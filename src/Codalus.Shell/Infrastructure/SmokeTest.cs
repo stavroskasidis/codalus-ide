@@ -224,6 +224,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => tree.Roots.Count > 0, "the Start page has items").ConfigureAwait(true);
         }).ConfigureAwait(true);
 
+        // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
+        await StepAsync("shell.setup", "M46", "The first-run setup: a theme family previewed live, a keyboard scheme, VS Code's settings imported and the tools checked; Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
+
         // M38: the start window, with the recent list the run has so far (the website's screenshot).
         await StepAsync("shell.startWindow", "M38", "The start window lists recent solutions and closes on Continue without code", async () =>
         {
@@ -265,7 +268,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }).ConfigureAwait(true);
 
         // M34d: the UI gallery's empty states, before a solution opens.
-        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
+        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
 
         // M2: project system (build host, MSBuild evaluation, Solution Explorer).
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>
@@ -359,6 +362,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             }
         }, "language.ready").ConfigureAwait(true);
 
+        await StepAsync("navigation.codeSearch", "M47", "Code Search: the index saved next to the solution, a type found with its container and project, the editable preview on its file, prefixes, Enter, and Feature Search", CodeSearchStepAsync, "language.ready").ConfigureAwait(true);
+
         await StepAsync("editor.insights", "M12", "Inlay hints, CodeLens, Peek Definition, the Document Outline and the navigation bar", async () =>
         {
             var program = await OpenAsync(Program).ConfigureAwait(true);
@@ -397,6 +402,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         }, "language.ready").ConfigureAwait(true);
+
+        await StepAsync("shell.themeFamilies", "M45", "Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, over the open solution; Harbor follows the system; the family picker in Options", ThemeFamiliesStepAsync, "language.ready").ConfigureAwait(true);
 
         // M34a: the menus as trees with icons, Ctrl+Space through the keyboard, output that follows.
         await UxPassStepsAsync().ConfigureAwait(true);
@@ -748,10 +755,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
 
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
-        await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
+        await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source; the solution closed for it keeps its session in .codalus/state", async () =>
         {
             var solution = PrepareTestingFixture();
+            var previousState = shell.SolutionStateDirectory;
             await shell.OpenSolutionAsync(solution).ConfigureAwait(true);
+            if (previousState is not null)
+            {
+                // ADR 0070: closing a solution writes its session next to it, git-ignored by the state folder's own .gitignore.
+                await shell.SolutionState.FlushAsync().ConfigureAwait(true);
+                Check(File.Exists(Path.Combine(previousState, "session.json")), $"the closed solution's session is in {previousState}");
+                Check(File.Exists(Path.Combine(Path.GetDirectoryName(previousState)!, ".gitignore")), "the state folder ignores itself in Git");
+            }
+
             shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId);
             await WaitAsync(() => TestClass("XunitV2Tests") is not null && TestClass("XunitV3Tests") is not null, "both test projects' CalculatorTests are listed", 300).ConfigureAwait(true);
             await WaitAsync(() => shell.TestExplorer.Rows.Any(r => r.Label == "XunitV3Tests"), "the Test Explorer shows them").ConfigureAwait(true);
@@ -781,7 +797,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, "testing.run").ConfigureAwait(true);
 
         // M34d: the UI gallery with data (the Testing solution after its runs), the documents, the chrome and the error states.
-        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, and the error states, in every theme", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
+        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, the error states, Code Search's results, the color theme cards and the WCF references page (M34g), in every theme", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
 
         // M9: NuGet packages, on a copy of samples/Packages and its local feed (ADR 0012).
         await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>
@@ -1100,10 +1116,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
 
         await StepAsync("web.scaffolding", "M15", "Add New Scaffolded Item runs dotnet-aspnet-codegenerator (an API controller over a DbContext); a gRPC service reference generates its client at build time", ScaffoldingStepAsync).ConfigureAwait(true);
+        await StepAsync("wcf.testClient", "M42", "samples/Wcf's CoreWCF service runs; the WCF Test Client finds its metadata and calls operations over BasicHttpBinding and WSHttpBinding", WcfStepAsync).ConfigureAwait(true);
         await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
 
         // M17a: containers (ADR 0042), where an engine runs Linux containers (GitHub's Linux runner; Podman here).
-        const string containerTitle = "A web app runs in a container through its \"Container (Dockerfile)\" profile (fast mode), answers, and the Containers window shows it";
+        const string containerTitle = "A web app runs in a container through its \"Container (Dockerfile)\" profile (fast mode), answers, serves its wwwroot, and the Containers window shows it";
         var engine = shell.ContainerEngine;
         var (engineOs, engineError) = await engine.ServerOsAsync(CancellationToken.None).ConfigureAwait(true);
         if (engineOs != "linux" && !(Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux()))
@@ -1162,6 +1179,67 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
         await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
+
+        // M40a: WinForms and WPF (ADR 0071, D31: Windows only).
+        const string desktopTitle = "The WPF app opens, its XAML completes binding paths from d:DataContext, and it builds and runs";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("windows.desktop", "M40a", desktopTitle, WindowsDesktopStepAsync).ConfigureAwait(true);
+        }
+        else
+        {
+            Report("windows.desktop", "M40a", desktopTitle, "skipped", 0, "WinForms and WPF apps run on Windows only (D31); their editing is covered by the tests on every OS.");
+        }
+
+        // M40b: the WPF previewer (ADR 0072, D31: Windows only).
+        const string wpfPreviewTitle = "The XAML Previewer renders the WPF app's MainWindow.xaml at its design size with its design-time data, follows an edit and selects in the XAML what is clicked";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("wpf.preview", "M40b", wpfPreviewTitle, WpfPreviewStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("wpf.preview", "M40b", wpfPreviewTitle, "skipped", 0, "The WPF previewer runs on Windows only (D31); off Windows it says so, which the tests cover on every OS.");
+        }
+
+        // M41a: the Windows Forms designer (ADR 0073, D31: Windows only).
+        const string winFormsDesignerTitle = "The WinForms app's OrderForm opens in the Windows Forms designer; a Button from the Toolbox and its Text set in the Properties window become code in OrderForm.Designer.cs";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.designer", "M41a", winFormsDesignerTitle, WinFormsDesignerStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.designer", "M41a", winFormsDesignerTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); off Windows a form opens as code, which the tests cover on every OS.");
+        }
+
+        // M41b: the designer's depth (ADR 0073): a menu edited through Type Here, a ToolTip extender property.
+        const string winFormsDepthTitle = "InventoryForm opens in the designer; a menu item typed into its menu strip and a ToolTip set on a control become code (the item, AddRange, SetToolTip), and undo takes them back";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.designerDepth", "M41b", winFormsDepthTitle, WinFormsDesignerDepthStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.designerDepth", "M41b", winFormsDepthTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the shell's side runs against a fake designer host in the tests on every OS.");
+        }
+
+        // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
+        const string winUITitle = "The WinUI 3 app opens, its XAML completes x:Bind paths from the page's class, and it builds and runs unpackaged";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("maui.windows", "M44", winUITitle, WinUIStepAsync).ConfigureAwait(true);
+        }
+        else
+        {
+            Report("maui.windows", "M44", winUITitle, "skipped", 0, "WinUI 3 apps build and run on Windows only (D31); their XAML editing and the Windows-only gates are covered by the tests on every OS.");
+        }
+
+        // M43a: .NET Framework projects (ADR 0075, D31): they open and build on every OS, and run on Windows only.
+        await StepAsync("netfx.projects", "M43a", OperatingSystem.IsWindows()
+            ? "The .NET Framework fixture opens (the old-style project restored from packages.config), the net48 console app builds and runs on the desktop CLR"
+            : "The .NET Framework fixture opens (the old-style project restored from packages.config), the net48 console app builds, and starting it says Windows only", NetFrameworkStepAsync).ConfigureAwait(true);
+
         await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.interactive", "M36", "A selection in an F# script runs in F# Interactive (dotnet fsi in a terminal), which shows the values defined", FSharpInteractiveStepAsync, "projects.open").ConfigureAwait(true);
@@ -1609,7 +1687,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await shell.ShowEntityFrameworkAsync().ConfigureAwait(true);
         var ef = shell.EfExplorer;
         string Log() => Tail(shell.EntityFramework.Channel.GetText(), 2500) + "\n" + ef.Message;
-        await WaitAsync(() => ef.Context is { Name: "BloggingContext", Provider: "Microsoft.EntityFrameworkCore.Sqlite" }, "the window finds BloggingContext on SQLite", 120).ConfigureAwait(true);
+        await WaitAsync(
+            () => ef.Context is { Name: "BloggingContext", Provider: "Microsoft.EntityFrameworkCore.Sqlite" },
+            () => $"the window finds BloggingContext on SQLite (contexts: {string.Join(", ", ef.Contexts.Select(c => $"{c.Name} on {c.Provider ?? "no provider"}"))}; "
+                + $"restore {shell.Solutions.RestoreState ?? "not started"}; C# {shell.Languages.Status(ShellHost.CSharpLanguageId)?.State ?? "not running"}):\n" + Log(),
+            120).ConfigureAwait(true);
         await WaitAsync(() => ef.Migrations.Count == 1 && !ef.IsBusy, "the window lists InitialCreate", 420).ConfigureAwait(true);
         Check(ef.Migrations[0].State == "Pending", "InitialCreate is pending: " + Log());
 
@@ -1724,14 +1806,76 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
     }
     /// <summary>
+    /// WCF (M42, ADR 0069): samples/Wcf's CoreWCF service started with Run; the WCF Test Client finds its metadata from
+    /// the running program, reads it, and calls Add over BasicHttpBinding (SOAP 1.1) and Greet, with a data contract,
+    /// over WSHttpBinding (SOAP 1.2 with WS-Addressing). The screenshot is the website's.
+    /// </summary>
+    private async Task WcfStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "Wcf", "Wcf.slnx")), $"the samples folder {samples} has Wcf");
+        var target = Path.Combine(Work, "Wcf");
+        Copy(Path.Combine(samples, "Wcf"), target);
+        shell.Trust.Trust(target); // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=wcf.testClient skips it
+        await shell.OpenSolutionAsync(Path.Combine(target, "Wcf.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Wcf solution is open", 300).ConfigureAwait(true);
+        var service = Path.Combine(target, "CalculatorService", "CalculatorService.csproj");
+        shell.SetStartupProject(service);
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        try
+        {
+            // The program's channel stays after it exits, so a service that stops at start says why.
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: CalculatorService")?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("Now listening on", StringComparison.Ordinal) || (Output().Length > 0 && shell.Runs.Running.Count == 0), "the CoreWCF service starts", 420).ConfigureAwait(true);
+            Check(Output().Contains("Now listening on", StringComparison.Ordinal), "the CoreWCF service listens:\n" + Tail(Output(), 2000) + "\nThe build output:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+
+            var client = shell.OpenWcfTestClient();
+            string? Result() => client.ResponseTree.Count > 0 && client.ResponseTree[0].Children.Count > 0 ? client.ResponseTree[0].Children[0].Label : null;
+            var found = await shell.DiscoverWcfServicesAsync().ConfigureAwait(true);
+            Check(found.Count > 0 && found[0].MetadataUrl.EndsWith("/CalculatorService.svc?wsdl", StringComparison.Ordinal), "the running service's metadata is found: " + string.Join(", ", found.Select(d => d.MetadataUrl)) + "\n" + Tail(Output(), 1000));
+            client.Address = found[0].MetadataUrl;
+            await client.LoadAsync().ConfigureAwait(true);
+            Check(client.Error is null && client.Endpoints.Count == 2, "the metadata is read: " + client.Error);
+
+            client.Select("Add", Workbench.Wcf.SoapVersion.Soap11);
+            client.Row("a")!.Value = "2";
+            client.Row("b")!.Value = "3.5";
+            await client.SendAsync().ConfigureAwait(true);
+            Check(client.Error is null && Result() == "AddResult = 5.5", "Add answers over BasicHttpBinding: " + (client.Error ?? client.ResponseText));
+
+            client.Select("Greet", Workbench.Wcf.SoapVersion.Soap12);
+            client.Row("person.Name")!.Value = "Ada";
+            client.Row("person.Age")!.Value = "36";
+            client.Row("person.Mood")!.Value = "Happy";
+            client.Row("person.Tags.string")!.AddCommand.Execute(null);
+            client.Rows[^1].Value = "math";
+            await client.SendAsync().ConfigureAwait(true);
+            Check(client.Error is null && Result() == "GreetResult = Hello Ada, 36 and happy (math)!", "Greet answers over WSHttpBinding: " + (client.Error ?? client.ResponseText));
+            await WaitAsync(() => window.GetVisualDescendants().OfType<WcfTestClientView>().Any(), "the WCF Test Client renders").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-wcf-test-client.png");
+            await GalleryWcfResponseAsync(client).ConfigureAwait(true); // M34g: a response and a fault in the gallery
+        }
+        finally
+        {
+            shell.StopRunning();
+            foreach (var document in shell.Layout.Documents.OfType<SolutionManagementDocument>().ToList())
+            {
+                shell.Layout.CloseDocument(document);
+            }
+        }
+    }
+
+    /// <summary>
     /// The database explorer (M27b, ADR 0037 and 0038) on a copy of samples/Data's inventory database: a connection
     /// added in the form, the tree, a table's data edited and committed, a query editor with schema completion,
     /// results and an estimated plan, all through the published data host.
     /// </summary>
     /// <summary>
     /// Containers (M17a): samples/Containers' web app with its container profile: Ctrl+F5 builds the Dockerfile's base
-    /// stage, mounts the build output and starts the app through exec; it answers on its published port; the Containers
-    /// window lists the container with its environment; stopping the program removes the container.
+    /// stage, mounts the build output and the static web assets, and starts the app through exec; it answers on its
+    /// published port and serves wwwroot; the Containers window lists the container with its environment; stopping the
+    /// program removes the container.
     /// </summary>
     private async Task ContainerRunStepAsync()
     {
@@ -1755,6 +1899,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
             var answer = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/")).ConfigureAwait(true);
             Check(answer.StartsWith("Hello from ", StringComparison.Ordinal), "the app answers: " + answer);
+            var asset = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/hello.txt")).ConfigureAwait(true);
+            Check(asset.Trim() == "Hello from wwwroot", "the app serves wwwroot, a static web asset of the project folder: " + asset);
 
             await shell.ShowContainersAsync().ConfigureAwait(true);
             var row = shell.ContainersWindow.Containers.FirstOrDefault(c => c.Name == name);
@@ -1866,6 +2012,185 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.DevicesWindow.Toolchain.Length > 0, "the Devices window shows the Android toolchain").ConfigureAwait(true);
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("maui-devices.png");
+    }
+
+    private async Task WindowsDesktopStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "WindowsDesktop");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "WindowsDesktop"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "WindowsDesktop.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true }, "the WindowsDesktop solution is open (its packages restored)", 600).ConfigureAwait(true);
+        var app = Path.Combine(target, "WpfApp", "WpfApp.csproj");
+        Check(shell.Solutions.Projects.TryGetValue(app, out var info) && info.UsesWpf, "WpfApp is a WPF project");
+
+        var path = Path.Combine(target, "WpfApp", "MainWindow.xaml");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.XamlLanguageId, "the file is XAML for the C# host: " + editor.Model.LanguageId);
+        MoveCaret(editor, "Text=\"{Binding NewTitle,", "Text=\"{Binding ".Length);
+        var asked = Stopwatch.StartNew();
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "AddCommand"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                MoveCaret(editor, "Text=\"{Binding NewTitle,", "Text=\"{Binding ".Length);
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "the binding path completes the view model's members (d:DataContext)", 360).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("wpf-xaml.png");
+        editor.CompletionWindow!.Close();
+
+        // Start Without Debugging builds the app and runs it: a WPF window on the desktop, until it's stopped.
+        shell.SetStartupProject(app);
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "WpfApp" && !p.HasExited), "the WPF app is running: " + Tail(shell.Builds.Channel.GetText(), 2000), 300).ConfigureAwait(true);
+        await Task.Delay(3000).ConfigureAwait(true);
+        Check(shell.Runs.Running.Any(p => p.Name == "WpfApp" && !p.HasExited), "the WPF app is still running (its window is up)");
+        shell.StopRunning();
+        await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the WPF app stops", 60).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// .NET Framework in the shipped app (M43a, ADR 0075): samples/NetFramework opens, the old-style project gets its
+    /// packages.config package and reference assemblies, the project that needs Visual Studio's targets says why it
+    /// can't build (<c>netfx-projects.png</c>), and the SDK-style net48 console app builds. On Windows Start Without
+    /// Debugging runs its .exe on the desktop CLR and its output comes back, and F5 debugs it there to a breakpoint (M43b,
+    /// ADR 0076: <c>netfx-debugging.png</c>); elsewhere starting it says Windows only.
+    /// </summary>
+    private async Task NetFrameworkStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "NetFramework");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "NetFramework"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "NetFramework.slnx")).ConfigureAwait(true);
+        var legacy = Path.Combine(target, "LegacyApp", "LegacyApp.csproj");
+        var web = Path.Combine(target, "LegacyWebApp", "LegacyWebApp.csproj");
+        var app = Path.Combine(target, "ConsoleApp", "ConsoleApp.csproj");
+        await WaitAsync(
+            () => shell.Solutions.Projects.Count == 8 && shell.Solutions.Progress is { Completed: true }
+                  && shell.Solutions.Projects.TryGetValue(legacy, out var info) && info.References.Any(r => r.Kind == Codalus.Projects.Protocol.ReferenceKinds.Package && r.Resolved),
+            "the NetFramework solution is open, LegacyApp's packages.config package restored", 600).ConfigureAwait(true);
+        Check(shell.Solutions.Projects[legacy].IsNonSdkStyle, "LegacyApp is a non-SDK-style project");
+        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("Visual Studio's own MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
+        shell.Explorer.Reveal("p:" + legacy);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("netfx-projects.png");
+        await GalleryNetFrameworkAsync(legacy, web).ConfigureAwait(true); // M34g: the .NET Framework project UI in the gallery
+
+        Check(await shell.BuildAsync(Codalus.Projects.Protocol.BuildTargets.Build, app).ConfigureAwait(true), "ConsoleApp (net48) builds:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+        Check(File.Exists(Path.Combine(target, "ConsoleApp", "bin", "Debug", "net48", "ConsoleApp.exe")), "ConsoleApp.exe was built");
+        shell.SetStartupProject(app);
+        if (!OperatingSystem.IsWindows())
+        {
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            Check(shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("ConsoleApp targets .NET Framework (net48): it runs, debugs and tests only on Windows", StringComparison.Ordinal)), "starting it says Windows only");
+            return;
+        }
+
+        // A program that ends leaves Runs.Running at once; its Run channel says how it ended, after its output.
+        string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: ConsoleApp")?.GetText() ?? string.Empty;
+        shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: ConsoleApp")?.Clear(); // an earlier step's ConsoleApp
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        await WaitAsync(() => Output().Contains("has exited with code", StringComparison.Ordinal), () => "ConsoleApp ran: " + Tail(Output() + shell.Builds.Channel.GetText(), 2000), 300).ConfigureAwait(true);
+        Check(Output().Contains("has exited with code 0 (0x0)", StringComparison.Ordinal), "it exits with code 0: " + Output());
+        Check(Output().Contains("Runtime: .NET Framework 4.", StringComparison.Ordinal), "its output names the desktop CLR: " + Output());
+        Check(Output().Contains("Hello from .NET Framework, Codalus!", StringComparison.Ordinal), "its output comes back");
+
+        // F5: the desktop-CLR debugger (codalus-debughost --netfx-dap) stops at a breakpoint in Main and evaluates.
+        var source = Path.Combine(target, "ConsoleApp", "Program.cs");
+        var line = Array.FindIndex(File.ReadAllLines(source), l => l.Contains("Console.WriteLine(greeter.Greet())", StringComparison.Ordinal)) + 1;
+        shell.Debugger.Breakpoints.Set(new Codalus.Workbench.Debugging.BreakpointSpec(source, line));
+        await shell.StartDebuggingAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == Codalus.Workbench.Debugging.DebugState.Stopped, () => "F5 stops ConsoleApp (net48) at its breakpoint: " + shell.DebugLog.GetText(), 300).ConfigureAwait(true);
+        Check(shell.Debugger.SelectedFrame is { Name: "ConsoleApp.Program.Main" } frame && frame.Line == line, $"it stopped in Main on line {line}: {shell.Debugger.SelectedFrame?.Name} {shell.Debugger.SelectedFrame?.Line}");
+        var greeting = await shell.Debugger.EvaluateAsync("greeter.Greet()", "watch", CancellationToken.None).ConfigureAwait(true);
+        Check(greeting.Result == "\"Hello from .NET Framework, Codalus!\"", "greeter.Greet() evaluates through func-eval: " + greeting.Result);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("netfx-debugging.png");
+        await GalleryNetFrameworkDebuggingAsync().ConfigureAwait(true); // M34g: the Call Stack and Modules of a desktop-CLR session
+        shell.Debugger.Breakpoints.Clear();
+        await shell.Debugger.StopAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == Codalus.Workbench.Debugging.DebugState.Idle, "the debug session ends", 60).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// WinUI 3 in the shipped app (M44, Windows): the WinUI fixture opens, MainPage.xaml completes an x:Bind path from
+    /// the page's class (<c>winui-xaml.png</c>), and Start Without Debugging builds the unpackaged app and runs it until
+    /// it's stopped.
+    /// </summary>
+    private async Task WinUIStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "WindowsDesktop");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "WindowsDesktop"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "WinUIApp.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the WinUI solution is open (its packages restored)", 600).ConfigureAwait(true);
+        var app = Path.Combine(target, "WinUIApp", "WinUIApp.csproj");
+        Check(shell.Solutions.Projects.TryGetValue(app, out var info) && info.UsesWinUI && info.WindowsPackageType == "None", "WinUIApp is an unpackaged WinUI 3 project: " + info?.WindowsPackageType);
+
+        var path = Path.Combine(target, "WinUIApp", "MainPage.xaml");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.XamlLanguageId, "the file is XAML for the C# host: " + editor.Model.LanguageId);
+        const string Marker = "{x:Bind ViewModel.NewTitle,";
+        MoveCaret(editor, Marker, "{x:Bind ViewModel.".Length);
+        var asked = Stopwatch.StartNew();
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "IsTyping"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                MoveCaret(editor, Marker, "{x:Bind ViewModel.".Length);
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "the x:Bind path completes the view model's members (from the page's class)", 360).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("winui-xaml.png");
+        editor.CompletionWindow!.Close();
+
+        // Start Without Debugging builds the app and runs it: a WinUI window on the desktop, until it's stopped.
+        shell.SetStartupProject(app);
+        var before = shell.Builds.LastBuild;
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        // A failed build starts nothing: it fails the step at once (the first Windows run waited out the 600 s and the job's limit).
+        bool BuildFailed() => BuildDone(before) && shell.Builds.LastBuild is { Result.Succeeded: false };
+        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited) || BuildFailed(), () => "the WinUI app is running: " + Tail(shell.Builds.Channel.GetText(), 2000), 600).ConfigureAwait(true);
+        Check(!BuildFailed(), "the WinUI app built:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+        await Task.Delay(3000).ConfigureAwait(true);
+        Check(shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited), "the WinUI app is still running (its window is up)");
+        shell.StopRunning();
+        await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the WinUI app stops", 60).ConfigureAwait(true);
     }
 
     private async Task VisualBasicStepAsync()
@@ -2007,6 +2332,170 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("fsharp-interactive.png");
         shell.Terminals.Close(session!);
+    }
+
+    /// <summary>
+    /// The Windows Forms designer in the shipped app (M41a): the solution windows.desktop opened, OrderForm in the
+    /// designer, a Button from the Toolbox, its Text from the Properties window, and the designer file's new code.
+    /// </summary>
+    private async Task WinFormsDesignerStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var app = Path.Combine(Work, "WindowsDesktop", "WinFormsApp");
+        Check(shell.Solutions.Projects.Values.Any(p => p.UsesWindowsForms), "the WindowsDesktop solution is still open");
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready }, "the C# host has loaded the solution", 300).ConfigureAwait(true);
+
+        var started = Stopwatch.StartNew();
+        await shell.OpenFileAsync(Path.Combine(app, "OrderForm.cs")).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault();
+        Check(designer is not null, "OrderForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0, "the designer builds the app, loads the form and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        Check(designer!.Problems is null, "every statement applied: " + designer.Problems);
+        Check(designer.Components.Any(c => c.Name == "placeOrderButton" && c.Parent == "buttonPanel"), "the form's controls are on the surface, nested");
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  first frame (build included) in {started.Elapsed.TotalSeconds:0.0} s, {designer.FrameWidth}×{designer.FrameHeight}"));
+
+        var code = designer.DesignerCode!;
+        var original = code.Text.Text;
+        shell.Layout.ShowToolWindow(ViewModels.ToolboxViewModel.ToolWindowId, focus: false);
+        var button = shell.Toolbox.Items.FirstOrDefault(i => i.Type == "System.Windows.Forms.Button");
+        Check(button is not null && shell.Toolbox.IsAvailable, "the Toolbox has the Button");
+        shell.Toolbox.Armed = button;
+        var root = designer.Root!;
+        await designer.CreateAsync(button!.Type, root.ClientX + 290, root.ClientY + 300).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("button1 = new Button();", StringComparison.Ordinal) && code.Text.Text.Contains("Controls.Add(button1);", StringComparison.Ordinal),
+            "the new button is in OrderForm.Designer.cs: " + designer.Status);
+
+        shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
+        await shell.PropertiesWindow.RefreshAsync().ConfigureAwait(true);
+        // The property's own row: (DataBindings), first in the window, has a Text row too (M41b).
+        var text = shell.PropertiesWindow.Categories.Where(c => c.Title != "(DataBindings)").SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "Text");
+        Check(text is { Value: "button1" }, "the Properties window shows the new button's Text: " + text?.Value);
+        text!.Text = "Smoke test";
+        await WaitAsync(() => code.Text.Text.Contains("button1.Text = \"Smoke test\";", StringComparison.Ordinal), "the Text set in the Properties window is in the code", 60).ConfigureAwait(true);
+        var added = code.Text.Text.Split('\n').Length - original.Split('\n').Length;
+        // The lines that weren't there before, in the message: the first Windows run counted 14 with nothing else to go on.
+        var remaining = original.Split('\n').GroupBy(l => l, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+        var newLines = new List<string>();
+        foreach (var line in code.Text.Text.Split('\n'))
+        {
+            if (remaining.TryGetValue(line, out var count) && count > 0)
+            {
+                remaining[line] = count - 1;
+            }
+            else
+            {
+                newLines.Add(line);
+            }
+        }
+
+        Check(added == 12, $"the diff is the button's field, creation, section and Controls.Add: {added} lines:\n{string.Join('\n', newLines)}");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer.png");
+        await GalleryWinFormsAsync(designer).ConfigureAwait(true); // M34g: the designer, the Toolbox and Properties in the gallery
+
+        while (code.Text.UndoStack.CanUndo)
+        {
+            code.Text.UndoStack.Undo();
+        }
+
+        Check(code.Text.Text == original, "undo takes the designer file back to the original");
+        shell.Layout.CloseDocument(designer);
+        shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+    }
+
+    /// <summary>
+    /// The designer's depth in the shipped app (M41b): InventoryForm opened, "&amp;Edit" typed into its menu strip's Type Here
+    /// (editToolStripMenuItem and the menu's AddRange), "ToolTip on inventoryToolTip" set on the list view (SetToolTip),
+    /// a frame drawn with the new item, and both undone.
+    /// </summary>
+    private async Task WinFormsDesignerDepthStepAsync()
+    {
+        var app = Path.Combine(Work, "WindowsDesktop", "WinFormsApp");
+        await shell.OpenFileAsync(Path.Combine(app, "InventoryForm.cs")).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath.EndsWith("InventoryForm.cs", StringComparison.Ordinal));
+        Check(designer is not null, "InventoryForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0, "the designer loads InventoryForm and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        Check(designer!.Problems is null, "every statement applied: " + designer.Problems);
+        Check(designer.Tray.Any(t => t.Name == "inventoryToolTip") && designer.Tray.Any(t => t.Name == "itemBindingSource"), "the component tray has the form's components");
+        var code = designer.DesignerCode!;
+        var original = code.Text.Text;
+
+        // Type Here on the menu strip.
+        designer.SetSelection(["mainMenuStrip"], notify: true);
+        Check(designer.StripTypeHere is { CanType: true }, "the menu strip shows Type Here");
+        await designer.AddItemAsync(designer.StripTypeHere!, "&Edit").WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("editToolStripMenuItem = new ToolStripMenuItem();", StringComparison.Ordinal)
+            && code.Text.Text.Contains("mainMenuStrip.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, helpToolStripMenuItem, editToolStripMenuItem });", StringComparison.Ordinal)
+            && code.Text.Text.Contains("editToolStripMenuItem.Text = \"&Edit\";", StringComparison.Ordinal),
+            "the typed item is in InventoryForm.Designer.cs: " + designer.Status);
+        Check(designer.Components.Any(c => c is { Name: "editToolStripMenuItem", IsItem: true, Owner: "mainMenuStrip" }), "the new item is on the surface, in the menu strip");
+
+        // An extender property in the Properties window.
+        designer.SetSelection(["itemsListView"], notify: true);
+        shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
+        await shell.PropertiesWindow.RefreshAsync().ConfigureAwait(true);
+        var tip = shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "ToolTip on inventoryToolTip");
+        Check(tip is not null, "the Properties window shows ToolTip on inventoryToolTip");
+        tip!.Text = "The items in stock.";
+        await WaitAsync(() => code.Text.Text.Contains("inventoryToolTip.SetToolTip(itemsListView, \"The items in stock.\");", StringComparison.Ordinal), "the ToolTip is a SetToolTip call in the code", 60).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer-depth.png");
+
+        for (var i = 0; i < 10 && code.Text.Text != original; i++)
+        {
+            designer.Undo();
+        }
+
+        Check(code.Text.Text == original, "undo takes the designer file back to the original");
+        shell.Layout.CloseDocument(designer);
+    }
+
+    /// <summary>The WPF previewer in the shipped app (M40b): the solution windows.desktop opened, its MainWindow.xaml previewed.</summary>
+    private async Task WpfPreviewStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var path = Path.Combine(Work, "WindowsDesktop", "WpfApp", "MainWindow.xaml");
+        Check(shell.Solutions.Projects.Values.Any(p => p.UsesWpf), "the WindowsDesktop solution is still open");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        var original = editor.Model.Text.Text;
+
+        var started = Stopwatch.StartNew();
+        var preview = shell.XamlPreview;
+        // FrameCount counts every frame the tool window has shown, the Avalonia ones of xaml.preview included (Clear keeps
+        // it), so the WPF file's first frame is one past what was counted before it opened.
+        var shown = preview.FrameCount;
+        shell.ShowXamlPreview();
+        await WaitAsync(() => (preview.FrameCount > shown && preview.Frame is not null) || preview.HasError, "the WPF previewer builds the app and shows its first frame: " + preview.Status, 600).ConfigureAwait(true);
+        Check(preview.FrameCount > shown && preview.Frame is not null, "the preview rendered: " + preview.Error + "\n" + Tail(shell.PreviewerLog.GetText(), 2000));
+        Check(preview.Frame is { } frame && frame.Width / frame.Scale == 480 && frame.Height / frame.Scale == 360, $"the window renders at its design size (d:DesignWidth/Height): {preview.Frame?.Width}×{preview.Frame?.Height}");
+        Check(!preview.SupportsThemes, "WPF has no theme variants: the picker is hidden");
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  first frame (build included) in {started.Elapsed.TotalSeconds:0.0} s, {preview.ImageWidth}×{preview.ImageHeight}"));
+
+        var session = shell.Previewer.Session;
+        Check(session is not null, "the WPF previewer runs");
+        Workbench.Previewer.PreviewPathStep[] remaining = [new("MainWindow", 0), new("Grid", 0), new("StackPanel", 0), new("TextBlock", 0)];
+        var text = await session!.BoundsAsync(remaining, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(text is { Width: > 0 }, "the design-time view model (d:DesignInstance) shows its remaining count");
+
+        var before = preview.Frame!;
+        var edit = Stopwatch.StartNew();
+        var add = editor.Model.Text.Text.IndexOf("Content=\"Add\"", StringComparison.Ordinal);
+        Check(add >= 0, "the button's content is in the XAML");
+        editor.Model.Text.Replace(add, "Content=\"Add\"".Length, "Content=\"Add a to-do\"");
+        await WaitAsync(() => preview.Frame is { } shown && shown != before && !shown.Data.AsSpan().SequenceEqual(before.Data), "the edit shows in the preview", 60).ConfigureAwait(true);
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  edit to the frame showing it: {edit.Elapsed.TotalMilliseconds:0} ms (the editor waits 150 ms after the last keystroke)"));
+
+        Workbench.Previewer.PreviewPathStep[] button = [new("MainWindow", 0), new("Grid", 0), new("DockPanel", 0), new("Button", 0)];
+        var bounds = await session.BoundsAsync(button, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(bounds is { Width: > 0 }, "the WPF previewer finds the button");
+        await shell.SelectFromPreviewAsync(bounds!.Value.X + bounds.Value.Width / 2, bounds.Value.Y + bounds.Value.Height / 2).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(editor.Editor.SelectedText.StartsWith("<Button DockPanel.Dock=\"Right\"", StringComparison.Ordinal), "a click selects the button in the XAML: " + editor.Editor.SelectedText);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("wpf-previewer.png");
+        await GalleryWpfPreviewAsync().ConfigureAwait(true); // M34g: the WPF preview in the gallery
+        shell.Layout.CloseToolWindow(ViewModels.XamlPreviewViewModel.ToolWindowId);
+        Restore(editor, original);
+        await shell.Previewer.InvalidateAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
     }
 
     private async Task XamlPreviewStepAsync()
@@ -2944,7 +3433,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 var error = process.StandardError.ReadToEndAsync();
                 if (!process.WaitForExit(TimeSpan.FromSeconds(60)))
                 {
-                    process.Kill(entireProcessTree: true);
+                    // The tool alone (ps and dotnet-stack start nothing): ending a process tree lists the system's
+                    // processes, which is what blocks when ps does (the macOS runner, blazor.wasmDebug).
+                    process.Kill();
                     return "(timed out)";
                 }
 

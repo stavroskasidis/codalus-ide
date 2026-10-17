@@ -1,0 +1,308 @@
+<Window xmlns:l="using:Codalus.Shell.Infrastructure"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Codalus.Shell.ViewModels"
+        xmlns:views="using:Codalus.Shell.Views"
+        xmlns:controls="using:Codalus.Shell.Controls"
+        x:Class="Codalus.Shell.Views.SetupWindow"
+        x:DataType="vm:SetupViewModel"
+        Title="{l:T setupWindow.title}"
+        Width="1120" Height="760" MinWidth="760" MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Shell.Panel}">
+  <!--
+    The first-run setup (M46, design/shell-themes/Setup.dc.html): the steps on the left, the current step on the right,
+    Skip setup, Back and Next below. Every color is a token, so the window repaints in the theme being chosen.
+  -->
+  <Window.Styles>
+    <Style Selector="Border.step">
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.step.current">
+      <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    </Style>
+    <Style Selector="Border.step.current TextBlock.stepTitle">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Border.stepDot">
+      <Setter Property="Width" Value="22" />
+      <Setter Property="Height" Value="22" />
+      <Setter Property="CornerRadius" Value="11" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    </Style>
+    <Style Selector="Border.stepDot TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    </Style>
+    <Style Selector="Border.step.current Border.stepDot">
+      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+    </Style>
+    <Style Selector="Border.step.current Border.stepDot TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.AccentForeground}" />
+    </Style>
+    <Style Selector="TextBlock.pageTitle">
+      <Setter Property="FontSize" Value="22" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <Style Selector="TextBlock.lead">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="MaxWidth" Value="640" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="0,0,0,22" />
+    </Style>
+    <!-- The mode picker: a segmented row, the chosen mode filled with the accent. -->
+    <Style Selector="ToggleButton.segment">
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="14,0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.segment:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.AccentForeground}" />
+      <Setter Property="TextElement.FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- Cards: a family, a keyboard scheme; the chosen one outlined in the accent. -->
+    <Style Selector="ToggleButton.setupCard">
+      <Setter Property="Padding" Value="10" />
+      <Setter Property="Margin" Value="0,0,12,12" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Top" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ToggleButton.setupCard:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <Style Selector="ToggleButton.setupCard:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <Style Selector="Border.section">
+      <Setter Property="Padding" Value="14,12" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    </Style>
+  </Window.Styles>
+
+  <Grid ColumnDefinitions="240,*">
+    <!-- The steps. -->
+    <Border Background="{DynamicResource Shell.Background}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,0,1,0" Padding="20,28">
+      <StackPanel Spacing="24">
+        <ItemsControl ItemsSource="{Binding Steps}" AutomationProperties.Name="{l:T setupWindow.setupSteps}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="6" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:SetupStepViewModel">
+              <Border Classes="step" Classes.current="{Binding IsCurrent}" AutomationProperties.Name="{Binding AccessibleName}">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                  <Border Classes="stepDot">
+                    <TextBlock Text="{Binding Number}" FontSize="{DynamicResource Shell.FontSize.Body}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Classes="stepTitle" Text="{Binding Title}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="4,0" Text="{l:T setupWindow.runsOnceTheFirstTime}" />
+      </StackPanel>
+    </Border>
+
+    <!-- The current step, with Skip setup, Back and Next. -->
+    <DockPanel Grid.Column="1" Margin="36,28,36,20">
+      <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0" Padding="0,16,0,0" Margin="0,16,0,0">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+            <Button x:Name="BackButton" Content="{l:T setupWindow.back}" Command="{Binding BackCommand}" ToolTip.Tip="{l:T setupWindow.backAltLeft}" MinWidth="72" />
+            <Button x:Name="NextButton" Classes="accent" Content="{Binding NextTitle}" Command="{Binding NextCommand}"
+                    ToolTip.Tip="{l:T setupWindow.nextAltRight}" AutomationProperties.Name="{Binding NextTitle}" FontWeight="SemiBold" MinWidth="96" />
+          </StackPanel>
+          <Button Classes="link" Content="{l:T setupWindow.skipSetup}" Command="{Binding SkipCommand}" ToolTip.Tip="{l:T setupWindow.skipSetupTip}"
+                  HorizontalAlignment="Left" VerticalAlignment="Center" Margin="14,0" />
+        </DockPanel>
+      </Border>
+
+      <Panel>
+        <!-- 1. Appearance. -->
+        <ScrollViewer IsVisible="{Binding IsAppearance}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel>
+            <TextBlock Classes="pageTitle" Text="{l:T setupWindow.chooseHowCodalusIdeLooks}" />
+            <TextBlock Classes="lead" Text="{l:T setupWindow.pickAThemeAndAMode}" />
+            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,8">
+              <TextBlock Text="{l:T setupWindow.mode}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <Border Background="{DynamicResource Shell.Background}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="8" Padding="3">
+                <ItemsControl x:Name="ModeList" ItemsSource="{Binding Modes}" AutomationProperties.Name="{l:T setupWindow.mode}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" Spacing="2" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SetupChoice">
+                      <ToggleButton Classes="segment" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                    Content="{Binding Title}" AutomationProperties.Name="{Binding Title}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
+            </StackPanel>
+            <TextBlock Classes="muted small" MinHeight="18" Margin="0,0,0,18" TextWrapping="Wrap"
+                       Text="{l:T setupWindow.followsYourSystem}" IsVisible="{Binding IsMatchSystem}" />
+            <ItemsControl x:Name="FamilyList" ItemsSource="{Binding Families}" AutomationProperties.Name="{l:T setupWindow.theme}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SetupFamilyOption">
+                  <ToggleButton Classes="setupCard" Width="184" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
+                    <StackPanel Spacing="10">
+                      <Viewbox Stretch="Uniform" HorizontalAlignment="Stretch">
+                        <views:ThemePictureView DataContext="{Binding Picture}" />
+                      </Viewbox>
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{DynamicResource Shell.FontSize.Heading}" VerticalAlignment="Center" />
+                        <controls:Icon Grid.Column="1" Kind="check-circle" IsVisible="{Binding IsSelected}" />
+                      </Grid>
+                      <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" />
+                    </StackPanel>
+                  </ToggleButton>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- 2. Keyboard. -->
+        <ScrollViewer IsVisible="{Binding IsKeyboard}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel>
+            <TextBlock Classes="pageTitle" Text="{l:T setupWindow.chooseYourKeyboardShortcuts}" />
+            <TextBlock Classes="lead" Text="{l:T setupWindow.theSchemeDecidesWhatTheKeysDo}" />
+            <ItemsControl x:Name="SchemeList" ItemsSource="{Binding Schemes}" AutomationProperties.Name="{l:T setupWindow.keyboardScheme}" MaxWidth="640" HorizontalAlignment="Left">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SetupChoice">
+                  <ToggleButton Classes="setupCard" HorizontalAlignment="Stretch" Margin="0,0,0,10" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{DynamicResource Shell.FontSize.Heading}" />
+                      <controls:Icon Grid.Column="1" Grid.RowSpan="2" Kind="check-circle" IsVisible="{Binding IsSelected}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Row="1" Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    </Grid>
+                  </ToggleButton>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- 3. Your settings. -->
+        <ScrollViewer IsVisible="{Binding IsSettings}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Classes="pageTitle" Text="{l:T setupWindow.bringYourSettings}" />
+            <TextBlock Classes="lead" Text="{l:T setupWindow.importFromAnotherEditor}" />
+            <Border Classes="section">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <TextBlock Text="{l:T setupWindow.fromVsCode}" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="1" Classes="muted small" Text="{Binding VsCodeText}" TextWrapping="Wrap" Margin="0,4,12,0" />
+                <Button x:Name="ImportVsCodeButton" Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Center" Content="{l:T setupWindow.importFromVsCode}" Command="{Binding ImportVsCodeCommand}" />
+              </Grid>
+            </Border>
+            <Border Classes="section">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <TextBlock Text="{l:T setupWindow.fromAVssettingsFile}" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="1" Classes="muted small" Text="{l:T setupWindow.fontsColorsEditorOptionsAndShortcuts}" TextWrapping="Wrap" Margin="0,4,12,0" />
+                <Button Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Center" Content="{l:T setupWindow.chooseAVssettingsFile}" Command="{Binding ImportVsSettingsCommand}" />
+              </Grid>
+            </Border>
+            <Border Classes="section">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <TextBlock Text="{l:T setupWindow.fromAnotherCodalusIde}" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="1" Classes="muted small" Text="{l:T setupWindow.aFileExportedWithExportSettings}" TextWrapping="Wrap" Margin="0,4,12,0" />
+                <Button Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Center" Content="{l:T setupWindow.chooseAFile}" Command="{Binding ImportExportCommand}" />
+              </Grid>
+            </Border>
+            <Border Classes="section">
+              <StackPanel Spacing="8">
+                <TextBlock Text="{l:T setupWindow.settingsSync}" FontWeight="SemiBold" />
+                <TextBlock Classes="muted small" Text="{l:T setupWindow.keepYourSettingsInAFolder}" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                  <Button Content="{l:T setupWindow.syncWithAFolder}" Command="{Binding SyncFolderCommand}" />
+                  <TextBox Grid.Column="1" Text="{Binding SyncUrl}" PlaceholderText="{l:T setupWindow.aGitRepositorysUrl}" AutomationProperties.Name="{l:T setupWindow.aGitRepositorysUrl}" />
+                  <Button Grid.Column="2" Content="{l:T setupWindow.syncWithTheRepository}" Command="{Binding SyncRepositoryCommand}" />
+                </Grid>
+              </StackPanel>
+            </Border>
+            <TextBlock Text="{Binding SettingsStatus}" IsVisible="{Binding HasSettingsStatus}" TextWrapping="Wrap" Margin="2,4,0,0" />
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- 4. Tools. -->
+        <DockPanel IsVisible="{Binding IsTools}">
+          <StackPanel DockPanel.Dock="Top">
+            <TextBlock Classes="pageTitle" Text="{l:T setupWindow.checkYourTools}" />
+            <TextBlock Classes="lead" Text="{l:T setupWindow.codalusIdeNeedsTheDotnetSdk}" />
+            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,8">
+              <Button Content="{l:T setupWindow.checkAgain}" Command="{Binding CheckToolsCommand}" />
+              <TextBlock Classes="muted" Text="{l:T setupWindow.checking}" IsVisible="{Binding IsChecking}" VerticalAlignment="Center" />
+            </StackPanel>
+          </StackPanel>
+          <Button DockPanel.Dock="Bottom" Classes="link" HorizontalAlignment="Left" Margin="0,8,0,0" Content="{l:T setupWindow.everythingElseCheckEnvironment}" Command="{Binding OpenCheckEnvironmentCommand}" />
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Tools}" AutomationProperties.Name="{l:T setupWindow.tools}" MaxWidth="720" HorizontalAlignment="Left">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SetupToolRowViewModel">
+                  <Border Classes="section" AutomationProperties.Name="{Binding Title}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+                      <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Top" Margin="0,2,10,0" />
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding State}" />
+                      </StackPanel>
+                      <Button Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Content="{Binding InstallTitle}" Command="{Binding InstallCommand}"
+                              IsVisible="{Binding CanInstall}" ToolTip.Tip="{Binding Confirmation}" />
+                      <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted small" Text="{Binding NeededFor}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                      <TextBlock Grid.Row="2" Grid.Column="1" Classes="muted small" Text="{Binding Details}" IsVisible="{Binding HasDetails}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                      <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Spacing="8" Margin="0,10,0,0" IsVisible="{Binding IsConfirming}">
+                        <TextBlock Text="{Binding Confirmation}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <Button Classes="accent" Content="{Binding ConfirmTitle}" Command="{Binding ConfirmCommand}" />
+                          <Button Content="{l:T setupWindow.cancel}" Command="{Binding CancelCommand}" />
+                        </StackPanel>
+                      </StackPanel>
+                      <TextBlock Grid.Row="3" Grid.Column="1" Classes="muted" Text="{l:T setupWindow.installing}" IsVisible="{Binding IsInstalling}" Margin="0,10,0,0" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Panel>
+    </DockPanel>
+  </Grid>
+</Window>

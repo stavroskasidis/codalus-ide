@@ -29,6 +29,87 @@ internal static class XamlCompletion
         ("RelativeSource", "A binding source relative to the target."),
     ];
 
+    /// <summary>WPF's markup extensions (M40a).</summary>
+    private static readonly (string Name, string Description)[] s_wpfExtensions =
+    [
+        ("Binding", "A binding to the data context, resolved at run time."),
+        ("StaticResource", "A resource looked up once, when the XAML loads."),
+        ("DynamicResource", "A resource that follows changes (themes, merged dictionaries)."),
+        ("TemplateBinding", "A property of the templated control, in a control template."),
+        ("RelativeSource", "A binding source relative to the target: Self, TemplatedParent, FindAncestor."),
+        ("x:Static", "A static property, field or constant."),
+        ("x:Type", "A type."),
+        ("x:Null", "null."),
+        ("x:Reference", "A named element."),
+        ("ComponentResourceKey", "A resource key of a custom control's theme."),
+    ];
+
+    private static readonly string[] s_xBindModes = ["OneTime", "OneWay", "TwoWay"];
+
+    /// <summary>WinUI's markup extensions (M44).</summary>
+    private static readonly (string Name, string Description)[] s_winUIExtensions =
+    [
+        ("x:Bind", "A binding compiled against the page's class (or a data template's x:DataType); OneTime unless x:DefaultBindMode or Mode says otherwise."),
+        ("Binding", "A binding to the data context, resolved at run time."),
+        ("StaticResource", "A resource looked up once, when the XAML loads."),
+        ("ThemeResource", "A resource that follows the theme (light, dark, high contrast)."),
+        ("CustomResource", "A resource from the app's CustomXamlResourceLoader."),
+        ("TemplateBinding", "A property of the templated control, in a control template."),
+        ("RelativeSource", "A binding source relative to the target: Self or TemplatedParent."),
+        ("x:Null", "null."),
+    ];
+
+    private static readonly (string Name, string Description)[] s_xBindArguments =
+    [
+        ("Path", "The path, from the page's class (or the data template's x:DataType): properties, fields, methods."),
+        ("Mode", "OneTime (x:Bind's default), OneWay or TwoWay."),
+        ("BindBack", "A method that writes a two-way binding's value back."),
+        ("Converter", "An IValueConverter."),
+        ("ConverterParameter", "The converter's parameter."),
+        ("ConverterLanguage", "The converter's language."),
+        ("FallbackValue", "The value when the path can't be resolved."),
+        ("TargetNullValue", "The value when the source is null."),
+        ("UpdateSourceTrigger", "When a two-way binding writes back: PropertyChanged, LostFocus or Explicit."),
+    ];
+
+    private static readonly (string Name, string Description)[] s_winUIBindingArguments =
+    [
+        ("Path", "The property path."),
+        ("Mode", "OneWay (the default), TwoWay or OneTime."),
+        ("ElementName", "A named element as the source."),
+        ("RelativeSource", "A source relative to the target."),
+        ("Source", "An explicit source object."),
+        ("Converter", "An IValueConverter."),
+        ("ConverterParameter", "The converter's parameter."),
+        ("ConverterLanguage", "The converter's language."),
+        ("FallbackValue", "The value when the binding fails."),
+        ("TargetNullValue", "The value when the source is null."),
+        ("UpdateSourceTrigger", "When a two-way binding writes back: PropertyChanged, LostFocus or Explicit."),
+    ];
+
+    private static readonly (string Name, string Description)[] s_wpfBindingArguments =
+    [
+        ("Path", "The property path."),
+        ("Mode", "OneWay, TwoWay, OneTime, OneWayToSource or Default."),
+        ("Converter", "An IValueConverter."),
+        ("ConverterParameter", "The converter's parameter."),
+        ("ConverterCulture", "The converter's culture."),
+        ("ElementName", "A named element as the source."),
+        ("RelativeSource", "A source relative to the target."),
+        ("Source", "An explicit source object."),
+        ("StringFormat", "A format string for the value."),
+        ("FallbackValue", "The value when the binding fails."),
+        ("TargetNullValue", "The value when the source is null."),
+        ("UpdateSourceTrigger", "When a two-way binding writes back: PropertyChanged, LostFocus or Explicit."),
+        ("Delay", "Milliseconds to wait before writing back."),
+        ("ValidatesOnDataErrors", "Whether IDataErrorInfo errors are validation errors."),
+        ("ValidatesOnNotifyDataErrors", "Whether INotifyDataErrorInfo errors are validation errors."),
+        ("ValidatesOnExceptions", "Whether exceptions from the source are validation errors."),
+        ("NotifyOnValidationError", "Whether validation errors raise the Validation.Error event."),
+        ("IsAsync", "Whether the source is read on a background thread."),
+        ("XPath", "An XPath query, for XML sources."),
+    ];
+
     private static readonly (string Name, string Description)[] s_bindingArguments =
     [
         ("Path", "The property path."),
@@ -195,8 +276,29 @@ internal static class XamlCompletion
         var d = prefixes.FirstOrDefault(p => p.Value == XamlNames.Design).Key;
         Add(Attribute($"{x}:Name", range, "The element's name (a field in the code-behind)."));
         Add(Attribute($"{x}:Key", range, "The resource's key."));
-        Add(Attribute($"{x}:DataType", range, "The type of the data context, for compiled bindings."));
-        Add(Attribute($"{x}:CompileBindings", range, "Whether bindings here compile against x:DataType."));
+        if (context.IsWpf)
+        {
+            // WPF's directives (M40a): no compiled bindings.
+            Add(Attribute($"{x}:Shared", range, "False: every lookup of the resource makes a new instance."));
+            Add(Attribute($"{x}:FieldModifier", range, "The access of the named element's field (public, internal…)."));
+            Add(Attribute($"{x}:Uid", range, "The element's localization identifier."));
+        }
+        else if (context.IsWinUI)
+        {
+            // WinUI's directives (M44): x:Bind's, deferred loading, localization.
+            Add(Attribute($"{x}:DataType", range, "The type a data template's x:Bind paths compile against."));
+            Add(Attribute($"{x}:DefaultBindMode", range, "The mode of the x:Binds below: OneTime (the default), OneWay or TwoWay."));
+            Add(Attribute($"{x}:Load", range, "Whether the element is created: False defers it until FindName or an x:Bind makes it True."));
+            Add(Attribute($"{x}:Phase", range, "The phase a list item's element is rendered in (incremental rendering)."));
+            Add(Attribute($"{x}:Uid", range, "The element's localization identifier (Resources.resw)."));
+            Add(Attribute($"{x}:FieldModifier", range, "The access of the named element's field (private by default)."));
+        }
+        else
+        {
+            Add(Attribute($"{x}:DataType", range, "The type of the data context, for compiled bindings."));
+            Add(Attribute($"{x}:CompileBindings", range, "Whether bindings here compile against x:DataType."));
+        }
+
         if (isRoot)
         {
             Add(Attribute($"{x}:Class", range, "The code-behind class."));
@@ -204,7 +306,17 @@ internal static class XamlCompletion
         }
 
         Add(Attribute("xmlns:", range, "An XML namespace prefix.", snippet: false));
-        if (d is not null)
+        if (d is not null && context.IsWpfStyle)
+        {
+            Add(Item($"{d}:DataContext", CompletionItemKind.Keyword, range, null, "The data context at design time: binding paths are checked against it.",
+                insert: $"{d}:DataContext=\"{{{d}:DesignInstance Type=$0, IsDesignTimeCreatable=True}}\"", snippet: true));
+            if (isRoot)
+            {
+                Add(Attribute($"{d}:DesignWidth", range, "The width at design time."));
+                Add(Attribute($"{d}:DesignHeight", range, "The height at design time."));
+            }
+        }
+        else if (d is not null)
         {
             Add(Attribute($"{d}:DataContext", range, "The data context at design time (the previewer)."));
             if (isRoot)
@@ -270,16 +382,18 @@ internal static class XamlCompletion
         var name = attribute.Name;
         if (name is "xmlns" || name.StartsWith("xmlns:", StringComparison.Ordinal))
         {
-            // MAUI writes x: as XAML 2009 and project namespaces as clr-namespace:; Avalonia as XAML 2006 and using:.
-            var maui = types is { IsMaui: true, IsAvalonia: false };
-            items.Add(Item(maui ? XamlNames.Maui : XamlNames.Avalonia, CompletionItemKind.Module, whole));
+            // MAUI writes x: as XAML 2009 and project namespaces as clr-namespace:; Avalonia as XAML 2006 and using:;
+            // WPF as XAML 2006 and clr-namespace: (M40a); WinUI as XAML 2006 and using: (M44).
+            var maui = types is { IsMaui: true, IsAvalonia: false } && !context.IsWinUI;
+            var wpf = context.IsWpf;
+            items.Add(Item(maui ? XamlNames.Maui : wpf || context.IsWinUI ? XamlNames.Wpf : XamlNames.Avalonia, CompletionItemKind.Module, whole));
             items.Add(Item(maui ? XamlNames.XamlLanguage2009 : XamlNames.XamlLanguage, CompletionItemKind.Module, whole));
             items.Add(Item(XamlNames.Design, CompletionItemKind.Module, whole));
             items.Add(Item(XamlNames.MarkupCompatibility, CompletionItemKind.Module, whole));
             if (types is not null)
             {
-                items.AddRange(types.KnownXmlNamespaces.Where(n => n is not (XamlNames.Maui or XamlNames.Avalonia)).Select(n => Item(n, CompletionItemKind.Module, whole)));
-                items.AddRange(types.SourceNamespaces().Select(n => Item((maui ? "clr-namespace:" : "using:") + n, CompletionItemKind.Module, whole)));
+                items.AddRange(types.KnownXmlNamespaces.Where(n => n is not (XamlNames.Maui or XamlNames.Avalonia or XamlNames.Wpf)).Select(n => Item(n, CompletionItemKind.Module, whole)));
+                items.AddRange(types.SourceNamespaces().Select(n => Item((maui || wpf ? "clr-namespace:" : "using:") + n, CompletionItemKind.Module, whole)));
             }
 
             return whole;
@@ -288,6 +402,19 @@ internal static class XamlCompletion
         if (name.EndsWith(":Ignorable", StringComparison.Ordinal))
         {
             items.Add(Item("d", CompletionItemKind.Value, whole));
+            return whole;
+        }
+
+        if (context.IsWinUI && name.EndsWith(":DefaultBindMode", StringComparison.Ordinal))
+        {
+            items.AddRange(s_xBindModes.Select(mode => Item(mode, CompletionItemKind.EnumMember, whole)));
+            return whole;
+        }
+
+        if (context.IsWinUI && name.EndsWith(":Load", StringComparison.Ordinal))
+        {
+            items.Add(Item("True", CompletionItemKind.Value, whole));
+            items.Add(Item("False", CompletionItemKind.Value, whole));
             return whole;
         }
 
@@ -336,13 +463,86 @@ internal static class XamlCompletion
             return range;
         }
 
+        if ((context.IsWpf && name is "StartupUri" or "Source" && (name == "StartupUri" || element.LocalName == "ResourceDictionary"))
+            || (context.IsWinUI && name == "Source" && element.LocalName == "ResourceDictionary"))
+        {
+            // WPF (M40a): the application's first window, a merged dictionary: the project's XAML files, relative to this
+            // one. WinUI (M44): a merged dictionary as an ms-appx:/// URI from the project's folder.
+            var projectDirectory = context.Project?.FilePath is { } projectFile ? Path.GetDirectoryName(projectFile) : null;
+            asyncWork = async (list, ct) =>
+            {
+                var directory = Path.GetDirectoryName(context.Path)!;
+                foreach (var (file, document) in await context.ProjectXamlAsync(ct).ConfigureAwait(false))
+                {
+                    var relative = context.IsWinUI && projectDirectory is not null
+                        ? "ms-appx:///" + Path.GetRelativePath(projectDirectory, file).Replace('\\', '/')
+                        : Path.GetRelativePath(directory, file).Replace('\\', '/');
+                    if (!string.Equals(Path.GetFullPath(file), context.Path, StringComparison.OrdinalIgnoreCase) && !relative.StartsWith("../", StringComparison.Ordinal)
+                        && (name == "Source") == (document.Root?.LocalName == "ResourceDictionary"))
+                    {
+                        list.Add(Item(relative, CompletionItemKind.File, whole, document.Root?.LocalName));
+                    }
+                }
+            };
+            return whole;
+        }
+
+        if (context.IsWpf && name is "TargetName" or "SourceName" && element.LocalName is "Setter" or "Trigger" or "EventTrigger" or "Condition")
+        {
+            var scope = element.Ancestors().FirstOrDefault(a => a.LocalName is "ControlTemplate" or "DataTemplate") ?? context.Document.Root;
+            foreach (var named in scope?.DescendantsAndSelf().Select(e => (e.Attribute("x:Name") ?? e.Attribute("Name"))?.Value).OfType<string>().Where(n => n.Length > 0).Distinct(StringComparer.Ordinal) ?? [])
+            {
+                items.Add(Item(named, CompletionItemKind.Reference, whole));
+            }
+
+            return whole;
+        }
+
         if (types is null)
         {
             return null;
         }
 
+        // WPF's triggers (M40a): Trigger and MultiTrigger's Condition take a property and a value, like setters.
+        if (context.IsWpf && element.LocalName is "Trigger" or "Condition" && name is "Property" or "Value" && context.SetterTargetType(element) is { } triggerTarget)
+        {
+            if (name == "Property")
+            {
+                foreach (var member in types.Members(triggerTarget).Where(m => m.Kind != XamlMemberKind.Event))
+                {
+                    items.Add(Item(member.Name, CompletionItemKind.Property, whole, Detail(member), XamlDocs.Summary(member.Symbol)));
+                }
+            }
+            else if (element.Attribute("Property")?.Value is { } triggered && Member(context, element, triggerTarget, triggered.Trim()) is { } triggerMember)
+            {
+                ValueItems(types, triggerMember.ValueType, items, whole);
+            }
+
+            return whole;
+        }
+
+        if (context.IsWpf && element.LocalName == "EventSetter" && context.TargetType(element) is { } eventTarget)
+        {
+            if (name == "Event")
+            {
+                foreach (var member in types.Members(eventTarget).Where(m => m.Kind == XamlMemberKind.Event))
+                {
+                    items.Add(Item(member.Name, CompletionItemKind.Event, whole, Detail(member), XamlDocs.Summary(member.Symbol)));
+                }
+            }
+            else if (name == "Handler" && context.CodeBehind is { } handlers)
+            {
+                foreach (var method in handlers.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary && x.Parameters.Length == 2))
+                {
+                    items.Add(Item(method.Name, CompletionItemKind.Method, whole, method.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
+                }
+            }
+
+            return whole;
+        }
+
         // A setter's property and value.
-        if (element.LocalName == "Setter" && context.TargetType(element) is { } target)
+        if (element.LocalName == "Setter" && context.SetterTargetType(element) is { } target)
         {
             if (name == "Property")
             {
@@ -448,9 +648,14 @@ internal static class XamlCompletion
         if (extension.InName)
         {
             var range = context.Range(attribute.ValueStart + extension.NameStart, offset);
-            foreach (var (name, description) in s_extensions)
+            foreach (var (name, description) in context.IsWpf ? s_wpfExtensions : context.IsWinUI ? s_winUIExtensions : s_extensions)
             {
                 items.Add(Item(name, CompletionItemKind.Keyword, range, null, description));
+            }
+
+            if (context.IsWpfStyle && attribute.LocalName == "DataContext" && attribute.Prefix is { } designPrefix && XamlDocument.ResolvePrefix(element, designPrefix) == XamlNames.Design)
+            {
+                items.Add(Item($"{designPrefix}:DesignInstance", CompletionItemKind.Keyword, range, null, "A design-time instance of a type: binding paths are checked against it."));
             }
 
             if (types is not null)
@@ -469,7 +674,11 @@ internal static class XamlCompletion
         {
             asyncWork = async (list, ct) =>
             {
-                foreach (var (key, kind, file) in await ResourceKeysAsync(context, ct).ConfigureAwait(false))
+                // WPF (M40a): the keys the file can see (its own, App.xaml's and the merged dictionaries'); the others, the project's.
+                IReadOnlyList<(string Key, string Kind, string File)> keys = context.IsWpfStyle
+                    ? [.. (await XamlResources.ScopeAsync(context, ct).ConfigureAwait(false)).Keys.Select(k => (k.Key, k.Kind, k.File))]
+                    : await ResourceKeysAsync(context, ct).ConfigureAwait(false);
+                foreach (var (key, kind, file) in keys)
                 {
                     list.Add(Item(key, CompletionItemKind.Constant, argumentRange, kind, $"Defined in {Path.GetFileName(file)}."));
                 }
@@ -477,11 +686,62 @@ internal static class XamlCompletion
             return argumentRange;
         }
 
+        if (extension.Kind == "DesignInstance")
+        {
+            // d:DesignInstance (WPF, M40a): the type, and its options.
+            if (extension.Key is null && extension.Index > 0)
+            {
+                foreach (var (name, description) in new[] { ("Type", "The design-time data context's type."), ("IsDesignTimeCreatable", "True: an instance is created (it needs a public parameterless constructor)."), ("CreateList", "True: a list of the type.") })
+                {
+                    items.Add(Item(name + "=", CompletionItemKind.Property, argumentRange, null, description, filter: name));
+                }
+
+                return argumentRange;
+            }
+
+            if (extension.Key is null or "Type")
+            {
+                TypeNames(context, element, items, argumentRange, creatableOnly: false);
+            }
+            else if (extension.Key is "IsDesignTimeCreatable" or "CreateList")
+            {
+                items.Add(Item("True", CompletionItemKind.Value, argumentRange));
+                items.Add(Item("False", CompletionItemKind.Value, argumentRange));
+            }
+
+            return argumentRange;
+        }
+
+        if (extension.Kind == "RelativeSource" && types is not null)
+        {
+            // {RelativeSource Self}, {RelativeSource AncestorType={x:Type Window}}, {RelativeSource TemplatedParent}.
+            if (extension.Key is null && extension.Index > 0)
+            {
+                foreach (var name in new[] { "Mode", "AncestorType", "AncestorLevel" })
+                {
+                    items.Add(Item(name + "=", CompletionItemKind.Property, argumentRange, null, null, filter: name));
+                }
+
+                return argumentRange;
+            }
+
+            if (extension.Key == "AncestorType")
+            {
+                TypeNames(context, element, items, argumentRange, creatableOnly: false);
+            }
+            else if (extension.Key is null or "Mode" && (types.Type("System.Windows.Data.RelativeSourceMode") ?? types.Type("Microsoft.UI.Xaml.Data.RelativeSourceMode") ?? types.Type("Avalonia.Data.RelativeSourceMode")) is { } relativeMode)
+            {
+                ValueItems(types, relativeMode, items, argumentRange);
+            }
+
+            return argumentRange;
+        }
+
         if (extension.IsBinding)
         {
             if (extension.Key is null && extension.Index > 0 && !extension.Argument.Contains('=', StringComparison.Ordinal))
             {
-                foreach (var (name, description) in s_bindingArguments)
+                foreach (var (name, description) in context.IsWpf ? s_wpfBindingArguments : context.IsWinUI ? (extension.IsXBind ? s_xBindArguments : s_winUIBindingArguments) : s_bindingArguments)
                 {
                     items.Add(Item(name + "=", CompletionItemKind.Property, argumentRange, null, description, filter: name));
                 }
@@ -491,16 +751,16 @@ internal static class XamlCompletion
 
             if (extension.IsPath)
             {
-                return BindingPath(context, element, extension.Argument, attribute.ValueStart + extension.ArgumentStart, offset, items);
+                return BindingPath(context, element, extension.Argument, attribute.ValueStart + extension.ArgumentStart, offset, items, attribute.Value);
             }
 
             switch (extension.Key)
             {
-                case "Mode" when types is not null && (types.Type("Avalonia.Data.BindingMode") ?? types.Type("Microsoft.Maui.Controls.BindingMode")) is { } mode:
+                case "Mode" when types is not null && (types.Type("Avalonia.Data.BindingMode") ?? types.Type("Microsoft.Maui.Controls.BindingMode") ?? types.Type("System.Windows.Data.BindingMode") ?? types.Type("Microsoft.UI.Xaml.Data.BindingMode")) is { } mode:
                     ValueItems(types, mode, items, argumentRange);
                     return argumentRange;
-                case "UpdateSourceTrigger" when types?.Type("Avalonia.Data.UpdateSourceTrigger") is { } trigger:
-                    ValueItems(types, trigger, items, argumentRange);
+                case "UpdateSourceTrigger" when (types?.Type("Avalonia.Data.UpdateSourceTrigger") ?? types?.Type("System.Windows.Data.UpdateSourceTrigger") ?? types?.Type("Microsoft.UI.Xaml.Data.UpdateSourceTrigger")) is { } trigger:
+                    ValueItems(types!, trigger, items, argumentRange);
                     return argumentRange;
                 case "ElementName":
                     foreach (var name in Names(context.Document))
@@ -552,11 +812,39 @@ internal static class XamlCompletion
     }
 
     /// <summary>A binding path's members: the data type's (x:DataType), or a named element's (<c>#Name.</c>), or an ancestor's (<c>$parent[Type].</c>).</summary>
-    private static Range BindingPath(XamlContext context, XamlElement element, string path, int pathStart, int offset, List<CompletionItem> items)
+    private static Range BindingPath(XamlContext context, XamlElement element, string path, int pathStart, int offset, List<CompletionItem> items, string? attributeValue = null)
     {
         var lastDot = path.LastIndexOf('.');
         var range = context.Range(pathStart + lastDot + 1, offset);
-        if (lastDot < 0)
+        if (context.IsWinUI && attributeValue is not null && XamlBindingPaths.IsXBind(attributeValue))
+        {
+            // x:Bind (M44): the page's named elements and members of any access first, then each type's members.
+            var root = context.XBindRoot(element, out var isRoot);
+            if (lastDot < 0 && isRoot)
+            {
+                foreach (var name in Names(context.Document))
+                {
+                    items.Add(Item(name, CompletionItemKind.Reference, range, null, "A named element.", sort: "0" + name));
+                }
+            }
+
+            var from = lastDot < 0 ? root : XamlBindingPaths.ResolveXBind(context, element, path[..lastDot]);
+            foreach (var member in from is null ? [] : XamlTypeSystem.XBindMembers(from, anyAccess: lastDot < 0 && isRoot))
+            {
+                var (kind, detail) = member switch
+                {
+                    IPropertySymbol property => (CompletionItemKind.Property, property.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)),
+                    IFieldSymbol field => (CompletionItemKind.Field, field.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)),
+                    IMethodSymbol method => (CompletionItemKind.Method, method.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)),
+                    _ => (CompletionItemKind.Field, null as string),
+                };
+                items.Add(Item(member.Name, kind, range, detail, XamlDocs.Summary(member), sort: (kind == CompletionItemKind.Property ? "1" : "2") + member.Name));
+            }
+
+            return range;
+        }
+
+        if (lastDot < 0 && !context.IsWpfStyle)
         {
             items.Add(Item("$parent", CompletionItemKind.Keyword, range, null, "An ancestor: $parent[Type] or $parent[Type;level]."));
             items.Add(Item("$self", CompletionItemKind.Keyword, range, null, "The target element."));
@@ -566,12 +854,12 @@ internal static class XamlCompletion
             }
         }
 
-        if (XamlBindingPaths.Resolve(context, element, lastDot < 0 ? string.Empty : path[..lastDot]) is not { } type)
+        if (XamlBindingPaths.Resolve(context, element, lastDot < 0 ? string.Empty : path[..lastDot], attributeValue) is not { } type)
         {
             return range;
         }
 
-        foreach (var member in XamlTypeSystem.BindableMembers(type))
+        foreach (var member in XamlTypeSystem.BindableMembers(type).Where(m => !context.IsWpfStyle || m is IPropertySymbol))
         {
             var (kind, detail) = member switch
             {
@@ -724,11 +1012,26 @@ internal static class XamlCompletion
 /// <summary>Binding paths: the type a path leads to.</summary>
 internal static class XamlBindingPaths
 {
-    /// <summary>The type <paramref name="path"/> (complete segments, no trailing dot) leads to from the data type in scope, or null.</summary>
-    public static ITypeSymbol? Resolve(XamlContext context, XamlElement element, string path)
+    /// <summary>
+    /// The type <paramref name="path"/> (complete segments, no trailing dot) leads to from the data type in scope, or
+    /// null. In WPF (M40a), from the source the binding in <paramref name="attributeValue"/> names instead, if any.
+    /// </summary>
+    public static ITypeSymbol? Resolve(XamlContext context, XamlElement element, string path, string? attributeValue = null)
     {
         ITypeSymbol? type;
         var rest = path.Trim();
+        if (context.IsWinUI && attributeValue is not null && IsXBind(attributeValue))
+        {
+            return ResolveXBind(context, element, rest);
+        }
+
+        if (context.IsWpfStyle)
+        {
+            var source = attributeValue is null ? null : XamlBindingSource.Of(attributeValue);
+            type = source is { HasOtherSource: true } ? SourceType(context, element, source) : context.WpfDataContext(element, 0);
+            return type is null ? null : Follow(type, rest);
+        }
+
         if (rest.StartsWith("$parent", StringComparison.Ordinal))
         {
             var close = rest.IndexOf(']', StringComparison.Ordinal);
@@ -754,7 +1057,189 @@ internal static class XamlBindingPaths
             type = context.DataType(element);
         }
 
-        foreach (var raw in rest.Split('.', StringSplitOptions.RemoveEmptyEntries))
+        return type is null ? null : Follow(type, rest);
+    }
+
+    /// <summary>
+    /// The object a WPF binding reads instead of the data context: the element its <c>ElementName</c> names,
+    /// <c>{RelativeSource Self}</c>, <c>{RelativeSource TemplatedParent}</c> (the template's target type),
+    /// <c>{RelativeSource AncestorType=…}</c>, or a <c>{StaticResource key}</c> of the same file. Null when unknown.
+    /// </summary>
+    public static ITypeSymbol? SourceType(XamlContext context, XamlElement element, XamlBindingSource source)
+    {
+        if (source.ElementName is { Length: > 0 } name)
+        {
+            var named = context.Document.Elements.FirstOrDefault(e => (e.Attribute("x:Name") ?? e.Attribute("Name"))?.Value?.Trim() == name.Trim());
+            return named is null ? null : TypeOfElement(context, named);
+        }
+
+        if (source.RelativeSource is { } relative)
+        {
+            var inner = Unwrap(relative);
+            if (!inner.StartsWith("RelativeSource", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            string? mode = null, ancestor = null;
+            foreach (var (key, value) in XamlBindingSource.Arguments(inner["RelativeSource".Length..]))
+            {
+                if (key is null or "Mode")
+                {
+                    mode = value;
+                }
+                else if (key == "AncestorType")
+                {
+                    ancestor = value;
+                }
+            }
+
+            return ancestor is not null ? context.ResolveTypeName(element, ancestor)
+                : mode == "Self" ? TypeOfElement(context, XamlContext.ObjectElement(element)!)
+                : mode == "TemplatedParent" ? context.TargetType(element)
+                : null;
+        }
+
+        if (source.Source is { } resource && Unwrap(resource) is var reference
+            && (reference.StartsWith("StaticResource ", StringComparison.Ordinal) || reference.StartsWith("DynamicResource ", StringComparison.Ordinal)))
+        {
+            var key = reference[(reference.IndexOf(' ', StringComparison.Ordinal) + 1)..].Trim();
+            var keyed = context.Document.Elements.FirstOrDefault(e => e.Attribute("x:Key")?.Value?.Trim() == key);
+            return keyed is null ? null : context.TypeOf(keyed);
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether an attribute value is a WinUI <c>{x:Bind …}</c> (M44).</summary>
+    public static bool IsXBind(string attributeValue) =>
+        attributeValue.TrimStart() is var trimmed && trimmed.StartsWith('{') && trimmed[1..].TrimStart().StartsWith("x:Bind", StringComparison.Ordinal)
+        && (trimmed.Length == trimmed.IndexOf("x:Bind", StringComparison.Ordinal) + 6 || trimmed[trimmed.IndexOf("x:Bind", StringComparison.Ordinal) + 6] is ' ' or '}' or ',' or '\t' or '\r' or '\n');
+
+    /// <summary>
+    /// The path of an <c>x:Bind</c>'s arguments (after its name), and its offset there: the first positional argument,
+    /// or <c>Path=</c>; null when there's none.
+    /// </summary>
+    public static (string Path, int Offset)? XBindPath(string arguments)
+    {
+        var depth = 0;
+        var start = 0;
+        var parenthesis = 0;
+        for (var i = 0; i <= arguments.Length; i++)
+        {
+            var c = i < arguments.Length ? arguments[i] : ',';
+            if (c == '{')
+            {
+                depth++;
+            }
+            else if (c == '}')
+            {
+                depth--;
+            }
+            else if (c == '(')
+            {
+                parenthesis++;
+            }
+            else if (c == ')')
+            {
+                parenthesis--;
+            }
+            else if (c == ',' && depth == 0 && parenthesis <= 0)
+            {
+                var argument = arguments[start..Math.Min(i, arguments.Length)];
+                var trimmed = argument.Trim();
+                var equals = trimmed.IndexOf('=', StringComparison.Ordinal);
+                if (start == 0 && trimmed.Length > 0 && (equals < 0 || trimmed.IndexOf('(', StringComparison.Ordinal) is var paren && paren >= 0 && paren < equals))
+                {
+                    return (trimmed, start + argument.IndexOf(trimmed, StringComparison.Ordinal));
+                }
+
+                if (equals > 0 && trimmed[..equals].Trim() == "Path")
+                {
+                    var path = trimmed[(equals + 1)..].Trim();
+                    return (path, start + argument.IndexOf(path, StringComparison.Ordinal));
+                }
+
+                start = i + 1;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The element of the document named <paramref name="name"/> (<c>x:Name</c> or <c>Name</c>), or null.</summary>
+    public static XamlElement? NamedElement(XamlContext context, string name) =>
+        context.Document.Elements.FirstOrDefault(e => (e.Attribute("x:Name") ?? e.Attribute("Name"))?.Value?.Trim() == name);
+
+    /// <summary>
+    /// The type a WinUI <c>x:Bind</c> path (complete segments) leads to (M44): from the page's class (a named element
+    /// first, then its members of any access) or a data template's <c>x:DataType</c>.
+    /// </summary>
+    public static ITypeSymbol? ResolveXBind(XamlContext context, XamlElement element, string path)
+    {
+        if (context.XBindRoot(element, out var isRoot) is not { } root)
+        {
+            return null;
+        }
+
+        ITypeSymbol? type = root;
+        var first = true;
+        foreach (var raw in path.Split('.', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (type is null)
+            {
+                return null;
+            }
+
+            var segment = raw.Trim();
+            var indexer = segment.IndexOf('[', StringComparison.Ordinal);
+            var name = indexer >= 0 ? segment[..indexer] : segment;
+            if (name.Contains('(', StringComparison.Ordinal) || name.Contains(':', StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            if (first && isRoot && NamedElement(context, name) is { } named)
+            {
+                type = context.TypeOf(named);
+            }
+            else
+            {
+                type = XamlTypeSystem.XBindMembers(type, anyAccess: first && isRoot).FirstOrDefault(m => m.Name == name) switch
+                {
+                    IPropertySymbol property => property.Type,
+                    IFieldSymbol field => field.Type,
+                    IMethodSymbol method => method.ReturnType,
+                    _ => null,
+                };
+            }
+
+            if (indexer >= 0 && type is not null)
+            {
+                type = XamlTypeSystem.ElementType(type);
+            }
+
+            first = false;
+        }
+
+        return type;
+    }
+
+    /// <summary>A markup extension's text without its outer braces.</summary>
+    private static string Unwrap(string value)
+    {
+        var trimmed = value.Trim();
+        return trimmed.StartsWith('{') && trimmed.EndsWith('}') ? trimmed[1..^1].Trim() : trimmed;
+    }
+
+    /// <summary>An element's type as a binding sees it: the root's is its <c>x:Class</c> (a user control's own properties).</summary>
+    private static ITypeSymbol? TypeOfElement(XamlContext context, XamlElement element) =>
+        element == context.Document.Root && context.CodeBehind is { } codeBehind ? codeBehind : context.TypeOf(element);
+
+    /// <summary>The type a path (complete segments) leads to from <paramref name="type"/>, or null.</summary>
+    public static ITypeSymbol? Follow(ITypeSymbol? type, string path)
+    {
+        foreach (var raw in path.Trim().Split('.', StringSplitOptions.RemoveEmptyEntries))
         {
             if (type is null)
             {

@@ -26,7 +26,7 @@ The questions: how to talk to the container engine; how a project runs and is de
 - **Fast mode** (`containers.fastMode`, on by default, Visual Studio's Debug behavior): `build --target base` builds only the Dockerfile's `base` stage; the container idles (`tail -f /dev/null`) with the project's build output mounted at `/app`. Run starts `dotnet /app/App.dll` through `exec -i` (its output is the Run channel's); Debug copies the pinned Linux netcoredbg into the container (M14c's `RemoteDebuggers`, without asking: the container is ours) and launches the app under it through `exec -i` as a pipe transport, so breakpoints bind from the first line. A rebuild needs no image build. Debug builds are portable, so a Windows or macOS build runs in the Linux container.
 - **Regular mode** (fast mode off): the whole Dockerfile is built and the container runs its entry point; debugging attaches to its .NET process.
 - The container's ports are published on `127.0.0.1` (the profile's ports, else free ones), the profile's environment applies without its `applicationUrl`, and the container is removed when the program or the debug session ends.
-- HTTPS in containers (the development certificate mounted in) isn't done: `TODO(issue)`. Static web assets of the project folder aren't mounted in fast mode: `TODO(issue)`.
+- HTTPS in containers (the development certificate mounted in) isn't done: `TODO(issue)`. Static web assets in fast mode: see the amendment below.
 
 **Add Docker Support: the .NET templates' files**
 - A multi-stage Dockerfile on `mcr.microsoft.com/dotnet/{aspnet|runtime}:<version>` and `sdk`, built from the solution's folder (the templates' context), restoring each project file first; `.dockerignore` there; and the "Container (Dockerfile)" profile. The fixture's Dockerfile is what it writes. No package reference is added (Visual Studio's `Microsoft.VisualStudio.Azure.Containers.Tools.Targets` is proprietary and not needed).
@@ -49,3 +49,11 @@ The questions: how to talk to the container engine; how a project runs and is de
 - Container features need a running engine; without one the window says why, and the tests skip (they fail on CI's Linux runner, the only GitHub runner with Linux containers).
 - Fast mode needs the Dockerfile's `base` stage, as the templates have it; without one, regular mode is used.
 - Windows containers aren't supported (the scripts are `sh`, as M14c's remote targets): `TODO(issue)`.
+
+## Amendment (2026-10-16): static web assets in fast mode
+
+The 0.3.0 release run found that, built with the .NET 11 SDK, the fixture's web app no longer started in a fast-mode container: `DirectoryNotFoundException: …/Web/obj/Debug/net10.0/jsmodules/`. The SDK now gives every web project static web assets (the `dotnet watch` browser scripts in `obj`), so a Debug build's `Web.staticwebassets.runtime.json` names folders of this machine. ASP.NET Core reads that manifest in Development and fails to start when one of its folders is missing, as it is in the container. Before, only projects with static web assets of their own (`wwwroot`, Razor class libraries) hit this, which was the gap this ADR left open.
+
+- **Fast mode now mounts them**, as Visual Studio does. Each content root of the manifest outside the build output is mounted read-only at `/staticwebassets/<index>`; roots inside the output map to `/app/…`. `App.staticwebassets.runtime.container.json`, the manifest with the container's paths, is written beside the original in the mounted output, and `ASPNETCORE_STATICWEBASSETS` points the app at it, for Run and Debug alike.
+- A root that doesn't exist on this machine isn't mounted, since the engine would create it; the app then fails in the container just as it would locally.
+- The fixture's app serves `wwwroot/hello.txt`. `ContainerRuntimeTests` and the smoke test's `containers.run` step request it.

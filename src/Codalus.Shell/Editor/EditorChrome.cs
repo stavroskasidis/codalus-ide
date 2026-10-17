@@ -207,6 +207,13 @@ public sealed class NavigationBar : Border
 /// above the text while scrolling. From the document symbols, or the foldings for languages without them. Clicking a
 /// header goes to it.
 /// </summary>
+/// <remarks>
+/// Each pinned line is drawn as the editor draws it: its runs take the colors and font styles of the line's visual line,
+/// which the editor's own colorizers (the grammar, semantic tokens, bracket pairs) built, with its indentation, in the
+/// text column, and its number in the line number margin. They were one plain text in the default color (the
+/// maintainer's report). Only the few pinned lines are built, and their controls are rebuilt only when a line's runs
+/// change (scrolling to other scopes, typing, new tokens, the theme).
+/// </remarks>
 public sealed class StickyScroll : Border
 {
     private const int MaxLines = 5;
@@ -215,6 +222,7 @@ public sealed class StickyScroll : Border
     private readonly Func<FoldingManager?> _foldings;
     private readonly StackPanel _lines = new();
     private IReadOnlyList<int> _shown = [];
+    private List<StickyLine> _rendered = [];
 
     public StickyScroll(TextEditor editor, Func<IReadOnlyList<DocumentSymbol>> symbols, Func<FoldingManager?> foldings)
     {
@@ -223,22 +231,26 @@ public sealed class StickyScroll : Border
         _foldings = foldings;
         VerticalAlignment = VerticalAlignment.Top;
         BorderThickness = new Thickness(0, 0, 0, 1);
+        BoxShadow = new BoxShadows(new BoxShadow { OffsetY = 1, Blur = 3, Color = Color.FromArgb(0x30, 0, 0, 0) });
         Child = _lines;
         IsVisible = false;
         AutomationProperties.SetName(this, "Sticky scroll");
-        // An adorner of the text view: the editor draws its text above its own layers and above sibling controls, so
-        // only the adorner layer (over the window's content) covers it.
-        var view = editor.TextArea.TextView;
-        view.AttachedToVisualTree += (_, _) => AdornerLayer.SetAdorner(view, this);
-        view.DetachedFromVisualTree += (_, _) => AdornerLayer.SetAdorner(view, null);
-        editor.TextArea.TextView.ScrollOffsetChanged += (_, _) => Update();
-        editor.TextArea.TextView.VisualLinesChanged += (_, _) => Update();
+        // An adorner of the text area (the margins and the text view): the editor draws its text above its own layers
+        // and above sibling controls, so only the adorner layer (over the window's content) covers it.
+        var area = editor.TextArea;
+        area.AttachedToVisualTree += (_, _) => AdornerLayer.SetAdorner(area, this);
+        area.DetachedFromVisualTree += (_, _) => AdornerLayer.SetAdorner(area, null);
+        area.TextView.ScrollOffsetChanged += (_, _) => Update();
+        area.TextView.VisualLinesChanged += (_, _) => Update();
     }
 
     public bool Enabled { get; set; } = true;
 
     /// <summary>The one-based lines shown (tests).</summary>
     internal IReadOnlyList<int> Shown => _shown;
+
+    /// <summary>Raised with the one-based lines pinned when they change (the controller keeps their semantic tokens).</summary>
+    public event EventHandler<IReadOnlyList<int>>? LinesPinned;
 
     public void Update()
     {
@@ -308,51 +320,171 @@ public sealed class StickyScroll : Border
 
     private void Show(List<int> headers)
     {
-        if (headers.SequenceEqual(_shown))
-        {
-            return;
-        }
-
+        var changed = !headers.SequenceEqual(_shown);
         _shown = headers;
-        _lines.Children.Clear();
         IsVisible = headers.Count > 0;
         if (headers.Count == 0)
         {
+            _lines.Children.Clear();
+            _rendered = [];
             return;
         }
 
-        // Opaque, in the editor's colors (resolved now: the theme may have changed since the last time).
-        Background = Resource("Shell.Editor.Background");
-        BorderBrush = Resource("Shell.Border");
-        var view = _editor.TextArea.TextView;
-        var document = _editor.Document;
-        foreach (var number in headers)
+        if (changed)
         {
-            var line = document.GetLineByNumber(number);
-            var text = new TextBlock
+            LinesPinned?.Invoke(this, headers);
+        }
+
+        var lines = headers.Select(Line).ToList();
+        if (!lines.SequenceEqual(_rendered))
+        {
+            // Opaque, in the editor's colors (resolved now: the theme may have changed since the last time).
+            Background = Resource("Shell.Editor.Background");
+            BorderBrush = Resource("Shell.Border");
+            _rendered = lines;
+            _lines.Children.Clear();
+            foreach (var line in lines)
             {
-                Text = document.GetText(line).TrimEnd(),
-                FontFamily = _editor.FontFamily,
-                FontSize = _editor.FontSize,
-                Height = view.DefaultLineHeight,
-                Margin = new Thickness(-view.HorizontalOffset, 0, 0, 0),
-                TextTrimming = TextTrimming.None,
-            };
-            text.Foreground = Resource("Shell.Editor.Foreground");
-            var row = new Border { Child = text, Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand) };
-            var target = number;
-            row.PointerPressed += (_, e) =>
+                _lines.Children.Add(Row(line));
+            }
+        }
+
+        // The columns follow the margins and the horizontal scroll, which don't change the lines' runs.
+        var view = _editor.TextArea.TextView;
+        var textLeft = view.TranslatePoint(default, _editor.TextArea)?.X ?? 0;
+        var numbers = _editor.TextArea.LeftMargins.OfType<AvaloniaEdit.Editing.LineNumberMargin>().FirstOrDefault(m => m.IsVisible);
+        var numbersLeft = numbers?.TranslatePoint(default, _editor.TextArea)?.X ?? 0;
+        foreach (var row in _lines.Children.OfType<Border>())
+        {
+            if (row.Child is Grid { Children: [TextBlock number, Border { Child: TextBlock text } code] })
             {
-                _editor.TextArea.Caret.Line = target;
-                _editor.TextArea.Caret.Column = 1;
-                _editor.ScrollTo(target, 1);
-                _editor.TextArea.Focus();
-                e.Handled = true;
-            };
-            AutomationProperties.SetName(row, $"Line {number}: {text.Text.Trim()}");
-            _lines.Children.Add(row);
+                number.IsVisible = numbers is not null;
+                number.Margin = new Thickness(numbersLeft, 0, 0, 0);
+                number.Width = numbers?.Bounds.Width ?? 0;
+                code.Margin = new Thickness(textLeft, 0, 0, 0);
+                text.Margin = new Thickness(-view.HorizontalOffset, 0, 0, 0);
+            }
         }
     }
+
+    /// <summary>The runs of a pinned line (one-based <paramref name="number"/>), colored as the editor colors it.</summary>
+    private StickyLine Line(int number)
+    {
+        var document = _editor.Document;
+        var line = document.GetLineByNumber(number);
+        var text = document.GetText(line).TrimEnd();
+        var runs = new List<StickyRun>();
+        var foreground = _editor.Foreground;
+        var visual = _editor.TextArea.TextView.GetOrConstructVisualLine(line);
+        var start = line.Offset - visual.FirstDocumentLine.Offset;
+        var position = 0;
+        foreach (var element in visual.Elements)
+        {
+            var from = Math.Max(position, element.RelativeTextOffset - start);
+            var to = Math.Min(text.Length, element.RelativeTextOffset - start + element.DocumentLength);
+            if (to <= from)
+            {
+                continue;
+            }
+
+            if (from > position)
+            {
+                runs.Add(new StickyRun(text[position..from], foreground, FontWeight.Normal, FontStyle.Normal));
+            }
+
+            var properties = element.TextRunProperties;
+            runs.Add(new StickyRun(text[from..to], properties.ForegroundBrush ?? foreground, properties.Typeface.Weight, properties.Typeface.Style));
+            position = to;
+        }
+
+        if (position < text.Length)
+        {
+            runs.Add(new StickyRun(text[position..], foreground, FontWeight.Normal, FontStyle.Normal));
+        }
+
+        return new StickyLine(number, [.. runs]);
+    }
+
+    private Border Row(StickyLine line)
+    {
+        var view = _editor.TextArea.TextView;
+        var tabSize = Math.Max(1, _editor.Options.IndentationSize);
+        // A line wider than the text column (a narrow docked editor) ends in an ellipsis at the column's edge, and its
+        // tooltip shows it whole (M34g): the text view scrolls sideways, a pinned header doesn't.
+        var code = new TextBlock
+        {
+            FontFamily = _editor.FontFamily,
+            FontSize = _editor.FontSize,
+            Height = view.DefaultLineHeight,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
+        };
+        var column = 0;
+        foreach (var run in line.Runs)
+        {
+            // Tabs to the next tab stop, as the text view lays them out in its fixed-width font.
+            var expanded = new System.Text.StringBuilder();
+            foreach (var c in run.Text)
+            {
+                if (c == '\t')
+                {
+                    var width = tabSize - (column % tabSize);
+                    expanded.Append(' ', width);
+                    column += width;
+                }
+                else
+                {
+                    expanded.Append(c);
+                    column++;
+                }
+            }
+
+            code.Inlines!.Add(new Avalonia.Controls.Documents.Run(expanded.ToString()) { Foreground = run.Foreground, FontWeight = run.Weight, FontStyle = run.Style });
+        }
+
+        var number = new TextBlock
+        {
+            Text = line.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            FontFamily = _editor.FontFamily,
+            FontSize = _editor.FontSize,
+            Height = view.DefaultLineHeight,
+            TextAlignment = TextAlignment.Right,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Foreground = _editor.LineNumbersForeground,
+        };
+        var row = new Border
+        {
+            Child = new Grid { Children = { number, new Border { Child = code, ClipToBounds = true } } },
+            Background = Brushes.Transparent,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        row.PointerEntered += (_, _) => row.Background = Resource("Shell.Hover");
+        row.PointerExited += (_, _) => row.Background = Brushes.Transparent;
+        var target = line.Number;
+        row.PointerPressed += (_, e) =>
+        {
+            _editor.TextArea.Caret.Line = target;
+            _editor.TextArea.Caret.Column = 1;
+            _editor.ScrollTo(target, 1);
+            _editor.TextArea.Focus();
+            e.Handled = true;
+        };
+        var whole = string.Concat(line.Runs.Select(r => r.Text)).Trim();
+        AutomationProperties.SetName(row, $"Line {line.Number}: {whole}");
+        ToolTip.SetTip(code, whole);
+        return row;
+    }
+
+    /// <summary>A pinned line: its number and its runs.</summary>
+    internal sealed record StickyLine(int Number, StickyRun[] Runs)
+    {
+        public bool Equals(StickyLine? other) => other is not null && Number == other.Number && Runs.AsSpan().SequenceEqual(other.Runs);
+
+        public override int GetHashCode() => Number;
+    }
+
+    /// <summary>A run of a pinned line, in the editor's color and font style for it.</summary>
+    internal sealed record StickyRun(string Text, IBrush? Foreground, FontWeight Weight, FontStyle Style);
 }
 
 /// <summary>

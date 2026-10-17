@@ -6,12 +6,18 @@ using System.Text;
 
 namespace Codalus.Workbench.Previewer;
 
-/// <summary>How to start Avalonia's designer host for an app (ADR 0048).</summary>
-/// <param name="HostApp">Avalonia's <c>Avalonia.Designer.HostApp.dll</c> (the app's <c>AvaloniaPreviewerNetCoreToolPath</c>).</param>
+/// <summary>How to start a designer host for an app: Avalonia's (ADR 0048) or the WPF previewer's (M40b, ADR 0072).</summary>
+/// <param name="HostApp">Avalonia's <c>Avalonia.Designer.HostApp.dll</c> (the app's <c>AvaloniaPreviewerNetCoreToolPath</c>), or <c>codalus-wpfpreviewer.dll</c>.</param>
 /// <param name="AppAssembly">The executable project's output (<c>TargetPath</c>); its runtimeconfig and deps.json start the host.</param>
 /// <param name="Agent">The previewer agent (a startup hook), or null to preview without selection and theme switching.</param>
 public sealed record PreviewerLaunch(string HostApp, string AppAssembly, string? Agent)
 {
+    /// <summary>
+    /// The designer host serves the agent's commands itself (the WPF previewer): it gets the agent's port and token,
+    /// and no startup hook.
+    /// </summary>
+    public bool AgentInHost { get; init; }
+
     /// <summary>The <c>dotnet</c> that runs it (default: <c>DOTNET_HOST_PATH</c>, else <c>dotnet</c> on the PATH).</summary>
     public string? Dotnet { get; init; }
 
@@ -41,7 +47,7 @@ public sealed record PreviewPathStep(string Type, int Ordinal, string? Name = nu
 
 /// <summary>
 /// One designer host process (ADR 0048): the user's app started out of process under Avalonia's
-/// <c>Avalonia.Designer.HostApp</c>, connected back over the remote protocol on a local TCP port (XAML in, frames out),
+/// <c>Avalonia.Designer.HostApp</c> (or the WPF previewer's host, which speaks the same protocol; ADR 0072), connected back over the remote protocol on a local TCP port (XAML in, frames out),
 /// and the previewer agent on a second port (hit testing, bounds, theme). Every wait has a timeout, and the process
 /// ends with the session. It runs the user's code: callers start it for trusted folders only.
 /// </summary>
@@ -178,13 +184,7 @@ public sealed class PreviewerSession : IAsyncDisposable
 
         start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         var agentToken = Guid.NewGuid().ToString("N");
-        if (launch.Agent is { } agent && File.Exists(agent))
-        {
-            var existing = start.Environment.TryGetValue(StartupHooksVariable, out var hooks) ? hooks : null;
-            start.Environment[StartupHooksVariable] = string.IsNullOrEmpty(existing) ? agent : agent + Path.PathSeparator + existing;
-            start.Environment[AgentPortVariable] = agentPort.ToString(CultureInfo.InvariantCulture);
-            start.Environment[AgentTokenVariable] = agentToken;
-        }
+        ApplyAgentEnvironment(start.Environment, launch, agentPort, agentToken);
 
         Process process;
         try
@@ -223,6 +223,27 @@ public sealed class PreviewerSession : IAsyncDisposable
             await session.DisposeAsync().ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Where the agent connects: its port and token, with the agent as a startup hook (after any the environment
+    /// has), or without one when the designer host serves the agent itself; nothing without an agent.
+    /// </summary>
+    internal static void ApplyAgentEnvironment(IDictionary<string, string?> environment, PreviewerLaunch launch, int agentPort, string agentToken)
+    {
+        if (!launch.AgentInHost)
+        {
+            if (launch.Agent is not { } agent || !File.Exists(agent))
+            {
+                return;
+            }
+
+            var existing = environment.TryGetValue(StartupHooksVariable, out var hooks) ? hooks : null;
+            environment[StartupHooksVariable] = string.IsNullOrEmpty(existing) ? agent : agent + Path.PathSeparator + existing;
+        }
+
+        environment[AgentPortVariable] = agentPort.ToString(CultureInfo.InvariantCulture);
+        environment[AgentTokenVariable] = agentToken;
     }
 
     private static int? SafeExitCode(Process process)

@@ -1,5 +1,6 @@
 # The token pairs the shell draws one on the other (M34d), with the WCAG 2.1 contrast each must meet in every theme:
-# 4.5 for text (AA, normal size), 3 for icons, focus rings and other graphics (AA, non-text contrast).
+# 4.5 for text (AA, normal size), 3 for icons, focus rings and other graphics (AA, non-text contrast). In the theme
+# families' High contrast variants (M45) text must meet 7 (AAA): PolishTests raises every 4.5 to 7 there.
 # Format: foreground background minimum. PolishTests checks every theme in Theming/Tokens.axaml against this list,
 # and that every token whose name ends in "Foreground" appears in it.
 
@@ -9,13 +10,14 @@ Shell.Foreground Shell.Panel 4.5
 Shell.Foreground Shell.Toolbar 4.5
 Shell.Foreground Shell.Overlay 4.5
 Shell.Foreground Shell.Hover 4.5
-Shell.Foreground Shell.Selection 4.5
-Shell.Foreground Shell.Search 4.5
+Shell.Selection.Foreground Shell.Selection 4.5
+Shell.Foreground Shell.Input 4.5
+Shell.Search.Foreground Shell.Search 4.5
 Shell.MutedForeground Shell.Background 4.5
 Shell.MutedForeground Shell.Panel 4.5
 Shell.MutedForeground Shell.Toolbar 4.5
 Shell.MutedForeground Shell.Overlay 4.5
-Shell.MutedForeground Shell.Search 4.5
+Shell.MutedForeground Shell.Input 4.5
 Shell.MutedForeground Shell.Editor.Background 4.5
 Shell.Link Shell.Panel 4.5
 Shell.Link Shell.Background 4.5
@@ -23,12 +25,18 @@ Shell.Link Shell.Overlay 4.5
 Shell.Match Shell.Overlay 4.5
 Shell.AccentForeground Shell.Accent 4.5
 Shell.TitleBar.Foreground Shell.TitleBar 4.5
+Shell.TitleBar.Foreground Shell.TitleBar.Hover 4.5
+Shell.TitleBar.Foreground Shell.TitleBar.Chip 4.5
+Shell.Toolbar.Start.Foreground Shell.Toolbar.Start 4.5
+Shell.Toolbar.Start.Icon Shell.Toolbar.Start 3
 
 # The status bar in each of its states.
 Shell.StatusBar.Foreground Shell.StatusBar 4.5
 Shell.StatusBar.Foreground Shell.StatusBar.Hover 4.5
-Shell.StatusBar.Foreground Shell.StatusBar.Empty 4.5
-Shell.StatusBar.Foreground Shell.StatusBar.Debugging 4.5
+Shell.StatusBar.Empty.Foreground Shell.StatusBar.Empty 4.5
+Shell.StatusBar.Empty.Foreground Shell.StatusBar.Empty.Hover 4.5
+Shell.StatusBar.Debugging.Foreground Shell.StatusBar.Debugging 4.5
+Shell.StatusBar.Debugging.Foreground Shell.StatusBar.Debugging.Hover 4.5
 
 # Document tabs and tool window captions.
 Shell.Tab.Active.Foreground Shell.Tab.Active 4.5
@@ -43,6 +51,10 @@ DockTabActiveForegroundBrush DockTabActiveBackgroundBrush 4.5
 # The editor.
 Shell.Editor.Foreground Shell.Editor.Background 4.5
 Shell.Editor.LineNumbers Shell.Editor.Background 4.5
+Shell.Editor.Foreground Shell.Editor.CurrentLine 4.5
+Shell.Editor.Foreground Shell.Editor.Breakpoint.Line 4.5
+Shell.Editor.Foreground Shell.Editor.CurrentStatement 4.5
+Shell.Editor.Breakpoint Shell.Editor.Background 3
 Shell.Editor.InlayHint.Foreground Shell.Editor.InlayHint.Background 4.5
 Shell.Editor.Fold Shell.Editor.Background 3
 Shell.Editor.Bracket1 Shell.Editor.Background 3
@@ -116,3 +128,32 @@ Shell.TabColor.5 Shell.Tab.Inactive 3
 Shell.TabColor.6 Shell.Tab.Inactive 3
 Shell.TabColor.7 Shell.Tab.Inactive 3
 Shell.TabColor.8 Shell.Tab.Inactive 3
+
+# Text in the state colors (M34g): error and warning messages, on the surfaces they're shown on.
+Shell.Error.Foreground Shell.Panel 4.5
+Shell.Error.Foreground Shell.Background 4.5
+Shell.Error.Foreground Shell.Overlay 4.5
+Shell.Error.Foreground Shell.Editor.Background 4.5
+Shell.Warning.Foreground Shell.Panel 4.5
+Shell.Warning.Foreground Shell.Background 4.5
+Shell.Warning.Foreground Shell.Overlay 4.5
+Shell.Warning.Foreground Shell.Editor.Background 4.5
+
+# Diff text (M34g on M43): the removed and added lines of a preview of changes (Convert to SDK-Style's among them).
+Shell.Diff.Added.Foreground Shell.Panel 4.5
+Shell.Diff.Added.Foreground Shell.Background 4.5
+Shell.Diff.Added.Foreground Shell.Overlay 4.5
+Shell.Diff.Added.Foreground Shell.Editor.Background 4.5
+Shell.Diff.Removed.Foreground Shell.Panel 4.5
+Shell.Diff.Removed.Foreground Shell.Background 4.5
+Shell.Diff.Removed.Foreground Shell.Overlay 4.5
+Shell.Diff.Removed.Foreground Shell.Editor.Background 4.5
+
+# The new views' other surfaces (M34g): the setup's cards and sections (Shell.Editor.Background), and the
+# outlines in the accent (a chosen card, a chosen chip).
+Shell.Foreground Shell.Editor.Background 4.5
+Shell.Accent Shell.Overlay 3
+Shell.Accent Shell.Editor.Background 3
+
+# A checked toggle button (M34g): Fluent's, set per family.
+ToggleButtonForegroundChecked ToggleButtonBackgroundChecked 4.5

@@ -133,6 +133,9 @@ public sealed class SolutionService : IAsyncDisposable
     /// <summary>A line of a <c>dotnet aspnet-codegenerator</c> run the build host runs (ADR 0041).</summary>
     public event EventHandler<ScaffoldOutputParams>? ScaffoldOutput;
 
+    /// <summary>A line of a <c>dotnet-svcutil</c> run the build host runs (ADR 0069).</summary>
+    public event EventHandler<ScaffoldOutputParams>? WcfOutput;
+
     /// <summary>The build host crashed; <see cref="ProcessCrashedEventArgs.WillRestart"/> tells whether it comes back.</summary>
     public event EventHandler<ProcessCrashedEventArgs>? HostCrashed;
 
@@ -143,14 +146,21 @@ public sealed class SolutionService : IAsyncDisposable
     /// <summary>
     /// Opens <paramref name="path"/> (<c>.sln</c>, <c>.slnx</c> or a project file) in a new build host. Untrusted
     /// solutions show their structure only. Returns the structure from the solution file; projects follow as
-    /// <see cref="ProjectChanged"/> events.
+    /// <see cref="ProjectChanged"/> events. <paramref name="configuration"/> and <paramref name="platform"/> are used
+    /// when the solution has them, and <paramref name="activeFrameworks"/> for the projects that still target them
+    /// (the session kept with the solution, ADR 0070).
     /// </summary>
-    public async Task<SolutionInfo> OpenAsync(string path, bool trusted, bool restore, CancellationToken cancellationToken, string? configuration = null, string? platform = null)
+    public async Task<SolutionInfo> OpenAsync(string path, bool trusted, bool restore, CancellationToken cancellationToken, string? configuration = null, string? platform = null, IReadOnlyDictionary<string, string>? activeFrameworks = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await CloseCoreAsync().ConfigureAwait(false);
+            foreach (var (project, framework) in activeFrameworks ?? new Dictionary<string, string>())
+            {
+                _activeFrameworks[project] = framework;
+            }
+
             var full = Path.GetFullPath(path);
             var hostPath = _resolveHost() ?? throw new InvalidOperationException("The build host (codalus-buildhost) was not found.");
             _openParams = new OpenSolutionParams(full, trusted, configuration, platform, restore);
@@ -273,6 +283,7 @@ public sealed class SolutionService : IAsyncDisposable
         connection.OnNotification(ItemMethods.FilesChanged, ItemJsonContext.Default.FilesChangedParams, p => FilesChanged?.Invoke(this, p.Directories));
         connection.OnNotification(EfMethods.Output, EntityFrameworkJsonContext.Default.EfOutputParams, o => EfOutput?.Invoke(this, o));
         connection.OnNotification(ScaffoldMethods.Output, WebToolsJsonContext.Default.ScaffoldOutputParams, o => ScaffoldOutput?.Invoke(this, o));
+        connection.OnNotification(WcfReferenceMethods.Output, WcfJsonContext.Default.ScaffoldOutputParams, o => WcfOutput?.Invoke(this, o));
         connection.OnNotification(PackageMethods.SignInMessage, PackageJsonContext.Default.PackageSignInMessage, m => PackageSignInMessage?.Invoke(this, m));
     }
 
@@ -329,9 +340,16 @@ public sealed class SolutionService : IAsyncDisposable
         InvokeAsync(ProjectMethods.Restore, new RestoreParams(path), ProjectJsonContext.Default.RestoreParams, cancellationToken);
 
     /// <summary>The target framework the language service sees for a multi-targeted project.</summary>
-    public string? ActiveFramework(string projectPath) =>
-        _activeFrameworks.TryGetValue(projectPath, out var framework) ? framework
-        : _projects.TryGetValue(projectPath, out var project) ? project.TargetFrameworks.FirstOrDefault() : null;
+    public string? ActiveFramework(string projectPath)
+    {
+        var frameworks = _projects.TryGetValue(projectPath, out var project) ? project.TargetFrameworks : [];
+        return _activeFrameworks.TryGetValue(projectPath, out var framework) && (frameworks.Length == 0 || frameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
+            ? framework // a kept choice the project no longer targets falls back to its first framework
+            : frameworks.FirstOrDefault();
+    }
+
+    /// <summary>The target frameworks chosen for multi-targeted projects (kept with the solution).</summary>
+    public IReadOnlyDictionary<string, string> ActiveFrameworks => new Dictionary<string, string>(_activeFrameworks, PathComparer);
 
     public async Task SetActiveFrameworkAsync(string projectPath, string targetFramework, CancellationToken cancellationToken)
     {
@@ -352,8 +370,13 @@ public sealed class SolutionService : IAsyncDisposable
     {
         var connection = Connection;
         await using var registration = cancellationToken.Register(() => _ = CancelBuildAsync(connection)).ConfigureAwait(false);
-        return await connection.InvokeAsync(
+        var result = await connection.InvokeAsync(
             ProjectMethods.Build, new BuildParams(target, projectPath, Options: options), ProjectJsonContext.Default.BuildParams, ProjectJsonContext.Default.BuildResultInfo, CancellationToken.None).ConfigureAwait(false);
+
+        // The host sends the build's output and diagnostics before its result, but the result completes this call as
+        // soon as it is read: wait until they have been raised (a failed build's errors were missing: Windows CI).
+        await connection.WhenDispatchedAsync().ConfigureAwait(false);
+        return result;
     }
 
     /// <summary>Batch Build (ADR 0034): each entry in turn, output and diagnostics as for a build; cancellable the same way.</summary>
@@ -361,8 +384,10 @@ public sealed class SolutionService : IAsyncDisposable
     {
         var connection = Connection;
         await using var registration = cancellationToken.Register(() => _ = CancelBuildAsync(connection)).ConfigureAwait(false);
-        return await connection.InvokeAsync(
+        var result = await connection.InvokeAsync(
             BuildDepthMethods.Batch, parameters, BuildDepthJsonContext.Default.BatchBuildParams, BuildDepthJsonContext.Default.BatchBuildResult, CancellationToken.None).ConfigureAwait(false);
+        await connection.WhenDispatchedAsync().ConfigureAwait(false); // its output and diagnostics first, as for a build
+        return result;
     }
 
     private static async Task CancelBuildAsync(JsonRpcConnection connection)
@@ -446,7 +471,8 @@ public sealed class SolutionService : IAsyncDisposable
 
     /// <summary>
     /// Sends a request to the build host, for the services built on its connection (packages, project properties…).
-    /// It times out after <paramref name="timeout"/> (default two minutes).
+    /// It completes after the notifications the host sent before its result (a tool's output: Entity Framework,
+    /// scaffolding, WCF), and times out after <paramref name="timeout"/> (default two minutes).
     /// </summary>
     public async Task<TResult> RequestAsync<TParams, TResult>(
         string method,
@@ -458,7 +484,10 @@ public sealed class SolutionService : IAsyncDisposable
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limit.CancelAfter(timeout ?? s_operationTimeout);
-        return await Connection.InvokeAsync(method, parameters, parametersInfo, resultInfo, limit.Token).ConfigureAwait(false);
+        var connection = Connection;
+        var result = await connection.InvokeAsync(method, parameters, parametersInfo, resultInfo, limit.Token).ConfigureAwait(false);
+        await connection.WhenDispatchedAsync().ConfigureAwait(false); // as for a build: the output sent before the result first
+        return result;
     }
 
     private async Task InvokeAsync<T>(string method, T parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken)

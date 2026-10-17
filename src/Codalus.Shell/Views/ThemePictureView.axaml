@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.ThemePictureView"
+             x:DataType="vm:ThemePicture">
+  <!--
+    A theme variant's picture (M45, shared by Options' family cards and the first-run setup's, M46): the title bar and
+    search box, the toolbar and Start, the editor with its current line, the gutter, a panel with its caption and
+    selection, the status bar, each in the variant's own tokens. 178 × 100; a Viewbox scales it.
+  -->
+  <Border Width="178" Height="100" HorizontalAlignment="Left" Background="{Binding Background}" BorderBrush="{Binding Border}" BorderThickness="1" ClipToBounds="True">
+    <DockPanel>
+      <Border DockPanel.Dock="Top" Height="12" Background="{Binding TitleBar}">
+        <Border Width="44" Height="6" HorizontalAlignment="Center" Background="{Binding Search}" BorderBrush="{Binding SearchBorder}" BorderThickness="1" CornerRadius="2" />
+      </Border>
+      <Border DockPanel.Dock="Top" Height="9" Background="{Binding Toolbar}" BorderBrush="{Binding ToolbarBorder}" BorderThickness="0,0,0,1">
+        <StackPanel Orientation="Horizontal" Spacing="3" Margin="4,0" VerticalAlignment="Center">
+          <Border Width="5" Height="5" Background="{Binding IconBlue}" />
+          <Border Width="5" Height="5" Background="{Binding IconFolder}" />
+          <Border Width="14" Height="5" CornerRadius="2" Background="{Binding Start}">
+            <Border Width="4" Height="4" HorizontalAlignment="Left" Margin="1,0" Background="{Binding StartIcon}" />
+          </Border>
+        </StackPanel>
+      </Border>
+      <Border DockPanel.Dock="Bottom" Height="7" Background="{Binding StatusBar}" />
+      <Grid ColumnDefinitions="*,Auto,52" Margin="2">
+        <Border Background="{Binding EditorBackground}" CornerRadius="{Binding PanelCorners}">
+          <StackPanel Spacing="3" Margin="5,5,0,0">
+            <Border Width="30" Height="3" HorizontalAlignment="Left" Background="{Binding Accent}" />
+            <Border Width="54" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding EditorForeground}" />
+            <Border Width="40" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Link}" />
+            <Border Height="5" Background="{Binding CurrentLine}">
+              <Border Width="46" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Muted}" />
+            </Border>
+            <Border Width="26" Height="3" HorizontalAlignment="Left" Background="{Binding EditorForeground}" />
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="1" Width="{Binding Gutter}" Background="{Binding GutterBackground}" />
+        <Border Grid.Column="2" Background="{Binding Panel}" CornerRadius="{Binding PanelCorners}">
+          <StackPanel Spacing="3">
+            <Border Height="7" Background="{Binding Caption}" />
+            <Border Height="5" Margin="3,0" Background="{Binding Selection}" />
+            <Border Width="30" Height="3" HorizontalAlignment="Left" Margin="5,0" Background="{Binding Foreground}" />
+            <Border Width="24" Height="3" HorizontalAlignment="Left" Margin="5,0" Background="{Binding Foreground}" />
+          </StackPanel>
+        </Border>
+      </Grid>
+    </DockPanel>
+  </Border>
+</UserControl>

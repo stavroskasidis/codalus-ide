@@ -196,6 +196,10 @@ public sealed class LanguageService : IAsyncDisposable
             ? [.. _registry.LintersFor(document.LanguageId).Where(l => Takes(l, document)).Select(l => RunningClient(l.LanguageId)).OfType<LanguageHostClient>()]
             : [];
 
+    /// <summary>Every running language service (one per server; linters included), without starting any: Code Search asks each for workspace symbols.</summary>
+    public IReadOnlyList<(string Server, LanguageHostClient Client)> RunningClients() =>
+        [.. _clients.Where(c => c.Value.IsValueCreated && c.Value.Value.IsCompletedSuccessfully && c.Value.Value.Result is not null).Select(c => (c.Key, c.Value.Value.Result!))];
+
     /// <summary>The running client of a language's service, without starting it.</summary>
     public LanguageHostClient? RunningClient(string languageId) =>
         ServerOf(languageId) is { } server && _clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result : null;

@@ -38,6 +38,46 @@ public class TemplateCatalogTests
 
     [Fact]
     public void Garbage_parses_to_nothing() => Assert.Empty(TemplateCatalog.Parse("dotnet: command failed"));
+
+    [Fact]
+    public void Wpf_and_windows_forms_templates_have_names_and_go_last_off_windows()
+    {
+        const string desktop = """
+            Template Name                    Short Name           Language    Tags
+            -------------------------------  -------------------  ----------  ---------------
+            Console App                      console              [C#],F#,VB  Common/Console
+            Windows Forms App                winforms             [C#],VB     Common/WinForms
+            Windows Forms Class Library      winformslib          [C#],VB     Common/WinForms
+            Windows Forms Control Library    winformscontrollib   [C#],VB     Common/WinForms
+            WPF Application                  wpf                  [C#],VB     Common/WPF
+            WPF Class Library                wpflib               [C#],VB     Common/WPF
+            WPF User Control Library         wpfusercontrollib    [C#],VB     Common/WPF
+            Class Library                    classlib             [C#],F#,VB  Common/Library
+            """;
+        var templates = TemplateCatalog.Parse(desktop);
+        Assert.Equal(["console", "classlib", "wpf", "wpflib", "wpfusercontrollib", "winforms", "winformslib", "winformscontrollib"], templates.Select(t => t.ShortName));
+        Assert.Equal("WPF User Control Library", templates.Single(t => t.ShortName == "wpfusercontrollib").Name);
+        Assert.Equal("WinFormsApp1", templates.Single(t => t.ShortName == "winforms").DefaultName);
+        Assert.Equal("WpfApp1", templates.Single(t => t.ShortName == "wpf").DefaultName);
+        Assert.True(templates.Single(t => t.ShortName == "winformslib").IsWindowsDesktop);
+        Assert.False(templates[0].IsWindowsDesktop);
+
+        Assert.Equal(templates, TemplateCatalog.ForThisOs(templates, windows: true));
+        var elsewhere = TemplateCatalog.ForThisOs([templates[2], templates[0], templates[5], templates[1]], windows: false);
+        Assert.Equal(["console", "classlib", "wpf", "winforms"], elsewhere.Select(t => t.ShortName));
+    }
+
+    [Fact]
+    public void Template_packs_that_are_not_installed_are_offered()
+    {
+        var templates = TemplateCatalog.Parse(Output);
+        Assert.Equal(["Avalonia.Templates", "CoreWCF.Templates"], TemplatePacks.Missing(templates).Select(p => p.Package));
+
+        var withCoreWcf = TemplateCatalog.Parse(Output.Replace("Console App         console ", "CoreWCF Service     corewcf ", StringComparison.Ordinal));
+        Assert.Equal(["Avalonia.Templates"], TemplatePacks.Missing(withCoreWcf).Select(p => p.Package));
+        var coreWcf = withCoreWcf.Single(t => t.ShortName == "corewcf");
+        Assert.Equal(("CoreWCF Service", "CoreWCFService1"), (coreWcf.Name, coreWcf.DefaultName));
+    }
 }
 
 public class TemplateFrameworksTests
@@ -189,5 +229,75 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
         var project = await opened.Task.WaitAsync(timeout.Token);
         Assert.Equal(Path.Combine(location, "Hello.Vb", "Hello.Vb.vbproj"), project);
         Assert.True(File.Exists(Path.Combine(location, "Hello.Vb", "Program.vb")));
+    }
+}
+
+/// <summary>New Project's .NET Framework templates (M43a, ADR 0075): SDK-style net48 projects in C# 7.3 that build on every OS.</summary>
+public sealed class NetFrameworkTemplatesTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-netfx-templates-" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    [Fact]
+    public void The_templates_write_sdk_style_net_framework_projects_and_go_last_off_windows()
+    {
+        var files = NetFrameworkTemplates.Files(NetFrameworkTemplates.ConsoleShortName, "Hello.App", "net472");
+        Assert.Equal(["Hello.App.csproj", "Program.cs", "App.config"], files.Select(f => f.Path));
+        Assert.Equal("<Project Sdk=\"Microsoft.NET.Sdk\">\n\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net472</TargetFramework>\n  </PropertyGroup>\n\n</Project>\n", files[0].Text);
+        Assert.Contains("namespace Hello.App\n{", files[1].Text, StringComparison.Ordinal);
+        Assert.Contains("private static void Main(string[] args)", files[1].Text, StringComparison.Ordinal);
+        Assert.Contains("sku=\".NETFramework,Version=v4.7.2\"", files[2].Text, StringComparison.Ordinal);
+
+        var library = NetFrameworkTemplates.Files(NetFrameworkTemplates.LibraryShortName, "1Lib-Core", "net48");
+        Assert.Equal(["1Lib-Core.csproj", "Class1.cs"], library.Select(f => f.Path));
+        Assert.Contains("<RootNamespace>_1Lib_Core</RootNamespace>", library[0].Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("OutputType", library[0].Text, StringComparison.Ordinal);
+        Assert.Equal("net48", NetFrameworkTemplates.Frameworks[0]);
+
+        Assert.True(NetFrameworkTemplates.All[0].RunsOnlyOnWindows);
+        Assert.Equal("ConsoleApp1", NetFrameworkTemplates.All[0].DefaultName);
+        Assert.Equal("ClassLibrary1", NetFrameworkTemplates.All[1].DefaultName);
+        var console = new ProjectTemplate("Console App", "console", "C#");
+        Assert.Equal(["console", NetFrameworkTemplates.ConsoleShortName], TemplateCatalog.ForThisOs([NetFrameworkTemplates.All[0], console], windows: false).Select(t => t.ShortName));
+    }
+
+    /// <summary>The console template's project builds with the SDK on this OS (the reference assemblies package from nuget.org, as other restores' targeting packs).</summary>
+    [Fact]
+    public async Task The_console_template_builds()
+    {
+        var directory = Path.Combine(_root, "ConsoleApp1");
+        Directory.CreateDirectory(directory);
+        Codalus.Tests.FixtureSdk.Pin(_root);
+        File.WriteAllText(Path.Combine(_root, "Directory.Build.props"), "<Project />");
+        File.WriteAllText(Path.Combine(_root, "Directory.Packages.props"), "<Project />");
+        foreach (var (path, text) in NetFrameworkTemplates.Files(NetFrameworkTemplates.ConsoleShortName, "ConsoleApp1", "net48"))
+        {
+            File.WriteAllText(Path.Combine(directory, path), text);
+        }
+
+        var psi = new System.Diagnostics.ProcessStartInfo("dotnet") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var argument in new[] { "build", "--nologo", "-v:q" })
+        {
+            psi.ArgumentList.Add(argument);
+        }
+
+        psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        using var process = System.Diagnostics.Process.Start(psi)!;
+        var output = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+        var error = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+        Assert.True(process.ExitCode == 0, await output + await error);
+        Assert.True(File.Exists(Path.Combine(directory, "bin", "Debug", "net48", "ConsoleApp1.exe")));
+        Assert.True(File.Exists(Path.Combine(directory, "bin", "Debug", "net48", "ConsoleApp1.exe.config")));
     }
 }

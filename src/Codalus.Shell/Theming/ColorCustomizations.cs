@@ -18,7 +18,7 @@ public sealed record ColorOverrides(IReadOnlyDictionary<string, uint> Tokens, IR
 /// shape so its settings import as they are.
 /// <list type="bullet">
 /// <item>Entries apply to every theme; an object under <c>"[Dark]"</c> (a theme's title or id) applies to that theme only,
-/// over them.</item>
+/// over them. A theme family's name (<c>"[Harbor]"</c>, M45) applies to its three variants, under their own.</item>
 /// <item>Token colors: <c>semanticTokenColors</c> by token type (<c>"class"</c>, <c>"comment"</c>; a value is a color or
 /// <c>{ "foreground": … }</c>), and VS Code's shorthands <c>comments</c>, <c>strings</c>, <c>keywords</c>,
 /// <c>numbers</c>, <c>types</c>, <c>functions</c> and <c>variables</c> for groups of them.</item>
@@ -35,7 +35,7 @@ public static class ColorCustomizations
     /// <summary>VS Code's token color shorthands, as our semantic token types.</summary>
     public static IReadOnlyDictionary<string, string[]> Shorthands { get; } = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
-        ["comments"] = ["comment", "xmlDocComment"],
+        ["comments"] = ["comment", "xmlDocComment", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation"],
         ["strings"] = ["string", "stringVerbatim"],
         ["keywords"] = ["keyword", "modifier", "controlKeyword"],
         ["numbers"] = ["number"],
@@ -44,18 +44,21 @@ public static class ColorCustomizations
         ["variables"] = ["parameter", "local", "variable"],
     };
 
-    /// <summary>The overrides for <paramref name="themeId"/> (with its <paramref name="themeTitle"/>) from the two settings' values.</summary>
-    public static ColorOverrides For(string themeId, string themeTitle, JsonElement workbench, JsonElement tokens)
+    /// <summary>
+    /// The overrides for <paramref name="themeId"/> (with its <paramref name="themeTitle"/>, and the theme family it is a
+    /// variant of) from the two settings' values.
+    /// </summary>
+    public static ColorOverrides For(string themeId, string themeTitle, JsonElement workbench, JsonElement tokens, string? family = null)
     {
         var tokenColors = new Dictionary<string, uint>(StringComparer.Ordinal);
         var elements = new Dictionary<string, uint>(StringComparer.Ordinal);
         var ui = new Dictionary<string, uint>(StringComparer.Ordinal);
-        foreach (var scope in Scopes(tokens, themeId, themeTitle))
+        foreach (var scope in Scopes(tokens, themeId, themeTitle, family))
         {
             ReadTokens(scope, tokenColors);
         }
 
-        foreach (var scope in Scopes(workbench, themeId, themeTitle))
+        foreach (var scope in Scopes(workbench, themeId, themeTitle, family))
         {
             foreach (var property in scope.EnumerateObject())
             {
@@ -78,8 +81,8 @@ public static class ColorCustomizations
         return tokenColors.Count == 0 && elements.Count == 0 && ui.Count == 0 ? ColorOverrides.None : new ColorOverrides(tokenColors, elements, ui);
     }
 
-    /// <summary>The setting's object, then its object for the theme (so the theme's entries win).</summary>
-    private static IEnumerable<JsonElement> Scopes(JsonElement value, string themeId, string themeTitle)
+    /// <summary>The setting's object, then its object for the family, then for the theme (so the theme's entries win).</summary>
+    private static IEnumerable<JsonElement> Scopes(JsonElement value, string themeId, string themeTitle, string? family)
     {
         if (value.ValueKind != JsonValueKind.Object)
         {
@@ -87,13 +90,28 @@ public static class ColorCustomizations
         }
 
         yield return value;
-        foreach (var property in value.EnumerateObject())
+        if (family is not null)
         {
-            if (property.Value.ValueKind == JsonValueKind.Object && property.Name.Length > 2 && property.Name[0] == '[' && property.Name[^1] == ']'
-                && property.Name[1..^1] is var name
-                && (string.Equals(name, themeId, StringComparison.OrdinalIgnoreCase) || string.Equals(name, themeTitle, StringComparison.OrdinalIgnoreCase)))
+            foreach (var scope in Named(value, name => string.Equals(name, family, StringComparison.OrdinalIgnoreCase)))
             {
-                yield return property.Value;
+                yield return scope;
+            }
+        }
+
+        foreach (var scope in Named(value, name => string.Equals(name, themeId, StringComparison.OrdinalIgnoreCase) || string.Equals(name, themeTitle, StringComparison.OrdinalIgnoreCase)))
+        {
+            yield return scope;
+        }
+
+        static IEnumerable<JsonElement> Named(JsonElement value, Func<string, bool> matches)
+        {
+            foreach (var property in value.EnumerateObject())
+            {
+                if (property.Value.ValueKind == JsonValueKind.Object && property.Name.Length > 2 && property.Name[0] == '[' && property.Name[^1] == ']'
+                    && matches(property.Name[1..^1]))
+                {
+                    yield return property.Value;
+                }
             }
         }
     }

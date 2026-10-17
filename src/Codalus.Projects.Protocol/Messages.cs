@@ -173,6 +173,24 @@ public sealed record ProjectInfo(
     /// <summary>A .NET MAUI project (<c>UseMaui</c>, M20a): its platform frameworks run on devices, emulators and simulators.</summary>
     public bool UsesMaui { get; init; }
 
+    /// <summary>A WPF project (<c>UseWPF</c>, M40a): it runs only on Windows; its <c>.xaml</c> files get WPF's XAML language service.</summary>
+    public bool UsesWpf { get; init; }
+
+    /// <summary>A Windows Forms project (<c>UseWindowsForms</c>, M40a): it runs only on Windows.</summary>
+    public bool UsesWindowsForms { get; init; }
+
+    /// <summary>
+    /// A WinUI 3 project (<c>UseWinUI</c>, M44): it builds, runs and debugs only on Windows (WinUI's XAML compiler runs
+    /// only there); its <c>.xaml</c> files get WinUI's XAML language service on every OS.
+    /// </summary>
+    public bool UsesWinUI { get; init; }
+
+    /// <summary>
+    /// The evaluated <c>WindowsPackageType</c> of the project's Windows framework (M44): <c>MSIX</c> for a packaged app,
+    /// <c>None</c> for an unpackaged one, <c>Sparse</c>; null when nothing sets it (no Windows App SDK).
+    /// </summary>
+    public string? WindowsPackageType { get; init; }
+
     /// <summary>
     /// Workload packs the project needs and the SDK doesn't have (the SDK's <c>MissingWorkloadPack</c> items, M20a), so
     /// it can't build until <c>dotnet workload restore</c> or an install; empty when none is missing.
@@ -184,6 +202,18 @@ public sealed record ProjectInfo(
     /// the Dependencies node shows a package's transitive packages under it. Empty before a restore.
     /// </summary>
     public PackageDependencyInfo[] Packages { get; init; } = [];
+
+    /// <summary>
+    /// A non-SDK-style ("old-style") project (M43a): it imports <c>Microsoft.CSharp.targets</c> itself, lists its files,
+    /// and has its packages in <c>packages.config</c>. Its target framework is .NET Framework's (<c>net472</c>).
+    /// </summary>
+    public bool IsNonSdkStyle { get; init; }
+
+    /// <summary>
+    /// Why the project can't build in Codalus IDE although it loads (M43a: it imports Visual Studio's own targets), or
+    /// null. Such projects are left out of solution builds and restores.
+    /// </summary>
+    public string? CannotBuildReason { get; init; }
 
     /// <summary>A Docker Compose project (<c>.dcproj</c>, M17a): loaded from its XML, never evaluated or built (ADR 0042).</summary>
     [JsonIgnore]
@@ -392,7 +422,14 @@ public sealed record RunInfo(
     string? RunCommand,
     string? RunArguments,
     string? RunWorkingDirectory,
-    string? LaunchSettings);
+    string? LaunchSettings)
+{
+    /// <summary>The framework's <c>WindowsPackageType</c> (M44): <c>MSIX</c> runs as a package; null when nothing sets it.</summary>
+    public string? WindowsPackageType { get; init; }
+
+    /// <summary>The <c>AppxManifest.xml</c> a packaged app's build writes (<c>FinalAppxManifestName</c>, M44), or null.</summary>
+    public string? AppxManifest { get; init; }
+}
 
 // ------------------------------------------------------------------ log
 

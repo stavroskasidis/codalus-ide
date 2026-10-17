@@ -3,6 +3,32 @@ using System.Runtime.InteropServices;
 
 namespace Codalus.Plugins.DotNetTest;
 
+/// <summary>Target frameworks that target Windows (M40a) or are .NET Framework's (M43a): their test hosts run only there.</summary>
+internal static class WindowsFrameworks
+{
+    /// <summary><c>net8.0-windows</c>, <c>net10.0-windows10.0.19041.0</c>.</summary>
+    public static bool IsWindows(string targetFramework) =>
+        targetFramework.IndexOf('-', StringComparison.Ordinal) is var dash and > 0 && targetFramework[(dash + 1)..].StartsWith("windows", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>.NET Framework's monikers: <c>net48</c>, <c>net472</c> (no dot, unlike <c>net8.0</c>).</summary>
+    public static bool IsNetFramework(string targetFramework) =>
+        targetFramework.Length is >= 5 and <= 6 && targetFramework.StartsWith("net", StringComparison.OrdinalIgnoreCase)
+        && targetFramework[3..].All(char.IsAsciiDigit) && targetFramework[3] is >= '1' and <= '4';
+
+    /// <summary>
+    /// Whether a project with these frameworks can't run its tests here: all of them target Windows or .NET Framework
+    /// (whose test hosts run on the desktop CLR; Mono is a later decision), and this isn't Windows.
+    /// </summary>
+    public static bool OnlyWindows(IReadOnlyList<string> targetFrameworks, bool windows) =>
+        !windows && targetFrameworks.Count > 0 && targetFrameworks.All(f => IsWindows(f) || IsNetFramework(f));
+
+    /// <summary>Why a project's tests run only on Windows, for its row and a run's output.</summary>
+    public static string Reason(string project, IReadOnlyList<string> targetFrameworks) =>
+        targetFrameworks.All(IsNetFramework)
+            ? $"{project} targets .NET Framework ({string.Join(", ", targetFrameworks)}): its tests run only on Windows."
+            : $"{project} targets Windows ({string.Join(", ", targetFrameworks)}): its tests run only on Windows.";
+}
+
 /// <summary>
 /// What the test hosts of older frameworks need (M33, ADR 0030), as the shell's runs and debug sessions get it:
 /// <list type="bullet">
@@ -15,7 +41,21 @@ namespace Codalus.Plugins.DotNetTest;
 internal static class OlderFrameworks
 {
     public static RunOptions Adjust(RunOptions options, string? targetFramework) =>
-        Adjust(options, targetFramework, RuntimeInformation.OSArchitecture, OperatingSystem.IsMacOS(), OperatingSystem.IsLinux(), Environment.GetEnvironmentVariable, SystemIcuMajor);
+        DebugNetFramework(
+            Adjust(options, targetFramework, RuntimeInformation.OSArchitecture, OperatingSystem.IsMacOS(), OperatingSystem.IsLinux(), Environment.GetEnvironmentVariable, SystemIcuMajor),
+            targetFramework,
+            OperatingSystem.IsWindows(),
+            RuntimeInformation.ProcessArchitecture);
+
+    /// <summary>
+    /// Debugging .NET Framework tests (M43b, ADR 0076): the desktop-CLR debugger debugs processes of its own bitness, and
+    /// VSTest may pick the 32-bit .NET Framework test host for an AnyCPU assembly, so the test host runs as the IDE's
+    /// architecture (x64, or ARM64), unless <c>testing.architecture</c> chose one.
+    /// </summary>
+    public static RunOptions DebugNetFramework(RunOptions options, string? targetFramework, bool windows, Architecture debugger) =>
+        windows && options.Mode == RunMode.Debug && string.IsNullOrEmpty(options.Architecture) && targetFramework is not null && WindowsFrameworks.IsNetFramework(targetFramework)
+            ? options with { Architecture = debugger switch { Architecture.Arm64 => "ARM64", Architecture.X86 => "x86", _ => "x64" } }
+            : options;
 
     public static RunOptions Adjust(RunOptions options, string? targetFramework, Architecture machine, bool macOS, bool linux, Func<string, string?> environment, Func<int?> icuMajor)
     {

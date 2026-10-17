@@ -1,0 +1,1035 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The <system.serviceModel> section of app.config and web.config (WCF), for completion, hover and validation in the
+  markup host (M42, ADR 0069). Written for Codalus IDE from WCF's documented configuration schema; MIT, like the rest
+  of the repository. Child elements may come in any order, as WCF's configuration reads them. Less common elements
+  take any attribute (anyAttribute), so their completion offers the usual ones without flagging the rest.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified">
+
+  <xs:element name="system.serviceModel">
+    <xs:annotation><xs:documentation>Windows Communication Foundation configuration: services, client endpoints, bindings, behaviors and diagnostics.</xs:documentation></xs:annotation>
+    <xs:complexType>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="behaviors" type="behaviorsSection" />
+        <xs:element name="bindings" type="bindingsSection" />
+        <xs:element name="client" type="clientSection" />
+        <xs:element name="services" type="servicesSection" />
+        <xs:element name="serviceHostingEnvironment" type="serviceHostingEnvironmentSection" />
+        <xs:element name="protocolMapping" type="protocolMappingSection" />
+        <xs:element name="diagnostics" type="diagnosticsSection" />
+        <xs:element name="extensions" type="extensionsSection" />
+        <xs:element name="standardEndpoints" type="openElement" />
+        <xs:element name="commonBehaviors" type="openElement" />
+        <xs:element name="comContracts" type="openElement" />
+        <xs:element name="routing" type="openElement" />
+        <xs:element name="tracking" type="openElement" />
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- Elements whose content isn't checked. -->
+  <xs:complexType name="openElement" mixed="true">
+    <xs:sequence>
+      <xs:any minOccurs="0" maxOccurs="unbounded" processContents="skip" />
+    </xs:sequence>
+    <xs:anyAttribute processContents="skip" />
+  </xs:complexType>
+
+  <!-- ===================================================================== simple types -->
+
+  <xs:simpleType name="bindingName">
+    <xs:annotation><xs:documentation>A binding: a system-provided one, or one an extension registers.</xs:documentation></xs:annotation>
+    <xs:union memberTypes="knownBindingName xs:string" />
+  </xs:simpleType>
+
+  <xs:simpleType name="knownBindingName">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="basicHttpBinding" />
+      <xs:enumeration value="basicHttpsBinding" />
+      <xs:enumeration value="wsHttpBinding" />
+      <xs:enumeration value="ws2007HttpBinding" />
+      <xs:enumeration value="wsDualHttpBinding" />
+      <xs:enumeration value="wsFederationHttpBinding" />
+      <xs:enumeration value="ws2007FederationHttpBinding" />
+      <xs:enumeration value="netHttpBinding" />
+      <xs:enumeration value="netHttpsBinding" />
+      <xs:enumeration value="netTcpBinding" />
+      <xs:enumeration value="netNamedPipeBinding" />
+      <xs:enumeration value="netMsmqBinding" />
+      <xs:enumeration value="netPeerTcpBinding" />
+      <xs:enumeration value="webHttpBinding" />
+      <xs:enumeration value="customBinding" />
+      <xs:enumeration value="mexHttpBinding" />
+      <xs:enumeration value="mexHttpsBinding" />
+      <xs:enumeration value="mexTcpBinding" />
+      <xs:enumeration value="mexNamedPipeBinding" />
+      <xs:enumeration value="msmqIntegrationBinding" />
+      <xs:enumeration value="udpBinding" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="timeSpan">
+    <xs:annotation><xs:documentation>A time span: hh:mm:ss, d.hh:mm:ss or Infinite.</xs:documentation></xs:annotation>
+    <xs:restriction base="xs:string" />
+  </xs:simpleType>
+
+  <xs:simpleType name="transferMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Buffered" />
+      <xs:enumeration value="Streamed" />
+      <xs:enumeration value="StreamedRequest" />
+      <xs:enumeration value="StreamedResponse" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="messageEncoding">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Text" />
+      <xs:enumeration value="Mtom" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="hostNameComparisonMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="StrongWildcard" />
+      <xs:enumeration value="Exact" />
+      <xs:enumeration value="WeakWildcard" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="httpClientCredentialType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="Basic" />
+      <xs:enumeration value="Digest" />
+      <xs:enumeration value="Ntlm" />
+      <xs:enumeration value="Windows" />
+      <xs:enumeration value="Certificate" />
+      <xs:enumeration value="InheritedFromHost" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="httpProxyCredentialType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="Basic" />
+      <xs:enumeration value="Digest" />
+      <xs:enumeration value="Ntlm" />
+      <xs:enumeration value="Windows" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="messageCredentialType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="Windows" />
+      <xs:enumeration value="UserName" />
+      <xs:enumeration value="Certificate" />
+      <xs:enumeration value="IssuedToken" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="tcpClientCredentialType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="Windows" />
+      <xs:enumeration value="Certificate" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="protectionLevel">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="Sign" />
+      <xs:enumeration value="EncryptAndSign" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="algorithmSuite">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Default" />
+      <xs:enumeration value="Basic256" />
+      <xs:enumeration value="Basic192" />
+      <xs:enumeration value="Basic128" />
+      <xs:enumeration value="TripleDes" />
+      <xs:enumeration value="Basic256Rsa15" />
+      <xs:enumeration value="Basic192Rsa15" />
+      <xs:enumeration value="Basic128Rsa15" />
+      <xs:enumeration value="TripleDesRsa15" />
+      <xs:enumeration value="Basic256Sha256" />
+      <xs:enumeration value="Basic192Sha256" />
+      <xs:enumeration value="Basic128Sha256" />
+      <xs:enumeration value="TripleDesSha256" />
+      <xs:enumeration value="Basic256Sha256Rsa15" />
+      <xs:enumeration value="Basic192Sha256Rsa15" />
+      <xs:enumeration value="Basic128Sha256Rsa15" />
+      <xs:enumeration value="TripleDesSha256Rsa15" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="basicHttpSecurityMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="Transport" />
+      <xs:enumeration value="Message" />
+      <xs:enumeration value="TransportWithMessageCredential" />
+      <xs:enumeration value="TransportCredentialOnly" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="securityMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="Transport" />
+      <xs:enumeration value="Message" />
+      <xs:enumeration value="TransportWithMessageCredential" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="webHttpSecurityMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="Transport" />
+      <xs:enumeration value="TransportCredentialOnly" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="namedPipeSecurityMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="Transport" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="webMessageFormat">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Xml" />
+      <xs:enumeration value="Json" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="webMessageBodyStyle">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Bare" />
+      <xs:enumeration value="Wrapped" />
+      <xs:enumeration value="WrappedRequest" />
+      <xs:enumeration value="WrappedResponse" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="performanceCounters">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Off" />
+      <xs:enumeration value="ServiceOnly" />
+      <xs:enumeration value="All" />
+      <xs:enumeration value="Default" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="storeLocation">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="CurrentUser" />
+      <xs:enumeration value="LocalMachine" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="storeName">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="AddressBook" />
+      <xs:enumeration value="AuthRoot" />
+      <xs:enumeration value="CertificateAuthority" />
+      <xs:enumeration value="Disallowed" />
+      <xs:enumeration value="My" />
+      <xs:enumeration value="Root" />
+      <xs:enumeration value="TrustedPeople" />
+      <xs:enumeration value="TrustedPublisher" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="x509FindType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="FindByThumbprint" />
+      <xs:enumeration value="FindBySubjectName" />
+      <xs:enumeration value="FindBySubjectDistinguishedName" />
+      <xs:enumeration value="FindByIssuerName" />
+      <xs:enumeration value="FindByIssuerDistinguishedName" />
+      <xs:enumeration value="FindBySerialNumber" />
+      <xs:enumeration value="FindByTimeValid" />
+      <xs:enumeration value="FindByTimeNotYetValid" />
+      <xs:enumeration value="FindByTimeExpired" />
+      <xs:enumeration value="FindByTemplateName" />
+      <xs:enumeration value="FindByApplicationPolicy" />
+      <xs:enumeration value="FindByCertificatePolicy" />
+      <xs:enumeration value="FindByExtension" />
+      <xs:enumeration value="FindByKeyUsage" />
+      <xs:enumeration value="FindBySubjectKeyIdentifier" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="userNamePasswordValidationMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Windows" />
+      <xs:enumeration value="MembershipProvider" />
+      <xs:enumeration value="Custom" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="principalPermissionMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None" />
+      <xs:enumeration value="UseWindowsGroups" />
+      <xs:enumeration value="UseAspNetRoles" />
+      <xs:enumeration value="Custom" />
+      <xs:enumeration value="Always" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="policyVersion">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Default" />
+      <xs:enumeration value="Policy12" />
+      <xs:enumeration value="Policy15" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="listenUriMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Explicit" />
+      <xs:enumeration value="Unique" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="transactionProtocol">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="OleTransactions" />
+      <xs:enumeration value="WSAtomicTransactionOctober2004" />
+      <xs:enumeration value="WSAtomicTransaction11" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- ===================================================================== collections -->
+
+  <xs:complexType name="nameRemove">
+    <xs:attribute name="name" type="xs:string" use="required" />
+  </xs:complexType>
+
+  <xs:complexType name="empty" />
+
+  <!-- ===================================================================== behaviors -->
+
+  <xs:complexType name="behaviorsSection">
+    <xs:annotation><xs:documentation>Named service and endpoint behaviors, used through behaviorConfiguration.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="serviceBehaviors">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="behavior" type="serviceBehavior" />
+            <xs:element name="clear" type="empty" />
+            <xs:element name="remove" type="nameRemove" />
+          </xs:choice>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="endpointBehaviors">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="behavior" type="endpointBehavior" />
+            <xs:element name="clear" type="empty" />
+            <xs:element name="remove" type="nameRemove" />
+          </xs:choice>
+        </xs:complexType>
+      </xs:element>
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="serviceBehavior">
+    <xs:annotation><xs:documentation>A service behavior; services name it in behaviorConfiguration (an empty name applies to every service).</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="serviceMetadata">
+        <xs:annotation><xs:documentation>Publishes the service's metadata (WSDL) over HTTP GET and through MEX endpoints.</xs:documentation></xs:annotation>
+        <xs:complexType>
+          <xs:attribute name="httpGetEnabled" type="xs:boolean" />
+          <xs:attribute name="httpsGetEnabled" type="xs:boolean" />
+          <xs:attribute name="httpGetUrl" type="xs:string" />
+          <xs:attribute name="httpsGetUrl" type="xs:string" />
+          <xs:attribute name="httpGetBinding" type="bindingName" />
+          <xs:attribute name="httpGetBindingConfiguration" type="xs:string" />
+          <xs:attribute name="httpsGetBinding" type="bindingName" />
+          <xs:attribute name="httpsGetBindingConfiguration" type="xs:string" />
+          <xs:attribute name="externalMetadataLocation" type="xs:string" />
+          <xs:attribute name="policyVersion" type="policyVersion" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="serviceDebug">
+        <xs:annotation><xs:documentation>Debugging help: exception details in faults, and the help page.</xs:documentation></xs:annotation>
+        <xs:complexType>
+          <xs:attribute name="includeExceptionDetailInFaults" type="xs:boolean" />
+          <xs:attribute name="httpHelpPageEnabled" type="xs:boolean" />
+          <xs:attribute name="httpsHelpPageEnabled" type="xs:boolean" />
+          <xs:attribute name="httpHelpPageUrl" type="xs:string" />
+          <xs:attribute name="httpsHelpPageUrl" type="xs:string" />
+          <xs:attribute name="httpHelpPageBinding" type="bindingName" />
+          <xs:attribute name="httpHelpPageBindingConfiguration" type="xs:string" />
+          <xs:attribute name="httpsHelpPageBinding" type="bindingName" />
+          <xs:attribute name="httpsHelpPageBindingConfiguration" type="xs:string" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="serviceThrottling">
+        <xs:annotation><xs:documentation>Limits on concurrent calls, sessions and service instances.</xs:documentation></xs:annotation>
+        <xs:complexType>
+          <xs:attribute name="maxConcurrentCalls" type="xs:int" />
+          <xs:attribute name="maxConcurrentSessions" type="xs:int" />
+          <xs:attribute name="maxConcurrentInstances" type="xs:int" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="serviceCredentials" type="credentials" />
+      <xs:element name="serviceAuthorization">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="authorizationPolicies" type="openElement" />
+          </xs:choice>
+          <xs:attribute name="principalPermissionMode" type="principalPermissionMode" />
+          <xs:attribute name="roleProviderName" type="xs:string" />
+          <xs:attribute name="impersonateCallerForAllOperations" type="xs:boolean" />
+          <xs:attribute name="serviceAuthorizationManagerType" type="xs:string" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="dataContractSerializer" type="dataContractSerializer" />
+      <xs:element name="serviceTimeouts">
+        <xs:complexType>
+          <xs:attribute name="transactionTimeout" type="timeSpan" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="serviceSecurityAudit" type="openElement" />
+      <xs:element name="useRequestHeadersForMetadataAddress" type="openElement" />
+      <xs:element name="serviceDiscovery" type="openElement" />
+      <xs:element name="routing" type="openElement" />
+      <xs:element name="workflowUnhandledException" type="openElement" />
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string" />
+  </xs:complexType>
+
+  <xs:complexType name="endpointBehavior">
+    <xs:annotation><xs:documentation>An endpoint behavior; endpoints name it in behaviorConfiguration.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="webHttp">
+        <xs:annotation><xs:documentation>The web programming model (REST) on a webHttpBinding endpoint.</xs:documentation></xs:annotation>
+        <xs:complexType>
+          <xs:attribute name="helpEnabled" type="xs:boolean" />
+          <xs:attribute name="automaticFormatSelectionEnabled" type="xs:boolean" />
+          <xs:attribute name="defaultOutgoingResponseFormat" type="webMessageFormat" />
+          <xs:attribute name="defaultBodyStyle" type="webMessageBodyStyle" />
+          <xs:attribute name="faultExceptionEnabled" type="xs:boolean" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="enableWebScript" type="empty" />
+      <xs:element name="clientCredentials" type="credentials" />
+      <xs:element name="dataContractSerializer" type="dataContractSerializer" />
+      <xs:element name="callbackDebug">
+        <xs:complexType>
+          <xs:attribute name="includeExceptionDetailInFaults" type="xs:boolean" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clientVia">
+        <xs:complexType>
+          <xs:attribute name="viaUri" type="xs:string" use="required" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="synchronousReceive" type="empty" />
+      <xs:element name="transactedBatching">
+        <xs:complexType>
+          <xs:attribute name="maxBatchSize" type="xs:int" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="endpointDiscovery" type="openElement" />
+      <xs:element name="soapProcessing" type="openElement" />
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string" />
+  </xs:complexType>
+
+  <xs:complexType name="credentials">
+    <xs:annotation><xs:documentation>Certificates and authentication of the service or the client.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="serviceCertificate" type="certificateReference" />
+      <xs:element name="clientCertificate" type="certificateReference" />
+      <xs:element name="userNameAuthentication">
+        <xs:complexType>
+          <xs:attribute name="userNamePasswordValidationMode" type="userNamePasswordValidationMode" />
+          <xs:attribute name="customUserNamePasswordValidatorType" type="xs:string" />
+          <xs:attribute name="membershipProviderName" type="xs:string" />
+          <xs:attribute name="includeWindowsGroups" type="xs:boolean" />
+          <xs:attribute name="cacheLogonTokens" type="xs:boolean" />
+          <xs:anyAttribute processContents="skip" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="windowsAuthentication" type="openElement" />
+      <xs:element name="windows" type="openElement" />
+      <xs:element name="httpDigest" type="openElement" />
+      <xs:element name="issuedToken" type="openElement" />
+      <xs:element name="issuedTokenAuthentication" type="openElement" />
+      <xs:element name="peer" type="openElement" />
+      <xs:element name="secureConversationAuthentication" type="openElement" />
+    </xs:choice>
+    <xs:attribute name="type" type="xs:string" />
+    <xs:attribute name="supportInteractive" type="xs:boolean" />
+    <xs:anyAttribute processContents="skip" />
+  </xs:complexType>
+
+  <xs:complexType name="certificateReference">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:any processContents="skip" />
+    </xs:choice>
+    <xs:attribute name="findValue" type="xs:string" />
+    <xs:attribute name="storeLocation" type="storeLocation" />
+    <xs:attribute name="storeName" type="storeName" />
+    <xs:attribute name="x509FindType" type="x509FindType" />
+    <xs:anyAttribute processContents="skip" />
+  </xs:complexType>
+
+  <xs:complexType name="dataContractSerializer">
+    <xs:attribute name="maxItemsInObjectGraph" type="xs:int" />
+    <xs:attribute name="ignoreExtensionDataObject" type="xs:boolean" />
+  </xs:complexType>
+
+  <!-- ===================================================================== bindings -->
+
+  <xs:complexType name="bindingsSection">
+    <xs:annotation><xs:documentation>Binding configurations, by binding; endpoints name one in bindingConfiguration.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="basicHttpBinding" type="basicHttpBindings" />
+      <xs:element name="basicHttpsBinding" type="basicHttpBindings" />
+      <xs:element name="wsHttpBinding" type="wsHttpBindings" />
+      <xs:element name="ws2007HttpBinding" type="wsHttpBindings" />
+      <xs:element name="wsDualHttpBinding" type="wsHttpBindings" />
+      <xs:element name="netHttpBinding" type="basicHttpBindings" />
+      <xs:element name="netHttpsBinding" type="basicHttpBindings" />
+      <xs:element name="netTcpBinding" type="netTcpBindings" />
+      <xs:element name="netNamedPipeBinding" type="netNamedPipeBindings" />
+      <xs:element name="webHttpBinding" type="webHttpBindings" />
+      <xs:element name="customBinding" type="customBindings" />
+      <xs:element name="wsFederationHttpBinding" type="openElement" />
+      <xs:element name="ws2007FederationHttpBinding" type="openElement" />
+      <xs:element name="netMsmqBinding" type="openElement" />
+      <xs:element name="netPeerTcpBinding" type="openElement" />
+      <xs:element name="msmqIntegrationBinding" type="openElement" />
+      <xs:element name="mexHttpBinding" type="openElement" />
+      <xs:element name="mexHttpsBinding" type="openElement" />
+      <xs:element name="mexTcpBinding" type="openElement" />
+      <xs:element name="mexNamedPipeBinding" type="openElement" />
+      <xs:element name="udpBinding" type="openElement" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:attributeGroup name="bindingCommon">
+    <xs:attribute name="name" type="xs:string">
+      <xs:annotation><xs:documentation>The configuration's name, for an endpoint's bindingConfiguration. Empty: the default for the binding.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="closeTimeout" type="timeSpan" />
+    <xs:attribute name="openTimeout" type="timeSpan" />
+    <xs:attribute name="receiveTimeout" type="timeSpan" />
+    <xs:attribute name="sendTimeout" type="timeSpan" />
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="httpCommon">
+    <xs:attribute name="allowCookies" type="xs:boolean" />
+    <xs:attribute name="bypassProxyOnLocal" type="xs:boolean" />
+    <xs:attribute name="hostNameComparisonMode" type="hostNameComparisonMode" />
+    <xs:attribute name="maxBufferPoolSize" type="xs:long" />
+    <xs:attribute name="maxReceivedMessageSize" type="xs:long">
+      <xs:annotation><xs:documentation>The largest message, in bytes, a channel accepts (default 65536).</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="messageEncoding" type="messageEncoding" />
+    <xs:attribute name="proxyAddress" type="xs:string" />
+    <xs:attribute name="textEncoding" type="xs:string" />
+    <xs:attribute name="useDefaultWebProxy" type="xs:boolean" />
+  </xs:attributeGroup>
+
+  <xs:complexType name="readerQuotas">
+    <xs:annotation><xs:documentation>Limits on the complexity of messages: depth, string and array lengths.</xs:documentation></xs:annotation>
+    <xs:attribute name="maxDepth" type="xs:int" />
+    <xs:attribute name="maxStringContentLength" type="xs:int" />
+    <xs:attribute name="maxArrayLength" type="xs:int" />
+    <xs:attribute name="maxBytesPerRead" type="xs:int" />
+    <xs:attribute name="maxNameTableCharCount" type="xs:int" />
+  </xs:complexType>
+
+  <xs:complexType name="reliableSession">
+    <xs:attribute name="enabled" type="xs:boolean" />
+    <xs:attribute name="ordered" type="xs:boolean" />
+    <xs:attribute name="inactivityTimeout" type="timeSpan" />
+  </xs:complexType>
+
+  <xs:complexType name="httpTransportSecurity">
+    <xs:attribute name="clientCredentialType" type="httpClientCredentialType" />
+    <xs:attribute name="proxyCredentialType" type="httpProxyCredentialType" />
+    <xs:attribute name="realm" type="xs:string" />
+    <xs:anyAttribute processContents="skip" />
+  </xs:complexType>
+
+  <xs:complexType name="basicHttpMessageSecurity">
+    <xs:attribute name="clientCredentialType" type="messageCredentialType" />
+    <xs:attribute name="algorithmSuite" type="algorithmSuite" />
+  </xs:complexType>
+
+  <xs:complexType name="messageSecurity">
+    <xs:attribute name="clientCredentialType" type="messageCredentialType" />
+    <xs:attribute name="algorithmSuite" type="algorithmSuite" />
+    <xs:attribute name="negotiateServiceCredential" type="xs:boolean" />
+    <xs:attribute name="establishSecurityContext" type="xs:boolean" />
+  </xs:complexType>
+
+  <!-- basicHttpBinding, basicHttpsBinding, netHttpBinding, netHttpsBinding -->
+  <xs:complexType name="basicHttpBindings">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="binding">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="readerQuotas" type="readerQuotas" />
+            <xs:element name="security">
+              <xs:complexType>
+                <xs:choice minOccurs="0" maxOccurs="unbounded">
+                  <xs:element name="transport" type="httpTransportSecurity" />
+                  <xs:element name="message" type="basicHttpMessageSecurity" />
+                </xs:choice>
+                <xs:attribute name="mode" type="basicHttpSecurityMode">
+                  <xs:annotation><xs:documentation>None, Transport (HTTPS), Message, TransportWithMessageCredential or TransportCredentialOnly.</xs:documentation></xs:annotation>
+                </xs:attribute>
+              </xs:complexType>
+            </xs:element>
+            <xs:element name="reliableSession" type="reliableSession" />
+            <xs:element name="webSocketSettings" type="openElement" />
+          </xs:choice>
+          <xs:attributeGroup ref="bindingCommon" />
+          <xs:attributeGroup ref="httpCommon" />
+          <xs:attribute name="maxBufferSize" type="xs:int" />
+          <xs:attribute name="transferMode" type="transferMode" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+  </xs:complexType>
+
+  <!-- wsHttpBinding, ws2007HttpBinding, wsDualHttpBinding -->
+  <xs:complexType name="wsHttpBindings">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="binding">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="readerQuotas" type="readerQuotas" />
+            <xs:element name="reliableSession" type="reliableSession" />
+            <xs:element name="security">
+              <xs:complexType>
+                <xs:choice minOccurs="0" maxOccurs="unbounded">
+                  <xs:element name="transport" type="httpTransportSecurity" />
+                  <xs:element name="message" type="messageSecurity" />
+                </xs:choice>
+                <xs:attribute name="mode" type="securityMode">
+                  <xs:annotation><xs:documentation>None, Transport, Message (the default) or TransportWithMessageCredential.</xs:documentation></xs:annotation>
+                </xs:attribute>
+              </xs:complexType>
+            </xs:element>
+          </xs:choice>
+          <xs:attributeGroup ref="bindingCommon" />
+          <xs:attributeGroup ref="httpCommon" />
+          <xs:attribute name="transactionFlow" type="xs:boolean" />
+          <xs:attribute name="clientBaseAddress" type="xs:string" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="netTcpBindings">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="binding">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="readerQuotas" type="readerQuotas" />
+            <xs:element name="reliableSession" type="reliableSession" />
+            <xs:element name="security">
+              <xs:complexType>
+                <xs:choice minOccurs="0" maxOccurs="unbounded">
+                  <xs:element name="transport">
+                    <xs:complexType>
+                      <xs:attribute name="clientCredentialType" type="tcpClientCredentialType" />
+                      <xs:attribute name="protectionLevel" type="protectionLevel" />
+                      <xs:attribute name="sslProtocols" type="xs:string" />
+                      <xs:anyAttribute processContents="skip" />
+                    </xs:complexType>
+                  </xs:element>
+                  <xs:element name="message" type="messageSecurity" />
+                </xs:choice>
+                <xs:attribute name="mode" type="securityMode" />
+              </xs:complexType>
+            </xs:element>
+          </xs:choice>
+          <xs:attributeGroup ref="bindingCommon" />
+          <xs:attribute name="hostNameComparisonMode" type="hostNameComparisonMode" />
+          <xs:attribute name="listenBacklog" type="xs:int" />
+          <xs:attribute name="maxBufferPoolSize" type="xs:long" />
+          <xs:attribute name="maxBufferSize" type="xs:int" />
+          <xs:attribute name="maxConnections" type="xs:int" />
+          <xs:attribute name="maxReceivedMessageSize" type="xs:long" />
+          <xs:attribute name="portSharingEnabled" type="xs:boolean" />
+          <xs:attribute name="transactionFlow" type="xs:boolean" />
+          <xs:attribute name="transactionProtocol" type="transactionProtocol" />
+          <xs:attribute name="transferMode" type="transferMode" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="netNamedPipeBindings">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="binding">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="readerQuotas" type="readerQuotas" />
+            <xs:element name="security">
+              <xs:complexType>
+                <xs:choice minOccurs="0" maxOccurs="unbounded">
+                  <xs:element name="transport">
+                    <xs:complexType>
+                      <xs:attribute name="protectionLevel" type="protectionLevel" />
+                    </xs:complexType>
+                  </xs:element>
+                </xs:choice>
+                <xs:attribute name="mode" type="namedPipeSecurityMode" />
+              </xs:complexType>
+            </xs:element>
+          </xs:choice>
+          <xs:attributeGroup ref="bindingCommon" />
+          <xs:attribute name="hostNameComparisonMode" type="hostNameComparisonMode" />
+          <xs:attribute name="maxBufferPoolSize" type="xs:long" />
+          <xs:attribute name="maxBufferSize" type="xs:int" />
+          <xs:attribute name="maxConnections" type="xs:int" />
+          <xs:attribute name="maxReceivedMessageSize" type="xs:long" />
+          <xs:attribute name="transactionFlow" type="xs:boolean" />
+          <xs:attribute name="transactionProtocol" type="transactionProtocol" />
+          <xs:attribute name="transferMode" type="transferMode" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="webHttpBindings">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="binding">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="readerQuotas" type="readerQuotas" />
+            <xs:element name="security">
+              <xs:complexType>
+                <xs:choice minOccurs="0" maxOccurs="unbounded">
+                  <xs:element name="transport" type="httpTransportSecurity" />
+                </xs:choice>
+                <xs:attribute name="mode" type="webHttpSecurityMode" />
+              </xs:complexType>
+            </xs:element>
+          </xs:choice>
+          <xs:attributeGroup ref="bindingCommon" />
+          <xs:attribute name="allowCookies" type="xs:boolean" />
+          <xs:attribute name="bypassProxyOnLocal" type="xs:boolean" />
+          <xs:attribute name="contentTypeMapper" type="xs:string" />
+          <xs:attribute name="crossDomainScriptAccessEnabled" type="xs:boolean" />
+          <xs:attribute name="hostNameComparisonMode" type="hostNameComparisonMode" />
+          <xs:attribute name="maxBufferPoolSize" type="xs:long" />
+          <xs:attribute name="maxBufferSize" type="xs:int" />
+          <xs:attribute name="maxReceivedMessageSize" type="xs:long" />
+          <xs:attribute name="proxyAddress" type="xs:string" />
+          <xs:attribute name="transferMode" type="transferMode" />
+          <xs:attribute name="useDefaultWebProxy" type="xs:boolean" />
+          <xs:attribute name="writeEncoding" type="xs:string" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="customBindings">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="binding">
+        <xs:annotation><xs:documentation>A binding built from binding elements: an encoder, protocols and a transport (last).</xs:documentation></xs:annotation>
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="textMessageEncoding" type="openElement" />
+            <xs:element name="binaryMessageEncoding" type="openElement" />
+            <xs:element name="mtomMessageEncoding" type="openElement" />
+            <xs:element name="httpTransport" type="openElement" />
+            <xs:element name="httpsTransport" type="openElement" />
+            <xs:element name="tcpTransport" type="openElement" />
+            <xs:element name="namedPipeTransport" type="openElement" />
+            <xs:element name="udpTransport" type="openElement" />
+            <xs:element name="webSocketTransport" type="openElement" />
+            <xs:element name="security" type="openElement" />
+            <xs:element name="reliableSession" type="openElement" />
+            <xs:element name="transactionFlow" type="openElement" />
+            <xs:element name="compositeDuplex" type="openElement" />
+            <xs:element name="oneWay" type="openElement" />
+            <xs:element name="windowsStreamSecurity" type="openElement" />
+            <xs:element name="sslStreamSecurity" type="openElement" />
+            <xs:element name="localServiceSettings" type="openElement" />
+            <xs:element name="localClientSettings" type="openElement" />
+            <xs:element name="webMessageEncoding" type="openElement" />
+          </xs:choice>
+          <xs:attributeGroup ref="bindingCommon" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+  </xs:complexType>
+
+  <!-- ===================================================================== endpoints, client, services -->
+
+  <xs:complexType name="identity">
+    <xs:annotation><xs:documentation>The identity the client expects of the service.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="dns" type="identityValue" />
+      <xs:element name="userPrincipalName" type="identityValue" />
+      <xs:element name="servicePrincipalName" type="identityValue" />
+      <xs:element name="rsa" type="identityValue" />
+      <xs:element name="certificate" type="openElement" />
+      <xs:element name="certificateReference" type="certificateReference" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="identityValue">
+    <xs:attribute name="value" type="xs:string" />
+  </xs:complexType>
+
+  <xs:attributeGroup name="endpointCommon">
+    <xs:attribute name="address" type="xs:string">
+      <xs:annotation><xs:documentation>The endpoint's address: absolute, or relative to the service's base address.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="binding" type="bindingName">
+      <xs:annotation><xs:documentation>The binding: basicHttpBinding (SOAP 1.1), wsHttpBinding (SOAP 1.2, WS-*), netTcpBinding…</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="bindingConfiguration" type="xs:string">
+      <xs:annotation><xs:documentation>The name of a binding configuration under bindings.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="behaviorConfiguration" type="xs:string">
+      <xs:annotation><xs:documentation>The name of an endpoint behavior under behaviors.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="contract" type="xs:string">
+      <xs:annotation><xs:documentation>The service contract's full type name (the [ServiceContract] interface), or IMetadataExchange.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="name" type="xs:string" />
+    <xs:attribute name="kind" type="xs:string" />
+    <xs:attribute name="endpointConfiguration" type="xs:string" />
+  </xs:attributeGroup>
+
+  <xs:complexType name="clientSection">
+    <xs:annotation><xs:documentation>The endpoints a client's proxies connect to.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="endpoint">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="identity" type="identity" />
+            <xs:element name="headers" type="openElement" />
+          </xs:choice>
+          <xs:attributeGroup ref="endpointCommon" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="metadata" type="openElement" />
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove">
+        <xs:complexType>
+          <xs:attribute name="contract" type="xs:string" />
+          <xs:attribute name="name" type="xs:string" />
+        </xs:complexType>
+      </xs:element>
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="servicesSection">
+    <xs:annotation><xs:documentation>The services this application hosts and their endpoints.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="service">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="endpoint">
+              <xs:complexType>
+                <xs:choice minOccurs="0" maxOccurs="unbounded">
+                  <xs:element name="identity" type="identity" />
+                  <xs:element name="headers" type="openElement" />
+                </xs:choice>
+                <xs:attributeGroup ref="endpointCommon" />
+                <xs:attribute name="bindingName" type="xs:string" />
+                <xs:attribute name="bindingNamespace" type="xs:string" />
+                <xs:attribute name="isSystemEndpoint" type="xs:boolean" />
+                <xs:attribute name="listenUri" type="xs:string" />
+                <xs:attribute name="listenUriMode" type="listenUriMode" />
+              </xs:complexType>
+            </xs:element>
+            <xs:element name="host">
+              <xs:complexType>
+                <xs:choice minOccurs="0" maxOccurs="unbounded">
+                  <xs:element name="baseAddresses">
+                    <xs:complexType>
+                      <xs:choice minOccurs="0" maxOccurs="unbounded">
+                        <xs:element name="add">
+                          <xs:complexType>
+                            <xs:attribute name="baseAddress" type="xs:string" use="required" />
+                          </xs:complexType>
+                        </xs:element>
+                        <xs:element name="clear" type="empty" />
+                        <xs:element name="remove">
+                          <xs:complexType>
+                            <xs:attribute name="baseAddress" type="xs:string" use="required" />
+                          </xs:complexType>
+                        </xs:element>
+                      </xs:choice>
+                    </xs:complexType>
+                  </xs:element>
+                  <xs:element name="timeouts">
+                    <xs:complexType>
+                      <xs:attribute name="closeTimeout" type="timeSpan" />
+                      <xs:attribute name="openTimeout" type="timeSpan" />
+                    </xs:complexType>
+                  </xs:element>
+                </xs:choice>
+              </xs:complexType>
+            </xs:element>
+            <xs:element name="clear" type="empty" />
+          </xs:choice>
+          <xs:attribute name="name" type="xs:string" use="required">
+            <xs:annotation><xs:documentation>The service implementation's full type name.</xs:documentation></xs:annotation>
+          </xs:attribute>
+          <xs:attribute name="behaviorConfiguration" type="xs:string">
+            <xs:annotation><xs:documentation>The name of a service behavior under behaviors.</xs:documentation></xs:annotation>
+          </xs:attribute>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="serviceHostingEnvironmentSection">
+    <xs:annotation><xs:documentation>Hosting in IIS and WAS: ASP.NET compatibility, file-less activation.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="serviceActivations">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="add">
+              <xs:complexType>
+                <xs:attribute name="relativeAddress" type="xs:string" use="required" />
+                <xs:attribute name="service" type="xs:string" use="required" />
+                <xs:attribute name="factory" type="xs:string" />
+              </xs:complexType>
+            </xs:element>
+            <xs:element name="clear" type="empty" />
+            <xs:element name="remove">
+              <xs:complexType>
+                <xs:attribute name="relativeAddress" type="xs:string" use="required" />
+              </xs:complexType>
+            </xs:element>
+          </xs:choice>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="baseAddressPrefixFilters">
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="add">
+              <xs:complexType>
+                <xs:attribute name="prefix" type="xs:string" use="required" />
+              </xs:complexType>
+            </xs:element>
+            <xs:element name="clear" type="empty" />
+          </xs:choice>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="transportConfigurationTypes" type="openElement" />
+    </xs:choice>
+    <xs:attribute name="aspNetCompatibilityEnabled" type="xs:boolean" />
+    <xs:attribute name="multipleSiteBindingsEnabled" type="xs:boolean" />
+    <xs:attribute name="minFreeMemoryPercentageToActivateService" type="xs:int" />
+    <xs:attribute name="closeIdleServicesAtLowMemory" type="xs:boolean" />
+  </xs:complexType>
+
+  <xs:complexType name="protocolMappingSection">
+    <xs:annotation><xs:documentation>The binding each transport scheme gets by default.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="add">
+        <xs:complexType>
+          <xs:attribute name="scheme" type="xs:string" use="required" />
+          <xs:attribute name="binding" type="bindingName" use="required" />
+          <xs:attribute name="bindingConfiguration" type="xs:string" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove">
+        <xs:complexType>
+          <xs:attribute name="scheme" type="xs:string" use="required" />
+        </xs:complexType>
+      </xs:element>
+    </xs:choice>
+  </xs:complexType>
+
+  <!-- ===================================================================== diagnostics, extensions -->
+
+  <xs:complexType name="diagnosticsSection">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="messageLogging">
+        <xs:annotation><xs:documentation>Logs messages to the System.ServiceModel.MessageLogging trace source.</xs:documentation></xs:annotation>
+        <xs:complexType>
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="filters" type="openElement" />
+          </xs:choice>
+          <xs:attribute name="logEntireMessage" type="xs:boolean" />
+          <xs:attribute name="logKnownPii" type="xs:boolean" />
+          <xs:attribute name="logMalformedMessages" type="xs:boolean" />
+          <xs:attribute name="logMessagesAtServiceLevel" type="xs:boolean" />
+          <xs:attribute name="logMessagesAtTransportLevel" type="xs:boolean" />
+          <xs:attribute name="maxMessagesToLog" type="xs:int" />
+          <xs:attribute name="maxSizeOfMessageToLog" type="xs:int" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="endToEndTracing">
+        <xs:complexType>
+          <xs:attribute name="activityTracing" type="xs:boolean" />
+          <xs:attribute name="messageFlowTracing" type="xs:boolean" />
+          <xs:attribute name="propagateActivity" type="xs:boolean" />
+        </xs:complexType>
+      </xs:element>
+    </xs:choice>
+    <xs:attribute name="performanceCounters" type="performanceCounters" />
+    <xs:attribute name="wmiProviderEnabled" type="xs:boolean" />
+    <xs:attribute name="etwProviderId" type="xs:string" />
+  </xs:complexType>
+
+  <xs:complexType name="extensionCollection">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="add">
+        <xs:complexType>
+          <xs:attribute name="name" type="xs:string" use="required" />
+          <xs:attribute name="type" type="xs:string" use="required" />
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="clear" type="empty" />
+      <xs:element name="remove" type="nameRemove" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="extensionsSection">
+    <xs:annotation><xs:documentation>Registers custom behaviors, bindings, binding elements and endpoints by type.</xs:documentation></xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="behaviorExtensions" type="extensionCollection" />
+      <xs:element name="bindingElementExtensions" type="extensionCollection" />
+      <xs:element name="bindingExtensions" type="extensionCollection" />
+      <xs:element name="endpointExtensions" type="extensionCollection" />
+    </xs:choice>
+  </xs:complexType>
+</xs:schema>

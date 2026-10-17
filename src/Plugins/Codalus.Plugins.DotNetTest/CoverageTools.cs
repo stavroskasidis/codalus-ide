@@ -23,7 +23,13 @@ internal static class CoverageTools
             ? Path.Combine(PluginFolder, "coverage", "collector-netstandard2.0")
             : Path.GetDirectoryName(CollectorPath)!;
 
+    /// <summary>The collector's in-process part, which VSTest loads into the test host (by its codebase from the adapter path).</summary>
+    public const string InProcCollectorType = "Coverlet.Collector.DataCollection.CoverletInProcDataCollector";
+
     public static string ConsolePath => Path.Combine(PluginFolder, "coverage", "console", "coverlet.console.dll");
+
+    /// <summary>The line <c>coverlet.console</c> writes once the application it runs has exited, before it measures and writes the report.</summary>
+    public const string ConsoleApplicationExited = "Calculating coverage result...";
 
     /// <summary>No include filter by default: Coverlet instruments the assemblies next to the tests that have symbols.</summary>
     public static IReadOnlyList<string> DefaultIncludes(IReadOnlyList<TestTarget> targets) => [];

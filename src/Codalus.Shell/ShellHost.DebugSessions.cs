@@ -119,6 +119,19 @@ public sealed partial class ShellHost
             return;
         }
 
+        // WinForms and WPF apps off Windows (M40a): said once each, and the others start.
+        var windowsOnly = targets.Where(t => WindowsOnlyReason(t.Project) is not null).ToList();
+        foreach (var target in windowsOnly)
+        {
+            WarnIfWindowsOnly(target.Project);
+        }
+
+        targets = [.. targets.Except(windowsOnly)];
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
         if (!await BuildAsync(BuildTargets.Build, null).ConfigureAwait(true))
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
@@ -145,6 +158,7 @@ public sealed partial class ShellHost
                     continue;
                 }
 
+                // .NET Framework apps (M43b) are debugged too: the debug service starts the desktop-CLR adapter for their .exe.
                 if (debug && target.Action == StartupAction.Start)
                 {
                     var (info, profiles, error) = await Runs.GetProfilesAsync(target.Project, CancellationToken.None).ConfigureAwait(true);

@@ -82,7 +82,7 @@ internal static class MetadataFeature
     });
 
     /// <summary><c>Namespace.Outer`1</c>: the metadata name the decompiler expects.</summary>
-    private static string MetadataName(INamedTypeSymbol type) =>
+    internal static string MetadataName(INamedTypeSymbol type) =>
         type.ContainingNamespace is { IsGlobalNamespace: false } ns ? ns.ToDisplayString() + "." + type.MetadataName : type.MetadataName;
 
     /// <summary>The declaration of <paramref name="symbol"/> in decompiled code (by name), or the start of the file.</summary>

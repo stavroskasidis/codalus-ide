@@ -373,12 +373,22 @@ public sealed record BenchmarkRequest(string Project, IReadOnlyList<string> Filt
 /// artifacts folder of our own), their results read from BenchmarkDotNet's JSON report, and the history of runs. The
 /// user's code runs, so the shell asks for a trusted solution first. UI-agnostic; events arrive on any thread.
 /// </summary>
+/// <remarks>
+/// Given the IDE's build (the shell's), the project is built by it first and <c>dotnet run</c> gets <c>--no-build</c>,
+/// as <c>dotnet ef</c> and test runs do: the IDE's build waits for the build host's restore and holds off the restores
+/// asked for meanwhile, where <c>dotnet run</c>'s own restore ran at the same time as the restore after opening the
+/// solution and both wrote the project's <c>obj/*.nuget.g.props</c> ("already exists", the run failed: Linux CI).
+/// </remarks>
 public sealed class BenchmarkService
 {
     public const int MaxRuns = 200;
 
+    /// <summary>The configuration benchmarks build and run in (BenchmarkDotNet measures optimized code).</summary>
+    public const string Configuration = "Release";
+
     private readonly Func<string?> _folder;
     private readonly string _stateFolder;
+    private readonly Func<string, CancellationToken, Task<bool>>? _build;
     private readonly Lock _gate = new();
     private Dictionary<string, string> _projectOfFile = new(StringComparer.Ordinal);
     private IReadOnlyList<(string Project, string File, BenchmarkMethod Method)> _all = [];
@@ -386,10 +396,15 @@ public sealed class BenchmarkService
 
     /// <param name="solutionFolder">The open solution's folder (history and artifacts go to its <c>.codalus/benchmarks</c>).</param>
     /// <param name="stateFolder">Where they go without a solution.</param>
-    public BenchmarkService(Func<string?> solutionFolder, string stateFolder)
+    /// <param name="build">
+    /// Builds a project in <see cref="Configuration"/> through the IDE's build (the build host's, coordinated with its
+    /// restores) and tells whether it succeeded; null: <c>dotnet run</c> restores and builds on its own.
+    /// </param>
+    public BenchmarkService(Func<string?> solutionFolder, string stateFolder, Func<string, CancellationToken, Task<bool>>? build = null)
     {
         _folder = solutionFolder;
         _stateFolder = stateFolder;
+        _build = build;
     }
 
     /// <summary>The benchmarks found, or a run started or finished.</summary>
@@ -513,6 +528,18 @@ public sealed class BenchmarkService
         Changed?.Invoke(this, EventArgs.Empty);
         try
         {
+            if (_build is not null)
+            {
+                Output?.Invoke(this, $"Building {Path.GetFileNameWithoutExtension(request.Project)} ({Configuration})…");
+                var built = await _build(request.Project, running.Token).ConfigureAwait(false);
+                running.Token.ThrowIfCancellationRequested();
+                if (!built)
+                {
+                    Output?.Invoke(this, "The build failed; see the Build output and the Error List.");
+                    throw new InvalidOperationException($"The build of {Path.GetFileNameWithoutExtension(request.Project)} failed; see the Error List.");
+                }
+            }
+
             var at = DateTimeOffset.Now;
             var artifacts = Path.Combine(Root, "runs", at.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture));
             Directory.CreateDirectory(artifacts);
@@ -525,37 +552,41 @@ public sealed class BenchmarkService
                 CreateNoWindow = true,
                 WorkingDirectory = Path.GetDirectoryName(request.Project)!,
             };
-            foreach (var argument in Arguments(request, artifacts))
+            foreach (var argument in Arguments(request, artifacts, noBuild: _build is not null))
             {
                 start.ArgumentList.Add(argument);
             }
 
             start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
             start.Environment["DOTNET_NOLOGO"] = "1";
+            NoLingeringBuildProcesses(start);
             Output?.Invoke(this, "> dotnet " + string.Join(' ', start.ArgumentList));
             int exit;
-            using (var process = Process.Start(start) ?? throw new InvalidOperationException("dotnet did not start."))
+            using (var process = new Process { StartInfo = start, EnableRaisingEvents = true })
             {
+                var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var outputEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var errorEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                process.Exited += (_, _) => exited.TrySetResult();
+                process.OutputDataReceived += (_, e) => OnLine(e.Data, outputEnded);
+                process.ErrorDataReceived += (_, e) => OnLine(e.Data, errorEnded);
+                if (!process.Start())
+                {
+                    throw new InvalidOperationException("dotnet did not start.");
+                }
+
                 process.StandardInput.Close(); // BenchmarkDotNet asks which benchmark to run when nothing matches
-                process.OutputDataReceived += (_, e) =>
-                {
-                    if (e.Data is { } line)
-                    {
-                        Output?.Invoke(this, line);
-                    }
-                };
-                process.ErrorDataReceived += (_, e) =>
-                {
-                    if (e.Data is { } line)
-                    {
-                        Output?.Invoke(this, line);
-                    }
-                };
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
+                if (process.HasExited)
+                {
+                    exited.TrySetResult();
+                }
+
                 try
                 {
-                    await process.WaitForExitAsync(running.Token).ConfigureAwait(false);
+                    // The process's exit, not the end of its output as WaitForExitAsync does (see DrainTimeout).
+                    await exited.Task.WaitAsync(running.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -563,6 +594,8 @@ public sealed class BenchmarkService
                     throw;
                 }
 
+                await Task.WhenAll(outputEnded.Task, errorEnded.Task).WaitAsync(DrainTimeout, running.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                running.Token.ThrowIfCancellationRequested();
                 exit = process.ExitCode;
             }
 
@@ -585,10 +618,53 @@ public sealed class BenchmarkService
     /// <summary>Stops the run in progress.</summary>
     public void Cancel() => _running?.Cancel();
 
-    /// <summary>The <c>dotnet run</c> arguments of a request (BenchmarkDotNet measures optimized code: Release).</summary>
-    public static IReadOnlyList<string> Arguments(BenchmarkRequest request, string artifacts)
+    /// <summary>
+    /// How long a run's output is still read after <c>dotnet</c> exits. A process its build starts (an MSBuild node or
+    /// server, the compiler server) can inherit the output pipes and keep them open for many minutes after the run ends,
+    /// and WaitForExitAsync waits for the end of the output too, so such a process held the run (as it held
+    /// <c>dotnet ef</c>, which the build host's DotnetProcess.DrainAsync bounds the same way). The build is asked to
+    /// leave no such process (<see cref="NoLingeringBuildProcesses"/>), and what arrives within this time of the exit is
+    /// all of the output.
+    /// </summary>
+    internal static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// The variables of a <c>dotnet</c> that builds: nothing it starts outlives it holding its pipes, and its build
+    /// doesn't go to MSBuild nodes or an MSBuild server another build left running (a Windows runner logged one that
+    /// didn't answer during the run that timed out), so each run builds alone.
+    /// </summary>
+    internal static void NoLingeringBuildProcesses(ProcessStartInfo start)
     {
-        List<string> arguments = ["run", "-c", "Release", "--project", request.Project, "--", "--filter", .. request.Filters, "--exporters", "json", "--artifacts", artifacts];
+        start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        start.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+        start.Environment["UseSharedCompilation"] = "false";
+    }
+
+    private void OnLine(string? line, TaskCompletionSource ended)
+    {
+        if (line is null)
+        {
+            ended.TrySetResult();
+        }
+        else
+        {
+            Output?.Invoke(this, line);
+        }
+    }
+
+    /// <summary>
+    /// The <c>dotnet run</c> arguments of a request (BenchmarkDotNet measures optimized code: Release); with
+    /// <paramref name="noBuild"/>, the project was built already and <c>dotnet run</c> neither restores nor builds.
+    /// </summary>
+    public static IReadOnlyList<string> Arguments(BenchmarkRequest request, string artifacts, bool noBuild = false)
+    {
+        List<string> arguments = ["run", "-c", Configuration, "--project", request.Project];
+        if (noBuild)
+        {
+            arguments.Add("--no-build");
+        }
+
+        arguments.AddRange(["--", "--filter", .. request.Filters, "--exporters", "json", "--artifacts", artifacts]);
         if (request.Job is { Length: > 0 } job && job != "Default")
         {
             arguments.AddRange(["--job", job]);

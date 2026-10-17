@@ -36,7 +36,8 @@ public sealed class MobileShellTests
         Assert.False(f.Shell.Solutions.Projects[views].UsesMaui);
         Assert.True(f.Shell.IsMobileProject(app));
         Assert.False(f.Shell.IsMobileProject(views));
-        Assert.Equal("net10.0-android", f.Shell.MobileRunFramework(info));
+        // Nothing chosen: Windows Machine on Windows (M44), where the fixture targets Windows too; Android elsewhere.
+        Assert.Equal(OperatingSystem.IsWindows() ? "net10.0-windows10.0.19041.0" : "net10.0-android", f.Shell.MobileRunFramework(info));
 
         // The project never calls a pack missing that dotnet workload list says is installed. (The other way round
         // depends on the SDK install: the CI runners' SDKs report no missing packs for an Android target without the
@@ -116,6 +117,11 @@ public sealed class MobileShellTests
             });
         var toolchain = new AndroidToolchain(PlatformInfo.Current, n => n switch { "ANDROID_HOME" => sdk, "JAVA_HOME" => Path.Combine(f.UserData, "jdk"), _ => null }, f.UserData, files.Contains);
         f.Shell.UseMobileService(new MobileService(PlatformInfo.Current, toolchain, Run, (_, _, _) => false, f.Shell.Workbench.Settings));
+        if (OperatingSystem.IsWindows())
+        {
+            await f.Shell.SetActiveFrameworkAsync(app, "net10.0-android"); // Windows Machine comes first there (M44)
+        }
+
         await f.Shell.RefreshDevicesAsync();
         await ShellFixture.PumpUntil(() => f.Shell.Toolbar.DeviceLabel == "Pixel 8 API 35");
         Assert.Equal(2, f.Shell.DevicesWindow.Devices.Count(d => d.Device.Platform == MobilePlatform.Android)); // and This Mac on macOS

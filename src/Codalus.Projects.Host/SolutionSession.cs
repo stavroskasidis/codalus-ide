@@ -36,6 +36,9 @@ internal interface ISessionEvents
 
     /// <summary>A line of a running <c>dotnet aspnet-codegenerator</c> (ADR 0041).</summary>
     Task ScaffoldOutputAsync(ScaffoldOutputParams output);
+
+    /// <summary>A line of a running <c>dotnet-svcutil</c> (ADR 0069).</summary>
+    Task WcfOutputAsync(ScaffoldOutputParams output);
 }
 
 /// <summary>The session's events plus those of builds.</summary>
@@ -247,6 +250,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
     private void StartEvaluation(bool restoreAfterwards)
     {
+        ConfigureNetFramework();
         var previous = Interlocked.Exchange(ref _evaluation, CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token));
         previous.Cancel();
         previous.Dispose();
@@ -595,7 +599,12 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 misses.Add($"{System.IO.Path.GetFileName(path)}: no cache key (no intermediate folder, or a referenced project has none)");
             }
 
-            requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework));
+            requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework)
+            {
+                WinUI = project.Info.UsesWinUI,
+                FrameworkLabel = project.Info.IsNonSdkStyle ? project.Info.TargetFrameworks.FirstOrDefault() : null,
+                IgnoreMissingImports = project.Info.CannotBuildReason is not null,
+            });
         }
 
         var started = Stopwatch.GetTimestamp();
@@ -715,8 +724,24 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
         var perProject = parameters.Project is null && !IsSingleProject;
         IReadOnlyList<string> scope = !perProject ? [path] : BuiltProjects();
+        var blockedProject = parameters.Project is not null ? path : IsSingleProject ? Path : null;
         return await ExclusiveBuildAsync(
-            token => BuildWithCheckAsync(path, parameters.Target, parameters.Restore, properties, scope, BuildGlobals(perProject, properties), parameters.Options, events, token),
+            async token =>
+            {
+                // Non-SDK-style projects (M43a): one that needs Visual Studio's targets doesn't build; the others get their
+                // packages.config packages and reference assemblies, which dotnet restore doesn't restore.
+                if (!await ReportProjectsThatCannotBuildAsync(blockedProject, events).ConfigureAwait(false))
+                {
+                    return new BuildResultInfo(false, false, 1, 0, 0);
+                }
+
+                if (parameters.Restore && parameters.Target != BuildTargets.Clean)
+                {
+                    await RestoreNetFrameworkForBuildAsync(events, token).ConfigureAwait(false);
+                }
+
+                return await BuildWithCheckAsync(path, parameters.Target, parameters.Restore, properties, scope, BuildGlobals(perProject, properties), parameters.Options, events, token).ConfigureAwait(false);
+            },
             new BuildResultInfo(false, true, 0, 0, 0),
             cancellationToken).ConfigureAwait(false);
     }
@@ -847,13 +872,18 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var launchSettings = System.IO.Path.Combine(directory, "Properties", "launchSettings.json");
         return new RunInfo(
             path,
-            framework ?? Property("TargetFramework"),
+            framework ?? Property("TargetFramework") ?? NonSdkFramework(path),
             Property("OutputType"),
             Property("TargetPath"),
             Property("RunCommand"),
             Property("RunArguments"),
             Property("RunWorkingDirectory"),
-            File.Exists(launchSettings) ? launchSettings : null);
+            File.Exists(launchSettings) ? launchSettings : null)
+        {
+            // A Windows App SDK app (M44): MSIX runs as a package, registered from the manifest its build writes.
+            WindowsPackageType = Property("WindowsPackageType"),
+            AppxManifest = Property("FinalAppxManifestName") is { } manifest ? System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, manifest.Replace('\\', System.IO.Path.DirectorySeparatorChar))) : null,
+        };
     }
 
     /// <summary>The properties MSBuild sets when it builds a solution; some projects rely on them.</summary>
@@ -960,9 +990,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
             path = FolderBuildEntryPoint();
         }
-        else if (path is null && !IsFolder && ProjectPaths.Any(ComposeProject.Is))
+        else if (path is null && !IsFolder && ProjectPaths.Any(p => ComposeProject.Is(p) || CannotBuild(p)))
         {
-            path = BuildEntryPoint(); // without the compose projects, which dotnet restore can't load
+            path = BuildEntryPoint(); // without the compose projects and those that need Visual Studio's targets, which dotnet restore can't load
         }
 
         var building = _building;
@@ -991,18 +1021,26 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 }
             }
 
-            var ok = code == 0;
-            if (ok)
+            // Non-SDK-style projects (M43a): their packages.config packages and reference assemblies, which dotnet restore skips.
+            var (netFrameworkFailed, netFrameworkChanged) = await RestoreNetFrameworkAsync(
+                ProjectPaths.Contains(target, s_pathComparer) ? [target] : [.. ProjectPaths.Where(p => !IsUnloaded(p) && !CannotBuild(p))],
+                _events.RestoreOutputAsync,
+                _lifetime.Token).ConfigureAwait(false);
+
+            var ok = code == 0 && netFrameworkFailed == 0;
+            if (code == 0)
             {
                 MarkRestored();
             }
 
             await _events.RestoreStateAsync(ok ? "succeeded" : "failed", ok ? null
-                : $"dotnet restore exited with code {code}." + (restoredAlone > 0 ? $" {restoredAlone} project(s) restored on their own." : "")).ConfigureAwait(false);
+                : code != 0 ? $"dotnet restore exited with code {code}." + (restoredAlone > 0 ? $" {restoredAlone} project(s) restored on their own." : "")
+                : $"{netFrameworkFailed} package(s) of non-SDK-style projects couldn't be restored.").ConfigureAwait(false);
 
             // Only projects whose assets file the restore wrote are evaluated again (M34b); the watcher handles the
-            // NuGet-generated imports it rewrote.
-            await EvaluateAsync([.. ProjectPaths.Where(AssetsChangedSinceEvaluation)], _lifetime.Token, DesignTimeMode.IfAssetsChanged).ConfigureAwait(false);
+            // NuGet-generated imports it rewrote. Non-SDK-style projects whose packages came are built again too.
+            await EvaluateAsync([.. ProjectPaths.Where(p => AssetsChangedSinceEvaluation(p) || netFrameworkChanged.Contains(p, s_pathComparer))], _lifetime.Token, DesignTimeMode.IfAssetsChanged).ConfigureAwait(false);
+            ScheduleDesignTimeBuilds(netFrameworkChanged);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {

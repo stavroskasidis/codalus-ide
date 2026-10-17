@@ -1,0 +1,141 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:wcf="using:Codalus.Workbench.Wcf"
+             x:Class="Codalus.Shell.Views.WcfTestClientView"
+             x:DataType="vm:WcfTestClientViewModel">
+  <DockPanel Margin="12,10">
+    <!-- The service: an address or a WSDL file, or a running CoreWCF service. -->
+    <StackPanel DockPanel.Dock="Top" Spacing="6">
+      <TextBlock Classes="heading" Text="{Binding Title}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T wcfTestClient.callsAWcfOrCorewcfService}" />
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+        <TextBlock Text="{l:T wcfTestClient.service}" Classes="muted" VerticalAlignment="Center" Margin="0,0,10,0" />
+        <TextBox x:Name="AddressBox" Grid.Column="1" Text="{Binding Address}" PlaceholderText="{l:T wcfTestClient.httpLocalhost5000ServiceSvcWsdl}" AutomationProperties.Name="{l:T wcfTestClient.serviceMetadataAddress}" />
+        <Button Grid.Column="2" Margin="6,0,0,0" Content="{l:T wcfTestClient.browse}" Command="{Binding BrowseCommand}" AutomationProperties.Name="{l:T wcfTestClient.chooseAWsdlFile}" />
+        <Button Grid.Column="3" Margin="6,0,0,0" Classes="accent" Content="{l:T wcfTestClient.load}" Command="{Binding LoadCommand}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T wcfTestClient.loadTheMetadata}" />
+        <Button Grid.Column="4" Margin="6,0,0,0" Content="{l:T wcfTestClient.runningServices}" Command="{Binding DiscoverCommand}" IsEnabled="{Binding !IsBusy}" ToolTip.Tip="{l:T wcfTestClient.findTheMetadataOfTheCorewcf}" />
+      </Grid>
+      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasDiscovered}">
+        <TextBlock Text="{l:T wcfTestClient.running}" Classes="muted" VerticalAlignment="Center" />
+        <ComboBox ItemsSource="{Binding Discovered}" SelectedItem="{Binding SelectedDiscovered}" MinWidth="320" AutomationProperties.Name="{l:T wcfTestClient.runningServices2}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="wcf:DiscoveredService">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <ProgressBar IsIndeterminate="True" Width="120" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+        <TextBlock Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
+      </StackPanel>
+      <SelectableTextBlock Classes="error" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+      <TextBlock Classes="warning" Text="{Binding Warnings}" IsVisible="{Binding HasWarnings}" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <Grid Margin="0,8,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="2*" MinWidth="160" />
+        <ColumnDefinition Width="4" />
+        <ColumnDefinition Width="3*" MinWidth="280" />
+      </Grid.ColumnDefinitions>
+      <!-- Endpoints and operations. -->
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{l:T wcfTestClient.endpoint}" Margin="0,0,0,4" />
+        <ComboBox x:Name="EndpointBox" DockPanel.Dock="Top" ItemsSource="{Binding Endpoints}" SelectedItem="{Binding SelectedEndpoint}" HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T wcfTestClient.endpoint}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:WcfEndpointRow">
+              <StackPanel ToolTip.Tip="{Binding ToolTip}">
+                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock DockPanel.Dock="Top" Classes="warning" Text="{Binding EndpointProblem}" IsVisible="{Binding HasEndpointProblem}" TextWrapping="Wrap" Margin="0,4,0,0" />
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{l:T wcfTestClient.operations}" Margin="0,10,0,4" />
+        <ListBox x:Name="OperationList" ItemsSource="{Binding Operations}" SelectedItem="{Binding SelectedOperation}" AutomationProperties.Name="{l:T wcfTestClient.operations}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="wcf:WsdlOperation">
+              <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Action}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+
+      <!-- The request, then the response. -->
+      <Grid Grid.Column="2" RowDefinitions="3*,Auto,2*" Margin="8,0,0,0">
+        <TabControl x:Name="RequestTabs" SelectedIndex="{Binding RequestTab}" Padding="0">
+          <TabItem Header="{l:T wcfTestClient.request}">
+            <ScrollViewer>
+              <!-- Room on the right for the overlaid scroll bar (the last column was under it). -->
+              <StackPanel Margin="0,4,14,4">
+                <TextBlock Classes="emptyState" Text="{l:T wcfTestClient.loadTheMetadataThenChooseAnOperation}" IsVisible="{Binding HasNoRequest}" />
+                <TextBlock Classes="muted" Text="{l:T wcfTestClient.theOperationTakesNoParameters}" IsVisible="{Binding HasNoParameters}" />
+                <!-- The rows share their fixed columns, so the values line up whatever each row shows (M34g). -->
+                <ItemsControl x:Name="FieldList" ItemsSource="{Binding Rows}" Grid.IsSharedSizeScope="True">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SoapFieldRow">
+                      <Grid Margin="0,2">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="1.2*" />
+                          <ColumnDefinition Width="0.8*" />
+                          <ColumnDefinition Width="2*" />
+                          <ColumnDefinition Width="Auto" SharedSizeGroup="wcfItemButtons" />
+                          <ColumnDefinition Width="Auto" SharedSizeGroup="wcfNil" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Name}" Margin="{Binding Indent}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ToolTip}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Type}" Classes="muted" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Type}" />
+                        <TextBox Grid.Column="2" Text="{Binding Value}" IsVisible="{Binding IsText}" IsEnabled="{Binding !IsNil}" PlaceholderText="{Binding Placeholder}" AutomationProperties.Name="{Binding Name}" />
+                        <ComboBox Grid.Column="2" ItemsSource="{Binding Choices}" SelectedItem="{Binding Value}" IsVisible="{Binding IsChoice}" IsEnabled="{Binding !IsNil}" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding Name}" />
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" Margin="6,0,0,0">
+                          <Button Content="{l:T wcfTestClient.add}" Command="{Binding AddCommand}" IsVisible="{Binding CanAdd}" ToolTip.Tip="{l:T wcfTestClient.addAnItem}" AutomationProperties.Name="{l:T wcfTestClient.addAnItem}" Padding="6,1" />
+                          <Button Content="{l:T wcfTestClient.remove}" Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}" ToolTip.Tip="{l:T wcfTestClient.removeThisItem}" AutomationProperties.Name="{l:T wcfTestClient.removeThisItem}" Padding="6,1" />
+                        </StackPanel>
+                        <CheckBox Grid.Column="4" Content="{l:T wcfTestClient.nil}" IsChecked="{Binding IsNil}" IsVisible="{Binding CanNil}" Margin="6,0,0,0" ToolTip.Tip="{l:T wcfTestClient.sendXsiNil}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+          <TabItem Header="{l:T wcfTestClient.xml}">
+            <TextBox x:Name="RequestXmlBox" Text="{Binding RequestXml}" AcceptsReturn="True" FontFamily="{Binding Font.Family}" TextWrapping="NoWrap" AutomationProperties.Name="{l:T wcfTestClient.requestXml}" />
+          </TabItem>
+        </TabControl>
+        <DockPanel Grid.Row="1" Margin="0,8">
+          <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" Margin="0,0,8,0">
+            <Button x:Name="SendButton" Classes="accent" Content="{l:T wcfTestClient.invoke}" Command="{Binding SendCommand}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T wcfTestClient.invokeTheOperation}" />
+            <Button Content="{l:T wcfTestClient.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
+            <Button Content="{l:T wcfTestClient.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T wcfTestClient.clearTheFormAndTheXml}" />
+          </StackPanel>
+          <TextBlock Text="{Binding ResponseSummary}" VerticalAlignment="Center" FontWeight="SemiBold" Classes.error="{Binding IsFault}" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{Binding ResponseSummary}" AutomationProperties.LiveSetting="Polite" />
+        </DockPanel>
+        <TabControl Grid.Row="2" Padding="0" IsVisible="{Binding HasResponse}">
+          <TabItem Header="{l:T wcfTestClient.response}">
+            <TreeView x:Name="ResponseTreeView" ItemsSource="{Binding ResponseTree}" AutomationProperties.Name="{l:T wcfTestClient.responseTree}">
+              <TreeView.Styles>
+                <Style Selector="TreeViewItem">
+                  <Setter Property="IsExpanded" Value="True" />
+                </Style>
+              </TreeView.Styles>
+              <TreeView.ItemTemplate>
+                <TreeDataTemplate x:DataType="wcf:XmlTreeNode" ItemsSource="{Binding Children}">
+                  <SelectableTextBlock Text="{Binding Label}" />
+                </TreeDataTemplate>
+              </TreeView.ItemTemplate>
+            </TreeView>
+          </TabItem>
+          <TabItem Header="{l:T wcfTestClient.xml}">
+            <TextBox Text="{Binding ResponseText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" FontFamily="{Binding Font.Family}" TextWrapping="NoWrap" AutomationProperties.Name="{l:T wcfTestClient.responseXml}" />
+          </TabItem>
+        </TabControl>
+      </Grid>
+    </Grid>
+  </DockPanel>
+</UserControl>

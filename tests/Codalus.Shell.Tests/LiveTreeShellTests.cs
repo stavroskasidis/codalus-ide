@@ -27,7 +27,18 @@ public sealed class LiveTreeShellTests
         await f.Shell.StartWithoutDebuggingAsync();
         try
         {
-            await ShellFixture.PumpUntil(() => f.Shell.Live is { IsConnected: true }, seconds: 240);
+            try
+            {
+                await ShellFixture.PumpUntil(() => f.Shell.Live is { IsConnected: true }, seconds: 240);
+            }
+            catch (Xunit.Sdk.TrueException)
+            {
+                // Whether the app was built, started and is still running, and what it and the build said.
+                Assert.Fail($"The app's live agent didn't connect (session: {(f.Shell.Live is null ? "none" : "waiting")}; running: "
+                    + string.Join(", ", f.Shell.Runs.Running.Select(p => $"{p.Name} exited={p.HasExited}")) + ")\n"
+                    + string.Join("\n", f.Shell.Workbench.Output.Channels.Where(c => c.Name.StartsWith("Run", StringComparison.Ordinal) || c.Name.StartsWith("Build", StringComparison.Ordinal)).Select(c => $"--- {c.Name}\n{c.GetText()}")));
+            }
+
             var tree = f.Shell.LiveTree;
             try
             {

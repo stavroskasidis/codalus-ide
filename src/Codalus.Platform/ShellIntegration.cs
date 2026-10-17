@@ -21,6 +21,26 @@ public static class ShellIntegration
         });
     }
 
+    /// <summary>
+    /// Opens a page of Windows' Settings app (<c>ms-settings:developers</c>, M44). Only a page name (letters, digits,
+    /// hyphens) is accepted, and only on Windows.
+    /// </summary>
+    public static void OpenWindowsSettings(string page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        if (page.Length == 0 || !page.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
+        {
+            throw new ArgumentException($"'{page}' isn't a Settings page.", nameof(page));
+        }
+
+        if (PlatformInfo.Current != PlatformKind.Windows)
+        {
+            throw new PlatformNotSupportedException("Windows' Settings open only on Windows.");
+        }
+
+        Start(new ProcessStartInfo("ms-settings:" + page) { UseShellExecute = true });
+    }
+
     /// <summary>Shows a file or folder in Explorer, Finder or the default Linux file manager.</summary>
     public static void RevealInFileManager(string path)
     {

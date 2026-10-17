@@ -182,7 +182,7 @@ public sealed class FontsAndColorsViewModel : ObservableObject
 
     public RelayCommand OpenFontSettingsCommand { get; }
 
-    public string ThemeTitle => ThemeService.Choices.FirstOrDefault(c => c.Id == _shell.Theme.ActiveTheme)?.Title ?? _shell.Theme.ActiveTheme;
+    public string ThemeTitle => ThemeService.CustomizationTitle(_shell.Theme.ActiveTheme);
 
     /// <summary>Colors set here apply to every theme (off: to the active one, under its <c>"[Title]"</c>).</summary>
     public bool ForAllThemes

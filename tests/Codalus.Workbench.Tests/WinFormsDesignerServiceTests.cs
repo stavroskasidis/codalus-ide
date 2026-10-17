@@ -1,0 +1,290 @@
+using System.Text.Json;
+using Codalus.LanguageServices.Protocol;
+using Codalus.Rpc;
+using Codalus.Workbench.Previewer;
+using Codalus.Workbench.Projects;
+using Codalus.Workbench.WinForms;
+
+namespace Codalus.Workbench.Tests;
+
+/// <summary>
+/// M41a (ADR 0073) on every OS: which files open in the Windows Forms designer, why it doesn't start off Windows (D31),
+/// how its host starts (the app's runtime, or its own for a library), and its protocol through the source-generated
+/// serializer the shell (Native AOT) and the host share.
+/// </summary>
+public sealed class WinFormsDesignerServiceTests
+{
+    private static string Sample(params string[] parts) =>
+        Path.Combine([DiagnosticsFixture.Metadata("CodalusRepoRoot"), "samples", "WindowsDesktop", "WinFormsApp", .. parts]);
+
+    private static WinFormsDesignerService Service(bool windows, Func<string, bool>? trusted = null) =>
+        new(new SolutionService(() => "/nonexistent/codalus-buildhost.dll"), trusted ?? (_ => true), (_, _) => Task.FromResult(true), (_, _, _) => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()))
+        {
+            IsWindows = () => windows,
+            DesignerHost = () => "/ide/winformsdesigner/codalus-winformsdesigner.dll",
+        };
+
+    [Fact]
+    public void A_forms_code_file_opens_in_the_designer_and_other_files_dont()
+    {
+        var service = Service(windows: true);
+        Assert.True(service.HasDesigner(Sample("OrderForm.cs")));
+        Assert.True(service.HasDesigner(Sample("AboutForm.cs")));
+        Assert.True(service.HasDesigner(Sample("UnreadableForm.cs"))); // the C# host says it can't be read
+        Assert.True(service.HasDesigner(Sample("Controls", "CounterControl.cs")));
+        Assert.False(service.HasDesigner(Sample("OrderForm.Designer.cs"))); // the designer file opens as code, as in Visual Studio
+        Assert.False(service.HasDesigner(Sample("Program.cs")));
+        Assert.False(service.HasDesigner(Sample("Counter.cs")));
+        Assert.False(service.HasDesigner(Sample("Properties", "Resources.Designer.cs")));
+        Assert.False(service.HasDesigner(Sample("OrderForm.resx")));
+
+        Assert.Equal(Sample("OrderForm.cs"), WinFormsDesignerService.CodeFileOf(Sample("OrderForm.Designer.cs")));
+        Assert.Equal(Sample("OrderForm.cs"), WinFormsDesignerService.CodeFileOf(Sample("OrderForm.cs")));
+        Assert.Null(WinFormsDesignerService.CodeFileOf(Sample("Program.cs")));
+    }
+
+    [Fact]
+    public async Task Off_windows_the_designer_says_windows_only_before_anything_else()
+    {
+        var error = await Assert.ThrowsAsync<PreviewerException>(() => Service(windows: false).ResolveAsync(Sample("OrderForm.cs"), CancellationToken.None));
+        Assert.Equal(WinFormsDesignerService.WindowsOnlyMessage, error.Message);
+        Assert.Contains("Windows only", error.Message, StringComparison.Ordinal);
+
+        // On Windows: a solution first.
+        var closed = await Assert.ThrowsAsync<PreviewerException>(() => Service(windows: true).ResolveAsync(Sample("OrderForm.cs"), CancellationToken.None));
+        Assert.Contains("Open the solution", closed.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_host_runs_on_the_apps_runtime_or_its_own_for_a_library()
+    {
+        var folder = Directory.CreateTempSubdirectory("codalus-winforms-launch-").FullName;
+        try
+        {
+            var app = Path.Combine(folder, "App.dll");
+            File.WriteAllText(app, string.Empty);
+            File.WriteAllText(Path.Combine(folder, "App.runtimeconfig.json"), "{}");
+            var target = new WinFormsDesignerTarget(Path.Combine(folder, "Form1.cs"), Path.Combine(folder, "App.csproj"), app, app, "/ide/winformsdesigner/codalus-winformsdesigner.dll");
+            var launch = WinFormsDesignerProcess.LaunchFor(target);
+            Assert.Equal(["exec", "--runtimeconfig", Path.Combine(folder, "App.runtimeconfig.json"), "--depsfile", Path.Combine(folder, "App.deps.json"), "/ide/winformsdesigner/codalus-winformsdesigner.dll"], launch.Arguments);
+            Assert.Equal(folder, launch.WorkingDirectory);
+
+            // A library with no app that references it: the host's own runtimeconfig, on the newest .NET.
+            var library = WinFormsDesignerProcess.LaunchFor(target with { HostAssembly = null, ProjectAssembly = Path.Combine(folder, "Lib.dll") });
+            Assert.Equal(["/ide/winformsdesigner/codalus-winformsdesigner.dll"], library.Arguments);
+            Assert.Equal("Major", library.Environment!["DOTNET_ROLL_FORWARD"]);
+
+            var load = WinFormsDesignerService.LoadParams(target, new DesignerModel { ClassName = "Form1", BaseType = "System.Windows.Forms.Form" }, "App.Form1");
+            Assert.Equal([folder], load.SearchFolders);
+            Assert.Equal("App.Form1", load.ClassFullName);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void The_protocol_round_trips_through_the_shared_serializer()
+    {
+        var json = WinFormsDesignerJsonContext.Default;
+        var model = new DesignerModel
+        {
+            ClassName = "Form1",
+            Namespace = "App",
+            BaseType = "System.Windows.Forms.Form",
+            Components = [new DesignerComponent("Form1", "System.Windows.Forms.Form") { IsRoot = true }, new DesignerComponent("button1", "System.Windows.Forms.Button") { Modifier = "private" }],
+            Statements =
+            [
+                new DesignerStatement { Kind = DesignerStatementKinds.Create, Target = "button1", Value = DesignerValue.NewOf("System.Windows.Forms.Button"), Line = 3 },
+                new DesignerStatement { Kind = DesignerStatementKinds.Assign, Target = "button1", Member = "Anchor", Value = DesignerValue.EnumOf("System.Windows.Forms.AnchorStyles", "Top", "Left") },
+                new DesignerStatement { Kind = DesignerStatementKinds.Call, Target = string.Empty, Member = "Controls.Add", Arguments = [DesignerValue.ReferenceTo("button1")] },
+            ],
+        };
+        var load = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerLoadParams(model, "/a/App.dll", "App.Form1", ["/a"]), json.DesignerLoadParams), json.DesignerLoadParams)!;
+        Assert.Equal("Form1", load.Model.ClassName);
+        Assert.Equal(3, load.Model.Statements.Length);
+        Assert.True(load.Model.Statements[1].Value!.SameAs(DesignerValue.EnumOf("System.Windows.Forms.AnchorStyles", "Top", "Left")));
+        Assert.Equal("button1", load.Model.Statements[2].Arguments![0].Value);
+
+        var change = new DesignerChangeResult(
+            [new DesignerPropertyChange("button1", "Location", DesignerValue.NewOf("System.Drawing.Point", DesignerValue.Int(10), DesignerValue.Int(20))), new DesignerPropertyChange("button1", "Text", null)],
+            new DesignerRenderResult(new DesignerFrame("iVBORw0KGgo=", 300, 200), [new DesignerComponentView("Form1", "System.Windows.Forms.Form", null, 0, 0, 300, 200) { IsContainer = true, ClientX = 8, ClientY = 31 }], []))
+        {
+            Created = new DesignerCreated("button1", "System.Windows.Forms.Button", [], string.Empty, null, null, [new DesignerPropertyValue("Text", DesignerValue.String("button1"))]) { IsControl = true },
+            Removed = ["label1"],
+        };
+        var text = JsonSerializer.Serialize(change, json.DesignerChangeResult);
+        Assert.Contains("\"clientX\":8", text, StringComparison.Ordinal);
+        var back = JsonSerializer.Deserialize(text, json.DesignerChangeResult)!;
+        Assert.Equal(2, back.Changes.Length);
+        Assert.Null(back.Changes[1].Value);
+        Assert.Equal((300, 200), (back.Render.Frame!.Width, back.Render.Frame.Height));
+        Assert.Equal(31, back.Render.Components[0].ClientY);
+        Assert.Equal("button1", back.Created!.Properties[0].Value.Value);
+        Assert.Equal(["label1"], back.Removed);
+
+        // M41b: z-order, collections with their locals, extenders, bindings, a localizable form's resources.
+        var depth = new DesignerChangeResult(
+            [new DesignerPropertyChange("button1", "ToolTip", DesignerValue.String("Saves")) { Provider = "toolTip1" }, new DesignerPropertyChange("textBox1", "Text", null) { DataBinding = true }],
+            new DesignerRenderResult(null, [new DesignerComponentView("item1", "System.Windows.Forms.ToolStripMenuItem", null, 0, 0, 40, 20) { IsItem = true, Owner = "menuStrip1", ItemIndex = 2, Margin = [3, 3, 3, 3], Baseline = 15 }], []))
+        {
+            Reordered = [new DesignerChildOrder(string.Empty, ["button1", "label1"])],
+            Collections = [new DesignerCollectionChange("listView1", "Items", "AddRange", "System.Windows.Forms.ListViewItem", [DesignerValue.ReferenceTo("listViewItem1")]) { Locals = [new DesignerLocal("listViewItem1", DesignerValue.NewOf("System.Windows.Forms.ListViewItem", DesignerValue.String("Hammer")))] }],
+            Resources = [new DesignerResourceEntry("button1.Text", DesignerResource.String("Enregistrer")) { Culture = "fr" }],
+            Localized = [new DesignerLocalized("button1", true)],
+        };
+        var depthBack = JsonSerializer.Deserialize(JsonSerializer.Serialize(depth, json.DesignerChangeResult), json.DesignerChangeResult)!;
+        Assert.Equal(("toolTip1", true), (depthBack.Changes[0].Provider, depthBack.Changes[1].DataBinding));
+        Assert.Equal(["button1", "label1"], depthBack.Reordered[0].Children);
+        Assert.Equal("listViewItem1", depthBack.Collections[0].Locals[0].Name);
+        Assert.Equal(("fr", "Enregistrer"), (depthBack.Resources[0].Culture, depthBack.Resources[0].Resource!.Text));
+        Assert.True(depthBack.Localized[0].Localized);
+        Assert.True(depthBack.Render.Components[0] is { IsItem: true, Owner: "menuStrip1", ItemIndex: 2, Baseline: 15 });
+        var collection = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerSetCollectionParams("menuStrip1", "Items", [new DesignerCollectionItem { Name = "item1", Type = "System.Windows.Forms.ToolStripMenuItem", Text = "&Edit" }]), json.DesignerSetCollectionParams), json.DesignerSetCollectionParams)!;
+        Assert.Equal("&Edit", collection.Items[0].Text);
+        var actions = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerActionsResult([new DesignerActionItem(DesignerActionKinds.Method, "verb:Add Tab", "Add Tab") { Collection = "TabControl:TabPages" }]), json.DesignerActionsResult), json.DesignerActionsResult)!;
+        Assert.Equal(("verb:Add Tab", "TabControl:TabPages"), (actions.Items[0].Member, actions.Items[0].Collection));
+    }
+
+    [Fact]
+    public async Task A_designer_host_that_isnt_there_fails_to_start_with_the_reason()
+    {
+        // A project folder that's gone: the process can't start, and the designer says why (no hang, no crash).
+        var missing = Path.Combine(Path.GetTempPath(), "codalus-no-such-folder-" + Guid.NewGuid().ToString("N"));
+        var target = new WinFormsDesignerTarget(Path.Combine(missing, "Form1.cs"), Path.Combine(missing, "App.csproj"), Path.Combine(missing, "App.dll"), null, Path.Combine(missing, "codalus-winformsdesigner.dll"));
+        var error = await Assert.ThrowsAsync<PreviewerException>(() => WinFormsDesignerProcess.StartAsync(target, CancellationToken.None));
+        Assert.StartsWith("The designer didn't start", error.Message, StringComparison.Ordinal);
+    }
+
+    private static readonly WinFormsDesignerTimeouts s_short = new() { Start = TimeSpan.FromSeconds(2), Load = TimeSpan.FromSeconds(1), Request = TimeSpan.FromSeconds(1), Status = TimeSpan.FromSeconds(2) };
+
+    [Fact]
+    public async Task A_load_that_runs_out_of_time_says_what_the_host_is_doing_and_what_it_wrote()
+    {
+        // A host that's ready but whose UI thread never finishes the load: the failure carries designer/status (answered
+        // off the UI thread) and the host's last standard error, not just "didn't answer".
+        await using var fake = new FakeDesignerHost(ready: true);
+        var host = await WinFormsDesignerProcess.StartAsync(fake.Launch, s_short, TestContext.Current.CancellationToken);
+        await using var _ = host;
+        Assert.Equal(1, fake.ReadyRequests);
+        var model = new DesignerModel { ClassName = "Form1", Namespace = "Demo", BaseType = "System.Windows.Forms.Form" };
+        var error = await Assert.ThrowsAsync<PreviewerException>(() => host.LoadAsync(new DesignerLoadParams(model, "/app/App.dll", "Demo.Form1", []), TestContext.Current.CancellationToken));
+        Assert.StartsWith("The designer didn't answer designer/load in 1 seconds: the host (process ", error.Message, StringComparison.Ordinal);
+        Assert.Contains("says: UI thread: designer/load for 1.0 s (running line 12 of the designer file). This process waited ", error.Message, StringComparison.Ordinal);
+        Assert.Contains(" pool threads, ", error.Message, StringComparison.Ordinal);
+        Assert.Contains("; its connection: 0 request(s) awaiting a reply;", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Its last standard error:" + Environment.NewLine + "[designer] loading App.dll", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_limit_that_fires_late_says_this_process_was_too_busy_to_read_the_answer()
+    {
+        // Windows CI: a load's 60 s limit fired 34 s late, so the test's own thread pool was busy (every read of the
+        // host's pipe is a work item on it there); the failure says so rather than only blaming the host.
+        var late = WinFormsDesignerProcess.DescribeHere(TimeSpan.FromSeconds(94), TimeSpan.FromSeconds(60), 9, 412, "0 request(s) awaiting a reply; 1 write(s) pending");
+        Assert.Equal("This process waited 94 s, its limit's timer 34 s late: its thread pool was too busy, so the host's answer may have waited unread (9 pool threads, 412 work items queued); its connection: 0 request(s) awaiting a reply; 1 write(s) pending.", late);
+        Assert.Equal("This process waited 120 s (4 pool threads, 0 work items queued).", WinFormsDesignerProcess.DescribeHere(TimeSpan.FromSeconds(120.4), TimeSpan.FromSeconds(120), 4, 0, null));
+    }
+
+    [Fact]
+    public async Task A_host_whose_message_loop_never_runs_fails_to_start_with_its_state_and_is_stopped()
+    {
+        // designer/ready never comes: the start fails after its own limit with what the host says (its window's message
+        // loop hasn't started), and the process is ended rather than left behind.
+        await using var fake = new FakeDesignerHost(ready: false);
+        var error = await Assert.ThrowsAsync<PreviewerException>(() => WinFormsDesignerProcess.StartAsync(fake.Launch, s_short, TestContext.Current.CancellationToken));
+        Assert.StartsWith("The designer didn't start in 2 seconds: the host (process ", error.Message, StringComparison.Ordinal);
+        Assert.Contains("says: its window's message loop hasn't started.", error.Message, StringComparison.Ordinal);
+        await fake.Stopped.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// A designer host in this process, over pipes: designer/ready answered (or never), designer/load never answered, and
+    /// designer/status saying what a stuck host would.
+    /// </summary>
+    private sealed class FakeDesignerHost : IProcessLauncher, IHostProcess
+    {
+        private readonly System.IO.Pipes.AnonymousPipeServerStream _toHost = new(System.IO.Pipes.PipeDirection.Out);
+        private readonly System.IO.Pipes.AnonymousPipeServerStream _toIde = new(System.IO.Pipes.PipeDirection.In);
+        private readonly System.IO.Pipes.AnonymousPipeClientStream _hostInput;
+        private readonly System.IO.Pipes.AnonymousPipeClientStream _hostOutput;
+        private readonly JsonRpcConnection _connection;
+        private readonly TaskCompletionSource<int?> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly bool _ready;
+        private int _readyRequests;
+
+        public FakeDesignerHost(bool ready)
+        {
+            _ready = ready;
+            _hostInput = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, _toHost.ClientSafePipeHandle);
+            _hostOutput = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.Out, _toIde.ClientSafePipeHandle);
+            var json = WinFormsDesignerJsonContext.Default;
+            _connection = new JsonRpcConnection(_hostInput, _hostOutput);
+            _connection.OnRequest(WinFormsDesignerMethods.Ready, json.JsonElement, json.DesignerStatus, async (_, ct) =>
+            {
+                Interlocked.Increment(ref _readyRequests);
+                if (!_ready)
+                {
+                    await Task.Delay(Timeout.Infinite, ct);
+                }
+
+                return new DesignerStatus("message loop running for 0.1 s; UI thread: idle.");
+            });
+            _connection.OnRequest(WinFormsDesignerMethods.Status, json.JsonElement, json.DesignerStatus, (_, _) =>
+                Task.FromResult(new DesignerStatus(_ready ? "UI thread: designer/load for 1.0 s (running line 12 of the designer file)." : "its window's message loop hasn't started.")));
+            _connection.OnRequest(WinFormsDesignerMethods.Load, json.DesignerLoadParams, json.DesignerRenderResult, async (_, ct) =>
+            {
+                ErrorLine?.Invoke("[designer] loading App.dll");
+                await Task.Delay(Timeout.Infinite, ct);
+                return new DesignerRenderResult(null, [], []);
+            });
+            _connection.OnRequest("shutdown", (_, _) => Task.FromResult<JsonElement?>(null));
+        }
+
+        public ProcessLaunchInfo Launch => new("codalus-winformsdesigner", []) { Launcher = this };
+
+        public int ReadyRequests => Volatile.Read(ref _readyRequests);
+
+        /// <summary>Completes when the IDE ended the host (killed it, or it exited after shutdown).</summary>
+        public Task Stopped => _exited.Task;
+
+        public Stream Output => _toIde;
+
+        public Stream Input => _toHost;
+
+        public int? Id => 4242;
+
+        public Task<int?> Exited => _exited.Task;
+
+        public event Action<string>? ErrorLine;
+
+        public Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
+        {
+            _connection.Start();
+            return Task.FromResult<IHostProcess>(this);
+        }
+
+        public void BeginErrorRead()
+        {
+        }
+
+        public void Kill()
+        {
+            _exited.TrySetResult(-1);
+            _hostOutput.Dispose();
+        }
+
+        async ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            _exited.TrySetResult(null);
+            await _connection.DisposeAsync();
+            _hostInput.Dispose();
+            _hostOutput.Dispose();
+            _toHost.Dispose();
+            _toIde.Dispose();
+        }
+
+        public ValueTask DisposeAsync() => ((IAsyncDisposable)this).DisposeAsync();
+    }
+}

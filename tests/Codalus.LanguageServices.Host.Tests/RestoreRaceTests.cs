@@ -9,7 +9,15 @@ namespace Codalus.LanguageServices.Host.Tests;
 /// A solution whose first design-time builds run before the restore has brought the reference pack (the smoke test's VB
 /// step on the CI runners, whose SDK 11 gets .NET 10's reference pack from NuGet): the projects load without their
 /// framework, and a completion asked then must not leave Roslyn's providers disabled once the restore lands.
+/// It runs alone, after the parallel tests: its restore downloads .NET 10's reference pack, and on the Windows runner
+/// it didn't finish within its 2 minutes while WinUIXamlTests' fixture restored the Windows App SDK's packages (about
+/// 1 GB) next to it (it passed there until those tests joined this assembly).
 /// </summary>
+[CollectionDefinition(nameof(RestoreRaceTests), DisableParallelization = true)]
+public sealed class RestoreRaceTestsAlone;
+
+/// <inheritdoc cref="RestoreRaceTestsAlone"/>
+[Collection(nameof(RestoreRaceTests))]
 public sealed class RestoreRaceTests
 {
     [Fact]
@@ -32,6 +40,7 @@ public sealed class RestoreRaceTests
         await using var languages = new LanguageService(registry, solutions, policy);
         languages.Log += (_, line) => { lock (log) { log.Add(line); } };
         solutions.Log += (_, line) => { lock (log) { log.Add("[build] " + line); } };
+        solutions.RestoreOutput += (_, line) => { lock (log) { log.Add("[restore] " + line); } };
         try
         {
             var ct = TestContext.Current.CancellationToken;

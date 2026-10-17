@@ -27,7 +27,7 @@
       </Button>
       <TextBox Text="{Binding Filter}" PlaceholderText="{l:T resxEditor.search}" MinWidth="160" AutomationProperties.Name="{l:T resxEditor.search}" />
     </controls:ToolbarPanel>
-    <TextBlock DockPanel.Dock="Top" Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" Margin="8,4" />
+    <TextBlock DockPanel.Dock="Top" Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" Margin="8,4" />
     <Grid DockPanel.Dock="Top" ColumnDefinitions="220,*,220" Margin="10,4,10,2">
       <TextBlock Classes="muted" Text="{l:T resxEditor.name}" />
       <TextBlock Grid.Column="1" Classes="muted" Text="{l:T resxEditor.value}" Margin="6,0,0,0" />

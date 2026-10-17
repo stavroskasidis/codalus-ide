@@ -36,11 +36,13 @@ The roadmap lists `Microsoft.CodeCoverage` and `Microsoft.Testing.Extensions.Cod
 - **VSTest:** a coverage run adds:
   - `TestAdapterPath` pointing at the bundled collector
   - a `DataCollector` entry, `XPlat Code Coverage`, with `Format=cobertura`
+  - Coverlet's in-process collector (`InProcDataCollectionRunSettings`, its codebase in the bundled collector's folder), as `dotnet test --collect` adds it: it flushes the hits before VSTest stops the test host (amended in M43a's CI fixes; without it a loaded machine lost them)
 
   to the runsettings. The `testhost` produces a Cobertura attachment per test assembly. If a project references its own `coverlet.collector`, the one VSTest resolves first is used.
 - **MTP:**
   - If the project references `coverlet.mtp`, the app gets `--coverlet --coverlet-output-format cobertura --coverlet-output <file>`.
   - Otherwise the app runs under the bundled `coverlet.console`: `<test app dll> --target <dotnet|apphost> --targetargs "<server-mode arguments>" --format cobertura --output <file>`. The server-mode connection works as in a normal run.
+  - After a run the app gets 5 s to exit before its process tree is stopped; once `coverlet.console` says the app has exited ("Calculating coverage result..."), it may finish reading the hits and writing the report however long that takes, unless the run is cancelled (amended in M34g's CI fixes; a loaded Windows runner lost the report).
 - **Filters:**
   - By default only the solution's own projects are instrumented. Test projects and generated code (`[GeneratedCode]`, `[CompilerGenerated]`, `*.g.cs`) are excluded.
   - `coverage.include` and `coverage.exclude` take Coverlet filter expressions (`[Assembly]Namespace.Type`).

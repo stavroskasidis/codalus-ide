@@ -176,8 +176,9 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
                 () => monitor.Find("System.Runtime", "cpu-usage") is { Points.Count: >= 2 }
                     && monitor.Find("System.Runtime", "working-set") is not null
                     && monitor.Find("Codalus-Samples-CpuBound", "work-items") is { Last.Value: > 0 }
-                    && monitor.Find("Codalus.Samples.CpuBound", "items.processed") is { Last.Value: > 0 },
-                "the runtime's counters, the EventCounter and the meter: " + string.Join(", ", monitor.Series.Select(s => s.Key)),
+                    && monitor.Find("Codalus.Samples.CpuBound", "items.processed") is { Last.Value: > 0 }
+                    && monitor.Series.Any(s => s.Key.Name.StartsWith("batch.duration P", StringComparison.Ordinal)),
+                "the runtime's counters, the EventCounter, the meter and its histogram's percentiles: " + string.Join(", ", monitor.Series.Select(s => s.Key)),
                 seconds: 60);
 
             var cpu = monitor.Find("System.Runtime", "cpu-usage")!;
@@ -230,11 +231,11 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
             // runtime's safe points, so Stopwatch, Sleep and wait frames of the other threads can rank above it overall.
             var functions = await trace.FunctionsAsync(all, null, 0, 50, Timeout());
             var hot = functions.Functions.FirstOrDefault(f => f.Module == "CpuBound");
-            Assert.True(hot is not null, "no CpuBound function: " + string.Join(", ", functions.Functions.Take(8).Select(f => f.Name)));
-            Assert.Contains("Primes.IsPrime", hot.Name, StringComparison.Ordinal);
+            Assert.True(hot is not null, "no CpuBound function: " + await DescribeAsync(trace));
+            Assert.True(hot.Name.Contains("Primes.IsPrime", StringComparison.Ordinal), $"{hot.Name} first: " + await DescribeAsync(trace));
             Assert.True(hot.Exclusive > 0, $"{hot.Exclusive} of {functions.Total}");
             var searched = await trace.FunctionsAsync(all, "Hashing.Mix", 0, 20, Timeout());
-            Assert.Contains(searched.Functions, f => f.Name.Contains("Hashing.Mix", StringComparison.Ordinal));
+            Assert.True(searched.Functions.Any(f => f.Name.Contains("Hashing.Mix", StringComparison.Ordinal)), "no Hashing.Mix: " + await DescribeAsync(trace));
 
             // Top-down: Main, then Primes.Count, then IsPrime.
             var roots = await trace.TopDownAsync(all, -1, 0, 50, Timeout());
@@ -292,7 +293,9 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
             var program = Assert.Single(files.Files, f => Path.GetFileName(f.Path) == "Program.cs");
             var lines = await trace.LinesAsync(all, program.Path, Timeout());
             var hottest = lines.Lines.MaxBy(l => l.Exclusive)!;
-            Assert.InRange(hottest.Line, fixture.HotLine - 2, fixture.HotLine + 2);
+            Assert.True(
+                Math.Abs(hottest.Line - fixture.HotLine) <= 2,
+                $"line {hottest.Line} hottest, not {fixture.HotLine}: " + string.Join(", ", lines.Lines.OrderByDescending(l => l.Exclusive).Take(8).Select(l => $"{l.Line}: {l.Exclusive}")));
             var withLine = await trace.FunctionsAsync(all, null, 0, 1, Timeout());
             Assert.Equal(program.Path, withLine.Functions[0].File);
         }
@@ -304,6 +307,25 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
                 await trace.DisposeAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Where a trace's samples landed, for a failed assertion: the top functions by self time (self/inclusive samples),
+    /// overall and for each thread, the thread's with its native samples (Sleep, waits) too.
+    /// </summary>
+    private static async Task<string> DescribeAsync(CpuTrace trace)
+    {
+        var summary = trace.Summary;
+        var text = new System.Text.StringBuilder($"{summary.Samples} managed samples, {summary.ExternalSamples} native.");
+        var views = new List<(string Name, CpuFilter Filter)> { ("All threads", new CpuFilter()) };
+        views.AddRange(summary.Threads.Take(6).Select(t => ($"{t.Name}, {t.Samples} managed samples, with native", new CpuFilter(Threads: [t.Id], IncludeExternal: true))));
+        foreach (var (name, filter) in views)
+        {
+            var top = await trace.FunctionsAsync(filter, null, 0, 10, Timeout());
+            text.Append(System.Globalization.CultureInfo.InvariantCulture, $"\n{name} ({top.Total}): ").AppendJoin("; ", top.Functions.Select(f => $"{f.Name} [{f.Module}] {f.Exclusive}/{f.Inclusive}"));
+        }
+
+        return text.ToString();
     }
 
     private static async Task<List<CpuNode>> FindPathAsync(CpuTrace trace, CpuFilter filter, IReadOnlyList<CpuNode> level, string name, int depth = 0)

@@ -422,7 +422,21 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
     {
         var log = new List<string>();
         var restoreStates = new List<string>();
+        const string completedMarker = "<design-time builds completed>";
         _service.Log += (_, line) => { lock (log) { log.Add(line); } };
+
+        // The host sends a batch's completed progress before its log lines (in that order, which the connection keeps):
+        // the marker tells the lines of the last batch from an earlier one's.
+        _service.DesignTimeProgressChanged += (_, p) =>
+        {
+            if (p.Completed)
+            {
+                lock (log)
+                {
+                    log.Add(completedMarker);
+                }
+            }
+        };
         _service.RestoreStateChanged += (_, e) => { lock (restoreStates) { restoreStates.Add(e.State); } };
         var testsProject = Path.Combine(Fixture, "tests", "Core.Tests", "Core.Tests.csproj");
         bool Ok(string path) => _service.CompilerInputs.TryGetValue(path, out var i) && i.State == CompilerInputStates.Ok;
@@ -462,6 +476,21 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
                     }
                 }, TimeSpan.FromMinutes(2));
             }
+
+            // The last batch's lines: "Design-time build of n project(s)", then the cache's hits and misses (every
+            // project built or taken from the cache is one or the other; only an empty batch has none). Waiting for the
+            // completed progress alone returned before they arrived (the Linux runner: the warm open had no such line).
+            await WaitUntilAsync(() =>
+            {
+                lock (log)
+                {
+                    var last = log.LastIndexOf(completedMarker);
+                    var batch = last < 0 ? -1 : log.FindIndex(last, l => l.Contains("Design-time build of", StringComparison.Ordinal));
+                    return batch >= 0
+                           && ((log[batch].Contains("Design-time build of 0 project(s)", StringComparison.Ordinal) && log[batch].EndsWith(" ms.", StringComparison.Ordinal))
+                               || log.FindIndex(batch, l => l.Contains("Design-time build cache:", StringComparison.Ordinal)) >= 0);
+                }
+            }, TimeSpan.FromMinutes(1));
 
             lock (log)
             {

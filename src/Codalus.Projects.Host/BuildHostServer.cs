@@ -208,6 +208,15 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         _connection.OnRequest(ServiceReferenceMethods.Add, json.ServiceReferenceParams, json.ServiceReferenceEditResult, (p, ct) => Guard(() => Session.AddServiceReferenceAsync(p, ct)));
         _connection.OnRequest(ServiceReferenceMethods.Update, json.ServiceReferenceParams, json.ServiceReferenceEditResult, (p, _) => Guard(() => Session.UpdateServiceReferenceAsync(p)));
         _connection.OnRequest(ServiceReferenceMethods.Remove, json.ServiceReferenceRemoveParams, json.ServiceReferenceEditResult, (p, _) => Guard(() => Session.RemoveServiceReferenceAsync(p)));
+
+        // WCF references through the user's dotnet-svcutil (ADR 0069).
+        var wcf = WcfJsonContext.Default;
+        _connection.OnRequest(WcfReferenceMethods.Status, wcf.WcfToolStatusParams, wcf.WcfToolStatusResult, (p, ct) => Guard(() => Session.WcfStatusAsync(p, ct)));
+        _connection.OnRequest(WcfReferenceMethods.Install, wcf.WcfToolInstallParams, wcf.WcfToolStatusResult, (p, ct) => Guard(() => Session.WcfInstallAsync(p, ct)));
+        _connection.OnRequest(WcfReferenceMethods.List, wcf.WcfReferencesParams, wcf.WcfReferencesResult, (p, _) => Guard(() => Task.Run(() => Session.WcfReferencesOf(p))));
+        _connection.OnRequest(WcfReferenceMethods.Add, wcf.WcfReferenceParams, wcf.WcfReferenceRunResult, (p, ct) => Guard(() => Session.AddWcfReferenceAsync(p, ct)));
+        _connection.OnRequest(WcfReferenceMethods.Update, wcf.WcfReferenceParams, wcf.WcfReferenceRunResult, (p, ct) => Guard(() => Session.UpdateWcfReferenceAsync(p, ct)));
+        _connection.OnRequest(WcfReferenceMethods.Remove, wcf.WcfReferenceRemoveParams, wcf.WcfReferencesResult, (p, _) => Guard(() => Session.RemoveWcfReferenceAsync(p)));
     }
 
     /// <summary>NuGet packages and .NET tools (ADR 0012).</summary>
@@ -315,6 +324,8 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
     public Task EfOutputAsync(EfOutputParams output) => Post(EfMethods.Output, output, EntityFrameworkJsonContext.Default.EfOutputParams);
 
     public Task ScaffoldOutputAsync(ScaffoldOutputParams output) => Post(ScaffoldMethods.Output, output, WebToolsJsonContext.Default.ScaffoldOutputParams);
+
+    public Task WcfOutputAsync(ScaffoldOutputParams output) => Post(WcfReferenceMethods.Output, output, WcfJsonContext.Default.ScaffoldOutputParams);
 
     /// <summary>Completes once every notification queued so far has been sent (a response must not overtake them).</summary>
     private Task FlushAsync()

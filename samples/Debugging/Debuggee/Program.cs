@@ -4,10 +4,34 @@ using Debuggee;
 if (args.Length == 2 && args[0] == "--wait-for")
 {
     // Attach tests: wait until the test creates the file, then run as usual.
+    Console.WriteLine("waiting");
     while (!File.Exists(args[1]))
     {
         Thread.Sleep(50); // [wait]
     }
+}
+
+if (args.Length == 2 && args[0] == "--main-returns")
+{
+    // Break All tests: Main returns while a foreground thread waits for the file. The main thread stays in the runtime,
+    // waiting for it, with no managed frames; it says "main returned" once the runtime has made the main thread a
+    // background thread, which it does once Main has returned.
+    var main = Thread.CurrentThread;
+    var waiter = new Thread(() =>
+    {
+        while (!main.IsBackground)
+        {
+            Thread.Sleep(10);
+        }
+
+        Console.WriteLine("main returned");
+        while (!File.Exists(args[1]))
+        {
+            Thread.Sleep(50); // [waiter]
+        }
+    }) { Name = "Waiter" };
+    waiter.Start();
+    return 0;
 }
 
 if (args is ["--depth"])

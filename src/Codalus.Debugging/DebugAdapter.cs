@@ -117,15 +117,7 @@ public sealed class DebugAdapter : IDebugAdapter
     {
         _process = process;
         _connection = new DapConnection(process.Output, process.Input);
-        _connection.EventReceived += e =>
-        {
-            if (e.Name == DapEvents.Initialized)
-            {
-                _initialized.TrySetResult();
-            }
-
-            return EventReceived?.Invoke(e) ?? Task.CompletedTask;
-        };
+        _connection.EventReceived += OnEventAsync;
         _connection.HandlerFailed += (_, ex) => Log?.Invoke(this, "Event handler failed: " + ex);
         process.ErrorLine += line =>
         {
@@ -200,7 +192,7 @@ public sealed class DebugAdapter : IDebugAdapter
                 : info.WorkingDirectory ?? (Path.IsPathRooted(info.Program) ? Path.GetDirectoryName(info.Program)! : Environment.CurrentDirectory),
         };
         var process = await (info.Launcher ?? LocalProcessLauncher.Instance).StartAsync(launch, cancellationToken).ConfigureAwait(false);
-        var adapter = new DebugAdapter(process) { Transport = info.Transport };
+        var adapter = new DebugAdapter(process) { Transport = info.Transport, _local = info.Transport is null && info.Launcher is null or LocalProcessLauncher };
         if (terminal is not null)
         {
             adapter._connection.Handle("runInTerminal", (arguments, ct) => RunInTerminalAsync(terminal, arguments, ct));
@@ -258,18 +250,352 @@ public sealed class DebugAdapter : IDebugAdapter
 
     private static DapJsonContext Json => DapJsonContext.Default;
 
-    public Task LaunchAsync(LaunchArguments arguments, CancellationToken cancellationToken) =>
-        _connection.RequestAsync("launch", arguments, Json.LaunchArguments, cancellationToken);
+    public Task LaunchAsync(LaunchArguments arguments, CancellationToken cancellationToken)
+    {
+        _program = arguments.Program;
+        _programTemp = arguments.Env?.GetValueOrDefault("TMPDIR");
+        return _connection.RequestAsync("launch", arguments, Json.LaunchArguments, cancellationToken);
+    }
 
     /// <summary>Launches with arguments of another shape (a remote target's program and paths, M14c).</summary>
     public Task LaunchAsync<T>(T arguments, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken) =>
         _connection.RequestAsync("launch", arguments, info, cancellationToken);
 
-    public Task AttachAsync(AttachArguments arguments, CancellationToken cancellationToken) =>
-        _connection.RequestAsync("attach", arguments, Json.AttachArguments, cancellationToken);
+    public Task AttachAsync(AttachArguments arguments, CancellationToken cancellationToken)
+    {
+        _attachedTo = arguments.ProcessId;
+        return _connection.RequestAsync("attach", arguments, Json.AttachArguments, cancellationToken);
+    }
 
-    public Task ConfigurationDoneAsync(CancellationToken cancellationToken) =>
-        _connection.RequestAsync("configurationDone", new EmptyArguments(), Json.EmptyArguments, cancellationToken);
+    /// <summary>Attaches with arguments of another shape (the desktop-CLR adapter's, M43b).</summary>
+    public Task AttachAsync<T>(T arguments, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken) =>
+        _connection.RequestAsync("attach", arguments, info, cancellationToken);
+
+    /// <summary>
+    /// Ends the configuration: netcoredbg starts the program (or attaches) and waits a fixed 5 seconds for its runtime
+    /// (<see cref="IsStartupTimeout"/>). Past them, a program on this machine that still runs gets
+    /// <see cref="LateRuntimeWait"/> more: netcoredbg gives up waiting, not the start, and debugs the program once its
+    /// runtime reports. Throws the timeout when the program ended first (or isn't found), or when netcoredbg can't take
+    /// up a runtime that started (a launched program is ended: <see cref="StuckRuntimeWait"/>), so that the start is
+    /// made again; and <see cref="InvalidOperationException"/> when the longer wait runs out too (a launched program is
+    /// ended).
+    /// </summary>
+    public async Task ConfigurationDoneAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _connection.RequestAsync("configurationDone", new EmptyArguments(), Json.EmptyArguments, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DapException ex) when (IsStartupTimeout(ex) && !cancellationToken.IsCancellationRequested && RunningProgram() is { } program)
+        {
+            using (program)
+            {
+                await WaitForRuntimeAsync(program, ex, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// netcoredbg's answer to <c>configurationDone</c> when the program's runtime didn't report to it within 5 seconds
+    /// of the launch or attach (its fixed <c>startupWaitTimeout</c>, which no option or variable changes; E_FAIL).
+    /// TODO(issue): ask Samsung/netcoredbg for a configurable wait.
+    /// </summary>
+    public static bool IsStartupTimeout(Exception ex) =>
+        ex is DapException { Command: "configurationDone" } && ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// How long a start waits, past netcoredbg's 5 seconds, for the runtime of a program on this machine
+    /// (<see cref="ConfigurationDoneAsync"/>).
+    /// </summary>
+    internal TimeSpan LateRuntimeWait { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// How long, during <see cref="LateRuntimeWait"/>, a launched program's runtime may have been started (its debugger
+    /// transport is there) without netcoredbg taking it up, before the start is given up so that it is made again
+    /// (<see cref="WaitForRuntimeAsync"/>). Taking a runtime up takes netcoredbg a few seconds even on a loaded machine.
+    /// </summary>
+    internal TimeSpan StuckRuntimeWait { get; set; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// The program netcoredbg attached to, or started (its child: dbgshim creates the process), while it runs; null for
+    /// an adapter on another machine.
+    /// </summary>
+    private Process? RunningProgram()
+    {
+        if (!_local)
+        {
+            return null;
+        }
+
+        var id = _attachedTo ?? (_process.Id is { } adapter && Codalus.Platform.ProcessTree.Children(adapter) is [var child, ..] ? child : null);
+        if (id is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var program = Process.GetProcessById(id.Value);
+            if (!HasExited(program))
+            {
+                return program;
+            }
+
+            program.Dispose();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Gone.
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Waits past netcoredbg's 5 seconds for the program's runtime (its first thread or module), while the program
+    /// runs. netcoredbg's wait ends only its own waiting: dbgshim's registration for the runtime's start stays (on
+    /// Windows its thread waits for the runtime's startup event without a limit), and once the runtime reports,
+    /// netcoredbg attaches, binds the breakpoints and stops at them. It only leaves out the <c>process</c> event, which
+    /// is raised here. Meanwhile netcoredbg is sent a request now and then (<see cref="WakeCommand"/>), which it doesn't
+    /// know and answers at once: on macOS it can't take the runtime up without one.
+    /// </summary>
+    /// <remarks>
+    /// macOS (PR #24's CI, and the probe runs 39031376883 and 39034047801 on macOS 26.6 with netcoredbg 3.2.0): a
+    /// runtime that reports late finds dbgshim's registration and netcoredbg's debugger connects, but its CreateProcess
+    /// callback blocks in <c>Interop::Init</c>, where netcoredbg hosts its own CoreCLR: <c>coreclr_initialize</c>, then
+    /// <c>FILEInitStdHandles</c>, then <c>fileno(stdin)</c>, which on macOS takes stdin's lock (<c>flockfile</c>; glibc's
+    /// doesn't). netcoredbg's main thread holds that lock while it waits to read DAP from stdin (<c>getc</c>, blocked in
+    /// <c>read</c>). Within the 5 seconds it isn't reading: <c>configurationDone</c> is one of the commands it waits on
+    /// before reading the next one. Once that has failed, it reads again, and the program stays held in its runtime's
+    /// startup with no event ever reported. A request makes that read return and the lock go, and the callback goes on.
+    /// TODO(issue): report upstream (Samsung/netcoredbg).
+    /// <para>
+    /// Linux (PR #32's CI; on a loaded Linux machine about one start in a thousand): a launched program whose
+    /// runtime started can be one netcoredbg never takes up, because the .NET 11 runtime's debugger transport can
+    /// deadlock at its start. The runtime creates its two FIFOs (<c>clr-debug-pipe-&lt;pid&gt;-&lt;key&gt;-in</c> and
+    /// <c>-out</c> in the temp folder) in <c>DbgTransportSession::Init</c>, tells dbgshim it started, and its transport
+    /// thread, once it runs, throws that channel away (its destructor unlinks both names) and makes new FIFOs under
+    /// the same names to wait on. When the transport thread runs late (a loaded machine) and netcoredbg connects in
+    /// between, netcoredbg opens the first <c>-in</c> FIFO, whose name is gone, and the runtime waits on the second:
+    /// both block in <c>open</c> forever, the program held in its startup (delaying the runtime's <c>unlink</c> with
+    /// <c>strace -e inject=unlink:delay_enter=1000000</c> makes every start do it). netcoredbg's attach gives up
+    /// meanwhile (its startup callback's thread is gone) and nothing takes the runtime up after that, so once the program's transport has been there for
+    /// <see cref="StuckRuntimeWait"/> without the runtime reported, a launched program is ended and the timeout thrown:
+    /// the start is made again (DebugService). TODO(issue): report upstream (dotnet/runtime).
+    /// </para>
+    /// <para>
+    /// netcoredbg doesn't reap a program that ends before its runtime reported: on Linux it stays a zombie, which
+    /// <see cref="Process.HasExited"/> reads as running (<see cref="HasExited"/> reads its state).
+    /// </para>
+    /// </remarks>
+    private async Task WaitForRuntimeAsync(Process program, DapException timeout, CancellationToken cancellationToken)
+    {
+        var waited = Stopwatch.StartNew();
+        TimeSpan? transportSince = null;
+        using var wakes = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var nextWake = TimeSpan.Zero;
+        Log?.Invoke(this, $"The debugger didn't see the program's runtime start within its 5 seconds; waiting for it (up to {LateRuntimeWait.TotalSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture)} seconds more).");
+        var processEvent = _attachedTo is null
+            ? new DapEvent(DapEvents.Process, JsonSerializer.SerializeToElement(new ProcessEvent(_program ?? program.ProcessName, program.Id, IsLocalProcess: true, StartMethod: "launch"), Json.ProcessEvent))
+            : null;
+        Volatile.Write(ref _lateProcess, processEvent);
+        try
+        {
+            while (!_runtime.Task.IsCompleted)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_connection.Closed.IsCompleted)
+                {
+                    // Ended meanwhile (the session was stopped): not a start to make again.
+                    throw new DapConnectionLostException("The debug adapter ended while waiting for the program's runtime.", timeout);
+                }
+
+                if (HasExited(program))
+                {
+                    Log?.Invoke(this, $"The program ended {Seconds(waited)} seconds later, before its runtime started.");
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(timeout);
+                }
+
+                if (_attachedTo is null && transportSince is null && HasRuntimeTransport(program, _programTemp))
+                {
+                    transportSince = waited.Elapsed;
+                }
+
+                if (transportSince is { } since && waited.Elapsed - since >= StuckRuntimeWait)
+                {
+                    Log?.Invoke(this, $"The program's runtime started, but the debugger hasn't taken it up in {(waited.Elapsed - since).TotalSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture)} seconds (its connection to the runtime is stuck); ending the program.");
+                    KillProgram(program);
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(timeout);
+                }
+
+                if (waited.Elapsed >= LateRuntimeWait)
+                {
+                    if (_attachedTo is null)
+                    {
+                        KillProgram(program);
+                    }
+
+                    throw new InvalidOperationException(
+                        $"The debugger didn't see the program's runtime start within {(LateRuntimeWait.TotalSeconds + 5).ToString("0", System.Globalization.CultureInfo.InvariantCulture)} seconds{(_attachedTo is null ? ", and ended the program" : string.Empty)}. Is it a .NET program?",
+                        timeout);
+                }
+
+                if (waited.Elapsed >= nextWake)
+                {
+                    nextWake = waited.Elapsed + WakeInterval;
+                    _ = _connection.RequestAsync(WakeCommand, new EmptyArguments(), Json.EmptyArguments, wakes.Token)
+                        .ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                }
+
+                await Task.WhenAny(_runtime.Task, _connection.Closed, Task.Delay(100, cancellationToken)).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            // The start failed: a runtime that reports now is no longer this start's.
+            Volatile.Write(ref _lateProcess, null);
+            throw;
+        }
+        finally
+        {
+            // The answers to the wake requests still on their way are nobody's.
+            await wakes.CancelAsync().ConfigureAwait(false);
+        }
+
+        Log?.Invoke(this, $"The debugger saw the program's runtime start {Seconds(waited)} seconds later.");
+        if (processEvent is not null && Interlocked.Exchange(ref _lateProcessRaised, 1) == 0)
+        {
+            // Its first thread or module came before the wait began: the process event follows them, before the start
+            // goes on.
+            _connection.Post(processEvent);
+            await Task.WhenAny(_lateProcessPosted.Task, _connection.Closed, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
+        }
+    }
+
+    private async Task OnEventAsync(DapEvent e)
+    {
+        if (e.Name == DapEvents.Initialized)
+        {
+            _initialized.TrySetResult();
+        }
+        else if (e.Name is DapEvents.Thread or DapEvents.Module or DapEvents.Stopped)
+        {
+            // netcoredbg reports threads and modules once it saw the program's runtime. One it saw late goes without
+            // a process event: it is raised before them, and before the start goes on (WaitForRuntimeAsync).
+            if (Volatile.Read(ref _lateProcess) is { } process && Interlocked.Exchange(ref _lateProcessRaised, 1) == 0)
+            {
+                await RaiseAsync(process).ConfigureAwait(false);
+            }
+
+            _runtime.TrySetResult();
+        }
+
+        await RaiseAsync(e).ConfigureAwait(false);
+        if (ReferenceEquals(e, Volatile.Read(ref _lateProcess)))
+        {
+            _lateProcessPosted.TrySetResult();
+        }
+    }
+
+    private Task RaiseAsync(DapEvent e) => EventReceived?.Invoke(e) ?? Task.CompletedTask;
+
+    /// <summary>The <c>process</c> event of a launched program whose runtime netcoredbg is late to see, raised once.</summary>
+    private DapEvent? _lateProcess;
+
+    private int _lateProcessRaised;
+
+    private readonly TaskCompletionSource _lateProcessPosted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// A request no adapter knows (netcoredbg answers it with E_NOTIMPL and changes nothing), sent while waiting for a
+    /// late runtime: reading it releases netcoredbg's stdin, which its CreateProcess callback waits for on macOS
+    /// (<see cref="WaitForRuntimeAsync"/>).
+    /// </summary>
+    internal const string WakeCommand = "codalus/wake";
+
+    /// <summary>How often <see cref="WakeCommand"/> is sent while waiting for a late runtime.</summary>
+    private static readonly TimeSpan WakeInterval = TimeSpan.FromMilliseconds(250);
+
+    private static string Seconds(Stopwatch watch) => watch.Elapsed.TotalSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Whether the program ended. On Linux a program netcoredbg started and never reaped (one whose runtime it didn't
+    /// see) stays a zombie, which <see cref="Process.HasExited"/> reads as running.
+    /// </summary>
+    private static bool HasExited(Process program)
+    {
+        try
+        {
+            return program.HasExited || (OperatingSystem.IsLinux() && ProcStat(program.Id) is not { State: not ('Z' or 'X') });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return true;
+        }
+    }
+
+    private static void KillProgram(Process program)
+    {
+        try
+        {
+            program.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            // It ended meanwhile.
+        }
+    }
+
+    /// <summary>
+    /// Whether the program's runtime started its debugger transport (Linux): the FIFO it waits on for a debugger,
+    /// <c>clr-debug-pipe-&lt;pid&gt;-&lt;start time&gt;-in</c> in its temp folder (the runtime's
+    /// <c>PAL_GetTransportPipeName</c>: <c>TMPDIR</c>, else <c>/tmp</c>). Elsewhere, false.
+    /// TODO(issue): macOS (the start time is in seconds there, and the same race is in its .NET 11 runtime).
+    /// </summary>
+    private static bool HasRuntimeTransport(Process program, string? programTemp)
+    {
+        if (!OperatingSystem.IsLinux() || ProcStat(program.Id) is not { } stat)
+        {
+            return false;
+        }
+
+        var temp = programTemp ?? Environment.GetEnvironmentVariable("TMPDIR");
+        var name = $"clr-debug-pipe-{program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)}-{stat.StartTime.ToString(System.Globalization.CultureInfo.InvariantCulture)}-in";
+        return File.Exists(Path.Combine(string.IsNullOrEmpty(temp) ? "/tmp" : temp, name));
+    }
+
+    /// <summary>A Linux process's state and start time (clock ticks since boot), from <c>/proc/&lt;pid&gt;/stat</c>; null when it is gone.</summary>
+    private static (char State, ulong StartTime)? ProcStat(int processId)
+    {
+        string stat;
+        try
+        {
+            stat = File.ReadAllText($"/proc/{processId.ToString(System.Globalization.CultureInfo.InvariantCulture)}/stat");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        // pid (comm) state ppid …: the name can hold spaces and parentheses, so the fields are counted after the last
+        // ')'. The state is the 3rd field, the start time the 22nd.
+        var fields = stat[(stat.LastIndexOf(')') + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return fields.Length > 19 && fields[0].Length == 1 && ulong.TryParse(fields[19], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var start)
+            ? (fields[0][0], start)
+            : null;
+    }
+
+    private readonly TaskCompletionSource _runtime = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Whether the adapter runs on this machine, so the program it starts is here too.</summary>
+    private bool _local;
+
+    private int? _attachedTo;
+
+    private string? _program;
+
+    /// <summary>The launched program's <c>TMPDIR</c>, when the launch sets one (<see cref="HasRuntimeTransport"/>).</summary>
+    private string? _programTemp;
 
     public async Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken) =>
         (await _connection.RequestAsync("setBreakpoints", new SetBreakpointsArguments(new Source(Path.GetFileName(path), path), breakpoints), Json.SetBreakpointsArguments, Json.SetBreakpointsResponse, cancellationToken).ConfigureAwait(false)).Breakpoints;
@@ -292,8 +618,19 @@ public sealed class DebugAdapter : IDebugAdapter
     public Task StepOutAsync(int threadId, CancellationToken cancellationToken) =>
         _connection.RequestAsync("stepOut", new ThreadArguments(threadId), Json.ThreadArguments, cancellationToken);
 
-    public Task PauseAsync(int threadId, CancellationToken cancellationToken) =>
-        _connection.RequestAsync("pause", new ThreadArguments(threadId), Json.ThreadArguments, cancellationToken);
+    /// <summary>
+    /// Pauses the program. DAP's pause names a thread, and netcoredbg refuses 0 (E_INVALIDARG): Break All (0) names the
+    /// program's first thread, and netcoredbg stops every thread and reports that one.
+    /// </summary>
+    public async Task PauseAsync(int threadId, CancellationToken cancellationToken)
+    {
+        if (threadId == 0 && (await ThreadsAsync(cancellationToken).ConfigureAwait(false)) is [var first, ..])
+        {
+            threadId = first.Id;
+        }
+
+        await _connection.RequestAsync("pause", new ThreadArguments(threadId), Json.ThreadArguments, cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task<DapThread[]> ThreadsAsync(CancellationToken cancellationToken) =>
         (await _connection.RequestAsync("threads", new EmptyArguments(), Json.EmptyArguments, Json.ThreadsResponse, cancellationToken).ConfigureAwait(false)).Threads;
@@ -340,6 +677,9 @@ public sealed class DebugAdapter : IDebugAdapter
             // No answer in time.
         }
     }
+
+    /// <summary>Ends the adapter's process at once, with the processes it started where the OS allows (a launched program).</summary>
+    public void Kill() => _process.Kill();
 
     /// <summary>Reads a body as <typeparamref name="T"/> (events).</summary>
     public static T? Read<T>(JsonElement body, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info) =>

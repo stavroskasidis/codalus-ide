@@ -39,8 +39,12 @@ public sealed class QuickPickRow(QuickPickItem item, IReadOnlyList<int> highligh
 
     public bool HasIcon => Item.Icon is not null;
 
-    /// <summary>What screen readers announce for the row.</summary>
-    public string AccessibleName => HasKeyLabel ? $"{Label}, {Item.KeyLabel}" : Label;
+    /// <summary>What screen readers announce for the row: the label, its detail and what's on the right.</summary>
+    public string AccessibleName => string.Join(", ", new[] { Label, Item.Detail, Item.KeyLabel }.Where(s => !string.IsNullOrEmpty(s)));
+
+    /// <summary>The right column's widest: half the row (a row's width in, the most its key label or detail may take out).</summary>
+    public static Avalonia.Data.Converters.IValueConverter HalfWidth { get; } =
+        new Avalonia.Data.Converters.FuncValueConverter<double, double>(width => width > 0 ? width / 2 : double.PositiveInfinity);
 }
 
 /// <summary>

@@ -5,11 +5,12 @@
              x:Class="Codalus.Shell.Views.DialogView"
              x:DataType="vm:DialogViewModel">
   <UserControl.Styles>
+    <!-- Diff text (M34g on M43): Shell.Diff.Added and .Removed are graphics; removed lines were 4.29:1 in Classic Dark. -->
     <Style Selector="TextBlock.added">
-      <Setter Property="Foreground" Value="{DynamicResource Shell.Diff.Added}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Diff.Added.Foreground}" />
     </Style>
     <Style Selector="TextBlock.removed">
-      <Setter Property="Foreground" Value="{DynamicResource Shell.Diff.Removed}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Diff.Removed.Foreground}" />
     </Style>
     <Style Selector="TextBlock.header">
       <Setter Property="FontWeight" Value="SemiBold" />
@@ -45,9 +46,19 @@
           <Button Content="{l:T dialog.down}" Command="{Binding MoveDownCommand}" MinWidth="64" AutomationProperties.Name="{l:T dialog.moveDown}" />
         </StackPanel>
       </Grid>
-      <Border IsVisible="{Binding HasDetails}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="420">
+      <!-- Notes about the changes (Convert to SDK-Style's, M43a) wrap above them (M34g on M43: they ran off sideways in the monospace box). -->
+      <ScrollViewer IsVisible="{Binding HasNotes}" MaxHeight="160" HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T dialog.notesAboutTheChanges}">
+        <ItemsControl ItemsSource="{Binding Notes}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:DetailLine">
+              <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,0,0,2" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <Border IsVisible="{Binding HasChanges}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="420">
         <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="{l:T dialog.preview}">
-          <ItemsControl ItemsSource="{Binding Details}" Margin="6,4">
+          <ItemsControl ItemsSource="{Binding Changes}" Margin="6,4">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:DetailLine">
                 <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
@@ -57,7 +68,7 @@
           </ItemsControl>
         </ScrollViewer>
       </Border>
-      <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
                  AutomationProperties.LiveSetting="Assertive" />
       <ItemsControl ItemsSource="{Binding Buttons}" HorizontalAlignment="Right" Margin="0,6,0,0">
         <ItemsControl.ItemsPanel>

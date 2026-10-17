@@ -425,6 +425,9 @@ internal static class XamlNames
     public const string MarkupCompatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006";
     public const string Xml = "http://www.w3.org/XML/1998/namespace";
 
+    /// <summary>WPF's default namespace (M40a).</summary>
+    public const string Wpf = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+
     /// <summary>.NET MAUI's default namespace (M20a).</summary>
     public const string Maui = "http://schemas.microsoft.com/dotnet/2021/maui";
 

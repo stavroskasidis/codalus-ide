@@ -26,7 +26,7 @@
                       AutomationProperties.Name="{Binding ToggleTitle}" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Details}" TextWrapping="Wrap" />
-            <TextBlock Foreground="{DynamicResource Shell.Error}" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" />
+            <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" />
           </StackPanel>
         </DataTemplate>
       </ListBox.ItemTemplate>

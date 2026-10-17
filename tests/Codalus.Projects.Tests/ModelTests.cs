@@ -18,7 +18,21 @@ public class NestingTests
     [InlineData("Program.cs", "Program.Designer.cs", null)]
     [InlineData("appsettings.json", "appsettings.Development.json", null)]
     [InlineData("Foo.Bar.cs", "Baz.cs", null)]
+    [InlineData("MainForm.resx", "MainForm.cs", "MainForm.cs")] // M40a: Windows Forms
+    [InlineData("MainForm.resx", "MainForm.vb", "MainForm.vb")]
+    [InlineData("Resources.Designer.cs", "Resources.resx", "Resources.resx")]
+    [InlineData("Settings.Designer.cs", "Settings.settings", "Settings.settings")]
+    [InlineData("MainForm.de.resx", "MainForm.resx", "MainForm.resx")]
+    [InlineData("Strings.resx", "Other.cs", null)]
     public void Default_rules(string file, string sibling, string? expected) => Assert.Equal(expected, Parent(file, sibling));
+
+    [Fact]
+    public void A_forms_designer_file_and_resources_nest_under_its_code()
+    {
+        Assert.Equal("MainForm.cs", Parent("MainForm.Designer.cs", "MainForm.cs", "MainForm.resx"));
+        Assert.Equal("MainForm.cs", Parent("MainForm.resx", "MainForm.cs", "MainForm.Designer.cs"));
+        Assert.Null(Parent("MainForm.cs", "MainForm.resx", "MainForm.Designer.cs"));
+    }
 
     [Fact]
     public void DependentUpon_wins_and_must_name_a_sibling()

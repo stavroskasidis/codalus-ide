@@ -229,6 +229,16 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (WarnIfWindowsOnly(project))
+        {
+            return; // a WinForms, WPF, WinUI or .NET Framework app off Windows (M40a, M44, M43a)
+        }
+
+        if (await TryStartPackagedAppAsync(project, debug: true).ConfigureAwait(true))
+        {
+            return; // a packaged WinUI 3 app (M44): started by Windows, then netcoredbg attaches
+        }
+
         if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
@@ -336,7 +346,7 @@ public sealed partial class ShellHost
             var items = processes.Select(p => new QuickPickItem($"{p.Name} ({p.Id.ToString(CultureInfo.InvariantCulture)})")
             {
                 Tag = p.Id,
-                Detail = p.IsDotnet ? ".NET" + (p.Title is null ? string.Empty : " · " + p.Title) : p.Title,
+                Detail = p.Runtime is { } runtime ? runtime + (p.Title is null ? string.Empty : " · " + p.Title) : p.Title,
             }).ToList();
             if (await Palette.ShowAsync(items, "Attach to a process (.NET processes are listed first)").ConfigureAwait(true) is not { Tag: int picked })
             {

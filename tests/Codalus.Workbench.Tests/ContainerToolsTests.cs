@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json.Nodes;
 using Codalus.Projects.Protocol;
 using Codalus.Workbench.Build;
 using Codalus.Workbench.Containers;
@@ -171,5 +172,55 @@ public sealed class ContainerToolsTests
 
         Assert.Equal("http://localhost:7000/swagger", ContainerLaunch.BrowserUrlFor("swagger", 7000));
         Assert.Equal("http://localhost:7000", ContainerLaunch.BrowserUrlFor("{Scheme}://{ServiceHost}:{ServicePort}", 7000));
+    }
+
+    [Fact]
+    public void A_fast_mode_plan_mounts_the_static_web_assets_and_points_the_app_at_their_container_paths()
+    {
+        // As a Debug build has it (the .NET 11 SDK gives every web app some: dotnet watch's browser scripts in obj).
+        var root = Directory.CreateTempSubdirectory("codalus-swa-").FullName;
+        try
+        {
+            var project = Path.Combine(root, "Web", "Web.csproj");
+            var output = Path.Combine(root, "Web", "bin", "Debug", "net10.0");
+            var wwwroot = Path.Combine(root, "Web", "wwwroot");
+            var watch = Path.Combine(root, "Web", "obj", "Debug", "net10.0", "dotnet-watch");
+            var inOutput = Path.Combine(output, "assets");
+            var missing = Path.Combine(root, "Web", "obj", "missing");
+            foreach (var folder in new[] { wwwroot, watch, inOutput })
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            var manifest = new JsonObject
+            {
+                ["ContentRoots"] = new JsonArray(wwwroot + Path.DirectorySeparatorChar, watch + Path.DirectorySeparatorChar, output + Path.DirectorySeparatorChar, inOutput + Path.DirectorySeparatorChar, missing + Path.DirectorySeparatorChar),
+                ["Root"] = new JsonObject { ["Children"] = null, ["Asset"] = null, ["Patterns"] = null },
+            };
+            File.WriteAllText(Path.Combine(output, "Web.staticwebassets.runtime.json"), manifest.ToJsonString());
+            var info = new RunInfo(project, "net10.0", "Exe", Path.Combine(output, "Web.dll"), "dotnet", "exec Web.dll", output, Sample("Web", "Properties", "launchSettings.json"));
+            var profile = LaunchSettings.Read(info.LaunchSettings, out _).Single(p => p.CommandName == LaunchProfile.Docker);
+            var launch = ContainerLaunch.Plan(info, profile, Sample("Web", "Dockerfile"), root, fastMode: true, new Dictionary<string, string> { ["ASPNETCORE_HTTP_PORTS"] = "8080" }, freePort: () => 6001);
+
+            // Folders outside the output are mounted read-only (a missing one isn't: the engine would create it).
+            Assert.Equal([output + ":/app", wwwroot + ":/staticwebassets/0:ro", watch + ":/staticwebassets/1:ro"], launch.Run.Mounts);
+            const string Container = "/app/Web.staticwebassets.runtime.container.json";
+            Assert.Contains(launch.Run.Environment, e => e is { Key: ContainerLaunch.StaticWebAssetsVariable, Value: Container });
+            Assert.Equal(Container, launch.Environment[ContainerLaunch.StaticWebAssetsVariable]); // the debugger's launch too
+
+            var written = JsonNode.Parse(File.ReadAllText(Path.Combine(output, "Web.staticwebassets.runtime.container.json")))!;
+            Assert.Equal(["/staticwebassets/0/", "/staticwebassets/1/", "/app/", "/app/assets/", "/staticwebassets/4/"], written["ContentRoots"]!.AsArray().Select(r => r!.GetValue<string>()));
+            Assert.NotNull(written["Root"]);
+
+            // Without a manifest (not a web app), only the output.
+            File.Delete(Path.Combine(output, "Web.staticwebassets.runtime.json"));
+            var plain = ContainerLaunch.Plan(info, profile, Sample("Web", "Dockerfile"), root, fastMode: true, new Dictionary<string, string>(), freePort: () => 6001);
+            Assert.Equal([output + ":/app"], plain.Run.Mounts);
+            Assert.DoesNotContain(plain.Run.Environment, e => e.Key == ContainerLaunch.StaticWebAssetsVariable);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 }

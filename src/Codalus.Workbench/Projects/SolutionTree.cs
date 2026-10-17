@@ -235,10 +235,18 @@ public static class SolutionTree
         }
 
         var dependencies = Dependencies(entry.Path, info, inputs);
+
+        // A non-SDK-style project (M43a) says so; one that needs Visual Studio's targets says why it doesn't build.
+        ExplorerNode[] cannotBuild = info.CannotBuildReason is { } reason
+            ? [new ExplorerNode(node.Id + "|cannotBuild", ExplorerNodeKind.Message, reason) { Icon = "warning", IsWarning = true, ProjectPath = entry.Path }]
+            : [];
         return node with
         {
-            Detail = info.TargetFrameworks.Length > 1 ? string.Join(", ", info.TargetFrameworks) : null,
-            Children = [.. dependencies is null ? [] : new[] { dependencies }, .. Contents(entry.Path, info, disk)],
+            Detail = info.CannotBuildReason is not null ? Localization.Localizer.Get("msg.solutionTree.nonSdkStyleCannotBuild", "(non-SDK-style, can't build here)")
+                : info.IsNonSdkStyle ? Localization.Localizer.Get("msg.solutionTree.nonSdkStyle", "(non-SDK-style)")
+                : info.TargetFrameworks.Length > 1 ? string.Join(", ", info.TargetFrameworks) : null,
+            IsWarning = info.CannotBuildReason is not null,
+            Children = [.. cannotBuild, .. dependencies is null ? [] : new[] { dependencies }, .. Contents(entry.Path, info, disk)],
         };
     }
 
@@ -419,6 +427,30 @@ public static class SolutionTree
             if (!s_names.Equals(candidate, name) && siblings.Contains(candidate))
             {
                 return candidate;
+            }
+        }
+
+        // Windows Forms and resources (M40a): a form's Form1.resx under Form1.cs, and a strongly typed resource class
+        // (Resources.Designer.cs) or settings class under the .resx or .settings it comes from.
+        if (extension.Equals(".resx", StringComparison.OrdinalIgnoreCase) && !System.IO.Path.HasExtension(withoutLast))
+        {
+            foreach (var code in new[] { withoutLast + ".cs", withoutLast + ".vb" })
+            {
+                if (siblings.Contains(code))
+                {
+                    return code;
+                }
+            }
+        }
+
+        if (System.IO.Path.GetExtension(withoutLast).Equals(".Designer", StringComparison.OrdinalIgnoreCase) && segmentBase.Length > 0)
+        {
+            foreach (var source in new[] { segmentBase + ".resx", segmentBase + ".settings" })
+            {
+                if (siblings.Contains(source))
+                {
+                    return source;
+                }
             }
         }
 

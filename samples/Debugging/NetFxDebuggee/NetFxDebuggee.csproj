@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A .NET Framework 4.8 console app for the desktop-CLR debugger (M43b, ADR 0076). It builds on every OS (the
+       reference assemblies come from the Microsoft.NETFramework.ReferenceAssemblies package) and runs on Windows,
+       where the adapter debugs it; elsewhere the tests read its metadata and portable PDB. C# 7.3, .NET Framework's. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+  </PropertyGroup>
+</Project>

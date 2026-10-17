@@ -2,18 +2,22 @@
 
 Codalus IDE debugs .NET programs with **netcoredbg**, the open-source .NET debugger from Samsung, which is bundled with the packages. It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and the macOS package bundles the x64 netcoredbg for them ([Older .NET versions](dotnet-versions.md)).
 
+On Windows, **.NET Framework** programs (and their tests) are debugged by Codalus IDE's own .NET Framework debugger, through the .NET Framework's debugging API: F5 on a .NET Framework app, Attach to Process on a .NET Framework process and Debug Test choose it by themselves, and the windows and commands below work the same. What it does and doesn't do is on the [.NET Framework](net-framework.md#debugging-on-windows) page. .NET MAUI apps on Android and iOS use the Mono debugger ([.NET MAUI](maui.md)).
+
 ## Starting
 
 | Command | Shortcut |
 |---|---|
 | Start Debugging (builds the startup project first, using its launch profile) | `F5` |
-| Attach to Process (the .NET processes are listed first) | `Ctrl+Alt+P` |
+| Attach to Process (the .NET and .NET Framework processes are listed first) | `Ctrl+Alt+P` |
 | Reattach to Process (the last one again, by id while it runs, otherwise by name) | `Shift+Alt+P` |
 | Attach to Process on a Remote Machine (over SSH, in a container, in WSL) | Debug menu |
 | Stop (terminates a launched program, detaches from an attached one) | `Shift+F5` |
 | Detach All (an attached program, or one launched in the terminal, keeps running) | Debug menu |
 | Restart | `Ctrl+Shift+F5` |
 | Break All | `Ctrl+Alt+Break` |
+
+**Break All** stops every thread, and the Call Stack shows the first thread running code of your own (or, when no thread is, the first that has managed frames). When no thread is running .NET code at all (a program that is still starting, or one running only native code), the Call Stack shows **[External Code]**: continue, and Break All again shows the program's code once it runs. Choose another thread in the Call Stack's thread list or the Threads window.
 
 The program's output and the debugger's messages appear in the **Debug Console**.
 
@@ -33,7 +37,7 @@ F5 then builds the solution once and starts the projects in that order. Those se
 - each program stops at its own breakpoints, and the others keep running;
 - the session ends when the last program ends.
 
-The choice is saved with the solution (in your user data, not in the solution file).
+The choice is saved with the solution, for you only, in `.codalus/state/` next to it (not in the solution file; see [What a solution reopens with](solutions.md#what-a-solution-reopens-with)).
 
 ### Debugging on other machines
 
@@ -151,7 +155,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
 - **Debug → Open Dump File** opens a dump (`.dmp` on Windows, a core dump on Linux and macOS) of a .NET program:
   - **Threads**: each managed thread with its exception, if it had one, and its call stack. Frames map to source lines when the program's PDBs are next to its assemblies; double-click a frame to open the line.
   - **Heap**: the objects by type, with their count and size. Pick a type to list its instances, and an instance to see its fields; follow references to other objects, and go back.
-- Dumps open on the operating system that wrote them, because the runtime's debugging library has to load on the machine reading them.
+- Dumps open on the operating system that wrote them, because the runtime's debugging library has to load on the machine reading them. It comes from a .NET installation with the dump's runtime version (`dotnet --list-runtimes`): on Linux and macOS, a dump of a runtime that isn't installed (a self-contained app's) doesn't open.
 - On macOS, the first dump may make the system ask for your password (access to developer tools). The dump waits until you approve it, and is abandoned with a message after 3 minutes.
 
 ## Settings
@@ -186,3 +190,5 @@ These come from netcoredbg:
 - .NET 11 programs debug with the bundled netcoredbg (3.2.0), except exception module conditions: it gives their stack frames no module, so a condition can't tell where an exception was thrown: one that names modules (`MyApp.dll`) doesn't break, and one that only leaves modules out (`!System.*`) always breaks
 
 Hit counts, logpoints, filters, dependent and temporary breakpoints, exception module conditions and Run to Cursor are implemented by the IDE, so each hit pauses the program briefly.
+
+The .NET Framework debugger (Windows) has these limits of its own: 64-bit processes only (not x86 or `Prefer32Bit` apps), portable PDBs only, no integrated terminal (the Debug Console or a console window), expressions limited to a C# subset (no `new`, lambdas, generic methods or assignments), and Edit and Continue, Set Next Statement, data breakpoints and mixed-mode debugging aren't available ([.NET Framework](net-framework.md#debugging-on-windows)).

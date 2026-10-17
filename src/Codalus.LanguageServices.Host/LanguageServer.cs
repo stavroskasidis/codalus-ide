@@ -175,9 +175,11 @@ internal sealed class LanguageServer : IAsyncDisposable
             async (document, _, ct) => await FoldingFeature.FoldingRangesAsync(document, ct).ConfigureAwait(false), [],
             (xaml, _, _) => Task.FromResult<FoldingRange[]?>(Xaml.XamlAnalysis.Folding(xaml)));
         OnDocument(Methods.SemanticTokensFull, json.SemanticTokensParams, json.SemanticTokens, p => p.TextDocument,
-            async (document, _, ct) => await SemanticTokensFeature.TokensAsync(document, null, ct).ConfigureAwait(false), new SemanticTokens([]), semantics: Semantics.Analysis);
+            async (document, _, ct) => await SemanticTokensFeature.TokensAsync(document, null, ct).ConfigureAwait(false), new SemanticTokens([]),
+            razor: async (mapping, _, ct) => await Razor.RazorClassifier.TokensAsync(mapping, null, ct).ConfigureAwait(false), semantics: Semantics.Analysis);
         OnDocument(Methods.SemanticTokensRange, json.SemanticTokensRangeParams, json.SemanticTokens, p => p.TextDocument,
-            async (document, p, ct) => await SemanticTokensFeature.TokensAsync(document, p.Range, ct).ConfigureAwait(false), new SemanticTokens([]), semantics: Semantics.Analysis);
+            async (document, p, ct) => await SemanticTokensFeature.TokensAsync(document, p.Range, ct).ConfigureAwait(false), new SemanticTokens([]),
+            razor: async (mapping, p, ct) => await Razor.RazorClassifier.TokensAsync(mapping, p.Range, ct).ConfigureAwait(false), semantics: Semantics.Analysis);
         OnDocument(Methods.DocumentOptions, json.DocumentOptionsParams, json.DocumentOptions, p => p.TextDocument,
             DocumentOptionsAsync, new DocumentOptions(true, 4, 4, null));
         OnPosition(Methods.References, json.ReferenceParams, json.LocationArray, p => (p.TextDocument, p.Position),
@@ -210,6 +212,10 @@ internal sealed class LanguageServer : IAsyncDisposable
             async (document, offset, p, ct) => await FormattingFeature.OnTypeAsync(document, offset, p.Ch, ct).ConfigureAwait(false), []);
         _connection.OnRequest(Methods.WorkspaceSymbol, json.WorkspaceSymbolParams, json.SymbolInformationArray, (p, ct) =>
             WorkspaceSymbolsFeature.SearchAsync(_workspace.CurrentSolution, _workspace.MiscellaneousProjectId, p.Query, ct));
+        _connection.OnRequest(Methods.SymbolIndex, json.SymbolIndexParams, json.SymbolIndexResult, (p, ct) =>
+            SymbolIndexFeature.IndexAsync(_workspace.CurrentSolution, _workspace.MiscellaneousProjectId, p.Uris, ct));
+        _connection.OnRequest(Methods.ExternalSymbols, json.ExternalSymbolsParams, json.SymbolInformationArray, (p, ct) =>
+            SymbolIndexFeature.ExternalAsync(_workspace.CurrentSolution, _workspace.MiscellaneousProjectId, p.Query, p.Limit, ct));
         _connection.OnRequest(Methods.MetadataText, json.MetadataTextParams, json.MetadataText, (p, _) => Task.FromResult(MetadataFeature.Text(p.TextDocument.Uri)!));
         OnDocument(Methods.SourceGeneratedText, json.SourceGeneratedTextParams, json.SourceGeneratedText, p => p.TextDocument,
             (document, _, ct) => GeneratedTextAsync(document, ct), null);
@@ -292,6 +298,15 @@ internal sealed class LanguageServer : IAsyncDisposable
             (p, ct) => AspNetEndpointsFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
         _connection.OnRequest(Methods.EfContexts, json.EfContextsParams, json.EfDiscoveredContextsResult,
             (p, ct) => EntityFrameworkFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
+        // The Windows Forms designer (M41a, ADR 0073): read InitializeComponent, write the designer's changes, the Toolbox's project components.
+        _connection.OnRequest(Methods.WinFormsRead, json.WinFormsReadParams, json.WinFormsReadResult, (p, ct) =>
+            DocumentUris.ToPath(p.TextDocument.Uri) is { } path
+                ? WinForms.WinFormsFeature.ReadAsync(_workspace.CurrentSolution, path, _workspace.OpenText, ct, p.ResourceFiles)
+                : Task.FromResult(new WinFormsReadResult(null, null, false, null, "The designer opens files on disk.", null)));
+        _connection.OnRequest(Methods.WinFormsEdit, json.WinFormsEditParams, json.WinFormsEditResult, (p, ct) =>
+            WinForms.WinFormsFeature.EditAsync(_workspace.CurrentSolution, p, _workspace.OpenText, _workspace.Version, ct));
+        _connection.OnRequest(Methods.WinFormsToolbox, json.WinFormsToolboxParams, json.WinFormsToolboxResult, (p, ct) =>
+            WinForms.WinFormsFeature.ToolboxAsync(_workspace.CurrentSolution, p.Project, ct));
         OnDocument(Methods.XamlLogicalTree, json.XamlLogicalTreeParams, json.XamlLogicalTreeResult, p => p.TextDocument,
             (_, _, _) => Task.FromResult<XamlLogicalTreeResult?>(null), new XamlLogicalTreeResult([]),
             (xaml, _, _) => Task.FromResult<XamlLogicalTreeResult?>(new XamlLogicalTreeResult(Xaml.XamlAnalysis.LogicalTree(xaml))));
@@ -332,13 +347,13 @@ internal sealed class LanguageServer : IAsyncDisposable
 
     private readonly HashSet<string> _xamlExplained = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Says once per file and state why a XAML file has no type information (not an additional file of a project, or neither Avalonia nor MAUI in its references).</summary>
+    /// <summary>Says once per file and state why a XAML file has no type information (not an additional file of a project, or neither Avalonia, MAUI nor WPF in its references).</summary>
     private void ExplainXaml(Xaml.XamlContext context, Solution solution)
     {
         string? reason = context.Project is null
             ? $"isn't an additional file of a loaded project ({solution.Projects.Count()} projects, {solution.Projects.Sum(p => p.AdditionalDocuments.Count(d => d.FilePath is { } f && Xaml.XamlContext.IsXaml(f)))} XAML additional files)"
             : context.Types is { HasDialect: false }
-                ? $"is in {context.Project.Name}, whose compilation has neither Avalonia nor .NET MAUI ({context.Project.MetadataReferences.Count} references, {context.Project.MetadataReferences.Count(r => r.Display?.Contains("Avalonia", StringComparison.OrdinalIgnoreCase) == true || r.Display?.Contains("Maui", StringComparison.OrdinalIgnoreCase) == true)} of either)"
+                ? $"is in {context.Project.Name}, whose compilation has neither Avalonia, .NET MAUI nor WPF ({context.Project.MetadataReferences.Count} references, {context.Project.MetadataReferences.Count(r => r.Display?.Contains("Avalonia", StringComparison.OrdinalIgnoreCase) == true || r.Display?.Contains("Maui", StringComparison.OrdinalIgnoreCase) == true || r.Display?.Contains("PresentationFramework", StringComparison.OrdinalIgnoreCase) == true)} of them)"
                 : null;
         lock (_xamlExplained)
         {
@@ -421,6 +436,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         Func<Document, TParams, CancellationToken, Task<TResult?>> handler,
         TResult? empty,
         Func<Xaml.XamlContext, TParams, CancellationToken, Task<TResult?>>? xaml = null,
+        Func<Razor.RazorMapping, TParams, CancellationToken, Task<TResult?>>? razor = null,
         Semantics semantics = Semantics.Workspace)
     {
         _connection.OnRequest(method, paramsInfo, resultInfo, async (p, ct) =>
@@ -430,6 +446,14 @@ internal sealed class LanguageServer : IAsyncDisposable
             {
                 return xaml is not null && await Xaml.XamlContext.CreateAsync(solution, xamlPath, _workspace.OpenText(xamlPath), ct).ConfigureAwait(false) is { } context
                     ? await xaml(context, p, ct).ConfigureAwait(false) ?? empty!
+                    : empty!;
+            }
+
+            // A Razor file (ADR 0023) with its mapping to the generated C#; outside a project, nothing (its grammar colors it).
+            if (razor is not null && DocumentUris.ToPath(where(p).Uri) is { } razorPath && Razor.RazorFiles.IsRazor(razorPath))
+            {
+                return await Razor.RazorMapping.CreateAsync(solution, razorPath, ct).ConfigureAwait(false) is { } mapping
+                    ? await razor(mapping, p, ct).ConfigureAwait(false) ?? empty!
                     : empty!;
             }
 

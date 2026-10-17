@@ -35,15 +35,31 @@ public sealed record ItemTemplate(string Name, string ShortName, string Category
     /// <summary>Item metadata the new file gets (a text template's <c>Generator</c>…); <c>{name}</c> is the file's base name.</summary>
     public IReadOnlyDictionary<string, string>? Metadata { get; init; }
 
+    /// <summary>
+    /// Files made with the main one (M40a), named by its base name and a suffix: a WPF window's <c>.xaml.cs</c>, a form's
+    /// <c>.Designer.cs</c>. Solution Explorer nests them under it.
+    /// </summary>
+    public IReadOnlyList<ItemTemplateCompanion> Companions { get; init; } = [];
+
     /// <summary>The file name for <paramref name="name"/> (the extension added unless typed).</summary>
     public string FileName(string name) =>
         Extension.Length == 0 || name.EndsWith(Extension, StringComparison.OrdinalIgnoreCase) ? name : name + Extension;
 
     public string Id => (Source == ItemTemplateSource.BuiltIn ? "builtin:" : "dotnet:") + ShortName;
+
+    /// <summary>The companion files' names for the main file <paramref name="fileName"/>.</summary>
+    public IEnumerable<string> CompanionNames(string fileName)
+    {
+        var stem = Extension.Length > 0 && fileName.EndsWith(Extension, StringComparison.OrdinalIgnoreCase) ? fileName[..^Extension.Length] : Path.GetFileNameWithoutExtension(fileName);
+        return Companions.Select(c => stem + c.Suffix);
+    }
 }
 
+/// <summary>A file an item template makes next to its main one (<c>MainWindow.xaml.cs</c> for <c>MainWindow.xaml</c>).</summary>
+public sealed record ItemTemplateCompanion(string Suffix, Func<ItemTemplateContext, string> Content);
+
 /// <summary>The project Add New Item adds to: its language and the kinds that filter the templates.</summary>
-public sealed record ItemTemplateProject(string Language, bool IsWeb = false, bool IsMaui = false, bool IsTest = false, bool IsWpf = false, bool IsWinForms = false, bool IsMobile = false)
+public sealed record ItemTemplateProject(string Language, bool IsWeb = false, bool IsMaui = false, bool IsTest = false, bool IsWpf = false, bool IsWinForms = false, bool IsMobile = false, bool IsWinUI = false)
 {
     /// <summary>The language of a project file: C#, F# or VB.</summary>
     public static string LanguageOf(string projectPath) => Path.GetExtension(projectPath).ToLowerInvariant() switch
@@ -71,6 +87,7 @@ public static class ItemTemplates
         ("Mobile", p => p.IsMaui || p.IsMobile),
         ("Tizen", p => p.IsMaui),
         ("WinUI", p => p.IsMaui),
+        ("WinUI 3", p => p.IsWinUI),
         ("WPF", p => p.IsWpf),
         ("WinForms", p => p.IsWinForms),
         ("Test", p => p.IsTest),
@@ -135,6 +152,31 @@ public static class ItemTemplates
         General("t4", "Text Template", "A T4 text template that generates a file of the project.", "TextTemplate1", ".tt", _ => TextTemplate, "General",
             metadata: new Dictionary<string, string> { ["Generator"] = "TextTemplatingFileGenerator", ["LastGenOutput"] = "{name}.cs" }),
         General("html", "HTML Page", "An HTML page.", "HtmlPage1", ".html", c => $"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"utf-8\" />\n    <title>{c.Name}</title>\n</head>\n<body>\n\n</body>\n</html>\n", "Web", tags: ["Web"]),
+        // WPF (M40a): XAML with its code-behind; a resource dictionary alone.
+        Wpf("wpfwindow", "Window (WPF)", "A WPF window with its code-behind.", "Window1", "Window", "System.Windows", "Title=\"{0}\" Height=\"450\" Width=\"800\""),
+        Wpf("wpfpage", "Page (WPF)", "A WPF page, for navigation in a NavigationWindow or a Frame.", "Page1", "Page", "System.Windows.Controls", "Title=\"{0}\""),
+        Wpf("wpfusercontrol", "User Control (WPF)", "A WPF user control with its code-behind.", "UserControl1", "UserControl", "System.Windows.Controls", string.Empty),
+        new("Resource Dictionary (WPF)", "wpfresourcedictionary", "WPF", "Styles, templates and other resources to merge into App.xaml or a window.", "Dictionary1", ".xaml")
+        {
+            Languages = ["C#"],
+            Tags = ["WPF"],
+            Content = _ => "<ResourceDictionary xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"\n                    xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">\n\n</ResourceDictionary>\n",
+        },
+
+        // WinUI 3 (M44): XAML with its code-behind, as the Windows App SDK's own templates write them; a resource dictionary alone.
+        WinUI("winuiwindow", "Blank Window (WinUI 3)", "A WinUI 3 window with its code-behind.", "BlankWindow1", "Window", "Microsoft.UI.Xaml", "Title=\"{0}\""),
+        WinUI("winuipage", "Blank Page (WinUI 3)", "A WinUI 3 page, for navigation in a Frame, with its code-behind.", "BlankPage1", "Page", "Microsoft.UI.Xaml.Controls", string.Empty),
+        WinUI("winuiusercontrol", "User Control (WinUI 3)", "A WinUI 3 user control with its code-behind.", "UserControl1", "UserControl", "Microsoft.UI.Xaml.Controls", string.Empty),
+        new("Resource Dictionary (WinUI 3)", "winuiresourcedictionary", "WinUI 3", "Styles, templates and other resources to merge into App.xaml.", "Dictionary1", ".xaml")
+        {
+            Languages = ["C#"],
+            Tags = ["WinUI 3"],
+            Content = _ => "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<ResourceDictionary\n    xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"\n    xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">\n\n</ResourceDictionary>\n",
+        },
+
+        // Windows Forms (M40a): the code with its Designer.cs, as the designer writes it.
+        WinForms("winformsform", "Form (Windows Forms)", "A Windows Forms form with its designer file.", "Form1", "Form", isForm: true),
+        WinForms("winformsusercontrol", "User Control (Windows Forms)", "A Windows Forms user control with its designer file.", "UserControl1", "UserControl", isForm: false),
         General("css", "Style Sheet", "A CSS style sheet.", "StyleSheet1", ".css", _ => "body {\n}\n", "Web", tags: ["Web"]),
         General("javascript", "JavaScript File", "A JavaScript file.", "JavaScript1", ".js", _ => string.Empty, "Web", tags: ["Web"]),
         General("typescript", "TypeScript File", "A TypeScript file.", "TypeScript1", ".ts", _ => string.Empty, "Web", tags: ["Web"]),
@@ -151,6 +193,60 @@ public static class ItemTemplates
 
     private static ItemTemplate General(string shortName, string name, string description, string defaultName, string extension, Func<ItemTemplateContext, string> content, string category = "General", IReadOnlyList<string>? tags = null, string? itemType = null, IReadOnlyDictionary<string, string>? metadata = null) =>
         new(name, shortName, category, description, defaultName, extension) { Content = content, Tags = tags ?? [], ItemType = itemType, Metadata = metadata };
+
+    /// <summary>A WPF XAML item and its code-behind (the WPF SDK's globs make them a Page and its Compile item).</summary>
+    private static ItemTemplate Wpf(string shortName, string name, string description, string defaultName, string root, string rootNamespace, string attributes) =>
+        new(name, shortName, "WPF", description, defaultName, ".xaml")
+        {
+            Languages = ["C#"],
+            Tags = ["WPF"],
+            Content = c =>
+            {
+                var className = c.Namespace.Length == 0 ? c.Name : c.Namespace + "." + c.Name;
+                var extra = attributes.Length == 0 ? string.Empty : "\n" + new string(' ', root.Length + 2) + string.Format(System.Globalization.CultureInfo.InvariantCulture, attributes, c.Name);
+                var pad = new string(' ', root.Length + 2);
+                return $"<{root} x:Class=\"{className}\"\n{pad}xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"\n{pad}xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"\n"
+                       + $"{pad}xmlns:d=\"http://schemas.microsoft.com/expression/blend/2008\"\n{pad}xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\"\n{pad}mc:Ignorable=\"d\"{extra}>\n    <Grid>\n\n    </Grid>\n</{root}>\n";
+            },
+            Companions = [new(".xaml.cs", c => $"using {rootNamespace};\n\n"
+                + CSharp(c, $"/// <summary>Interaction logic for {c.Name}.xaml.</summary>\npublic partial class {c.Name} : {root}\n{{\n    public {c.Name}()\n    {{\n        InitializeComponent();\n    }}\n}}\n"))],
+        };
+
+    /// <summary>A WinUI 3 window, page or user control (M44): its XAML, with <c>using:</c> for the folder's namespace, and its code-behind.</summary>
+    private static ItemTemplate WinUI(string shortName, string name, string description, string defaultName, string root, string rootNamespace, string attributes) =>
+        new(name, shortName, "WinUI 3", description, defaultName, ".xaml")
+        {
+            Languages = ["C#"],
+            Tags = ["WinUI 3"],
+            Content = c =>
+            {
+                var className = c.Namespace.Length == 0 ? c.Name : c.Namespace + "." + c.Name;
+                var extra = attributes.Length == 0 ? string.Empty : "\n    " + string.Format(System.Globalization.CultureInfo.InvariantCulture, attributes, c.Name);
+                var local = c.Namespace.Length == 0 ? string.Empty : $"\n    xmlns:local=\"using:{c.Namespace}\"";
+                return $"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<{root}\n    x:Class=\"{className}\"\n    xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"\n    xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"{local}\n"
+                       + $"    xmlns:d=\"http://schemas.microsoft.com/expression/blend/2008\"\n    xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\"\n    mc:Ignorable=\"d\"{extra}>\n\n    <Grid>\n\n    </Grid>\n</{root}>\n";
+            },
+            Companions = [new(".xaml.cs", c => $"using {rootNamespace};\n\n"
+                + CSharp(c, $"/// <summary>The code-behind of {c.Name}.xaml.</summary>\npublic sealed partial class {c.Name} : {root}\n{{\n    public {c.Name}()\n    {{\n        InitializeComponent();\n    }}\n}}\n"))],
+        };
+
+    /// <summary>A Windows Forms form or user control: its code, and the Designer.cs the designer reads and writes.</summary>
+    private static ItemTemplate WinForms(string shortName, string name, string description, string defaultName, string baseType, bool isForm) =>
+        new(name, shortName, "Windows Forms", description, defaultName, ".cs")
+        {
+            Languages = ["C#"],
+            Tags = ["WinForms"],
+            Content = c => CSharp(c, $"public partial class {c.Name} : {baseType}\n{{\n    public {c.Name}()\n    {{\n        InitializeComponent();\n    }}\n}}\n"),
+            Companions = [new(".Designer.cs", c => CSharp(c,
+                $"partial class {c.Name}\n{{\n    /// <summary>Required designer variable.</summary>\n    private System.ComponentModel.IContainer components = null;\n\n"
+                + "    /// <summary>Clean up any resources being used.</summary>\n    /// <param name=\"disposing\">true if managed resources should be disposed; otherwise, false.</param>\n"
+                + "    protected override void Dispose(bool disposing)\n    {\n        if (disposing && (components != null))\n        {\n            components.Dispose();\n        }\n\n        base.Dispose(disposing);\n    }\n\n"
+                + $"    #region {(isForm ? "Windows Form" : "Component")} Designer generated code\n\n"
+                + "    /// <summary>Required method for Designer support - do not modify the contents of this method with the code editor.</summary>\n"
+                + "    private void InitializeComponent()\n    {\n        components = new System.ComponentModel.Container();\n        AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;\n"
+                + (isForm ? $"        ClientSize = new System.Drawing.Size(800, 450);\n        Text = \"{c.Name}\";\n" : string.Empty)
+                + "    }\n\n    #endregion\n}\n"))],
+        };
 
     /// <summary>A C# file with the context's namespace, file scoped when the language version allows it.</summary>
     public static string CSharp(ItemTemplateContext context, string body)

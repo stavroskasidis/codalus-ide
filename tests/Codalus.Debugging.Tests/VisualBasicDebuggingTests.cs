@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading.Channels;
 using Codalus.Workbench.Debugging;
 
@@ -13,9 +14,13 @@ public sealed class VisualBasicDebuggingTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-vbdebug-" + Guid.NewGuid().ToString("N"));
     private readonly Channel<StopInfo> _stops = Channel.CreateUnbounded<StopInfo>();
+    private readonly System.Text.StringBuilder _output = new();
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
     private DebugService _debug = null!;
 
     private string Console => Path.Combine(_root, "VisualBasic", "VbConsole");
+
+    private string Dll => Path.Combine(Console, "bin", "Debug", "net10.0", "VbConsole.dll");
 
     private string Program => Path.Combine(Console, "Program.vb");
 
@@ -37,9 +42,18 @@ public sealed class VisualBasicDebuggingTests : IAsyncLifetime
         var output = process.StandardOutput.ReadToEndAsync();
         await process.WaitForExitAsync();
         Assert.True(process.ExitCode == 0, await output);
+        var warm = await DebuggeeFixture.RunOnceAsync(Dll, Console);
 
         _debug = new DebugService(() => DebuggeeFixture.Adapter);
         _debug.Stopped += (_, stop) => _stops.Writer.TryWrite(stop);
+        _debug.Output += (_, o) =>
+        {
+            lock (_output)
+            {
+                _output.Append(CultureInfo.InvariantCulture, $"[{_clock.Elapsed.TotalSeconds:0.0}s] {o.Text}");
+            }
+        };
+        _output.Append(CultureInfo.InvariantCulture, $"[{_clock.Elapsed.TotalSeconds:0.0}s] (the program ran once without the debugger, in {warm.TotalSeconds:0.0}s)\n");
     }
 
     public async ValueTask DisposeAsync()
@@ -67,8 +81,21 @@ public sealed class VisualBasicDebuggingTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
         var line = Array.FindIndex(File.ReadAllLines(Program), l => l.Contains("' [vb-loop]", StringComparison.Ordinal)) + 1;
         _debug.Breakpoints.Set(new BreakpointSpec(Program, line));
-        var dll = Path.Combine(Console, "bin", "Debug", "net10.0", "VbConsole.dll");
-        await _debug.LaunchAsync("dotnet", ["exec", dll], Console, new Dictionary<string, string>(), ct);
+        lock (_output)
+        {
+            _output.Append(CultureInfo.InvariantCulture, $"[{_clock.Elapsed.TotalSeconds:0.0}s] (the test launches the program)\n");
+        }
+
+        try
+        {
+            await _debug.LaunchAsync(DebuggeeFixture.DotnetHost, ["exec", Dll], Console, new Dictionary<string, string>(), ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // netcoredbg gives the runtime 5 seconds per start (DebugService.StartupAttempts): the Debug Console says
+            // when each start began and what the debugger wrote.
+            Assert.Fail($"{ex.Message}\nDebug Console:\n{Output()}");
+        }
 
         await NextStopAsync();
         Assert.Equal(line, _debug.SelectedFrame?.Line);
@@ -93,7 +120,22 @@ public sealed class VisualBasicDebuggingTests : IAsyncLifetime
     private async Task NextStopAsync()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-        await _stops.Reader.ReadAsync(timeout.Token);
+        try
+        {
+            await _stops.Reader.ReadAsync(timeout.Token);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            Assert.Fail($"No stop within 60 seconds ({_debug.State}).\nDebug Console:\n{Output()}");
+        }
+    }
+
+    private string Output()
+    {
+        lock (_output)
+        {
+            return _output.ToString();
+        }
     }
 
     private static void CopyTree(string source, string target)

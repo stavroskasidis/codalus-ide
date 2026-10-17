@@ -26,6 +26,7 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
                 OnPropertyChanged(nameof(Name));
                 OnPropertyChanged(nameof(Detail));
                 OnPropertyChanged(nameof(HasDetail));
+                OnPropertyChanged(nameof(ToolTip));
                 OnPropertyChanged(nameof(Icon));
                 OnPropertyChanged(nameof(IsWarning));
                 OnPropertyChanged(nameof(IsLinked));
@@ -49,6 +50,12 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
     public string? Detail => _node.Detail;
 
     public bool HasDetail => _node.Detail is not null;
+
+    /// <summary>
+    /// The row's tooltip: the path, or for a message (a project's reason it can't build, M43a) its whole text, which
+    /// trims in a narrow pane (M34g).
+    /// </summary>
+    public string? ToolTip => _node.Path ?? (_node.Kind == ExplorerNodeKind.Message ? _node.Name : null);
 
     /// <summary>File-type, folder and project icons (M34a, <see cref="Controls.FileIcons"/>); folders open when expanded.</summary>
     public string Icon => Controls.FileIcons.ForNode(_node, _isExpanded, _project);
@@ -394,6 +401,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 _shell.Workbench.Context.Set("explorerItemKind", value is null ? null : KindKey(value.Node.Kind));
                 _shell.Workbench.Context.Set("explorerItemIsProjectReference", value?.Node is { Kind: ExplorerNodeKind.Dependency } n && n.Id.Contains("|project|", StringComparison.Ordinal));
                 _shell.Workbench.Context.Set("explorerProjectUnloaded", value?.Node.IsUnloaded == true);
+                _shell.Workbench.Context.Set("explorerProjectNonSdkStyle", value?.Node is { Kind: ExplorerNodeKind.Project, ProjectPath: { } nonSdk } && _shell.Solutions.Projects.TryGetValue(nonSdk, out var nonSdkInfo) && nonSdkInfo.IsNonSdkStyle);
                 _shell.Workbench.Context.Set("explorerItemName", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } file } ? System.IO.Path.GetFileName(file) : null);
                 _shell.Workbench.Context.Set("explorerItemExcluded", value?.Node.IsExcluded == true);
                 _shell.Workbench.Context.Set("explorerItemLinked", value?.Node.IsLinked == true);
@@ -581,6 +589,28 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     public void CollapseAll()
     {
         _expanded.RemoveWhere(id => id != "solution");
+        Refresh();
+    }
+
+    /// <summary>
+    /// The expansion to keep with the solution (ADR 0070): the expanded nodes, and the solution and solution folders
+    /// the user collapsed (they start expanded). Node ids are stable across sessions: <c>p:</c>, <c>d:</c> and <c>f:</c>
+    /// with the item's path, <c>sf:</c> with the solution folder's id in the solution file.
+    /// </summary>
+    public (IReadOnlyList<string> Expanded, IReadOnlyList<string> Collapsed) CaptureExpansion() =>
+        ([.. _expanded.Order(StringComparer.Ordinal)],
+         [.. _seen.Where(id => (id == "solution" || id.StartsWith("sf:", StringComparison.Ordinal)) && !_expanded.Contains(id)).Order(StringComparer.Ordinal)]);
+
+    /// <summary>
+    /// Restores the expansion kept with the solution (before its tree loads): nodes expand as they appear, so a
+    /// project's folders expand once the project has loaded.
+    /// </summary>
+    public void LoadExpansion(IEnumerable<string>? expanded, IEnumerable<string>? collapsed)
+    {
+        _expanded.Clear();
+        _seen.Clear();
+        _expanded.UnionWith(expanded ?? []);
+        _seen.UnionWith(collapsed ?? []);
         Refresh();
     }
 

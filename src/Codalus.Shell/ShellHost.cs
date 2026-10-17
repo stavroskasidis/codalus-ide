@@ -71,11 +71,12 @@ public sealed partial class ShellHost : IAsyncDisposable
         Options = options;
         Paths = AppPaths.Resolve(PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
         Paths.EnsureCreated();
+        _usedBefore = WasUsed(Paths); // before anything writes to the folder (M46)
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
         UseUserDotnet();
-        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings()]);
+        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
@@ -84,7 +85,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.RemoteToolWindows()).Concat(BuiltIns.AiToolWindows()).Concat(BuiltIns.MobileToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Append(BuiltIns.CodeSearchToolWindow()).Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.WinFormsToolWindows()).Concat(BuiltIns.RemoteToolWindows()).Concat(BuiltIns.AiToolWindows()).Concat(BuiltIns.MobileToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -116,6 +117,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeHosting();
         InitializeEditor();
         InitializeRefactoring();
+        InitializeCodeSearch();
         InitializeNavigation();
         LoadSnippets();
         InitializeEditingSafety();
@@ -133,6 +135,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeAspire();
         InitializeProfiling();
         InitializeXaml();
+        InitializeWinFormsDesigner();
         InitializeUpdates();
         InitializeRemote();
         InitializeMobile();
@@ -157,10 +160,12 @@ public sealed partial class ShellHost : IAsyncDisposable
         Layout = new LayoutManager(Workbench.ToolWindows, CreateToolContent);
         InitializeCustomEditors();
         WireEditorToLayout();
+        WireWinFormsDesigner();
 
         BuiltIns.RegisterCommands(this);
         BuiltIns.RegisterSolutionCommands(this);
         BuiltIns.RegisterEditorCommands(this);
+        BuiltIns.RegisterCodeSearchCommands(this);
         BuiltIns.RegisterBuildCommands(this);
         BuiltIns.RegisterDebugCommands(this);
         BuiltIns.RegisterWebCommands(this);
@@ -168,6 +173,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterContainerCommands(this);
         BuiltIns.RegisterProfilingCommands(this);
         BuiltIns.RegisterXamlCommands(this);
+        BuiltIns.RegisterWinFormsCommands(this);
         BuiltIns.RegisterRemoteCommands(this);
         BuiltIns.RegisterAiCommands(this);
         BuiltIns.RegisterMobileCommands(this);
@@ -188,6 +194,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterContainerMenus(Workbench.Menus);
         BuiltIns.RegisterProfilingMenus(Workbench.Menus);
         BuiltIns.RegisterXamlMenus(Workbench.Menus);
+        BuiltIns.RegisterWinFormsMenus(Workbench.Menus);
         BuiltIns.RegisterRemoteMenus(Workbench.Menus);
         BuiltIns.RegisterAiMenus(Workbench.Menus);
         BuiltIns.RegisterMobileMenus(Workbench.Menus);
@@ -324,9 +331,13 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         _ = OfferRecoveryAsync();
         StartUpdates();
+
+        // The first-run setup (M46) shows before the start window; its Tools step offers what M37 offers here.
+        var setup = FirstRunDecision;
+        Workbench.Log.AppendLine($"[setup] First-run setup: {setup}.");
         if (Options.SmokeTest is null && Options.Bench is null)
         {
-            _ = CheckEnvironmentAsync(offer: true);
+            _ = CheckEnvironmentAsync(offer: setup != SetupDecision.Show);
         }
         _ = SyncSettingsAsync(quiet: true);
         foreach (var error in Options.Errors)
@@ -377,7 +388,14 @@ public sealed partial class ShellHost : IAsyncDisposable
         _ = Plugins.ActivateDebuggedPluginsAsync(CancellationToken.None);
         _ = CheckPluginUpdatesOnStartupAsync();
         _ = ResumePluginBisectAsync();
-        OnStartupWithoutSolution();
+        if (setup == SetupDecision.Show)
+        {
+            Ui.Post(() => ShowSetup(firstStart: true));
+        }
+        else
+        {
+            OnStartupWithoutSolution();
+        }
     }
 
     private Infrastructure.SingleInstance? _instance;
@@ -472,6 +490,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             ErrorListViewModel.ToolWindowId => ErrorList,
             FindResultsViewModel.ToolWindowId => FindResults,
             DocumentOutlineViewModel.ToolWindowId => DocumentOutline,
+            CodeSearchToolWindowId => CodeSearch,
             HierarchyViewModel.ToolWindowId => Hierarchy,
             SymbolBrowserViewModel.ClassViewId => ShowClassView(),
             CodeDefinitionViewModel.ToolWindowId => CodeDefinition,
@@ -513,6 +532,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             CountersViewModel.ToolWindowId => CountersWindow,
             BenchmarksViewModel.ToolWindowId => BenchmarksWindow,
             XamlPreviewViewModel.ToolWindowId => XamlPreview,
+            ToolboxViewModel.ToolWindowId => Toolbox,
             RemotePortsViewModel.ToolWindowId => PortsWindow,
             DevicesViewModel.ToolWindowId => DevicesWindow,
             SourceControlProvidersWindow => SourceControlProviders(),
@@ -639,9 +659,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Color Theme (the quick pick): every family following the system and in each variant, Classic's four, then the
+    /// plugins' themes. Up and Down preview a theme; Enter saves it, Escape goes back (M45).
+    /// </summary>
     public async Task SelectThemeAsync()
     {
-        var current = Theme.Setting;
+        var current = ThemeService.Normalize(Theme.Setting);
         var choices = Theme.AllChoices;
         var items = choices.Select(c => new QuickPickItem(c.Title) { Tag = c.Id, Detail = c.Id == current ? "current" : null }).ToList();
         var active = Math.Max(0, choices.ToList().FindIndex(c => c.Id == current));
@@ -896,18 +920,22 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     private void LoadState()
     {
-        if (ReadJson(StateFile, ShellJsonContext.Default.ShellState)?.RecentCommands is { } recent)
+        var state = ReadJson(StateFile, ShellJsonContext.Default.ShellState);
+        if (state?.RecentCommands is { } recent)
         {
             Workbench.Commands.SetRecent(recent);
         }
+
+        CodeSearch.RestoreState(state?.CodeSearch);
     }
 
     /// <summary>Saves the layout (with the window placement) and the small state file. Called when the window closes.</summary>
     public void SaveState(WindowPlacement? placement)
     {
         WriteJson(Paths.LayoutFile, Layout.Capture(placement), ShellJsonContext.Default.LayoutSnapshot);
-        WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds }, ShellJsonContext.Default.ShellState);
-        SaveEditorSession();
+        WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds, CodeSearch = CodeSearch.CaptureState() }, ShellJsonContext.Default.ShellState);
+        _ = SaveCodeSearchIndex(onlyIfChanged: true); // flushed in DisposeAsync
+        SaveEditorSession(); // next to the solution, written in the background (flushed in DisposeAsync)
     }
 
     private T? ReadJson<T>(string path, JsonTypeInfo<T> info)
@@ -943,6 +971,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
+        await FlushSolutionStateAsync().ConfigureAwait(false);
         if (SelfUpdate is not null)
         {
             await SelfUpdate.DisposeAsync().ConfigureAwait(false);

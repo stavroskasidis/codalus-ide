@@ -9,7 +9,7 @@
       <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" TextWrapping="Wrap" />
       <TextBlock Classes="muted" TextWrapping="Wrap"
                  Text="{l:T interactiveRebase.pickKeepsACommitRewordKeeps}" />
-      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
       <Button Classes="accent" Content="{l:T interactiveRebase.startRebase}" Command="{Binding StartCommand}" />

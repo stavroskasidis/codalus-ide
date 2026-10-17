@@ -9,7 +9,7 @@ namespace Codalus.Shell;
 
 /// <summary>
 /// Find All References, Rename with preview, the lightbulb (code fixes and refactorings with a preview), formatting,
-/// Go To All and Find in Files (ADR 0005, M3b), and applying the language service's workspace edits.
+/// Find in Files (ADR 0005, M3b), and applying the language service's workspace edits. Go To All is Code Search (M47).
 /// </summary>
 public sealed partial class ShellHost
 {
@@ -257,77 +257,6 @@ public sealed partial class ShellHost
         }
     }
 
-    // ------------------------------------------------------------------ Go To All
-
-    /// <summary>Ctrl+T: types, members and files of the solution. Prefix the query with <c>f </c> for files only.</summary>
-    public async Task GoToAllAsync()
-    {
-        var files = SearchableFiles();
-        async Task<IReadOnlyList<QuickPickItem>> Provider(string query, CancellationToken cancellationToken)
-        {
-            query = query.Trim();
-            var filesOnly = query.StartsWith("f ", StringComparison.OrdinalIgnoreCase);
-            if (filesOnly)
-            {
-                query = query[2..].Trim();
-            }
-
-            if (query.Length == 0)
-            {
-                return [];
-            }
-
-            var items = new List<QuickPickItem>();
-            if (!filesOnly && Languages.RunningClient(CSharpLanguageId) is { } client)
-            {
-                foreach (var symbol in await client.WorkspaceSymbolsAsync(query, cancellationToken).ConfigureAwait(true))
-                {
-                    items.Add(new QuickPickItem(symbol.Name)
-                    {
-                        Detail = $"{KindName(symbol.Kind)}{(symbol.ContainerName is { } container ? " in " + container : string.Empty)} · {Path.GetFileName(DocumentUris.ToPath(symbol.Location.Uri))}",
-                        Tag = symbol.Location,
-                        Icon = ViewModels.SymbolNodeViewModel.IconFor(symbol.Kind),
-                    });
-                }
-            }
-
-            items.AddRange(files
-                .Select(f => (Path: f, Match: Codalus.Workbench.Search.FuzzyMatcher.Match(query, Path.GetFileName(f))))
-                .Where(m => m.Match is not null)
-                .OrderByDescending(m => m.Match!.Score)
-                .Take(filesOnly ? 100 : 20)
-                .Select(m => new QuickPickItem(Path.GetFileName(m.Path)) { Detail = "File · " + Path.GetDirectoryName(m.Path), Tag = m.Path, Icon = Controls.FileIcons.ForFile(Path.GetFileName(m.Path)) }));
-            return items;
-        }
-
-        switch (await Palette.ShowAsync(Provider, "Go to type, member or file (prefix 'f ' for files only)").ConfigureAwait(true))
-        {
-            case { Tag: Location location }:
-                RememberLocation();
-                await OpenLocationAsync(location).ConfigureAwait(true);
-                break;
-            case { Tag: string path }:
-                await OpenFileAsync(path).ConfigureAwait(true);
-                break;
-        }
-    }
-
-    private static string KindName(int kind) => kind switch
-    {
-        SymbolKind.Class => "class",
-        SymbolKind.Interface => "interface",
-        SymbolKind.Struct => "struct",
-        SymbolKind.Enum => "enum",
-        SymbolKind.Method => "method",
-        SymbolKind.Constructor => "constructor",
-        SymbolKind.Property => "property",
-        SymbolKind.Field => "field",
-        SymbolKind.Event => "event",
-        SymbolKind.Constant => "constant",
-        SymbolKind.EnumMember => "enum member",
-        _ => "symbol",
-    };
-
     // ------------------------------------------------------------------ Find in Files (ShellHost.FindInFiles.cs)
 
     /// <summary>The solution's files (project items that exist, project and solution files), or the open files.</summary>
@@ -377,7 +306,7 @@ public sealed partial class ShellHost
     /// Applies a workspace edit: open documents change in the editor (undoable, left unsaved, like Visual Studio);
     /// other files are changed on disk with their encoding kept; files that don't exist are created.
     /// </summary>
-    public async Task<bool> ApplyWorkspaceEditAsync(WorkspaceEdit edit)
+    public async Task<bool> ApplyWorkspaceEditAsync(WorkspaceEdit edit, bool quiet = false)
     {
         var failed = new List<string>();
         foreach (var change in edit.DocumentChanges)
@@ -446,7 +375,10 @@ public sealed partial class ShellHost
         }
 
         var count = edit.DocumentChanges.Length + edit.ResourceOperations.Count(o => !edit.DocumentChanges.Any(c => c.TextDocument.Uri == o.Uri));
-        ShowMessage(count == 1 ? "Changed 1 file." : $"Changed {count} files.");
+        if (!quiet)
+        {
+            ShowMessage(count == 1 ? "Changed 1 file." : $"Changed {count} files.");
+        }
         return true;
     }
 

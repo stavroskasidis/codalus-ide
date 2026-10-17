@@ -1,7 +1,7 @@
 @page "/features"
 @inject SiteOptions Site
 
-<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, Visual Basic, F#, profiling and more." />
+<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF, Windows Forms and WinUI 3, .NET Framework, Visual Basic, F#, WCF, profiling and more." />
 
 <div class="container">
     <section class="page-intro">
@@ -35,15 +35,15 @@
 
     <section class="section themes" aria-labelledby="themes">
         <div class="head-row">
-            <h2 class="heading" id="themes">Blue, Light and Dark.</h2>
-            <p class="muted small">Plus High Contrast. A classic layout: the menu and search in the title bar, the Solution Explorer on the right, and a status bar colored by state.</p>
+            <h2 class="heading" id="themes">Four theme families.</h2>
+            <p class="muted small">Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast, following your system or not. A classic layout in each: the menu and search in the title bar, the Solution Explorer on the right, and a status bar colored by state. The Blue, Light, Dark and High Contrast themes stay, as Classic.</p>
         </div>
         <div class="grid grid-wide">
-            @foreach (var theme in new[] { "Blue", "Light", "Dark" })
+            @foreach (var (family, variant, line) in s_families)
             {
                 <figure>
-                    <img src="assets/screenshots/editor-@(theme.ToLowerInvariant()).png" width="1280" height="800" loading="lazy" alt="Codalus IDE in the @theme theme" />
-                    <figcaption>@theme</figcaption>
+                    <img src="assets/screenshots/theme-@(family.ToLowerInvariant()).png" width="1280" height="800" loading="lazy" alt="Codalus IDE in the @family family, @variant" />
+                    <figcaption>@family, @variant: @line</figcaption>
                 </figure>
             }
         </div>
@@ -69,7 +69,9 @@
                 <ul>
                     <li>Go to Definition and Implementation, into decompiled code</li>
                     <li>Find All References with read/write classification</li>
-                    <li>Peek Definition, Call and Type Hierarchy, Go To All, Class View and the Object Browser</li>
+                    <li>Code Search: files, types, members and text in one window, with filter chips, a live, editable preview, and an index kept with the solution so it finds everything right after a restart</li>
+                    <li>Feature Search for commands, settings and Options pages, from the search box</li>
+                    <li>Peek Definition, Call and Type Hierarchy, Class View and the Object Browser</li>
                     <li>Find and Replace in Files: a floating window, results with every match highlighted, filtered, grouped and kept</li>
                     <li>Inlay hints, CodeLens, an inheritance margin and sticky scroll</li>
                     <li>Library code from Source Link before decompiling</li>
@@ -84,6 +86,7 @@
                     <li>Browse, update and consolidate packages; Central Package Management</li>
                     <li>The Properties window, Show All Files, Add New Item, templates and External Tools</li>
                     <li>Folder mode for a folder without a solution</li>
+                    <li>A solution reopens as you left it: documents, breakpoints, bookmarks, configuration and the Solution Explorer's expansion, kept in a self-ignoring .codalus/state next to it</li>
                     <li>.NET 11 projects with C# 15, every framework from .NET Core 2.0 to .NET 10, and older SDKs in global.json</li>
                     <li>A start window with your recent solutions, pinned and searchable</li>
                     <li>Check Environment: a missing .NET SDK or git offered to install</li>
@@ -125,7 +128,7 @@
             <div>
                 <h3>Web</h3>
                 <ul>
-                    <li>Razor and Blazor, with C# features inside the markup</li>
+                    <li>Razor and Blazor, with C# features inside the markup and components, HTML and directives each in their own color</li>
                     <li>.http files, the HTTP Response window and an Endpoints Explorer</li>
                     <li>HTML, CSS, JavaScript and TypeScript language servers</li>
                     <li>ESLint, Prettier, npm scripts and the Task Runner Explorer</li>
@@ -147,6 +150,8 @@
             <div>
                 <h3>Make it yours</h3>
                 <ul>
+                    <li>A first-run setup: the theme family and mode, previewed live, the keyboard scheme, your settings from VS Code, a .vssettings file or settings sync, and a check of the .NET SDK and git, before the start window</li>
+                    <li>Four theme families, Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, chosen from pictures in Options; Classic's Blue, Light, Dark and High Contrast</li>
                     <li>Fonts and Colors over any theme, for code, the editor and the window</li>
                     <li>Default, VS Code, ReSharper and Emacs keyboard schemes</li>
                     <li>Import from VS Code or a .vssettings file; export to one file</li>
@@ -171,12 +176,46 @@
             <div>
                 <h3>.NET MAUI</h3>
                 <ul>
-                    <li>Android devices and emulators on Windows, Linux and macOS; iOS simulators, iPhones and Mac Catalyst on macOS</li>
+                    <li>Android devices and emulators on Windows, Linux and macOS; iOS simulators, iPhones and Mac Catalyst on macOS; Windows Machine (the Windows target) on Windows</li>
                     <li>A device picker on the toolbar and a Devices window: start emulators, boot simulators, choose where the app runs</li>
                     <li>Build, deploy and run with the platform SDK's own run target</li>
                     <li>Debug on Android devices and emulators, iOS simulators and Mac Catalyst with our own Mono debugger: breakpoints, stepping, locals, watch and exceptions</li>
                     <li>MAUI XAML: completion, compiled binding paths from x:DataType, live errors, hover and Go to Definition</li>
                     <li>The MAUI workloads, the Android SDK and a JDK installed when you agree, and listed in Check Environment</li>
+                    <li>The Windows target runs and debugs as a desktop app (netcoredbg, Hot Reload with dotnet watch), packaged or unpackaged</li>
+                </ul>
+            </div>
+            <div>
+                <h3>WPF, Windows Forms and WinUI 3</h3>
+                <ul>
+                    <li>WPF and Windows Forms projects open, edit and build on Windows, Linux and macOS</li>
+                    <li>Run, debug, test and Hot Reload them on Windows; elsewhere the IDE says they're Windows only</li>
+                    <li>WPF XAML: completion of controls, dependency and attached properties, markup extensions, styles, triggers and resources through App.xaml and merged dictionaries</li>
+                    <li>Binding paths from d:DataContext, checked as warnings; the markup compiler's errors in their XAML files</li>
+                    <li>Go to Definition, hover, x:Name rename into the code-behind, and formatting</li>
+                    <li>On Windows, the XAML Previewer draws WPF XAML on your app's own WPF as you type: design-time data from d:DesignInstance, the design size, zoom and scale, and a click selects the element's tag</li>
+                    <li>On Windows, the Live Visual Tree and Live Property Explorer for running WPF apps: logical and visual trees, dependency property values with their sources, values set live, highlight, pick and Go to XAML</li>
+                    <li>On Windows, the Windows Forms designer on your app's own Windows Forms: select, move, resize, nudge, copy and paste controls, the Toolbox with your own controls, the Properties window and its Events view</li>
+                    <li>Snap lines, the Format menu (align, make same size, spacing, center, bring to front and send to back), tab order mode, Dock and Anchor pickers and adorners</li>
+                    <li>Smart tags with the designers' tasks, menus and tool strips edited in place with Type Here, the component tray, and collection editors for items, columns, tab pages and table styles</li>
+                    <li>Localizable forms designed per language into each culture's .resx, images imported into the form's or the project's resources, extender properties such as ToolTip on toolTip1, and data binding to a BindingSource's members</li>
+                    <li>The designer writes InitializeComponent as Visual Studio does, as the smallest edit of the designer file: undo, local history and source control see only what changed; code it can't read opens as code with the reason</li>
+                    <li>New WPF and Windows Forms projects; windows, pages, user controls, resource dictionaries and forms in Add New Item, nested with their code-behind</li>
+                    <li>WinUI 3 apps open and edit everywhere, and build, run, debug and Hot Reload on Windows; packaged (MSIX) apps are registered, started by Windows and attached to, with Developer Mode explained when it's off</li>
+                    <li>WinUI XAML: x:Bind paths checked against the page's class as errors, x:Load and x:DefaultBindMode, ThemeResource and resources through App.xaml's merged dictionaries, WinUI's compiler errors in their files</li>
+                </ul>
+            </div>
+            <div>
+                <h3>.NET Framework</h3>
+                <ul>
+                    <li>net48, net472 and the other .NET Framework projects open, restore and build on Windows, Linux and macOS, with no targeting pack: the reference assemblies come from NuGet</li>
+                    <li>Old-style (non-SDK-style) projects too: packages.config restored, a Dependencies node of their references, hint paths and packages, built with the .NET SDK's MSBuild</li>
+                    <li>C# 7.3 in the editor, as the compiler uses it, and binding redirects generated for executables</li>
+                    <li>Convert to SDK-Style: an old-style project rewritten as an SDK-style one, packages.config as package references and AssemblyInfo.cs as properties, after a preview of every change</li>
+                    <li>Run and debug .NET Framework apps on Windows with our own .NET Framework debugger, on the debugging API that comes with the .NET Framework: breakpoints with conditions, stepping with Just My Code, call stack, threads, locals and watch with C# expressions and method calls, exceptions, and Attach to Process; elsewhere the IDE says it's Windows only</li>
+                    <li>xUnit, NUnit and MSTest tests on .NET Framework in the Test Explorer on Windows, old-style test projects included: discover, run and debug</li>
+                    <li>Projects that need Visual Studio's own targets (ASP.NET web applications) open with IntelliSense and say why they don't build</li>
+                    <li>New .NET Framework console apps and class libraries, and the installed .NET Framework in Check Environment</li>
                 </ul>
             </div>
             <div>
@@ -201,6 +240,17 @@
                     <li>Scripts with #load and #r "nuget:", type providers, F# analyzers</li>
                     <li>Expecto, xUnit and NUnit tests in the Test Explorer; debugging F#</li>
                     <li>F# item templates and project properties</li>
+                </ul>
+            </div>
+            <div>
+                <h3>WCF</h3>
+                <ul>
+                    <li>Add Service Reference with your dotnet-svcutil: from a service's metadata, a WSDL file or a CoreWCF service you run</li>
+                    <li>Namespace, collection types, synchronous operations, type reuse and access; Update and Remove</li>
+                    <li>References kept as Visual Studio keeps them: Connected Services and ConnectedService.json</li>
+                    <li>CoreWCF services from CoreWCF's templates in New Project</li>
+                    <li>A WCF Test Client: operations from the metadata, a form per operation or raw XML, responses as a tree; BasicHttpBinding and WSHttpBinding</li>
+                    <li>system.serviceModel completion, hover and checks in app.config and web.config</li>
                 </ul>
             </div>
             <div>
@@ -230,6 +280,15 @@
 @code {
     private sealed record Shot(string Key, string Label, string File, string Alt, string Caption);
 
+    /// <summary>The theme families (M45), each in the variant its screenshot shows.</summary>
+    private static readonly (string Family, string Variant, string Line)[] s_families =
+    [
+        ("Harbor", "Light", "the default, closest to a classic IDE"),
+        ("Graphite", "Dark", "compact, hairlines instead of gutters"),
+        ("Daylight", "Light", "flat, with rounded tabs"),
+        ("Ember", "Dark", "warm, with floating panels"),
+    ];
+
     private static readonly Shot[] s_shots =
     [
         new("editor", "Editor", "editor-dark.png",
@@ -238,6 +297,9 @@
         new("find", "Find in Files", "find-in-files.png",
             "The Find and Replace window floating over the editor, with Find Results below",
             "Find and Replace in Files from a floating window: scopes, file types and regular expressions, with every match listed in Find Results, which filters, groups by path or file and keeps earlier results on their own pages."),
+        new("code-search", "Code Search", "code-search.png",
+            "The Code Search window over the editor: filter chips, two-line results for Greet with Greeter selected, and Greeter.cs in the preview below",
+            "Go To All is Code Search: files, types, members and text with filter chips, results that say where each one is, and the selected one in a live preview you can edit and save."),
         new("debugging", "Debugging", "debugging.png",
             "Paused at a breakpoint with a PerfTip, and the Exception Settings window",
             "Paused on a line with a PerfTip, and the Exception Settings window, with every debug tool window a tab away."),
@@ -247,6 +309,9 @@
         new("web", "Web APIs", "web-http.png",
             "A .http file with run buttons, the HTTP Response window and the Endpoints Explorer",
             "Send requests from a .http file, read the response, and browse every route in the Endpoints Explorer."),
+        new("wcf", "WCF", "wcf-test-client.png",
+            "The WCF Test Client with a CoreWCF service's operations, the request form of Greet and its response as a tree",
+            "Call a WCF or CoreWCF service from its metadata: a form per operation, the SOAP envelope, and the response as a tree."),
         new("profiling", "Profiling", "profiler.png",
             "A CPU profiling report: the sample timeline above a flame graph of the program's hot methods",
             "Record a CPU trace, scrub the timeline, and find the hot path in the flame graph, with hot lines marked in the editor."),
@@ -256,5 +321,8 @@
         new("xaml", "Avalonia XAML", "xaml-preview.png",
             "An Avalonia .axaml file in the editor with the XAML Previewer rendering it beside the code",
             "Edit Avalonia XAML with completion and bindings, and watch the previewer follow every change."),
+        new("setup", "First start", "setup.png",
+            "The first-run setup's appearance step: Harbor, Graphite, Daylight and Ember as cards with a picture of each, and the mode",
+            "The first start sets it up your way: a theme family and its mode, previewed as you click, then the keyboard scheme, your settings from elsewhere and a tools check."),
     ];
 }

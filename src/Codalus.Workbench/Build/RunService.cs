@@ -82,11 +82,28 @@ public sealed class RunningProgram : IDisposable
     /// <summary>Ends the program and every process it started; a child the OS won't let us end (access denied, already exiting) is left.</summary>
     public void Stop()
     {
+        // Ending the tree lists the system's processes to find the program's children. On macOS that listing can block
+        // for many minutes (task information of a crashed process that ReportCrash holds: `ps -o pcpu,rss` blocks the
+        // same way; seen after a debugging session closed its browser): the tree's end then gets a while, and after it
+        // the program alone is ended, so its run ends (a child it started, if any, is left; the dev server's
+        // BrowserDebugHost ends with its owner).
+        var tree = Task.Run(() => Kill(entireProcessTree: true));
+        if (!tree.Wait(s_treeKillWait))
+        {
+            Kill(entireProcessTree: false);
+        }
+    }
+
+    /// <summary>How long <see cref="Stop"/> lets the tree's end take before it ends the program alone.</summary>
+    private static readonly TimeSpan s_treeKillWait = TimeSpan.FromSeconds(10);
+
+    private void Kill(bool entireProcessTree)
+    {
         try
         {
             if (!_process.HasExited)
             {
-                _process.Kill(entireProcessTree: true);
+                _process.Kill(entireProcessTree);
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)
@@ -294,10 +311,13 @@ public sealed class RunService : IDisposable
         StartupChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>A project's launch profiles (empty without a launch settings file).</summary>
-    public async Task<(RunInfo Info, IReadOnlyList<LaunchProfile> Profiles, string? Error)> GetProfilesAsync(string projectPath, CancellationToken cancellationToken)
+    /// <summary>
+    /// A project's launch profiles (empty without a launch settings file), and how it runs in
+    /// <paramref name="targetFramework"/> (null: the active framework).
+    /// </summary>
+    public async Task<(RunInfo Info, IReadOnlyList<LaunchProfile> Profiles, string? Error)> GetProfilesAsync(string projectPath, CancellationToken cancellationToken, string? targetFramework = null)
     {
-        var info = await _solutions.GetRunInfoAsync(projectPath, cancellationToken).ConfigureAwait(false);
+        var info = await _solutions.GetRunInfoAsync(projectPath, cancellationToken, targetFramework).ConfigureAwait(false);
         var (profiles, error) = await LaunchSettings.ReadAsync(info.LaunchSettings, cancellationToken).ConfigureAwait(false);
         return (info, profiles, error);
     }
@@ -378,14 +398,20 @@ public sealed class RunService : IDisposable
 
     /// <summary>
     /// The plan of a Hot Reload run (ADR 0022): <c>dotnet watch run</c> on the project, with the launch profile already
-    /// applied (so <c>--no-launch-profile</c>), restarting on rude edits instead of asking, and plain-text messages.
+    /// applied (so <c>--no-launch-profile</c>), restarting on rude edits instead of asking, and plain-text messages. A
+    /// <paramref name="framework"/> picks one framework of a multi-targeted project (MAUI's Windows target, M44).
     /// </summary>
-    public LaunchPlan HotReloadPlan(string projectPath, LaunchPlan plan, string? commandLineArgs)
+    public LaunchPlan HotReloadPlan(string projectPath, LaunchPlan plan, string? commandLineArgs, string? framework = null)
     {
         var dotnet = DotnetRoot is { } root && File.Exists(Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"))
             ? Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")
             : "dotnet";
         var arguments = $"watch run --project \"{projectPath}\" --no-launch-profile --non-interactive";
+        if (!string.IsNullOrWhiteSpace(framework))
+        {
+            arguments += " --framework " + framework;
+        }
+
         if (!string.IsNullOrWhiteSpace(commandLineArgs))
         {
             arguments += " -- " + commandLineArgs;
@@ -406,9 +432,10 @@ public sealed class RunService : IDisposable
     /// <paramref name="hotReload"/>, it runs under <c>dotnet watch</c>: saved edits are applied to the running program.
     /// </summary>
     /// <param name="openBrowser">False keeps the launch profile's browser closed (browser debugging opens its own, ADR 0026).</param>
-    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken, bool hotReload = false, bool openBrowser = true)
+    /// <param name="targetFramework">The framework to run (null: the active one); a Hot Reload run passes it to <c>dotnet watch</c>.</param>
+    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken, bool hotReload = false, bool openBrowser = true, string? targetFramework = null)
     {
-        var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken).ConfigureAwait(false);
+        var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken, targetFramework).ConfigureAwait(false);
         var name = Path.GetFileNameWithoutExtension(projectPath);
         var channel = _output.GetOrCreate("codalus.run." + name, "Run: " + name);
         if (error is not null)
@@ -425,7 +452,7 @@ public sealed class RunService : IDisposable
 
         if (hotReload)
         {
-            plan = HotReloadPlan(projectPath, plan, profile?.CommandLineArgs);
+            plan = HotReloadPlan(projectPath, plan, profile?.CommandLineArgs, targetFramework);
             externalConsole = false;
         }
 
@@ -439,6 +466,51 @@ public sealed class RunService : IDisposable
     /// </summary>
     public RunningProgram StartPlan(string key, string name, LaunchPlan plan) =>
         Launch(key, name, plan, _output.GetOrCreate("codalus.run." + name, "Run: " + name), console: false, hotReload: false, string.Empty);
+
+    /// <summary>
+    /// Follows a program the system started for us (a packaged app activated through Windows, M44): it is listed as
+    /// running until it exits, and Stop ends it. Its output isn't ours to read; the channel says when it exits.
+    /// </summary>
+    public RunningProgram Track(string key, string name, int processId)
+    {
+        var channel = _output.GetOrCreate("codalus.run." + name, "Run: " + name);
+        var process = Process.GetProcessById(processId);
+        var program = new RunningProgram(key, name, process, channel);
+        var gone = 0;
+        void OnGone()
+        {
+            if (Interlocked.Exchange(ref gone, 1) == 1)
+            {
+                return;
+            }
+
+            program.OnExited(waitForOutput: false);
+            var code = program.Exited.Result;
+            channel.AppendLine($"The program '[{processId.ToString(CultureInfo.InvariantCulture)}] {name}' has exited with code {code.ToString(CultureInfo.InvariantCulture)} (0x{code:x}).");
+            lock (_gate)
+            {
+                _running.Remove(program);
+            }
+
+            RunningChanged?.Invoke(this, EventArgs.Empty);
+            program.Dispose();
+        }
+
+        lock (_gate)
+        {
+            _running.Add(program);
+        }
+
+        RunningChanged?.Invoke(this, EventArgs.Empty);
+        process.Exited += (_, _) => OnGone();
+        process.EnableRaisingEvents = true;
+        if (process.HasExited)
+        {
+            OnGone();
+        }
+
+        return program;
+    }
 
     private RunningProgram Launch(string projectPath, string name, LaunchPlan plan, OutputChannel channel, bool console, bool hotReload, string note)
     {

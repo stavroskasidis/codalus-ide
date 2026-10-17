@@ -48,5 +48,56 @@ public sealed class OlderFrameworksTests
     {
         // (Both are bundled by the plugin's build; DotNetTestCoverageTests run them from the plugin's own folder.)
         Assert.Equal(folder, Path.GetFileName(CoverageTools.CollectorFolder(tfm)));
+
+        // Its in-process part flushes the hits before VSTest stops the test host (a loaded runner lost them all).
+        var target = new TestTarget("Tests.csproj", "Tests", "VSTest", tfm, "/work/Tests/bin/Tests.dll", null, null, "/work/Tests") { Framework = tfm };
+        var settings = System.Xml.Linq.XDocument.Parse(VsTestRunner.RunSettings(Options(), [target], new CoverageOptions("/work/coverage", [], [])));
+        var inProc = Assert.Single(settings.Descendants("InProcDataCollector"));
+        Assert.StartsWith(CoverageTools.InProcCollectorType + ", coverlet.collector,", (string?)inProc.Attribute("assemblyQualifiedName"), StringComparison.Ordinal);
+        Assert.Equal(Path.Combine(CoverageTools.CollectorFolder(tfm), "coverlet.collector.dll"), (string?)inProc.Attribute("codebase"));
+        Assert.Empty(System.Xml.Linq.XDocument.Parse(VsTestRunner.RunSettings(Options(), [target], coverage: null)).Descendants("InProcDataCollector"));
+    }
+
+    [Fact]
+    public void Test_projects_whose_every_framework_targets_windows_run_only_there()
+    {
+        // M40a: net*-windows test projects (WinForms, WPF) say "Windows only" off Windows instead of failing to start.
+        Assert.True(WindowsFrameworks.IsWindows("net11.0-windows"));
+        Assert.True(WindowsFrameworks.IsWindows("net10.0-windows10.0.19041.0"));
+        Assert.False(WindowsFrameworks.IsWindows("net11.0"));
+        Assert.False(WindowsFrameworks.IsWindows("net10.0-android"));
+        Assert.True(WindowsFrameworks.OnlyWindows(["net11.0-windows"], windows: false));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net11.0-windows"], windows: true));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net11.0", "net11.0-windows"], windows: false));
+        Assert.False(WindowsFrameworks.OnlyWindows([], windows: false));
+    }
+
+    [Fact]
+    public void Debugging_net_framework_tests_runs_the_test_host_as_the_debuggers_architecture()
+    {
+        // M43b: the desktop-CLR debugger debugs processes of its own bitness; VSTest's default .NET Framework host may be 32-bit.
+        var debug = new RunOptions(RunMode.Debug, new Dictionary<string, string>(), null, null, Parallel: true);
+        Assert.Equal("x64", OlderFrameworks.DebugNetFramework(debug, "net48", windows: true, Architecture.X64).Architecture);
+        Assert.Equal("ARM64", OlderFrameworks.DebugNetFramework(debug, "net481", windows: true, Architecture.Arm64).Architecture);
+        Assert.Null(OlderFrameworks.DebugNetFramework(debug, "net8.0", windows: true, Architecture.X64).Architecture);
+        Assert.Null(OlderFrameworks.DebugNetFramework(debug, "net48", windows: false, Architecture.X64).Architecture);
+        Assert.Null(OlderFrameworks.DebugNetFramework(Options(), "net48", windows: true, Architecture.X64).Architecture);
+        Assert.Equal("x86", OlderFrameworks.DebugNetFramework(debug with { Architecture = "x86" }, "net48", windows: true, Architecture.X64).Architecture);
+    }
+
+    [Fact]
+    public void Net_framework_test_projects_run_only_on_windows()
+    {
+        // M43a: net4x test hosts run on the desktop CLR (M43b runs them there); off Windows the project says why.
+        Assert.True(WindowsFrameworks.IsNetFramework("net48"));
+        Assert.True(WindowsFrameworks.IsNetFramework("net472"));
+        Assert.False(WindowsFrameworks.IsNetFramework("net8.0"));
+        Assert.False(WindowsFrameworks.IsNetFramework("netstandard2.0"));
+        Assert.True(WindowsFrameworks.OnlyWindows(["net48"], windows: false));
+        Assert.True(WindowsFrameworks.OnlyWindows(["net48", "net11.0-windows"], windows: false));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net48"], windows: true));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net48", "net8.0"], windows: false));
+        Assert.Equal("Tests targets .NET Framework (net48): its tests run only on Windows.", WindowsFrameworks.Reason("Tests", ["net48"]));
+        Assert.Equal("Tests targets Windows (net11.0-windows): its tests run only on Windows.", WindowsFrameworks.Reason("Tests", ["net11.0-windows"]));
     }
 }

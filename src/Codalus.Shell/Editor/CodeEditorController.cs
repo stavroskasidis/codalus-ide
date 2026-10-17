@@ -83,6 +83,12 @@ public sealed partial class CodeEditorController : IDisposable
     private DocumentOptions? _documentOptions;
     private readonly bool _attached;
     private bool _disposed;
+    private (int Version, HashSet<int> Requested) _pinnedTokens = (0, []);
+    private TokensRequest? _tokensInFlight;
+    private bool _tokensAgain;
+
+    /// <summary>The semantic tokens request the language service is answering: its client, document version and window of lines.</summary>
+    private sealed record TokensRequest(LanguageHostClient Client, int Version, int Start, int End);
 
     public CodeEditorController(TextEditor editor, CodeEditorDocument dockable, IEditorServices services, Popup hoverPopup, bool attach = true, Popup? exceptionPopup = null)
     {
@@ -360,6 +366,7 @@ public sealed partial class CodeEditorController : IDisposable
             }
 
             _textMate.SetGrammar(scope);
+            KeepSemanticColorsOverGrammar();
             _insights.KeepColorizerLast();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -369,6 +376,25 @@ public sealed partial class CodeEditorController : IDisposable
             _textMate = null;
             GrammarScope = null;
         }
+    }
+
+    /// <summary>
+    /// Puts the semantic tokens (and the diagnostics' marks) after the grammar's colors, which AvaloniaEdit's TextMate adds
+    /// last: where the language service classified the text (Razor's markup and C#), its colors win.
+    /// </summary>
+    private void KeepSemanticColorsOverGrammar()
+    {
+        var transformers = Editor.TextArea.TextView.LineTransformers;
+        var grammar = transformers.OfType<AvaloniaEdit.TextMate.TextMateColoringTransformer>().FirstOrDefault();
+        if (grammar is null || transformers.IndexOf(_colorizer) > transformers.IndexOf(grammar))
+        {
+            return;
+        }
+
+        transformers.Remove(_colorizer);
+        transformers.Remove(_markers);
+        transformers.Insert(transformers.IndexOf(grammar) + 1, _colorizer);
+        transformers.Insert(transformers.IndexOf(_colorizer) + 1, _markers);
     }
 
     private void ApplyTheme()
@@ -417,10 +443,21 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>Requests everything again: after the language service (re)started, or the document was reloaded.</summary>
     public void RefreshAll()
     {
-        // Highlighting the visible lines first; folding (a walk of the whole file) and options when it's done.
+        // Highlighting the visible lines first; folding (a walk of the whole file), options and the insights (CodeLens,
+        // inlay hints and document symbols, whose answers for a 100k-line file are megabytes the service computes beside
+        // the first classification) when it's done.
         _refreshPending = true;
-        ScheduleTokens(TimeSpan.Zero);
-        _insights.Refresh();
+        if (_tokensInFlight is { } request && request.Version == Model.Version && ReferenceEquals(request.Client, Client))
+        {
+            // The same service is answering for this text (it finished loading projects meanwhile): its answer shows
+            // first and is asked for again after. Cancelling would throw away the work of the first classification of
+            // a large file, the slowest request of an open (file_highlight_ms).
+            _tokensAgain = true;
+        }
+        else
+        {
+            ScheduleTokens(TimeSpan.Zero);
+        }
     }
 
     private bool _refreshPending;
@@ -430,6 +467,7 @@ public sealed partial class CodeEditorController : IDisposable
         if (_refreshPending)
         {
             _refreshPending = false;
+            _insights.Refresh();
             ScheduleFolding(TimeSpan.Zero);
             _ = LoadDocumentOptionsAsync();
         }
@@ -474,16 +512,33 @@ public sealed partial class CodeEditorController : IDisposable
     private void OnViewChanged(object? sender, EventArgs e)
     {
         LightbulbChanged?.Invoke(this, EventArgs.Empty);
-        if (!_colorizer.Covers(VisibleLines()))
+        var visible = VisibleLines();
+        if (!_colorizer.Covers(visible) && !TokensInFlightCover(visible))
         {
             ScheduleTokens(s_scrollDelay);
         }
     }
 
-    private void ScheduleTokens(TimeSpan delay) => _ = TokensAsync(delay, Restart(ref _tokensCts).Token);
+    /// <summary>
+    /// True if the request in flight asks for every line of the range for the current text. Every redraw rebuilds the
+    /// visual lines (CodeLens, inlay hints, Git lenses arriving), and a redraw used to restart the request while the
+    /// service was still classifying, so a large file's first colors waited for the last redraw of the open.
+    /// </summary>
+    private bool TokensInFlightCover((int First, int Last) range) =>
+        _tokensInFlight is { } request && request.Version == Model.Version && range.First >= request.Start && range.Last <= request.End;
+
+    /// <summary>Semantic tokens requests sent to the language service (tests: redraws while one is answered add none).</summary>
+    internal int TokenRequests { get; private set; }
+
+    private void ScheduleTokens(TimeSpan delay)
+    {
+        _tokensAgain = false;
+        _ = TokensAsync(delay, Restart(ref _tokensCts).Token);
+    }
 
     private async Task TokensAsync(TimeSpan delay, CancellationToken cancellationToken)
     {
+        TokensRequest? request = null;
         try
         {
             if (delay > TimeSpan.Zero)
@@ -513,6 +568,8 @@ public sealed partial class CodeEditorController : IDisposable
             }
 
             var range = new LanguageServices.Protocol.Range(new Position(start, 0), new Position(end, 0));
+            TokenRequests++;
+            _tokensInFlight = request = new TokensRequest(client, version, start, end);
             var tokens = await client.SemanticTokensAsync(Model.Uri, provider.Range ? range : null, cancellationToken).ConfigureAwait(true);
             if (cancellationToken.IsCancellationRequested || version != Model.Version || _disposed)
             {
@@ -529,6 +586,67 @@ public sealed partial class CodeEditorController : IDisposable
             AfterTokens();
         }
         catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (request is not null && ReferenceEquals(_tokensInFlight, request))
+            {
+                _tokensInFlight = null;
+                if (_tokensAgain && !_disposed)
+                {
+                    ScheduleTokens(TimeSpan.Zero); // RefreshAll came while this one was answered
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Keeps the semantic tokens of the lines sticky scroll pins (one-based <paramref name="lines"/>), and asks for the
+    /// ones it lacks, a line at a time: a header far above the viewport is outside the window of tokens kept around it.
+    /// </summary>
+    public void KeepTokens(IReadOnlyList<int> lines)
+    {
+        var zeroBased = lines.Select(l => l - 1).ToList();
+        _colorizer.Pin(zeroBased);
+        if (_pinnedTokens.Version != Model.Version)
+        {
+            _pinnedTokens = (Model.Version, []);
+        }
+
+        var missing = zeroBased.Where(l => !_colorizer.Knows(l) && _pinnedTokens.Requested.Add(l)).ToList();
+        if (missing.Count > 0)
+        {
+            _ = PinnedTokensAsync(missing);
+        }
+    }
+
+    private async Task PinnedTokensAsync(List<int> lines)
+    {
+        try
+        {
+            // A server without range requests sends the whole document's tokens, which cover every line.
+            if (Client is not { Capabilities.SemanticTokensProvider: { Range: true } provider } client)
+            {
+                return;
+            }
+
+            var version = Model.Version;
+            foreach (var line in lines)
+            {
+                var range = new LanguageServices.Protocol.Range(new Position(line, 0), new Position(line + 1, 0));
+                var tokens = await client.SemanticTokensAsync(Model.Uri, range, CancellationToken.None).ConfigureAwait(true);
+                if (version != Model.Version || _disposed)
+                {
+                    return;
+                }
+
+                _colorizer.ApplyLine(line, SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes));
+            }
+
+            Editor.TextArea.TextView.Redraw();
+        }
+        catch (Exception ex) when (IsTransient(ex))
         {
         }
     }

@@ -54,6 +54,13 @@ public sealed partial class ShellHost : IEditorServices
 
     public IEnumerable<CodeEditorDocument> Editors => Layout.Documents.OfType<CodeEditorDocument>();
 
+    /// <summary>
+    /// The editor tabs and Code Search's preview, which isn't a tab but asks the language service for the same things
+    /// (semantic colors, the navigation bar's symbols, sticky scroll): what the language service's start, restart and
+    /// readiness refresh.
+    /// </summary>
+    private IEnumerable<CodeEditorDocument> LanguageViews => _previewDocument is { } preview ? Editors.Append(preview) : Editors;
+
     public event EventHandler? ThemeChanged;
 
     public event EventHandler? ProjectContextsChanged;
@@ -257,6 +264,18 @@ public sealed partial class ShellHost : IEditorServices
             return null;
         }
 
+        // A form's code file opens in the Windows Forms designer on Windows (M41a), unless the text editor was asked for.
+        if (initialContent is null && !textEditor && at is null && File.Exists(path) && OpensInWinFormsDesigner(path))
+        {
+            await OpenWinFormsDesignerAsync(path, preview).ConfigureAwait(true);
+            return null;
+        }
+
+        if (initialContent is null && !textEditor)
+        {
+            TellWinFormsWindowsOnly(path);
+        }
+
         // A plugin's custom editor claims the file (API 1.0), unless the text editor was asked for.
         if (initialContent is null && !textEditor && at is null && Plugins.CustomEditorFor(path) is { } custom && File.Exists(path)
             && await OpenInCustomEditorAsync(path, custom, preview).ConfigureAwait(true))
@@ -416,7 +435,7 @@ public sealed partial class ShellHost : IEditorServices
 
         if (await Languages.OpenAsync(new LanguageDocument(model.Path, languageId, Text)).ConfigureAwait(true))
         {
-            foreach (var editor in Editors.Where(e => e.Model == model))
+            foreach (var editor in LanguageViews.Where(e => e.Model == model))
             {
                 editor.Controller?.RefreshAll();
             }
@@ -436,7 +455,7 @@ public sealed partial class ShellHost : IEditorServices
 
     private void OnDocumentClosed(Docking.ShellDocument document)
     {
-        if (document is not CodeEditorDocument closed || Editors.Any(e => e.Model == closed.Model))
+        if (document is not CodeEditorDocument closed || Editors.Any(e => e.Model == closed.Model) || IsHeld(closed.Model))
         {
             return;
         }
@@ -461,7 +480,7 @@ public sealed partial class ShellHost : IEditorServices
     /// <summary>Asks the language service for everything again (after it restarted or finished loading projects).</summary>
     private void RefreshEditors()
     {
-        foreach (var editor in Editors)
+        foreach (var editor in LanguageViews)
         {
             editor.Controller?.RefreshAll();
         }
@@ -768,95 +787,6 @@ public sealed partial class ShellHost : IEditorServices
         }
 
         return false;
-    }
-
-    // ------------------------------------------------------------------ session (open documents per solution)
-
-    private string? SessionFile(string? solutionPath)
-    {
-        if (solutionPath is null)
-        {
-            return null;
-        }
-
-        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(solutionPath.ToUpperInvariant())))[..16];
-        return Path.Combine(Paths.State, "sessions", hash + ".json");
-    }
-
-    /// <summary>Remembers the open solution's documents and carets (files on disk only).</summary>
-    public void SaveEditorSession()
-    {
-        if (SessionFile(Solutions.Solution?.Path) is not { } file)
-        {
-            return;
-        }
-
-        var documents = Editors
-            .Where(e => !e.Model.IsReadOnly && File.Exists(e.Model.Path))
-            .DistinctBy(e => e.Model)
-            .Select(e =>
-            {
-                var caret = e.Controller is { } controller ? e.Model.PositionAt(controller.Editor.CaretOffset) : new Position(0, 0);
-                return new Docking.SessionDocument(e.Model.Path, caret.Line, caret.Character) { Pinned = e.IsPinned ? true : null };
-            })
-            .ToList();
-        WriteJson(file, new Docking.EditorSession(documents, ActiveEditor?.Model.Path)
-        {
-            StartupProject = Runs.ChosenStartupProject,
-            Breakpoints = Debugger.Breakpoints.All.Count == 0 ? null : [.. Debugger.Breakpoints.All.Select(ToSession)],
-            FunctionBreakpoints = Debugger.Breakpoints.Functions.Count == 0 ? null : [.. Debugger.Breakpoints.Functions.Select(ToSession)],
-            BreakOnOtherExceptions = Debugger.ExceptionSettings.BreakOnOthers ? true : null,
-            AspNetEnvironment = Runs.EnvironmentOverride,
-            ExceptionTypes = Debugger.ExceptionSettings.Changes() is { Count: > 0 } exceptionTypes ? exceptionTypes : null,
-            ExceptionConditions = Debugger.ExceptionSettings.Conditions() is { Count: > 0 } conditions ? conditions : null,
-            Watches = Watch.Expressions.Count == 0 ? null : Watch.Expressions,
-            DataTips = Debugger.PinnedTips.All is { Count: > 0 } tips ? [.. tips.Select(t => new Docking.SessionDataTip(t.Path, t.Line, t.Expression, t.Comment))] : null,
-            LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
-            MobileDevices = Mobile.Selections.Count == 0 ? null : new Dictionary<string, string>(Mobile.Selections),
-            MultipleStartupProjects = Runs.MultipleStartup ? true : null,
-            StartupProjects = Runs.StartupEntries is { Count: > 0 } entries ? [.. entries.Select(e => new Docking.SessionStartupProject(e.Project, e.Action.ToString()))] : null,
-        }, Docking.ShellJsonContext.Default.EditorSession);
-    }
-
-    /// <summary>Reopens the documents that were open the last time this solution was closed.</summary>
-    private async Task RestoreEditorSessionAsync(string solutionPath)
-    {
-        if (SessionFile(solutionPath) is not { } file || ReadJson(file, Docking.ShellJsonContext.Default.EditorSession) is not { } session)
-        {
-            Runs.Load(null, null);
-            Mobile.LoadSelections(null);
-            Debugger.Breakpoints.Clear();
-            Debugger.ExceptionSettings.Reset();
-            Runs.EnvironmentOverride = null;
-            Watch.Load(null);
-            Debugger.PinnedTips.Load([]);
-            return;
-        }
-
-        Runs.Load(
-            session.StartupProject,
-            session.LaunchProfiles,
-            session.MultipleStartupProjects == true,
-            [.. (session.StartupProjects ?? []).Select(p => new StartupEntry(p.Path, Enum.TryParse<StartupAction>(p.Action, out var action) ? action : StartupAction.None))]);
-        Mobile.LoadSelections(session.MobileDevices);
-        Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(FromSession), (session.FunctionBreakpoints ?? []).Select(FromSession));
-        Debugger.ExceptionSettings.Load(session.BreakOnOtherExceptions ?? false, session.ExceptionTypes, session.ExceptionConditions);
-        Runs.EnvironmentOverride = session.AspNetEnvironment;
-        Watch.Load(session.Watches);
-        Debugger.PinnedTips.Load((session.DataTips ?? []).Select(t => (t.Path, t.Line, t.Expression, t.Comment)));
-
-        foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))
-        {
-            if (await OpenFileAsync(document.Path, preview: false, new Position(document.Line, document.Character)).ConfigureAwait(true) is { } opened && document.Pinned == true)
-            {
-                Layout.SetPinned(opened, true);
-            }
-        }
-
-        if (session.Active is { } active && Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, active)) is { } editor)
-        {
-            Layout.OpenDocument(editor);
-        }
     }
 
     /// <summary>Closing a solution closes its documents (unsaved ones stay open, as the user has to decide).</summary>

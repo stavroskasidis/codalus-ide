@@ -28,6 +28,9 @@
     <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected, Mode=TwoWay}" Background="Transparent"
               AutomationProperties.Name="{l:T liveTree.liveVisualTree}">
       <TreeView.Styles>
+        <Style Selector="TextBlock.muted.onSelection">
+          <Setter Property="Foreground" Value="{DynamicResource TreeViewItemForegroundSelected}" />
+        </Style>
         <Style Selector="TreeViewItem" x:DataType="vm:LiveNodeViewModel">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
@@ -38,7 +41,8 @@
         <TreeDataTemplate x:DataType="vm:LiveNodeViewModel" ItemsSource="{Binding Children}">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <controls:Icon Kind="window" IsVisible="{Binding IsWindow}" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Label}" Classes.muted="{Binding IsTemplated}" VerticalAlignment="Center" />
+            <!-- A template part is muted, except on the selection, where it takes the selection's text (M34g). -->
+            <TextBlock Text="{Binding Label}" Classes.muted="{Binding IsTemplated}" Classes.onSelection="{Binding $parent[TreeViewItem].IsSelected}" VerticalAlignment="Center" />
           </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>

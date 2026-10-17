@@ -388,7 +388,7 @@ internal sealed partial class SolutionSession
         arguments.AddRange(["--configuration", ProjectConfiguration(startup).Configuration]);
         if (_evaluated.TryGetValue(startup, out var evaluated) && evaluated.Info.TargetFrameworks.Length > 1)
         {
-            arguments.AddRange(["--framework", _activeFrameworks.TryGetValue(startup, out var active) ? active : evaluated.Info.TargetFrameworks[0]]);
+            arguments.AddRange(["--framework", _activeFrameworks.TryGetValue(startup, out var active) && evaluated.Info.TargetFrameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active : evaluated.Info.TargetFrameworks[0]]);
         }
 
         if (target.NoBuild)

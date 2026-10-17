@@ -192,14 +192,55 @@ public sealed class ProfilerToolsShellTests
         // Running one from its glyph: BenchmarkDotNet's Dry job in process, then again for the history.
         window.Job = "Dry";
         window.InProcess = true;
+        string Describe()
+        {
+            var output = f.Shell.BenchmarkLog.GetText();
+            return $"status '{window.Status}', running {window.IsRunning}, {window.Results.Count} results, {window.History.Count} in the history, "
+                + $"{f.Shell.Benchmarks.History().Runs.Count} runs in {f.Shell.Benchmarks.HistoryPath}, project of the file '{f.Shell.Benchmarks.ProjectOf(file)}'\n"
+                + "Notifications:\n" + string.Join('\n', f.Shell.Workbench.Notifications.Items.Select(n => n.Message))
+                + "\nBenchmarks output (the end):\n" + output[Math.Max(0, output.Length - 6000)..];
+        }
+
+        // Started while the build host restores the solution (as right after opening it): dotnet run starts after the
+        // restore, built by the IDE's build, and doesn't restore the project at the same time (Linux CI: both wrote its
+        // obj/*.nuget.g.props, "already exists", and the run failed).
+        string? restoreAtRun = null;
+        var restoresEnded = 0;
+        var restoresEndedAtRun = -1;
+        void OnRestore(object? sender, Codalus.Workbench.Projects.RestoreStateChangedEventArgs e)
+        {
+            if (e.State is "succeeded" or "failed")
+            {
+                Interlocked.Increment(ref restoresEnded);
+            }
+        }
+
+        void OnRun(object? sender, string line)
+        {
+            if (line.StartsWith("> dotnet", StringComparison.Ordinal) && restoresEndedAtRun < 0)
+            {
+                restoreAtRun = f.Shell.Solutions.RestoreState;
+                restoresEndedAtRun = Volatile.Read(ref restoresEnded);
+            }
+        }
+
+        f.Shell.Solutions.RestoreStateChanged += OnRestore;
+        f.Shell.Benchmarks.Output += OnRun;
+        await f.Shell.Solutions.RestoreAsync(null, CancellationToken.None);
         await f.Shell.RunBenchmarkAsync(file, concat);
-        await ShellFixture.PumpUntil(() => window.Results.Count > 0 && !window.IsRunning, seconds: 600);
+        await ShellFixture.PumpUntil(() => window.Results.Count > 0 && !window.IsRunning, seconds: 600, Describe);
+        f.Shell.Solutions.RestoreStateChanged -= OnRestore;
+        f.Shell.Benchmarks.Output -= OnRun;
+        Assert.True(restoresEndedAtRun >= 1, $"dotnet run started before the restore ended ({restoresEndedAtRun} ended then)\n{Describe()}");
+        Assert.Equal("succeeded", restoreAtRun);
+        Assert.Contains("--no-build", f.Shell.BenchmarkLog.GetText(), StringComparison.Ordinal);
+        Assert.Equal(Path.Combine(folder, "Benchmarks", "Benchmarks.csproj"), f.Shell.Builds.LastBuild?.Request.Project);
         var result = Assert.Single(window.Results);
         Assert.Equal("Concat", result.Result.Method);
         Assert.True(result.Result.Mean > 0);
         Assert.True(result.Result.Allocated > 0, "MemoryDiagnoser's allocations");
         await f.Shell.RunBenchmarkAsync(file, concat);
-        await ShellFixture.PumpUntil(() => window.History.Count == 2 && !window.IsRunning, seconds: 600);
+        await ShellFixture.PumpUntil(() => window.History.Count == 2 && !window.IsRunning, seconds: 600, Describe);
         Assert.True(File.Exists(f.Shell.Benchmarks.HistoryPath));
         Assert.StartsWith(Path.Combine(folder, ".codalus", "benchmarks"), f.Shell.Benchmarks.HistoryPath, StringComparison.Ordinal);
     }

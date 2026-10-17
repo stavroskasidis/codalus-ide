@@ -20,7 +20,7 @@
         <Button Content="{l:T configurationManager.remove}" Command="{Binding RemovePlatformCommand}" Margin="0,0,16,4" />
         <Button Content="{l:T configurationManager.makeActive}" Command="{Binding ActivateCommand}" Margin="0,0,4,4" />
       </WrapPanel>
-      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <Grid RowDefinitions="Auto,*">
       <Grid ColumnDefinitions="*,180,140,70" Margin="8,2">

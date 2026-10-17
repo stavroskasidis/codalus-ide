@@ -25,24 +25,27 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
         return Task.CompletedTask;
     }
 
-    /// <summary>The Avalonia project templates' package (M19b), offered in New Project when none is installed.</summary>
-    private const string AvaloniaTemplates = "Avalonia.Templates";
-
     private async Task<object?> NewProjectAsync(CancellationToken cancellationToken)
     {
         _templates ??= TemplateCatalog.LoadAsync(Context.Log, CancellationToken.None);
-        var templates = await _templates.ConfigureAwait(false);
-        var items = templates.Select(t => new QuickPickItem(t.Name) { Description = t.ShortName, Detail = t.Languages, Tag = t }).ToList();
-        // The Avalonia templates (M19b) when they aren't installed: dotnet new install, then the list again.
-        if (!templates.Any(t => t.ShortName.StartsWith("avalonia", StringComparison.OrdinalIgnoreCase)))
+        var templates = TemplateCatalog.ForThisOs([.. await _templates.ConfigureAwait(false), .. NetFrameworkTemplates.All], OperatingSystem.IsWindows());
+        var items = templates.Select(t => new QuickPickItem(t.Name)
         {
-            items.Add(new QuickPickItem("Install the Avalonia templates…") { Description = AvaloniaTemplates, Detail = "dotnet new install " + AvaloniaTemplates, Tag = AvaloniaTemplates });
+            Description = NetFrameworkTemplates.Is(t) ? "SDK-style, .NET Framework 4.x" : t.ShortName,
+            Detail = t.RunsOnlyOnWindows && !OperatingSystem.IsWindows() ? t.Languages + " · Windows only: it edits and builds here, and runs on Windows" : t.Languages,
+            Tag = t,
+        }).ToList();
+        // Template packs that aren't installed (Avalonia, M19b; CoreWCF, M42): picking one is the consent to
+        // dotnet new install it, then the list comes again.
+        foreach (var pack in TemplatePacks.Missing(templates))
+        {
+            items.Add(new QuickPickItem(pack.Title) { Description = pack.Package, Detail = "dotnet new install " + pack.Package, Tag = pack });
         }
 
         var picked = await Context.Window.ShowQuickPickAsync(items, "Select a project template", cancellationToken).ConfigureAwait(false);
-        if (picked is { Tag: AvaloniaTemplates })
+        if (picked is { Tag: TemplatePack install })
         {
-            if (!await RunDotnetAsync(["new", "install", AvaloniaTemplates], cancellationToken).ConfigureAwait(false))
+            if (!await RunDotnetAsync(["new", "install", install.Package], cancellationToken).ConfigureAwait(false))
             {
                 return null;
             }
@@ -78,6 +81,11 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
             return null;
         }
 
+        if (NetFrameworkTemplates.Is(template))
+        {
+            return await NewNetFrameworkProjectAsync(template, location, name, solution, cancellationToken).ConfigureAwait(false);
+        }
+
         var (framework, canceled) = await AskFrameworkAsync(template, language, location, cancellationToken).ConfigureAwait(false);
         if (canceled)
         {
@@ -109,6 +117,28 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
             return null;
         }
 
+        await Context.Commands.ExecuteAsync(solution is null ? "workbench.openSolution" : "solution.addProjectFile", cancellationToken, project).ConfigureAwait(false);
+        return project;
+    }
+
+    /// <summary>A .NET Framework project (M43a): its framework asked for, its files written by the plugin, then opened or added.</summary>
+    private async Task<string?> NewNetFrameworkProjectAsync(ProjectTemplate template, string location, string name, string? solution, CancellationToken cancellationToken)
+    {
+        var choices = NetFrameworkTemplates.Frameworks.Select((f, i) => new QuickPickItem(TemplateFrameworks.Display(f)) { Description = f, Detail = i == 0 ? "Default" : null, Tag = f }).ToList();
+        if (await Context.Window.ShowQuickPickAsync(choices, "Target framework", cancellationToken).ConfigureAwait(false) is not { Tag: string framework })
+        {
+            return null;
+        }
+
+        var directory = Path.Combine(location, name);
+        Directory.CreateDirectory(directory);
+        foreach (var (path, text) in NetFrameworkTemplates.Files(template.ShortName, name, framework))
+        {
+            await File.WriteAllTextAsync(Path.Combine(directory, path), text, cancellationToken).ConfigureAwait(false);
+        }
+
+        var project = Path.Combine(directory, name + ".csproj");
+        Context.Log.Info($"Wrote the .NET Framework project {project} ({framework}).");
         await Context.Commands.ExecuteAsync(solution is null ? "workbench.openSolution" : "solution.addProjectFile", cancellationToken, project).ConfigureAwait(false);
         return project;
     }
@@ -236,13 +266,44 @@ internal sealed record ProjectTemplate(string Name, string ShortName, string Lan
 {
     public string DefaultName => ShortName switch
     {
-        "console" => "ConsoleApp1",
-        "classlib" => "ClassLibrary1",
+        "console" or NetFrameworkTemplates.ConsoleShortName => "ConsoleApp1",
+        "classlib" or NetFrameworkTemplates.LibraryShortName => "ClassLibrary1",
         "xunit" or "nunit" or "mstest" => "TestProject1",
         "web" or "webapi" or "mvc" or "webapp" or "blazor" or "grpc" => "WebApplication1",
         "worker" => "WorkerService1",
+        "wpf" => "WpfApp1",
+        "wpflib" => "WpfLibrary1",
+        "wpfusercontrollib" or "wpfcustomcontrollib" => "WpfControlLibrary1",
+        "winforms" => "WinFormsApp1",
+        "winformslib" => "WinFormsLibrary1",
+        "winformscontrollib" => "WinFormsControlLibrary1",
+        "corewcf" => "CoreWCFService1",
         _ => "Project1",
     };
+
+    /// <summary>A WPF or Windows Forms template (M40a): its projects run only on Windows.</summary>
+    public bool IsWindowsDesktop =>
+        ShortName.StartsWith("wpf", StringComparison.OrdinalIgnoreCase) || ShortName.StartsWith("winforms", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A template whose projects run only on Windows: WPF, Windows Forms (M40a) and .NET Framework (M43a).</summary>
+    public bool RunsOnlyOnWindows => IsWindowsDesktop || NetFrameworkTemplates.Is(this);
+}
+
+/// <summary>A template package New Project offers to install while none of its templates is (<see cref="Prefix"/>).</summary>
+internal sealed record TemplatePack(string Package, string Prefix, string Title);
+
+internal static class TemplatePacks
+{
+    /// <summary>The packs New Project knows: Avalonia's (M19b) and CoreWCF's (M42), both from nuget.org.</summary>
+    public static readonly TemplatePack[] Known =
+    [
+        new("Avalonia.Templates", "avalonia", "Install the Avalonia templates…"),
+        new("CoreWCF.Templates", "corewcf", "Install the CoreWCF templates…"),
+    ];
+
+    /// <summary>The known packs none of whose templates is in <paramref name="templates"/>.</summary>
+    public static IEnumerable<TemplatePack> Missing(IReadOnlyList<ProjectTemplate> templates) =>
+        Known.Where(p => !templates.Any(t => t.ShortName.StartsWith(p.Prefix, StringComparison.OrdinalIgnoreCase)));
 }
 
 internal static class TemplateCatalog
@@ -262,15 +323,28 @@ internal static class TemplateCatalog
         ("mvc", "ASP.NET Core Web App (Model-View-Controller)"),
         ("blazor", "Blazor Web App"),
         ("grpc", "ASP.NET Core gRPC Service"),
+        ("corewcf", "CoreWCF Service"), // CoreWCF.Templates (M42)
         ("razorclasslib", "Razor Class Library"),
         ("maui", ".NET MAUI App"), // with the MAUI workloads (M20a)
         ("maui-blazor", ".NET MAUI Blazor Hybrid App"),
         ("mauilib", ".NET MAUI Class Library"),
         ("android", "Android Application"),
         ("ios", "iOS Application"),
-        ("wpf", "WPF Application"),
+        ("wpf", "WPF Application"), // M40a: WPF and Windows Forms run on Windows only (D31)
+        ("wpflib", "WPF Class Library"),
+        ("wpfusercontrollib", "WPF User Control Library"),
+        ("wpfcustomcontrollib", "WPF Custom Control Library"),
         ("winforms", "Windows Forms App"),
+        ("winformslib", "Windows Forms Class Library"),
+        ("winformscontrollib", "Windows Forms Control Library"),
     ];
+
+    /// <summary>
+    /// The templates as New Project lists them on this OS: off Windows, the WPF, Windows Forms and .NET Framework ones go
+    /// last (their projects edit and build there, but run only on Windows, M40a, M43a).
+    /// </summary>
+    public static IReadOnlyList<ProjectTemplate> ForThisOs(IReadOnlyList<ProjectTemplate> templates, bool windows) =>
+        windows ? templates : [.. templates.Where(t => !t.RunsOnlyOnWindows), .. templates.Where(t => t.RunsOnlyOnWindows)];
 
     public static async Task<IReadOnlyList<ProjectTemplate>> LoadAsync(IPluginLog log, CancellationToken cancellationToken)
     {

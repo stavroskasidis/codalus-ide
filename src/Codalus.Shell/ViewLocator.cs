@@ -27,6 +27,7 @@ public sealed class ViewLocator : IDataTemplate
         ImageDocument document => new PaneHost(document, new ImageViewerView(document)),
         HexDocument document => new PaneHost(document, new HexViewerView(document)),
         ResxEditorDocument document => new PaneHost(document, new ResxEditorView { DataContext = document }),
+        WinFormsDesignerDocument document => new PaneHost(document, new WinFormsDesignerView(document)),
         EditorConfigDocument document => new PaneHost(document, new EditorConfigView { DataContext = document }),
         CustomEditorDocument document => new PaneHost(document, new DeclarativeViewHost(document.ViewId, document.Plugins, activate: false)),
         GitHistoryDocument document => new PaneHost(document, new GitHistoryView { DataContext = document.ViewModel }),
@@ -81,6 +82,7 @@ public sealed class ViewLocator : IDataTemplate
         BinaryLogViewModel vm => new BinaryLogView { DataContext = vm },
         ScaffoldViewModel vm => new ScaffoldView { DataContext = vm },
         ServiceReferencesViewModel vm => new ServiceReferencesView { DataContext = vm },
+        WcfTestClientViewModel vm => new WcfTestClientView { DataContext = vm },
         PerformanceProfilerViewModel vm => new PerformanceProfilerView { DataContext = vm },
         ProfilingReportViewModel vm => new ProfilingReportView { DataContext = vm },
         ProfilingComparisonViewModel vm => new ProfilingComparisonView { DataContext = vm },
@@ -90,6 +92,7 @@ public sealed class ViewLocator : IDataTemplate
     private static Control BuildToolContent(object? content) => content switch
     {
         OutputViewModel vm => new OutputView { DataContext = vm },
+        CodeSearchViewModel vm => new CodeSearchView { DataContext = vm, IsToolWindow = true },
         NotificationsViewModel vm => new NotificationsView { DataContext = vm },
         PluginsViewModel vm => new PluginsView { DataContext = vm },
         TreeToolViewModel vm => new TreeToolView { DataContext = vm },
@@ -124,6 +127,7 @@ public sealed class ViewLocator : IDataTemplate
         CountersViewModel vm => new CountersView { DataContext = vm },
         BenchmarksViewModel vm => new BenchmarksView { DataContext = vm },
         XamlPreviewViewModel vm => new XamlPreviewView { DataContext = vm },
+        ToolboxViewModel vm => new ToolboxView { DataContext = vm },
         RemotePortsViewModel vm => new RemotePortsView { DataContext = vm },
         DevicesViewModel vm => new DevicesView { DataContext = vm },
         HttpResponseViewModel vm => new HttpResponseView { DataContext = vm },

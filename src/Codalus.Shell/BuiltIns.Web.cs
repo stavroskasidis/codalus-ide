@@ -89,7 +89,9 @@ internal static partial class BuiltIns
         Add("web.trustDevCertificate", "Trust the HTTPS Development Certificate", "ASP.NET Core", _ => shell.TrustDevCertificateAsync());
         Add("web.manageUserSecrets", "Manage User Secrets", "ASP.NET Core", shell.ManageUserSecretsAsync, "solutionOpen && solutionTrusted");
         Add("web.addScaffoldedItem", "Add New Scaffolded Item…", "ASP.NET Core", project => { shell.OpenAddScaffoldedItem(project); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
-        Add("web.serviceReferences", "Service References (OpenAPI, gRPC)…", "ASP.NET Core", project => { shell.OpenServiceReferences(project); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
+        Add("web.serviceReferences", "Service References (OpenAPI, gRPC, WCF)…", "ASP.NET Core", project => { shell.OpenServiceReferences(project); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
+        Add("wcf.addServiceReference", "Add Service Reference (WCF)…", "WCF", project => { shell.OpenServiceReferences(project, ServiceReferencesViewModel.WcfKind); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
+        Add("wcf.testClient", "WCF Test Client", "WCF", address => { shell.OpenWcfTestClient(address); return Task.CompletedTask; });
         Add("web.installLanguageServers", "Install the Web Language Servers (Node.js)", "Web", _ => shell.InstallWebLanguagesAsync());
         Add("npm.taskRunner", "Task Runner Explorer", "npm", _ => shell.ShowTaskRunnerAsync());
         Add("npm.runScript", "Run npm Script…", "npm", _ => shell.PickNpmScriptAsync(), "solutionOpen");
@@ -115,6 +117,9 @@ internal static partial class BuiltIns
             Item(OtherWindowsMenu, "web.endpoints", "windows", AlphabeticalOrder("Endpoints Explorer")),
             Item(SolutionExplorerView.AddMenuLocation, "web.addScaffoldedItem", "1-new", 0, "(explorerItemKind == project || explorerItemKind == folder) && !explorerFolderView", "New Scaffolded Item…"),
             Item(SolutionExplorerView.AddMenuLocation, "web.serviceReferences", "2-references", 2, "explorerItemKind == project", "Service References…"),
+            Item(SolutionExplorerView.AddMenuLocation, "wcf.addServiceReference", "2-references", 3, "explorerItemKind == project", "Service Reference (WCF)…"),
+            Item(MenuLocations.MenuBar("project"), "wcf.addServiceReference", "2-references", 1),
+            Item(MenuLocations.MenuBar("tools"), "wcf.testClient", "1-wcf"),
             Item(SolutionExplorerView.ContextMenuLocation, "web.manageUserSecrets", "2-references", 4, "explorerItemKind == project"),
             Item(OtherWindowsMenu, "npm.taskRunner", "windows", AlphabeticalOrder("Task Runner Explorer")),
             Item(SolutionExplorerView.ContextMenuLocation, "npm.restore", "3-web", 2, "explorerItemName == 'package.json'", "Restore Packages"),

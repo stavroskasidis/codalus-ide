@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="WpfApp/WpfApp.csproj" />
+  <Project Path="WpfApp.Tests/WpfApp.Tests.csproj" />
+  <Project Path="WinFormsApp/WinFormsApp.csproj" />
+  <Project Path="WinFormsApp.Tests/WinFormsApp.Tests.csproj" />
+</Solution>

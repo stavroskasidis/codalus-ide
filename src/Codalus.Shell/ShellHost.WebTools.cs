@@ -3,6 +3,7 @@ using Codalus.Rpc;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Projects;
+using Codalus.Workbench.Wcf;
 using Codalus.Workbench.Web;
 using Codalus.Workbench.Localization;
 
@@ -23,6 +24,7 @@ public sealed partial class ShellHost
     {
         Scaffolding = new ScaffoldingService(Solutions, ProjectManagement, Workbench.Output);
         ServiceReferences = new ServiceReferenceService(Solutions);
+        WcfReferences = new WcfReferenceService(Solutions, Workbench.Output);
     }
 
     /// <summary>Add New Scaffolded Item, for the selected project (or folder), or <paramref name="project"/>.</summary>
@@ -140,8 +142,11 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ service references
 
-    /// <summary>The service references of the selected project (or <paramref name="project"/>).</summary>
-    public ServiceReferencesViewModel? OpenServiceReferences(string? project = null)
+    /// <summary>
+    /// The service references of the selected project (or <paramref name="project"/>); <paramref name="kind"/> picks the
+    /// add form's kind (<see cref="ServiceReferencesViewModel.WcfKind"/> for Add Service Reference, M42).
+    /// </summary>
+    public ServiceReferencesViewModel? OpenServiceReferences(string? project = null, string? kind = null)
     {
         if (!RequireTrustedSolution("Service references"))
         {
@@ -158,10 +163,20 @@ public sealed partial class ShellHost
         if (Layout.FindDocument<SolutionManagementDocument>(id) is { ViewModel: ServiceReferencesViewModel existing } document)
         {
             Layout.OpenDocument(document, focus: true);
+            if (kind == ServiceReferencesViewModel.WcfKind)
+            {
+                existing.KindLabel = "WCF";
+            }
+
             return existing;
         }
 
         var viewModel = new ServiceReferencesViewModel(chosen, ServiceReferenceActionAsync);
+        if (kind == ServiceReferencesViewModel.WcfKind)
+        {
+            viewModel.KindLabel = "WCF";
+        }
+
         Layout.OpenDocument(new SolutionManagementDocument(id, $"Service References ({Path.GetFileNameWithoutExtension(chosen)})", viewModel), focus: true);
         _ = viewModel.RunAsync("reload");
         return viewModel;
@@ -172,20 +187,61 @@ public sealed partial class ShellHost
         try
         {
             var selected = form.Selected?.Info;
+            var wcf = form.Selected?.Wcf;
             switch (action)
             {
                 case "reload":
                     break;
                 case "browse":
                     if (Window is not null && await Window.PickFileAsync(
-                            form.IsOpenApi ? "Choose an OpenAPI document" : "Choose a .proto file",
-                            form.IsOpenApi ? "OpenAPI documents" : "Protocol Buffers",
-                            form.IsOpenApi ? ["*.json", "*.yaml", "*.yml"] : ["*.proto"]).ConfigureAwait(true) is { } picked)
+                            form.IsWcf ? "Choose a WSDL file" : form.IsOpenApi ? "Choose an OpenAPI document" : "Choose a .proto file",
+                            form.IsWcf ? "WSDL documents" : form.IsOpenApi ? "OpenAPI documents" : "Protocol Buffers",
+                            form.IsWcf ? ["*.wsdl", "*.xml"] : form.IsOpenApi ? ["*.json", "*.yaml", "*.yml"] : ["*.proto"]).ConfigureAwait(true) is { } picked)
                     {
                         form.Source = picked;
                     }
 
                     return;
+                case "wcfStatus":
+                    form.WcfStatus = await WcfToolStatusAsync(form.Project).ConfigureAwait(true);
+                    return;
+                case "installWcf":
+                    await InstallSvcutilAsync(form).ConfigureAwait(true);
+                    return;
+                case "discover":
+                {
+                    var found = await DiscoverWcfServicesAsync().ConfigureAwait(true);
+                    form.SetDiscovered(found);
+                    form.Result = found.Count == 0 ? "No running CoreWCF service publishes metadata. Run the service (Ctrl+F5) with ServiceMetadataBehavior.HttpGetEnabled, or enter its address." : null;
+                    return;
+                }
+
+                case "test" when wcf is not null:
+                    OpenWcfTestClient(wcf.Inputs.FirstOrDefault() is { } input && !ServiceReferenceService.IsUrl(input) ? Path.GetFullPath(Path.Combine(wcf.Folder, input)) : wcf.Inputs.FirstOrDefault());
+                    return;
+                case "add" when form.IsWcf:
+                {
+                    if (form.WcfStatus is null or { ToolAvailable: false })
+                    {
+                        form.WcfStatus = await WcfToolStatusAsync(form.Project).ConfigureAwait(true);
+                        if (form.NeedsWcfTool)
+                        {
+                            form.Error = form.WcfToolMessage;
+                            return;
+                        }
+                    }
+
+                    var result = await WcfReferences.AddAsync(form.WcfRequest(), CancellationToken.None).ConfigureAwait(true);
+                    form.Result = $"Added {result.Reference.Name} in Connected Services ({string.Join(", ", result.Created.Select(Path.GetFileName))}).";
+                    form.Source = string.Empty;
+                    if (result.Reference.Code is { } code)
+                    {
+                        await OpenFileAsync(code, preview: true).ConfigureAwait(true);
+                    }
+
+                    break;
+                }
+
                 case "add":
                 {
                     var (file, edit) = await ServiceReferences.AddAsync(form.Request(), CancellationToken.None).ConfigureAwait(true);
@@ -193,6 +249,35 @@ public sealed partial class ShellHost
                                   + (edit.AddedPackages.Length > 0 ? $" and the packages {string.Join(", ", edit.AddedPackages)}" : string.Empty)
                                   + ". The code is generated when the project builds.";
                     form.Source = string.Empty;
+                    break;
+                }
+
+                case "save" or "refresh" when wcf is not null:
+                {
+                    var result = await WcfReferences.UpdateAsync(form.WcfUpdate()!, CancellationToken.None).ConfigureAwait(true);
+                    form.Result = $"Generated {result.Reference.Name} again from {string.Join(", ", result.Reference.Inputs)}.";
+                    break;
+                }
+
+                case "open" when wcf is not null:
+                    if (wcf.Code is { } reference)
+                    {
+                        await OpenFileAsync(reference, preview: false).ConfigureAwait(true);
+                    }
+
+                    return;
+                case "remove" when wcf is not null:
+                {
+                    if (!await Dialogs.ConfirmAsync(
+                            Localizer.Get("msg.webTools.removeTheServiceReference", "Remove the service reference"),
+                            Localizer.Format("msg.webTools.removeTheWcfReferenceFromThe", "Remove {0} from {1}? Its folder goes to the trash; the System.ServiceModel packages stay.", wcf.Name, Path.GetFileNameWithoutExtension(form.Project)),
+                            Localizer.Get("msg.webTools.remove", "Remove")).ConfigureAwait(true))
+                    {
+                        return;
+                    }
+
+                    await WcfReferences.RemoveAsync(form.Project, wcf.Name, CancellationToken.None).ConfigureAwait(true);
+                    form.Result = $"Removed {wcf.Name}.";
                     break;
                 }
 
@@ -230,7 +315,8 @@ public sealed partial class ShellHost
                     return;
             }
 
-            form.SetReferences(await ServiceReferences.ListAsync(form.Project, CancellationToken.None).ConfigureAwait(true));
+            var references = await ServiceReferences.ListAsync(form.Project, CancellationToken.None).ConfigureAwait(true);
+            form.SetReferences(references, await WcfReferences.ListAsync(form.Project, CancellationToken.None).ConfigureAwait(true));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException or HttpRequestException or TaskCanceledException)
         {

@@ -64,6 +64,8 @@ public static class Methods
     public const string WorkspaceStatus = "codalus/workspaceStatus";
     public const string TestCandidates = "codalus/testCandidates";
     public const string TypeOutline = "codalus/typeOutline";
+    public const string SymbolIndex = "codalus/symbolIndex";
+    public const string ExternalSymbols = "codalus/externalSymbols";
     public const string ReferenceItems = "codalus/references";
     public const string GoToBase = "codalus/base";
     public const string InheritanceMargin = "codalus/inheritanceMargin";
@@ -86,4 +88,13 @@ public static class Methods
 
     /// <summary>An Avalonia XAML file's logical tree, for the previewer's selection (M19a, ADR 0047).</summary>
     public const string XamlLogicalTree = "codalus/xaml/logicalTree";
+
+    /// <summary>A form's or user control's designer model, read from InitializeComponent (M41a, ADR 0073).</summary>
+    public const string WinFormsRead = "codalus/winforms/read";
+
+    /// <summary>The Windows Forms designer's changes as minimal text edits of the designer file (M41a, ADR 0073).</summary>
+    public const string WinFormsEdit = "codalus/winforms/edit";
+
+    /// <summary>A project's own components and controls, for the Toolbox (M41a, ADR 0073).</summary>
+    public const string WinFormsToolbox = "codalus/winforms/toolbox";
 }

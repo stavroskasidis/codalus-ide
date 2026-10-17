@@ -11,13 +11,15 @@ public sealed record Bookmark(string Path, int Line, string? Name = null)
 
 /// <summary>
 /// Bookmarks (M12b): toggled on a line, visited in order across files (Ctrl+K Ctrl+N / Ctrl+K Ctrl+P), named, and
-/// kept in the state folder (<c>bookmarks.json</c>). Editors move them with their lines. Thread-safe; <see cref="Changed"/>
-/// is raised on the calling thread.
+/// kept with the open solution (<c>.codalus/state/&lt;solution&gt;/bookmarks.json</c>, ADR 0070), or, with no solution
+/// open, in the user's state folder (<paramref name="file"/>). Editors move them with their lines. Thread-safe;
+/// <see cref="Changed"/> is raised on the calling thread.
 /// </summary>
 public sealed class BookmarkService(string file)
 {
     private readonly Lock _gate = new();
     private List<Bookmark>? _bookmarks;
+    private Action<List<Bookmark>>? _save;
 
     public event EventHandler? Changed;
 
@@ -120,6 +122,74 @@ public sealed class BookmarkService(string file)
             : all.LastOrDefault(b => Compare(b) < 0) ?? all[^1];
     }
 
+    /// <summary>
+    /// Switches to a solution's bookmarks, saved in its state folder. The first time (no saved bookmarks), the user
+    /// file's bookmarks in the solution's folder move to the solution. <see cref="Changed"/> is raised on the caller's context.
+    /// </summary>
+    public async Task OpenSolutionAsync(Projects.SolutionStateStore store, Projects.SolutionStateKey key)
+    {
+        var (saved, migrated) = await ReadSolutionBookmarksAsync(store, key); // back on the caller's context
+        lock (_gate)
+        {
+            _bookmarks = saved;
+            _save = list => _ = store.WriteAsync(key, Projects.SolutionStateStore.BookmarksFile, list, BookmarkJsonContext.Default.ListBookmark);
+            if (migrated)
+            {
+                Save();
+            }
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task<(List<Bookmark> Bookmarks, bool Migrated)> ReadSolutionBookmarksAsync(Projects.SolutionStateStore store, Projects.SolutionStateKey key)
+    {
+        if (await store.ReadAsync(key, Projects.SolutionStateStore.BookmarksFile, BookmarkJsonContext.Default.ListBookmark).ConfigureAwait(false) is { } saved)
+        {
+            return (saved, false);
+        }
+
+        var moved = await Task.Run(() => TakeFromFile(b => Projects.SolutionStateStore.IsInFolder(key, b.Path))).ConfigureAwait(false);
+        return (moved, moved.Count > 0);
+    }
+
+    /// <summary>Back to the user file's bookmarks (the solution closed).</summary>
+    public void CloseSolution()
+    {
+        lock (_gate)
+        {
+            if (_save is null)
+            {
+                return;
+            }
+
+            _save = null;
+            _bookmarks = null;
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Removes the user file's bookmarks that match and returns them.</summary>
+    private List<Bookmark> TakeFromFile(Func<Bookmark, bool> predicate)
+    {
+        lock (_gate)
+        {
+            var all = ReadFile();
+            var taken = all.Where(predicate).ToList();
+            if (taken.Count > 0)
+            {
+                WriteFile([.. all.Except(taken)]);
+                if (_save is null)
+                {
+                    _bookmarks = null; // read the file again
+                }
+            }
+
+            return taken;
+        }
+    }
+
     private void Update(Action<List<Bookmark>> change)
     {
         lock (_gate)
@@ -138,24 +208,40 @@ public sealed class BookmarkService(string file)
             return _bookmarks;
         }
 
-        try
-        {
-            _bookmarks = File.Exists(file) ? JsonSerializer.Deserialize(File.ReadAllText(file), BookmarkJsonContext.Default.ListBookmark) ?? [] : [];
-        }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
-        {
-            _bookmarks = [];
-        }
-
+        _bookmarks = ReadFile();
         return _bookmarks;
     }
 
+    private List<Bookmark> ReadFile()
+    {
+        try
+        {
+            return File.Exists(file) ? JsonSerializer.Deserialize(File.ReadAllText(file), BookmarkJsonContext.Default.ListBookmark) ?? [] : [];
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Saves the list: to the solution's state (written in the background), or to the user file.</summary>
     private void Save()
+    {
+        if (_save is { } save)
+        {
+            save([.. _bookmarks ?? []]);
+            return;
+        }
+
+        WriteFile(_bookmarks ?? []);
+    }
+
+    private void WriteFile(List<Bookmark> bookmarks)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-            File.WriteAllText(file, JsonSerializer.Serialize(_bookmarks ?? [], BookmarkJsonContext.Default.ListBookmark));
+            File.WriteAllText(file, JsonSerializer.Serialize(bookmarks, BookmarkJsonContext.Default.ListBookmark));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

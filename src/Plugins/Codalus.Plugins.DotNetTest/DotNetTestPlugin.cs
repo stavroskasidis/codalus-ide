@@ -158,6 +158,14 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
                         : frameworkSetting.Length > 0 && project.TargetFrameworks.Contains(frameworkSetting, StringComparer.OrdinalIgnoreCase)
                             ? [frameworkSetting]
                             : project.TargetFrameworks;
+                    tests.WindowsOnly = WindowsFrameworks.OnlyWindows(project.TargetFrameworks, OperatingSystem.IsWindows())
+                        ? WindowsFrameworks.Reason(project.Name, project.TargetFrameworks)
+                        : null;
+                    if (tests.WindowsOnly is not null)
+                    {
+                        tests.Error = tests.WindowsOnly;
+                    }
+
                     var files = project.CompileFiles.Where(f => !f.Contains("/obj/", StringComparison.OrdinalIgnoreCase) && !f.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase))
                         .Select(f => new Uri(f).AbsoluteUri).ToHashSet(StringComparer.OrdinalIgnoreCase);
                     foreach (var removed in tests.Candidates.Keys.Where(k => !files.Contains(k)).ToList())
@@ -332,7 +340,7 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
     private async Task<List<TestTarget>> TargetsAsync(List<ProjectTests> projects, CancellationToken cancellationToken)
     {
         var targets = new List<TestTarget>();
-        foreach (var project in projects)
+        foreach (var project in projects.Where(p => p.WindowsOnly is null))
         {
             List<string?> frameworks = project.Frameworks.Count > 1 ? [.. project.Frameworks] : [null];
             foreach (var framework in frameworks)
@@ -454,6 +462,19 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
         string? coverageDirectory = null;
         try
         {
+            // net*-windows test projects off Windows (M40a): said, and left out; the others run.
+            foreach (var windowsOnly in projects.Where(p => p.WindowsOnly is not null))
+            {
+                run.AppendOutput(windowsOnly.WindowsOnly + "\n");
+                Log(windowsOnly.WindowsOnly!);
+            }
+
+            projects = [.. projects.Where(p => p.WindowsOnly is null)];
+            if (projects.Count == 0)
+            {
+                return;
+            }
+
             if (build && !await BuildAsync(projects, run, cancellationToken).ConfigureAwait(false))
             {
                 return;

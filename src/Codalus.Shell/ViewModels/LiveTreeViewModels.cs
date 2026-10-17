@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Previewer;
 
 namespace Codalus.Shell.ViewModels;
@@ -36,9 +37,10 @@ public sealed class LiveNodeViewModel(int id, string type, string name, bool tem
 }
 
 /// <summary>
-/// Debug → Windows → Live Visual Tree (M19b, ADR 0052): the running Avalonia app's windows and elements, the logical
-/// tree by default (a classic IDE's "Just My XAML"), the visual tree with templates' parts on request. Selecting an
-/// element highlights it in the app and shows its properties; Select Element in the App picks one by clicking it.
+/// Debug → Windows → Live Visual Tree (M19b, ADR 0052; WPF apps in M40b, ADR 0072): the running app's windows and
+/// elements, the logical tree by default (a classic IDE's "Just My XAML"), the visual tree with templates' parts on
+/// request. Selecting an element highlights it in the app and shows its properties; Select Element in the App picks one
+/// by clicking it.
 /// </summary>
 public sealed class LiveTreeViewModel : ObservableObject
 {
@@ -51,7 +53,10 @@ public sealed class LiveTreeViewModel : ObservableObject
     private string _message = NotRunning;
     private int _generation;
 
-    private const string NotRunning = "Start an Avalonia app (F5 or Ctrl+F5) to see its live visual tree.";
+    /// <summary>What the tree says before an app runs: WPF apps run (and get the live tools) on Windows only (D31).</summary>
+    internal static string NotRunning => OperatingSystem.IsWindows()
+        ? Localizer.Get("msg.liveTree.notRunningWindows", "Start an Avalonia or WPF app (F5 or Ctrl+F5) to see its live visual tree.")
+        : Localizer.Get("msg.liveTree.notRunning", "Start an Avalonia app (F5 or Ctrl+F5) to see its live visual tree. A WPF app's live visual tree is Windows only.");
 
     public LiveTreeViewModel(Func<LiveSession?> session, Func<LiveNodeViewModel, Task> goToXaml)
     {
@@ -187,7 +192,7 @@ public sealed class LiveTreeViewModel : ObservableObject
                 Roots.Add(root);
             }
 
-            Message = roots.Count == 0 ? "The app has no window open." : string.Empty;
+            Message = roots.Count == 0 ? Localizer.Get("msg.liveTree.noWindow", "The app has no window open.") : string.Empty;
             Selected = selectedId is { } id ? Find(id) : null;
             if (roots.Count == 0)
             {
@@ -293,6 +298,9 @@ public sealed class LivePropertyRow(LiveProperty property, Func<LivePropertyRow,
 
     public string AccessibleName => $"{Name}: {Value} ({Source})";
 
+    /// <summary>The name and type, for the trimmed name (M34g: the tooltip had the type alone).</summary>
+    public string ToolTip => $"{Name}: {Type}";
+
     public string Value
     {
         get => _value;
@@ -321,9 +329,9 @@ public sealed class LivePropertyRow(LiveProperty property, Func<LivePropertyRow,
 }
 
 /// <summary>
-/// Debug → Windows → Live Property Explorer (M19b, ADR 0052): the selected element's Avalonia properties, their values
-/// and where they come from (local, style, template, inherited, default); editing a value sets it as a local value in
-/// the running app (not in the XAML).
+/// Debug → Windows → Live Property Explorer (M19b, ADR 0052; M40b, ADR 0072): the selected element's Avalonia or WPF
+/// dependency properties, their values and where they come from (local, style, template, inherited, default); editing
+/// a value sets it as a local value in the running app (not in the XAML).
 /// </summary>
 public sealed class LivePropertiesViewModel : ObservableObject
 {
@@ -339,7 +347,7 @@ public sealed class LivePropertiesViewModel : ObservableObject
 
     public ObservableCollection<LivePropertyRow> Rows { get; } = [];
 
-    public string Title => _element is null ? "Select an element in the Live Visual Tree." : _element.Label;
+    public string Title => _element is null ? Localizer.Get("msg.liveTree.selectElement", "Select an element in the Live Visual Tree.") : _element.Label;
 
     public string Filter
     {
