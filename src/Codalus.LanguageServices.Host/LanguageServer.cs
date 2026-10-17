@@ -301,7 +301,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         // The Windows Forms designer (M41a, ADR 0073): read InitializeComponent, write the designer's changes, the Toolbox's project components.
         _connection.OnRequest(Methods.WinFormsRead, json.WinFormsReadParams, json.WinFormsReadResult, (p, ct) =>
             DocumentUris.ToPath(p.TextDocument.Uri) is { } path
-                ? WinForms.WinFormsFeature.ReadAsync(_workspace.CurrentSolution, path, _workspace.OpenText, ct)
+                ? WinForms.WinFormsFeature.ReadAsync(_workspace.CurrentSolution, path, _workspace.OpenText, ct, p.ResourceFiles)
                 : Task.FromResult(new WinFormsReadResult(null, null, false, null, "The designer opens files on disk.", null)));
         _connection.OnRequest(Methods.WinFormsEdit, json.WinFormsEditParams, json.WinFormsEditResult, (p, ct) =>
             WinForms.WinFormsFeature.EditAsync(_workspace.CurrentSolution, p, _workspace.OpenText, _workspace.Version, ct));

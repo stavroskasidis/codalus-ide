@@ -167,6 +167,8 @@ public sealed class WinFormsDesignerCodeTests
         { "AboutForm.Designer.cs", true },
         { "MainForm.Designer.cs", false },
         { Path.Combine("Controls", "CounterControl.Designer.cs"), true },
+        { "InventoryForm.Designer.cs", false },
+        { "InventoryForm.Designer.cs", true },
     };
 
     /// <summary>Every statement written again from the model is the file's own text: the generator writes Visual Studio's style (both of them).</summary>
@@ -587,5 +589,498 @@ public sealed class WinFormsDesignerCodeTests
         Assert.Equal([("b\n", string.Empty)], Changes("a\nb\nc\n", "a\nc\n"));
         Assert.Equal([("a\n", string.Empty), (string.Empty, "z\n")], Changes("a\nb\nc\n", "b\nc\nz\n"));
         Assert.Equal([("b\r\n", "y\r\n")], Changes("a\r\nb\r\nc", "a\r\ny\r\nc"));
+    }
+
+    // ------------------------------------------------------------------ M41b: menus, collections, extenders, bindings
+
+    private static string InventoryForm => File.ReadAllText(Sample("InventoryForm.Designer.cs"));
+
+    /// <summary>A form's designer file and its resource files (read from the fixture, changed in memory), edited together.</summary>
+    private static (string Designer, DesignerResourceSet Resources) ApplyWithResources(string form, params DesignerEdit[] edits)
+    {
+        var resources = new DesignerResourceSet(Sample(form + ".cs"), p => File.Exists(p) ? File.ReadAllText(p) : null);
+        var writer = new DesignerWriter(t => DesignerReader.Read(CSharpSyntaxTree.ParseText(t), "System.Windows.Forms.Form", DesignerReader.WindowsFormsImplicitUsings), resources);
+        return (writer.Apply(SourceText.From(File.ReadAllText(Sample(form + ".Designer.cs"))), edits).ToString(), resources);
+    }
+
+    private static string Resx(string file) => File.ReadAllText(Sample(file));
+
+    private static DesignerEdit Extender(string component, string provider, string property, DesignerValue? value) =>
+        new() { Kind = DesignerEditKinds.SetExtender, Component = component, Provider = provider, Property = property, Value = value };
+
+    private static DesignerEdit Collection(string component, string property, string method, string? elementType, params DesignerValue[] items) =>
+        new() { Kind = DesignerEditKinds.SetCollection, Component = component, Property = property, Method = method, Type = elementType, Items = items };
+
+    private static DesignerEdit Resource(string key, DesignerResource? resource, string culture = "", bool metadata = false) =>
+        new() { Kind = DesignerEditKinds.SetResource, Key = key, Resource = resource, Culture = culture, Metadata = metadata };
+
+    private static DesignerValue Binding(string property, string source, string member) =>
+        DesignerValue.NewOf("System.Windows.Forms.Binding", DesignerValue.String(property), DesignerValue.ReferenceTo(source), DesignerValue.String(member), DesignerValue.Bool(true));
+
+    private static DesignerValue[] Refs(params string[] names) => [.. names.Select(DesignerValue.ReferenceTo)];
+
+    /// <summary>Only additions, in any order (which "// " line the diff pairs with which is a matter of taste).</summary>
+    private static void AssertAdded(IEnumerable<string> expected, IEnumerable<string> actual) =>
+        Assert.Equal(expected.Order(StringComparer.Ordinal), actual.Select(l => l.TrimEnd()).Order(StringComparer.Ordinal));
+
+    [Fact]
+    public void Reads_menus_collections_extenders_and_bindings_visual_studio_wrote()
+    {
+        var model = Read(InventoryForm).Model;
+        Assert.Equal("System.Windows.Forms.ToolStripMenuItem", model.Components.Single(c => c.Name == "fileToolStripMenuItem").Type);
+        Assert.Equal("System.Windows.Forms.BindingSource", model.Components.Single(c => c.Name == "itemBindingSource").Type);
+        Assert.Contains(model.Components, c => c is { Name: "listViewItem1", IsLocal: true, Type: "System.Windows.Forms.ListViewItem" });
+        DesignerStatement Call(string target, string member) => model.Statements.Single(s => s.Kind == DesignerStatementKinds.Call && s.Target == target && s.Member == member);
+        Assert.Equal(["newToolStripMenuItem", "toolStripSeparator1", "exitToolStripMenuItem"], Call("fileToolStripMenuItem", "DropDownItems.AddRange").Arguments![0].Arguments!.Select(a => a.Value));
+        Assert.Equal("System.Windows.Forms.ToolStripItem", Call("mainMenuStrip", "Items.AddRange").Arguments![0].Type);
+        Assert.Equal(["listViewItem1", "listViewItem2"], Call("itemsListView", "Items.AddRange").Arguments![0].Arguments!.Select(a => a.Value));
+        Assert.Equal(["locationColumn", "quantityColumn"], Call("stockGridView", "Columns.AddRange").Arguments![0].Arguments!.Select(a => a.Value));
+        var binding = Call("nameTextBox", "DataBindings.Add").Arguments![0];
+        Assert.Equal(("System.Windows.Forms.Binding", "Text", "itemBindingSource", "Name"), (binding.Type, binding.Arguments![0].Value, binding.Arguments[1].Value, binding.Arguments[2].Value));
+        Assert.Equal("The item's name, as it shows on the shelf.", Call("inventoryHelpProvider", "SetHelpString").Arguments![1].Value);
+        Assert.Equal(("WinFormsApp.InventoryItem", DesignerValueKinds.TypeOf), (model.Statements.Single(s => s.Member == "DataSource").Value!.Type, model.Statements.Single(s => s.Member == "DataSource").Value!.Kind));
+        Assert.Equal(["Control", "N"], model.Statements.Single(s => s.Member == "ShortcutKeys").Value!.Members!);
+        Assert.Equal(DesignerValue.ReferenceTo(string.Empty), model.Statements.Single(s => s.Member == "ContainerControl").Value);
+    }
+
+    [Fact]
+    public void Bring_to_front_and_send_to_back_move_the_controls_add_as_it_is()
+    {
+        // The root's controls are written front first: Bring to Front moves a control's Controls.Add first, Send to Back last.
+        var front = Apply(OrderForm, new DesignerEdit { Kind = DesignerEditKinds.SetChildIndex, Component = "giftCheckBox", Index = 0 });
+        Assert.Equal(["+Controls.Add(giftCheckBox);", "-Controls.Add(giftCheckBox);"], Diff(OrderForm, front));
+        Assert.Contains("ClientSize = new Size(384, 401);\n            Controls.Add(giftCheckBox);\n            Controls.Add(counterControl);", front, StringComparison.Ordinal);
+        var back = Apply(OrderForm, new DesignerEdit { Kind = DesignerEditKinds.SetChildIndex, Component = "giftCheckBox", Index = int.MaxValue });
+        Assert.Contains("Controls.Add(customerLabel);\n            Controls.Add(giftCheckBox);\n            FormBorderStyle", back, StringComparison.Ordinal);
+        Assert.Equal(2, Diff(OrderForm, back).Count);
+
+        // Already there: no edit. In a table, the cell stays with it; a tab control's pages are its tabs' order.
+        Assert.Equal(OrderForm, Apply(OrderForm, new DesignerEdit { Kind = DesignerEditKinds.SetChildIndex, Component = "counterControl", Index = 0 }));
+        Assert.Contains("detailsTable.Controls.Add(orderDatePicker, 1, 0);\n            detailsTable.Controls.Add(dateLabel, 0, 0);",
+            Apply(OrderForm, new DesignerEdit { Kind = DesignerEditKinds.SetChildIndex, Component = "orderDatePicker", Index = 0 }), StringComparison.Ordinal);
+        Assert.Contains("detailsTabControl.Controls.Add(stockTabPage);\n            detailsTabControl.Controls.Add(generalTabPage);",
+            Apply(InventoryForm, new DesignerEdit { Kind = DesignerEditKinds.SetChildIndex, Component = "stockTabPage", Index = 0 }), StringComparison.Ordinal);
+
+        // The .NET Framework style's statement moves with its this.
+        var about = Apply(AboutForm, new DesignerEdit { Kind = DesignerEditKinds.SetChildIndex, Component = "titleLabel", Index = 0 });
+        Assert.Contains("this.Controls.Add(this.titleLabel);\n            this.Controls.Add(this.versionLabel);\n            this.Controls.Add(this.okButton);", about, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tab_order_is_each_controls_tab_index_and_nothing_else()
+    {
+        // Tab order mode's clicks: each a TabIndex, in place (no sibling moves).
+        var after = Apply(OrderForm,
+            Set("customerTextBox", "TabIndex", DesignerValue.Int(0)),
+            Set("customerLabel", "TabIndex", DesignerValue.Int(1)),
+            Set("standardRadioButton", "TabIndex", DesignerValue.Int(1)),
+            Set("expressRadioButton", "TabIndex", DesignerValue.Int(0)));
+        Assert.Equal(
+        [
+            "-customerLabel.TabIndex = 0;",
+            "+customerLabel.TabIndex = 1;",
+            "-customerTextBox.TabIndex = 1;",
+            "+customerTextBox.TabIndex = 0;",
+            "-expressRadioButton.TabIndex = 1;",
+            "+expressRadioButton.TabIndex = 0;",
+            "-standardRadioButton.TabIndex = 0;",
+            "+standardRadioButton.TabIndex = 1;",
+        ], Diff(OrderForm, after));
+    }
+
+    [Fact]
+    public void Extender_properties_are_the_providers_set_calls_in_the_extended_components_section()
+    {
+        // A new tool tip: after TabIndex (sorted as ToolTip), before the events.
+        var added = Apply(OrderForm, Extender("productComboBox", "orderToolTip", "ToolTip", DesignerValue.String("What to order.")));
+        Assert.Equal(["+orderToolTip.SetToolTip(productComboBox, \"What to order.\");"], Diff(OrderForm, added));
+        Assert.Contains("productComboBox.TabIndex = 2;\n            orderToolTip.SetToolTip(productComboBox, \"What to order.\");\n            productComboBox.SelectedIndexChanged += OnProductChanged;", added, StringComparison.Ordinal);
+
+        // Changed in place; removed (back to its default).
+        Assert.Equal(
+            ["-orderToolTip.SetToolTip(customerTextBox, \"The customer who places the order.\");", "+orderToolTip.SetToolTip(customerTextBox, \"Who orders.\");"],
+            Diff(OrderForm, Apply(OrderForm, Extender("customerTextBox", "orderToolTip", "ToolTip", DesignerValue.String("Who orders.")))));
+        Assert.Equal(["-orderToolTip.SetToolTip(customerTextBox, \"The customer who places the order.\");"],
+            Diff(OrderForm, Apply(OrderForm, Extender("customerTextBox", "orderToolTip", "ToolTip", null))));
+
+        // A help provider's two properties sort among the text box's by their names; one on a control without any.
+        var help = Apply(InventoryForm,
+            Extender("nameTextBox", "inventoryHelpProvider", "ShowHelp", DesignerValue.Bool(false)),
+            Extender("categoryListBox", "inventoryHelpProvider", "HelpString", DesignerValue.String("Pick one.")));
+        Assert.Equal(
+        [
+            "+inventoryHelpProvider.SetHelpString(categoryListBox, \"Pick one.\");",
+            "-inventoryHelpProvider.SetShowHelp(nameTextBox, true);",
+            "+inventoryHelpProvider.SetShowHelp(nameTextBox, false);",
+        ], Diff(InventoryForm, help));
+        Assert.Contains("categoryListBox.FormattingEnabled = true;\n            inventoryHelpProvider.SetHelpString(categoryListBox, \"Pick one.\");\n            categoryListBox.Items.AddRange", help, StringComparison.Ordinal);
+
+        // .NET Framework's style: this.provider.SetX(this.component, …).
+        const string framework = """
+            partial class Form1
+            {
+                private void InitializeComponent()
+                {
+                    this.components = new System.ComponentModel.Container();
+                    this.button1 = new System.Windows.Forms.Button();
+                    this.toolTip1 = new System.Windows.Forms.ToolTip(this.components);
+                    // 
+                    // button1
+                    // 
+                    this.button1.Location = new System.Drawing.Point(12, 12);
+                    this.button1.Name = "button1";
+                }
+
+                private System.Windows.Forms.Button button1;
+                private System.Windows.Forms.ToolTip toolTip1;
+            }
+            """;
+        Assert.Contains("this.button1.Name = \"button1\";\n        this.toolTip1.SetToolTip(this.button1, \"Saves\");",
+            Apply(framework.Replace("\r\n", "\n", StringComparison.Ordinal), Extender("button1", "toolTip1", "ToolTip", DesignerValue.String("Saves"))), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Collections_are_written_again_in_place_as_visual_studio_writes_them()
+    {
+        // A list box's items: the AddRange line, in place; emptied, it goes; a list without items gets one where Items sorts.
+        var items = Apply(InventoryForm, Collection("categoryListBox", "Items", "AddRange", "System.Object", DesignerValue.String("Tools"), DesignerValue.String("Garden"), DesignerValue.String("Paint"), DesignerValue.String("Plumbing")));
+        Assert.Equal(["-categoryListBox.Items.AddRange(new object[] { \"Tools\", \"Garden\", \"Paint\" });", "+categoryListBox.Items.AddRange(new object[] { \"Tools\", \"Garden\", \"Paint\", \"Plumbing\" });"], Diff(InventoryForm, items));
+        Assert.Equal(["-categoryListBox.Items.AddRange(new object[] { \"Tools\", \"Garden\", \"Paint\" });"], Diff(InventoryForm, Apply(InventoryForm, Collection("categoryListBox", "Items", "AddRange", "System.Object"))));
+        var fresh = Apply(OrderForm, Collection("historyListBox", "Items", "AddRange", "System.Object", DesignerValue.String("Espresso")));
+        Assert.Contains("historyListBox.ItemHeight = 15;\n            historyListBox.Items.AddRange(new object[] { \"Espresso\" });\n            historyListBox.Location", fresh, StringComparison.Ordinal);
+        Assert.Equal(InventoryForm, Apply(InventoryForm, Collection("categoryListBox", "Items", "AddRange", "System.Object", DesignerValue.String("Tools"), DesignerValue.String("Garden"), DesignerValue.String("Paint"))));
+
+        // A table's column styles: one Add each, where the old ones were.
+        DesignerValue Style(string sizeType, float value) => DesignerValue.NewOf("System.Windows.Forms.ColumnStyle", DesignerValue.EnumOf("System.Windows.Forms.SizeType", sizeType), DesignerValue.Float(value));
+        var styles = Apply(OrderForm, Collection("detailsTable", "ColumnStyles", "Add", null, Style("Absolute", 84F), Style("Percent", 50F), Style("Percent", 50F)), Set("detailsTable", "ColumnCount", DesignerValue.Int(3)));
+        Assert.Equal(
+        [
+            "-detailsTable.ColumnCount = 2;",
+            "+detailsTable.ColumnCount = 3;",
+            "-detailsTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));",
+            "+detailsTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));",
+            "+detailsTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));",
+        ], Diff(OrderForm, styles));
+
+        // A list view's columns (components) reordered; a grid's columns with a new one (a field, its creation, its section, the array).
+        Assert.Equal(
+            ["-itemsListView.Columns.AddRange(new ColumnHeader[] { nameColumnHeader, countColumnHeader });", "+itemsListView.Columns.AddRange(new ColumnHeader[] { countColumnHeader, nameColumnHeader });"],
+            Diff(InventoryForm, Apply(InventoryForm, Collection("itemsListView", "Columns", "AddRange", "System.Windows.Forms.ColumnHeader", DesignerValue.ReferenceTo("countColumnHeader"), DesignerValue.ReferenceTo("nameColumnHeader")))));
+        var grid = Apply(InventoryForm,
+            new DesignerEdit
+            {
+                Kind = DesignerEditKinds.AddComponent, Component = "inStockColumn", Type = "System.Windows.Forms.DataGridViewCheckBoxColumn",
+                Properties = [new("HeaderText", DesignerValue.String("In stock")), new("Name", DesignerValue.String("inStockColumn"))],
+            },
+            Collection("stockGridView", "Columns", "AddRange", "System.Windows.Forms.DataGridViewColumn", DesignerValue.ReferenceTo("locationColumn"), DesignerValue.ReferenceTo("quantityColumn"), DesignerValue.ReferenceTo("inStockColumn")));
+        AssertAdded(
+        [
+            "+inStockColumn = new DataGridViewCheckBoxColumn();",
+            "-stockGridView.Columns.AddRange(new DataGridViewColumn[] { locationColumn, quantityColumn });",
+            "+stockGridView.Columns.AddRange(new DataGridViewColumn[] { locationColumn, quantityColumn, inStockColumn });",
+            "+//",
+            "+// inStockColumn",
+            "+//",
+            "+inStockColumn.HeaderText = \"In stock\";",
+            "+inStockColumn.Name = \"inStockColumn\";",
+            "+private DataGridViewCheckBoxColumn inStockColumn;",
+        ], Diff(InventoryForm, grid));
+        Assert.Contains("            // \n            // inStockColumn\n            // \n            inStockColumn.HeaderText = \"In stock\";\n            inStockColumn.Name = \"inStockColumn\";\n            // \n            // InventoryForm\n", grid, StringComparison.Ordinal);
+
+        // A list view's items are locals, declared before the components are created, as Visual Studio declares them.
+        var listItems = Apply(InventoryForm,
+            new DesignerEdit { Kind = DesignerEditKinds.AddLocal, Component = "listViewItem3", Value = DesignerValue.NewOf("System.Windows.Forms.ListViewItem", DesignerValue.String("Drill")) },
+            Collection("itemsListView", "Items", "AddRange", "System.Windows.Forms.ListViewItem", DesignerValue.ReferenceTo("listViewItem1"), DesignerValue.ReferenceTo("listViewItem2"), DesignerValue.ReferenceTo("listViewItem3")));
+        Assert.Equal(
+        [
+            "+ListViewItem listViewItem3 = new ListViewItem(\"Drill\");",
+            "-itemsListView.Items.AddRange(new ListViewItem[] { listViewItem1, listViewItem2 });",
+            "+itemsListView.Items.AddRange(new ListViewItem[] { listViewItem1, listViewItem2, listViewItem3 });",
+        ], Diff(InventoryForm, listItems));
+        Assert.Contains("ListViewItem listViewItem2 = new ListViewItem(\"Saw\");\n            ListViewItem listViewItem3 = new ListViewItem(\"Drill\");\n            mainMenuStrip = new MenuStrip();", listItems, StringComparison.Ordinal);
+        var removedItem = Apply(InventoryForm, new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = "listViewItem1" });
+        Assert.Equal(
+        [
+            "-ListViewItem listViewItem1 = new ListViewItem(\"Hammer\");",
+            "-itemsListView.Items.AddRange(new ListViewItem[] { listViewItem1, listViewItem2 });",
+            "+itemsListView.Items.AddRange(new ListViewItem[] { listViewItem2 });",
+        ], Diff(InventoryForm, removedItem));
+
+        // .NET Framework's arrays, one item a line.
+        const string framework = """
+            partial class Form1
+            {
+                private void InitializeComponent()
+                {
+                    this.listBox1 = new System.Windows.Forms.ListBox();
+                    // 
+                    // listBox1
+                    // 
+                    this.listBox1.FormattingEnabled = true;
+                    this.listBox1.Location = new System.Drawing.Point(12, 12);
+                }
+
+                private System.Windows.Forms.ListBox listBox1;
+            }
+            """;
+        Assert.Contains("this.listBox1.FormattingEnabled = true;\n        this.listBox1.Items.AddRange(new object[] {\n        \"One\",\n        \"Two\"});\n        this.listBox1.Location",
+            Apply(framework.Replace("\r\n", "\n", StringComparison.Ordinal), Collection("listBox1", "Items", "AddRange", "System.Object", DesignerValue.String("One"), DesignerValue.String("Two"))), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Menu_and_tool_strip_items_are_components_in_their_owners_add_range()
+    {
+        // Type Here on the File menu: a menu item (its field, creation and section) at the end of the drop-down's AddRange.
+        var opened = Apply(InventoryForm,
+            new DesignerEdit
+            {
+                Kind = DesignerEditKinds.AddComponent, Component = "openToolStripMenuItem", Type = "System.Windows.Forms.ToolStripMenuItem",
+                Properties = [new("Name", DesignerValue.String("openToolStripMenuItem")), new("Size", Size(141, 22)), new("Text", DesignerValue.String("&Open…"))],
+            },
+            Collection("fileToolStripMenuItem", "DropDownItems", "AddRange", "System.Windows.Forms.ToolStripItem", Refs("newToolStripMenuItem", "openToolStripMenuItem", "toolStripSeparator1", "exitToolStripMenuItem")));
+        AssertAdded(
+        [
+            "+openToolStripMenuItem = new ToolStripMenuItem();",
+            "-fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { newToolStripMenuItem, toolStripSeparator1, exitToolStripMenuItem });",
+            "+fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { newToolStripMenuItem, openToolStripMenuItem, toolStripSeparator1, exitToolStripMenuItem });",
+            "+//",
+            "+// openToolStripMenuItem",
+            "+//",
+            "+openToolStripMenuItem.Name = \"openToolStripMenuItem\";",
+            "+openToolStripMenuItem.Size = new Size(141, 22);",
+            "+openToolStripMenuItem.Text = \"&Open…\";",
+            "+private ToolStripMenuItem openToolStripMenuItem;",
+        ], Diff(InventoryForm, opened));
+        Assert.Contains("inventoryErrorProvider = new ErrorProvider(components);\n            openToolStripMenuItem = new ToolStripMenuItem();\n            mainMenuStrip.SuspendLayout();", opened, StringComparison.Ordinal);
+        Assert.Contains(Read(opened).Model.Components, c => c.Name == "openToolStripMenuItem");
+
+        // A top-level menu and a tool strip button reordered; an item removed leaves the array without it.
+        Assert.Equal(
+            ["-mainMenuStrip.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, helpToolStripMenuItem });", "+mainMenuStrip.Items.AddRange(new ToolStripItem[] { helpToolStripMenuItem, fileToolStripMenuItem });"],
+            Diff(InventoryForm, Apply(InventoryForm, Collection("mainMenuStrip", "Items", "AddRange", "System.Windows.Forms.ToolStripItem", Refs("helpToolStripMenuItem", "fileToolStripMenuItem")))));
+        var removed = Apply(InventoryForm, new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = "toolStripSeparator2" });
+        AssertAdded(
+        [
+            "-toolStripSeparator2 = new ToolStripSeparator();",
+            "-mainToolStrip.Items.AddRange(new ToolStripItem[] { newToolStripButton, toolStripSeparator2, searchToolStripLabel });",
+            "+mainToolStrip.Items.AddRange(new ToolStripItem[] { newToolStripButton, searchToolStripLabel });",
+            "-//",
+            "-// toolStripSeparator2",
+            "-//",
+            "-toolStripSeparator2.Name = \"toolStripSeparator2\";",
+            "-toolStripSeparator2.Size = new Size(6, 25);",
+            "-private ToolStripSeparator toolStripSeparator2;",
+        ], Diff(InventoryForm, removed));
+
+        // A new menu strip's first item: its Items line where Items sorts.
+        var strip = Apply(OrderForm,
+            new DesignerEdit
+            {
+                Kind = DesignerEditKinds.AddComponent, Component = "menuStrip1", Type = "System.Windows.Forms.MenuStrip", Parent = string.Empty,
+                Properties = [new("Location", Point(0, 0)), new("Name", DesignerValue.String("menuStrip1")), new("Size", Size(384, 24)), new("TabIndex", DesignerValue.Int(11)), new("Text", DesignerValue.String("menuStrip1"))],
+            },
+            new DesignerEdit
+            {
+                Kind = DesignerEditKinds.AddComponent, Component = "fileToolStripMenuItem", Type = "System.Windows.Forms.ToolStripMenuItem",
+                Properties = [new("Name", DesignerValue.String("fileToolStripMenuItem")), new("Size", Size(37, 20)), new("Text", DesignerValue.String("&File"))],
+            },
+            Collection("menuStrip1", "Items", "AddRange", "System.Windows.Forms.ToolStripItem", Refs("fileToolStripMenuItem")),
+            Set(string.Empty, "MainMenuStrip", DesignerValue.ReferenceTo("menuStrip1")));
+        Assert.Contains("            // menuStrip1\n            // \n            menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem });\n            menuStrip1.Location = new Point(0, 0);", strip, StringComparison.Ordinal);
+        Assert.Contains("            Controls.Add(menuStrip1);\n            Controls.Add(counterControl);", strip, StringComparison.Ordinal);
+        Assert.Contains("            buttonPanel.SuspendLayout();\n            menuStrip1.SuspendLayout();\n            SuspendLayout();", strip, StringComparison.Ordinal);
+        Assert.Contains("            buttonPanel.ResumeLayout(false);\n            menuStrip1.ResumeLayout(false);\n            menuStrip1.PerformLayout();\n            ResumeLayout(false);", strip, StringComparison.Ordinal);
+        Assert.Contains("            FormBorderStyle = FormBorderStyle.FixedDialog;\n            MainMenuStrip = menuStrip1;\n            MaximizeBox = false;", strip, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Data_bindings_are_the_controls_data_bindings_add_calls()
+    {
+        // The Text binding to another member: in place; a second property's binding: after the first; removed.
+        Assert.Equal(
+            ["-nameTextBox.DataBindings.Add(new Binding(\"Text\", itemBindingSource, \"Name\", true));", "+nameTextBox.DataBindings.Add(new Binding(\"Text\", itemBindingSource, \"Quantity\", true));"],
+            Diff(InventoryForm, Apply(InventoryForm, new DesignerEdit { Kind = DesignerEditKinds.SetDataBinding, Component = "nameTextBox", Property = "Text", Value = Binding("Text", "itemBindingSource", "Quantity") })));
+        var tag = Apply(InventoryForm, new DesignerEdit { Kind = DesignerEditKinds.SetDataBinding, Component = "nameTextBox", Property = "Tag", Value = Binding("Tag", "itemBindingSource", "InStock") });
+        Assert.Contains("nameTextBox.DataBindings.Add(new Binding(\"Text\", itemBindingSource, \"Name\", true));\n            nameTextBox.DataBindings.Add(new Binding(\"Tag\", itemBindingSource, \"InStock\", true));\n            inventoryHelpProvider.SetHelpString", tag, StringComparison.Ordinal);
+        Assert.Equal(["-nameTextBox.DataBindings.Add(new Binding(\"Text\", itemBindingSource, \"Name\", true));"],
+            Diff(InventoryForm, Apply(InventoryForm, new DesignerEdit { Kind = DesignerEditKinds.SetDataBinding, Component = "nameTextBox", Property = "Text" })));
+
+        // A control bound for the first time: where DataBindings sorts; the binding source removed takes its bindings.
+        var list = Apply(InventoryForm, new DesignerEdit { Kind = DesignerEditKinds.SetDataBinding, Component = "categoryListBox", Property = "Text", Value = Binding("Text", "itemBindingSource", "Name") });
+        Assert.Contains("categoryListBox.ContextMenuStrip = itemsContextMenuStrip;\n            categoryListBox.DataBindings.Add(new Binding(\"Text\", itemBindingSource, \"Name\", true));\n            categoryListBox.FormattingEnabled", list, StringComparison.Ordinal);
+        var unbound = Apply(InventoryForm, new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = "itemBindingSource" });
+        Assert.DoesNotContain("itemBindingSource", unbound, StringComparison.Ordinal);
+        Assert.DoesNotContain("DataBindings", unbound, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_localizable_forms_properties_go_to_its_resx_and_per_culture()
+    {
+        // A localizable property: the default .resx's value, nothing in the code.
+        var (code, resources) = ApplyWithResources("AboutForm", Resource("okButton.Text", DesignerResource.String("Close")));
+        Assert.Equal(AboutForm, code);
+        Assert.Equal(["-<value>OK</value>", "+<value>Close</value>"], Diff(Resx("AboutForm.resx"), resources.Get(null)!.Text));
+
+        // In French: AboutForm.fr.resx; in German, a new AboutForm.de.resx with only that key.
+        (_, resources) = ApplyWithResources("AboutForm", Resource("titleLabel.Text", null, "fr"));
+        Assert.Equal(
+        [
+            "-<data name=\"titleLabel.Text\" xml:space=\"preserve\">",
+            "-<value>Codalus WinForms (français)</value>",
+            "-</data>",
+        ], Diff(Resx("AboutForm.fr.resx"), resources.Get("fr")!.Text));
+        (_, resources) = ApplyWithResources("AboutForm",
+            Resource("okButton.Text", DesignerResource.String("Fermer la fenêtre"), "fr"),
+            Resource("okButton.Text", DesignerResource.String("Schließen"), "de"));
+        Assert.Equal(["-<value>Fermer</value>", "+<value>Fermer la fenêtre</value>"], Diff(Resx("AboutForm.fr.resx"), resources.Get("fr")!.Text));
+        Assert.Equal(Resx("AboutForm.resx"), resources.Get(null)!.Text);
+        var german = resources.Get("de")!.Text;
+        Assert.Equal(ResxText.Empty.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("</root>", "  <data name=\"okButton.Text\" xml:space=\"preserve\">\n    <value>Schließen</value>\n  </data>\n</root>", StringComparison.Ordinal), german);
+        Assert.Contains(resources.Changes, c => c.Path.EndsWith("AboutForm.de.resx", StringComparison.Ordinal) && c.Before is null);
+        Assert.Equal(["de", "fr"], resources.Cultures);
+
+        // A property that was in the code moves to the resources: ApplyResources first in the component's section,
+        // the assignment gone; its key in a new group before the form's ($this) entries, with Visual Studio's records.
+        DesignerResource Point(string text) => new() { Type = "System.Drawing.Point, System.Drawing", Text = text, AssemblyAlias = "System.Drawing", AssemblyName = "System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" };
+        (code, resources) = ApplyWithResources("AboutForm",
+            new DesignerEdit { Kind = DesignerEditKinds.SetLocalized, Component = "versionLabel", Localized = true },
+            Set("versionLabel", "Text", null),
+            Set("versionLabel", "Location", null),
+            new DesignerEdit { Kind = DesignerEditKinds.SetResource, Component = "versionLabel", Property = "Text", Resource = DesignerResource.String("Version 1.0") },
+            new DesignerEdit { Kind = DesignerEditKinds.SetResource, Component = "versionLabel", Property = "Location", Resource = Point("12, 36") },
+            Resource(">>versionLabel.Name", DesignerResource.String("versionLabel")),
+            Resource(">>versionLabel.Parent", DesignerResource.String("$this")));
+        Assert.Equal(
+        [
+            "+resources.ApplyResources(this.versionLabel, \"versionLabel\");",
+            "-this.versionLabel.Location = new System.Drawing.Point(12, 36);",
+            "-this.versionLabel.Text = \"Version 1.0\";",
+        ], Diff(AboutForm, code));
+        Assert.Contains("            // versionLabel\n            // \n            resources.ApplyResources(this.versionLabel, \"versionLabel\");\n            this.versionLabel.Anchor", code, StringComparison.Ordinal);
+        Assert.Equal(
+        [
+            "+<data name=\"versionLabel.Location\" type=\"System.Drawing.Point, System.Drawing\">",
+            "+<value>12, 36</value>",
+            "+</data>",
+            "+<data name=\"versionLabel.Text\" xml:space=\"preserve\">",
+            "+<value>Version 1.0</value>",
+            "+</data>",
+            "+<data name=\"&gt;&gt;versionLabel.Name\" xml:space=\"preserve\">",
+            "+<value>versionLabel</value>",
+            "+</data>",
+            "+<data name=\"&gt;&gt;versionLabel.Parent\" xml:space=\"preserve\">",
+            "+<value>$this</value>",
+            "+</data>",
+        ], Diff(Resx("AboutForm.resx"), resources.Get(null)!.Text));
+        Assert.Contains("    <value>0</value>\n  </data>\n  <data name=\"versionLabel.Location\"", resources.Get(null)!.Text, StringComparison.Ordinal);
+
+        // Back out of the resources: ApplyResources goes when the shell says so.
+        (code, _) = ApplyWithResources("AboutForm", new DesignerEdit { Kind = DesignerEditKinds.SetLocalized, Component = "okButton", Localized = false });
+        Assert.Equal(["-resources.ApplyResources(this.okButton, \"okButton\");"], Diff(AboutForm, code));
+    }
+
+    [Fact]
+    public void Renaming_or_removing_a_localized_component_renames_or_removes_its_resource_keys()
+    {
+        var (code, resources) = ApplyWithResources("AboutForm", new DesignerEdit { Kind = DesignerEditKinds.RenameComponent, Component = "okButton", NewName = "closeButton" });
+        Assert.DoesNotContain("okButton", code.Replace("okButton_Click", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains("resources.ApplyResources(this.closeButton, \"closeButton\");", code, StringComparison.Ordinal);
+        Assert.Contains("this.closeButton.Click += new System.EventHandler(this.okButton_Click);", code, StringComparison.Ordinal);
+        var resx = resources.Get(null)!.Text;
+        Assert.DoesNotContain("okButton", resx, StringComparison.Ordinal);
+        Assert.Equal(
+        [
+            "-<data name=\"okButton.Anchor\" type=\"System.Windows.Forms.AnchorStyles, System.Windows.Forms\">",
+            "+<data name=\"closeButton.Anchor\" type=\"System.Windows.Forms.AnchorStyles, System.Windows.Forms\">",
+            "-<data name=\"okButton.Location\" type=\"System.Drawing.Point, System.Drawing\">",
+            "+<data name=\"closeButton.Location\" type=\"System.Drawing.Point, System.Drawing\">",
+            "-<data name=\"okButton.Size\" type=\"System.Drawing.Size, System.Drawing\">",
+            "+<data name=\"closeButton.Size\" type=\"System.Drawing.Size, System.Drawing\">",
+            "-<data name=\"okButton.TabIndex\" type=\"System.Int32, mscorlib\">",
+            "+<data name=\"closeButton.TabIndex\" type=\"System.Int32, mscorlib\">",
+            "-<data name=\"okButton.Text\" xml:space=\"preserve\">",
+            "+<data name=\"closeButton.Text\" xml:space=\"preserve\">",
+            "-<data name=\"&gt;&gt;okButton.Name\" xml:space=\"preserve\">",
+            "-<value>okButton</value>",
+            "+<data name=\"&gt;&gt;closeButton.Name\" xml:space=\"preserve\">",
+            "+<value>closeButton</value>",
+            "-<data name=\"&gt;&gt;okButton.Type\" xml:space=\"preserve\">",
+            "+<data name=\"&gt;&gt;closeButton.Type\" xml:space=\"preserve\">",
+            "-<data name=\"&gt;&gt;okButton.Parent\" xml:space=\"preserve\">",
+            "+<data name=\"&gt;&gt;closeButton.Parent\" xml:space=\"preserve\">",
+            "-<data name=\"&gt;&gt;okButton.ZOrder\" xml:space=\"preserve\">",
+            "+<data name=\"&gt;&gt;closeButton.ZOrder\" xml:space=\"preserve\">",
+        ], Diff(Resx("AboutForm.resx"), resx));
+        Assert.Equal(["-<data name=\"okButton.Text\" xml:space=\"preserve\">", "+<data name=\"closeButton.Text\" xml:space=\"preserve\">"], Diff(Resx("AboutForm.fr.resx"), resources.Get("fr")!.Text));
+
+        // Removed: its keys go from every culture's resources.
+        (code, resources) = ApplyWithResources("AboutForm", new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = "titleLabel" });
+        Assert.DoesNotContain("titleLabel", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("titleLabel", resources.Get(null)!.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("titleLabel", resources.Get("fr")!.Text, StringComparison.Ordinal);
+        Assert.Contains("okButton.Text", resources.Get("fr")!.Text, StringComparison.Ordinal);
+        Assert.All(Diff(Resx("AboutForm.resx"), resources.Get(null)!.Text), l => Assert.StartsWith("-", l, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_image_imported_into_the_forms_resources_is_get_object_and_its_resx_entry()
+    {
+        // A non-localizable form: the code reads it with GetObject, the .resx holds the bytes (with its group, before the Image).
+        var png = new DesignerResource
+        {
+            Type = "System.Drawing.Bitmap, System.Drawing",
+            MimeType = "application/x-microsoft.net.object.bytearray.base64",
+            Text = "\r\n        iVBORw0KGgo=\r\n",
+            AssemblyAlias = "System.Drawing",
+            AssemblyName = "System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a",
+        };
+        var resource = new DesignerValue { Kind = DesignerValueKinds.Resource, Type = "System.Drawing.Image", Value = "logoPictureBox.BackgroundImage" };
+        var (code, resources) = ApplyWithResources("OrderForm", Resource("logoPictureBox.BackgroundImage", png), Set("logoPictureBox", "BackgroundImage", resource));
+        Assert.Equal(["+logoPictureBox.BackgroundImage = (Image)resources.GetObject(\"logoPictureBox.BackgroundImage\");"], Diff(OrderForm, code));
+        Assert.Equal(
+        [
+            "+<data name=\"logoPictureBox.BackgroundImage\" type=\"System.Drawing.Bitmap, System.Drawing\" mimetype=\"application/x-microsoft.net.object.bytearray.base64\">",
+            "+<value>",
+            "+iVBORw0KGgo=",
+            "+</value>",
+            "+</data>",
+        ], Diff(Resx("OrderForm.resx"), resources.Get(null)!.Text));
+        Assert.Contains("  <assembly alias=\"System.Drawing\" name=\"System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a\" />\n  <data name=\"logoPictureBox.BackgroundImage\"", resources.Get(null)!.Text, StringComparison.Ordinal);
+        Assert.Contains("  <data name=\"logoPictureBox.BackgroundImage\" type=\"System.Drawing.Bitmap, System.Drawing\" mimetype=\"application/x-microsoft.net.object.bytearray.base64\">\n    <value>\n        iVBORw0KGgo=\n</value>\n  </data>\n  <data name=\"logoPictureBox.Image\"",
+            resources.Get(null)!.Text, StringComparison.Ordinal);
+
+        // A form without resources: the resources variable first (after components), and its .resx created.
+        var (main, mainResources) = ApplyWithResources("MainForm", Resource("resetButton.Image", png),
+            Set("resetButton", "Image", resource with { Value = "resetButton.Image" }));
+        Assert.Contains("    {\n        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));\n        greetingLabel = new Label();", main, StringComparison.Ordinal);
+        Assert.Contains("        resetButton.Image = (Image)resources.GetObject(\"resetButton.Image\");\n        resetButton.Location", main, StringComparison.Ordinal);
+        Assert.Contains("<data name=\"resetButton.Image\"", mainResources.Get(null)!.Text, StringComparison.Ordinal);
+
+        // The image's last use removed: so are its key and the resources variable.
+        var (noLogo, logoResources) = ApplyWithResources("OrderForm", new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = "logoPictureBox" });
+        Assert.DoesNotContain("ComponentResourceManager", noLogo, StringComparison.Ordinal);
+        Assert.DoesNotContain("logoPictureBox", logoResources.Get(null)!.Text, StringComparison.Ordinal);
+        Assert.Contains("orderToolTip.TrayLocation", logoResources.Get(null)!.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_image_lists_images_and_tray_locations()
+    {
+        // An image list's images: its stream from the resources, then a SetKeyName each after its properties.
+        var stream = new DesignerValue { Kind = DesignerValueKinds.Resource, Type = "System.Windows.Forms.ImageListStreamer", Value = "iconImageList.ImageStream" };
+        var images = Apply(InventoryForm, Set("iconImageList", "ImageStream", stream), Collection("iconImageList", "Images", "SetKeyName", null, DesignerValue.String("new.png"), DesignerValue.String("open.png")));
+        Assert.Contains(
+            "            iconImageList.ImageSize = new Size(24, 24);\n            iconImageList.ImageStream = (ImageListStreamer)resources.GetObject(\"iconImageList.ImageStream\");\n            iconImageList.TransparentColor = Color.Transparent;\n            iconImageList.Images.SetKeyName(0, \"new.png\");\n            iconImageList.Images.SetKeyName(1, \"open.png\");\n",
+            images, StringComparison.Ordinal);
+        Assert.Contains(Read(images).Model.Statements, s => s is { Kind: DesignerStatementKinds.Call, Member: "Images.SetKeyName" });
+
+        // The tray's arrangement: TrayLocation metadata, in place or with the component's group.
+        var point = new DesignerResource { Type = "System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a", Text = "140, 17" };
+        var (_, resources) = ApplyWithResources("InventoryForm", Resource("mainToolStrip.TrayLocation", point, metadata: true));
+        Assert.Equal(["-<value>132, 17</value>", "+<value>140, 17</value>"], Diff(Resx("InventoryForm.resx"), resources.Get(null)!.Text));
+        Assert.Equal(["mainMenuStrip", "mainToolStrip", "mainStatusStrip", "itemsContextMenuStrip", "iconImageList", "itemBindingSource", "inventoryToolTip", "inventoryHelpProvider", "inventoryErrorProvider"],
+            new ResxText(Resx("InventoryForm.resx")).TrayLocations().OrderBy(t => t.Value.Y).ThenBy(t => t.Value.X).Select(t => t.Key));
+        Assert.True(new ResxText(Resx("AboutForm.resx")).IsLocalizable);
+        Assert.False(new ResxText(Resx("OrderForm.resx")).IsLocalizable);
     }
 }

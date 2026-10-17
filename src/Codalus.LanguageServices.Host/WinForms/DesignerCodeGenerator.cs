@@ -50,6 +50,9 @@ internal sealed class DesignerCodeGenerator(DesignerModel model, string indent, 
         return indent + code + newLine;
     }
 
+    /// <summary>A local's declaration (M41b): <c>ListViewItem listViewItem1 = new ListViewItem("Hammer");</c>.</summary>
+    public string LocalDeclaration(string name, DesignerValue value) => $"{indent}{Type(value.Type!)} {name} = {Value(value)};{newLine}";
+
     /// <summary>A section comment for <paramref name="name"/>.</summary>
     public string Section(string name, string sectionRule) => Statement(new DesignerStatement { Kind = DesignerStatementKinds.Section, Target = name }, sectionRule);
 
