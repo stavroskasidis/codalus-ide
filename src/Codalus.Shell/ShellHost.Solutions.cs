@@ -200,12 +200,13 @@ public sealed partial class ShellHost
 
     public async Task CloseSolutionAsync()
     {
-        CloseCodeSearchIndex();
+        var savingIndex = CloseCodeSearchIndex();
         CloseSolutionState();
         CloseSolutionDocuments();
         await Solutions.CloseAsync().ConfigureAwait(true);
         Git.Close();
         Workbench.Settings.SetWorkspaceFile(null);
+        await savingIndex.ConfigureAwait(true); // the completed index is on disk once the solution has closed
     }
 
     public async Task TrustSolutionAsync()

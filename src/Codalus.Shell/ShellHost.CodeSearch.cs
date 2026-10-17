@@ -805,7 +805,7 @@ public sealed partial class ShellHost : ICodeSearchHost
     /// <summary>A solution opens: its saved index is read in the background (before the language host has loaded anything).</summary>
     private void OpenCodeSearchIndex(SolutionStateKey key)
     {
-        CloseCodeSearchIndex();
+        _ = CloseCodeSearchIndex(); // the previous solution's write is queued in the solution state
         _indexKey = key;
         _ = LoadCodeSearchIndexAsync(key);
     }
@@ -825,24 +825,32 @@ public sealed partial class ShellHost : ICodeSearchHost
         }
     }
 
-    /// <summary>The solution closes: the index is saved (when it changed) and forgotten.</summary>
-    private void CloseCodeSearchIndex()
+    /// <summary>
+    /// The solution closes: the index is saved (when it changed) and forgotten. The returned task is the write, which
+    /// is also queued in the solution's state (its flush waits for it).
+    /// </summary>
+    private Task CloseCodeSearchIndex()
     {
         _indexRefresh?.Cancel();
         _indexTimer?.Stop();
         _indexPending.Clear();
-        SaveCodeSearchIndex(onlyIfChanged: true);
+        var saving = SaveCodeSearchIndex(onlyIfChanged: true);
         _indexKey = null;
         _projectOfFile = null;
         CodeSearchIndex.Clear();
         _ = ReleasePreviewAsync();
+        return saving;
     }
 
-    private void SaveCodeSearchIndex(bool onlyIfChanged)
+    /// <summary>
+    /// Queues the index's write in the solution's state now (serialized on this thread, written in the background) and
+    /// returns it; a failure is logged, never thrown.
+    /// </summary>
+    private Task SaveCodeSearchIndex(bool onlyIfChanged)
     {
         if (_indexKey is not { } key || onlyIfChanged && !_indexUnsaved || !CodeSearchIndex.IsComplete)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         _indexUnsaved = false;
@@ -851,7 +859,29 @@ public sealed partial class ShellHost : ICodeSearchHost
             CodeSearchIndex.SetFiles(files.Files);
         }
 
-        _ = CodeSearchIndex.SaveAsync(SolutionState, key);
+        Task write;
+        try
+        {
+            write = CodeSearchIndex.SaveAsync(SolutionState, key);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            write = Task.FromException(ex);
+        }
+
+        return LogFailureAsync(write, key);
+
+        async Task LogFailureAsync(Task pending, SolutionStateKey solution)
+        {
+            try
+            {
+                await pending.ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                Workbench.Log.AppendLine($"[code search] Could not save the index of {Path.GetFileName(solution.Path)}: {ex.Message}");
+            }
+        }
     }
 
     private void OnCodeSearchLanguageStatus(string languageId, WorkspaceStatusParams status)
@@ -882,21 +912,18 @@ public sealed partial class ShellHost : ICodeSearchHost
         {
             var started = System.Diagnostics.Stopwatch.StartNew();
             var index = await client.SymbolIndexAsync(null, cts.Token).ConfigureAwait(true);
+            var files = await CodeSearchFilesAsync().ConfigureAwait(true);
             if (cts.IsCancellationRequested || _indexKey != key)
             {
                 return;
             }
 
+            // The index becomes complete, unsaved and queued for writing with no await between: a solution (or the
+            // window) closing the moment it is complete must never find it complete but not yet marked unsaved.
             CodeSearchIndex.Replace(index.Documents);
-            var files = await CodeSearchFilesAsync().ConfigureAwait(true);
-            if (_indexKey != key)
-            {
-                return;
-            }
-
             CodeSearchIndex.SetFiles(files);
             _indexUnsaved = true;
-            SaveCodeSearchIndex(onlyIfChanged: false);
+            _ = SaveCodeSearchIndex(onlyIfChanged: false);
             Workbench.Log.AppendLine($"[code search] Indexed {CodeSearchIndex.SymbolCount} symbols in {CodeSearchIndex.DocumentCount} documents in {started.ElapsedMilliseconds} ms.");
         }
         catch (Exception ex) when (ex is OperationCanceledException or Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or InvalidOperationException or ObjectDisposedException)
