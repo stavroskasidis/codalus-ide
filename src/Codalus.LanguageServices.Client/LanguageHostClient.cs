@@ -411,6 +411,14 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public async Task<SymbolInformation[]> WorkspaceSymbolsAsync(string query, CancellationToken cancellationToken) =>
         await InvokeNullable(Methods.WorkspaceSymbol, new WorkspaceSymbolParams(query), ProtocolJsonContext.Default.WorkspaceSymbolParams, ProtocolJsonContext.Default.SymbolInformationArray, cancellationToken).ConfigureAwait(false) ?? [];
 
+    /// <summary>Code Search's index: the declarations of the given documents, or of the whole solution (ADR 0078).</summary>
+    public async Task<SymbolIndexResult> SymbolIndexAsync(string[]? uris, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.SymbolIndex, new SymbolIndexParams(uris), ProtocolJsonContext.Default.SymbolIndexParams, ProtocolJsonContext.Default.SymbolIndexResult, cancellationToken).ConfigureAwait(false) ?? new SymbolIndexResult([]);
+
+    /// <summary>Types of the referenced assemblies matching a query, in <c>codalus-metadata:</c> documents.</summary>
+    public async Task<SymbolInformation[]> ExternalSymbolsAsync(string query, int limit, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.ExternalSymbols, new ExternalSymbolsParams(query, limit), ProtocolJsonContext.Default.ExternalSymbolsParams, ProtocolJsonContext.Default.SymbolInformationArray, cancellationToken).ConfigureAwait(false) ?? [];
+
     public Task<MetadataText?> MetadataTextAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.MetadataText, new MetadataTextParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.MetadataTextParams, ProtocolJsonContext.Default.MetadataText, cancellationToken);
 
@@ -491,6 +499,18 @@ public sealed class LanguageHostClient : IAsyncDisposable
     /// <summary>An <c>.axaml</c> file's logical tree, for the previewer's selection (M19a).</summary>
     public Task<XamlLogicalTreeResult?> XamlLogicalTreeAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.XamlLogicalTree, new XamlLogicalTreeParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.XamlLogicalTreeParams, ProtocolJsonContext.Default.XamlLogicalTreeResult, cancellationToken);
+
+    /// <summary><c>codalus/winforms/read</c>: a form's designer model from its code or designer file, or why it opens as code (M41a, ADR 0073).</summary>
+    public Task<WinFormsReadResult?> WinFormsReadAsync(string uri, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.WinFormsRead, new WinFormsReadParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.WinFormsReadParams, ProtocolJsonContext.Default.WinFormsReadResult, cancellationToken);
+
+    /// <summary><c>codalus/winforms/edit</c>: the designer's changes as minimal text edits (M41a, ADR 0073).</summary>
+    public Task<WinFormsEditResult?> WinFormsEditAsync(WinFormsEditParams parameters, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.WinFormsEdit, parameters, ProtocolJsonContext.Default.WinFormsEditParams, ProtocolJsonContext.Default.WinFormsEditResult, cancellationToken);
+
+    /// <summary><c>codalus/winforms/toolbox</c>: a project's own components and controls, for the Toolbox (M41a, ADR 0073).</summary>
+    public Task<WinFormsToolboxResult?> WinFormsToolboxAsync(string project, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.WinFormsToolbox, new WinFormsToolboxParams(project), ProtocolJsonContext.Default.WinFormsToolboxParams, ProtocolJsonContext.Default.WinFormsToolboxResult, cancellationToken);
 
     public Task<CodeMetricsResult?> CodeMetricsAsync(string? uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.CodeMetrics, new CodeMetricsParams(uri is null ? null : new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.CodeMetricsParams, ProtocolJsonContext.Default.CodeMetricsResult, cancellationToken);

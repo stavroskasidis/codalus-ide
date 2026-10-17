@@ -229,6 +229,16 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (WarnIfWindowsOnly(project))
+        {
+            return; // a WinForms, WPF or WinUI app off Windows (M40a, M44)
+        }
+
+        if (await TryStartPackagedAppAsync(project, debug: true).ConfigureAwait(true))
+        {
+            return; // a packaged WinUI 3 app (M44): started by Windows, then netcoredbg attaches
+        }
+
         if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })

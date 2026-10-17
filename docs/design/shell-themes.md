@@ -1,6 +1,6 @@
 # Shell themes: Harbor, Graphite, Daylight and Ember
 
-Four theme families for the shell. Each comes in Light, Dark and High contrast. They keep a classic IDE's layout and the icon palette, but each has its own colors and some layout differences. The maintainer asked for them on 2026-10-16 ("close to Visual Studio style but original too") and wants every one shipped, so users pick one. Nothing here is built yet: [M45](../roadmap.md#m45--theme-families) implements the families, and [M46](../roadmap.md#m46--first-run-setup) adds the first-run setup that offers them. [D32](../roadmap.md#decision-register) settled the rest on 2026-10-16: Harbor with Follow System is the default for new installs, today's Blue, Light, Dark and High Contrast stay as a Classic family, and `workbench.colorTheme` takes `<family>` or `<family>.<light|dark|highContrast>`.
+Four theme families for the shell. Each comes in Light, Dark and High contrast. They keep a classic IDE's layout and the icon palette, but each has its own colors and some layout differences. The maintainer asked for them on 2026-10-16 ("close to Visual Studio style but original too") and wants every one shipped, so users pick one. [M45](../roadmap.md#m45--theme-families) built the families ([ADR 0077](../adr/0077-theme-families.md), [checkpoint](../checkpoints/m45.md)): their colors come from the tables below, which the tests read, and their shapes from the Shapes table as tokens; the layout differences that need more than a value (Daylight's rail and toolbar groups, Ember's run controls in the title bar, Graphite's search box in the title row, tool window tabs in the header) wait for their own work. [M46](../roadmap.md#m46--first-run-setup) built the first-run setup that offers them ([checkpoint](../checkpoints/m46.md)): its appearance step follows the design below, its other steps are the setup window's own. [D32](../roadmap.md#decision-register) settled the rest on 2026-10-16: Harbor with Follow System is the default for new installs, today's Blue, Light, Dark and High Contrast stay as a Classic family, and `workbench.colorTheme` takes `<family>` or `<family>.<light|dark|highContrast>`.
 
 | | Light | Dark | High contrast |
 |---|---|---|---|
@@ -26,7 +26,7 @@ The mockups use web fonts (IBM Plex, Instrument Sans, Public Sans, Geist, with t
 - **Layout:** Visual Studio's layout and terms: the menu bar, the configuration and platform pickers, the Start button, Solution Explorer, docked tool windows, the Error List, and the status bar's states (ready, debugging, no solution). Nothing says "Visual Studio" (CLAUDE.md's UI rules).
 - **The logo:** the two-wing mark (`assets/logo/codalus.svg`) in the title bar; High contrast uses the single-color mark (`codalus-mono.svg`) in the text color.
 - **Icons:** the icon rule from [`ui-guidelines.md`](../ui-guidelines.md#icons). The Light variants use Visual Studio's light image palette and the Dark variants its dark palette. In High Contrast every icon is monochrome, and shape carries the meaning.
-- **Contrast:** text meets WCAG AA (4.5:1) on what it's drawn on in Light and Dark, and 7:1 in High contrast. Icons, focus rings and other graphics meet 3:1. Every pair in the tables below was checked. M45 adds them to `tests/Codalus.Shell.Tests/TestData/contrast-pairs.txt`, so `PolishTests` keeps checking them.
+- **Contrast:** text meets WCAG AA (4.5:1) on what it's drawn on in Light and Dark, and 7:1 in High contrast. Icons, focus rings and other graphics meet 3:1. Every pair in the tables below was checked. M45 added them to `tests/Codalus.Shell.Tests/TestData/contrast-pairs.txt`, so `PolishTests` keeps checking them.
 - **High contrast:** black surfaces, white text, and white borders around every tool window and field. The family's accent marks selection, the active tab, the focused caption and the status bar, always with black text. Each family keeps its shapes, so its High contrast variant still looks like the family.
 - **Editor colors:** each family has syntax colors for Light, Dark and High contrast, listed below. Fonts and Colors (M23a) still overrides them.
 
@@ -90,7 +90,7 @@ Each family's layout differences become shape tokens and style classes in `Shell
 
 ## Colors
 
-The tokens are those of [`ui-guidelines.md`](../ui-guidelines.md#tokens). Tokens marked "new" don't exist yet; M45 adds them. Editor rows are the C# classification colors. A token missing from a family's table (such as captions in Graphite, Daylight and Ember) takes that family's panel colors.
+The tokens are those of [`ui-guidelines.md`](../ui-guidelines.md#tokens). Tokens marked "new" were added by M45. Editor rows are the C# classification colors. A token missing from a family's table (such as captions in Graphite, Daylight and Ember) takes that family's panel colors.
 
 ### Harbor colors
 
@@ -268,7 +268,7 @@ The tokens are those of [`ui-guidelines.md`](../ui-guidelines.md#tokens). Tokens
 
 ![The setup's appearance step](shell-themes/previews/setup-appearance.png)
 
-The first step of the first-run setup (M46):
+The first step of the first-run setup (M46, built as `SetupWindow`; the smoke step `shell.setup` photographs it as the website's `setup.png`):
 
 - **The four families as cards:** each card has a small picture of the family's layout in the chosen mode and a line about it.
 - **A mode picker:** Light, Dark, High contrast or Match system. Match system is the default and follows the OS's light, dark and high-contrast settings, as Follow System does today.

@@ -3,6 +3,7 @@ using Codalus.Platform;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
 using Codalus.Workbench.Mobile;
+using Codalus.Workbench.Projects;
 using Codalus.Workbench.Setup;
 
 namespace Codalus.Shell;
@@ -65,7 +66,7 @@ public sealed partial class ShellHost
     {
         try
         {
-            Tools = [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true), .. await MobileToolsAsync().ConfigureAwait(true)];
+            Tools = [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true), .. await MobileToolsAsync().ConfigureAwait(true), .. await WindowsAppToolsAsync().ConfigureAwait(true)];
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {
@@ -155,6 +156,8 @@ public sealed partial class ShellHost
             : null
         : tool.Id.StartsWith(WorkloadToolPrefix, StringComparison.Ordinal)
         ? new InstallPlan(tool.Id, InstallKind.Terminal, Localizer.Format("msg.setup.installWorkload", "Install the .NET workload {0}", tool.Id[WorkloadToolPrefix.Length..]), "dotnet workload install " + tool.Id[WorkloadToolPrefix.Length..])
+        : WindowsApps.PlanFor(tool, hasWinget: Workbench.Platform == PlatformKind.Windows && EnvironmentCheck.FindOnPath("winget") is not null) is { } windowsApp
+        ? windowsApp // Developer Mode's Settings page, the Windows App SDK runtime (M44)
         : InstallPlans.For(
         tool,
         Workbench.Platform,
@@ -202,7 +205,15 @@ public sealed partial class ShellHost
         switch (plan.Kind)
         {
             case InstallKind.OpenPage:
-                ShellIntegration.OpenUrl(new Uri(plan.Command));
+                if (plan.Command.StartsWith("ms-settings:", StringComparison.Ordinal))
+                {
+                    OpenWindowsSettings(plan.Command["ms-settings:".Length..]); // Developer Mode (M44)
+                }
+                else
+                {
+                    ShellIntegration.OpenUrl(new Uri(plan.Command));
+                }
+
                 return;
             case InstallKind.Terminal:
                 RunInstallInTerminal(plan);

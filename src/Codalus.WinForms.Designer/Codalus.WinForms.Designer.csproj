@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!--
+      Windows Forms code (M41a, ADR 0073): the Windows Forms designer's host, run with `dotnet exec` on the designed
+      project's app's runtimeconfig.json and deps.json (so on the app's .NET and Windows Forms), hosting the framework's
+      own DesignSurface (dotnet/winforms, MIT, part of the Windows Desktop runtime: nothing of it ships with the IDE).
+      It loads into the user's Windows Forms version, so it targets the oldest supported one and references nothing but
+      the framework. It builds on every OS (EnableWindowsTargeting) and ships only in the Windows package
+      (winformsdesigner/ next to the shell).
+    -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>codalus-winformsdesigner</AssemblyName>
+    <RootNamespace>Codalus.WinForms.Designer</RootNamespace>
+    <Description>Codalus IDE: the Windows Forms designer's host (M41a, ADR 0073). Runs the user's code, only for trusted folders.</Description>
+    <UseAppHost>false</UseAppHost>
+    <RollForward>Major</RollForward>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <IsTrimmable>false</IsTrimmable>
+    <!-- The SDK's InitializeComponent analyzers are about the user's code, not this host. -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Windows Forms' implicit usings bring its Timer; the linked JSON-RPC code means the threading one. -->
+    <Using Include="System.Threading.Timer" Alias="Timer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- JSON-RPC over stdio, as every host speaks it, and the designer's model and protocol: linked, so nothing but the framework is referenced. -->
+    <Compile Include="..\Codalus.Rpc\Framing.cs" Link="Protocol\Framing.cs" />
+    <Compile Include="..\Codalus.Rpc\JsonRpcConnection.cs" Link="Protocol\JsonRpcConnection.cs" />
+    <Compile Include="..\Codalus.LanguageServices.Protocol\WinFormsDesign.cs" Link="Protocol\WinFormsDesign.cs" />
+    <Compile Include="..\Codalus.Workbench\WinForms\WinFormsDesignerProtocol.cs" Link="Protocol\WinFormsDesignerProtocol.cs" />
+  </ItemGroup>
+</Project>

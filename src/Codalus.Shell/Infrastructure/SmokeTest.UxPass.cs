@@ -18,7 +18,16 @@ namespace Codalus.Shell.Infrastructure;
 /// </summary>
 internal sealed partial class SmokeTest
 {
-    private static readonly string[] s_galleryThemes = ["blue", "light", "dark", "highContrast"];
+    /// <summary>Classic's four themes, which the UX pass photographs.</summary>
+    private static readonly string[] s_classicThemes = ["blue", "light", "dark", "highContrast"];
+
+    /// <summary>
+    /// The gallery's themes: Classic's four, or with <c>CODALUS_GALLERY_THEMES=all</c> also the theme families' twelve
+    /// variants (M45), for the maintainer's review: four times the pictures, more than the smoke test's time on CI.
+    /// </summary>
+    private static readonly string[] s_galleryThemes = Environment.GetEnvironmentVariable("CODALUS_GALLERY_THEMES") == "all"
+        ? [.. ThemeService.Themes.Select(t => t.Id)]
+        : s_classicThemes;
 
     private async Task UxPassStepsAsync()
     {
@@ -102,7 +111,7 @@ internal sealed partial class SmokeTest
             var before = shell.Theme.Setting;
             await OpenAsync(Program).ConfigureAwait(true);
             var bar = window.GetVisualDescendants().OfType<Menu>().First(m => m.Name == "MenuBar");
-            foreach (var theme in s_galleryThemes)
+            foreach (var theme in s_classicThemes)
             {
                 await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
                 await WaitAsync(() => shell.Theme.ActiveTheme == theme, $"the {theme} theme applies").ConfigureAwait(true);
@@ -137,7 +146,7 @@ internal sealed partial class SmokeTest
             await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 60).ConfigureAwait(true);
             greeter.Editor.TextArea.Focus();
             var before = shell.Theme.Setting;
-            foreach (var theme in s_galleryThemes)
+            foreach (var theme in s_classicThemes)
             {
                 await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
                 await WaitAsync(() => shell.Theme.ActiveTheme == theme, $"the {theme} theme applies").ConfigureAwait(true);

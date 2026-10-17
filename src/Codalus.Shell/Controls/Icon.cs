@@ -98,7 +98,7 @@ public sealed class Icon : Control
 
             kind = kind[..at];
         }
-        else if (kind is not null && !kind.StartsWith(IconSet.MaterialPrefix, StringComparison.Ordinal) && !kind.StartsWith(IconSet.ClassicPrefix, StringComparison.Ordinal) && !IsSet(ForegroundProperty) && ActualThemeVariant != Theming.ThemeService.HighContrast
+        else if (kind is not null && !kind.StartsWith(IconSet.MaterialPrefix, StringComparison.Ordinal) && !kind.StartsWith(IconSet.ClassicPrefix, StringComparison.Ordinal) && !IsSet(ForegroundProperty) && !Theming.ThemeService.IsHighContrast(ActualThemeVariant)
                  && CommandIcons.DefaultColorOf(kind) is { } color
                  && this.TryFindResource("Shell.Icon." + char.ToUpperInvariant(color[0]) + color[1..], ActualThemeVariant, out var token) && token is IBrush colored)
         {
@@ -113,7 +113,7 @@ public sealed class Icon : Control
             // Multicolor icons (file types) take the Visual Studio palette's nearest color in the current theme (folders its
             // tan), except in High Contrast, where shape carries the meaning. The classic file icons' unfilled parts (pages,
             // outlines) are the theme's outline gray.
-            var monochrome = ActualThemeVariant == Theming.ThemeService.HighContrast;
+            var monochrome = Theming.ThemeService.IsHighContrast(ActualThemeVariant);
             var folder = kind!.StartsWith("mi:folder", StringComparison.Ordinal);
             var outline = kind.StartsWith(IconSet.ClassicPrefix, StringComparison.Ordinal)
                 && this.TryFindResource("Shell.Icon.Outline", ActualThemeVariant, out var gray) && gray is IBrush outlineBrush ? outlineBrush : brush;
@@ -317,6 +317,7 @@ public static class IconSet
         ["container"] = "cube_16_regular",
         ["publish"] = "cloud_arrow_up_16_regular",
         ["build"] = "toolbox_16_regular",
+        ["toolbox"] = "toolbox_16_regular",
         ["cancel"] = "dismiss_circle_16_regular",
         ["layers"] = "stack_16_regular",
         ["timer"] = "timer_16_regular",

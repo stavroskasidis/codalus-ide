@@ -30,6 +30,17 @@ The tree shows the solution, its solution folders, projects, project folders and
 
 Codalus IDE watches the files: changes made outside the IDE (a `git pull`, another editor) are picked up, and the affected projects are evaluated again.
 
+## What a solution reopens with
+
+Like Visual Studio's `.vs` folder, Codalus IDE keeps your own state for a solution in `.codalus/state/` next to it. The folder has one subfolder per solution file (`App.slnx/`, `App.sln/`, and `folder/` for a folder opened without a solution), so several solutions in one folder each keep their own state:
+- `session.json`: the open documents (with their carets and pinned tabs) and the active one; breakpoints, exception settings, Watch expressions and pinned data tips; the startup project or projects, launch profiles, devices and the ASP.NET Core environment; the solution configuration and platform; the target framework chosen for multi-targeted projects; the Solution Explorer's expanded nodes (Collapse All clears them); the Error List's filters and the Test Explorer's grouping.
+- `bookmarks.json`: the solution's bookmarks.
+- `solution.json`: the unloaded projects.
+
+`.codalus/state/` holds its own `.gitignore` (`*`), so Git never shows it, even if your repository's `.gitignore` doesn't mention it. On Windows the `state` folder is hidden. Delete it to start the solution afresh. The shared files in `.codalus/` (`settings.json`, `tasks.json`, `launch.json`, `playlists/`) stay where they are, for you to commit.
+
+Opening a solution writes nothing there, except to move in the state an earlier version kept elsewhere. The state is saved when you close the solution or the IDE, and bookmarks are saved when you change them. If the solution's folder can't be written (a read-only checkout or share), the state goes to the `solution-state` folder of your user data instead, and moves back next to the solution once the folder can be written. Remote windows don't keep this state yet.
+
 ## The Properties window
 
 `F4` (View → Properties) shows the Solution Explorer's selection:
@@ -99,7 +110,7 @@ Packages are managed in the [NuGet Package Manager](packages.md).
 
 ## Unloading projects and solution filters
 
-- **Unload Project** (a project's context menu) stops loading, analyzing and building it; it shows dimmed as *(unloaded)*. **Reload Project** brings it back. Unloaded projects are remembered per user in `.codalus/solution.json`.
+- **Unload Project** (a project's context menu) stops loading, analyzing and building it; it shows dimmed as *(unloaded)*. **Reload Project** brings it back. Unloaded projects are remembered per user in `.codalus/state/` (see [What a solution reopens with](#what-a-solution-reopens-with)).
 - **Save As Solution Filter…** (File menu, or the solution's context menu) writes the loaded projects to a `.slnf`. Opening a `.slnf` opens its solution with only those projects loaded.
 
 ## .NET SDKs

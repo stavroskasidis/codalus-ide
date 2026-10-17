@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Windows.Input;
 using Codalus.Projects.Protocol;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
+using Codalus.Workbench.Wcf;
 using Codalus.Workbench.Web;
 
 namespace Codalus.Shell.ViewModels;
@@ -380,28 +382,55 @@ public sealed class ScaffoldViewModel : ObservableObject
 
 // ------------------------------------------------------------------ service references
 
-/// <summary>A reference in the list: what it is, its document, and how its code is generated.</summary>
-public sealed record ServiceReferenceRow(ServiceReferenceInfo Info)
+/// <summary>
+/// A reference in the list: what it is, its document, and how its code is generated. An OpenAPI or gRPC reference has
+/// <see cref="Info"/>; a WCF reference (M42) has <see cref="Wcf"/>.
+/// </summary>
+public sealed record ServiceReferenceRow(ServiceReferenceInfo? Info, WcfReferenceInfo? Wcf = null)
 {
-    public string Kind => Info.Kind == ServiceReferenceKinds.OpenApi ? "OpenAPI" : "gRPC";
+    public bool IsWcf => Wcf is not null;
 
-    public string Name => Path.GetFileName(Info.Path);
+    public string Kind => Wcf is not null ? "WCF" : Info!.Kind == ServiceReferenceKinds.OpenApi ? "OpenAPI" : "gRPC";
 
-    public string Icon => Info.Kind == ServiceReferenceKinds.OpenApi ? "cloud" : "link";
+    public string Name => Wcf?.Name ?? Path.GetFileName(Info!.Path);
 
-    public string Detail => Info.Kind == ServiceReferenceKinds.OpenApi
-        ? $"{Info.CodeGenerator ?? "NSwagCSharp"}{(Info.ClassName is { } name ? ", class " + name : string.Empty)}{(Info.Namespace is { } ns ? ", namespace " + ns : string.Empty)}"
-        : $"Services: {Info.GrpcServices ?? GrpcServiceKinds.Both}{(Info.Access is { } access ? ", " + access.ToLowerInvariant() : string.Empty)}";
+    public string Icon => Wcf is not null ? "globe" : Info!.Kind == ServiceReferenceKinds.OpenApi ? "cloud" : "link";
 
-    public string Source => Info.SourceUrl ?? Info.Include;
+    public string Detail => Wcf is { } wcf
+        ? $"dotnet-svcutil, namespace {wcf.Namespace ?? wcf.Name}{(wcf.CollectionType is { } collection ? ", " + collection : string.Empty)}{(wcf.Sync ? ", synchronous too" : string.Empty)}{(wcf.Internal ? ", internal" : string.Empty)}"
+        : Info!.Kind == ServiceReferenceKinds.OpenApi
+            ? $"{Info.CodeGenerator ?? "NSwagCSharp"}{(Info.ClassName is { } name ? ", class " + name : string.Empty)}{(Info.Namespace is { } ns ? ", namespace " + ns : string.Empty)}"
+            : $"Services: {Info.GrpcServices ?? GrpcServiceKinds.Both}{(Info.Access is { } access ? ", " + access.ToLowerInvariant() : string.Empty)}";
+
+    public string Source => Wcf is { } reference ? string.Join(", ", reference.Inputs) : Info!.SourceUrl ?? Info.Include;
+
+    /// <summary>The path of the reference: its document, or a WCF reference's folder.</summary>
+    public string Location => Wcf?.Folder ?? Info!.Path;
 }
 
 /// <summary>
-/// Service references of a project (ADR 0041): the OpenAPI and gRPC references with Refresh, Edit and Remove, and a
-/// form to add one from a file or a URL.
+/// Service references of a project (ADR 0041; WCF, ADR 0069): the OpenAPI, gRPC and WCF references with Refresh, Edit
+/// and Remove, and a form to add one from a file or a URL (a WCF one from a service's metadata, a WSDL file, or a
+/// running CoreWCF service).
 /// </summary>
 public sealed class ServiceReferencesViewModel : ObservableObject
 {
+    /// <summary>The add form's kind for a WCF reference (the others are <see cref="ServiceReferenceKinds"/>).</summary>
+    public const string WcfKind = "wcf";
+
+    private string _wcfName = "ServiceReference1";
+    private string _collectionType = WcfReferenceService.CollectionTypes[0];
+    private string _dictionaryType = WcfReferenceService.DictionaryTypes[0];
+    private bool _sync;
+    private bool _reuseTypes = true;
+    private bool _internal;
+    private string _editCollectionType = WcfReferenceService.CollectionTypes[0];
+    private string _editDictionaryType = WcfReferenceService.DictionaryTypes[0];
+    private bool _editSync;
+    private bool _editReuseTypes = true;
+    private bool _editInternal;
+    private WcfToolStatusResult? _wcfStatus;
+    private DiscoveredService? _discovered;
     private readonly Func<ServiceReferencesViewModel, string, Task> _action;
     private ServiceReferenceRow? _selected;
     private string _kind = ServiceReferenceKinds.OpenApi;
@@ -430,6 +459,9 @@ public sealed class ServiceReferencesViewModel : ObservableObject
         RemoveCommand = new RelayCommand(() => _ = RunAsync("remove"));
         OpenCommand = new RelayCommand(() => _ = RunAsync("open"));
         ReloadCommand = new RelayCommand(() => _ = RunAsync("reload"));
+        InstallWcfCommand = new RelayCommand(() => _ = RunAsync("installWcf"));
+        DiscoverCommand = new RelayCommand(() => _ = RunAsync("discover"));
+        TestCommand = new RelayCommand(() => _ = RunAsync("test"));
     }
 
     public string Project { get; }
@@ -447,13 +479,20 @@ public sealed class ServiceReferencesViewModel : ObservableObject
         {
             if (SetField(ref _selected, value))
             {
-                EditNamespace = value?.Info.Namespace ?? string.Empty;
-                EditClassName = value?.Info.ClassName ?? string.Empty;
-                EditOptions = value?.Info.Options ?? string.Empty;
-                EditServices = value?.Info.GrpcServices ?? GrpcServiceKinds.Both;
+                EditNamespace = value?.Info?.Namespace ?? value?.Wcf?.Namespace ?? string.Empty;
+                EditClassName = value?.Info?.ClassName ?? string.Empty;
+                EditOptions = value?.Info?.Options ?? string.Empty;
+                EditServices = value?.Info?.GrpcServices ?? GrpcServiceKinds.Both;
+                EditCollectionType = value?.Wcf?.CollectionType ?? WcfReferenceService.CollectionTypes[0];
+                EditDictionaryType = value?.Wcf?.DictionaryCollectionType ?? WcfReferenceService.DictionaryTypes[0];
+                EditSync = value?.Wcf?.Sync ?? false;
+                EditReuseTypes = value?.Wcf?.ReuseTypes ?? true;
+                EditInternal = value?.Wcf?.Internal ?? false;
                 OnPropertyChanged(nameof(HasSelection));
                 OnPropertyChanged(nameof(SelectedIsOpenApi));
                 OnPropertyChanged(nameof(SelectedIsGrpc));
+                OnPropertyChanged(nameof(SelectedIsWcf));
+                OnPropertyChanged(nameof(SelectedHasNamespace));
                 OnPropertyChanged(nameof(CanRefresh));
             }
         }
@@ -461,25 +500,39 @@ public sealed class ServiceReferencesViewModel : ObservableObject
 
     public bool HasSelection => _selected is not null;
 
-    public bool SelectedIsOpenApi => _selected?.Info.Kind == ServiceReferenceKinds.OpenApi;
+    public bool SelectedIsOpenApi => _selected?.Info?.Kind == ServiceReferenceKinds.OpenApi;
 
-    public bool SelectedIsGrpc => _selected?.Info.Kind == ServiceReferenceKinds.Grpc;
+    public bool SelectedIsGrpc => _selected?.Info?.Kind == ServiceReferenceKinds.Grpc;
 
-    public bool CanRefresh => _selected?.Info.SourceUrl is not null;
+    public bool SelectedIsWcf => _selected?.Wcf is not null;
 
-    public IReadOnlyList<string> Kinds { get; } = ["OpenAPI", "gRPC"];
+    /// <summary>OpenAPI and WCF references have a namespace to edit.</summary>
+    public bool SelectedHasNamespace => SelectedIsOpenApi || SelectedIsWcf;
+
+    /// <summary>A reference downloaded from a URL can be downloaded again (a WCF one is generated again from its address).</summary>
+    public bool CanRefresh => _selected?.Info?.SourceUrl is not null || _selected?.Wcf?.Inputs.Any(ServiceReferenceService.IsUrl) == true;
+
+    public IReadOnlyList<string> Kinds { get; } = ["OpenAPI", "gRPC", "WCF"];
 
     public string KindLabel
     {
-        get => _kind == ServiceReferenceKinds.OpenApi ? "OpenAPI" : "gRPC";
+        get => _kind switch { ServiceReferenceKinds.Grpc => "gRPC", WcfKind => "WCF", _ => "OpenAPI" };
         set
         {
-            var kind = value == "gRPC" ? ServiceReferenceKinds.Grpc : ServiceReferenceKinds.OpenApi;
+            var kind = value switch { "gRPC" => ServiceReferenceKinds.Grpc, "WCF" => WcfKind, _ => ServiceReferenceKinds.OpenApi };
             if (SetField(ref _kind, kind, nameof(Kind)))
             {
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsOpenApi));
                 OnPropertyChanged(nameof(IsGrpc));
+                OnPropertyChanged(nameof(IsWcf));
+                OnPropertyChanged(nameof(HasNamespace));
+                OnPropertyChanged(nameof(NamespacePlaceholder));
+                OnPropertyChanged(nameof(SourcePlaceholder));
+                if (kind == WcfKind && _wcfStatus is null)
+                {
+                    _ = RunAsync("wcfStatus");
+                }
             }
         }
     }
@@ -489,6 +542,151 @@ public sealed class ServiceReferencesViewModel : ObservableObject
     public bool IsOpenApi => _kind == ServiceReferenceKinds.OpenApi;
 
     public bool IsGrpc => _kind == ServiceReferenceKinds.Grpc;
+
+    public bool IsWcf => _kind == WcfKind;
+
+    public bool HasNamespace => IsOpenApi || IsWcf;
+
+    public string NamespacePlaceholder => IsWcf
+        ? Localizer.Get("msg.webTools.theReferenceSName", "The reference's name")
+        : Localizer.Get("serviceReferences.theProjectSRootNamespace", "The project's root namespace");
+
+    public string SourcePlaceholder => IsWcf
+        ? Localizer.Get("msg.webTools.wcfMetadataAddressOrAWsdlFile", "http://localhost:5000/Service.svc?wsdl, or a WSDL file")
+        : Localizer.Get("serviceReferences.aFileOrHttpsSwaggerV1", "A file, or https://…/swagger/v1/swagger.json");
+
+    // ------------------------------------------------------------------ WCF (M42)
+
+    /// <summary>The folder under Connected Services, and the default namespace.</summary>
+    public string WcfName
+    {
+        get => _wcfName;
+        set => SetField(ref _wcfName, value ?? string.Empty);
+    }
+
+    public IReadOnlyList<string> CollectionTypes => WcfReferenceService.CollectionTypes;
+
+    public IReadOnlyList<string> DictionaryTypes => WcfReferenceService.DictionaryTypes;
+
+    public string CollectionType
+    {
+        get => _collectionType;
+        set => SetField(ref _collectionType, value ?? WcfReferenceService.CollectionTypes[0]);
+    }
+
+    public string DictionaryType
+    {
+        get => _dictionaryType;
+        set => SetField(ref _dictionaryType, value ?? WcfReferenceService.DictionaryTypes[0]);
+    }
+
+    public bool Sync
+    {
+        get => _sync;
+        set => SetField(ref _sync, value);
+    }
+
+    public bool ReuseTypes
+    {
+        get => _reuseTypes;
+        set => SetField(ref _reuseTypes, value);
+    }
+
+    public bool Internal
+    {
+        get => _internal;
+        set => SetField(ref _internal, value);
+    }
+
+    public string EditCollectionType
+    {
+        get => _editCollectionType;
+        set => SetField(ref _editCollectionType, value ?? WcfReferenceService.CollectionTypes[0]);
+    }
+
+    public string EditDictionaryType
+    {
+        get => _editDictionaryType;
+        set => SetField(ref _editDictionaryType, value ?? WcfReferenceService.DictionaryTypes[0]);
+    }
+
+    public bool EditSync
+    {
+        get => _editSync;
+        set => SetField(ref _editSync, value);
+    }
+
+    public bool EditReuseTypes
+    {
+        get => _editReuseTypes;
+        set => SetField(ref _editReuseTypes, value);
+    }
+
+    public bool EditInternal
+    {
+        get => _editInternal;
+        set => SetField(ref _editInternal, value);
+    }
+
+    /// <summary>dotnet-svcutil's state: whether it runs, local or global, its version.</summary>
+    public WcfToolStatusResult? WcfStatus
+    {
+        get => _wcfStatus;
+        set
+        {
+            if (SetField(ref _wcfStatus, value))
+            {
+                OnPropertyChanged(nameof(WcfToolMessage));
+                OnPropertyChanged(nameof(NeedsWcfTool));
+            }
+        }
+    }
+
+    public bool NeedsWcfTool => _wcfStatus is { ToolAvailable: false };
+
+    public string WcfToolMessage => _wcfStatus is null ? "Checking dotnet-svcutil…"
+        : _wcfStatus.ToolAvailable ? $"dotnet-svcutil {_wcfStatus.ToolVersion} ({_wcfStatus.ToolSource})"
+        : (_wcfStatus.Message ?? "dotnet-svcutil isn't available.") + " Install adds it as a local tool of this solution.";
+
+    /// <summary>Running CoreWCF services whose metadata answers, found by Discover.</summary>
+    public ObservableCollection<DiscoveredService> Discovered { get; } = [];
+
+    public bool HasDiscovered => Discovered.Count > 0;
+
+    public DiscoveredService? SelectedDiscovered
+    {
+        get => _discovered;
+        set
+        {
+            if (SetField(ref _discovered, value) && value is not null)
+            {
+                Source = value.MetadataUrl;
+            }
+        }
+    }
+
+    public void SetDiscovered(IReadOnlyList<DiscoveredService> services)
+    {
+        Discovered.Clear();
+        foreach (var service in services)
+        {
+            Discovered.Add(service);
+        }
+
+        OnPropertyChanged(nameof(HasDiscovered));
+        SelectedDiscovered = services.Count > 0 ? services[0] : null;
+    }
+
+    /// <summary>The add form as svcutil's options.</summary>
+    public WcfReferenceParams WcfRequest() =>
+        new(Project, WcfName.Trim(), Source.Trim(), Empty(Namespace), CollectionType, DictionaryType, Sync, ReuseTypes, Internal);
+
+    /// <summary>The selected WCF reference's edited options (its address unchanged).</summary>
+    public WcfReferenceParams? WcfUpdate() => _selected?.Wcf is { } wcf
+        ? new(Project, wcf.Name, null, Empty(EditNamespace), EditCollectionType, EditDictionaryType, EditSync, EditReuseTypes, EditInternal)
+        : null;
+
+    private static string? Empty(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>A file path, or an http(s) URL to download the document from.</summary>
     public string Source
@@ -604,17 +802,33 @@ public sealed class ServiceReferencesViewModel : ObservableObject
 
     public ICommand ReloadCommand { get; }
 
-    public void SetReferences(ServiceReferencesResult result)
+    public ICommand InstallWcfCommand { get; }
+
+    public ICommand DiscoverCommand { get; }
+
+    public ICommand TestCommand { get; }
+
+    public void SetReferences(ServiceReferencesResult result, IReadOnlyList<WcfReferenceInfo>? wcf = null)
     {
-        var selected = _selected?.Info.Path;
+        var selected = _selected?.Location;
         References.Clear();
         foreach (var reference in result.References)
         {
             References.Add(new ServiceReferenceRow(reference));
         }
 
+        foreach (var reference in wcf ?? [])
+        {
+            References.Add(new ServiceReferenceRow(null, reference));
+        }
+
         Packages = result.Packages.Length == 0 ? "No code generation packages yet." : string.Join(", ", result.Packages.Select(p => $"{p.Id} {p.Version}".Trim()));
-        Selected = References.FirstOrDefault(r => r.Info.Path == selected) ?? References.FirstOrDefault();
+        Selected = References.FirstOrDefault(r => r.Location == selected) ?? References.FirstOrDefault();
+        if (wcf is not null)
+        {
+            WcfName = WcfReferenceService.DefaultName(wcf.Select(r => r.Name));
+        }
+
         OnPropertyChanged(nameof(IsEmpty));
     }
 
@@ -625,7 +839,15 @@ public sealed class ServiceReferencesViewModel : ObservableObject
     {
         if (action == "add" && Source.Trim().Length == 0)
         {
-            Error = "Choose the document: a file, or the URL of an OpenAPI document or a .proto file.";
+            Error = IsWcf
+                ? "Enter the service's metadata address (…/Service.svc?wsdl), choose a WSDL file, or discover a running service."
+                : "Choose the document: a file, or the URL of an OpenAPI document or a .proto file.";
+            return;
+        }
+
+        if (action == "add" && IsWcf && WcfName.Trim().Length == 0)
+        {
+            Error = "Name the reference: its folder under Connected Services.";
             return;
         }
 

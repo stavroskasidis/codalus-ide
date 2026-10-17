@@ -20,7 +20,7 @@ public static class TestAppBuilder
 /// <summary>A shell and its main window on a fresh user-data directory, running headless.</summary>
 internal sealed class ShellFixture : IAsyncDisposable
 {
-    private ShellFixture(string userData, string? builtInPlugins)
+    private ShellFixture(string userData, string? builtInPlugins, bool firstRun)
     {
         UserData = userData;
         Environment.SetEnvironmentVariable("HISTFILE", "/dev/null"); // the tests' terminals keep no history in the real home
@@ -36,14 +36,17 @@ internal sealed class ShellFixture : IAsyncDisposable
         Environment.SetEnvironmentVariable("CODALUS_DEBUGHOST", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-debughost.dll"));
         Environment.SetEnvironmentVariable("CODALUS_DIAGHOST", Path.Combine(RepoRoot, "src", "Codalus.Diagnostics.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-diaghost.dll"));
         Environment.SetEnvironmentVariable("CODALUS_PREVIEWER_AGENT", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "Codalus.Previewer.Agent.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_WPF_PREVIEWER", Path.Combine(RepoRoot, "src", "Codalus.Previewer.Wpf", "bin", Configuration, "net8.0-windows", "codalus-wpfpreviewer.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_WINFORMS_DESIGNER", Path.Combine(RepoRoot, "src", "Codalus.WinForms.Designer", "bin", Configuration, "net8.0-windows", "codalus-winformsdesigner.dll"));
 
         // Hosting tokens stay in this process: the tests never touch the OS credential store (M13b).
         Environment.SetEnvironmentVariable(Codalus.Platform.Credentials.CredentialStore.EnvironmentVariable, "memory");
 
         // Programs run and debug with their output in the IDE: Windows' default console windows would open on the
         // desktop and keep the output from the tests (a test that wants them sets the settings).
+        // A first-run fixture (M46) starts on an empty user data folder, as a new install does.
         var settings = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, _ => null, userData).SettingsFile;
-        if (!File.Exists(settings))
+        if (!firstRun && !File.Exists(settings))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
             File.WriteAllText(settings, "{ \"run.console\": \"outputWindow\", \"debug.console\": \"internalConsole\" }");
@@ -53,7 +56,8 @@ internal sealed class ShellFixture : IAsyncDisposable
         {
             UserDataDir = userData,
             WatchFiles = false,
-            StartWindow = false,
+            StartWindow = firstRun, // the first-run setup goes on to the start window
+            SkipSetup = !firstRun, // the setup (M46) shows only in its own tests
             BuiltInPluginsDir = builtInPlugins ?? PluginBin("Codalus.Plugins.Welcome"),
         });
         Window = new MainWindow(Shell);
@@ -121,8 +125,12 @@ internal sealed class ShellFixture : IAsyncDisposable
         }
     }
 
-    public static ShellFixture Create(string? userData = null, string? builtInPlugins = null) =>
-        new(userData ?? Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-shell-" + Guid.NewGuid().ToString("N")), builtInPlugins);
+    /// <param name="firstRun">
+    /// A new install (M46): no settings file, and the first-run setup and the start window allowed (the other fixtures
+    /// skip both).
+    /// </param>
+    public static ShellFixture Create(string? userData = null, string? builtInPlugins = null, bool firstRun = false) =>
+        new(userData ?? Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-shell-" + Guid.NewGuid().ToString("N")), builtInPlugins, firstRun);
 
     private static string Metadata(string key) =>
         typeof(ShellFixture).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
@@ -135,13 +143,18 @@ internal sealed class ShellFixture : IAsyncDisposable
         Dispatcher.UIThread.RunJobs();
     }
 
-    public static async Task PumpUntil(Func<bool> condition, int seconds = 30)
+    /// <param name="describe">What the shell was doing, added to the failure on a timeout.</param>
+    public static async Task PumpUntil(Func<bool> condition, int seconds = 30, Func<string>? describe = null)
     {
         // A monotonic clock: a machine that sleeps during the wait (a Mac with the display off) doesn't time out at once.
         var started = System.Diagnostics.Stopwatch.StartNew();
         while (!condition())
         {
-            Assert.True(started.Elapsed < TimeSpan.FromSeconds(seconds), "Timed out waiting for the shell.");
+            if (started.Elapsed >= TimeSpan.FromSeconds(seconds))
+            {
+                Assert.Fail(describe is null ? "Timed out waiting for the shell." : "Timed out waiting for the shell: " + describe());
+            }
+
             Pump();
             await Task.Delay(15);
         }
@@ -153,6 +166,12 @@ internal sealed class ShellFixture : IAsyncDisposable
     /// </summary>
     public static CancellationToken RequestTimeout(int seconds = 30) =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromSeconds(seconds)).Token).Token;
+
+    /// <summary>
+    /// The default bindings' <c>primary</c> modifier (<c>Keys.Parse</c>): ⌘ on macOS, Ctrl elsewhere. A test presses
+    /// a <c>primary+…</c> binding with it: on macOS, Ctrl+T matches no binding (Go To All is Cmd+T).
+    /// </summary>
+    public static RawInputModifiers Primary { get; } = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
 
     public void Press(Key key, RawInputModifiers modifiers = RawInputModifiers.None)
     {

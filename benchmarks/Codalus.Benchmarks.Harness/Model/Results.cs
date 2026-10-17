@@ -28,6 +28,14 @@ public sealed record ScenarioResult
 
     public int DiscardedRuns { get; set; }
 
+    /// <summary>
+    /// The CI run this result came from: the first folder under the baseline directory (<c>baseline/&lt;run id&gt;/</c>),
+    /// set by <see cref="Gates.LoadAll"/>. Results of one run share their runner, so the reference application's numbers
+    /// of the same run normalize latency (ADR 0002, amendment 2026-10-17). Not stored in the file.
+    /// </summary>
+    [JsonIgnore]
+    public string? Run { get; init; }
+
     public void Add(string metric, double value)
     {
         if (!Samples.TryGetValue(metric, out var list))
@@ -61,6 +69,10 @@ public sealed record ScenarioResult
     }
 }
 
+/// <param name="L3CacheBytes">
+/// The size of one last-level (L3) cache as the OS reports it, or null when unknown (results before 2026-10-17). The GC
+/// sizes its generation-0 budget from it, so memory follows it across runner models (docs/benchmarks/net11-release-gate.md).
+/// </param>
 public sealed record MachineInfo(
     string Os,
     string OsVersion,
@@ -70,7 +82,8 @@ public sealed record MachineInfo(
     long MemoryBytes,
     string? Gpu,
     double? DisplayRefreshHz,
-    bool IsCi);
+    bool IsCi,
+    long? L3CacheBytes = null);
 
 [JsonSourceGenerationOptions(
     WriteIndented = true,

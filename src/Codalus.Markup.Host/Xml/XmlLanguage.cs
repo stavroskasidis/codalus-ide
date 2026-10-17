@@ -30,6 +30,9 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
     /// <summary>XSD validation of plain XML documents (not MSBuild files).</summary>
     public XsdValidation Schemas { get; } = new();
 
+    /// <summary>The <c>system.serviceModel</c> section of <c>app.config</c> and <c>web.config</c> (M42).</summary>
+    public ServiceModelConfig ServiceModel { get; } = new();
+
     private static bool IsMsBuild(TextDocument document) => document.LanguageId == "msbuild";
 
     public List<Diagnostic> Diagnostics(TextDocument document)
@@ -53,6 +56,10 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
         if (!IsMsBuild(document))
         {
             diagnostics.AddRange(Schemas.Validate(document));
+            if (ServiceModelConfig.IsConfigFile(document.Path))
+            {
+                diagnostics.AddRange(ServiceModel.Validate(document));
+            }
         }
         else
         {
@@ -86,7 +93,7 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
     {
         if (!IsMsBuild(document))
         {
-            return new CompletionList(false, []);
+            return ServiceModelConfig.IsConfigFile(document.Path) ? ServiceModel.Completion(document, offset) ?? new CompletionList(false, []) : new CompletionList(false, []);
         }
 
         var context = Locate(document.Text, offset);
@@ -142,7 +149,7 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
     {
         if (!IsMsBuild(document))
         {
-            return null;
+            return ServiceModelConfig.IsConfigFile(document.Path) ? ServiceModel.Hover(document, offset) : null;
         }
 
         // The element name under the position.

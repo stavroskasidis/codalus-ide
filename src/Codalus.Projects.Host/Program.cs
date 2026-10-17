@@ -82,6 +82,8 @@ if (OperatingSystem.IsLinux() && instance.Version.Major < 5 && Codalus.Projects.
 {
     Environment.SetEnvironmentVariable("CLR_ICU_VERSION_OVERRIDE", icu.ToString(System.Globalization.CultureInfo.InvariantCulture));
 }
+
+WindowsDesktop.EnableWindowsTargeting();
 MSBuildLocator.RegisterInstance(instance);
 return await RunAsync(stdin, stdout, instance.MSBuildPath, sdkWarning).ConfigureAwait(false);
 

@@ -23,7 +23,11 @@ internal sealed partial class SolutionSession
     /// <summary>The solution filter the solution was opened through, if any.</summary>
     public string? FilterPath { get; private set; }
 
-    private string StateFile => System.IO.Path.Combine(SolutionDirectory, ".codalus", "solution.json");
+    /// <summary>The unloaded projects: per user, in the solution's state folder (ADR 0070).</summary>
+    private string StateFile => System.IO.Path.Combine(SolutionStateLayout.Directory(Path, IsFolder), SolutionStateLayout.UnloadedProjectsFile);
+
+    /// <summary>Where the unloaded projects were kept before ADR 0070 (moved on open).</summary>
+    private string LegacyStateFile => System.IO.Path.Combine(SolutionDirectory, ".codalus", "solution.json");
 
     // ------------------------------------------------------------------ properties
 
@@ -278,7 +282,7 @@ internal sealed partial class SolutionSession
 
     // ------------------------------------------------------------------ load and unload
 
-    /// <summary>Reads the unloaded projects (from the filter, or from <c>.codalus/solution.json</c>).</summary>
+    /// <summary>Reads the unloaded projects (from the filter, or from the state folder's <c>solution.json</c>).</summary>
     private void LoadUnloadedState(IReadOnlyList<string>? filterProjects)
     {
         lock (_unloaded)
@@ -299,7 +303,8 @@ internal sealed partial class SolutionSession
 
         try
         {
-            if (File.Exists(StateFile) && JsonNode.Parse(File.ReadAllText(StateFile))?["unloadedProjects"] is JsonArray unloaded)
+            var file = MigrateUnloadedState();
+            if (File.Exists(file) && JsonNode.Parse(File.ReadAllText(file))?["unloadedProjects"] is JsonArray unloaded)
             {
                 foreach (var item in unloaded.OfType<JsonValue>().Select(v => v.GetValue<string>()))
                 {
@@ -313,6 +318,32 @@ internal sealed partial class SolutionSession
         }
     }
 
+    /// <summary>
+    /// The file to read the unloaded projects from: the state folder's, after moving <c>.codalus/solution.json</c>
+    /// there the first time; the old file while it can't be moved (a read-only folder).
+    /// </summary>
+    private string MigrateUnloadedState()
+    {
+        if (IsSingleProject || File.Exists(StateFile) || !File.Exists(LegacyStateFile))
+        {
+            return StateFile; // a project opened alone has no unloaded projects; the old file belongs to a solution
+        }
+
+        try
+        {
+            SolutionStateLayout.EnsureDirectory(Path, IsFolder);
+            SolutionStateLayout.WriteAllTextAtomic(StateFile, File.ReadAllText(LegacyStateFile));
+            File.Delete(LegacyStateFile);
+            _ = _events.LogAsync("info", $"Moved {LegacyStateFile} to {StateFile}.");
+            return StateFile;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _ = _events.LogAsync("warning", $"Could not move {LegacyStateFile} to {StateFile}: {ex.Message}");
+            return File.Exists(StateFile) ? StateFile : LegacyStateFile;
+        }
+    }
+
     private void SaveUnloadedState()
     {
         if (FilterPath is not null || IsSingleProject)
@@ -320,10 +351,18 @@ internal sealed partial class SolutionSession
             return; // a filter is the user's file; it's saved explicitly with Save As Solution Filter
         }
 
-        var state = File.Exists(StateFile) ? JsonNode.Parse(File.ReadAllText(StateFile)) as JsonObject ?? [] : [];
-        state["unloadedProjects"] = new JsonArray([.. UnloadedProjects().Order(StringComparer.Ordinal).Select(p => (JsonNode)System.IO.Path.GetRelativePath(SolutionDirectory, p).Replace('\\', '/'))]);
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(StateFile)!);
-        File.WriteAllText(StateFile, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        try
+        {
+            var state = File.Exists(StateFile) ? JsonNode.Parse(File.ReadAllText(StateFile)) as JsonObject ?? [] : [];
+            state["unloadedProjects"] = new JsonArray([.. UnloadedProjects().Order(StringComparer.Ordinal).Select(p => (JsonNode)System.IO.Path.GetRelativePath(SolutionDirectory, p).Replace('\\', '/'))]);
+            SolutionStateLayout.EnsureDirectory(Path, IsFolder);
+            SolutionStateLayout.WriteAllTextAtomic(StateFile, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            // The project stays unloaded (or loaded) for this session; it isn't remembered.
+            _ = _events.LogAsync("warning", $"Could not save the unloaded projects to {StateFile}: {ex.Message}");
+        }
     }
 
     /// <summary>Thread-safe: evaluations run in parallel with unload and reload.</summary>

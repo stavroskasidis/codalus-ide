@@ -78,11 +78,12 @@ public sealed class TerminalTests
         var control = f.Window.GetVisualDescendants().OfType<TerminalControl>().First(c => c.Session == session);
         control.Focus();
 
-        // Ctrl+Q (the search box) stays with the IDE.
+        // Ctrl+Q (the search box: Feature Search, M47) stays with the IDE.
         f.Press(Key.Q, RawInputModifiers.Control);
-        Assert.True(f.Shell.Palette.IsOpen);
+        Assert.True(f.Shell.CodeSearch is { IsOpen: true, IsFeatureTab: true });
+        ShellFixture.Pump();
         f.Press(Key.Escape);
-        await ShellFixture.PumpUntil(() => !f.Shell.Palette.IsOpen);
+        await ShellFixture.PumpUntil(() => !f.Shell.CodeSearch.IsOpen);
 
         // A file:line reference printed by a program is a link to the file.
         var file = Path.Combine(f.UserData, "Linked.cs");

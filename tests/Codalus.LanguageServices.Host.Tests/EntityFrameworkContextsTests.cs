@@ -6,6 +6,28 @@ namespace Codalus.LanguageServices.Host.Tests;
 public sealed class DataFixture : LanguageFixture
 {
     protected override (string Sample, string Solution, int Projects) Sample => ("Data", "Data.slnx", 1);
+
+    /// <summary>
+    /// The restore runs after the first load: until it has brought EF Core's packages, <c>DbContext</c> doesn't resolve
+    /// and no context is found. The loaded Windows runners answered the tests in between (an empty list, 48 ms in).
+    /// </summary>
+    protected override async Task ReadyAsync()
+    {
+        try
+        {
+            await WaitUntilAsync(() => Client.EfContextsAsync(null, CancellationToken.None).GetAwaiter().GetResult()?.Contexts.Length > 0);
+        }
+        catch (Xunit.Sdk.XunitException)
+        {
+            string log;
+            lock (Log)
+            {
+                log = string.Join('\n', Log.TakeLast(40));
+            }
+
+            Assert.Fail($"No DbContext once restored (restore {Solutions.RestoreState ?? "not started"}):\n" + log);
+        }
+    }
 }
 
 /// <summary><c>codalus/ef/contexts</c> (M27a, ADR 0036): DbContext types with their provider and connection name, from Roslyn.</summary>

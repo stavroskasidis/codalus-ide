@@ -98,6 +98,32 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
         Assert.Null(attributes.Find("int[]", s_modules).Display);
     }
 
+    [Fact]
+    public void The_modules_read_stay_free_to_rebuild()
+    {
+        // The companion outlives debug sessions: a module it held open couldn't be overwritten by the next build on
+        // Windows ("being used by another process", the first Windows run of the WPF app's F5 then its tests' build).
+        var folder = Directory.CreateTempSubdirectory("codalus-typeattributes-").FullName;
+        try
+        {
+            var module = Path.Combine(folder, Path.GetFileName(typeof(CompanionTests).Assembly.Location));
+            File.Copy(typeof(CompanionTests).Assembly.Location, module);
+            using var attributes = new TypeAttributes();
+            Assert.Equal("{Name}, {Age} years", attributes.Find("Codalus.Debugging.Tests.DisplayedPerson", [module]).Display);
+
+            using (File.Open(module, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+            }
+
+            File.Copy(typeof(CompanionTests).Assembly.Location, module, overwrite: true);
+            Assert.Equal("Inner!", attributes.Find("Codalus.Debugging.Tests.Outer.Inner", [module]).Display);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("A.B", "A.B")]
     [InlineData("A.List<int>", "A.List`1")]
@@ -166,7 +192,13 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
             // macOS core dumps don't record the process id.
             Assert.Equal(OperatingSystem.IsMacOS() ? null : process.Id, summary.ProcessId);
             Assert.StartsWith(".NET 11.", summary.Runtime, StringComparison.Ordinal);
-            var main = Assert.Single(summary.Threads, t => t.Frames.Any(f => f.Method.Contains("<Main>$", StringComparison.Ordinal)));
+            // On Linux x64 the main thread is Thread.Sleep's wait (.NET 11's managed WaitSubsystem), <Main>$ and
+            // Environment.CallEntryPoint; every thread's frames are in the message for when another platform differs.
+            var mains = summary.Threads.Where(t => t.Frames.Any(f => f.Method.Contains("<Main>$", StringComparison.Ordinal))).ToList();
+            Assert.True(
+                mains.Count == 1,
+                $"{mains.Count} threads run <Main>$; the dump's threads: {string.Join(" || ", summary.Threads.Select(t => $"#{t.ManagedId} (OS {t.OsId}): {string.Join(" | ", t.Frames.Select(f => f.Method))}"))}");
+            var main = mains[0];
             var frame = main.Frames.First(f => f.Method.Contains("<Main>$", StringComparison.Ordinal));
             Assert.True(
                 (Path.GetFileName(frame.File), frame.Line) == ("Program.cs", DebuggeeFixture.Line(debuggee.Program, "wait")),

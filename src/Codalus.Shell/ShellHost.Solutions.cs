@@ -147,7 +147,15 @@ public sealed partial class ShellHost
         try
         {
             StatusBar.ShowMessage(Localizer.Format("msg.solutions.opening", "Opening {0}…", Path.GetFileName(path)));
-            await Solutions.OpenAsync(path, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None).ConfigureAwait(true);
+            var stateKey = new SolutionStateKey(path, IsFolder: false);
+            if (!remote)
+            {
+                OpenCodeSearchIndex(stateKey); // searches before the projects load (M47)
+            }
+
+            var session = remote ? null : await ReadSolutionSessionAsync(stateKey).ConfigureAwait(true);
+            ApplySolutionViewState(session);
+            await Solutions.OpenAsync(path, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None, session?.Configuration, session?.Platform, session?.ActiveFrameworks).ConfigureAwait(true);
             StatusBar.ClearMessage();
             Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
             if (remote)
@@ -161,7 +169,7 @@ public sealed partial class ShellHost
                 _ = CheckSolutionSdkAsync(path);
                 _ = OfferDevContainerAsync(Path.GetDirectoryName(path)!);
                 Workbench.Settings.SetWorkspaceFile(Path.Combine(folder, ".codalus", "settings.json"));
-                await RestoreEditorSessionAsync(path).ConfigureAwait(true);
+                await RestoreSolutionStateAsync(stateKey, session).ConfigureAwait(true);
                 await OpenRepositoryAsync(folder).ConfigureAwait(true);
             }
         }
@@ -192,7 +200,8 @@ public sealed partial class ShellHost
 
     public async Task CloseSolutionAsync()
     {
-        SaveEditorSession();
+        CloseCodeSearchIndex();
+        CloseSolutionState();
         CloseSolutionDocuments();
         await Solutions.CloseAsync().ConfigureAwait(true);
         Git.Close();

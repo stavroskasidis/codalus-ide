@@ -21,6 +21,7 @@ public sealed class DeviceRow(MobileDevice device, bool isTarget)
             MobileDeviceKind.Emulator => Device.IsRunning ? "emulator, running" : "emulator",
             MobileDeviceKind.Simulator => Device.IsRunning ? "simulator, booted" : "simulator",
             MobileDeviceKind.ThisMac => "this Mac",
+            MobileDeviceKind.ThisPc => "this PC",
             _ => "device",
         },
         Device.Problem,

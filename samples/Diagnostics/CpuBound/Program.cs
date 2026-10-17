@@ -78,29 +78,50 @@ namespace CpuBound
     {
         public static long Rounds;
 
+        // A round is one call of Mix that works about 50 ms, then a sleep of 350: the thread works an eighth of the
+        // time, well behind the main thread, so IsPrime keeps the most self time and its [hot] line the most of the
+        // file's.
+        //
+        // The work has no safe point but Mix's loop itself, as the main thread's long batches (see BatchLimit): the
+        // sampler stops each thread for every sample, and a thread it can't interrupt at once stops at its next GC poll
+        // (or at Thread.Sleep). Where the interruption comes milliseconds late (some Windows runners), every sample of
+        // a thread that polls more often than that lands at the poll. Run once read Stopwatch's clock every 50 calls of
+        // Mix (0.35 ms) to end a round: that read is a call without the GC transition, with a poll after it, so the
+        // hashing thread's samples all went to Stopwatch.get_ElapsedMilliseconds and Thread.Sleep, and Mix had none (PR
+        // #23's and #25's Windows runs, while IsPrime had plenty). Even on Linux, where a thread is interrupted within
+        // microseconds, the poll took a sixth to a quarter of the thread's samples; with the runtime's interruption off
+        // (DOTNET_INTERNAL_ThreadSuspendInjection=0) it took all of them. Now the clock is read only around the call,
+        // to size the next one, so a stop that comes up to tens of milliseconds late still lands in Mix.
         public static void Run(DateTime until)
         {
             var value = 17UL;
+            var rounds = 1_000_000;
+            var call = new Stopwatch();
             while (DateTime.UtcNow < until)
             {
-                for (var i = 0; i < 100_000; i++)
-                {
-                    value = Mix(value);
-                }
-
+                call.Restart();
+                value = Mix(value, rounds);
+                rounds = (int)Math.Clamp(rounds * 50.0 / Math.Max(call.Elapsed.TotalMilliseconds, 0.1), 10_000, 1_000_000_000);
                 Interlocked.Increment(ref Rounds);
-                Thread.Sleep(1);
+                Thread.Sleep(350);
             }
 
             GC.KeepAlive(value);
         }
 
+        // A loop without calls, as in Primes.IsPrime: no GC poll, and the JIT makes such a method fully interruptible, so
+        // a sample stops the thread in it. NoInlining keeps it a frame of its own in an optimized build too. A round
+        // takes about 7 ns in the Debug build the tests profile.
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        private static ulong Mix(ulong value)
+        private static ulong Mix(ulong value, int rounds)
         {
-            value ^= value >> 33;
-            value *= 0xff51afd7ed558ccdUL;
-            value ^= value >> 33;
+            for (var round = 0; round < rounds; round++)
+            {
+                value ^= value >> 33;
+                value *= 0xff51afd7ed558ccdUL;
+                value ^= value >> 33;
+            }
+
             return value;
         }
     }

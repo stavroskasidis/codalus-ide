@@ -44,6 +44,7 @@ What netcoredbg (3.2.0-1092) does, probed over DAP for M14b:
 - Debug → Open Dump File reads a dump through ClrMD (`Microsoft.Diagnostics.Runtime`, MIT): the threads with their managed stacks and exceptions, frames mapped to source lines through the portable PDBs next to the modules, the heap by type, instances, and an object's fields, followed by address. Debug → Create Dump writes a full dump of the debugged process through the diagnostics IPC (`Microsoft.Diagnostics.NETCore.Client`, MIT), the same way `dotnet-dump` does.
 - Full dumps, because a heap dump leaves out the JIT's IL-to-native maps, so frames can't be mapped to lines. A frame without a map shows no line rather than a guessed one.
 - The DAC must match the dump's runtime and load on the reading OS: dumps open on the OS that wrote them.
+- Since ClrMD 4.2 (2026-10-16), which no longer loads the DAC beside the runtime path a dump names, the host passes the DAC from a .NET installation on the machine (its own, `DOTNET_ROOT`'s, the `dotnet` on the PATH, the default install folders) whose shared framework has the dump's runtime version (`Dumps.InstalledDac`). A dump of a self-contained app's runtime that no installation has doesn't open off Windows. `TODO(issue)`
 
 **Symbol settings**
 - No symbol servers or search paths: netcoredbg reads the PDBs next to the modules, and ClrMD likewise for dumps. Library sources still come from embedded sources and Source Link (ADR 0017). Recorded as a gap.

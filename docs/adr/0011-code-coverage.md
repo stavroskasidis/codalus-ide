@@ -36,6 +36,7 @@ The roadmap lists `Microsoft.CodeCoverage` and `Microsoft.Testing.Extensions.Cod
 - **VSTest:** a coverage run adds:
   - `TestAdapterPath` pointing at the bundled collector
   - a `DataCollector` entry, `XPlat Code Coverage`, with `Format=cobertura`
+  - Coverlet's in-process collector (`InProcDataCollectionRunSettings`, its codebase in the bundled collector's folder), as `dotnet test --collect` adds it: it flushes the hits before VSTest stops the test host (amended in M43a's CI fixes; without it a loaded machine lost them)
 
   to the runsettings. The `testhost` produces a Cobertura attachment per test assembly. If a project references its own `coverlet.collector`, the one VSTest resolves first is used.
 - **MTP:**

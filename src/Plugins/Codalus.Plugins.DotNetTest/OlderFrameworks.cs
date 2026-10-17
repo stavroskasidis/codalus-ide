@@ -3,6 +3,18 @@ using System.Runtime.InteropServices;
 
 namespace Codalus.Plugins.DotNetTest;
 
+/// <summary>Target frameworks that target Windows (M40a): their test hosts run only there.</summary>
+internal static class WindowsFrameworks
+{
+    /// <summary><c>net8.0-windows</c>, <c>net10.0-windows10.0.19041.0</c>.</summary>
+    public static bool IsWindows(string targetFramework) =>
+        targetFramework.IndexOf('-', StringComparison.Ordinal) is var dash and > 0 && targetFramework[(dash + 1)..].StartsWith("windows", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether a project with these frameworks can't run its tests here: all of them target Windows, and this isn't Windows.</summary>
+    public static bool OnlyWindows(IReadOnlyList<string> targetFrameworks, bool windows) =>
+        !windows && targetFrameworks.Count > 0 && targetFrameworks.All(IsWindows);
+}
+
 /// <summary>
 /// What the test hosts of older frameworks need (M33, ADR 0030), as the shell's runs and debug sessions get it:
 /// <list type="bullet">

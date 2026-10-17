@@ -75,7 +75,15 @@ public sealed partial class ShellHost
         try
         {
             StatusBar.ShowMessage(Localizer.Format("msg.folder.opening", "Opening {0}…", Path.GetFileName(folder)));
-            var solution = await Solutions.OpenAsync(folder, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None).ConfigureAwait(true);
+            var stateKey = new SolutionStateKey(folder, IsFolder: true);
+            if (!remote)
+            {
+                OpenCodeSearchIndex(stateKey); // searches before the projects load (M47)
+            }
+
+            var session = remote ? null : await ReadSolutionSessionAsync(stateKey).ConfigureAwait(true);
+            ApplySolutionViewState(session);
+            var solution = await Solutions.OpenAsync(folder, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None, session?.Configuration, session?.Platform, session?.ActiveFrameworks).ConfigureAwait(true);
             StatusBar.ClearMessage();
             _launchConfiguration = null;
             Explorer.SetFolderView(solution.Projects.Length == 0);
@@ -89,7 +97,7 @@ public sealed partial class ShellHost
                 Recent.Add(folder);
                 _ = OfferDevContainerAsync(folder);
                 Workbench.Settings.SetWorkspaceFile(Path.Combine(folder, ".codalus", "settings.json"));
-                await RestoreEditorSessionAsync(folder).ConfigureAwait(true);
+                await RestoreSolutionStateAsync(stateKey, session).ConfigureAwait(true);
                 await OpenRepositoryAsync(folder).ConfigureAwait(true);
             }
 

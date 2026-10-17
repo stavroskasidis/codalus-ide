@@ -3,10 +3,11 @@
 ## The window
 
 - **Title bar**: the menu, the search box and the open solution's name. On Windows they're in the window's title bar; drag its empty part to move the window, double-click it to maximize.
-- **Search** (`Ctrl+Q`): commands, settings, files, and the solution's types and members, in one list.
+- **Search** (`Ctrl+Q`): Feature Search, in the Code Search window: commands, settings and Options pages. Its other tab, Code Search (`Ctrl+T`), finds files, types, members and text ([Code Search](editing.md#code-search)).
 - **Toolbar**: back and forward, open, save and save all, undo and redo, the solution configuration and platform, the startup project, and Start (`F5`) and Start Without Debugging (`Ctrl+F5`). While debugging it shows Continue, Break All, Stop, Restart and the step commands.
 - **Status bar**: purple without a solution, blue with one, orange while debugging. The right side shows the caret's line and column, indentation, line endings, encoding, language, Git branch and notifications.
 - **Layout**: the Solution Explorer is on the right, the Error List and Output at the bottom. Window → Reset Layout brings this layout back.
+  - Drag a tab to move a tool window to another group, a window's edge, a floating window or among the documents, where it gets a document tab. A tool window you open goes back where you last closed it, or opens as a tab in the group for its usual place (most at the bottom, with the Output), wherever you moved that group.
 
 ## Settings
 
@@ -44,7 +45,23 @@ Settings you may want first:
 
 ## Themes
 
-Tools → Color Theme (`Ctrl+K Ctrl+T`): Blue, Light, Dark, High Contrast, or Follow System (Light or Dark, as the operating system is set). Plugins can add color themes, which are listed with these.
+Codalus IDE has four **theme families**, each in Light, Dark and High contrast, and Classic. The [first-run setup](getting-started.md#the-first-run-setup) offers the four at the first start (Help → Set Up Codalus IDE shows it again):
+
+| Family | What it looks like |
+|---|---|
+| **Harbor** (the default) | The closest to a classic IDE: a deep navy title bar in Light, tool windows docked with gaps between them, the focused tool window's caption and the status bar in cobalt, a bar across the top of the active tab. |
+| **Graphite** | Compact and dense: the title bar and toolbar in the window's color, hairlines between tool windows, a bold title with a teal dot on the focused one, an underline on the active tab, a dark teal status bar. |
+| **Daylight** | Flat and airy: hairlines between tool windows, rounded tabs with the active one tinted violet, the Start button filled with the accent. |
+| **Ember** | Warm, with floating panels: tool windows and documents as rounded cards with gaps on the window's background, rounded tabs, and a status bar in the window's color with a dot for the state, orange only while debugging. |
+| **Classic** | The themes from before 0.3: Blue, Light, Dark and High Contrast. |
+
+Choose one in either place; the IDE switches at once:
+- **Tools → Options → Environment → Appearance → Color Theme**: the families as cards, each with a picture of it, and a **mode**: Follow System, Light, Dark or High Contrast (Classic also has Blue). Follow System follows the operating system's light or dark setting and its high-contrast setting as they change, within the family.
+- **Tools → Color Theme** (`Ctrl+K Ctrl+T`): every family following the system and in each mode, Classic's, then the plugins' themes. Moving through the list shows each theme; Enter keeps it, Escape goes back.
+
+In `settings.json`, `workbench.colorTheme` is a family (`"harbor"`, following the system) or a family and its mode (`"ember.dark"`, `"graphite.highContrast"`, `"classic.blue"`). A new install uses Harbor following the system. A setting saved by an earlier version (`"dark"`, `"blue"`, `"followSystem"`…) keeps its look: it reads as Classic.
+
+Plugins can add color themes, which are listed with these; a plugin's theme goes over Classic's Light, Dark or High Contrast.
 
 **File icon themes**: Options → Environment → Appearance → File Icon Theme (`workbench.iconTheme`) chooses the icons of files and folders in the Solution Explorer, tabs and pickers: the built-in classic icons (outline pages with a small colored badge, outline folders and project boxes, the default), Material Icon Theme's colored icons (`material`, also built in), or a plugin's. Icon themes use VS Code's format. Their SVG icons are converted the first time a theme is chosen (a moment, once per theme); an SVG icon that uses more than plain shapes with fills shows the built-in icon instead.
 
@@ -56,7 +73,7 @@ Tools → Color Theme (`Ctrl+K Ctrl+T`): Blue, Light, Dark, High Contrast, or Fo
 Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme** applies it to every theme instead of the current one, and Reset goes back to the theme's color. The colors are saved in VS Code's shape, so they can also be edited as JSON:
 - `editor.tokenColorCustomizations`: `{ "comments": "#6A9955", "semanticTokenColors": { "property": "#9CDCFE" } }`.
 - `workbench.colorCustomizations`: `{ "editor.selectionBackground": "#26496980" }`, alpha last.
-- Put either under `"[Dark]"` (a theme's name) to apply to that theme only.
+- Put either under `"[Dark]"` (a theme's name: `"[Harbor Dark]"`, `"[High Contrast]"`) to apply to that theme only, or under a family's name (`"[Harbor]"`) to apply to its three modes.
 
 ## Moving your settings
 
@@ -157,7 +174,7 @@ Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 
 - **Keyboard**: every function is reachable from it. `Alt+F6` and `Alt+Shift+F6` (`F6` and `Shift+F6` in the VS Code scheme) move between panes, and every command is in the command palette and the search box.
 - **Screen readers**: lists, trees and buttons have accessible names.
-- **Color**: the High Contrast theme raises contrast throughout. Diffs mark lines with `+` and `−`, not only with color.
+- **Color**: every theme family has a High contrast mode, and Classic has High Contrast; Follow System switches to it when the operating system's high contrast is on. Icons are monochrome there. A family's High contrast mode has black surfaces, white text with at least 7:1 contrast, and white borders around every tool window and field. Diffs mark lines with `+` and `−`, not only with color.
 
 ## Updates and network access
 

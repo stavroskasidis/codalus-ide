@@ -259,7 +259,9 @@ public sealed class ProjectManagementIntegrationTests : IAsyncLifetime
         await OpenAsync();
         await _management.UnloadAsync(Tests, Timeout());
         await WaitUntilAsync(() => _service.Projects[Tests].State == ProjectStates.Unloaded);
-        Assert.Contains("Core.Tests.csproj", File.ReadAllText(Path.Combine(Fixture, ".codalus", "solution.json")), StringComparison.Ordinal);
+        Assert.Contains("Core.Tests.csproj", File.ReadAllText(UnloadedStateFile), StringComparison.Ordinal);
+        Assert.Equal(Path.Combine(Fixture, ".codalus", "state", "ProjectSystem.slnx", "solution.json"), UnloadedStateFile); // per user, next to the solution (ADR 0070)
+        Assert.Contains("*", File.ReadAllLines(Path.Combine(Fixture, ".codalus", "state", ".gitignore")));
 
         // Reopened: still unloaded.
         await OpenAsync();
@@ -279,7 +281,35 @@ public sealed class ProjectManagementIntegrationTests : IAsyncLifetime
 
         await _management.ReloadAsync(Tests, Timeout());
         await WaitUntilAsync(() => _service.Projects[Tests].State == ProjectStates.Loaded);
-        Assert.DoesNotContain("Core.Tests.csproj", File.ReadAllText(Path.Combine(Fixture, ".codalus", "solution.json")), StringComparison.Ordinal);
+        Assert.DoesNotContain("Core.Tests.csproj", File.ReadAllText(UnloadedStateFile), StringComparison.Ordinal);
+    }
+
+    private string UnloadedStateFile => Path.Combine(SolutionStateLayout.Directory(Slnx, isFolder: false), SolutionStateLayout.UnloadedProjectsFile);
+
+    [Fact]
+    public async Task Unloaded_projects_move_from_the_old_codalus_solution_json_into_the_state_folder()
+    {
+        var legacy = Path.Combine(Fixture, ".codalus", "solution.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(legacy)!);
+        await File.WriteAllTextAsync(legacy, """{ "unloadedProjects": ["tests/Core.Tests/Core.Tests.csproj"] }""", TestContext.Current.CancellationToken);
+
+        await OpenAsync();
+        Assert.Equal(ProjectStates.Unloaded, _service.Projects[Tests].State);
+        Assert.Equal(ProjectStates.Loaded, _service.Projects[App].State);
+        Assert.False(File.Exists(legacy));
+        Assert.Contains("Core.Tests.csproj", File.ReadAllText(UnloadedStateFile), StringComparison.Ordinal);
+
+        // Another solution in the same folder keeps its own unloaded projects.
+        var other = Path.Combine(Fixture, "Other.slnx");
+        File.Copy(Slnx, other);
+        await OpenAsync(other);
+        Assert.Equal(ProjectStates.Loaded, _service.Projects[Tests].State);
+        await _management.UnloadAsync(App, Timeout());
+        await WaitUntilAsync(() => _service.Projects[App].State == ProjectStates.Unloaded);
+        Assert.True(File.Exists(Path.Combine(Fixture, ".codalus", "state", "Other.slnx", "solution.json")));
+        await OpenAsync();
+        Assert.Equal(ProjectStates.Unloaded, _service.Projects[Tests].State);
+        Assert.Equal(ProjectStates.Loaded, _service.Projects[App].State);
     }
 
     [Fact]
@@ -296,7 +326,7 @@ public sealed class ProjectManagementIntegrationTests : IAsyncLifetime
         await WaitUntilAsync(() => _service.Progress is { Completed: true } && _service.Projects.Count == 3);
         Assert.Equal(ProjectStates.Unloaded, _service.Projects[Tests].State);
         Assert.Equal(ProjectStates.Loaded, _service.Projects[Core].State);
-        Assert.False(File.Exists(Path.Combine(Fixture, ".codalus", "solution.json"))); // a filter's state is the filter itself
+        Assert.False(File.Exists(UnloadedStateFile)); // a filter's state is the filter itself
     }
 
     // ------------------------------------------------------------------ SDKs

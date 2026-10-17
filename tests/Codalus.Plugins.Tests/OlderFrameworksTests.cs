@@ -48,5 +48,27 @@ public sealed class OlderFrameworksTests
     {
         // (Both are bundled by the plugin's build; DotNetTestCoverageTests run them from the plugin's own folder.)
         Assert.Equal(folder, Path.GetFileName(CoverageTools.CollectorFolder(tfm)));
+
+        // Its in-process part flushes the hits before VSTest stops the test host (a loaded runner lost them all).
+        var target = new TestTarget("Tests.csproj", "Tests", "VSTest", tfm, "/work/Tests/bin/Tests.dll", null, null, "/work/Tests") { Framework = tfm };
+        var settings = System.Xml.Linq.XDocument.Parse(VsTestRunner.RunSettings(Options(), [target], new CoverageOptions("/work/coverage", [], [])));
+        var inProc = Assert.Single(settings.Descendants("InProcDataCollector"));
+        Assert.StartsWith(CoverageTools.InProcCollectorType + ", coverlet.collector,", (string?)inProc.Attribute("assemblyQualifiedName"), StringComparison.Ordinal);
+        Assert.Equal(Path.Combine(CoverageTools.CollectorFolder(tfm), "coverlet.collector.dll"), (string?)inProc.Attribute("codebase"));
+        Assert.Empty(System.Xml.Linq.XDocument.Parse(VsTestRunner.RunSettings(Options(), [target], coverage: null)).Descendants("InProcDataCollector"));
+    }
+
+    [Fact]
+    public void Test_projects_whose_every_framework_targets_windows_run_only_there()
+    {
+        // M40a: net*-windows test projects (WinForms, WPF) say "Windows only" off Windows instead of failing to start.
+        Assert.True(WindowsFrameworks.IsWindows("net11.0-windows"));
+        Assert.True(WindowsFrameworks.IsWindows("net10.0-windows10.0.19041.0"));
+        Assert.False(WindowsFrameworks.IsWindows("net11.0"));
+        Assert.False(WindowsFrameworks.IsWindows("net10.0-android"));
+        Assert.True(WindowsFrameworks.OnlyWindows(["net11.0-windows"], windows: false));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net11.0-windows"], windows: true));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net11.0", "net11.0-windows"], windows: false));
+        Assert.False(WindowsFrameworks.OnlyWindows([], windows: false));
     }
 }

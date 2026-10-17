@@ -25,7 +25,9 @@ Codalus IDE is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linu
 21. [.NET MAUI: devices, emulators and simulators, running and debugging on Android and iOS, the workloads and the Android SDK, MAUI XAML](maui.md)
 22. [Visual Basic: editing, mixed C# and VB solutions, what the editor adds as you type, project options, tests and debugging](visual-basic.md)
 23. [F#: editing with FsAutoComplete and Fantomas, the compile order, F# Interactive, scripts, type providers, analyzers, Expecto tests and debugging](fsharp.md)
-24. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
+24. [WCF: Add Service Reference with dotnet-svcutil, CoreWCF services, the WCF Test Client, and system.serviceModel in configuration files](wcf.md)
+25. [WPF, Windows Forms and WinUI 3: opening and building them on every OS, running, debugging and testing on Windows, WPF and WinUI XAML editing, packaged apps, new projects and items](windows-desktop.md)
+26. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md), with the [API reference](plugin-api.md).
 
@@ -35,10 +37,10 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 
 | Area | Shortcut | Command |
 |---|---|---|
-| General | `Ctrl+Q` | Search commands, settings, files and code |
+| General | `Ctrl+Q` | Feature Search: commands, settings and Options pages |
 | | `Ctrl+Shift+P` | Command palette |
 | | `Ctrl+Alt+I` | AI Chat |
-| | `Ctrl+,` | Go to all |
+| | `Ctrl+,` | Code Search (go to all) |
 | | `Alt+F6`, `Alt+Shift+F6` | Move focus between panes |
 | | `Ctrl+Alt+L`, `Ctrl+;` | Solution Explorer, search it |
 | | `Ctrl+Shift+O` | Open solution or project |
@@ -58,7 +60,7 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 | | `Ctrl+M Ctrl+M` | Toggle folding |
 | Navigation | `F12`, `Ctrl+F12` | Go to definition, implementation |
 | | `Shift+F12` | Find all references |
-| | `Ctrl+T` | Go to all (types, members, files) |
+| | `Ctrl+T` | Code Search: files, types, members and text, with a preview |
 | | `Ctrl+Shift+F`, `Ctrl+Shift+H` | Find in files, replace in files |
 | | `Ctrl+-`, `Ctrl+Shift+-` | Navigate back, forward |
 | Build and run | `Ctrl+Shift+B`, `F6` | Build solution |

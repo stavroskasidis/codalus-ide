@@ -21,6 +21,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 {
     private readonly ShellHost _shell = null!;
     private IInputElement? _focusBeforePalette;
+    private IInputElement? _focusBeforeCodeSearch;
     private IInputElement? _focusBeforeFind;
     private bool _chordPending;
     private bool _closeConfirmed;
@@ -79,6 +80,40 @@ public sealed partial class MainWindow : Window, IShellWindow
             _focusBeforePalette = null;
         };
         shell.Layout.FocusRequested += (_, dockable) => FocusDockableSoon(dockable, attempts: 10);
+        CodeSearchLayer.PointerPressed += (_, e) =>
+        {
+            if (e.Source == CodeSearchLayer && !shell.CodeSearch.IsPinned)
+            {
+                shell.CodeSearch.Close();
+            }
+        };
+        CodeSearchLayer.Background = shell.CodeSearch.IsPinned ? null : Avalonia.Media.Brushes.Transparent;
+        shell.CodeSearch.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ViewModels.CodeSearchViewModel.IsPinned))
+            {
+                CodeSearchLayer.Background = shell.CodeSearch.IsPinned ? null : Avalonia.Media.Brushes.Transparent;
+            }
+        };
+        shell.CodeSearch.Opened += (_, _) =>
+        {
+            if (!shell.CodeSearch.IsDocked && FocusManager?.GetFocusedElement() is Visual focused && !CodeSearch.IsVisualAncestorOf(focused))
+            {
+                _focusBeforeCodeSearch = focused as IInputElement;
+            }
+        };
+        shell.CodeSearch.Closed += (_, _) =>
+        {
+            // The focus goes back where it was, unless a result opened a document (which took it).
+            var now = FocusManager?.GetFocusedElement() as Visual;
+            if (_focusBeforeCodeSearch is Visual previous && TopLevel.GetTopLevel(previous) == this && previous.IsEffectivelyVisible
+                && (now is null || !now.IsEffectivelyVisible || CodeSearch.IsVisualAncestorOf(now)))
+            {
+                _focusBeforeCodeSearch.Focus();
+            }
+
+            _focusBeforeCodeSearch = null;
+        };
         shell.FindReplace.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(ViewModels.FindReplaceViewModel.IsOpen))
@@ -387,6 +422,12 @@ public sealed partial class MainWindow : Window, IShellWindow
         if (KeyInterceptor is { } intercept && intercept(e))
         {
             e.Handled = true;
+            return;
+        }
+
+        // Code Search takes Esc, Enter, the arrows, Alt and a chip's letter, and Ctrl+S in its preview, before key bindings.
+        if (e.Source is Visual source && source.FindAncestorOfType<CodeSearchView>(includeSelf: true) is { } codeSearch && codeSearch.TakesKey(e))
+        {
             return;
         }
 

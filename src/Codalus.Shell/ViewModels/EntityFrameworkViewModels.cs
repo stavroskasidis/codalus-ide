@@ -242,8 +242,56 @@ public sealed class EntityFrameworkViewModel : ObservableObject
         return _reload = ReloadCoreAsync(fromTool);
     }
 
+    /// <summary>
+    /// The C# service has (re)loaded the solution, so Roslyn may know contexts it didn't: reloads when the window lists
+    /// none. A reload in progress doesn't serve this request, since it asked before; another follows it when it ends
+    /// without a context. Opening a solution restores after its first load, and until the restore has brought EF Core
+    /// <c>DbContext</c> doesn't resolve: a window shown in between got an empty list, and the C# service's next ready
+    /// came while it was still asking dotnet ef for its version (seconds on Windows), so nothing asked again.
+    /// </summary>
+    public Task ReloadIfNoContextsAsync()
+    {
+        if (_reload is not { IsCompleted: false } running)
+        {
+            if (Contexts.Count > 0)
+            {
+                return Task.CompletedTask;
+            }
+
+            _reloadFromTool = false;
+            return _reload = ReloadCoreAsync(fromTool: false);
+        }
+
+        // One reload waits behind the running one however many times the service becomes ready meanwhile.
+        if (_reloadQueued)
+        {
+            return running;
+        }
+
+        _reloadQueued = true;
+        return _reload = ReloadAfterAsync(running);
+    }
+
+    private async Task ReloadAfterAsync(Task running)
+    {
+        try
+        {
+            await running.ConfigureAwait(true);
+        }
+        finally
+        {
+            _reloadQueued = false;
+        }
+
+        if (Contexts.Count == 0)
+        {
+            await ReloadCoreAsync(fromTool: false).ConfigureAwait(true);
+        }
+    }
+
     private Task? _reload;
     private bool _reloadFromTool;
+    private bool _reloadQueued;
 
     private async Task ReloadCoreAsync(bool fromTool)
     {

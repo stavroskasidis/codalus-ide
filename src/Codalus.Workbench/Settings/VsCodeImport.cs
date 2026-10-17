@@ -17,12 +17,12 @@ public static class VsCodeImport
     private static readonly JsonDocumentOptions s_jsonc = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
     private static readonly string[] s_products = ["Code", "Code - Insiders", "VSCodium"];
 
-    /// <summary>VS Code's built-in themes by name, as ours.</summary>
+    /// <summary>VS Code's built-in themes by name, as ours: Classic's, the closest to them (M45).</summary>
     public static IReadOnlyDictionary<string, string> Themes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["Default Dark Modern"] = "dark", ["Default Dark+"] = "dark", ["Dark+"] = "dark", ["Dark (Visual Studio)"] = "dark", ["Visual Studio Dark"] = "dark",
-        ["Default Light Modern"] = "light", ["Default Light+"] = "light", ["Light+"] = "light", ["Light (Visual Studio)"] = "light", ["Visual Studio Light"] = "light",
-        ["Default High Contrast"] = "highContrast", ["Default High Contrast Light"] = "highContrast",
+        ["Default Dark Modern"] = "classic.dark", ["Default Dark+"] = "classic.dark", ["Dark+"] = "classic.dark", ["Dark (Visual Studio)"] = "classic.dark", ["Visual Studio Dark"] = "classic.dark",
+        ["Default Light Modern"] = "classic.light", ["Default Light+"] = "classic.light", ["Light+"] = "classic.light", ["Light (Visual Studio)"] = "classic.light", ["Visual Studio Light"] = "classic.light",
+        ["Default High Contrast"] = "classic.highContrast", ["Default High Contrast Light"] = "classic.highContrast",
     };
 
     /// <summary>VS Code's user folder on this machine (VS Code, then Insiders, then VSCodium), or null.</summary>
@@ -61,7 +61,7 @@ public static class VsCodeImport
                 }
                 else
                 {
-                    skipped.Add((property.Name, $"the theme {value} isn't one of Codalus IDE's (Blue, Light, Dark, High Contrast)"));
+                    skipped.Add((property.Name, $"the theme {value} isn't one of Codalus IDE's (Harbor, Graphite, Daylight, Ember or Classic)"));
                 }
 
                 continue;

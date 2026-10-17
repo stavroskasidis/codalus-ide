@@ -5,11 +5,13 @@
     <ProjectReference Include="..\..\src\Codalus.Projects.Host\Codalus.Projects.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Codalus.TextTemplating.Host\Codalus.TextTemplating.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Codalus.NuGetCredentialProvider.Fake\Codalus.NuGetCredentialProvider.Fake.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Codalus.Svcutil.Fake\Codalus.Svcutil.Fake.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <!-- Host code without MSBuild types, tested on its own. -->
     <Compile Include="..\..\src\Codalus.Projects.Host\SdkSelection.cs" Link="Host\SdkSelection.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\DesignTimeCache.cs" Link="Host\DesignTimeCache.cs" />
+    <Compile Include="..\..\src\Codalus.Projects.Host\WindowsDesktop.cs" Link="Host\WindowsDesktop.cs" />
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
 </Project>

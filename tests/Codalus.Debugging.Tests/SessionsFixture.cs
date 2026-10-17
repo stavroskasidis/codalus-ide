@@ -26,8 +26,8 @@ public sealed class SessionsFixture : IAsyncLifetime
         File.Copy(Path.Combine(DebuggeeFixture.RepoRoot, "samples", "Directory.Build.props"), Path.Combine(_root, "Directory.Build.props"));
         Codalus.Tests.FixtureSdk.Pin(_root);
         File.Copy(Path.Combine(DebuggeeFixture.RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(_root, "Directory.Packages.props"));
-        var (code, output) = await RunAsync("dotnet", ["build", Path.Combine(Folder, "Sessions.slnx"), "-nologo", "-v", "quiet"]);
-        Assert.True(code == 0, output);
+        var (code, output, error) = await RunAsync("dotnet", ["build", Path.Combine(Folder, "Sessions.slnx"), "-nologo", "-v", "quiet"]);
+        Assert.True(code == 0, output + error);
     }
 
     /// <summary>
@@ -37,14 +37,16 @@ public sealed class SessionsFixture : IAsyncLifetime
     public async Task<(CompilerInputsInfo Inputs, string SdkPath)> CompilerInputsAsync(string project)
     {
         var path = Project(project);
-        var (code, output) = await RunAsync("dotnet",
+        var (code, output, error) = await RunAsync("dotnet",
         [
             "msbuild", path, "-t:Compile", "-nologo",
             "-p:SkipCompilerExecution=true", "-p:ProvideCommandLineArgs=true", "-p:DesignTimeBuild=true",
             "-p:BuildingInsideVisualStudio=true", "-p:BuildProjectReferences=false",
             "-getItem:CscCommandLineArgs", "-getProperty:MSBuildExtensionsPath",
         ]);
-        Assert.True(code == 0, output);
+        Assert.True(code == 0, output + error);
+
+        // -getItem writes its JSON to standard output; what MSBuild says on standard error (a node's message) isn't part of it.
         using var json = JsonDocument.Parse(output[output.IndexOf('{', StringComparison.Ordinal)..]);
         var arguments = json.RootElement.GetProperty("Items").GetProperty("CscCommandLineArgs").EnumerateArray().Select(i => i.GetProperty("Identity").GetString()!).ToArray();
         var sdk = json.RootElement.GetProperty("Properties").GetProperty("MSBuildExtensionsPath").GetString()!;
@@ -52,7 +54,7 @@ public sealed class SessionsFixture : IAsyncLifetime
         return (new CompilerInputsInfo(path, "net11.0", "C#", CompilerInputStates.Ok, null, arguments, [], null, null), sdk);
     }
 
-    private async Task<(int Code, string Output)> RunAsync(string program, IReadOnlyList<string> arguments)
+    private async Task<(int Code, string Output, string Error)> RunAsync(string program, IReadOnlyList<string> arguments)
     {
         var start = new ProcessStartInfo(program, arguments)
         {
@@ -65,7 +67,7 @@ public sealed class SessionsFixture : IAsyncLifetime
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
-        return (process.ExitCode, await output + await error);
+        return (process.ExitCode, await output, await error);
     }
 
     public ValueTask DisposeAsync()

@@ -9,5 +9,7 @@
     <ProjectReference Include="..\..\src\Codalus.Workbench\Codalus.Workbench.csproj" />
     <!-- Built so the tests can launch it; not referenced as an assembly. -->
     <ProjectReference Include="..\..\src\Codalus.Projects.Host\Codalus.Projects.Host.csproj" ReferenceOutputAssembly="false" />
+    <!-- The Windows Forms designer's host (Windows only tests; built everywhere). -->
+    <ProjectReference Include="..\..\src\Codalus.WinForms.Designer\Codalus.WinForms.Designer.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" GlobalPropertiesToRemove="TargetFramework" />
   </ItemGroup>
 </Project>

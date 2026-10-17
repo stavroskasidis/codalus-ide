@@ -51,6 +51,12 @@ internal sealed class ProjectTests(string path, string name)
     /// <summary>The last discovery problem, shown on the project item.</summary>
     public string? Error { get; set; }
 
+    /// <summary>
+    /// Why the project's tests can't run on this machine (M40a): every target framework targets Windows and this isn't
+    /// Windows. Its tests show from source, and a run says why it skips them.
+    /// </summary>
+    public string? WindowsOnly { get; set; }
+
     public IEnumerable<RunnerTest> AllRunnerTests => RunnerTests.Values.SelectMany(t => t);
 }
 

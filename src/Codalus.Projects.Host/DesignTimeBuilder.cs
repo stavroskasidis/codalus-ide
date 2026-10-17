@@ -21,7 +21,11 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
     private readonly SemaphoreSlim _gate = gate;
 
     /// <summary>One project to build: its configuration and, for multi-targeted projects, the framework.</summary>
-    public sealed record Request(string Path, string Configuration, string Platform, string? TargetFramework);
+    public sealed record Request(string Path, string Configuration, string Platform, string? TargetFramework)
+    {
+        /// <summary>A WinUI 3 project (M44): off Windows, the design-time pass of its XAML compiler is left out.</summary>
+        public bool WinUI { get; init; }
+    }
 
     /// <summary>
     /// Builds <paramref name="requests"/>, calling <paramref name="completed"/> as each one finishes. A newer batch
@@ -101,6 +105,8 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             ["VbcCommandLineArgs"] = [],
             ["FscCommandLineArgs"] = [],
             ["ProjectReference"] = [],
+            ["Page"] = [],
+            ["ApplicationDefinition"] = [],
         },
     };
 
@@ -133,12 +139,28 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
                 global["TargetFramework"] = tfm;
             }
 
+            if (request.WinUI && WindowsDesktop.WinUIDesignTimeTargets() is { } skipXamlCompiler)
+            {
+                // WinUI's XAML compiler is a Windows program (M44): off Windows its design-time pass would fail the build.
+                // A self-contained Windows App SDK needs a Windows runtime identifier, which only Windows infers; a
+                // design-time build writes nothing, so it doesn't need one.
+                global[WindowsDesktop.CustomAfterDirectoryBuildTargets] = skipXamlCompiler;
+                global["WindowsAppSDKSelfContained"] = "false";
+            }
+
             var data = new BuildRequestData(request.Path, global, null, s_targets, null, BuildRequestDataFlags.ProvideSubsetOfStateAfterBuild, s_state);
             var result = await ExecuteAsync(_manager.PendBuildRequest(data)).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             var state = result.ProjectStateAfterBuild;
             var arguments = state?.GetItems(language switch { "VB" => "VbcCommandLineArgs", "F#" => "FscCommandLineArgs", _ => "CscCommandLineArgs" })
                 .Select(i => i.EvaluatedInclude).ToArray() ?? [];
+            if (state is not null && language != "F#" && arguments.Length > 0)
+            {
+                var projectDirectory = Path.GetDirectoryName(request.Path)!;
+                arguments = WindowsDesktop.WithWpfXaml(arguments, state.GetItems("Page").Concat(state.GetItems("ApplicationDefinition"))
+                    .Select(i => Path.GetFullPath(Path.Combine(projectDirectory, i.EvaluatedInclude.Replace('\\', Path.DirectorySeparatorChar)))));
+            }
+
             if (state is not null && framework.Length == 0)
             {
                 framework = state.GetPropertyValue("TargetFramework");

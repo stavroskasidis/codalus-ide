@@ -107,6 +107,13 @@ internal static partial class BuiltIns
                 EnumDescriptions = ["The start window", "An empty window", "The last solution"],
                 Scope = SettingScope.User,
             },
+            SettingDescriptor.Create(ShellHost.SetupCompletedSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "First-Run Setup Completed",
+                Category = "Environment",
+                Description = "Whether the first-run setup (appearance, keyboard, your settings, tools) has run for this user data folder; Done and Skip setup turn it on. Turn it off to see the setup at the next start. Help → Set Up Codalus IDE runs it any time.",
+                Scope = SettingScope.User,
+            },
             SettingDescriptor.Create(KeyboardSchemeSetting, "\"default\"", SettingType.String, shell) with
             {
                 Title = "Keyboard Scheme",
@@ -256,6 +263,7 @@ internal static partial class BuiltIns
         Add("workbench.restart", "Restart", "File", Ui(shell.Restart));
         Add("remote.reopenInContainer", "Reopen in Container", "Dev Containers", Ui(() => shell.ReopenInContainerAsync()));
         Add("help.checkEnvironment", "Check Environment", "Help", Ui(shell.OpenCheckEnvironment));
+        Add("help.setUp", "Set Up Codalus IDE", "Help", Ui(() => shell.ShowSetup()));
         Add("workbench.showStartWindow", "Start Window", "File", Ui(shell.ShowStartWindow));
         Add("settingsSync.turnOn", "Settings Sync: Turn On…", "Preferences", Ui(() => shell.TurnOnSettingsSyncAsync()));
         Add("settingsSync.syncNow", "Settings Sync: Sync Now", "Preferences", Ui(() => shell.SyncSettingsAsync()));
@@ -298,12 +306,15 @@ internal static partial class BuiltIns
 
     /// <summary>The tool windows on the View menu itself, in this order (as a classic IDE's View menu); the rest go to submenus.</summary>
     private static readonly string[] s_mainViewWindows =
-        ["solutionExplorer", "git.changes", "testExplorer", "bookmarks", "codeDefinition", "errorList", "output", "taskList", "terminal", "notifications", "properties"];
+        ["solutionExplorer", "git.changes", "testExplorer", "bookmarks", "codeDefinition", "errorList", "output", "taskList", "terminal", "notifications", "properties", "toolbox"];
 
     /// <summary>Tool windows whose menu entry is contributed explicitly (with a command that does more than show them).</summary>
-    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", AiChatViewModel.ToolWindowId, DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId, XamlPreviewViewModel.ToolWindowId };
+    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", AiChatViewModel.ToolWindowId, DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId, XamlPreviewViewModel.ToolWindowId, ShellHost.CodeSearchToolWindowId };
 
-    /// <summary>Where a tool window's <c>workbench.view.*</c> entry goes, or null when it has an explicit one.</summary>
+    /// <summary>
+    /// Where a tool window's <c>workbench.view.*</c> entry goes, or null when it has an explicit one (Code Search's window
+    /// opens from Edit → Go To and docks from its own button).
+    /// </summary>
     public static MenuItemRule? ViewMenuEntry(string windowId, string title, string command, ContributionSource source)
     {
         if (s_explicitViewEntries.Contains(windowId))
@@ -360,6 +371,7 @@ internal static partial class BuiltIns
             .. KeybindingService.ParseRules(DefaultKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(SolutionKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(EditorKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+            .. KeybindingService.ParseRules(CodeSearchKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(BuildKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(DebugKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(GitKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
@@ -372,6 +384,7 @@ internal static partial class BuiltIns
         .. KeybindingService.ParseRules(DataKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(ProfilingKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(XamlKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+        .. KeybindingService.ParseRules(WinFormsKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(AiKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(FSharpKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(SchemeKeybindings, KeybindingSource.Default, platform, null, diagnostics: null)
@@ -390,15 +403,18 @@ internal static partial class BuiltIns
         return null;
     };
 
-    /// <summary><c>workbench.colorTheme</c>, offering <paramref name="choices"/> (the built-in themes, and plugins' once they're known).</summary>
+    /// <summary>
+    /// <c>workbench.colorTheme</c> (D32), offering <paramref name="choices"/> (the built-in themes, and plugins' once they're
+    /// known) and accepting the values written before the theme families, which read as Classic.
+    /// </summary>
     public static SettingDescriptor ColorThemeSetting(IReadOnlyList<ThemeChoice> choices) =>
-        SettingDescriptor.Create(ThemeService.SettingKey, "\"followSystem\"", SettingType.String, ContributionSource.Shell) with
+        SettingDescriptor.Create(ThemeService.SettingKey, "\"" + ThemeService.DefaultSetting + "\"", SettingType.String, ContributionSource.Shell) with
         {
             Title = "Color Theme",
             Category = "Appearance",
-            Description = "The color theme. Follow System uses the operating system's light, dark or high-contrast setting. Plugins can add themes.",
-            Enum = [.. choices.Select(c => c.Id)],
-            EnumDescriptions = [.. choices.Select(c => c.Title)],
+            Description = "The theme family and its variant: \"harbor\" follows the operating system's light, dark or high-contrast setting, \"harbor.dark\" stays dark. The families are Harbor, Graphite, Daylight and Ember, and Classic (Blue, Light, Dark and High Contrast). Plugins can add themes.",
+            Enum = [.. choices.Select(c => c.Id), .. ThemeService.LegacyChoices.Select(c => c.Id)],
+            EnumDescriptions = [.. choices.Select(c => c.Title), .. ThemeService.LegacyChoices.Select(c => c.Title)],
             Scope = SettingScope.User,
             Order = 1,
         };

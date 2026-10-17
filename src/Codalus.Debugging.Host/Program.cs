@@ -4,6 +4,12 @@ using Codalus.Rpc;
 
 // Usage: codalus-debughost. The debug companion (M14b, ADR 0032): JSON-RPC on stdio, the requests in CompanionMethods.
 // codalus-debughost --mono-dap: the Mono debugger adapter (M20b, ADR 0065), DAP on stdio.
+// codalus-debughost --activate-app <AUMID>: starts a registered packaged Windows app, printing its process id (M44, ADR 0074).
+if (args.Contains("--activate-app"))
+{
+    return AppActivation.Run(args, Console.Out, Console.Error);
+}
+
 var stdin = Console.OpenStandardInput();
 var stdout = Console.OpenStandardOutput();
 Console.SetOut(Console.Error);
