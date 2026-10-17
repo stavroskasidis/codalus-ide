@@ -83,7 +83,7 @@ namespace CpuBound
             var value = 17UL;
             while (DateTime.UtcNow < until)
             {
-                for (var i = 0; i < 100_000; i++)
+                for (var i = 0; i < 1_000; i++)
                 {
                     value = Mix(value);
                 }
@@ -95,12 +95,21 @@ namespace CpuBound
             GC.KeepAlive(value);
         }
 
+        // The rounds loop inside, without calls, as in Primes.IsPrime: the JIT makes such a method fully interruptible,
+        // so a sample stops the thread in it. A one-round Mix had no safe point of its own (a leaf called from Run's
+        // loop): where the interruption comes late (some Windows runners), the thread stopped at the call's return or at
+        // Thread.Sleep, Run's frames, and Mix got no samples at all. A round of Run's loop takes a millisecond or two
+        // (0.2 before, against a sleep of up to 15.6 on Windows), so the thread is sampled often enough.
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static ulong Mix(ulong value)
         {
-            value ^= value >> 33;
-            value *= 0xff51afd7ed558ccdUL;
-            value ^= value >> 33;
+            for (var round = 0; round < 1_000; round++)
+            {
+                value ^= value >> 33;
+                value *= 0xff51afd7ed558ccdUL;
+                value ^= value >> 33;
+            }
+
             return value;
         }
     }

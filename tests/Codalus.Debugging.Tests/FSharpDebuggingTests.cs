@@ -20,6 +20,8 @@ public sealed class FSharpDebuggingTests : IAsyncLifetime
 
     private string Console => Path.Combine(_root, "FSharp", "FsConsole");
 
+    private string Dll => Path.Combine(Console, "bin", "Debug", "net10.0", "FsConsole.dll");
+
     private string Geometry => Path.Combine(_root, "FSharp", "FsLibrary", "Geometry.fs");
 
     public async ValueTask InitializeAsync()
@@ -40,6 +42,7 @@ public sealed class FSharpDebuggingTests : IAsyncLifetime
         var output = process.StandardOutput.ReadToEndAsync();
         await process.WaitForExitAsync();
         Assert.True(process.ExitCode == 0, await output);
+        var warm = await DebuggeeFixture.RunOnceAsync(Dll, Console);
 
         _debug = new DebugService(() => DebuggeeFixture.Adapter);
         _debug.Stopped += (_, stop) => _stops.Writer.TryWrite(stop);
@@ -50,6 +53,7 @@ public sealed class FSharpDebuggingTests : IAsyncLifetime
                 _output.Append(CultureInfo.InvariantCulture, $"[{_clock.Elapsed.TotalSeconds:0.0}s] {o.Text}");
             }
         };
+        _output.Append(CultureInfo.InvariantCulture, $"[{_clock.Elapsed.TotalSeconds:0.0}s] (the program ran once without the debugger, in {warm.TotalSeconds:0.0}s)\n");
     }
 
     public async ValueTask DisposeAsync()
@@ -77,7 +81,6 @@ public sealed class FSharpDebuggingTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
         var line = Array.FindIndex(File.ReadAllLines(Geometry), l => l.StartsWith("let totalArea", StringComparison.Ordinal)) + 1;
         _debug.Breakpoints.Set(new BreakpointSpec(Geometry, line));
-        var dll = Path.Combine(Console, "bin", "Debug", "net10.0", "FsConsole.dll");
         lock (_output)
         {
             _output.Append(CultureInfo.InvariantCulture, $"[{_clock.Elapsed.TotalSeconds:0.0}s] (the test launches the program)\n");
@@ -85,7 +88,7 @@ public sealed class FSharpDebuggingTests : IAsyncLifetime
 
         try
         {
-            await _debug.LaunchAsync("dotnet", ["exec", dll], Console, new Dictionary<string, string>(), ct);
+            await _debug.LaunchAsync(DebuggeeFixture.DotnetHost, ["exec", Dll], Console, new Dictionary<string, string>(), ct);
         }
         catch (InvalidOperationException ex)
         {

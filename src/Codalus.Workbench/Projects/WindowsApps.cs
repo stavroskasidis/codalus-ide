@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,6 +20,9 @@ public sealed record AppxIdentity(string Name, string Publisher, string Version,
     /// <summary>The application user model id an activation names: the family name, <c>!</c>, the application's id.</summary>
     public string? Aumid => ApplicationIds.Count == 0 ? null : FamilyName + "!" + ApplicationIds[0];
 }
+
+/// <summary>A framework package a packaged app depends on: its <c>.msix</c> and the identity read from it (null when unreadable).</summary>
+public sealed record FrameworkPackage(string Path, AppxIdentity? Identity);
 
 /// <summary>An installed Windows App SDK runtime (a framework package): its channel (<c>1.8</c>), version and architecture.</summary>
 public sealed record WindowsAppRuntime(string Channel, string Version, string? Architecture);
@@ -184,21 +188,57 @@ public static class WindowsApps
                 _ => "x64",
             };
 
+    /// <summary>The identity in an <c>.msix</c> package's <c>AppxManifest.xml</c>, or null when the file isn't one.</summary>
+    public static AppxIdentity? ReadPackageIdentity(string msix)
+    {
+        try
+        {
+            using var zip = ZipFile.OpenRead(msix);
+            if (zip.GetEntry("AppxManifest.xml") is not { } entry)
+            {
+                return null;
+            }
+
+            using var reader = new StreamReader(entry.Open());
+            return ReadManifest(reader.ReadToEnd());
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// The arguments of <c>powershell.exe</c> that register a build's layout (Developer Mode), after installing the
-    /// framework packages it depends on: <c>Add-AppxPackage -Path &lt;framework msix&gt;</c> for each (one already
-    /// there at a higher version, 0x80073D06, is fine), then <c>Add-AppxPackage -Register &lt;manifest&gt;
-    /// -ForceApplicationShutdown -ForceUpdateFromAnyVersion</c>, failing on the first other error. The registration
-    /// can't take them as <c>-DependencyPath</c>: with <c>-Register</c> every path given is registered as a layout, and
-    /// a package file is rejected ("the manifest is not in the package root", 0x80073CF9).
+    /// framework packages it depends on: <c>Add-AppxPackage -Path &lt;framework msix&gt;</c> for each that isn't installed
+    /// at its version or a higher one for its architecture (<c>Get-AppxPackage</c>; when its identity is unknown it is
+    /// installed, one there at a higher version, 0x80073D06, being fine), then <c>Add-AppxPackage -Register
+    /// &lt;manifest&gt; -ForceApplicationShutdown -ForceUpdateFromAnyVersion</c>, failing on the first other error. A
+    /// framework already there isn't added again: while an app that uses it runs (the runtime's Singleton, started by
+    /// the app's last run), Windows refuses that with 0x80073D02 ("resources it modifies are currently in use"). The
+    /// registration can't take them as <c>-DependencyPath</c>: with <c>-Register</c> every path given is registered as a
+    /// layout, and a package file is rejected ("the manifest is not in the package root", 0x80073CF9).
     /// </summary>
-    public static IReadOnlyList<string> RegisterArguments(string manifest, IReadOnlyList<string> dependencies)
+    public static IReadOnlyList<string> RegisterArguments(string manifest, IReadOnlyList<FrameworkPackage> dependencies)
     {
         var command = new StringBuilder("$ErrorActionPreference = 'Stop'; ");
-        if (dependencies.Count > 0)
+        foreach (var framework in dependencies)
         {
-            command.Append("foreach ($framework in @(").Append(string.Join(',', dependencies.Select(PowerShellQuote)))
-                .Append(")) { try { Add-AppxPackage -Path $framework } catch { if ($_.Exception.Message -notmatch '0x80073D06') { throw } } }; ");
+            var install = "try { Add-AppxPackage -Path " + PowerShellQuote(framework.Path) + " } catch { if ($_.Exception.Message -notmatch '0x80073D06') { throw } }";
+            if (framework.Identity is { } identity)
+            {
+                command.Append("if (-not (Get-AppxPackage -Name ").Append(PowerShellQuote(identity.Name)).Append(" | Where-Object { ");
+                if (identity.Architecture is { Length: > 0 } architecture)
+                {
+                    command.Append("\"$($_.Architecture)\" -eq ").Append(PowerShellQuote(architecture)).Append(" -and ");
+                }
+
+                command.Append("[version]$_.Version -ge [version]").Append(PowerShellQuote(identity.Version)).Append(" })) { ").Append(install).Append(" }; ");
+            }
+            else
+            {
+                command.Append(install).Append("; ");
+            }
         }
 
         command.Append("Add-AppxPackage -Register ").Append(PowerShellQuote(manifest)).Append(" -ForceApplicationShutdown -ForceUpdateFromAnyVersion");

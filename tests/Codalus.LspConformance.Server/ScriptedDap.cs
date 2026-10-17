@@ -37,7 +37,10 @@ internal static class ScriptedDap
                     launch = message.TryGetProperty("arguments", out var arguments) ? arguments.Clone() : null;
                     break;
                 case "configurationDone" when FailsToStart(launch):
-                    // As netcoredbg answers when the program's runtime didn't report within its 5 seconds.
+                    // As netcoredbg answers when the program's runtime didn't report within its 5 seconds. Like netcoredbg,
+                    // it started the program first, as its child, and doesn't end it on disconnect: its id is listed
+                    // next to the starts file.
+                    StartProgram(launch!.Value.GetProperty("startsFile").GetString()! + ".programs");
                     await WriteAsync(output, new JsonObject
                     {
                         ["seq"] = ++s_seq,
@@ -88,6 +91,25 @@ internal static class ScriptedDap
 
         File.WriteAllText(path, (failed + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
         return true;
+    }
+
+    private static void StartProgram(string programs)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!)
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        if (Path.GetFileNameWithoutExtension(Environment.ProcessPath!) == "dotnet")
+        {
+            start.ArgumentList.Add(typeof(ScriptedDap).Assembly.Location);
+        }
+
+        start.ArgumentList.Add("--program");
+        using var program = System.Diagnostics.Process.Start(start)!;
+        File.AppendAllText(programs, program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n");
     }
 
     private static Task RespondAsync(Stream output, int requestSeq, string command, JsonNode? body) =>
