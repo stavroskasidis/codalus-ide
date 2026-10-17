@@ -231,7 +231,12 @@ public sealed partial class ShellHost
 
         if (WarnIfWindowsOnly(project))
         {
-            return; // a WinForms, WPF or WinUI app off Windows (M40a, M44)
+            return; // a WinForms, WPF, WinUI or .NET Framework app off Windows (M40a, M44, M43a)
+        }
+
+        if (OfferStartWithoutDebuggingForNetFramework(project))
+        {
+            return; // a .NET Framework app on Windows: the desktop CLR's debugger comes in M43b
         }
 
         if (await TryStartPackagedAppAsync(project, debug: true).ConfigureAwait(true))

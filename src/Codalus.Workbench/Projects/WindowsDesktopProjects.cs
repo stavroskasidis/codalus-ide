@@ -14,11 +14,12 @@ public static class WindowsDesktopProjects
         && tfm[(dash + 1)..].StartsWith("windows", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Whether the project's programs run only on Windows: a WPF or Windows Forms project, or one whose every target
-    /// framework targets Windows.
+    /// Whether the project's programs run only on Windows: a WPF or Windows Forms project, one whose every target
+    /// framework targets Windows, or a .NET Framework project (M43a: the desktop CLR; Mono is a later decision).
     /// </summary>
     public static bool RunsOnlyOnWindows(ProjectInfo project) =>
-        project.UsesWpf || project.UsesWindowsForms || project.UsesWinUI || (project.TargetFrameworks.Length > 0 && project.TargetFrameworks.All(IsWindowsFramework));
+        project.UsesWpf || project.UsesWindowsForms || project.UsesWinUI || (project.TargetFrameworks.Length > 0 && project.TargetFrameworks.All(IsWindowsFramework))
+        || NetFrameworkProjects.IsNetFramework(project);
 
     /// <summary>
     /// Whether the project builds only on Windows: a WinUI 3 project (M44), whose XAML compiler is a Windows program.

@@ -19,7 +19,7 @@ namespace Codalus.Projects.Host.Packages;
 /// the package sources of the solution's effective <c>NuGet.Config</c>. Credentials come from NuGet's cross-platform
 /// credential-provider plugins, non-interactively.
 /// </summary>
-internal sealed class NuGetClient(string root, Func<string, string, Task> log)
+internal sealed partial class NuGetClient(string root, Func<string, string, Task> log)
 {
     private const string ReadmeTemplateType = "ReadmeUriTemplate/6.13.0";
     private static int s_credentialsConfigured;

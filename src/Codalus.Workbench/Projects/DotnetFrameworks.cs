@@ -43,11 +43,16 @@ public static class DotnetFrameworks
 
     /// <summary>
     /// The C# version the SDK uses for a target framework when the project doesn't set <c>LangVersion</c>: 7.3 for
-    /// .NET Core 2.x and .NET Standard 2.0, 8.0 for 3.x and .NET Standard 2.1, 9.0 for .NET 5, then one per release.
-    /// Null for frameworks it doesn't know (the compiler's own default applies).
+    /// .NET Framework (M43a), .NET Core 2.x and .NET Standard 2.0, 8.0 for 3.x and .NET Standard 2.1, 9.0 for .NET 5,
+    /// then one per release. Null for frameworks it doesn't know (the compiler's own default applies).
     /// </summary>
     public static string? DefaultCSharpVersion(string? targetFramework)
     {
+        if (NetFrameworkProjects.IsMoniker(targetFramework?.Trim()))
+        {
+            return "7.3";
+        }
+
         if (targetFramework?.Trim().ToLowerInvariant() is { } tfm && tfm.StartsWith("netstandard", StringComparison.Ordinal))
         {
             return Version.TryParse(tfm["netstandard".Length..], out var standard) ? standard >= new Version(2, 1) ? "8.0" : "7.3" : null;
@@ -64,8 +69,8 @@ public static class DotnetFrameworks
     /// isn't known). <c>dotnet watch</c> applies changes from .NET 6 on.
     /// </summary>
     public static string? HotReloadUnsupportedReason(string? targetFramework, string? projectName = null) =>
-        NetCoreVersion(targetFramework) is { Major: < 6 }
-            ? $"Hot Reload needs .NET 6 or later: {(projectName is null ? "the project" : projectName)} targets {targetFramework}."
+        NetCoreVersion(targetFramework) is { Major: < 6 } || NetFrameworkProjects.IsMoniker(targetFramework)
+            ? $"Hot Reload needs .NET 6 or later: {(projectName is null ? "the project" : projectName)} targets {targetFramework}{(NetFrameworkProjects.IsMoniker(targetFramework) ? " (.NET Framework)" : string.Empty)}."
             : null;
 
     /// <summary>

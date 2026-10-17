@@ -46,6 +46,7 @@ internal static partial class BuiltIns
         Add("solution.projectDependencies", "Project Dependencies…", "Project", Sync(p => shell.OpenProjectDependencies(p)), Trusted);
         Add("project.unload", "Unload Project", "Project", shell.UnloadProjectAsync, Trusted + " && !explorerProjectUnloaded");
         Add("project.reload", "Reload Project", "Project", shell.ReloadProjectAsync, Trusted + " && explorerProjectUnloaded");
+        Add("project.convertToSdkStyle", "Convert to SDK-Style…", "Project", shell.ConvertToSdkStyleAsync, Trusted + " && explorerProjectNonSdkStyle"); // M43a
         Add("solution.saveFilter", "Save As Solution Filter…", "File", _ => shell.SaveSolutionFilterAsync(), Trusted);
         Add("solution.sdks", ".NET SDKs…", "Tools", Sync(_ => shell.OpenSdks()), Trusted);
     }
@@ -65,6 +66,7 @@ internal static partial class BuiltIns
             Item(Context, "solution.saveFilter", "4-solution", 6, "explorerItemKind == solution"),
             Item(Context, "project.unload", "6-load", 1, "explorerItemKind == project && !explorerProjectUnloaded"),
             Item(Context, "project.reload", "6-load", 2, "explorerItemKind == project && explorerProjectUnloaded"),
+            Item(Context, "project.convertToSdkStyle", "6-load", 3, "explorerItemKind == project && explorerProjectNonSdkStyle"),
             Item(Context, "project.properties", "9-properties", 1, "explorerItemKind == project"),
         ]);
     }

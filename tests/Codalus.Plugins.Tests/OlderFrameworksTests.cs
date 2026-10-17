@@ -71,4 +71,20 @@ public sealed class OlderFrameworksTests
         Assert.False(WindowsFrameworks.OnlyWindows(["net11.0", "net11.0-windows"], windows: false));
         Assert.False(WindowsFrameworks.OnlyWindows([], windows: false));
     }
+
+    [Fact]
+    public void Net_framework_test_projects_run_only_on_windows()
+    {
+        // M43a: net4x test hosts run on the desktop CLR (M43b runs them there); off Windows the project says why.
+        Assert.True(WindowsFrameworks.IsNetFramework("net48"));
+        Assert.True(WindowsFrameworks.IsNetFramework("net472"));
+        Assert.False(WindowsFrameworks.IsNetFramework("net8.0"));
+        Assert.False(WindowsFrameworks.IsNetFramework("netstandard2.0"));
+        Assert.True(WindowsFrameworks.OnlyWindows(["net48"], windows: false));
+        Assert.True(WindowsFrameworks.OnlyWindows(["net48", "net11.0-windows"], windows: false));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net48"], windows: true));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net48", "net8.0"], windows: false));
+        Assert.Equal("Tests targets .NET Framework (net48): its tests run only on Windows.", WindowsFrameworks.Reason("Tests", ["net48"]));
+        Assert.Equal("Tests targets Windows (net11.0-windows): its tests run only on Windows.", WindowsFrameworks.Reason("Tests", ["net11.0-windows"]));
+    }
 }

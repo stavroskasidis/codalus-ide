@@ -158,7 +158,13 @@ public sealed partial class ShellHost
                     continue;
                 }
 
-                if (debug && target.Action == StartupAction.Start)
+                if (debug && target.Action == StartupAction.Start && IsNetFrameworkProject(target.Project))
+                {
+                    // The desktop CLR's debugger comes in M43b: a .NET Framework app among them runs without it.
+                    DebugLog.AppendLine($"[{name}] runs without debugging: it targets .NET Framework, whose debugger comes in a later release.");
+                }
+
+                if (debug && target.Action == StartupAction.Start && !IsNetFrameworkProject(target.Project))
                 {
                     var (info, profiles, error) = await Runs.GetProfilesAsync(target.Project, CancellationToken.None).ConfigureAwait(true);
                     if (error is not null)

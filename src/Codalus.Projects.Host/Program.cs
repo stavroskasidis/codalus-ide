@@ -84,6 +84,7 @@ if (OperatingSystem.IsLinux() && instance.Version.Major < 5 && Codalus.Projects.
 }
 
 WindowsDesktop.EnableWindowsTargeting();
+NetFramework.UseReferenceAssemblies(); // non-SDK-style .NET Framework projects (M43a)
 MSBuildLocator.RegisterInstance(instance);
 return await RunAsync(stdin, stdout, instance.MSBuildPath, sdkWarning).ConfigureAwait(false);
 
@@ -103,6 +104,8 @@ static string SdkName(VisualStudioInstance instance) => Path.GetFileName(Path.Tr
 [MethodImpl(MethodImplOptions.NoInlining)]
 static async Task<int> RunAsync(Stream input, Stream output, string msbuildPath, string? sdkWarning)
 {
+    // Before any project collection reads the environment (M43a): where the reference assemblies packages are.
+    Codalus.Projects.Host.Packages.NuGetClient.PublishGlobalPackagesFolder(Directory.GetCurrentDirectory());
     await using var connection = new JsonRpcConnection(input, output);
     await using var server = new BuildHostServer(connection, msbuildPath) { SdkWarning = sdkWarning };
     server.RegisterHandlers();
