@@ -2081,11 +2081,14 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return;
         }
 
+        // A program that ends leaves Runs.Running at once; its Run channel says how it ended, after its output.
+        string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: ConsoleApp")?.GetText() ?? string.Empty;
+        shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: ConsoleApp")?.Clear(); // an earlier step's ConsoleApp
         await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
-        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "ConsoleApp" && p.HasExited), "ConsoleApp ran: " + Tail(shell.Builds.Channel.GetText(), 2000), 300).ConfigureAwait(true);
-        var program = shell.Runs.Running.Last(p => p.Name == "ConsoleApp");
-        await WaitAsync(() => program.Channel?.GetText().Contains("Runtime: .NET Framework 4.", StringComparison.Ordinal) == true, "its output names the desktop CLR: " + program.Channel?.GetText(), 60).ConfigureAwait(true);
-        Check(program.Channel!.GetText().Contains("Hello from .NET Framework, Codalus!", StringComparison.Ordinal), "its output comes back");
+        await WaitAsync(() => Output().Contains("has exited with code", StringComparison.Ordinal), () => "ConsoleApp ran: " + Tail(Output() + shell.Builds.Channel.GetText(), 2000), 300).ConfigureAwait(true);
+        Check(Output().Contains("has exited with code 0 (0x0)", StringComparison.Ordinal), "it exits with code 0: " + Output());
+        Check(Output().Contains("Runtime: .NET Framework 4.", StringComparison.Ordinal), "its output names the desktop CLR: " + Output());
+        Check(Output().Contains("Hello from .NET Framework, Codalus!", StringComparison.Ordinal), "its output comes back");
     }
 
     /// <summary>

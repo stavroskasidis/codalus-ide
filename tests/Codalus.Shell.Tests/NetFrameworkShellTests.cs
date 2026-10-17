@@ -140,11 +140,13 @@ public sealed class NetFrameworkShellTests
         f.Shell.SetStartupProject(console);
 
         await f.Shell.StartWithoutDebuggingAsync();
-        await ShellFixture.PumpUntil(() => f.Shell.Runs.Running.Any(p => p.Name == "ConsoleApp" && p.HasExited), seconds: 240);
-        var program = f.Shell.Runs.Running.Single(p => p.Name == "ConsoleApp");
-        await ShellFixture.PumpUntil(() => program.Channel?.GetText().Contains("Runtime: .NET Framework 4.", StringComparison.Ordinal) == true, seconds: 60);
-        Assert.Contains("Hello from .NET Framework, Codalus!", program.Channel!.GetText(), StringComparison.Ordinal);
-        Assert.Equal(0, await program.Exited);
+
+        // A program that ends leaves Runs.Running at once; its Run channel says how it ended, after its output.
+        string Output() => f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: ConsoleApp")?.GetText() ?? string.Empty;
+        await ShellFixture.PumpUntil(() => Output().Contains("has exited with code", StringComparison.Ordinal), seconds: 240);
+        Assert.Contains("has exited with code 0 (0x0)", Output(), StringComparison.Ordinal);
+        Assert.Contains("Runtime: .NET Framework 4.", Output(), StringComparison.Ordinal);
+        Assert.Contains("Hello from .NET Framework, Codalus!", Output(), StringComparison.Ordinal);
 
         // F5 offers Start Without Debugging instead (the desktop CLR's debugger is M43b).
         await f.Shell.StartDebuggingAsync();
