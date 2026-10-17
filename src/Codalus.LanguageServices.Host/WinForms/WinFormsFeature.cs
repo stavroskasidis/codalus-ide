@@ -70,9 +70,17 @@ internal static class WinFormsFeature
             DesignerReader.Read(text.ContentEquals(DesignerText) ? DesignerTree : CSharpSyntaxTree.ParseText(text, ParseOptions, DesignerPath), BaseType, GlobalUsings, Resolver);
     }
 
-    /// <summary>A file's text as the editor has it, else as it is on disk (null when there's no such file).</summary>
-    private static string? ReadText(string path, Func<string, SourceText?> openText)
+    /// <summary>
+    /// A file's text as the designer sent it (<paramref name="held"/>: its unsaved <c>.resx</c> files), else as the editor
+    /// has it, else as it is on disk (null when there's no such file).
+    /// </summary>
+    private static string? ReadText(string path, Func<string, SourceText?> openText, DesignerFileText[]? held = null)
     {
+        if (held?.FirstOrDefault(f => string.Equals(Path.GetFullPath(f.Path), Path.GetFullPath(path), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) is { } file)
+        {
+            return file.Text;
+        }
+
         if (openText(path) is { } open)
         {
             return open.ToString();
@@ -208,7 +216,7 @@ internal static class WinFormsFeature
     }
 
     /// <summary>A form's designer model, or why it opens as code.</summary>
-    public static async Task<WinFormsReadResult> ReadAsync(Solution solution, string path, Func<string, SourceText?> openText, CancellationToken cancellationToken)
+    public static async Task<WinFormsReadResult> ReadAsync(Solution solution, string path, Func<string, SourceText?> openText, CancellationToken cancellationToken, DesignerFileText[]? resourceFiles = null)
     {
         var (codePath, designerPath) = Files(path);
         var resx = Path.ChangeExtension(codePath, ".resx");
@@ -220,7 +228,7 @@ internal static class WinFormsFeature
 
         var project = (context.Designer ?? context.Code)?.Project.FilePath;
         var fullName = context.Class?.ToDisplayString() ?? null;
-        var resources = new DesignerResourceSet(codePath, p => ReadText(p, openText));
+        var resources = new DesignerResourceSet(codePath, p => ReadText(p, openText, resourceFiles), resourceFiles?.Select(f => f.Path));
         var trayLocations = resources.Get(null)?.TrayLocations() ?? new Dictionary<string, (int X, int Y)>();
         WinFormsReadResult Result(DesignerModel? model, string? problem, int? line) =>
             new(codePath, designerPath, context.IsDesignable, model, problem, line)
@@ -272,7 +280,7 @@ internal static class WinFormsFeature
             return Fail($"{Path.GetFileName(context.DesignerPath)} changed meanwhile: the designer reloads it.");
         }
 
-        var resources = new DesignerResourceSet(context.CodePath, p => ReadText(p, openText));
+        var resources = new DesignerResourceSet(context.CodePath, p => ReadText(p, openText, parameters.ResourceFiles), parameters.ResourceFiles?.Select(f => f.Path));
         var writer = new DesignerWriter(context.Read, resources);
         var text = context.DesignerText;
         var documents = new List<TextDocumentEdit>();

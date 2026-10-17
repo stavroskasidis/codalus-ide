@@ -494,7 +494,11 @@ public sealed class LanguageHostClient : IAsyncDisposable
 
     /// <summary><c>codalus/winforms/read</c>: a form's designer model from its code or designer file, or why it opens as code (M41a, ADR 0073).</summary>
     public Task<WinFormsReadResult?> WinFormsReadAsync(string uri, CancellationToken cancellationToken) =>
-        InvokeNullable(Methods.WinFormsRead, new WinFormsReadParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.WinFormsReadParams, ProtocolJsonContext.Default.WinFormsReadResult, cancellationToken);
+        WinFormsReadAsync(new WinFormsReadParams(new TextDocumentIdentifier(uri)), cancellationToken);
+
+    /// <summary><c>codalus/winforms/read</c> with the form's unsaved <c>.resx</c> files (M41b).</summary>
+    public Task<WinFormsReadResult?> WinFormsReadAsync(WinFormsReadParams parameters, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.WinFormsRead, parameters, ProtocolJsonContext.Default.WinFormsReadParams, ProtocolJsonContext.Default.WinFormsReadResult, cancellationToken);
 
     /// <summary><c>codalus/winforms/edit</c>: the designer's changes as minimal text edits (M41a, ADR 0073).</summary>
     public Task<WinFormsEditResult?> WinFormsEditAsync(WinFormsEditParams parameters, CancellationToken cancellationToken) =>

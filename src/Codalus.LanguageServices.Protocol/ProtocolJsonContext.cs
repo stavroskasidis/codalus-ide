@@ -98,6 +98,7 @@ namespace Codalus.LanguageServices.Protocol;
 [JsonSerializable(typeof(XamlLogicalTreeParams))]
 [JsonSerializable(typeof(XamlLogicalTreeResult))]
 [JsonSerializable(typeof(WinFormsReadParams))]
+[JsonSerializable(typeof(DesignerFileText))]
 [JsonSerializable(typeof(WinFormsReadResult))]
 [JsonSerializable(typeof(WinFormsEditParams))]
 [JsonSerializable(typeof(WinFormsEditResult))]

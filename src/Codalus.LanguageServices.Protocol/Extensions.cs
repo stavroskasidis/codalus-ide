@@ -410,7 +410,14 @@ public sealed record XamlLogicalTreeResult(XamlLogicalNode[] Nodes);
 /// <c>codalus/winforms/read</c> (M41a, ADR 0073): a form's or user control's designer model, from its code file
 /// (<c>MainForm.cs</c>) or its designer file (<c>MainForm.Designer.cs</c>).
 /// </summary>
-public sealed record WinFormsReadParams(TextDocumentIdentifier TextDocument);
+public sealed record WinFormsReadParams(TextDocumentIdentifier TextDocument)
+{
+    /// <summary>The form's <c>.resx</c> files as the designer has them (M41b), which win over the files on disk.</summary>
+    public DesignerFileText[]? ResourceFiles { get; init; }
+}
+
+/// <summary>A file's text as the client has it, unsaved (M41b): a form's <c>.resx</c> file the designer edits.</summary>
+public sealed record DesignerFileText(string Path, string Text);
 
 /// <summary>
 /// The designer files of a class (<see cref="CodeFile"/> and <see cref="DesignerFile"/>) and, when InitializeComponent
@@ -577,6 +584,9 @@ public sealed record DesignerEdit
 public sealed record WinFormsEditParams(TextDocumentIdentifier TextDocument, DesignerEdit[] Edits)
 {
     public int? Version { get; init; }
+
+    /// <summary>The form's <c>.resx</c> files as the designer has them (M41b), which win over the files on disk.</summary>
+    public DesignerFileText[]? ResourceFiles { get; init; }
 }
 
 /// <summary>

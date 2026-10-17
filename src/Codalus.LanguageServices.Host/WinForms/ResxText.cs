@@ -448,8 +448,11 @@ internal sealed class DesignerResourceSet
 {
     private readonly Dictionary<string, (string Path, string? Original, ResxText Text)> _files = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The resource files of the form whose code file is <paramref name="codePath"/>, read through <paramref name="read"/> (the editor's text, else the file's).</summary>
-    public DesignerResourceSet(string codePath, Func<string, string?> read)
+    /// <summary>
+    /// The resource files of the form whose code file is <paramref name="codePath"/>, read through <paramref name="read"/>
+    /// (the designer's or the editor's text, else the file's), with <paramref name="unsaved"/> files that aren't on disk yet.
+    /// </summary>
+    public DesignerResourceSet(string codePath, Func<string, string?> read, IEnumerable<string>? unsaved = null)
     {
         CodePath = codePath;
         Read = read;
@@ -466,6 +469,15 @@ internal sealed class DesignerResourceSet
                 }
             }
         }
+
+        foreach (var file in unsaved ?? [])
+        {
+            if (string.Equals(Path.GetDirectoryName(Path.GetFullPath(file)), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase)
+                && CultureOf(stem, Path.GetFileName(file)) is { } culture && !_files.ContainsKey(culture))
+            {
+                Add(culture, file);
+            }
+        }
     }
 
     public string CodePath { get; }
@@ -475,7 +487,7 @@ internal sealed class DesignerResourceSet
     /// <summary>The culture of a form's resource file (<c>fr</c> for <c>OrderForm.fr.resx</c>), or null when it isn't one.</summary>
     public static string? CultureOf(string stem, string fileName)
     {
-        if (!fileName.StartsWith(stem + ".", StringComparison.OrdinalIgnoreCase) || !fileName.EndsWith(".resx", StringComparison.OrdinalIgnoreCase))
+        if (fileName.Length <= stem.Length + 1 + ".resx".Length || !fileName.StartsWith(stem + ".", StringComparison.OrdinalIgnoreCase) || !fileName.EndsWith(".resx", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }

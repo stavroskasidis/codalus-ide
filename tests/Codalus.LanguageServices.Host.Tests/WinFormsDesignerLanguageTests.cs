@@ -165,6 +165,18 @@ public sealed class WinFormsDesignerLanguageTests(WinFormsLanguageFixture winFor
         Assert.Equal((Uri(Form("AboutForm.de.resx")), (int?)null), (created.TextDocument.Uri, created.TextDocument.Version));
         Assert.Contains("<value>Schließen</value>", Assert.Single(created.Edits).NewText, StringComparison.Ordinal);
         Assert.Equal(new Position(0, 0), created.Edits[0].Range.Start);
+
+        // The designer's unsaved .resx files win over the disk's: the new culture is read, and a second key goes into it.
+        var held = new[] { new DesignerFileText(Form("AboutForm.de.resx"), created.Edits[0].NewText) };
+        var unsaved = await winForms.Client.WinFormsReadAsync(new WinFormsReadParams(new TextDocumentIdentifier(Uri(Form("AboutForm.cs")))) { ResourceFiles = held }, Ct);
+        Assert.Equal(["de", "fr"], unsaved!.Cultures);
+        var second = await winForms.Client.WinFormsEditAsync(new WinFormsEditParams(new TextDocumentIdentifier(Uri(Form("AboutForm.Designer.cs"))),
+            [new DesignerEdit { Kind = DesignerEditKinds.SetResource, Key = "$this.Text", Culture = "de", Resource = DesignerResource.String("Über") }]) { ResourceFiles = held }, Ct);
+        var edited = second!.Edit.DocumentChanges.Single();
+        Assert.Equal(Uri(Form("AboutForm.de.resx")), edited.TextDocument.Uri);
+        var after = Assert.Single(edited.Edits).NewText;
+        Assert.DoesNotContain("Schließen", after, StringComparison.Ordinal);
+        Assert.Contains("<value>Über</value>", after, StringComparison.Ordinal);
     }
 
     [Fact]
