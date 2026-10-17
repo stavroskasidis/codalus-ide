@@ -31,7 +31,7 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
 
         /// <summary>
         /// Loads the project without the imports that are missing (M43a): a non-SDK-style project that imports Visual
-        /// Studio's own targets still gets IntelliSense, though it can't build.
+        /// Studio's own targets still gets IntelliSense, though it can't build. It builds in this process (see <see cref="InProcess"/>).
         /// </summary>
         public bool IgnoreMissingImports { get; init; }
     }
@@ -119,6 +119,17 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
         },
     };
 
+    /// <summary>
+    /// Keeps a build of a project instance loaded here in this process: a batch's worker node would load the project again
+    /// from its file, without the instance's load settings (the missing imports it ignores), and fail.
+    /// </summary>
+    internal static HostServices InProcess(string path)
+    {
+        var host = new HostServices();
+        host.SetNodeAffinity(path, NodeAffinity.InProc);
+        return host;
+    }
+
     private async Task BuildOneAsync(
         Request request,
         IReadOnlyDictionary<string, string> solutionProperties,
@@ -166,7 +177,7 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
                         LoadSettings = ProjectLoadSettings.IgnoreMissingImports | ProjectLoadSettings.IgnoreInvalidImports | ProjectLoadSettings.IgnoreEmptyImports,
                     }),
                     s_targets,
-                    null,
+                    InProcess(request.Path),
                     BuildRequestDataFlags.ProvideProjectStateAfterBuild)
                 : new BuildRequestData(request.Path, global, null, s_targets, null, BuildRequestDataFlags.ProvideSubsetOfStateAfterBuild, s_state);
             var result = await ExecuteAsync(_manager.PendBuildRequest(data)).ConfigureAwait(false);
