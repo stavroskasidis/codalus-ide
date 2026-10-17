@@ -101,6 +101,7 @@ internal sealed class SolutionBuilder : IDisposable
         using var collection = new ProjectCollection();
         var canceled = false;
         var succeeded = false;
+        var restored = true;
         _manager.BeginBuild(new BuildParameters(collection)
         {
             Loggers = loggers,
@@ -113,7 +114,6 @@ internal sealed class SolutionBuilder : IDisposable
         try
         {
             await using var registration = cancellationToken.Register(_manager.CancelAllSubmissions).ConfigureAwait(false);
-            var restored = true;
             if (restore && target != BuildTargets.Clean)
             {
                 var restoreProperties = new Dictionary<string, string>(globalProperties, StringComparer.OrdinalIgnoreCase)
@@ -151,6 +151,14 @@ internal sealed class SolutionBuilder : IDisposable
         finally
         {
             _manager.EndBuild();
+        }
+
+        // A failed build always says why in the Error List: one that logged no error (a task that returned false
+        // quietly, a restore that failed without one) gets an error of its own, on the project or solution built.
+        if (!succeeded && !canceled && !cancellationToken.IsCancellationRequested && logger.Errors == 0)
+        {
+            var what = restored ? msbuildTarget : "Restore";
+            await logger.ReportAsync(BuildSeverities.Error, null, $"{what} failed without reporting an error. The Build output above may say why; a binary log (Build settings) records every step.", path, 0, 0, path).ConfigureAwait(false);
         }
 
         await logger.DrainAsync().ConfigureAwait(false);
