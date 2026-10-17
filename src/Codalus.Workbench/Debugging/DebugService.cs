@@ -1659,6 +1659,11 @@ public sealed class DebugService : IAsyncDisposable
             await EndRunToCursorAsync(adapter).ConfigureAwait(false);
 
             Threads = await adapter.ThreadsAsync(_session.Token).ConfigureAwait(false);
+            if (frames.Length == 0 && stopped.Reason == "pause")
+            {
+                Output?.Invoke(this, new DebugOutput("console", $"Paused in external code: none of the program's {Threads.Count.ToString(CultureInfo.InvariantCulture)} threads is running .NET code (it may still be starting, or be running only native code). Continue, and Break All again to see its code.\n"));
+            }
+
             SelectedThreadId = threadId;
             Frames = frames;
             SelectedFrame = frames.FirstOrDefault(f => f.Source?.Path is not null) ?? (frames.Length > 0 ? frames[0] : null);
@@ -1703,7 +1708,7 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         (int ThreadId, StackFrame[] Frames)? withFrames = frames.Length > 0 ? (stopped.ThreadId!.Value, frames) : null;
-        DapThread[] threads;
+        DapThread[] threads = [];
         try
         {
             threads = await adapter.ThreadsAsync(_session.Token).ConfigureAwait(false);
@@ -1741,7 +1746,10 @@ public sealed class DebugService : IAsyncDisposable
             }
         }
 
-        return withFrames ?? (stopped.ThreadId ?? 0, frames);
+        // No thread has frames: a program paused before its Main runs (just started, or attached to at its start), or
+        // one running only native code. The stop shows the thread the event named (or else the first), with no frames:
+        // the Call Stack shows [External Code], and Continue then Break All again shows the program's code.
+        return withFrames ?? (stopped.ThreadId ?? (threads.Length > 0 ? threads[0].Id : 0), frames);
 
         static bool HasSource(StackFrame frame) => frame.Source?.Path is not null;
     }
