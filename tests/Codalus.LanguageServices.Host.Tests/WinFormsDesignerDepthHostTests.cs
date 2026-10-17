@@ -218,10 +218,10 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
         var (host, _, source) = await LoadAsync("InventoryForm.cs");
         await using var _ = host;
 
-        // A list box's: Edit Items… opens the collection editor; Use Data Bound Items is a property.
+        // A list box's: Edit Items… opens the collection editor. (Windows Forms' ListBoxDesigner gives a list box the
+        // unbound action list on .NET 11, Edit Items… alone: no Use Data Bound Items property.)
         var listBox = (await host.ActionsAsync(new DesignerComponentsParams(["categoryListBox"]), Ct)).Items;
-        Assert.Contains(listBox, i => i.Collection == "System.Windows.Forms.ListBox:Items");
-        Assert.Contains(listBox, i => i.Kind == DesignerActionKinds.Property);
+        Assert.Contains(listBox, i => i is { Kind: DesignerActionKinds.Method, Member: "InvokeItemsDialog", Collection: "System.Windows.Forms.ListBox:Items", Unavailable: false });
 
         // A tab control's Add Tab: a new tab page, written as a component in the tab control's controls.
         var tabs = (await host.ActionsAsync(new DesignerComponentsParams(["detailsTabControl"]), Ct)).Items;
