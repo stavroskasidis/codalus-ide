@@ -94,7 +94,8 @@ public sealed class NetFrameworkShellTests
 
         // The solution builds everywhere, without the web project.
         Assert.True(await f.Shell.BuildAsync(BuildTargets.Build, null), f.Shell.Builds.Channel.GetText());
-        Assert.Contains("LegacyWebApp is left out of the build", f.Shell.Builds.Channel.GetText(), StringComparison.Ordinal);
+        // Output notifications may be handled just after the result arrives.
+        await ShellFixture.PumpUntil(() => f.Shell.Builds.Channel.GetText().Contains("LegacyWebApp is left out of the build", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(folder, "LegacyApp", "bin", "Debug", "LegacyApp.exe")));
     }
 

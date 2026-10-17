@@ -362,7 +362,8 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         // The solution builds without it, saying so.
         var result = await _builds.BuildAsync(BuildTargets.Build, null, Timeout());
         Assert.True(result.Succeeded, _builds.Channel.GetText());
-        Assert.Contains("LegacyWebApp is left out of the build", _builds.Channel.GetText(), StringComparison.Ordinal);
+        // Output notifications may be handled just after the result arrives (the result doesn't queue behind them).
+        await WaitUntilAsync(() => _builds.Channel.GetText().Contains("LegacyWebApp is left out of the build", StringComparison.Ordinal), _builds.Channel.GetText);
         Assert.True(File.Exists(Path.Combine(Fixture, "LegacyApp", "bin", "Debug", "LegacyApp.exe")));
         Assert.True(File.Exists(Path.Combine(Fixture, "LegacyApp", "bin", "Debug", "Codalus.Sample.Legacy.dll")));
         Assert.True(File.Exists(Path.Combine(Fixture, "LegacyApp", "bin", "Debug", "LegacyApp.exe.config")));
@@ -375,7 +376,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         // On its own it doesn't build, and says why.
         result = await _builds.BuildAsync(BuildTargets.Build, Project("LegacyWebApp"), Timeout());
         Assert.False(result.Succeeded);
-        Assert.Contains("imports Visual Studio's own MSBuild targets", _builds.Channel.GetText(), StringComparison.Ordinal);
+        await WaitUntilAsync(() => _builds.Channel.GetText().Contains("imports Visual Studio's own MSBuild targets", StringComparison.Ordinal), _builds.Channel.GetText);
 
         // How they start: the .exe itself (the desktop CLR runs it, not dotnet).
         var run = await _solutions.GetRunInfoAsync(legacy, Timeout());
