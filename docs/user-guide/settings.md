@@ -45,7 +45,7 @@ Settings you may want first:
 
 ## Themes
 
-Codalus IDE has four **theme families**, each in Light, Dark and High contrast, and Classic:
+Codalus IDE has four **theme families**, each in Light, Dark and High contrast, and Classic. The [first-run setup](getting-started.md#the-first-run-setup) offers the four at the first start (Help → Set Up Codalus IDE shows it again):
 
 | Family | What it looks like |
 |---|---|

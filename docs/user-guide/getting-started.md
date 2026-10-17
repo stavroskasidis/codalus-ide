@@ -10,7 +10,7 @@
 
 The debugger (netcoredbg) is included in the packages.
 
-**Missing something?** When Codalus IDE starts without the .NET SDK or git, it offers to install them, and the same when only SDKs older than .NET 11 are installed (it installs the .NET 11 SDK). When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
+**Missing something?** The [first-run setup](#the-first-run-setup)'s Tools step checks for the .NET SDK and git. On later starts without them, Codalus IDE offers to install them, and the same when only SDKs older than .NET 11 are installed (it installs the .NET 11 SDK). When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
 - **What's found**: Help → Check Environment lists every tool it uses, with its version, its path and what needs it: the .NET SDK, git and Git LFS, Docker or Podman, and WSL on Windows.
 - **How it installs**:
   - Windows: winget, or the download page when winget isn't there.
@@ -47,6 +47,7 @@ From a Windows terminal, `codalus` runs the installed app and waits for it, so `
 | `codalus App.slnx`, `codalus src/App.csproj`, `codalus folder` | Opens the solution, project or folder in a new window. |
 | `codalus Program.cs:12:5` | Opens the file in the running window, at line 12, column 5 (`:column` and `:line` are optional), and brings the window to the front. Without a running window it opens a new one. |
 | `codalus --new-window Program.cs` | Opens the file in a new window, even when one is running. |
+| `codalus --skip-setup` | Starts without the [first-run setup](#the-first-run-setup), for scripts and automation (`CODALUS_SKIP_SETUP=1` does the same). The setup still shows at a later start. |
 | `codalus --wait <file>` | Edits the file and exits when its tab closes (git's `core.editor`). |
 | `codalus diff <left> <right>`, `codalus merge <local> <remote> <base> <merged>` | Compares two files, or resolves a merge for `git mergetool` ([git.md](git.md)). |
 | `codalus --list-plugins` | Prints the plugins you've installed (`--show-versions`: with their versions), and exits. |
@@ -60,6 +61,27 @@ To build from source, see the repository's README.
 
 ## First start
 
+### The first-run setup
+
+The first time Codalus IDE starts for a user data folder, **Set up Codalus IDE** opens in its own window, before the start window. Four steps, each optional:
+
+1. **Appearance**: the four theme families, Harbor, Graphite, Daylight and Ember, as cards with a picture of each, and a mode: Light, Dark, High contrast or **Match system** (the default), which follows your system's light, dark and high-contrast settings. The setup window and the IDE behind it change as you choose. Harbor with Match system is preselected. Classic's Blue, Light, Dark and High Contrast are in Tools → Options → Environment → Appearance ([Themes](settings.md#themes)).
+2. **Keyboard**: the keyboard scheme: **Default** (the classic IDE's keys: F5 debugs, F6 builds, Ctrl+Q searches), VS Code's, ReSharper's or Emacs. Your own key bindings go over any of them ([Keyboard shortcuts](settings.md#keyboard-shortcuts)).
+3. **Your settings**: import from VS Code (its settings and key bindings, found in its user folder), from a `.vssettings` file another IDE exported, or from a file exported with Tools → Export Settings ([Moving your settings](settings.md#moving-your-settings)); or turn on [Settings Sync](settings.md#settings-sync) with a folder or a Git repository. When the folder or repository already has settings, they replace this machine's, without asking.
+4. **Tools**: the .NET SDK and git, found or offered. **Install…** shows exactly what would run; nothing installs until you choose **Install** (or **Run in Terminal**, or **Open Page**). Help → Check Environment lists everything else.
+
+**Next** saves the step and moves on (`Alt+Right`); **Back** goes back (`Alt+Left`). **Done**, on the last step, opens the start window. **Skip setup** (or `Esc`, or closing the window) ends the setup without saving the step you're on, so a new install keeps the defaults: Harbor following the system, and the Default keys. Either way the setup is recorded (`workbench.setupCompleted`) and doesn't show again; **Help → Set Up Codalus IDE** or **Help → Get Started** runs it again. The window works from the keyboard: `Tab` moves through a step, the arrow keys move between the cards and modes, and `Space` or `Enter` chooses.
+
+It doesn't show:
+- when the command line opens something: a solution, folder or file, `--remote`, `codalus diff`, `codalus merge` or `--wait`;
+- with `--skip-setup` or `CODALUS_SKIP_SETUP=1`, and in the smoke test, benchmarks and `--screenshot` runs;
+- when Settings Sync is already on (its target is in your settings): your profile comes from it;
+- for a user data folder used before the setup existed (one with settings or a saved window), so an upgrade doesn't ask.
+
+The setup doesn't ask about AI: it stays off until you turn it on ([AI assistance](ai.md)).
+
+### The start window
+
 **The start window** asks "What would you like to do?" when Codalus IDE starts without a solution:
 - **Recent list**: on the left, your recent solutions, projects and folders, grouped as Pinned, Today, Yesterday, This week, This month and Older.
   - Search them with `Alt+S`; `Enter` opens the first match.
@@ -71,7 +93,9 @@ To build from source, see the repository's README.
 
 File → Start Window brings it back. Environment → On Startup (`workbench.startup`) can open an empty window or the last solution instead.
 
-The Start page opens with **Get Started**: choose a color theme and a keyboard scheme (Default, VS Code, ReSharper or Emacs), import your VS Code settings and key bindings or a file exported from another machine, and adjust Fonts and Colors. **Done** hides these steps (Help → Get Started shows them again). Below them are the common actions, recent solutions and a tip that runs what it describes.
+The Start page has the common actions, recent solutions and a tip that runs what it describes. (Get Started, the theme, keyboard scheme and imports that were at its top, is the first-run setup since 0.3: Help → Get Started opens it.)
+
+### Opening a solution
 
 1. **Open a solution**: File → Open Solution or Project (`Ctrl+Shift+O`). Pick a `.sln`, `.slnx` or a project file (`.csproj`). You can also pass one on the command line: `codalus path/to/App.sln`.
 2. **Trust the folder.** Opening a solution runs code from it: MSBuild evaluates its project files and imports, and restore runs NuGet targets. The first time you open a folder, Codalus IDE asks whether you trust its authors.
