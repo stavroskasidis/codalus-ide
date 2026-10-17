@@ -257,6 +257,18 @@ public sealed partial class ShellHost : IEditorServices
             return null;
         }
 
+        // A form's code file opens in the Windows Forms designer on Windows (M41a), unless the text editor was asked for.
+        if (initialContent is null && !textEditor && at is null && File.Exists(path) && OpensInWinFormsDesigner(path))
+        {
+            await OpenWinFormsDesignerAsync(path, preview).ConfigureAwait(true);
+            return null;
+        }
+
+        if (initialContent is null && !textEditor)
+        {
+            TellWinFormsWindowsOnly(path);
+        }
+
         // A plugin's custom editor claims the file (API 1.0), unless the text editor was asked for.
         if (initialContent is null && !textEditor && at is null && Plugins.CustomEditorFor(path) is { } custom && File.Exists(path)
             && await OpenInCustomEditorAsync(path, custom, preview).ConfigureAwait(true))
@@ -436,7 +448,7 @@ public sealed partial class ShellHost : IEditorServices
 
     private void OnDocumentClosed(Docking.ShellDocument document)
     {
-        if (document is not CodeEditorDocument closed || Editors.Any(e => e.Model == closed.Model))
+        if (document is not CodeEditorDocument closed || Editors.Any(e => e.Model == closed.Model) || IsHeld(closed.Model))
         {
             return;
         }

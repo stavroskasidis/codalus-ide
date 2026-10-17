@@ -1,0 +1,39 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.ToolboxView"
+             x:DataType="vm:ToolboxViewModel">
+  <!-- The Toolbox (M41a): a click arms an item for a click or a drag on the designer's surface; an item can be dragged onto it too. -->
+  <DockPanel>
+    <TextBox DockPanel.Dock="Top" Margin="6,6,6,4" Text="{Binding Filter}" PlaceholderText="{l:T toolbox.searchToolbox}" AutomationProperties.Name="{l:T toolbox.searchToolbox}" />
+    <TextBlock DockPanel.Dock="Top" Margin="8,0,8,4" Classes="muted" Text="{Binding ArmedText}" IsVisible="{Binding HasArmed}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+    <Grid>
+      <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" />
+      <ScrollViewer IsVisible="{Binding IsAvailable}">
+        <ItemsControl x:Name="CategoryList" ItemsSource="{Binding Categories}" AutomationProperties.Name="{l:T toolbox.toolbox}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ToolboxCategoryViewModel">
+              <Expander Header="{Binding Title}" IsExpanded="{Binding IsExpanded}" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,1">
+                <ItemsControl ItemsSource="{Binding Items}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ToolboxItemViewModel">
+                      <Button Classes="toolbar toolboxItem" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,2" Click="OnItemClicked"
+                              PointerPressed="OnItemPressed" PointerMoved="OnItemMoved" ToolTip.Tip="{Binding ToolTip}" AutomationProperties.Name="{Binding Name}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <controls:Icon Kind="{Binding Icon}" />
+                          <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Expander>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</UserControl>

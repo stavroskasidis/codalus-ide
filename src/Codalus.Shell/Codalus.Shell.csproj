@@ -115,6 +115,7 @@
                                   Codalus.Debugging.StartupHook.dll for programs debugged in the terminal, and
                                   Codalus.Previewer.Agent.dll for Avalonia's designer host (the XAML previewer)
       wpfpreviewer/               codalus-wpfpreviewer, the WPF previewer's designer host and the WPF live agent (Windows only)
+      winformsdesigner/           codalus-winformsdesigner, the Windows Forms designer's host (Windows only)
       diaghost/                   codalus-diaghost, EventPipe sessions and trace processing for the profiler (likewise)
       plugins/<plugin id>/        built-in plugins
       terminal/                   shell integration scripts for the integrated terminal
@@ -176,6 +177,28 @@
 
   <Target Name="CodalusPublishWpfPreviewer" AfterTargets="Publish" DependsOnTargets="CodalusWpfPreviewerFiles" Condition="$(RuntimeIdentifier.StartsWith('win'))">
     <Copy SourceFiles="@(_CodalusWpfPreviewerFiles)" DestinationFolder="$(PublishDir)wpfpreviewer" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!--
+    The Windows Forms designer's host (M41a, ADR 0073): Windows Forms code (net8.0-windows), built on every OS
+    (EnableWindowsTargeting) and shipped only on Windows, in winformsdesigner/, as the WPF previewer is.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.WinForms.Designer\Codalus.WinForms.Designer.csproj" ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;TargetFramework" />
+  </ItemGroup>
+
+  <Target Name="CodalusWinFormsDesignerFiles">
+    <ItemGroup>
+      <_CodalusWinFormsDesignerFiles Include="$(MSBuildThisFileDirectory)..\Codalus.WinForms.Designer\bin\$(Configuration)\net8.0-windows\codalus-winformsdesigner.*" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CodalusCopyWinFormsDesigner" AfterTargets="Build" DependsOnTargets="CodalusWinFormsDesignerFiles" Condition="'$(DesignTimeBuild)' != 'true' And '$(OS)' == 'Windows_NT'">
+    <Copy SourceFiles="@(_CodalusWinFormsDesignerFiles)" DestinationFolder="$(OutDir)winformsdesigner" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CodalusPublishWinFormsDesigner" AfterTargets="Publish" DependsOnTargets="CodalusWinFormsDesignerFiles" Condition="$(RuntimeIdentifier.StartsWith('win'))">
+    <Copy SourceFiles="@(_CodalusWinFormsDesignerFiles)" DestinationFolder="$(PublishDir)winformsdesigner" SkipUnchangedFiles="true" />
   </Target>
 
   <Target Name="CodalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
