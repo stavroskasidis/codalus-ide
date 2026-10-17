@@ -96,8 +96,8 @@ internal sealed partial class SolutionSession
     }
 
     /// <summary>
-    /// A project build of a project that can't build here says why and fails; a solution build says which projects it
-    /// leaves out. True when the build should go on.
+    /// A project build of a project that can't build here says why (an error on the project, in the Error List too) and
+    /// fails; a solution build says which projects it leaves out (a warning on each). True when the build should go on.
     /// </summary>
     private async Task<bool> ReportProjectsThatCannotBuildAsync(string? project, IBuildEvents events)
     {
@@ -105,7 +105,7 @@ internal sealed partial class SolutionSession
         {
             if (CannotBuildReason(project) is { } reason)
             {
-                await events.BuildOutputAsync("error: " + reason).ConfigureAwait(false);
+                await ReportAsync(events, BuildSeverities.Error, project, reason).ConfigureAwait(false);
                 return false;
             }
 
@@ -114,10 +114,16 @@ internal sealed partial class SolutionSession
 
         foreach (var path in ProjectPaths.Where(p => !IsUnloaded(p) && CannotBuild(p)))
         {
-            await events.BuildOutputAsync($"warning: {System.IO.Path.GetFileNameWithoutExtension(path)} is left out of the build. {CannotBuildReason(path)}").ConfigureAwait(false);
+            await ReportAsync(events, BuildSeverities.Warning, path, $"{System.IO.Path.GetFileNameWithoutExtension(path)} is left out of the build. {CannotBuildReason(path)}").ConfigureAwait(false);
         }
 
         return true;
+    }
+
+    private static async Task ReportAsync(IBuildEvents events, string severity, string project, string message)
+    {
+        await events.BuildOutputAsync($"{project}: {severity}: {message}").ConfigureAwait(false);
+        await events.BuildDiagnosticAsync(new BuildDiagnosticInfo(severity, null, message, project, 0, 0, 0, 0, project, null)).ConfigureAwait(false);
     }
 
     /// <summary>A project's .NET Framework moniker for its run information, when it has no <c>TargetFramework</c> (non-SDK-style).</summary>

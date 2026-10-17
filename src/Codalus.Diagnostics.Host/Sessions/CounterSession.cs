@@ -86,7 +86,7 @@ internal sealed class CounterSession : IAsyncDisposable
     public async Task<string> StartAsync(CancellationToken cancellationToken)
     {
         var name = DiagnosticsPort.NameOf(_parameters.ProcessId);
-        _session = await DiagnosticsPort.StartSessionAsync(_parameters.ProcessId, Providers(), rundown: false, stacks: false, bufferMegabytes: 64, cancellationToken).ConfigureAwait(false);
+        _session = await DiagnosticsPort.StartSessionAsync(_parameters.ProcessId, Providers(), rundown: false, stacks: false, bufferMegabytes: 64, slowStart: false, cancellationToken).ConfigureAwait(false);
         var session = _session;
         _processing = Task.Run(() => ProcessAsync(session), CancellationToken.None);
         _flushing = Task.Run(FlushLoopAsync, CancellationToken.None);

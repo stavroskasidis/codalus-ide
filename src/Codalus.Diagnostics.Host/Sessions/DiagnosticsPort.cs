@@ -9,11 +9,18 @@ namespace Codalus.Diagnostics.Host.Sessions;
 /// <summary>
 /// A process's diagnostics port (Microsoft.Diagnostics.NETCore.Client): finding .NET processes, starting EventPipe
 /// sessions, and resuming a process held at startup. A process launched to be profiled from its start may not have
-/// opened its port yet, so starting retries briefly while the process lives.
+/// opened its port yet, so starting retries briefly while the process lives. A try the port doesn't answer is given up
+/// and made again, so a session's start never waits on it for good.
 /// </summary>
 internal static class DiagnosticsPort
 {
     private static readonly TimeSpan s_connectTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>How long one try to start a session waits for the port's answer before it is made again.</summary>
+    private static readonly TimeSpan s_attemptTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>How long a live process's port may leave session starts unanswered before starting fails, saying so.</summary>
+    private static readonly TimeSpan s_answerTimeout = TimeSpan.FromSeconds(60);
 
     /// <summary>The runtime's own events a CPU trace needs: method loads (names), IL-to-native maps (source lines), modules.</summary>
     private const long CpuRuntimeKeywords = 0x8 /* Loader */ | 0x10 /* Jit */ | 0x20 /* NGen (ReadyToRun) */ | 0x20000 /* JittedMethodILToNativeMap */;
@@ -236,29 +243,47 @@ internal static class DiagnosticsPort
         }
     }
 
-    /// <summary>Starts an EventPipe session, retrying while the port isn't open yet (a process that has just started).</summary>
-    public static async Task<EventPipeSession> StartSessionAsync(int processId, IReadOnlyList<EventPipeProvider> providers, bool rundown, bool stacks, int bufferMegabytes, CancellationToken cancellationToken)
+    /// <summary>
+    /// Starts an EventPipe session, retrying while the port isn't open yet (a process that has just started) and while
+    /// it doesn't answer. On Windows the client waits for the runtime's pipe without a time limit (one the runtime hasn't
+    /// made yet, or a connection it missed), which held a trace's start until the caller gave up after 3 minutes (the
+    /// Windows CI runner): each try now waits <see cref="s_attemptTimeout"/>, and after <see cref="s_answerTimeout"/>
+    /// starting fails with the reason. A start that does its work before it answers (<paramref name="slowStart"/>: a
+    /// heap snapshot's induced GC, as long as the heap is large) waits for its answer instead.
+    /// </summary>
+    public static async Task<EventPipeSession> StartSessionAsync(int processId, IReadOnlyList<EventPipeProvider> providers, bool rundown, bool stacks, int bufferMegabytes, bool slowStart, CancellationToken cancellationToken)
     {
         NameOf(processId);
         var client = new DiagnosticsClient(processId);
         var clock = Stopwatch.StartNew();
         while (true)
         {
+            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (!slowStart)
+            {
+                attempt.CancelAfter(s_attemptTimeout);
+            }
+
+            var starting = StartOnceAsync(client, providers, rundown, stacks, bufferMegabytes, attempt.Token);
             try
             {
-                if (!stacks)
+                // WaitAsync too: the try ends on time even where the client doesn't watch its token.
+                return await starting.WaitAsync(attempt.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                DisposeWhenStarted(starting);
+                if (!IsAlive(processId))
                 {
-                    try
-                    {
-                        return await client.StartEventPipeSessionAsync(new EventPipeSessionConfiguration(providers, bufferMegabytes, rundown, requestStackwalk: false), cancellationToken).ConfigureAwait(false);
-                    }
-                    catch (UnsupportedCommandException)
-                    {
-                        // Before .NET 6: every event carries a stack.
-                    }
+                    throw new JsonRpcHandlerException(DiagnosticsErrorCodes.ProcessNotFound, $"Process {processId} has exited.");
                 }
 
-                return await client.StartEventPipeSessionAsync(providers, rundown, bufferMegabytes, cancellationToken).ConfigureAwait(false);
+                if (clock.Elapsed >= s_answerTimeout)
+                {
+                    throw new JsonRpcHandlerException(
+                        DiagnosticsErrorCodes.NotAvailable,
+                        $"Process {processId}'s .NET diagnostics port didn't answer within {s_answerTimeout.TotalSeconds:0} s (tried every {s_attemptTimeout.TotalSeconds:0} s).");
+                }
             }
             catch (ServerNotAvailableException) when (clock.Elapsed < s_connectTimeout && IsAlive(processId))
             {
@@ -276,6 +301,41 @@ internal static class DiagnosticsPort
             }
         }
     }
+
+    private static async Task<EventPipeSession> StartOnceAsync(DiagnosticsClient client, IReadOnlyList<EventPipeProvider> providers, bool rundown, bool stacks, int bufferMegabytes, CancellationToken cancellationToken)
+    {
+        if (!stacks)
+        {
+            try
+            {
+                return await client.StartEventPipeSessionAsync(new EventPipeSessionConfiguration(providers, bufferMegabytes, rundown, requestStackwalk: false), cancellationToken).ConfigureAwait(false);
+            }
+            catch (UnsupportedCommandException)
+            {
+                // Before .NET 6: every event carries a stack.
+            }
+        }
+
+        return await client.StartEventPipeSessionAsync(providers, rundown, bufferMegabytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>A try given up on that starts its session after all: the session is stopped (its connection closed).</summary>
+    private static void DisposeWhenStarted(Task<EventPipeSession> starting) =>
+        _ = starting.ContinueWith(
+            static t =>
+            {
+                if (t.IsCompletedSuccessfully)
+                {
+                    t.Result.Dispose();
+                }
+                else
+                {
+                    _ = t.Exception; // observed
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            TaskScheduler.Default);
 
     /// <summary>Resumes a process started with <c>DOTNET_DefaultDiagnosticPortSuspend=1</c>.</summary>
     public static async Task ResumeAsync(int processId, CancellationToken cancellationToken)

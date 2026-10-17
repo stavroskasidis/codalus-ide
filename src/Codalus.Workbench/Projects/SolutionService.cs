@@ -370,8 +370,13 @@ public sealed class SolutionService : IAsyncDisposable
     {
         var connection = Connection;
         await using var registration = cancellationToken.Register(() => _ = CancelBuildAsync(connection)).ConfigureAwait(false);
-        return await connection.InvokeAsync(
+        var result = await connection.InvokeAsync(
             ProjectMethods.Build, new BuildParams(target, projectPath, Options: options), ProjectJsonContext.Default.BuildParams, ProjectJsonContext.Default.BuildResultInfo, CancellationToken.None).ConfigureAwait(false);
+
+        // The host sends the build's output and diagnostics before its result, but the result completes this call as
+        // soon as it is read: wait until they have been raised (a failed build's errors were missing: Windows CI).
+        await connection.WhenDispatchedAsync().ConfigureAwait(false);
+        return result;
     }
 
     /// <summary>Batch Build (ADR 0034): each entry in turn, output and diagnostics as for a build; cancellable the same way.</summary>
@@ -379,8 +384,10 @@ public sealed class SolutionService : IAsyncDisposable
     {
         var connection = Connection;
         await using var registration = cancellationToken.Register(() => _ = CancelBuildAsync(connection)).ConfigureAwait(false);
-        return await connection.InvokeAsync(
+        var result = await connection.InvokeAsync(
             BuildDepthMethods.Batch, parameters, BuildDepthJsonContext.Default.BatchBuildParams, BuildDepthJsonContext.Default.BatchBuildResult, CancellationToken.None).ConfigureAwait(false);
+        await connection.WhenDispatchedAsync().ConfigureAwait(false); // its output and diagnostics first, as for a build
+        return result;
     }
 
     private static async Task CancelBuildAsync(JsonRpcConnection connection)
