@@ -50,6 +50,7 @@ Debug → **Start with Hot Reload** runs the startup project under `dotnet watch
 - **Web apps:** the browser refreshes, including after CSS changes.
 - **Edits that can't be applied** to a running app (a *rude edit*, such as a changed method signature): the app restarts, and a notification says so.
 - **Edits that don't compile:** they wait until they do.
+- **While Hot Reload is still starting** (the status bar says *starting*), `dotnet watch` doesn't see a saved file yet, even when the app already answers. Apply Code Changes waits until it watches, then saves.
 
 The toolbar's **Hot Reload** button (the flame, next to Start) starts with Hot Reload, and while the app runs applies the code changes. Its menu also has Stop Running Programs, the Hot Reload on Start Without Debugging switch and the settings.
 
