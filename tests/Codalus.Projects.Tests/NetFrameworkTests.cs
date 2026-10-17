@@ -335,8 +335,9 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         await _solutions.OpenAsync(Path.Combine(Fixture, "NetFramework.slnx"), trusted: true, restore: true, Timeout());
         await WaitUntilAsync(
             () => _solutions.CompilerInputs.TryGetValue(legacy, out var inputs) && inputs.State == CompilerInputStates.Ok
-                  && inputs.Arguments.Any(a => a.Contains("codalus.sample.legacy", StringComparison.OrdinalIgnoreCase)),
-            DesignTimeState);
+                  && inputs.Arguments.Any(a => a.Contains("codalus.sample.legacy", StringComparison.OrdinalIgnoreCase))
+                  && EvaluatedAfterRestore(legacy), // the package resolved under Dependencies: not a design-time build ahead of the evaluation
+            () => $"{RestoreState(legacy)}; {DesignTimeState()}");
 
         var info = _solutions.Projects[legacy];
         Assert.False(info.IsNonSdkStyle);
