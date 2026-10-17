@@ -400,6 +400,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.True(result.Succeeded, _builds.Channel.GetText());
         // Output notifications may be handled just after the result arrives (the result doesn't queue behind them).
         await WaitUntilAsync(() => _builds.Channel.GetText().Contains("LegacyWebApp is left out of the build", StringComparison.Ordinal), _builds.Channel.GetText);
+        Assert.Contains(_builds.Diagnostics, d => d.Severity == BuildSeverities.Warning && string.Equals(d.File, Project("LegacyWebApp"), StringComparison.OrdinalIgnoreCase) && d.Message.StartsWith("LegacyWebApp is left out of the build", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(Fixture, "LegacyApp", "bin", "Debug", "LegacyApp.exe")));
         Assert.True(File.Exists(Path.Combine(Fixture, "LegacyApp", "bin", "Debug", "Codalus.Sample.Legacy.dll")));
         Assert.True(File.Exists(Path.Combine(Fixture, "LegacyApp", "bin", "Debug", "LegacyApp.exe.config")));
@@ -413,6 +414,10 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         result = await _builds.BuildAsync(BuildTargets.Build, Project("LegacyWebApp"), Timeout());
         Assert.False(result.Succeeded);
         await WaitUntilAsync(() => _builds.Channel.GetText().Contains("imports Visual Studio's own MSBuild targets", StringComparison.Ordinal), _builds.Channel.GetText);
+        var blocked = Assert.Single(_builds.Diagnostics); // a failed build always says why in the Error List
+        Assert.Equal(BuildSeverities.Error, blocked.Severity);
+        Assert.Equal(Project("LegacyWebApp"), blocked.File, ignoreCase: true);
+        Assert.Contains("imports Visual Studio's own MSBuild targets", blocked.Message, StringComparison.Ordinal);
 
         // How they start: the .exe itself (the desktop CLR runs it, not dotnet).
         var run = await _solutions.GetRunInfoAsync(legacy, Timeout());
