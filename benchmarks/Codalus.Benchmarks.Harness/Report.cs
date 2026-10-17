@@ -33,7 +33,7 @@ internal static class Report
             var machine = results.First(r => r.Machine.Os == os).Machine;
             sb.Append(CultureInfo.InvariantCulture, $"## {os}\n\n");
             sb.Append(CultureInfo.InvariantCulture,
-                $"Machine: {machine.Cpu}, {machine.LogicalCores} logical cores, {machine.MemoryBytes / 1073741824.0:F0} GB RAM, GPU {machine.Gpu ?? "n/a"}, display {machine.DisplayRefreshHz?.ToString(CultureInfo.InvariantCulture) ?? "n/a"} Hz, {machine.OsVersion}{(machine.IsCi ? " (CI runner)" : string.Empty)}.\n\n");
+                $"Machine: {machine.Cpu.Trim()} (L3 {Platform.Machine.FormatCache(machine.L3CacheBytes)}), {machine.LogicalCores} logical cores, {machine.MemoryBytes / 1073741824.0:F0} GB RAM, GPU {machine.Gpu ?? "n/a"}, display {machine.DisplayRefreshHz?.ToString(CultureInfo.InvariantCulture) ?? "n/a"} Hz, {machine.OsVersion}{(machine.IsCi ? " (CI runner)" : string.Empty)}.\n\n");
 
             foreach (var scenario in ScenarioRunner.Scenarios)
             {

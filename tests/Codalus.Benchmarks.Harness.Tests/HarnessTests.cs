@@ -110,6 +110,36 @@ public class ReportTests
     }
 }
 
+public class MachineTests
+{
+    [Fact]
+    public void The_l3_cache_size_is_parsed_and_shown()
+    {
+        Assert.Equal(33792L * 1024, Machine.ParseCacheSize("33792K\n"));
+        Assert.Equal(32L << 20, Machine.ParseCacheSize("32M"));
+        Assert.Equal(4096, Machine.ParseCacheSize("4096"));
+        Assert.Null(Machine.ParseCacheSize("unknown"));
+        Assert.Equal("33 MB", Machine.FormatCache(33792L * 1024));
+        Assert.Equal("unknown", Machine.FormatCache(null));
+    }
+
+    [Fact]
+    public void Results_from_before_the_l3_cache_was_recorded_still_parse()
+    {
+        const string json = """
+            { "target": "shell", "scenario": "cold-start", "startedAt": "2026-10-14T20:45:46Z", "method": "instrumented",
+              "machine": { "os": "linux", "osVersion": "Ubuntu", "architecture": "x64", "cpu": "AMD EPYC 9V45 96-Core Processor",
+                           "logicalCores": 4, "memoryBytes": 16766410752, "isCi": true } }
+            """;
+        var result = System.Text.Json.JsonSerializer.Deserialize(json, ResultsJsonContext.Default.ScenarioResult)!;
+        Assert.Null(result.Machine.L3CacheBytes);
+
+        var recorded = result with { Machine = result.Machine with { L3CacheBytes = 32L << 20 } };
+        Assert.Contains("\"l3CacheBytes\": 33554432", System.Text.Json.JsonSerializer.Serialize(recorded, ResultsJsonContext.Default.ScenarioResult), StringComparison.Ordinal);
+        Assert.Contains("AMD EPYC 9V45 96-Core Processor (L3 32 MB)", Report.Markdown([recorded]), StringComparison.Ordinal);
+    }
+}
+
 public class FixtureTests
 {
     [Fact]

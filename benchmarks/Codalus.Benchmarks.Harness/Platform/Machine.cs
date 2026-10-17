@@ -15,7 +15,74 @@ internal static class Machine
         MemoryBytes: GC.GetGCMemoryInfo().TotalAvailableMemoryBytes,
         Gpu: Gpu(),
         DisplayRefreshHz: OperatingSystem.IsWindows() ? Win32.PrimaryRefreshRate() : null,
-        IsCi: Environment.GetEnvironmentVariable("CI") is "true" or "1");
+        IsCi: Environment.GetEnvironmentVariable("CI") is "true" or "1",
+        L3CacheBytes: L3Cache());
+
+    /// <summary>"32 MB" (or "512 KB"), or "unknown".</summary>
+    public static string FormatCache(long? bytes) => bytes switch
+    {
+        null or <= 0 => "unknown",
+        >= 1L << 20 => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes.Value / 1048576.0:0.#} MB"),
+        _ => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes.Value / 1024} KB"),
+    };
+
+    /// <summary>
+    /// The L3 cache of the first CPU: sysfs on Linux, <c>Win32_Processor.L3CacheSize</c> (KB) on Windows,
+    /// <c>hw.l3cachesize</c> on macOS (Apple silicon has none; null then). A VM that reports 0 counts as unknown.
+    /// </summary>
+    private static long? L3Cache()
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return Run("powershell", "-NoProfile -Command \"(Get-CimInstance Win32_Processor | Select-Object -First 1).L3CacheSize\"") is { } kb
+                       && long.TryParse(kb, System.Globalization.CultureInfo.InvariantCulture, out var value) && value > 0
+                    ? value * 1024
+                    : null;
+            }
+
+            if (OperatingSystem.IsMacOS())
+            {
+                return Run("sysctl", "-n hw.l3cachesize") is { } text
+                       && long.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var value) && value > 0
+                    ? value
+                    : null;
+            }
+
+            const string caches = "/sys/devices/system/cpu/cpu0/cache";
+            if (!Directory.Exists(caches))
+            {
+                return null;
+            }
+
+            foreach (var index in Directory.EnumerateDirectories(caches, "index*"))
+            {
+                if (File.Exists(Path.Combine(index, "level")) && File.ReadAllText(Path.Combine(index, "level")).Trim() == "3"
+                    && File.Exists(Path.Combine(index, "size")))
+                {
+                    return ParseCacheSize(File.ReadAllText(Path.Combine(index, "size")));
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>sysfs's cache size: "33792K", "32M" or a number of bytes.</summary>
+    public static long? ParseCacheSize(string text)
+    {
+        text = text.Trim();
+        var multiplier = text.EndsWith('K') ? 1024L : text.EndsWith('M') ? 1L << 20 : 1L;
+        var digits = multiplier == 1 ? text : text[..^1];
+        return long.TryParse(digits, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var value) && value > 0
+            ? value * multiplier
+            : null;
+    }
 
     private static string Cpu()
     {
