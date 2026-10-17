@@ -2097,8 +2097,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // Start Without Debugging builds the app and runs it: a WinUI window on the desktop, until it's stopped.
         shell.SetStartupProject(app);
+        var before = shell.Builds.LastBuild;
         await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
-        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited), "the WinUI app is running: " + Tail(shell.Builds.Channel.GetText(), 2000), 600).ConfigureAwait(true);
+        // A failed build starts nothing: it fails the step at once (the first Windows run waited out the 600 s and the job's limit).
+        bool BuildFailed() => BuildDone(before) && shell.Builds.LastBuild is { Result.Succeeded: false };
+        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited) || BuildFailed(), () => "the WinUI app is running: " + Tail(shell.Builds.Channel.GetText(), 2000), 600).ConfigureAwait(true);
+        Check(!BuildFailed(), "the WinUI app built:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
         await Task.Delay(3000).ConfigureAwait(true);
         Check(shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited), "the WinUI app is still running (its window is up)");
         shell.StopRunning();
@@ -2285,7 +2289,22 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         text!.Text = "Smoke test";
         await WaitAsync(() => code.Text.Text.Contains("button1.Text = \"Smoke test\";", StringComparison.Ordinal), "the Text set in the Properties window is in the code", 60).ConfigureAwait(true);
         var added = code.Text.Text.Split('\n').Length - original.Split('\n').Length;
-        Check(added == 12, $"the diff is the button's field, creation, section and Controls.Add: {added} lines");
+        // The lines that weren't there before, in the message: the first Windows run counted 14 with nothing else to go on.
+        var remaining = original.Split('\n').GroupBy(l => l, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+        var newLines = new List<string>();
+        foreach (var line in code.Text.Text.Split('\n'))
+        {
+            if (remaining.TryGetValue(line, out var count) && count > 0)
+            {
+                remaining[line] = count - 1;
+            }
+            else
+            {
+                newLines.Add(line);
+            }
+        }
+
+        Check(added == 12, $"the diff is the button's field, creation, section and Controls.Add: {added} lines:\n{string.Join('\n', newLines)}");
         await RenderedAsync().ConfigureAwait(true);
         Screenshot("winforms-designer.png");
 
@@ -2356,10 +2375,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var original = editor.Model.Text.Text;
 
         var started = Stopwatch.StartNew();
-        shell.ShowXamlPreview();
         var preview = shell.XamlPreview;
-        await WaitAsync(() => preview.FrameCount > 0 || preview.HasError, "the WPF previewer builds the app and shows its first frame: " + preview.Status, 600).ConfigureAwait(true);
-        Check(preview.FrameCount > 0, "the preview rendered: " + preview.Error + "\n" + Tail(shell.PreviewerLog.GetText(), 2000));
+        // FrameCount counts every frame the tool window has shown, the Avalonia ones of xaml.preview included (Clear keeps
+        // it), so the WPF file's first frame is one past what was counted before it opened.
+        var shown = preview.FrameCount;
+        shell.ShowXamlPreview();
+        await WaitAsync(() => (preview.FrameCount > shown && preview.Frame is not null) || preview.HasError, "the WPF previewer builds the app and shows its first frame: " + preview.Status, 600).ConfigureAwait(true);
+        Check(preview.FrameCount > shown && preview.Frame is not null, "the preview rendered: " + preview.Error + "\n" + Tail(shell.PreviewerLog.GetText(), 2000));
         Check(preview.Frame is { } frame && frame.Width / frame.Scale == 480 && frame.Height / frame.Scale == 360, $"the window renders at its design size (d:DesignWidth/Height): {preview.Frame?.Width}×{preview.Frame?.Height}");
         Check(!preview.SupportsThemes, "WPF has no theme variants: the picker is hidden");
         Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  first frame (build included) in {started.Elapsed.TotalSeconds:0.0} s, {preview.ImageWidth}×{preview.ImageHeight}"));
@@ -3325,7 +3347,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 var error = process.StandardError.ReadToEndAsync();
                 if (!process.WaitForExit(TimeSpan.FromSeconds(60)))
                 {
-                    process.Kill(entireProcessTree: true);
+                    // The tool alone (ps and dotnet-stack start nothing): ending a process tree lists the system's
+                    // processes, which is what blocks when ps does (the macOS runner, blazor.wasmDebug).
+                    process.Kill();
                     return "(timed out)";
                 }
 

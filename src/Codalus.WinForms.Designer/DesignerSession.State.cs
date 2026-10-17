@@ -2,6 +2,7 @@ using System.Collections;
 using System.ComponentModel;
 using System.ComponentModel.Design;
 using System.Globalization;
+using System.Reflection;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Workbench.WinForms;
 
@@ -188,7 +189,7 @@ internal sealed partial class DesignerSession
                         continue;
                     }
 
-                    if (descriptor.IsReadOnly || !descriptor.ShouldSerializeValue(owner))
+                    if (descriptor.IsReadOnly || !ShouldSerialize(descriptor, owner))
                     {
                         continue;
                     }
@@ -220,6 +221,83 @@ internal sealed partial class DesignerSession
         if (component is Control or ToolStripItem or DataGridViewColumn && component.Site?.Name is { } name)
         {
             result.Add(new SerializedProperty("Name", DesignerValue.String(name), name, false, typeof(string)));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Whether the code sets a property: its descriptor's <c>ShouldSerializeValue</c>, except for a designer's shadow of
+    /// a component's property that brings no rule of its own. <c>ControlDesigner</c> shadows <c>Visible</c> and
+    /// <c>Enabled</c> (the control on the surface stays visible and enabled) with a property of its own that has neither
+    /// a <c>DefaultValue</c> nor a <c>ShouldSerialize</c> method, so its descriptor says "serialize" whatever the value;
+    /// Visual Studio writes them only when they differ from the control's own default (<c>Enabled = false</c>, never
+    /// <c>= true</c>; none of the fixture's controls has either line). Such a shadow is compared with the default the
+    /// component's own property has: its <c>DefaultValue</c>, or a new instance's value when that isn't serialized.
+    /// </summary>
+    private static bool ShouldSerialize(PropertyDescriptor descriptor, object owner)
+    {
+        if (!descriptor.ShouldSerializeValue(owner))
+        {
+            return false;
+        }
+
+        var shadowedBy = descriptor.ComponentType;
+        if (shadowedBy.IsInstanceOfType(owner)
+            || descriptor.Attributes[typeof(DefaultValueAttribute)] is not null
+            || shadowedBy.GetMethod("ShouldSerialize" + descriptor.Name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, Type.EmptyTypes) is not null)
+        {
+            return true;
+        }
+
+        return OwnDefault(owner.GetType(), descriptor.Name) is not { } fallback || !Equals(descriptor.GetValue(owner), fallback.Value);
+    }
+
+    private static readonly Dictionary<(Type, string), DefaultOf?> s_ownDefaults = [];
+
+    private sealed record DefaultOf(object? Value);
+
+    /// <summary>A component type's own default for a property (not a designer's shadow of it), or null when it has none.</summary>
+    private static DefaultOf? OwnDefault(Type componentType, string property)
+    {
+        lock (s_ownDefaults)
+        {
+            if (s_ownDefaults.TryGetValue((componentType, property), out var known))
+            {
+                return known;
+            }
+        }
+
+        DefaultOf? result = null;
+        if (TypeDescriptor.GetProperties(componentType)[property] is { } own)
+        {
+            if (own.Attributes[typeof(DefaultValueAttribute)] is DefaultValueAttribute declared)
+            {
+                result = new DefaultOf(declared.Value);
+            }
+            else if (!own.ComponentType.IsAbstract && own.ComponentType.GetConstructor(Type.EmptyTypes) is not null)
+            {
+                // The type that declares it (Control for Visible and Enabled), new: its value there, when that isn't written.
+                object? probe = null;
+                try
+                {
+                    probe = Activator.CreateInstance(own.ComponentType);
+                    result = probe is not null && !own.ShouldSerializeValue(probe) ? new DefaultOf(own.GetValue(probe)) : null;
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    result = null;
+                }
+                finally
+                {
+                    (probe as IDisposable)?.Dispose();
+                }
+            }
+        }
+
+        lock (s_ownDefaults)
+        {
+            s_ownDefaults[(componentType, property)] = result;
         }
 
         return result;

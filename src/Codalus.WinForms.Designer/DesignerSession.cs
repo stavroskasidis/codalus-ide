@@ -1027,7 +1027,7 @@ internal sealed partial class DesignerSession : IDisposable
         {
             Description = descriptor.Description,
             IsReadOnly = !settable,
-            IsSet = descriptor.ShouldSerializeValue(target),
+            IsSet = ShouldSerialize(descriptor, target),
             Editor = editor,
             StandardValues = standard,
         };

@@ -185,20 +185,23 @@ public static class WindowsApps
             };
 
     /// <summary>
-    /// The arguments of <c>powershell.exe</c> that register a build's layout (Developer Mode), with the framework
-    /// packages it depends on: <c>Add-AppxPackage -Register &lt;manifest&gt; -ForceApplicationShutdown
-    /// -ForceUpdateFromAnyVersion [-DependencyPath …]</c>, failing on the first error.
+    /// The arguments of <c>powershell.exe</c> that register a build's layout (Developer Mode), after installing the
+    /// framework packages it depends on: <c>Add-AppxPackage -Path &lt;framework msix&gt;</c> for each (one already
+    /// there at a higher version, 0x80073D06, is fine), then <c>Add-AppxPackage -Register &lt;manifest&gt;
+    /// -ForceApplicationShutdown -ForceUpdateFromAnyVersion</c>, failing on the first other error. The registration
+    /// can't take them as <c>-DependencyPath</c>: with <c>-Register</c> every path given is registered as a layout, and
+    /// a package file is rejected ("the manifest is not in the package root", 0x80073CF9).
     /// </summary>
     public static IReadOnlyList<string> RegisterArguments(string manifest, IReadOnlyList<string> dependencies)
     {
-        var command = new StringBuilder("$ErrorActionPreference = 'Stop'; Add-AppxPackage -Register ")
-            .Append(PowerShellQuote(manifest))
-            .Append(" -ForceApplicationShutdown -ForceUpdateFromAnyVersion");
+        var command = new StringBuilder("$ErrorActionPreference = 'Stop'; ");
         if (dependencies.Count > 0)
         {
-            command.Append(" -DependencyPath ").Append(string.Join(',', dependencies.Select(PowerShellQuote)));
+            command.Append("foreach ($framework in @(").Append(string.Join(',', dependencies.Select(PowerShellQuote)))
+                .Append(")) { try { Add-AppxPackage -Path $framework } catch { if ($_.Exception.Message -notmatch '0x80073D06') { throw } } }; ");
         }
 
+        command.Append("Add-AppxPackage -Register ").Append(PowerShellQuote(manifest)).Append(" -ForceApplicationShutdown -ForceUpdateFromAnyVersion");
         return ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command.ToString()];
     }
 

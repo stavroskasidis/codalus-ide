@@ -167,6 +167,9 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
         Assert.Equal("290, 300", Property(button, "Location"));
         Assert.Equal("75, 23", Property(button, "Size"));
         Assert.Equal("true", Property(button, "UseVisualStyleBackColor"));
+
+        // Visible and Enabled are ControlDesigner's shadows, at the control's defaults: not written (Visual Studio doesn't).
+        Assert.DoesNotContain(button.Properties, p => p.Name is "Visible" or "Enabled");
         Assert.Contains(created.Render.Components, c => c.Name == "button1" && c.Parent == "OrderForm");
         var withButton = Apply(source, [.. Edits(created)]);
         Assert.Contains("            button1.Location = new Point(290, 300);\n            button1.Name = \"button1\";\n            button1.Size = new Size(75, 23);", withButton, StringComparison.Ordinal);

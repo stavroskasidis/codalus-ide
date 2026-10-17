@@ -162,11 +162,17 @@ public sealed class WindowsAppsTests : IDisposable
         Assert.Equal(Path.Combine("/home/me", ".nuget", "packages"), WindowsApps.PackagesRoot(_ => null, "/home/me"));
         Assert.Equal("/cache", WindowsApps.PackagesRoot(n => n == "NUGET_PACKAGES" ? "/cache" : null, "/home/me"));
 
-        // PowerShell's command: the manifest and the dependencies in single quotes (a quote doubled), failing on errors.
-        var arguments = WindowsApps.RegisterArguments(@"C:\src\Bob's App\bin\AppxManifest.xml", [@"C:\p\a.msix", @"C:\p\b.msix"]);
+        // PowerShell's command: the frameworks installed first (one there at a higher version is fine), then the layout
+        // registered; paths in single quotes (a quote doubled), failing on errors. Never -DependencyPath: with -Register
+        // it takes layouts only (0x80073CF9 for an .msix).
+        var arguments = WindowsApps.RegisterArguments(@"C:\src\Bob's App\bin\AppxManifest.xml", [@"C:\p\a.msix", @"C:\p\b's.msix"]);
         Assert.Equal(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"], arguments.Take(5));
-        Assert.Equal(@"$ErrorActionPreference = 'Stop'; Add-AppxPackage -Register 'C:\src\Bob''s App\bin\AppxManifest.xml' -ForceApplicationShutdown -ForceUpdateFromAnyVersion -DependencyPath 'C:\p\a.msix','C:\p\b.msix'", arguments[^1]);
-        Assert.DoesNotContain("-DependencyPath", WindowsApps.RegisterArguments("m.xml", [])[^1], StringComparison.Ordinal);
+        Assert.Equal(
+            @"$ErrorActionPreference = 'Stop'; foreach ($framework in @('C:\p\a.msix','C:\p\b''s.msix')) { try { Add-AppxPackage -Path $framework } catch { if ($_.Exception.Message -notmatch '0x80073D06') { throw } } }; "
+            + @"Add-AppxPackage -Register 'C:\src\Bob''s App\bin\AppxManifest.xml' -ForceApplicationShutdown -ForceUpdateFromAnyVersion",
+            arguments[^1]);
+        Assert.DoesNotContain("-DependencyPath", arguments[^1], StringComparison.Ordinal);
+        Assert.Equal("$ErrorActionPreference = 'Stop'; Add-AppxPackage -Register 'm.xml' -ForceApplicationShutdown -ForceUpdateFromAnyVersion", WindowsApps.RegisterArguments("m.xml", [])[^1]);
 
         // The companion's activation: its arguments, and the process id it prints.
         Assert.Equal(["--activate-app", "A_b!App"], WindowsApps.ActivateArguments("A_b!App", null));

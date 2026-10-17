@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Codalus.Debugging;
 using Codalus.Workbench.Build;
@@ -660,18 +661,58 @@ public sealed class DebugService : IAsyncDisposable
 
         ModulesChanged?.Invoke(this, EventArgs.Empty);
         _resumedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        for (var attempt = 1; ; attempt++)
+        {
+            if (await StartAttemptAsync(create, start, attached, processes, configured, lastAttempt: attempt == StartupAttempts, cancellationToken).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            Output?.Invoke(this, new DebugOutput("console", $"The debugger didn't see the program's runtime start within its 5 seconds; starting again ({(attempt + 1).ToString(CultureInfo.InvariantCulture)} of {StartupAttempts.ToString(CultureInfo.InvariantCulture)}).\n"));
+        }
+    }
+
+    /// <summary>How many times a session starts when netcoredbg gives up waiting for the program's runtime (<see cref="IsStartupTimeout"/>).</summary>
+    internal const int StartupAttempts = 3;
+
+    /// <summary>
+    /// netcoredbg's answer to <c>configurationDone</c> when the program's runtime didn't report to it within 5 seconds
+    /// of the launch or attach (its fixed <c>startupWaitTimeout</c>; E_FAIL). On a loaded machine the runtime can take
+    /// longer (the first Windows runs: a VSTest test host attached to, Visual Basic and F# programs launched); the
+    /// program is ended (or detached from) and the session starts again. TODO(issue): ask Samsung/netcoredbg for a
+    /// configurable wait.
+    /// </summary>
+    internal static bool IsStartupTimeout(Exception ex) =>
+        ex is DapException { Command: "configurationDone" } && ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// One start of the session: the adapter, the launch or attach, the configuration. False when netcoredbg timed out
+    /// waiting for the runtime and it's worth starting again: the attempt is undone without ending the session.
+    /// </summary>
+    private async Task<bool> StartAttemptAsync<TAdapter>(
+        Func<CancellationToken, Task<TAdapter>> create,
+        Func<TAdapter, Task> start,
+        bool attached,
+        IReadOnlyList<DebugProcess> processes,
+        Func<Task>? configured,
+        bool lastAttempt,
+        CancellationToken cancellationToken)
+        where TAdapter : class, IDebugAdapter
+    {
         TAdapter? adapter = null;
+        Task? launching = null;
+        var abandoned = new StrongBox<bool>();
         try
         {
             adapter = await create(cancellationToken).ConfigureAwait(false);
-            adapter.EventReceived += OnEventAsync;
+            adapter.EventReceived += e => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : OnEventAsync(e);
             adapter.Log += (_, line) => Output?.Invoke(this, new DebugOutput("console", line + "\n"));
             _adapter = adapter;
-            _ = adapter.Closed.ContinueWith(_ => EndAsync(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+            _ = adapter.Closed.ContinueWith(_ => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : EndAsync(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
 
             // DAP's order: launch, and configure while it runs. Some adapters (js-debug) answer the launch only after
             // configurationDone.
-            var launching = start(adapter);
+            launching = start(adapter);
             await Task.WhenAny(launching, adapter.Initialized.WaitAsync(cancellationToken)).ConfigureAwait(false);
             if (launching.IsFaulted || launching.IsCanceled)
             {
@@ -702,6 +743,16 @@ public sealed class DebugService : IAsyncDisposable
             {
                 await configured().ConfigureAwait(false);
             }
+
+            return true;
+        }
+        catch (DapException ex) when (!lastAttempt && adapter is not null && IsStartupTimeout(ex) && !cancellationToken.IsCancellationRequested && CanStartAgain(attached, processes))
+        {
+            // Its events and its end are no longer the session's: the next attempt's adapter takes over.
+            Volatile.Write(ref abandoned.Value, true);
+            _ = launching?.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+            await AbandonAttemptAsync(adapter, attached, processes).ConfigureAwait(false);
+            return false;
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
@@ -720,6 +771,70 @@ public sealed class DebugService : IAsyncDisposable
 
             throw ex is OperationCanceledException or InvalidOperationException ? ex : new InvalidOperationException(ex.Message, ex);
         }
+    }
+
+    /// <summary>
+    /// Whether a start that timed out can be made again: a launch can (its program is ended first); an attach only to a
+    /// local process that is still there.
+    /// </summary>
+    private static bool CanStartAgain(bool attached, IReadOnlyList<DebugProcess> processes)
+    {
+        if (!attached)
+        {
+            return true;
+        }
+
+        if (processes is not [{ Id: { } processId, Target: null }])
+        {
+            return false;
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Undoes a start attempt without ending the session: the program ended (or detached from), its state cleared.</summary>
+    private async Task AbandonAttemptAsync(IDebugAdapter adapter, bool attached, IReadOnlyList<DebugProcess> processes)
+    {
+        lock (_gate)
+        {
+            if (ReferenceEquals(_adapter, adapter))
+            {
+                _adapter = null;
+            }
+        }
+
+        await adapter.DisconnectAsync(terminateDebuggee: !attached, CancellationToken.None).ConfigureAwait(false);
+        KillTerminalPrograms();
+        await adapter.DisposeAsync().ConfigureAwait(false);
+
+        SetState(DebugState.Starting);
+        _exitCode = 0;
+        ProcessId = null;
+        _process = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_gate)
+        {
+            _processes.Clear();
+            _processes.AddRange(processes);
+            _hits.Clear();
+            _adapterBreakpoints.Clear();
+            _adapterFunctionBreakpoints.Clear();
+            _runToIds.Clear();
+            _hitLocations.Clear();
+            _modules.Clear();
+            _runTo = null;
+        }
+
+        Breakpoints.ClearStates();
+        ProcessesChanged?.Invoke(this, EventArgs.Empty);
+        ModulesChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Ends the session: terminates a launched program, detaches from an attached one.</summary>
