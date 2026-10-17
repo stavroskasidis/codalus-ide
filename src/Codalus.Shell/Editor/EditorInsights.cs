@@ -196,8 +196,12 @@ public sealed class EditorInsights : IDisposable
         }
     }
 
-    /// <summary>The history of each member with a CodeLens: its lines are its document symbol's range.</summary>
-    private void UpdateGitLenses()
+    /// <summary>
+    /// The history of each member with a CodeLens: its lines are its document symbol's range. Redraws only when they
+    /// changed, or when <paramref name="lensesChanged"/> (new CodeLens entries to show): the document symbols of every
+    /// open arrive while the first semantic tokens are being computed, and a file outside a repository has none.
+    /// </summary>
+    private void UpdateGitLenses(bool lensesChanged = false)
     {
         var lenses = new Dictionary<int, string>();
         if (Options.CodeLens && Options.GitCodeLens && _blame.Count > 0)
@@ -212,6 +216,11 @@ public sealed class EditorInsights : IDisposable
                     lenses[line] = text;
                 }
             }
+        }
+
+        if (!lensesChanged && lenses.Count == _gitLenses.Count && lenses.All(p => _gitLenses.TryGetValue(p.Key, out var text) && text == p.Value))
+        {
+            return;
         }
 
         _gitLenses = lenses;
@@ -581,7 +590,7 @@ public sealed class EditorInsights : IDisposable
                 _lenses.Disconnect(_editor.Document);
                 _lenses = collection;
                 _lensVersion = version;
-                UpdateGitLenses();
+                UpdateGitLenses(lensesChanged: true);
                 _ = RefreshBlameAsync();
             }
 
