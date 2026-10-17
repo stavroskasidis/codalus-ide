@@ -501,7 +501,7 @@ internal static class DesignerReader
                     return Flags(or, null);
 
                 case ThisExpressionSyntax:
-                    UsesThis = true;
+                    // The root as a value (ContainerControl = this): both styles write it; only this. qualifiers mark the .NET Framework style.
                     return DesignerValue.ReferenceTo(string.Empty);
 
                 case IdentifierNameSyntax identifier:

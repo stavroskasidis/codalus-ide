@@ -201,8 +201,40 @@ public sealed class ProfilerToolsShellTests
                 + "\nBenchmarks output (the end):\n" + output[Math.Max(0, output.Length - 6000)..];
         }
 
+        // Started while the build host restores the solution (as right after opening it): dotnet run starts after the
+        // restore, built by the IDE's build, and doesn't restore the project at the same time (Linux CI: both wrote its
+        // obj/*.nuget.g.props, "already exists", and the run failed).
+        string? restoreAtRun = null;
+        var restoresEnded = 0;
+        var restoresEndedAtRun = -1;
+        void OnRestore(object? sender, Codalus.Workbench.Projects.RestoreStateChangedEventArgs e)
+        {
+            if (e.State is "succeeded" or "failed")
+            {
+                Interlocked.Increment(ref restoresEnded);
+            }
+        }
+
+        void OnRun(object? sender, string line)
+        {
+            if (line.StartsWith("> dotnet", StringComparison.Ordinal) && restoresEndedAtRun < 0)
+            {
+                restoreAtRun = f.Shell.Solutions.RestoreState;
+                restoresEndedAtRun = Volatile.Read(ref restoresEnded);
+            }
+        }
+
+        f.Shell.Solutions.RestoreStateChanged += OnRestore;
+        f.Shell.Benchmarks.Output += OnRun;
+        await f.Shell.Solutions.RestoreAsync(null, CancellationToken.None);
         await f.Shell.RunBenchmarkAsync(file, concat);
         await ShellFixture.PumpUntil(() => window.Results.Count > 0 && !window.IsRunning, seconds: 600, Describe);
+        f.Shell.Solutions.RestoreStateChanged -= OnRestore;
+        f.Shell.Benchmarks.Output -= OnRun;
+        Assert.True(restoresEndedAtRun >= 1, $"dotnet run started before the restore ended ({restoresEndedAtRun} ended then)\n{Describe()}");
+        Assert.Equal("succeeded", restoreAtRun);
+        Assert.Contains("--no-build", f.Shell.BenchmarkLog.GetText(), StringComparison.Ordinal);
+        Assert.Equal(Path.Combine(folder, "Benchmarks", "Benchmarks.csproj"), f.Shell.Builds.LastBuild?.Request.Project);
         var result = Assert.Single(window.Results);
         Assert.Equal("Concat", result.Result.Method);
         Assert.True(result.Result.Mean > 0);

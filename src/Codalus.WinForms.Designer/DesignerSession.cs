@@ -1,46 +1,63 @@
 using System.Collections;
 using System.ComponentModel;
 using System.ComponentModel.Design;
+using System.ComponentModel.Design.Serialization;
 using System.Drawing.Imaging;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Windows.Forms.Design;
+using System.Windows.Forms.Design.Behavior;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Workbench.WinForms;
 
 namespace Codalus.WinForms.Designer;
 
 /// <summary>
-/// One form on Windows Forms' own design surface (M41a, ADR 0073). <see cref="Load"/> creates the root (an instance of
-/// the class's base type, as Visual Studio's designer does) and the components, and runs InitializeComponent's statements
-/// against them through the designers (so a designed control is in design mode). A change sets properties through
-/// their property descriptors, and what it changed comes back as code: every component's serializable properties are
-/// compared before and after, so a docking or a tab order that moves its siblings is written too.
+/// One form on Windows Forms' own design surface (M41a and M41b, ADR 0073). <see cref="Load"/> creates the root (an
+/// instance of the class's base type, as Visual Studio's designer does) and the components, and runs InitializeComponent's
+/// statements against them through the designers (so a designed control is in design mode). A change sets properties
+/// through their property descriptors (or runs a smart tag's action, edits a collection, moves a control in the
+/// z-order), and what it changed comes back as code: the surface's state as the code would say it (properties,
+/// extender properties, data bindings, collections, the controls' parents and order) is captured before and after,
+/// and the difference is the change (DesignerSession.State.cs); a localizable form's localizable values go to its
+/// resources.
 /// </summary>
-internal sealed class DesignerSession : IDisposable
+internal sealed partial class DesignerSession : IDisposable
 {
     private readonly HostWindow _window;
     private readonly DesignerTypes _types = new();
     private readonly Dictionary<string, object?> _locals = new(StringComparer.Ordinal);
     private readonly System.ComponentModel.Container _components = new();
+    private readonly ServiceContainer _services = new();
     private readonly DesignerValues _values;
     private DesignSurface? _surface;
     private IDesignerHost? _host;
     private Control? _root;
     private Control? _view;
     private ComponentResourceManager? _resources;
+    private TextResourceManager? _textResources;
+    private CultureInfo _culture = CultureInfo.InvariantCulture;
+    private bool _localizable;
     private string _className = string.Empty;
     private string[] _searchFolders = [];
+    private string? _phase;
 
     public DesignerSession(HostWindow window)
     {
         _window = window;
         _values = new DesignerValues(_types, Target, NameOf, Resource);
+        _services.AddService(typeof(INameCreationService), new NameCreation(this));
     }
 
     private IDesignerHost Host => _host ?? throw new InvalidOperationException("No form is loaded.");
 
     private Control Root => _root ?? throw new InvalidOperationException("No form is loaded.");
+
+    /// <summary>Where a load or a drawing is (read off the UI thread by <c>designer/status</c>), or null.</summary>
+    public string? Phase => Volatile.Read(ref _phase);
+
+    private void Enter(string? phase) => Volatile.Write(ref _phase, phase);
 
     /// <summary>The project's references, from its output folder (a library's, which has no deps.json of its own).</summary>
     public Assembly? ResolveAssembly(AssemblyLoadContext context, AssemblyName name)
@@ -61,12 +78,26 @@ internal sealed class DesignerSession : IDisposable
 
     public DesignerRenderResult Load(DesignerLoadParams parameters)
     {
+        try
+        {
+            return LoadCore(parameters);
+        }
+        finally
+        {
+            Enter(null);
+        }
+    }
+
+    private DesignerRenderResult LoadCore(DesignerLoadParams parameters)
+    {
+        Enter("unloading the previous form");
         Unload();
         var errors = new List<string>();
         _searchFolders = [.. parameters.SearchFolders.Append(Path.GetDirectoryName(parameters.ProjectAssembly)!).Distinct(StringComparer.OrdinalIgnoreCase)];
         Assembly? project = null;
         if (File.Exists(parameters.ProjectAssembly))
         {
+            Enter($"loading {Path.GetFileName(parameters.ProjectAssembly)}");
             project = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => !a.IsDynamic && string.Equals(a.Location, parameters.ProjectAssembly, StringComparison.OrdinalIgnoreCase))
                 ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(parameters.ProjectAssembly);
             _types.Add(project);
@@ -78,7 +109,8 @@ internal sealed class DesignerSession : IDisposable
 
         var model = parameters.Model;
         var rootType = _types.Find(model.BaseType) ?? throw new InvalidOperationException($"The base type {model.BaseType} wasn't found (build the project).");
-        _surface = new DesignSurface();
+        Enter($"loading the design surface for {model.BaseType}");
+        _surface = new DesignSurface(_services);
         _surface.BeginLoad(rootType);
         if (_surface.LoadErrors.Count > 0)
         {
@@ -97,7 +129,15 @@ internal sealed class DesignerSession : IDisposable
             errors.Add($"The root can't be named {model.ClassName}: {ex.Message}");
         }
 
-        if (parameters.ClassFullName is { } className && project?.GetType(className, throwOnError: false) is { } classType)
+        // The resources: the editor's .resx texts (M41b), else the build's compiled ones.
+        _culture = parameters.Culture is { Length: > 0 } culture ? CultureInfo.GetCultureInfo(culture) : CultureInfo.InvariantCulture;
+        _localizable = parameters.Localizable;
+        if (parameters.Resources.Length > 0)
+        {
+            _textResources = new TextResourceManager(parameters.Resources, null);
+            _resources = _textResources;
+        }
+        else if (parameters.ClassFullName is { } className && project?.GetType(className, throwOnError: false) is { } classType)
         {
             _resources = new ComponentResourceManager(classType);
         }
@@ -111,6 +151,7 @@ internal sealed class DesignerSession : IDisposable
         {
             try
             {
+                Enter($"running line {statement.Line + 1} of the designer file");
                 Execute(statement, locals);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -137,7 +178,9 @@ internal sealed class DesignerSession : IDisposable
         _root = null;
         _view = null;
         _resources = null;
+        _textResources = null;
         _locals.Clear();
+        _imageListVersions.Clear();
     }
 
     private void Execute(DesignerStatement statement, HashSet<string> locals)
@@ -189,7 +232,7 @@ internal sealed class DesignerSession : IDisposable
 
             case DesignerStatementKinds.ApplyResources:
                 (_resources ?? throw new InvalidOperationException("The form's resources aren't available (build the project)."))
-                    .ApplyResources(Target(statement.Target) ?? throw Unknown(statement.Target), statement.Value?.Value ?? string.Empty, System.Globalization.CultureInfo.InvariantCulture);
+                    .ApplyResources(Target(statement.Target) ?? throw Unknown(statement.Target), statement.Value?.Value ?? string.Empty, _culture);
                 return;
             default:
                 // Events aren't hooked at design time; section comments are comments.
@@ -239,6 +282,7 @@ internal sealed class DesignerSession : IDisposable
         return _host?.Container.Components[name];
     }
 
+    /// <summary>A component's name (empty for the root), a local's name, or null when it isn't the form's.</summary>
     private string? NameOf(object value)
     {
         if (ReferenceEquals(value, _root))
@@ -246,11 +290,16 @@ internal sealed class DesignerSession : IDisposable
             return string.Empty;
         }
 
-        return value is IComponent { Site: { } site } && _host is not null && ReferenceEquals(site.Container, _host.Container) ? site.Name : null;
+        if (value is IComponent { Site: { } site } && _host is not null && ReferenceEquals(site.Container, _host.Container))
+        {
+            return site.Name;
+        }
+
+        return value is IComponent ? null : _locals.FirstOrDefault(l => ReferenceEquals(l.Value, value)).Key;
     }
 
     private object? Resource(string key) =>
-        (_resources ?? throw new InvalidOperationException("The form's resources aren't available (build the project).")).GetObject(key, System.Globalization.CultureInfo.InvariantCulture);
+        (_resources ?? throw new InvalidOperationException("The form's resources aren't available (build the project).")).GetObject(key, _culture);
 
     /// <summary>The object a path's last member is on (<c>FlatAppearance</c> of <c>FlatAppearance.BorderSize</c>) and that member's name.</summary>
     private static (object Owner, string Member) Walk(object target, string path)
@@ -283,6 +332,20 @@ internal sealed class DesignerSession : IDisposable
 
     public DesignerRenderResult Render()
     {
+        var phase = Phase;
+        Enter("drawing the form");
+        try
+        {
+            return RenderCore();
+        }
+        finally
+        {
+            Enter(phase);
+        }
+    }
+
+    private DesignerRenderResult RenderCore()
+    {
         var root = Root;
         var errors = new List<string>();
         root.PerformLayout();
@@ -312,7 +375,10 @@ internal sealed class DesignerSession : IDisposable
 
     private static Point WindowOrigin(Control control) => control.Parent is { } parent ? parent.PointToScreen(control.Location) : control.Location;
 
-    /// <summary>The root, its controls (front first, parents before children; a SplitContainer's panels as parts), then the other components.</summary>
+    /// <summary>
+    /// The root, its controls (front first, parents before children; a SplitContainer's panels as parts), the tool
+    /// strips' items, then the other components (the tray's).
+    /// </summary>
     private IEnumerable<DesignerComponentView> Views()
     {
         var root = Root;
@@ -321,29 +387,42 @@ internal sealed class DesignerSession : IDisposable
         {
             var at = WindowOrigin(control);
             var client = control.PointToScreen(Point.Empty);
+            var isContainer = isPart || Host.GetDesigner(control) is ParentControlDesigner;
             return new DesignerComponentView(name, DesignerTypes.NameOf(control.GetType()), parent, at.X - origin.X, at.Y - origin.Y, control.Width, control.Height)
             {
                 IsControl = true,
-                IsContainer = isPart || Host.GetDesigner(control) is ParentControlDesigner,
+                IsContainer = isContainer,
                 ClientX = client.X - origin.X,
                 ClientY = client.Y - origin.Y,
                 Visible = true,
                 DefaultEvent = isPart ? null : TypeDescriptor.GetDefaultEvent(control)?.Name,
                 IsPart = isPart,
+                TabIndex = isPart || ReferenceEquals(control, root) ? null : control.TabIndex,
+                Dock = isPart ? null : control.Dock.ToString(),
+                Anchor = isPart ? null : TypeDescriptor.GetConverter(typeof(AnchorStyles)).ConvertToInvariantString(control.Anchor),
+                Margin = [control.Margin.Left, control.Margin.Top, control.Margin.Right, control.Margin.Bottom],
+                Padding = isContainer ? SnapPadding(control) : null,
+                Baseline = isPart ? null : Baseline(control),
+                HasActions = !isPart && HasActions(control),
+                Collections = isPart ? null : CollectionKeys(control),
+                Text = isPart ? null : control.Text,
+                InTray = control is ToolStrip and not ToolStripDropDown,
             };
         }
 
         yield return View(root, _className, null, isPart: false);
         var queue = new List<DesignerComponentView>();
+        var strips = new List<(ToolStrip Strip, string Name, bool Visible)>();
         void Children(Control parent, string parentName)
         {
             foreach (Control child in parent.Controls)
             {
                 string? name = NameOf(child);
                 var isPart = false;
-                if (name is null && child is SplitterPanel && parent is SplitContainer split && NameOf(split) is { } owner)
+                if (name is null && NameOf(parent) is { } owner && PartName(parent, child) is { } path)
                 {
-                    name = owner + "." + (ReferenceEquals(split.Panel1, child) ? "Panel1" : "Panel2");
+                    // A container's own panel (a SplitContainer's, a ToolStripContainer's): a part that holds controls.
+                    name = (owner.Length == 0 ? _className : owner) + "." + path;
                     isPart = true;
                 }
 
@@ -353,6 +432,11 @@ internal sealed class DesignerSession : IDisposable
                 }
 
                 queue.Add(View(child, name, parentName.Length == 0 ? _className : parentName, isPart));
+                if (child is ToolStrip strip && !isPart)
+                {
+                    strips.Add((strip, name, true));
+                }
+
                 Children(child, name);
             }
         }
@@ -365,192 +449,124 @@ internal sealed class DesignerSession : IDisposable
 
         foreach (IComponent component in Host.Container.Components)
         {
-            if (component is not Control && !ReferenceEquals(component, root) && component.Site is { } site)
+            if (component is ToolStrip { Parent: null } unparented && NameOf(unparented) is { Length: > 0 } menu)
             {
-                yield return new DesignerComponentView(site.Name ?? string.Empty, DesignerTypes.NameOf(component.GetType()), null, 0, 0, 0, 0)
-                {
-                    DefaultEvent = TypeDescriptor.GetDefaultEvent(component)?.Name,
-                };
+                strips.Add((unparented, menu, false));
             }
         }
-    }
 
-    // ------------------------------------------------------------------ serializing
+        foreach (var (strip, name, visible) in strips)
+        {
+            foreach (var item in Items(strip.Items, name, visible, origin))
+            {
+                yield return item;
+            }
+        }
 
-    /// <summary>Every component's properties as Visual Studio's serializers would write them, by component and property.</summary>
-    private Dictionary<(string Component, string Property), DesignerValue> Snapshot()
-    {
-        var snapshot = new Dictionary<(string, string), DesignerValue>();
         foreach (IComponent component in Host.Container.Components)
         {
-            var name = ReferenceEquals(component, _root) ? string.Empty : component.Site?.Name ?? string.Empty;
-            foreach (var (property, value) in Serialize(component))
+            if (ReferenceEquals(component, root) || component.Site is not { } site || component is ToolStripItem)
             {
-                snapshot[(name, property)] = value;
+                continue;
             }
-        }
 
-        return snapshot;
+            if (component is Control control && control.Parent is not null)
+            {
+                continue;
+            }
+
+            if (component is not Control && !TypeDescriptor.GetAttributes(component).Contains(DesignTimeVisibleAttribute.Yes))
+            {
+                continue;
+            }
+
+            yield return new DesignerComponentView(site.Name ?? string.Empty, DesignerTypes.NameOf(component.GetType()), null, 0, 0, 0, 0)
+            {
+                IsControl = component is Control,
+                DefaultEvent = TypeDescriptor.GetDefaultEvent(component)?.Name,
+                HasActions = HasActions(component),
+                Collections = CollectionKeys(component),
+                InTray = true,
+                Visible = false,
+            };
+        }
     }
 
-    /// <summary>
-    /// A component's properties that the code sets: visible to serialization, not design-only or extended by another
-    /// component, different from their defaults (<c>ShouldSerializeValue</c>); content properties one level down
-    /// (<c>FlatAppearance.BorderSize</c>, <c>Panel1.BackColor</c>); collections are left to the code's calls.
-    /// </summary>
-    private List<(string Property, DesignerValue Value)> Serialize(IComponent component)
+    /// <summary>A strip's items (and their drop-downs' items, which aren't drawn: the IDE draws them), with their bounds when the strip shows on the form.</summary>
+    private IEnumerable<DesignerComponentView> Items(ToolStripItemCollection items, string owner, bool visible, Point origin)
     {
-        var result = new List<(string, DesignerValue)>();
-        void Properties(object owner, string prefix, int depth)
+        var index = 0;
+        foreach (ToolStripItem item in items)
         {
-            foreach (PropertyDescriptor descriptor in TypeDescriptor.GetProperties(owner, [DesignOnlyAttribute.No]))
+            if (NameOf(item) is not { Length: > 0 } name)
             {
-                if (descriptor.Name == "Name" || descriptor.SerializationVisibility == DesignerSerializationVisibility.Hidden
-                    || descriptor.Attributes[typeof(ExtenderProvidedPropertyAttribute)] is ExtenderProvidedPropertyAttribute { Provider: not null })
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                try
+            var shown = visible && item.Owner is { Visible: true } && item.Visible;
+            var at = shown ? item.Owner!.PointToScreen(item.Bounds.Location) : Point.Empty;
+            yield return new DesignerComponentView(name, DesignerTypes.NameOf(item.GetType()), owner,
+                shown ? at.X - origin.X : 0, shown ? at.Y - origin.Y : 0, shown ? item.Bounds.Width : 0, shown ? item.Bounds.Height : 0)
+            {
+                IsItem = true,
+                Owner = owner,
+                ItemIndex = index++,
+                Text = item.Text,
+                Visible = shown,
+                DefaultEvent = TypeDescriptor.GetDefaultEvent(item)?.Name,
+                HasDropDown = item is ToolStripDropDownItem,
+                HasActions = HasActions(item),
+                Collections = CollectionKeys(item),
+            };
+            if (item is ToolStripDropDownItem dropDown)
+            {
+                foreach (var child in Items(dropDown.DropDownItems, name, visible: false, origin))
                 {
-                    if (descriptor.SerializationVisibility == DesignerSerializationVisibility.Content)
+                    yield return child;
+                }
+            }
+        }
+    }
+
+    /// <summary>The padding the snap lines keep inside a container: its Padding; a form's empty one is the designer's 9 (with a control's margin of 3, Visual Studio's 12).</summary>
+    private int[] SnapPadding(Control control)
+    {
+        var padding = control.Padding;
+        if (ReferenceEquals(control, _root) && padding == Padding.Empty)
+        {
+            return [9, 9, 9, 9];
+        }
+
+        return [padding.Left, padding.Top, padding.Right, padding.Bottom];
+    }
+
+    /// <summary>The control's text baseline from its top, from its designer's snap lines (labels, text boxes, buttons).</summary>
+    private double? Baseline(Control control)
+    {
+        try
+        {
+            if (Host.GetDesigner(control) is ControlDesigner designer)
+            {
+                foreach (var line in designer.SnapLines.OfType<SnapLine>())
+                {
+                    if (line.SnapLineType == SnapLineType.Baseline)
                     {
-                        if (depth == 0 && !typeof(IEnumerable).IsAssignableFrom(descriptor.PropertyType) && descriptor.GetValue(owner) is { } content)
-                        {
-                            Properties(content, prefix + descriptor.Name + ".", depth + 1);
-                        }
-
-                        continue;
+                        return line.Offset;
                     }
-
-                    if (descriptor.IsReadOnly || !ShouldSerialize(descriptor, owner) || _values.Serialize(descriptor.GetValue(owner)) is not { } value)
-                    {
-                        continue;
-                    }
-
-                    result.Add((prefix + descriptor.Name, value));
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    Console.Error.WriteLine($"{prefix}{descriptor.Name} couldn't be read: {ex.Message}");
                 }
             }
         }
-
-        Properties(component, string.Empty, 0);
-        if (component is Control && component.Site?.Name is { } name)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            result.Add(("Name", DesignerValue.String(name)));
+            Console.Error.WriteLine($"{control.Name}'s snap lines couldn't be read: {ex.Message}");
         }
 
-        return result;
+        return null;
     }
-
-    /// <summary>
-    /// Whether the code sets a property: its descriptor's <c>ShouldSerializeValue</c>, except for a designer's shadow of
-    /// a component's property that brings no rule of its own. <c>ControlDesigner</c> shadows <c>Visible</c> and
-    /// <c>Enabled</c> (the control on the surface stays visible and enabled) with a property of its own that has neither
-    /// a <c>DefaultValue</c> nor a <c>ShouldSerialize</c> method, so its descriptor says "serialize" whatever the value;
-    /// Visual Studio writes them only when they differ from the control's own default (<c>Enabled = false</c>, never
-    /// <c>= true</c>; none of the fixture's controls has either line). Such a shadow is compared with the default the
-    /// component's own property has: its <c>DefaultValue</c>, or a new instance's value when that isn't serialized.
-    /// </summary>
-    private static bool ShouldSerialize(PropertyDescriptor descriptor, object owner)
-    {
-        if (!descriptor.ShouldSerializeValue(owner))
-        {
-            return false;
-        }
-
-        var shadowedBy = descriptor.ComponentType;
-        if (shadowedBy.IsInstanceOfType(owner)
-            || descriptor.Attributes[typeof(DefaultValueAttribute)] is not null
-            || shadowedBy.GetMethod("ShouldSerialize" + descriptor.Name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, Type.EmptyTypes) is not null)
-        {
-            return true;
-        }
-
-        return OwnDefault(owner.GetType(), descriptor.Name) is not { } fallback || !Equals(descriptor.GetValue(owner), fallback.Value);
-    }
-
-    private static readonly Dictionary<(Type, string), DefaultOf?> s_ownDefaults = [];
-
-    private sealed record DefaultOf(object? Value);
-
-    /// <summary>A component type's own default for a property (not a designer's shadow of it), or null when it has none.</summary>
-    private static DefaultOf? OwnDefault(Type componentType, string property)
-    {
-        lock (s_ownDefaults)
-        {
-            if (s_ownDefaults.TryGetValue((componentType, property), out var known))
-            {
-                return known;
-            }
-        }
-
-        DefaultOf? result = null;
-        if (TypeDescriptor.GetProperties(componentType)[property] is { } own)
-        {
-            if (own.Attributes[typeof(DefaultValueAttribute)] is DefaultValueAttribute declared)
-            {
-                result = new DefaultOf(declared.Value);
-            }
-            else if (!own.ComponentType.IsAbstract && own.ComponentType.GetConstructor(Type.EmptyTypes) is not null)
-            {
-                // The type that declares it (Control for Visible and Enabled), new: its value there, when that isn't written.
-                object? probe = null;
-                try
-                {
-                    probe = Activator.CreateInstance(own.ComponentType);
-                    result = probe is not null && !own.ShouldSerializeValue(probe) ? new DefaultOf(own.GetValue(probe)) : null;
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    result = null;
-                }
-                finally
-                {
-                    (probe as IDisposable)?.Dispose();
-                }
-            }
-        }
-
-        lock (s_ownDefaults)
-        {
-            s_ownDefaults[(componentType, property)] = result;
-        }
-
-        return result;
-    }
-
-    private static DesignerPropertyChange[] Diff(Dictionary<(string Component, string Property), DesignerValue> before, Dictionary<(string Component, string Property), DesignerValue> after, ISet<string> skip)
-    {
-        var changes = new List<DesignerPropertyChange>();
-        foreach (var (key, value) in after)
-        {
-            if (!skip.Contains(key.Component) && (!before.TryGetValue(key, out var old) || !old.SameAs(value)))
-            {
-                changes.Add(new DesignerPropertyChange(key.Component, key.Property, value));
-            }
-        }
-
-        foreach (var key in before.Keys)
-        {
-            if (!skip.Contains(key.Component) && !after.ContainsKey(key))
-            {
-                changes.Add(new DesignerPropertyChange(key.Component, key.Property, null));
-            }
-        }
-
-        return [.. changes];
-    }
-
-    private DesignerChangeResult Changed(Dictionary<(string Component, string Property), DesignerValue> before, ISet<string> skip) =>
-        new(Diff(before, Snapshot(), skip), Render());
 
     // ------------------------------------------------------------------ changes
 
-    /// <summary>A parent named by the IDE: the root (null or empty), a container component, or a SplitContainer's panel (<c>splitContainer1.Panel1</c>).</summary>
+    /// <summary>A parent named by the IDE: the root (null or empty), a container component, or a container's panel (<c>splitContainer1.Panel1</c>).</summary>
     private (Control Control, string Component, string? Path) Parent(string? name)
     {
         if (string.IsNullOrEmpty(name) || name == _className)
@@ -622,7 +638,7 @@ internal sealed class DesignerSession : IDisposable
 
     public DesignerChangeResult Create(DesignerCreateParams parameters)
     {
-        var before = Snapshot();
+        var before = Capture();
         var type = _types.Find(parameters.Type) ?? throw new InvalidOperationException($"The type {parameters.Type} wasn't found (build the project?).");
         if (Host.Container.Components[parameters.Name] is not null)
         {
@@ -636,16 +652,11 @@ internal sealed class DesignerSession : IDisposable
             initializer.InitializeNewComponent(new Hashtable());
         }
 
-        string? parentComponent = null;
-        string? parentPath = null;
-        int[]? cell = null;
-        if (component is Control control)
+        if (component is Control control and not ToolStripDropDown)
         {
-            var (parent, owner, path) = Parent(parameters.Parent);
-            parentComponent = owner;
-            parentPath = path;
+            var (parent, _, _) = Parent(parameters.Parent);
             var siblings = parent.Controls.Cast<Control>().Where(c => !ReferenceEquals(c, control)).ToList();
-            cell = AddTo(parent, control, ClientPoint(parent, parameters.X, parameters.Y));
+            AddTo(parent, control, ClientPoint(parent, parameters.X, parameters.Y));
             if (parameters is { Width: { } width, Height: { } height } && width >= 1 && height >= 1)
             {
                 control.Size = new Size((int)Math.Round(width), (int)Math.Round(height));
@@ -654,26 +665,33 @@ internal sealed class DesignerSession : IDisposable
             control.TabIndex = siblings.Count == 0 ? 0 : siblings.Max(c => c.TabIndex) + 1;
         }
 
-        var arguments = component is not Control && type.GetConstructor([typeof(IContainer)]) is not null
-            ? new[] { DesignerValue.ReferenceTo("components") }
-            : [];
-        var created = new DesignerCreated(parameters.Name, DesignerTypes.NameOf(type), arguments, parentComponent, parentPath, cell,
-            [.. Serialize(component).Select(p => new DesignerPropertyValue(p.Property, p.Value))])
-        {
-            SupportsInitialize = component is ISupportInitialize,
-            IsControl = component is Control,
-        };
-        return Changed(before, new HashSet<string>(StringComparer.Ordinal) { parameters.Name }) with { Created = created };
+        return Result(before, created: parameters.Name);
     }
 
     public DesignerChangeResult SetProperties(DesignerSetPropertiesParams parameters)
     {
-        var before = Snapshot();
+        var before = Capture();
         foreach (var edit in parameters.Edits)
         {
+            if (edit.Component.Length == 0 && edit.Property == "Localizable" && edit.Provider is null)
+            {
+                return SetLocalizable(before, string.Equals(edit.Text, "True", StringComparison.OrdinalIgnoreCase));
+            }
+
             var target = Target(edit.Component) ?? throw Unknown(edit.Component);
+            if (edit.DataBinding)
+            {
+                if (SetDataBinding(target, edit) is { } bindingError)
+                {
+                    return new DesignerChangeResult([], Render()) { Error = bindingError };
+                }
+
+                continue;
+            }
+
             var (owner, member) = Walk(target, edit.Property);
-            var descriptor = TypeDescriptor.GetProperties(owner)[member] ?? throw new InvalidOperationException($"{edit.Property} isn't a property of {edit.Component}.");
+            var descriptor = Descriptor(owner, member, edit.Provider)
+                ?? throw new InvalidOperationException(edit.Provider is null ? $"{edit.Property} isn't a property of {edit.Component}." : $"{edit.Provider} doesn't give {edit.Component} a {edit.Property}.");
             if (edit.Reset)
             {
                 if (descriptor.CanResetValue(owner))
@@ -687,26 +705,42 @@ internal sealed class DesignerSession : IDisposable
             object? value;
             try
             {
-                value = edit.Value is { } structured
-                    ? _values.Evaluate(structured, descriptor.PropertyType)
+                value = edit.Bytes is { } bytes ? ImageOf(descriptor.PropertyType, Convert.FromBase64String(bytes))
+                    : edit.Value is { } structured ? _values.Evaluate(structured, descriptor.PropertyType)
                     : descriptor.Converter.ConvertFromInvariantString(edit.Text ?? string.Empty);
             }
-            catch (Exception ex) when (ex is FormatException or NotSupportedException or ArgumentException or InvalidCastException or OverflowException)
+            catch (Exception ex) when (ex is FormatException or NotSupportedException or ArgumentException or InvalidCastException or OverflowException or System.Runtime.InteropServices.ExternalException)
             {
-                return new DesignerChangeResult([], Render()) { Error = $"'{edit.Text}' isn't a valid {edit.Property}: {ex.Message}" };
+                return new DesignerChangeResult([], Render()) { Error = $"'{edit.Text ?? edit.Property}' isn't a valid {edit.Property}: {ex.Message}" };
             }
 
             descriptor.SetValue(owner, value);
         }
 
-        return Changed(before, new HashSet<string>(StringComparer.Ordinal));
+        return Result(before);
     }
+
+    /// <summary>A property of <paramref name="owner"/>, or the extender property <paramref name="provider"/> gives it (<c>ToolTip on toolTip1</c>).</summary>
+    private PropertyDescriptor? Descriptor(object owner, string member, string? provider)
+    {
+        if (provider is null)
+        {
+            return TypeDescriptor.GetProperties(owner)[member];
+        }
+
+        return TypeDescriptor.GetProperties(owner).Cast<PropertyDescriptor>().FirstOrDefault(d => d.Name == member
+            && d.Attributes[typeof(ExtenderProvidedPropertyAttribute)] is ExtenderProvidedPropertyAttribute { Provider: { } p } && NameOf(p) == provider);
+    }
+
+    /// <summary>An image file's bytes as the property's type: an icon for <c>Icon</c>, else an image (its stream kept, so it keeps its format).</summary>
+    private static object ImageOf(Type type, byte[] bytes) =>
+        typeof(Icon).IsAssignableFrom(type) ? new Icon(new MemoryStream(bytes)) : Image.FromStream(new MemoryStream(bytes));
 
     public DesignerChangeResult SetParent(DesignerSetParentParams parameters)
     {
-        var before = Snapshot();
+        var before = Capture();
         var control = Target(parameters.Component) as Control ?? throw new InvalidOperationException($"{parameters.Component} isn't a control.");
-        var (parent, owner, path) = Parent(parameters.Parent);
+        var (parent, _, _) = Parent(parameters.Parent);
         for (var ancestor = parent; ancestor is not null; ancestor = ancestor.Parent)
         {
             if (ReferenceEquals(ancestor, control))
@@ -716,13 +750,23 @@ internal sealed class DesignerSession : IDisposable
         }
 
         control.Parent?.Controls.Remove(control);
-        var cell = AddTo(parent, control, ClientPoint(parent, parameters.X, parameters.Y));
-        return Changed(before, new HashSet<string>(StringComparer.Ordinal)) with { Reparented = new DesignerReparented(parameters.Component, owner, path, cell) };
+        AddTo(parent, control, ClientPoint(parent, parameters.X, parameters.Y));
+        return Result(before, reparented: parameters.Component);
+    }
+
+    /// <summary>Moves a control in its parent's controls (M41b): 0 brings it to the front, the last index sends it to the back.</summary>
+    public DesignerChangeResult SetChildIndex(DesignerChildIndexParams parameters)
+    {
+        var before = Capture();
+        var control = Target(parameters.Component) as Control ?? throw new InvalidOperationException($"{parameters.Component} isn't a control.");
+        var parent = control.Parent ?? throw new InvalidOperationException($"{parameters.Component} has no parent.");
+        parent.Controls.SetChildIndex(control, Math.Clamp(parameters.Index, 0, parent.Controls.Count - 1));
+        return Result(before);
     }
 
     public DesignerChangeResult Delete(DesignerComponentsParams parameters)
     {
-        var before = Snapshot();
+        var before = Capture();
         var removed = new List<IComponent>();
         void Collect(IComponent component)
         {
@@ -739,15 +783,27 @@ internal sealed class DesignerSession : IDisposable
                     {
                         Collect(child);
                     }
-                    else if (child is SplitterPanel panel)
+                    else if (PartName(control, child) is not null)
                     {
-                        foreach (Control grandchild in panel.Controls)
+                        foreach (Control grandchild in child.Controls)
                         {
                             if (NameOf(grandchild) is { Length: > 0 })
                             {
                                 Collect(grandchild);
                             }
                         }
+                    }
+                }
+            }
+
+            // A strip's items, a menu item's drop-down's, a list view's columns, a grid's columns.
+            foreach (var (_, collection) in CollectionsOf(component))
+            {
+                foreach (var item in ((IEnumerable)collection).Cast<object>().ToList())
+                {
+                    if (item is IComponent child && !ReferenceEquals(child, component) && NameOf(child) is { Length: > 0 })
+                    {
+                        Collect(child);
                     }
                 }
             }
@@ -763,13 +819,15 @@ internal sealed class DesignerSession : IDisposable
             }
         }
 
-        var names = removed.Select(c => c.Site!.Name!).ToList();
         foreach (var component in removed)
         {
-            Host.DestroyComponent(component);
+            if (component.Site is not null)
+            {
+                Host.DestroyComponent(component);
+            }
         }
 
-        return Changed(before, new HashSet<string>(names, StringComparer.Ordinal)) with { Removed = [.. names] };
+        return Result(before);
     }
 
     public void Select(DesignerComponentsParams parameters)
@@ -784,6 +842,67 @@ internal sealed class DesignerSession : IDisposable
     {
         Unload();
         _components.Dispose();
+        _services.Dispose();
+    }
+
+    // ------------------------------------------------------------------ data bindings (M41b)
+
+    /// <summary>Binds a property to a binding source's member (<c>bindingSource1 - Name</c>), or unbinds it (<c>(none)</c>).</summary>
+    private string? SetDataBinding(object target, DesignerPropertyEdit edit)
+    {
+        if (target is not Control control)
+        {
+            return $"{edit.Component} isn't a control: it has no data bindings.";
+        }
+
+        if (control.DataBindings[edit.Property] is { } old)
+        {
+            control.DataBindings.Remove(old);
+        }
+
+        if (edit.Reset || edit.Text is not { } text || text == NoBinding)
+        {
+            return null;
+        }
+
+        var separator = text.IndexOf(BindingSeparator, StringComparison.Ordinal);
+        if (separator < 0 || Target(text[..separator]) is not IComponent source)
+        {
+            return $"'{text}' isn't a binding source's member.";
+        }
+
+        control.DataBindings.Add(new Binding(edit.Property, source, text[(separator + BindingSeparator.Length)..], true));
+        return null;
+    }
+
+    private const string NoBinding = "(none)";
+    private const string BindingSeparator = " - ";
+
+    /// <summary>The choices of a property's binding: none, and every binding source's members (<c>bindingSource1 - Name</c>).</summary>
+    private string[] BindingChoices()
+    {
+        var choices = new List<string> { NoBinding };
+        foreach (IComponent component in Host.Container.Components)
+        {
+            if (component is not (BindingSource or IListSource or IList) || NameOf(component) is not { Length: > 0 } name)
+            {
+                continue;
+            }
+
+            try
+            {
+                foreach (PropertyDescriptor member in ListBindingHelper.GetListItemProperties(component))
+                {
+                    choices.Add(name + BindingSeparator + member.Name);
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                Console.Error.WriteLine($"{name}'s members couldn't be listed: {ex.Message}");
+            }
+        }
+
+        return [.. choices];
     }
 
     // ------------------------------------------------------------------ the Properties window
@@ -807,7 +926,8 @@ internal sealed class DesignerSession : IDisposable
             var infos = Describe(target, NameOf(target)).ToList();
             merged = merged is null
                 ? infos
-                : [.. merged.Join(infos, a => (a.Name, a.Type), b => (b.Name, b.Type), (a, b) => a.Value == b.Value ? a with { IsSet = a.IsSet || b.IsSet } : a with { Value = null, Mixed = true, IsSet = a.IsSet || b.IsSet })];
+                : [.. merged.Join(infos, a => (a.Name, a.Type, a.Provider, a.DataBinding), b => (b.Name, b.Type, b.Provider, b.DataBinding),
+                    (a, b) => a.Value == b.Value ? a with { IsSet = a.IsSet || b.IsSet } : a with { Value = null, Mixed = true, IsSet = a.IsSet || b.IsSet })];
         }
 
         return new DesignerPropertiesResult([.. merged!]);
@@ -825,24 +945,74 @@ internal sealed class DesignerSession : IDisposable
             };
         }
 
+        if (ReferenceEquals(target, _root))
+        {
+            // Visual Studio's design-time property of a form: its localizable values go to its resources, per language.
+            yield return new DesignerPropertyInfo("Localizable", "Design", "System.Boolean", _localizable ? "True" : "False")
+            {
+                Description = "The form's localizable properties (texts, sizes, locations, images…) are in its resources, a .resx per language.",
+                IsSet = _localizable,
+                Editor = DesignerEditors.Boolean,
+                StandardValues = ["True", "False"],
+            };
+        }
+
+        var collections = CollectionsOf(target).ToDictionary(c => c.Info.Property, c => c.Info.Key, StringComparer.Ordinal);
         foreach (PropertyDescriptor descriptor in TypeDescriptor.GetProperties(target, [BrowsableAttribute.Yes]))
         {
-            if (descriptor.Name == "Name" || descriptor.Attributes[typeof(ExtenderProvidedPropertyAttribute)] is ExtenderProvidedPropertyAttribute { Provider: not null })
+            if (descriptor.Name == "Name")
             {
                 continue;
+            }
+
+            string? provider = null;
+            if (descriptor.Attributes[typeof(ExtenderProvidedPropertyAttribute)] is ExtenderProvidedPropertyAttribute { Provider: { } extender })
+            {
+                if (NameOf(extender) is not { Length: > 0 } providerName)
+                {
+                    continue;
+                }
+
+                provider = providerName;
             }
 
             DesignerPropertyInfo info;
             try
             {
                 info = Describe(target, descriptor);
+                if (collections.TryGetValue(descriptor.Name, out var key) && provider is null)
+                {
+                    info = info with { Editor = DesignerEditors.Collection, Collection = key, Value = "(Collection)", IsReadOnly = false };
+                }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 info = new DesignerPropertyInfo(descriptor.Name, descriptor.Category, DesignerTypes.NameOf(descriptor.PropertyType), ex.Message) { IsReadOnly = true, Editor = DesignerEditors.ReadOnly };
             }
 
-            yield return info;
+            yield return info with { Provider = provider, Localizable = _localizable && descriptor.IsLocalizable };
+        }
+
+        // (DataBindings): the bindable properties, bound to a binding source's member.
+        if (target is Control control && NameOf(control) is { Length: > 0 })
+        {
+            string[]? choices = null;
+            foreach (PropertyDescriptor bindable in TypeDescriptor.GetProperties(control, [BindableAttribute.Yes]))
+            {
+                choices ??= BindingChoices();
+                var binding = control.DataBindings[bindable.Name];
+                var current = binding?.DataSource is IComponent source && NameOf(source) is { } sourceName
+                    ? sourceName + BindingSeparator + binding.BindingMemberInfo.BindingMember
+                    : NoBinding;
+                yield return new DesignerPropertyInfo(bindable.Name, "(DataBindings)", DesignerTypes.NameOf(bindable.PropertyType), current)
+                {
+                    Description = $"Binds {bindable.Name} to a member of one of the form's binding sources.",
+                    IsSet = binding is not null,
+                    Editor = DesignerEditors.Enum,
+                    StandardValues = choices.Contains(current) ? choices : [.. choices, current],
+                    DataBinding = true,
+                };
+            }
         }
     }
 
@@ -859,6 +1029,17 @@ internal sealed class DesignerSession : IDisposable
         catch (Exception ex) when (ex is NotSupportedException or ArgumentException or InvalidOperationException)
         {
             text = value?.ToString();
+        }
+
+        if (!descriptor.IsReadOnly && (typeof(Image).IsAssignableFrom(type) || typeof(Icon).IsAssignableFrom(type)))
+        {
+            // An image: imported from a file into the resources (the editor shows its type, as Visual Studio does).
+            return new DesignerPropertyInfo(descriptor.Name, descriptor.Category, DesignerTypes.NameOf(type), value is null ? "(none)" : DesignerTypes.NameOf(value.GetType()))
+            {
+                Description = descriptor.Description,
+                IsSet = descriptor.ShouldSerializeValue(target),
+                Editor = DesignerEditors.Image,
+            };
         }
 
         var settable = !descriptor.IsReadOnly && converter.CanConvertFrom(typeof(string)) && descriptor.SerializationVisibility != DesignerSerializationVisibility.Content;

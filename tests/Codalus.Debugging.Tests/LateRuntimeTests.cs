@@ -59,7 +59,14 @@ public sealed class LateRuntimeTests(DebuggeeFixture debuggee) : IClassFixture<D
         var text = Text();
         Assert.Contains("The debugger didn't see the program's runtime start within its 5 seconds; waiting for it", text, StringComparison.Ordinal);
         Assert.Contains("The debugger saw the program's runtime start ", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("starting again", text, StringComparison.Ordinal);
+
+        // The same start, unless the runtime's debugger transport deadlocked at its start (a loaded Linux machine; the
+        // .NET 11 runtime, DebugAdapter.WaitForRuntimeAsync): then the program was ended and started again.
+        if (text.Contains("starting again", StringComparison.Ordinal))
+        {
+            Assert.Contains("The program's runtime started, but the debugger hasn't taken it up", text, StringComparison.Ordinal);
+        }
+
         await debug.StopAsync();
 
         string Text()
@@ -69,5 +76,40 @@ public sealed class LateRuntimeTests(DebuggeeFixture debuggee) : IClassFixture<D
                 return output.ToString();
             }
         }
+    }
+
+    [Fact]
+    public async Task A_program_that_ends_before_its_runtime_starts_is_started_again_without_the_longer_wait()
+    {
+        // netcoredbg doesn't reap a program it never saw the runtime of: on Linux it stays a zombie, which
+        // Process.HasExited reads as running, and the start waited out its 60 seconds instead of starting again.
+        Assert.SkipWhen(DebuggeeFixture.Adapter is null, "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "A program's state is read from /proc (DebugAdapter.HasExited). TODO(issue): macOS.");
+        var ct = TestContext.Current.CancellationToken;
+        await using var debug = new DebugService(() => DebuggeeFixture.Adapter);
+        var output = new StringBuilder();
+        debug.Output += (_, o) =>
+        {
+            lock (output)
+            {
+                output.Append(o.Text);
+            }
+        };
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        // Each start's "program" ends a second after netcoredbg's 5 seconds, before any runtime started.
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            debug.LaunchAsync("/bin/sh", ["-c", "sleep 6; exit 3"], debuggee.Folder, new Dictionary<string, string>(), ct).WaitAsync(TimeSpan.FromSeconds(150), ct));
+
+        string text;
+        lock (output)
+        {
+            text = output.ToString();
+        }
+
+        Assert.Contains("0x80004005", error.Message, StringComparison.Ordinal);
+        Assert.Contains("before its runtime started", text, StringComparison.Ordinal);
+        Assert.Contains($"starting again ({DebugService.StartupAttempts} of {DebugService.StartupAttempts})", text, StringComparison.Ordinal);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(60), $"took {clock.Elapsed}: a start waited out the longer wait. Debug Console:\n{text}");
     }
 }

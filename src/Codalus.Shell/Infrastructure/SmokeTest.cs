@@ -1213,6 +1213,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("winforms.designer", "M41a", winFormsDesignerTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); off Windows a form opens as code, which the tests cover on every OS.");
         }
 
+        // M41b: the designer's depth (ADR 0073): a menu edited through Type Here, a ToolTip extender property.
+        const string winFormsDepthTitle = "InventoryForm opens in the designer; a menu item typed into its menu strip and a ToolTip set on a control become code (the item, AddRange, SetToolTip), and undo takes them back";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.designerDepth", "M41b", winFormsDepthTitle, WinFormsDesignerDepthStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.designerDepth", "M41b", winFormsDepthTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the shell's side runs against a fake designer host in the tests on every OS.");
+        }
+
         // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
         const string winUITitle = "The WinUI 3 app opens, its XAML completes x:Bind paths from the page's class, and it builds and runs unpackaged";
         if (OperatingSystem.IsWindows())
@@ -2337,8 +2348,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
         await shell.PropertiesWindow.RefreshAsync().ConfigureAwait(true);
-        var text = shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "Text");
-        Check(text is { Value: "button1" }, "the Properties window shows the new button's Text");
+        // The property's own row: (DataBindings), first in the window, has a Text row too (M41b).
+        var text = shell.PropertiesWindow.Categories.Where(c => c.Title != "(DataBindings)").SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "Text");
+        Check(text is { Value: "button1" }, "the Properties window shows the new button's Text: " + text?.Value);
         text!.Text = "Smoke test";
         await WaitAsync(() => code.Text.Text.Contains("button1.Text = \"Smoke test\";", StringComparison.Ordinal), "the Text set in the Properties window is in the code", 60).ConfigureAwait(true);
         var added = code.Text.Text.Split('\n').Length - original.Split('\n').Length;
@@ -2369,6 +2381,53 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(code.Text.Text == original, "undo takes the designer file back to the original");
         shell.Layout.CloseDocument(designer);
         shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+    }
+
+    /// <summary>
+    /// The designer's depth in the shipped app (M41b): InventoryForm opened, "&amp;Edit" typed into its menu strip's Type Here
+    /// (editToolStripMenuItem and the menu's AddRange), "ToolTip on inventoryToolTip" set on the list view (SetToolTip),
+    /// a frame drawn with the new item, and both undone.
+    /// </summary>
+    private async Task WinFormsDesignerDepthStepAsync()
+    {
+        var app = Path.Combine(Work, "WindowsDesktop", "WinFormsApp");
+        await shell.OpenFileAsync(Path.Combine(app, "InventoryForm.cs")).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath.EndsWith("InventoryForm.cs", StringComparison.Ordinal));
+        Check(designer is not null, "InventoryForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0, "the designer loads InventoryForm and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        Check(designer!.Problems is null, "every statement applied: " + designer.Problems);
+        Check(designer.Tray.Any(t => t.Name == "inventoryToolTip") && designer.Tray.Any(t => t.Name == "itemBindingSource"), "the component tray has the form's components");
+        var code = designer.DesignerCode!;
+        var original = code.Text.Text;
+
+        // Type Here on the menu strip.
+        designer.SetSelection(["mainMenuStrip"], notify: true);
+        Check(designer.StripTypeHere is { CanType: true }, "the menu strip shows Type Here");
+        await designer.AddItemAsync(designer.StripTypeHere!, "&Edit").WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("editToolStripMenuItem = new ToolStripMenuItem();", StringComparison.Ordinal)
+            && code.Text.Text.Contains("mainMenuStrip.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, helpToolStripMenuItem, editToolStripMenuItem });", StringComparison.Ordinal)
+            && code.Text.Text.Contains("editToolStripMenuItem.Text = \"&Edit\";", StringComparison.Ordinal),
+            "the typed item is in InventoryForm.Designer.cs: " + designer.Status);
+        Check(designer.Components.Any(c => c is { Name: "editToolStripMenuItem", IsItem: true, Owner: "mainMenuStrip" }), "the new item is on the surface, in the menu strip");
+
+        // An extender property in the Properties window.
+        designer.SetSelection(["itemsListView"], notify: true);
+        shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
+        await shell.PropertiesWindow.RefreshAsync().ConfigureAwait(true);
+        var tip = shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "ToolTip on inventoryToolTip");
+        Check(tip is not null, "the Properties window shows ToolTip on inventoryToolTip");
+        tip!.Text = "The items in stock.";
+        await WaitAsync(() => code.Text.Text.Contains("inventoryToolTip.SetToolTip(itemsListView, \"The items in stock.\");", StringComparison.Ordinal), "the ToolTip is a SetToolTip call in the code", 60).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer-depth.png");
+
+        for (var i = 0; i < 10 && code.Text.Text != original; i++)
+        {
+            designer.Undo();
+        }
+
+        Check(code.Text.Text == original, "undo takes the designer file back to the original");
+        shell.Layout.CloseDocument(designer);
     }
 
     /// <summary>The WPF previewer in the shipped app (M40b): the solution windows.desktop opened, its MainWindow.xaml previewed.</summary>

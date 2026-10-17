@@ -20,6 +20,12 @@ public enum PropertyRowKind
 
     /// <summary>A color as text (<c>Red</c>, <c>255, 128, 0</c>) with a swatch (M41a).</summary>
     Color,
+
+    /// <summary>A Windows Forms control's Dock: Visual Studio's picker (Top, Left, Fill, Right, Bottom around, None below; M41b).</summary>
+    Dock,
+
+    /// <summary>A Windows Forms control's Anchor: Visual Studio's picker (a bar to each edge to toggle; M41b).</summary>
+    Anchor,
 }
 
 /// <summary>A flag of a <see cref="PropertyRowKind.Flags"/> row.</summary>
@@ -64,17 +70,53 @@ public sealed class PropertyRowViewModel : ObservableObject
             Options.Add(new PropertyOption(value, value.Length == 0 ? "(none)" : value));
         }
 
-        if (Kind == PropertyRowKind.Flags)
+        if (Kind is PropertyRowKind.Flags or PropertyRowKind.Anchor)
         {
             var set = value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
             Flags = [.. Options.Select(o => new FlagOptionViewModel(o.Value, set.Contains(o.Value), CommitFlags))];
         }
+
+        DockCommand = new RelayCommand(dock => _ = dock is string style && _commit is not null ? _commit(style) : Task.CompletedTask);
     }
+
+    /// <summary>The Dock picker's buttons (their parameter is the dock style).</summary>
+    public ICommand DockCommand { get; }
+
+    public bool IsDock => Kind == PropertyRowKind.Dock;
+
+    public bool IsAnchor => Kind == PropertyRowKind.Anchor;
+
+    /// <summary>The Anchor picker's bars.</summary>
+    public FlagOptionViewModel? AnchorTop => Flags.FirstOrDefault(f => f.Name == "Top");
+
+    public FlagOptionViewModel? AnchorBottom => Flags.FirstOrDefault(f => f.Name == "Bottom");
+
+    public FlagOptionViewModel? AnchorLeft => Flags.FirstOrDefault(f => f.Name == "Left");
+
+    public FlagOptionViewModel? AnchorRight => Flags.FirstOrDefault(f => f.Name == "Right");
+
+    /// <summary>Whether a Dock picker's button is the current value.</summary>
+    public bool IsDocked(string dock) => string.Equals(_value, dock, StringComparison.OrdinalIgnoreCase);
+
+    public bool DockTop => IsDocked("Top");
+
+    public bool DockBottom => IsDocked("Bottom");
+
+    public bool DockLeft => IsDocked("Left");
+
+    public bool DockRight => IsDocked("Right");
+
+    public bool DockFill => IsDocked("Fill");
+
+    public bool DockNone => IsDocked("None");
 
     /// <summary>The toggles of a <see cref="PropertyRowKind.Flags"/> row.</summary>
     public IReadOnlyList<FlagOptionViewModel> Flags { get; } = [];
 
     public bool IsFlags => Kind == PropertyRowKind.Flags;
+
+    /// <summary>The value shown on a picker's button (Dock, Anchor).</summary>
+    public bool IsPicker => Kind is PropertyRowKind.Dock or PropertyRowKind.Anchor;
 
     public bool IsColor => Kind == PropertyRowKind.Color;
 
@@ -90,6 +132,16 @@ public sealed class PropertyRowViewModel : ObservableObject
     public string ActionTitle { get; init; } = string.Empty;
 
     public bool HasAction => Action is not null;
+
+    /// <summary>The action button's icon (the Events view's go-to; an image's import; a collection's editor).</summary>
+    public string ActionIcon { get; init; } = "go-to";
+
+    /// <summary>A second command next to the value (an image imported into the project's resources), or null.</summary>
+    public ICommand? SecondaryAction { get; init; }
+
+    public string SecondaryActionTitle { get; init; } = string.Empty;
+
+    public bool HasSecondaryAction => SecondaryAction is not null;
 
     private void CommitFlags()
     {

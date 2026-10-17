@@ -181,6 +181,36 @@ public sealed class DebugStartAgainTests : IDisposable
     }
 
     [Fact]
+    public async Task A_start_whose_runtime_started_but_is_never_taken_up_ends_its_program_and_times_out_to_start_again()
+    {
+        // PR #32's Linux CI: the .NET 11 runtime's debugger transport deadlocked at its start (netcoredbg and the runtime
+        // each blocked opening a different FIFO of the same name), and the start waited out the longer wait to fail.
+        // The scripted adapter's "program" is a .NET process, so its runtime's transport is there, and it never reports:
+        // the start ends it and fails as netcoredbg's timeout, which DebugService answers by starting again.
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "The runtime's transport is looked for on Linux (DebugAdapter.HasRuntimeTransport).");
+        await using var adapter = await DebugAdapter.StartAsync(Adapter(), Timeout());
+        adapter.StuckRuntimeWait = TimeSpan.FromSeconds(1);
+        var log = new System.Text.StringBuilder();
+        adapter.Log += (_, line) => { lock (log) { log.AppendLine(line); } };
+        await adapter.LaunchAsync(Launch(failStarts: 1, runtimeAfter: "never"), DapJsonContext.Default.JsonElement, Timeout());
+        await adapter.Initialized.WaitAsync(Timeout());
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+
+        var error = await Assert.ThrowsAsync<DapException>(() => adapter.ConfigurationDoneAsync(Timeout()));
+
+        Assert.True(DebugAdapter.IsStartupTimeout(error));
+        Assert.True(waited.Elapsed < TimeSpan.FromSeconds(30), $"took {waited.Elapsed}, not the 60 seconds of the longer wait");
+        lock (log)
+        {
+            Assert.Contains("The program's runtime started, but the debugger hasn't taken it up in 1 seconds", log.ToString(), StringComparison.Ordinal);
+        }
+
+        var (ids, running) = LeftPrograms();
+        Assert.Single(ids);
+        Assert.True(running.Count == 0, "still running: " + string.Join(", ", running.Select(p => p.Id)));
+    }
+
+    [Fact]
     public async Task A_start_whose_program_ended_before_its_runtime_started_starts_again_and_the_session_ends_once()
     {
         await using var debug = new DebugService(() => null);
