@@ -122,6 +122,28 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Equal(31, back.Render.Components[0].ClientY);
         Assert.Equal("button1", back.Created!.Properties[0].Value.Value);
         Assert.Equal(["label1"], back.Removed);
+
+        // M41b: z-order, collections with their locals, extenders, bindings, a localizable form's resources.
+        var depth = new DesignerChangeResult(
+            [new DesignerPropertyChange("button1", "ToolTip", DesignerValue.String("Saves")) { Provider = "toolTip1" }, new DesignerPropertyChange("textBox1", "Text", null) { DataBinding = true }],
+            new DesignerRenderResult(null, [new DesignerComponentView("item1", "System.Windows.Forms.ToolStripMenuItem", null, 0, 0, 40, 20) { IsItem = true, Owner = "menuStrip1", ItemIndex = 2, Margin = [3, 3, 3, 3], Baseline = 15 }], []))
+        {
+            Reordered = [new DesignerChildOrder(string.Empty, ["button1", "label1"])],
+            Collections = [new DesignerCollectionChange("listView1", "Items", "AddRange", "System.Windows.Forms.ListViewItem", [DesignerValue.ReferenceTo("listViewItem1")]) { Locals = [new DesignerLocal("listViewItem1", DesignerValue.NewOf("System.Windows.Forms.ListViewItem", DesignerValue.String("Hammer")))] }],
+            Resources = [new DesignerResourceEntry("button1.Text", DesignerResource.String("Enregistrer")) { Culture = "fr" }],
+            Localized = [new DesignerLocalized("button1", true)],
+        };
+        var depthBack = JsonSerializer.Deserialize(JsonSerializer.Serialize(depth, json.DesignerChangeResult), json.DesignerChangeResult)!;
+        Assert.Equal(("toolTip1", true), (depthBack.Changes[0].Provider, depthBack.Changes[1].DataBinding));
+        Assert.Equal(["button1", "label1"], depthBack.Reordered[0].Children);
+        Assert.Equal("listViewItem1", depthBack.Collections[0].Locals[0].Name);
+        Assert.Equal(("fr", "Enregistrer"), (depthBack.Resources[0].Culture, depthBack.Resources[0].Resource!.Text));
+        Assert.True(depthBack.Localized[0].Localized);
+        Assert.True(depthBack.Render.Components[0] is { IsItem: true, Owner: "menuStrip1", ItemIndex: 2, Baseline: 15 });
+        var collection = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerSetCollectionParams("menuStrip1", "Items", [new DesignerCollectionItem { Name = "item1", Type = "System.Windows.Forms.ToolStripMenuItem", Text = "&Edit" }]), json.DesignerSetCollectionParams), json.DesignerSetCollectionParams)!;
+        Assert.Equal("&Edit", collection.Items[0].Text);
+        var actions = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerActionsResult([new DesignerActionItem(DesignerActionKinds.Method, "verb:Add Tab", "Add Tab") { Collection = "TabControl:TabPages" }]), json.DesignerActionsResult), json.DesignerActionsResult)!;
+        Assert.Equal(("verb:Add Tab", "TabControl:TabPages"), (actions.Items[0].Member, actions.Items[0].Collection));
     }
 
     [Fact]
