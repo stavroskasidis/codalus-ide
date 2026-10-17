@@ -90,9 +90,18 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
     {
         var source = fixture.Read(form[..^3] + ".Designer.cs", form.StartsWith("Controls", StringComparison.Ordinal) ? "System.Windows.Forms.UserControl" : "System.Windows.Forms.Form");
         var host = await WinFormsDesignerProcess.StartAsync(fixture.Target(form), Ct);
-        var target = fixture.Target(form);
-        var render = await host.LoadAsync(WinFormsDesignerService.LoadParams(target, source.Model, source.Model.Namespace + "." + source.Model.ClassName), Ct);
-        return (host, render, source);
+        try
+        {
+            var target = fixture.Target(form);
+            var render = await host.LoadAsync(WinFormsDesignerService.LoadParams(target, source.Model, source.Model.Namespace + "." + source.Model.ClassName), Ct);
+            return (host, render, source);
+        }
+        catch
+        {
+            // A load that failed (or ran out of time) ends its host: one left running would take the machine from the tests after it.
+            await host.DisposeAsync();
+            throw;
+        }
     }
 
     private static string Apply(DesignerSource source, params DesignerEdit[] edits) =>

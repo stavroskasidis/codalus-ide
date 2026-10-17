@@ -171,8 +171,20 @@ public sealed class WinFormsDesignerServiceTests
         var model = new DesignerModel { ClassName = "Form1", Namespace = "Demo", BaseType = "System.Windows.Forms.Form" };
         var error = await Assert.ThrowsAsync<PreviewerException>(() => host.LoadAsync(new DesignerLoadParams(model, "/app/App.dll", "Demo.Form1", []), TestContext.Current.CancellationToken));
         Assert.StartsWith("The designer didn't answer designer/load in 1 seconds: the host (process ", error.Message, StringComparison.Ordinal);
-        Assert.Contains("says: UI thread: designer/load for 1.0 s (running line 12 of the designer file).", error.Message, StringComparison.Ordinal);
+        Assert.Contains("says: UI thread: designer/load for 1.0 s (running line 12 of the designer file). This process waited ", error.Message, StringComparison.Ordinal);
+        Assert.Contains(" pool threads, ", error.Message, StringComparison.Ordinal);
+        Assert.Contains("; its connection: 0 request(s) awaiting a reply;", error.Message, StringComparison.Ordinal);
         Assert.Contains("Its last standard error:" + Environment.NewLine + "[designer] loading App.dll", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_limit_that_fires_late_says_this_process_was_too_busy_to_read_the_answer()
+    {
+        // Windows CI: a load's 60 s limit fired 34 s late, so the test's own thread pool was busy (every read of the
+        // host's pipe is a work item on it there); the failure says so rather than only blaming the host.
+        var late = WinFormsDesignerProcess.DescribeHere(TimeSpan.FromSeconds(94), TimeSpan.FromSeconds(60), 9, 412, "0 request(s) awaiting a reply; 1 write(s) pending");
+        Assert.Equal("This process waited 94 s, its limit's timer 34 s late: its thread pool was too busy, so the host's answer may have waited unread (9 pool threads, 412 work items queued); its connection: 0 request(s) awaiting a reply; 1 write(s) pending.", late);
+        Assert.Equal("This process waited 120 s (4 pool threads, 0 work items queued).", WinFormsDesignerProcess.DescribeHere(TimeSpan.FromSeconds(120.4), TimeSpan.FromSeconds(120), 4, 0, null));
     }
 
     [Fact]

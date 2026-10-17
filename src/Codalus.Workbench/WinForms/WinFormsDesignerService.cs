@@ -441,6 +441,7 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_timeouts.Start);
+        var asked = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             var ready = await connection.InvokeAsync(WinFormsDesignerMethods.Ready, s_noParams, s_json.JsonElement, s_json.DesignerStatus, timeout.Token).ConfigureAwait(false);
@@ -448,11 +449,12 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new PreviewerException($"The designer didn't start in {_timeouts.Start.TotalSeconds:0} seconds: {await DiagnoseAsync(connection).ConfigureAwait(false)}");
+            var here = DescribeHere(connection, asked, _timeouts.Start);
+            throw new PreviewerException($"The designer didn't start in {_timeouts.Start.TotalSeconds:0} seconds: {await DiagnoseAsync(connection, here).ConfigureAwait(false)}");
         }
         catch (JsonRpcConnectionLostException ex)
         {
-            throw new PreviewerException($"The designer exited while starting: {await DiagnoseAsync(null).ConfigureAwait(false)}", ex);
+            throw new PreviewerException($"The designer exited while starting: {await DiagnoseAsync(null, null).ConfigureAwait(false)}", ex);
         }
         catch (JsonRpcRemoteException ex)
         {
@@ -466,6 +468,7 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(allowed);
         JsonRpcConnection? connection = null;
+        var asked = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             connection = _process.Connection;
@@ -473,7 +476,8 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new PreviewerException($"The designer didn't answer {method} in {allowed.TotalSeconds:0} seconds: {await DiagnoseAsync(connection).ConfigureAwait(false)}");
+            var here = DescribeHere(connection, asked, allowed);
+            throw new PreviewerException($"The designer didn't answer {method} in {allowed.TotalSeconds:0} seconds: {await DiagnoseAsync(connection, here).ConfigureAwait(false)}");
         }
         catch (JsonRpcRemoteException ex)
         {
@@ -481,11 +485,32 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
         }
     }
 
+    /// <summary>This side of a request that ran out of time (<see cref="DescribeHere(TimeSpan, TimeSpan, int, long, string?)"/>), taken when its limit fired.</summary>
+    private static string DescribeHere(JsonRpcConnection? connection, long asked, TimeSpan allowed) =>
+        DescribeHere(System.Diagnostics.Stopwatch.GetElapsedTime(asked), allowed, ThreadPool.ThreadCount, ThreadPool.PendingWorkItemCount, connection?.Describe());
+
+    /// <summary>
+    /// This side of a request that ran out of time, in words: how long the wait really took, this process's thread pool
+    /// (its threads and the work queued for them) and the connection's state (a request still being written: the host
+    /// doesn't read its input). A limit that fires late means the pool was too busy to run its timer; on Windows every
+    /// read and write of the host's pipes is a work item on that pool, so the host's answer may have waited unread too.
+    /// </summary>
+    internal static string DescribeHere(TimeSpan waited, TimeSpan allowed, int threads, long queued, string? connection)
+    {
+        var late = waited - allowed;
+        var text = late > TimeSpan.FromSeconds(2)
+            ? $"This process waited {waited.TotalSeconds:0} s, its limit's timer {late.TotalSeconds:0} s late: its thread pool was too busy, so the host's answer may have waited unread"
+            : $"This process waited {waited.TotalSeconds:0} s";
+        text += $" ({threads} pool threads, {queued} work items queued)";
+        return (connection is { Length: > 0 } state ? $"{text}; its connection: {state}" : text) + ".";
+    }
+
     /// <summary>
     /// Why the host doesn't answer, in words: whether it's running, what it says it's doing (<c>designer/status</c>,
-    /// answered off its UI thread: the work there, its phase, what waits for it), and its last lines of standard error.
+    /// answered off its UI thread: the work there, its phase, what waits for it), this side's state
+    /// (<paramref name="here"/>), and the host's last lines of standard error.
     /// </summary>
-    private async Task<string> DiagnoseAsync(JsonRpcConnection? connection)
+    private async Task<string> DiagnoseAsync(JsonRpcConnection? connection, string? here)
     {
         string state;
         if (_exited is { } exited && (connection is null || !_process.IsRunning))
@@ -506,12 +531,17 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
             }
             catch (OperationCanceledException)
             {
-                state = $"the host (process {_process.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}, started {_started.Elapsed.TotalSeconds:0} s ago) didn't answer {WinFormsDesignerMethods.Status} in {_timeouts.Status.TotalSeconds:0} seconds either: it isn't reading its input, or its output is blocked.";
+                state = $"the host (process {_process.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}, started {_started.Elapsed.TotalSeconds:0} s ago) didn't answer {WinFormsDesignerMethods.Status} in {_timeouts.Status.TotalSeconds:0} seconds either: it isn't reading its input, its output is blocked, or this process is too busy to read the answer.";
             }
             catch (Exception ex) when (ex is JsonRpcConnectionLostException or JsonRpcRemoteException or IOException or ObjectDisposedException)
             {
                 state = (_exited ?? "the designer host's connection failed") + $": {ex.Message}";
             }
+        }
+
+        if (here is not null)
+        {
+            state += " " + here;
         }
 
         string[] errors;

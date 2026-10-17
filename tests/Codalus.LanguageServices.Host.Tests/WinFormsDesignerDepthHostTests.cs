@@ -25,7 +25,6 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
     {
         var source = fixture.Read(form[..^3] + ".Designer.cs");
         var target = fixture.Target(form);
-        var host = await WinFormsDesignerProcess.StartAsync(target, Ct);
         var parameters = WinFormsDesignerService.LoadParams(target, source.Model, source.Model.Namespace + "." + source.Model.ClassName);
         if (withResources)
         {
@@ -38,9 +37,19 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
             };
         }
 
-        var render = await host.LoadAsync(parameters, Ct);
-        Assert.True(render.Errors.Length == 0, string.Join("\n", render.Errors));
-        return (host, render, source);
+        var host = await WinFormsDesignerProcess.StartAsync(target, Ct);
+        try
+        {
+            var render = await host.LoadAsync(parameters, Ct);
+            Assert.True(render.Errors.Length == 0, string.Join("\n", render.Errors));
+            return (host, render, source);
+        }
+        catch
+        {
+            // A load that failed (or ran out of time) ends its host: one left running would take the machine from the tests after it.
+            await host.DisposeAsync();
+            throw;
+        }
     }
 
     /// <summary>A change as the designer document turns it into the C# host's edits (WinFormsDesignerDocument.EditsFor).</summary>
