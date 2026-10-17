@@ -13,8 +13,12 @@ public sealed partial class MainPage : Page
     /// <summary>The page's view model.</summary>
     public MainViewModel ViewModel { get; } = new();
 
-    /// <summary>A function binding's function: "2 remaining".</summary>
-    public static string FormatRemaining(int count) => string.Format(CultureInfo.CurrentCulture, "{0} remaining", count);
+    /// <summary>
+    /// A function binding's function: "2 remaining". An instance method: the XAML compiler calls a function named
+    /// without its type (<c>{x:Bind FormatRemaining(…)}</c>) on the page instance; a static one needs
+    /// <c>local:MainPage.FormatRemaining(…)</c>.
+    /// </summary>
+    public string FormatRemaining(int count) => string.Format(CultureInfo.CurrentCulture, "{0} remaining", count);
 
     private void OnAddClicked(object sender, RoutedEventArgs e) => NewTitleBox.Focus(FocusState.Programmatic);
 }

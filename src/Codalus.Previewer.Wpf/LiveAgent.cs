@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using static Codalus.Previewer.Wpf.WpfTree;
 
 namespace Codalus.Previewer.Wpf;
@@ -15,7 +16,9 @@ namespace Codalus.Previewer.Wpf;
 /// WPF app, with the commands and replies of the Avalonia agent (ADR 0052), so the IDE's <c>LiveSession</c> and tool
 /// windows serve both. Lists are records separated by <see cref="WpfTree.Record"/>, fields by
 /// <see cref="WpfTree.Field"/>; element ids stay the same while the elements live. Every command runs on the app's UI
-/// thread:
+/// thread at <see cref="DispatcherPriority.Loaded"/>, after the data binding and layout the app has queued (a binding
+/// attaches at <c>DataBind</c> priority, after the constructor that set it), so a window that has just opened is read
+/// as it's drawn: with its bound <c>Title</c> and its laid-out items:
 /// <list type="bullet">
 /// <item><c>windows</c> → id, title, type (the window's class) per open window</item>
 /// <item><c>tree id logical|visual</c> → id, parent id, type, name, templated (1 when a template made it) per element,
@@ -61,7 +64,7 @@ internal sealed class LiveAgent(Action<string> send)
             "pick" => Pick(Arg(2) == "on"),
             "path" => Path(Element(Arg(2))),
             _ => throw new InvalidOperationException("Unknown command " + command),
-        });
+        }, DispatcherPriority.Loaded);
     }
 
     // ------------------------------------------------------------------ ids

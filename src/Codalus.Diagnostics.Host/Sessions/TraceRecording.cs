@@ -36,7 +36,7 @@ internal sealed class TraceRecording : IAsyncDisposable
         try
         {
             var tools = _parameters.Tools is { Count: > 0 } named ? named : [TraceTools.Cpu];
-            _session = await DiagnosticsPort.StartSessionAsync(_parameters.ProcessId, DiagnosticsPort.TraceProviders(tools.ToList(), _parameters.Providers), rundown: true, stacks: true, bufferMegabytes: 256, cancellationToken).ConfigureAwait(false);
+            _session = await DiagnosticsPort.StartSessionAsync(_parameters.ProcessId, DiagnosticsPort.TraceProviders(tools.ToList(), _parameters.Providers), rundown: true, stacks: true, bufferMegabytes: 256, slowStart: false, cancellationToken).ConfigureAwait(false);
             if (tools.Contains(TraceTools.FileIo))
             {
                 _io = new IoSampler(_parameters.ProcessId);

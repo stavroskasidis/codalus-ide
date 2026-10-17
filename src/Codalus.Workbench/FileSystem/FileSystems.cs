@@ -129,7 +129,18 @@ public sealed class LocalFileSystem : IFileSystemProvider
         return Task.FromResult(file.Exists ? new FileEntryInfo(true, false, file.Length, file.LastWriteTimeUtc) : FileEntryInfo.Missing);
     }
 
-    public Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken) => File.ReadAllBytesAsync(path, cancellationToken);
+    /// <summary>
+    /// Reads the file sharing it for writing and deleting (File.ReadAllBytesAsync shares it for reading only): on
+    /// Windows that read fails while git or another tool has the file open to write it, and their write fails while
+    /// the read lasts, as an open document reloading after a change on disk did in the middle of git's next one.
+    /// </summary>
+    public async Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1, useAsync: true);
+        using var content = new MemoryStream(stream.CanSeek ? (int)Math.Min(stream.Length, int.MaxValue) : 0);
+        await stream.CopyToAsync(content, cancellationToken).ConfigureAwait(false);
+        return content.ToArray();
+    }
 
     public async Task WriteAllBytesAsync(string path, byte[] content, CancellationToken cancellationToken)
     {

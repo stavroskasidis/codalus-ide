@@ -193,7 +193,8 @@ public sealed partial class ShellHost
                 WindowsApps.PackagesRoot(Environment.GetEnvironmentVariable, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),
                 WindowsApps.Architecture(identity),
                 folder => Directory.Exists(folder) ? Directory.EnumerateFiles(folder) : []);
-            var register = WindowsApps.RegisterArguments(manifest, dependencies);
+            var frameworks = await Task.Run(() => dependencies.Select(path => new FrameworkPackage(path, WindowsApps.ReadPackageIdentity(path))).ToList()).ConfigureAwait(true);
+            var register = WindowsApps.RegisterArguments(manifest, frameworks);
             channel.AppendLine(Localizer.Format("msg.windowsApps.registering", "Registering {0} ({1}) from {2}…", identity.Name, identity.Version, Path.GetDirectoryName(manifest)));
             channel.AppendLine("> powershell " + register[^1]);
             var (code, output) = await WindowsAppRunner("powershell.exe", register, Path.GetDirectoryName(manifest), CancellationToken.None).ConfigureAwait(true);

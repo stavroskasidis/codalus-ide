@@ -1627,6 +1627,7 @@
   "msg.hosting.yourSessionExpiredOrWasRevoked": "Your {0} session expired or was revoked. Sign in again to see pull requests and checks.",
   "msg.hotReload.anEditCouldntBeAppliedTo": "An edit couldn't be applied to the running {0}, so it is restarting (a rude edit).",
   "msg.hotReload.applyingTheCodeChanges": "Applying the code changes…",
+  "msg.hotReload.theCodeChangesAreSavedOnceItWatches": "Hot Reload is starting: the code changes are saved and applied once it watches for them…",
   "msg.import.couldntBeRead": "{0} couldn't be read: {1}",
   "msg.import.importSettingsAndKeyboardShortcutsFrom": "Import {0} settings and {1} keyboard shortcuts from VS Code ({2})? They replace yours for the same settings.",
   "msg.import.importSettingsAndKeyboardShortcutsFrom2": "Import {0} settings and {1} keyboard shortcuts from {2}? Colors are added to yours; other settings replace yours.",

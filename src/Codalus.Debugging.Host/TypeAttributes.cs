@@ -222,7 +222,9 @@ internal sealed class TypeAttributes : IDisposable
             {
                 if (File.Exists(path))
                 {
-                    var pe = new PEReader(File.OpenRead(path));
+                    // The metadata read into memory and the file closed: a handle held for the companion's lifetime keeps the
+                    // program from being rebuilt on Windows ("being used by another process") after it was debugged.
+                    var pe = new PEReader(File.OpenRead(path), PEStreamOptions.PrefetchMetadata);
                     if (pe.HasMetadata)
                     {
                         var reader = pe.GetMetadataReader();
