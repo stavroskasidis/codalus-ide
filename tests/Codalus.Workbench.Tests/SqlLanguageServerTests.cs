@@ -8,9 +8,19 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Workbench.Tests;
 
 /// <summary>
+/// The SQL tests run alone, after the parallel ones: the completion budget is a latency, and next to the assembly's
+/// hundreds of parallel tests it measured the runner. A completion costs 2–4 ms of work through the bridge; next to
+/// them, with every core also busy, its median was 14–31 ms (max 118 ms) on a 4-core machine, and 136 ms on a 4-core
+/// CI runner running other test assemblies too. Alone, after them, under the same load: 1.6–3.3 ms.
+/// </summary>
+[CollectionDefinition(nameof(SqlLanguageServerTests), DisableParallelization = true)]
+public sealed class SqlLanguageServerTestsAlone;
+
+/// <summary>
 /// The SQL language server (M27b, ADR 0038): <c>codalus-datahost --lsp</c> through the workbench's LSP bridge, with a
 /// schema sent as <c>codalus/sql/context</c>; and the plan parsers and batch splitting of the data host.
 /// </summary>
+[Collection(nameof(SqlLanguageServerTests))]
 public sealed class SqlLanguageServerTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-sql-" + Guid.NewGuid().ToString("N"));
@@ -94,18 +104,31 @@ public sealed class SqlLanguageServerTests : IAsyncLifetime
         Assert.Contains("TOP", labels); // T-SQL keywords
         Assert.True(labels.IndexOf("Title") < labels.IndexOf("Products"));
 
-        // The roadmap's budget: completion from a cached schema within 100 ms (the median of 20, through the bridge).
-        var times = new List<double>();
-        for (var i = 0; i < 20; i++)
+        // The roadmap's budget: completion from a cached schema within 100 ms (the median of 20, through the bridge). As
+        // in ADR 0002's regression gate, a median over budget fails only when an immediate re-run confirms it: a slow
+        // completion is slow in both, a burst of load on a shared runner rarely lasts through both.
+        async Task<(double Median, double Max)> MeasureAsync()
         {
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-            await client.CompletionAsync(uri, End(text, "\nSELECT "), null, Timeout());
-            times.Add(watch.Elapsed.TotalMilliseconds);
+            var times = new List<double>();
+            for (var i = 0; i < 20; i++)
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                await client.CompletionAsync(uri, End(text, "\nSELECT "), null, Timeout());
+                times.Add(watch.Elapsed.TotalMilliseconds);
+            }
+
+            times.Sort();
+            return (times[10], times[^1]);
         }
 
-        times.Sort();
-        Assert.True(times[10] < 100, $"Schema completion took {times[10]:0} ms (median).");
-        Console.WriteLine($"[budget] sql schema completion: median {times[10]:0.0} ms, max {times[^1]:0.0} ms");
+        var (median, max) = await MeasureAsync();
+        Console.WriteLine($"[budget] sql schema completion: median {median:0.0} ms, max {max:0.0} ms");
+        if (median >= 100)
+        {
+            var (confirmed, confirmedMax) = await MeasureAsync();
+            Console.WriteLine($"[budget] sql schema completion, re-run: median {confirmed:0.0} ms, max {confirmedMax:0.0} ms");
+            Assert.True(confirmed < 100, $"Schema completion took {median:0} ms, then {confirmed:0} ms (median of 20, budget 100 ms).");
+        }
 
         // schema. → its objects.
         var schema = await client.CompletionAsync(uri, End(text, "FROM sales."), null, Timeout());

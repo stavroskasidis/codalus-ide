@@ -70,6 +70,32 @@ internal static class WinFormsFeature
             DesignerReader.Read(text.ContentEquals(DesignerText) ? DesignerTree : CSharpSyntaxTree.ParseText(text, ParseOptions, DesignerPath), BaseType, GlobalUsings, Resolver);
     }
 
+    /// <summary>
+    /// A file's text as the designer sent it (<paramref name="held"/>: its unsaved <c>.resx</c> files), else as the editor
+    /// has it, else as it is on disk (null when there's no such file).
+    /// </summary>
+    private static string? ReadText(string path, Func<string, SourceText?> openText, DesignerFileText[]? held = null)
+    {
+        if (held?.FirstOrDefault(f => string.Equals(Path.GetFullPath(f.Path), Path.GetFullPath(path), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) is { } file)
+        {
+            return file.Text;
+        }
+
+        if (openText(path) is { } open)
+        {
+            return open.ToString();
+        }
+
+        try
+        {
+            return File.Exists(path) ? File.ReadAllText(path) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private static async Task<SourceText?> TextOfAsync(Document? document, string path, Func<string, SourceText?> openText, CancellationToken cancellationToken)
     {
         if (openText(path) is { } open)
@@ -190,7 +216,7 @@ internal static class WinFormsFeature
     }
 
     /// <summary>A form's designer model, or why it opens as code.</summary>
-    public static async Task<WinFormsReadResult> ReadAsync(Solution solution, string path, Func<string, SourceText?> openText, CancellationToken cancellationToken)
+    public static async Task<WinFormsReadResult> ReadAsync(Solution solution, string path, Func<string, SourceText?> openText, CancellationToken cancellationToken, DesignerFileText[]? resourceFiles = null)
     {
         var (codePath, designerPath) = Files(path);
         var resx = Path.ChangeExtension(codePath, ".resx");
@@ -202,12 +228,17 @@ internal static class WinFormsFeature
 
         var project = (context.Designer ?? context.Code)?.Project.FilePath;
         var fullName = context.Class?.ToDisplayString() ?? null;
+        var resources = new DesignerResourceSet(codePath, p => ReadText(p, openText, resourceFiles), resourceFiles?.Select(f => f.Path));
+        var trayLocations = resources.Get(null)?.TrayLocations() ?? new Dictionary<string, (int X, int Y)>();
         WinFormsReadResult Result(DesignerModel? model, string? problem, int? line) =>
             new(codePath, designerPath, context.IsDesignable, model, problem, line)
             {
                 ResourceFile = File.Exists(resx) ? resx : null,
                 Project = project,
                 ClassFullName = fullName ?? (model is null ? null : model.Namespace is { } ns ? ns + "." + model.ClassName : model.ClassName),
+                IsLocalizable = resources.Get(null)?.IsLocalizable ?? false,
+                Cultures = [.. resources.Cultures],
+                TrayOrder = [.. trayLocations.OrderBy(t => t.Value.Y).ThenBy(t => t.Value.X).Select(t => t.Key)],
             };
 
         if (!context.IsDesignable)
@@ -249,7 +280,8 @@ internal static class WinFormsFeature
             return Fail($"{Path.GetFileName(context.DesignerPath)} changed meanwhile: the designer reloads it.");
         }
 
-        var writer = new DesignerWriter(context.Read);
+        var resources = new DesignerResourceSet(context.CodePath, p => ReadText(p, openText, parameters.ResourceFiles), parameters.ResourceFiles?.Select(f => f.Path));
+        var writer = new DesignerWriter(context.Read, resources);
         var text = context.DesignerText;
         var documents = new List<TextDocumentEdit>();
         Location? handlerLocation = null;
@@ -298,6 +330,15 @@ internal static class WinFormsFeature
             documents.Insert(0, new TextDocumentEdit(
                 new OptionalVersionedTextDocumentIdentifier(DocumentUris.FromPath(context.DesignerPath), designerVersion),
                 [.. changes.Select(c => new TextEdit(Positions.ToRange(context.DesignerText, c.Span), c.NewText ?? string.Empty))]));
+        }
+
+        // The form's resource files (a localizable form's properties, images, a new culture's file).
+        foreach (var (resxPath, before, resxText) in resources.Changes)
+        {
+            var old = SourceText.From(before ?? string.Empty);
+            var resxChanges = LineDiff.Compute(old, SourceText.From(resxText));
+            documents.Add(new TextDocumentEdit(new OptionalVersionedTextDocumentIdentifier(DocumentUris.FromPath(resxPath), before is null ? null : version(resxPath)),
+                [.. resxChanges.Select(c => new TextEdit(Positions.ToRange(old, c.Span), c.NewText ?? string.Empty))]));
         }
 
         DesignerModel? after;

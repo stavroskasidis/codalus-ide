@@ -410,7 +410,14 @@ public sealed record XamlLogicalTreeResult(XamlLogicalNode[] Nodes);
 /// <c>codalus/winforms/read</c> (M41a, ADR 0073): a form's or user control's designer model, from its code file
 /// (<c>MainForm.cs</c>) or its designer file (<c>MainForm.Designer.cs</c>).
 /// </summary>
-public sealed record WinFormsReadParams(TextDocumentIdentifier TextDocument);
+public sealed record WinFormsReadParams(TextDocumentIdentifier TextDocument)
+{
+    /// <summary>The form's <c>.resx</c> files as the designer has them (M41b), which win over the files on disk.</summary>
+    public DesignerFileText[]? ResourceFiles { get; init; }
+}
+
+/// <summary>A file's text as the client has it, unsaved (M41b): a form's <c>.resx</c> file the designer edits.</summary>
+public sealed record DesignerFileText(string Path, string Text);
 
 /// <summary>
 /// The designer files of a class (<see cref="CodeFile"/> and <see cref="DesignerFile"/>) and, when InitializeComponent
@@ -428,6 +435,15 @@ public sealed record WinFormsReadResult(string? CodeFile, string? DesignerFile, 
 
     /// <summary>The class's full name (<c>WinFormsApp.MainForm</c>), whose compiled resources <c>resources</c> reads.</summary>
     public string? ClassFullName { get; init; }
+
+    /// <summary>The form is localizable (M41b): its default <c>.resx</c> says <c>$this.Localizable</c>, so its localizable properties are written there.</summary>
+    public bool IsLocalizable { get; init; }
+
+    /// <summary>The cultures the form has resources for besides the default (<c>fr</c> for <c>MainForm.fr.resx</c>), sorted.</summary>
+    public string[] Cultures { get; init; } = [];
+
+    /// <summary>The non-visual components in the order of their tray locations (the <c>.resx</c>'s <c>TrayLocation</c> metadata), for the component tray.</summary>
+    public string[] TrayOrder { get; init; } = [];
 }
 
 /// <summary>The kinds of <see cref="DesignerEdit"/>.</summary>
@@ -453,6 +469,48 @@ public static class DesignerEditKinds
 
     /// <summary>Unhooks <see cref="DesignerEdit.Event"/> (the handler method stays, as in Visual Studio).</summary>
     public const string RemoveEvent = "removeEvent";
+
+    /// <summary>
+    /// Moves a control's <c>Controls.Add</c> to <see cref="DesignerEdit.Index"/> among its parent's (M41b): the z-order,
+    /// front first, and a tab page's position, as Visual Studio writes them. The statement's text moves as it is.
+    /// </summary>
+    public const string SetChildIndex = "setChildIndex";
+
+    /// <summary>
+    /// Sets an extender property (M41b): <c>provider.SetProperty(component, value)</c> (<see cref="DesignerEdit.Provider"/>,
+    /// <see cref="DesignerEdit.Property"/>) in the extended component's section, or removes it when the value is null.
+    /// </summary>
+    public const string SetExtender = "setExtender";
+
+    /// <summary>
+    /// Writes a collection (M41b): <see cref="DesignerEdit.Items"/> as <c>component.Property.AddRange(new Type[] { … })</c>
+    /// (<see cref="DesignerEdit.Method"/> <c>AddRange</c>, <see cref="DesignerEdit.Type"/> the element type), one
+    /// <c>Add(item)</c> each (<c>Add</c>), or <c>Images.SetKeyName(i, key)</c> each (<c>SetKeyName</c>), in place of the
+    /// statements that filled it; no items, no statement.
+    /// </summary>
+    public const string SetCollection = "setCollection";
+
+    /// <summary>Declares a local object (M41b): <c>Type name = value;</c> before the components are created (a <c>ListViewItem</c>).</summary>
+    public const string AddLocal = "addLocal";
+
+    /// <summary>
+    /// Binds <see cref="DesignerEdit.Property"/> (M41b): <c>component.DataBindings.Add(value)</c> with the binding as
+    /// <see cref="DesignerEdit.Value"/> (<c>new Binding("Text", bindingSource1, "Name", true)</c>), replacing the
+    /// property's binding, or removing it when the value is null.
+    /// </summary>
+    public const string SetDataBinding = "setDataBinding";
+
+    /// <summary>
+    /// Sets or removes a key of the form's <c>.resx</c> for <see cref="DesignerEdit.Culture"/> (M41b):
+    /// <see cref="DesignerEdit.Key"/>, <see cref="DesignerEdit.Resource"/>, <see cref="DesignerEdit.Metadata"/>.
+    /// </summary>
+    public const string SetResource = "setResource";
+
+    /// <summary>
+    /// Adds (<see cref="DesignerEdit.Localized"/> true) or removes <c>resources.ApplyResources(component, "name")</c>,
+    /// the first statement of a localizable form's component's section (M41b).
+    /// </summary>
+    public const string SetLocalized = "setLocalized";
 }
 
 /// <summary>
@@ -500,12 +558,35 @@ public sealed record DesignerEdit
 
     /// <summary>The handler's parameters as <c>Type name</c> pairs (<c>System.Object sender</c>), when the caller knows them.</summary>
     public string[]? HandlerParameters { get; init; }
+
+    /// <summary>An extender property's provider (<c>toolTip1</c>).</summary>
+    public string? Provider { get; init; }
+
+    /// <summary>How a collection is written: <c>AddRange</c>, <c>Add</c> or <c>SetKeyName</c>.</summary>
+    public string? Method { get; init; }
+
+    public DesignerValue[]? Items { get; init; }
+
+    /// <summary>A <c>.resx</c> key.</summary>
+    public string? Key { get; init; }
+
+    /// <summary>The <c>.resx</c>'s culture: empty or null for the default one.</summary>
+    public string? Culture { get; init; }
+
+    public DesignerResource? Resource { get; init; }
+
+    public bool Metadata { get; init; }
+
+    public bool? Localized { get; init; }
 }
 
 /// <summary><c>codalus/winforms/edit</c>: <see cref="Edits"/> applied in order to the designer file at <see cref="Version"/>.</summary>
 public sealed record WinFormsEditParams(TextDocumentIdentifier TextDocument, DesignerEdit[] Edits)
 {
     public int? Version { get; init; }
+
+    /// <summary>The form's <c>.resx</c> files as the designer has them (M41b), which win over the files on disk.</summary>
+    public DesignerFileText[]? ResourceFiles { get; init; }
 }
 
 /// <summary>

@@ -64,6 +64,49 @@ public sealed class LspBridgeTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// A completion list already in the narrowed shape is returned as it is (checked in place, without the node round
+    /// trip that cost 2 ms of a 4 ms SQL completion); one item that isn't sends the whole list through normalization.
+    /// </summary>
+    [Fact]
+    public void A_narrowed_completion_list_passes_unchanged_and_any_other_is_normalized()
+    {
+        const string Edit = """{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":1}},"newText":"a"}""";
+        static JsonElement Parse(string json)
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.Clone();
+        }
+
+        static CompletionList Normalize(JsonElement list) =>
+            LanguageServices.Client.LspNormalizer.Result(Methods.Completion, list).Deserialize(ProtocolJsonContext.Default.CompletionList)!;
+
+        var narrowed = Parse($$$"""
+            {"isIncomplete":false,"items":[
+              {"label":"a","kind":5,"textEdit":{{{Edit}}}},
+              {"label":"b","documentation":{"kind":"markdown","value":"**b**"}},
+              {"label":"c","documentation":null,"textEdit":{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}},"replace":{"start":{"line":0,"character":0},"end":{"line":0,"character":2}},"newText":"c"}}]}
+            """);
+        var result = LanguageServices.Client.LspNormalizer.Result(Methods.Completion, narrowed);
+        Assert.Equal(narrowed.GetRawText(), result.GetRawText());
+        Assert.Equal(["a", "b", "c"], Normalize(narrowed).Items.Select(i => i.Label));
+
+        // Each shape that needs a change: plain-string documentation, MarkupContent without a kind, command links,
+        // an insert/replace edit without a range, an array instead of a list, a list without isIncomplete.
+        var plain = Normalize(Parse($$"""{"isIncomplete":false,"items":[{"label":"a","textEdit":{{Edit}}},{"label":"b","documentation":"Plain."}]}"""));
+        Assert.Equal(new MarkupContent("markdown", "Plain."), plain.Items[1].Documentation);
+        var kindless = Normalize(Parse("""{"isIncomplete":false,"items":[{"label":"a","documentation":{"value":"Value."}}]}"""));
+        Assert.Equal(new MarkupContent("markdown", "Value."), kindless.Items[0].Documentation);
+        var command = Normalize(Parse("""{"isIncomplete":false,"items":[{"label":"a","documentation":{"kind":"markdown","value":"Docs [Open](command:open)"}}]}"""));
+        Assert.Equal("Docs", command.Items[0].Documentation?.Value);
+        var insertReplace = Normalize(Parse("""{"isIncomplete":false,"items":[{"label":"a","textEdit":{"insert":{"start":{"line":0,"character":0},"end":{"line":0,"character":1}},"replace":{"start":{"line":0,"character":0},"end":{"line":0,"character":3}},"newText":"a"}}]}"""));
+        Assert.Equal(3, insertReplace.Items[0].TextEdit!.Range.End.Character);
+        var array = Normalize(Parse("""[{"label":"a"}]"""));
+        Assert.Equal(("a", false), (Assert.Single(array.Items).Label, array.IsIncomplete));
+        var noFlag = LanguageServices.Client.LspNormalizer.Result(Methods.Completion, Parse("""{"items":[{"label":"a"}]}"""));
+        Assert.False(noFlag.GetProperty("isIncomplete").GetBoolean());
+    }
+
     [Fact]
     public async Task A_vs_code_style_server_works_through_the_bridge()
     {

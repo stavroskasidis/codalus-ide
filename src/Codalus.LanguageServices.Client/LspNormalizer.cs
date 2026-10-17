@@ -29,6 +29,13 @@ public static partial class LspNormalizer
             return result;
         }
 
+        // Completion runs on every keystroke, and a list in the narrowed shape (our own servers', most others') is the
+        // common case: checked in place, it skips the node round trip, which costs more than the rest of the request.
+        if (method == Methods.Completion && IsNarrowedCompletionList(result))
+        {
+            return result;
+        }
+
         JsonNode? node = method switch
         {
             Methods.Initialize => InitializeResult(JsonNode.Parse(result.GetRawText())),
@@ -159,6 +166,46 @@ public static partial class LspNormalizer
         }
 
         return list ?? node;
+    }
+
+    /// <summary>
+    /// Whether <see cref="CompletionList(JsonNode?)"/> would leave the result as it is: a list with <c>isIncomplete</c>,
+    /// whose items have no documentation or Markdown/plain-text documentation without command links, and text edits
+    /// with a range.
+    /// </summary>
+    private static bool IsNarrowedCompletionList(JsonElement result)
+    {
+        if (result.ValueKind != JsonValueKind.Object
+            || !result.TryGetProperty("isIncomplete", out var incomplete) || incomplete.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+            || !result.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            if (item.TryGetProperty("documentation", out var documentation) && documentation.ValueKind != JsonValueKind.Null
+                && (documentation.ValueKind != JsonValueKind.Object
+                    || !documentation.TryGetProperty("kind", out var kind) || kind.ValueKind == JsonValueKind.Null
+                    || (documentation.TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.String && value.GetString()!.Contains("command:", StringComparison.Ordinal))))
+            {
+                return false;
+            }
+
+            if (item.TryGetProperty("textEdit", out var edit) && edit.ValueKind == JsonValueKind.Object
+                && (!edit.TryGetProperty("range", out var range) || range.ValueKind == JsonValueKind.Null)
+                && edit.TryGetProperty("replace", out var replace) && replace.ValueKind != JsonValueKind.Null)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static JsonNode? CompletionItem(JsonNode? node)

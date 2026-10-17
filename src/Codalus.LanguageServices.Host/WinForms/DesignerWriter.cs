@@ -12,11 +12,16 @@ namespace Codalus.LanguageServices.Host.WinForms;
 /// section in alphabetical order (events after the properties), a new component's field after the last one, its
 /// creation after the last creation, its section before the next component's (the root's last), and its
 /// <c>Controls.Add</c> first in its parent's (new controls go to the front). Nothing else in the file moves, so an
-/// unchanged statement keeps its text byte for byte.
+/// unchanged statement keeps its text byte for byte. M41b adds the z-order (<c>Controls.Add</c>'s order), extender
+/// properties, collections, locals, data bindings, and a localizable form's resources: the form's <c>.resx</c> files
+/// (<paramref name="resources"/>) are edited with it, and the <c>resources</c> variable comes and goes with its uses.
 /// </summary>
-internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
+internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, DesignerResourceSet? resources = null)
 {
     private const string EventKeyPrefix = "￿";
+
+    /// <summary>An <c>ImageList</c>'s <c>Images.SetKeyName</c> calls: after its properties, before its events, as Visual Studio writes them.</summary>
+    private const string LastKeyPrefix = "￾";
 
     /// <summary>Applies <paramref name="edits"/> in order and returns the new text.</summary>
     public SourceText Apply(SourceText text, IEnumerable<DesignerEdit> edits)
@@ -30,6 +35,14 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
     }
 
     public SourceText Apply(SourceText text, DesignerEdit edit)
+    {
+        var applied = ApplyOne(text, edit);
+        return edit.Kind is DesignerEditKinds.SetProperty or DesignerEditKinds.AddComponent or DesignerEditKinds.RemoveComponent or DesignerEditKinds.SetLocalized
+            ? TidyResources(applied)
+            : applied;
+    }
+
+    private SourceText ApplyOne(SourceText text, DesignerEdit edit)
     {
         var source = read(text);
         var changes = new List<TextChange>();
@@ -57,6 +70,27 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
                     changes.Add(new TextChange(statement.Lines, string.Empty));
                 }
 
+                break;
+            case DesignerEditKinds.SetChildIndex:
+                SetChildIndex(source, changes, edit.Component, edit.Index ?? 0);
+                break;
+            case DesignerEditKinds.SetExtender:
+                SetExtender(source, changes, edit);
+                break;
+            case DesignerEditKinds.SetCollection:
+                SetCollection(source, changes, edit);
+                break;
+            case DesignerEditKinds.AddLocal:
+                AddLocal(source, changes, edit);
+                break;
+            case DesignerEditKinds.SetDataBinding:
+                SetDataBinding(source, changes, edit);
+                break;
+            case DesignerEditKinds.SetResource:
+                SetResource(edit);
+                return text;
+            case DesignerEditKinds.SetLocalized:
+                SetLocalized(source, changes, edit.Component, edit.Localized ?? true);
                 break;
             default:
                 throw new ArgumentException($"Unknown designer edit {edit.Kind}.", nameof(edit));
@@ -150,6 +184,7 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
         DesignerStatementKinds.Assign => statement.Member!,
         DesignerStatementKinds.Event => EventKeyPrefix + statement.Member,
         DesignerStatementKinds.Call when IsExtender(statement) => statement.Member!["Set".Length..],
+        DesignerStatementKinds.Call when statement.Member!.EndsWith(".SetKeyName", StringComparison.Ordinal) => LastKeyPrefix + statement.Member,
         DesignerStatementKinds.Call when statement.Member!.LastIndexOf('.') is var dot and > 0 => statement.Member[..dot],
         _ => statement.Member ?? string.Empty,
     };
@@ -273,18 +308,20 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
     }
 
     /// <summary>Inserts a statement in its component's section, making the section when the component has none.</summary>
-    private static void Insert(DesignerSource source, List<TextChange> changes, string component, DesignerStatement statement)
+    private static void Insert(DesignerSource source, List<TextChange> changes, string component, DesignerStatement statement) =>
+        InsertCode(source, changes, component, Key(statement), Generator(source).Statement(statement));
+
+    /// <summary>Inserts statements' code where a statement with <paramref name="key"/> sorts in the component's section, making the section when the component has none.</summary>
+    private static void InsertCode(DesignerSource source, List<TextChange> changes, string component, string key, string code)
     {
-        var generator = Generator(source);
-        var code = generator.Statement(statement);
-        if (InsertionPoint(source, component, Key(statement)) is { } point)
+        if (InsertionPoint(source, component, key) is { } point)
         {
             changes.Add(new TextChange(new TextSpan(point, 0), code));
             return;
         }
 
         var name = component.Length == 0 ? source.Model.ClassName : component;
-        changes.Add(new TextChange(new TextSpan(NewSectionPoint(source, component), 0), generator.Section(name, source.SectionRule) + code));
+        changes.Add(new TextChange(new TextSpan(NewSectionPoint(source, component), 0), Generator(source).Section(name, source.SectionRule) + code));
     }
 
     // ------------------------------------------------------------------ components
@@ -469,8 +506,8 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
         statement is { Kind: DesignerStatementKinds.Call, Member: { } member, Arguments: [{ Kind: DesignerValueKinds.Reference } child, ..] }
         && member.EndsWith("Controls.Add", StringComparison.Ordinal) && child.Value == name;
 
-    /// <summary>Removes a component, the controls it contains, and every statement about them.</summary>
-    private static void RemoveComponents(DesignerSource source, List<TextChange> changes, string name)
+    /// <summary>Removes a component, the controls it contains, and every statement about them (and their keys in the form's resources).</summary>
+    private void RemoveComponents(DesignerSource source, List<TextChange> changes, string name)
     {
         var removed = new HashSet<string>(StringComparer.Ordinal) { name };
         for (var grew = true; grew;)
@@ -483,6 +520,14 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
                 {
                     grew = true;
                 }
+            }
+        }
+
+        foreach (var file in resources?.All ?? [])
+        {
+            foreach (var component in removed)
+            {
+                file.RemoveComponent(component);
             }
         }
 
@@ -536,9 +581,11 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
 
     /// <summary>
     /// Renames a component in the designer file: its field, its uses in statements, its section comments and its
-    /// <c>Name</c>. (Its uses in the class's other files are renamed through the compilation by the caller.)
+    /// <c>Name</c>, its keys in the form's resources (every culture's) and the code's uses of them
+    /// (<c>ApplyResources(…, "name")</c>, <c>GetObject("name.Image")</c>). (Its uses in the class's other files are
+    /// renamed through the compilation by the caller.)
     /// </summary>
-    private static void Rename(DesignerSource source, List<TextChange> changes, string name, string newName)
+    private void Rename(DesignerSource source, List<TextChange> changes, string name, string newName)
     {
         if (!SyntaxFacts.IsValidIdentifier(newName) || SyntaxFacts.GetKeywordKind(newName) != SyntaxKind.None)
         {
@@ -550,9 +597,26 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
             throw new InvalidOperationException($"{source.Model.ClassName} already has a member named {newName}.");
         }
 
-        if (source.Model.Statements.Any(s => s is { Kind: DesignerStatementKinds.ApplyResources } && s.Target == name))
+        if (source.Model.Statements.Any(s => s is { Kind: DesignerStatementKinds.ApplyResources } && s.Target == name) && resources?.Get(null) is null)
         {
-            throw new InvalidOperationException($"{name}'s properties are in the form's resources (a localizable form): it can't be renamed in the designer yet.");
+            throw new InvalidOperationException($"{name}'s properties are in the localizable form's resources, which weren't found: it can't be renamed in the designer.");
+        }
+
+        foreach (var file in resources?.All ?? [])
+        {
+            file.RenameComponent(name, newName);
+        }
+
+        // The keys the code uses: resources.ApplyResources(x, "name"), resources.GetObject("name.Image").
+        foreach (var invocation in source.Method.Body!.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (invocation.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "resources" }, Name.Identifier.Text: var method }
+                && invocation.ArgumentList.Arguments.LastOrDefault()?.Expression is LiteralExpressionSyntax { RawKind: (int)SyntaxKind.StringLiteralExpression } literal
+                && literal.Token.ValueText is var key
+                && ((method == "ApplyResources" && key == name) || (method is "GetObject" or "GetString" && key.StartsWith(name + ".", StringComparison.Ordinal))))
+            {
+                changes.Add(new TextChange(literal.Span, SymbolDisplay.FormatLiteral(newName + key[name.Length..], quote: true)));
+            }
         }
 
         if (source.Fields.TryGetValue(name, out var field) && field.Declaration.Variables.FirstOrDefault(v => v.Identifier.Text == name) is { } variable)
@@ -619,4 +683,223 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read)
 
         Insert(source, changes, edit.Component, statement);
     }
+
+    // ------------------------------------------------------------------ z-order (M41b)
+
+    /// <summary>
+    /// Moves a control's <c>Controls.Add</c> to <paramref name="index"/> among its parent's: the code's order is the
+    /// controls' order, front first (Bring to Front is 0, Send to Back the last), a tab control's pages in their order.
+    /// </summary>
+    private static void SetChildIndex(DesignerSource source, List<TextChange> changes, string component, int index)
+    {
+        var add = source.Statements.FirstOrDefault(s => IsAddOf(s.Statement, component))
+            ?? throw new InvalidOperationException($"{component} isn't added to a parent's controls in InitializeComponent.");
+        var all = source.Statements.Where(s => s.Statement.Kind == DesignerStatementKinds.Call && s.Statement.Target == add.Statement.Target && s.Statement.Member == add.Statement.Member).ToList();
+        var siblings = all.Where(s => s != add).ToList();
+        index = Math.Clamp(index, 0, siblings.Count);
+        if (all.IndexOf(add) == index)
+        {
+            return;
+        }
+
+        var code = source.Text.ToString(add.Lines);
+        changes.Add(new TextChange(add.Lines, string.Empty));
+        changes.Add(new TextChange(new TextSpan(index < siblings.Count ? siblings[index].Lines.Start : siblings[^1].Lines.End, 0), code));
+    }
+
+    // ------------------------------------------------------------------ extender properties (M41b)
+
+    /// <summary><c>provider.SetProperty(component, value)</c>: its value replaced in place, inserted where the property sorts in the component's section, or removed.</summary>
+    private static void SetExtender(DesignerSource source, List<TextChange> changes, DesignerEdit edit)
+    {
+        var provider = edit.Provider ?? throw new ArgumentException("setExtender needs a provider.", nameof(edit));
+        var member = "Set" + (edit.Property ?? throw new ArgumentException("setExtender needs a property.", nameof(edit)));
+        var existing = source.Statements.FirstOrDefault(s => s.Statement is { Kind: DesignerStatementKinds.Call, Arguments: [{ Kind: DesignerValueKinds.Reference } extended, _] } call
+            && call.Target == provider && call.Member == member && (extended.Value ?? string.Empty) == edit.Component);
+        if (existing is not null)
+        {
+            if (edit.Value is null)
+            {
+                changes.Add(new TextChange(existing.Lines, string.Empty));
+            }
+            else if (existing.Syntax is ExpressionStatementSyntax { Expression: InvocationExpressionSyntax { ArgumentList.Arguments: [_, var value] } })
+            {
+                changes.Add(new TextChange(value.Span, Generator(source).Value(edit.Value)));
+            }
+
+            return;
+        }
+
+        if (edit.Value is not null)
+        {
+            Insert(source, changes, edit.Component, new DesignerStatement
+            {
+                Kind = DesignerStatementKinds.Call,
+                Target = provider,
+                Member = member,
+                Arguments = [DesignerValue.ReferenceTo(edit.Component), edit.Value],
+            });
+        }
+    }
+
+    // ------------------------------------------------------------------ collections (M41b)
+
+    /// <summary>
+    /// A collection's statements written again: <c>AddRange(new T[] { … })</c>, one <c>Add</c> per item, or one
+    /// <c>SetKeyName</c> per image, where the collection's statements were (else where the property sorts).
+    /// </summary>
+    private static void SetCollection(DesignerSource source, List<TextChange> changes, DesignerEdit edit)
+    {
+        var property = edit.Property ?? throw new ArgumentException("setCollection needs a property.", nameof(edit));
+        var method = edit.Method ?? "AddRange";
+        var items = edit.Items ?? [];
+        string[] members = [property + ".Add", property + ".AddRange", property + ".SetKeyName"];
+        var existing = source.Statements.Where(s => s.Statement is { Kind: DesignerStatementKinds.Call } call && call.Target == edit.Component && members.Contains(call.Member)).ToList();
+        DesignerStatement Call(string name, params DesignerValue[] arguments) =>
+            new() { Kind = DesignerStatementKinds.Call, Target = edit.Component, Member = property + "." + name, Arguments = arguments };
+        List<DesignerStatement> statements = method switch
+        {
+            "AddRange" when items.Length == 0 => [],
+            "AddRange" => [Call("AddRange", DesignerValue.ArrayOf(edit.Type ?? "System.Object", items))],
+            "Add" => [.. items.Select(i => Call("Add", i))],
+            "SetKeyName" => [.. items.Select((i, n) => Call("SetKeyName", DesignerValue.Int(n), i))],
+            _ => throw new ArgumentException($"Unknown collection method {method}.", nameof(edit)),
+        };
+        var generator = Generator(source);
+        var code = string.Concat(statements.Select(s => generator.Statement(s)));
+        if (existing.Count > 0)
+        {
+            changes.Add(new TextChange(existing[0].Lines, code));
+            foreach (var other in existing.Skip(1))
+            {
+                changes.Add(new TextChange(other.Lines, string.Empty));
+            }
+
+            return;
+        }
+
+        if (statements.Count > 0)
+        {
+            InsertCode(source, changes, edit.Component, Key(statements[0]), code);
+
+            // A tool strip's first items: its layout calls, as Visual Studio writes them (a context menu's without PerformLayout).
+            var type = source.Model.Components.FirstOrDefault(c => c.Name == edit.Component)?.Type ?? string.Empty;
+            if (property == "Items" && (type.EndsWith("Strip", StringComparison.Ordinal) || type.EndsWith(".BindingNavigator", StringComparison.Ordinal))
+                && !source.Statements.Any(s => s.Statement is { Kind: DesignerStatementKinds.Layout, Member: "SuspendLayout" } layout && layout.Target == edit.Component))
+            {
+                AddLayoutPair(source, changes, edit.Component, "SuspendLayout", "ResumeLayout", perform: !type.EndsWith("ContextMenuStrip", StringComparison.Ordinal));
+            }
+        }
+    }
+
+    /// <summary><c>Type name = value;</c> with the locals before the components are created (after <c>components</c> and <c>resources</c>), as Visual Studio declares a <c>ListViewItem</c>.</summary>
+    private static void AddLocal(DesignerSource source, List<TextChange> changes, DesignerEdit edit)
+    {
+        var value = edit.Value ?? throw new ArgumentException("addLocal needs a value.", nameof(edit));
+        if (source.Names.Contains(edit.Component) || source.Fields.ContainsKey(edit.Component))
+        {
+            throw new InvalidOperationException($"{source.Model.ClassName} already has a member named {edit.Component}.");
+        }
+
+        var locals = source.Model.Components.Where(c => c.IsLocal).Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
+        var at = BodyStart(source);
+        foreach (var statement in source.Statements)
+        {
+            if (statement.Statement.Kind != DesignerStatementKinds.Create || !(statement.Statement.Target == "components" || locals.Contains(statement.Statement.Target)))
+            {
+                break;
+            }
+
+            at = statement.Lines.End;
+        }
+
+        changes.Add(new TextChange(new TextSpan(at, 0), Generator(source).LocalDeclaration(edit.Component, value)));
+    }
+
+    // ------------------------------------------------------------------ data bindings (M41b)
+
+    /// <summary><c>component.DataBindings.Add(new Binding("Text", …))</c>: the property's binding replaced, added where <c>DataBindings</c> sorts, or removed.</summary>
+    private static void SetDataBinding(DesignerSource source, List<TextChange> changes, DesignerEdit edit)
+    {
+        var property = edit.Property ?? throw new ArgumentException("setDataBinding needs a property.", nameof(edit));
+        var existing = source.Statements.FirstOrDefault(s => s.Statement is { Kind: DesignerStatementKinds.Call, Member: "DataBindings.Add", Arguments: [{ Kind: DesignerValueKinds.New, Arguments: [{ Kind: DesignerValueKinds.Literal } bound, ..] }] } call
+            && call.Target == edit.Component && bound.Value == property);
+        var statement = edit.Value is null ? null : new DesignerStatement { Kind = DesignerStatementKinds.Call, Target = edit.Component, Member = "DataBindings.Add", Arguments = [edit.Value] };
+        if (existing is not null)
+        {
+            changes.Add(new TextChange(existing.Lines, statement is null ? string.Empty : Generator(source).Statement(statement)));
+            return;
+        }
+
+        if (statement is not null)
+        {
+            Insert(source, changes, edit.Component, statement);
+        }
+    }
+
+    // ------------------------------------------------------------------ resources (M41b)
+
+    /// <summary>Sets or removes a key of the form's <c>.resx</c> for a culture (created when the form has none for it).</summary>
+    private void SetResource(DesignerEdit edit)
+    {
+        var set = resources ?? throw new InvalidOperationException("The form's resources weren't found.");
+        var key = edit.Key ?? $"{(edit.Component.Length == 0 ? "$this" : edit.Component)}.{edit.Property ?? throw new ArgumentException("setResource needs a key or a property.", nameof(edit))}";
+        var file = edit.Resource is null ? set.Get(edit.Culture) : set.GetOrCreate(edit.Culture);
+        file?.Set(key, edit.Resource, edit.Metadata);
+    }
+
+    /// <summary><c>resources.ApplyResources(component, "name")</c>, the first statement of the component's section, added or removed.</summary>
+    private static void SetLocalized(DesignerSource source, List<TextChange> changes, string component, bool localized)
+    {
+        var existing = source.Statements.FirstOrDefault(s => s.Statement.Kind == DesignerStatementKinds.ApplyResources && s.Statement.Target == component);
+        if (!localized)
+        {
+            if (existing is not null)
+            {
+                changes.Add(new TextChange(existing.Lines, string.Empty));
+            }
+
+            return;
+        }
+
+        if (existing is null)
+        {
+            Insert(source, changes, component, new DesignerStatement
+            {
+                Kind = DesignerStatementKinds.ApplyResources,
+                Target = component,
+                Value = DesignerValue.String(component.Length == 0 ? "$this" : component),
+            });
+        }
+    }
+
+    /// <summary>
+    /// The <c>resources</c> variable (<c>ComponentResourceManager resources = new ComponentResourceManager(typeof(Form1))</c>)
+    /// exists while a statement uses it: created after <c>components</c> (else first), removed with its last use.
+    /// </summary>
+    private SourceText TidyResources(SourceText text)
+    {
+        var source = read(text);
+        var creation = source.Statements.FirstOrDefault(s => s.Statement is { Kind: DesignerStatementKinds.Create, Target: "resources" });
+        var used = source.Statements.Any(s => s.Statement.Kind == DesignerStatementKinds.ApplyResources
+            || (s.Statement.Value is { } value && UsesResource(value)) || (s.Statement.Arguments?.Any(UsesResource) ?? false));
+        if (used == creation is not null)
+        {
+            return text;
+        }
+
+        if (creation is not null)
+        {
+            return text.WithChanges(new TextChange(creation.Lines, string.Empty));
+        }
+
+        var first = source.Statements.Count > 0 ? source.Statements[0] : null;
+        var at = first?.Statement is { Kind: DesignerStatementKinds.Create, Target: "components" } ? first.Lines.End : BodyStart(source);
+        var className = source.Model.Namespace is { } ns ? ns + "." + source.Model.ClassName : source.Model.ClassName;
+        var statement = Generator(source).LocalDeclaration("resources",
+            DesignerValue.NewOf("System.ComponentModel.ComponentResourceManager", new DesignerValue { Kind = DesignerValueKinds.TypeOf, Type = className }));
+        return text.WithChanges(new TextChange(new TextSpan(at, 0), statement));
+    }
+
+    private static bool UsesResource(DesignerValue value) => value.Kind == DesignerValueKinds.Resource || (value.Arguments?.Any(UsesResource) ?? false);
 }

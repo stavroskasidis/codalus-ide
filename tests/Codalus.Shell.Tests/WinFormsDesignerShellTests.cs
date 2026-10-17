@@ -1,168 +1,9 @@
-using System.Globalization;
 using Avalonia.Headless.XUnit;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.WinForms;
 
 namespace Codalus.Shell.Tests;
-
-/// <summary>
-/// A designer host that runs on any OS (M41a): it lays the model's controls out from their Location and Size, draws a
-/// blank frame, and answers changes as Windows Forms' designer would for the few properties the tests use.
-/// </summary>
-internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
-{
-    private const string Png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-    private readonly Dictionary<string, (string Type, string? Parent, double X, double Y, double W, double H, string? Text)> _controls = new(StringComparer.Ordinal);
-    private string _root = "Form1";
-
-    public int Loads { get; private set; }
-
-    public List<string> Selected { get; } = [];
-
-    public DesignerModel? Model { get; private set; }
-
-    public event EventHandler<string>? Log;
-
-    public event EventHandler? Restarted;
-
-    private static int Int(DesignerValue? value, int index) => int.Parse(value?.Arguments?[index].Value ?? "0", CultureInfo.InvariantCulture);
-
-    public Task<DesignerRenderResult> LoadAsync(DesignerLoadParams parameters, CancellationToken cancellationToken)
-    {
-        Loads++;
-        Model = parameters.Model;
-        _root = parameters.Model.ClassName;
-        _controls.Clear();
-        var statements = parameters.Model.Statements;
-        foreach (var component in parameters.Model.Components.Where(c => !c.IsRoot && !c.IsLocal))
-        {
-            DesignerValue? Value(string member) => statements.LastOrDefault(s => s.Kind == DesignerStatementKinds.Assign && s.Target == component.Name && s.Member == member)?.Value;
-            var add = statements.FirstOrDefault(s => s.Kind == DesignerStatementKinds.Call && s.Member?.EndsWith("Controls.Add", StringComparison.Ordinal) == true && s.Arguments?[0].Value == component.Name);
-            var location = Value("Location");
-            var size = Value("Size");
-            _controls[component.Name] = (component.Type, add is null ? null : add.Target.Length == 0 ? _root : add.Target, Int(location, 0), Int(location, 1), size is null ? 0 : Int(size, 0), size is null ? 0 : Int(size, 1), Value("Text")?.Value);
-        }
-
-        Log?.Invoke(this, $"Loaded {_root}");
-        return Task.FromResult(Render());
-    }
-
-    private DesignerRenderResult Render()
-    {
-        var views = new List<DesignerComponentView> { new(_root, "System.Windows.Forms.Form", null, 0, 0, 400, 450) { IsControl = true, IsContainer = true, ClientX = 8, ClientY = 31, DefaultEvent = "Load" } };
-        foreach (var (name, control) in _controls.Where(c => c.Value.Parent is not null))
-        {
-            var parent = views.FirstOrDefault(v => v.Name == control.Parent) ?? views[0];
-            views.Add(new DesignerComponentView(name, control.Type, parent.Name, parent.ClientX + control.X, parent.ClientY + control.Y, control.W, control.H)
-            {
-                IsControl = true,
-                IsContainer = control.Type.EndsWith("Panel", StringComparison.Ordinal) || control.Type.EndsWith("GroupBox", StringComparison.Ordinal),
-                ClientX = parent.ClientX + control.X,
-                ClientY = parent.ClientY + control.Y,
-                DefaultEvent = "Click",
-            });
-        }
-
-        views.AddRange(_controls.Where(c => c.Value.Parent is null).Select(c => new DesignerComponentView(c.Key, c.Value.Type, null, 0, 0, 0, 0)));
-        return new DesignerRenderResult(new DesignerFrame(Png, 400, 450), [.. views], []);
-    }
-
-    public Task<DesignerRenderResult> RenderAsync(CancellationToken cancellationToken) => Task.FromResult(Render());
-
-    public Task<DesignerChangeResult> CreateAsync(DesignerCreateParams parameters, CancellationToken cancellationToken)
-    {
-        var x = (int)parameters.X - 8;
-        var y = (int)parameters.Y - 31;
-        _controls[parameters.Name] = (parameters.Type, _root, x, y, 75, 23, parameters.Name);
-        var created = new DesignerCreated(parameters.Name, parameters.Type, [], string.Empty, null, null,
-        [
-            new("Location", DesignerValue.NewOf("System.Drawing.Point", DesignerValue.Int(x), DesignerValue.Int(y))),
-            new("Name", DesignerValue.String(parameters.Name)),
-            new("Size", DesignerValue.NewOf("System.Drawing.Size", DesignerValue.Int(75), DesignerValue.Int(23))),
-            new("TabIndex", DesignerValue.Int(11)),
-            new("Text", DesignerValue.String(parameters.Name)),
-            new("UseVisualStyleBackColor", DesignerValue.Bool(true)),
-        ]) { IsControl = true };
-        return Task.FromResult(new DesignerChangeResult([], Render()) { Created = created });
-    }
-
-    public Task<DesignerChangeResult> SetPropertiesAsync(DesignerSetPropertiesParams parameters, CancellationToken cancellationToken)
-    {
-        var changes = new List<DesignerPropertyChange>();
-        foreach (var edit in parameters.Edits)
-        {
-            var control = _controls[edit.Component];
-            switch (edit.Property)
-            {
-                case "Text":
-                    _controls[edit.Component] = control with { Text = edit.Text };
-                    changes.Add(new DesignerPropertyChange(edit.Component, "Text", edit.Reset ? null : DesignerValue.String(edit.Text ?? string.Empty)));
-                    break;
-                case "Location" or "Size":
-                    var parts = edit.Text!.Split(',', StringSplitOptions.TrimEntries).Select(p => int.Parse(p, CultureInfo.InvariantCulture)).ToArray();
-                    _controls[edit.Component] = edit.Property == "Location" ? control with { X = parts[0], Y = parts[1] } : control with { W = parts[0], H = parts[1] };
-                    changes.Add(new DesignerPropertyChange(edit.Component, edit.Property, DesignerValue.NewOf("System.Drawing." + (edit.Property == "Location" ? "Point" : "Size"), DesignerValue.Int(parts[0]), DesignerValue.Int(parts[1]))));
-                    break;
-                default:
-                    return Task.FromResult(new DesignerChangeResult([], Render()) { Error = $"The fake host doesn't set {edit.Property}." });
-            }
-        }
-
-        return Task.FromResult(new DesignerChangeResult([.. changes], Render()));
-    }
-
-    public Task<DesignerChangeResult> SetParentAsync(DesignerSetParentParams parameters, CancellationToken cancellationToken)
-    {
-        var control = _controls[parameters.Component];
-        _controls[parameters.Component] = control with { Parent = parameters.Parent ?? _root };
-        return Task.FromResult(new DesignerChangeResult([], Render()) { Reparented = new DesignerReparented(parameters.Component, parameters.Parent, null, null) });
-    }
-
-    public Task<DesignerChangeResult> DeleteAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken)
-    {
-        var removed = parameters.Components.Concat(_controls.Where(c => parameters.Components.Contains(c.Value.Parent)).Select(c => c.Key)).ToList();
-        foreach (var name in removed)
-        {
-            _controls.Remove(name);
-        }
-
-        return Task.FromResult(new DesignerChangeResult([], Render()) { Removed = [.. removed] });
-    }
-
-    public Task<DesignerPropertiesResult> PropertiesAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken)
-    {
-        var name = parameters.Components.FirstOrDefault() ?? string.Empty;
-        var control = _controls.GetValueOrDefault(name);
-        return Task.FromResult(new DesignerPropertiesResult(
-        [
-            new("Name", "Design", "System.String", name.Length == 0 ? _root : name) { IsSet = true },
-            new("Text", "Appearance", "System.String", control.Text ?? string.Empty) { IsSet = true },
-            new("Location", "Layout", "System.Drawing.Point", $"{control.X}, {control.Y}") { IsSet = true },
-            new("Enabled", "Behavior", "System.Boolean", "True") { Editor = DesignerEditors.Boolean, StandardValues = ["True", "False"] },
-            new("Anchor", "Layout", "System.Windows.Forms.AnchorStyles", "Top, Left") { Editor = DesignerEditors.Anchor, StandardValues = ["None", "Top", "Bottom", "Left", "Right"] },
-            new("BackColor", "Appearance", "System.Drawing.Color", "Control") { Editor = DesignerEditors.Color },
-        ]));
-    }
-
-    public Task<DesignerEventsResult> EventsAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken) =>
-        Task.FromResult(new DesignerEventsResult(
-        [
-            new("Click", "Action", "System.EventHandler", ["System.Object sender", "System.EventArgs e"]),
-            new("MouseDown", "Mouse", "System.Windows.Forms.MouseEventHandler", ["System.Object sender", "System.Windows.Forms.MouseEventArgs e"]),
-        ], "Click"));
-
-    public Task SelectAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken)
-    {
-        Selected.Clear();
-        Selected.AddRange(parameters.Components);
-        return Task.CompletedTask;
-    }
-
-    public void Restart() => Restarted?.Invoke(this, EventArgs.Empty);
-
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-}
 
 /// <summary>
 /// M41a (ADR 0073, D31) in the headless shell on samples/WindowsDesktop's Windows Forms app. Off Windows a form opens as
@@ -284,7 +125,7 @@ public sealed class WinFormsDesignerShellTests
         Assert.Equal("button1 System.Windows.Forms.Button", properties.Title);
         var text = properties.Categories.SelectMany(c => c.Rows).Single(r => r.Name == "Text");
         Assert.Equal("button1", text.Value);
-        Assert.Contains(properties.Categories.SelectMany(c => c.Rows), r => r is { Name: "Anchor", IsFlags: true } && r.Flags.Single(x => x.Name == "Top").IsChecked);
+        Assert.Contains(properties.Categories.SelectMany(c => c.Rows), r => r is { Name: "Anchor", IsAnchor: true } && r.AnchorTop!.IsChecked && !r.AnchorRight!.IsChecked);
         Assert.Contains(properties.Categories.SelectMany(c => c.Rows), r => r is { Name: "Enabled", IsChoice: true });
         Assert.Contains(properties.Categories.SelectMany(c => c.Rows), r => r is { Name: "BackColor", IsColor: true });
         text.Text = "Hello";
