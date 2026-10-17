@@ -70,7 +70,7 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PropertyRowViewModel">
                       <Border Classes="row">
-                        <Grid ColumnDefinitions="0.45*,0.55*,Auto">
+                        <Grid ColumnDefinitions="0.45*,0.55*,Auto,Auto">
                           <TextBlock VerticalAlignment="Center" Text="{Binding Name}" Classes.set="{Binding IsSet}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
                           <DockPanel Grid.Column="1" IsVisible="{Binding IsTextEditor}">
                             <Border DockPanel.Dock="Left" Width="14" Height="14" Margin="4,0,0,0" VerticalAlignment="Center" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}"
@@ -98,8 +98,46 @@
                           </ComboBox>
                           <SelectableTextBlock Grid.Column="1" Margin="4,3" IsVisible="{Binding IsReadOnly}" Text="{Binding Value}" Classes.set="{Binding IsSet}" TextTrimming="CharacterEllipsis"
                                                ToolTip.Tip="{Binding Value}" AutomationProperties.Name="{Binding AccessibleName}" Focusable="True" />
+                          <!-- Visual Studio's Dock and Anchor pickers (M41b): a drop-down with the edges to click. -->
+                          <DropDownButton Grid.Column="1" Classes="cell" IsVisible="{Binding IsPicker}" Content="{Binding Value}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                          AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding Description}">
+                            <DropDownButton.Flyout>
+                              <Flyout Placement="BottomEdgeAlignedLeft">
+                                <Panel Margin="4">
+                                  <Grid IsVisible="{Binding IsDock}" ColumnDefinitions="28,56,28" RowDefinitions="22,44,22,26" Width="116">
+                                    <ToggleButton Grid.Row="0" Grid.ColumnSpan="3" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Top" IsChecked="{Binding DockTop, Mode=OneWay}"
+                                                  ToolTip.Tip="{l:T properties.dockTop}" AutomationProperties.Name="{l:T properties.dockTop}" />
+                                    <ToggleButton Grid.Row="1" Grid.Column="0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Left" IsChecked="{Binding DockLeft, Mode=OneWay}"
+                                                  ToolTip.Tip="{l:T properties.dockLeft}" AutomationProperties.Name="{l:T properties.dockLeft}" />
+                                    <ToggleButton Grid.Row="1" Grid.Column="1" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Fill" IsChecked="{Binding DockFill, Mode=OneWay}"
+                                                  ToolTip.Tip="{l:T properties.dockFill}" AutomationProperties.Name="{l:T properties.dockFill}" />
+                                    <ToggleButton Grid.Row="1" Grid.Column="2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Right" IsChecked="{Binding DockRight, Mode=OneWay}"
+                                                  ToolTip.Tip="{l:T properties.dockRight}" AutomationProperties.Name="{l:T properties.dockRight}" />
+                                    <ToggleButton Grid.Row="2" Grid.ColumnSpan="3" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Bottom" IsChecked="{Binding DockBottom, Mode=OneWay}"
+                                                  ToolTip.Tip="{l:T properties.dockBottom}" AutomationProperties.Name="{l:T properties.dockBottom}" />
+                                    <ToggleButton Grid.Row="3" Grid.ColumnSpan="3" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="None" IsChecked="{Binding DockNone, Mode=OneWay}"
+                                                  Content="{l:T properties.dockNone}" AutomationProperties.Name="{l:T properties.dockNone}" />
+                                  </Grid>
+                                  <Grid IsVisible="{Binding IsAnchor}" ColumnDefinitions="40,36,40" RowDefinitions="30,36,30" Width="116">
+                                    <ToggleButton Grid.Row="0" Grid.Column="1" Width="10" HorizontalAlignment="Center" VerticalAlignment="Stretch" IsChecked="{Binding AnchorTop.IsChecked}"
+                                                  ToolTip.Tip="{l:T properties.anchorTop}" AutomationProperties.Name="{l:T properties.anchorTop}" />
+                                    <ToggleButton Grid.Row="1" Grid.Column="0" Height="10" HorizontalAlignment="Stretch" VerticalAlignment="Center" IsChecked="{Binding AnchorLeft.IsChecked}"
+                                                  ToolTip.Tip="{l:T properties.anchorLeft}" AutomationProperties.Name="{l:T properties.anchorLeft}" />
+                                    <Border Grid.Row="1" Grid.Column="1" Margin="2" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}" Background="{DynamicResource Shell.Toolbar}" />
+                                    <ToggleButton Grid.Row="1" Grid.Column="2" Height="10" HorizontalAlignment="Stretch" VerticalAlignment="Center" IsChecked="{Binding AnchorRight.IsChecked}"
+                                                  ToolTip.Tip="{l:T properties.anchorRight}" AutomationProperties.Name="{l:T properties.anchorRight}" />
+                                    <ToggleButton Grid.Row="2" Grid.Column="1" Width="10" HorizontalAlignment="Center" VerticalAlignment="Stretch" IsChecked="{Binding AnchorBottom.IsChecked}"
+                                                  ToolTip.Tip="{l:T properties.anchorBottom}" AutomationProperties.Name="{l:T properties.anchorBottom}" />
+                                  </Grid>
+                                </Panel>
+                              </Flyout>
+                            </DropDownButton.Flyout>
+                          </DropDownButton>
                           <Button Grid.Column="2" Classes="toolbar" Padding="2,0" IsVisible="{Binding HasAction}" Command="{Binding Action}" ToolTip.Tip="{Binding ActionTitle}" AutomationProperties.Name="{Binding ActionTitle}">
-                            <controls:Icon Kind="go-to" />
+                            <controls:Icon Kind="{Binding ActionIcon}" />
+                          </Button>
+                          <Button Grid.Column="3" Classes="toolbar" Padding="2,0" IsVisible="{Binding HasSecondaryAction}" Command="{Binding SecondaryAction}" ToolTip.Tip="{Binding SecondaryActionTitle}" AutomationProperties.Name="{Binding SecondaryActionTitle}">
+                            <controls:Icon Kind="folder" />
                           </Button>
                         </Grid>
                       </Border>
