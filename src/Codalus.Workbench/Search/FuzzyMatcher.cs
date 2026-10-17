@@ -1,3 +1,6 @@
+using System.Runtime.CompilerServices;
+using System.Text;
+
 namespace Codalus.Workbench.Search;
 
 /// <summary>A fuzzy match: higher scores are better; <see cref="Positions"/> are the matched character indices.</summary>
@@ -27,14 +30,22 @@ public static class FuzzyMatcher
     /// it and asks <see cref="Match"/> for the highlights of the results it keeps (M47). <paramref name="query"/> must
     /// be trimmed and not empty.
     /// </summary>
-    public static bool TryScore(string query, string text, out int score)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryScore(string query, string text, out int score) => TryScore(query.AsSpan(), text.AsSpan(), out score);
+
+    /// <inheritdoc cref="TryScore(string, string, out int)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryScore(ReadOnlySpan<char> query, ReadOnlySpan<char> text, out int score)
     {
         var result = Run(query, text, null);
         score = result ?? 0;
         return result is not null;
     }
 
-    private static int? Run(string query, string text, List<int>? positions)
+    // Compiled fully optimized at once: Code Search runs it over a large index a few times, too few for tiered
+    // compilation to replace its first, unoptimized code in time (M47).
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static int? Run(ReadOnlySpan<char> query, ReadOnlySpan<char> text, List<int>? positions)
     {
         // Greedy forward pass with a preference for word starts: for each query character, take the next word
         // start that matches if one exists before the next plain match would force a worse alignment.
@@ -43,6 +54,7 @@ public static class FuzzyMatcher
         var score = 0;
         var t = 0;
         var previous = -2;
+        var ascii = Ascii.IsValid(text);
         foreach (var qc in query)
         {
             if (qc == ' ')
@@ -50,24 +62,59 @@ public static class FuzzyMatcher
                 continue;
             }
 
+            var lower = char.ToLowerInvariant(qc);
             var plain = -1;
             var wordStart = -1;
-            for (var i = t; i < text.Length; i++)
+            if (ascii)
             {
-                if (char.ToLowerInvariant(text[i]) != char.ToLowerInvariant(qc))
+                // An ASCII text (nearly every name): the characters that lower to the query's are its two cases,
+                // found a vector at a time.
+                if (lower < 128)
                 {
-                    continue;
-                }
+                    var upper = lower is >= 'a' and <= 'z' ? (char)(lower - 32) : lower;
+                    for (var i = t; i < text.Length;)
+                    {
+                        var found = upper == lower ? text[i..].IndexOf(lower) : text[i..].IndexOfAny(lower, upper);
+                        if (found < 0)
+                        {
+                            break;
+                        }
 
-                if (plain < 0)
-                {
-                    plain = i;
-                }
+                        i += found;
+                        if (plain < 0)
+                        {
+                            plain = i;
+                        }
 
-                if (IsWordStart(text, i))
+                        if (IsWordStart(text, i))
+                        {
+                            wordStart = i;
+                            break;
+                        }
+
+                        i++;
+                    }
+                }
+            }
+            else
+            {
+                for (var i = t; i < text.Length; i++)
                 {
-                    wordStart = i;
-                    break;
+                    if (char.ToLowerInvariant(text[i]) != lower)
+                    {
+                        continue;
+                    }
+
+                    if (plain < 0)
+                    {
+                        plain = i;
+                    }
+
+                    if (IsWordStart(text, i))
+                    {
+                        wordStart = i;
+                        break;
+                    }
                 }
             }
 
@@ -118,7 +165,7 @@ public static class FuzzyMatcher
         return score;
     }
 
-    private static bool IsWordStart(string text, int i)
+    private static bool IsWordStart(ReadOnlySpan<char> text, int i)
     {
         if (i == 0)
         {

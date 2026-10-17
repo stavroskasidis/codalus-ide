@@ -24,7 +24,9 @@ public sealed class CodeSearchTests : IDisposable
 
     private string File(string name, string text = "// code\n")
     {
-        var path = Path.Combine(_root, "src", name);
+        // The platform's separators: the index keeps paths as the language host's URIs give them (backslashes on
+        // Windows), as the editor and the projects do.
+        var path = Path.Combine([_root, "src", .. name.Split('/')]);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         System.IO.File.WriteAllText(path, text);
         return path;
@@ -133,6 +135,36 @@ public sealed class CodeSearchTests : IDisposable
     }
 
     [Fact]
+    public void The_limit_keeps_the_best_by_the_ranking_and_typing_on_finds_what_a_new_query_does()
+    {
+        var a = File("A/Invoices.cs");
+        var b = File("B/Invoices.cs");
+        IndexedDocument[] documents = [
+            Document(a, "A", Symbol("Invoicexx", SymbolKind.Class, "A"), Symbol("Invoicex", SymbolKind.Class, "A"), Symbol("Invoicer", SymbolKind.Method, "Invoicex", line: 3), Symbol("Invoicer", SymbolKind.Method, "Invoicex", line: 3)),
+            Document(b, "B", Symbol("Invoicex", SymbolKind.Class, "B"), Symbol("Invoicer", SymbolKind.Method, "Invoicex", line: 3)),
+        ];
+        var index = new CodeSearchIndex();
+        index.Replace(documents);
+
+        // Of equal scores at the limit, the shorter name, then the path, as the full ranking orders them.
+        Assert.Equal([("Invoicex", a)], index.Search(CodeSearchQuery.Parse("t:Inv"), CodeSearchRankContext.Empty, null, 1, Ct).Select(r => (r.Name, r.Path)));
+        Assert.Equal([("Invoicex", a), ("Invoicex", b)], index.Search(CodeSearchQuery.Parse("t:Inv"), CodeSearchRankContext.Empty, null, 2, Ct).Select(r => (r.Name, r.Path)));
+
+        // A declaration reported twice is one result, and the limit is still filled.
+        Assert.Equal([a, b], index.Search(CodeSearchQuery.Parse("m:Invoicer"), CodeSearchRankContext.Empty, null, 2, Ct).Select(r => r.Path));
+
+        // Typing on ("I", "In", "Inv"…) looks only at what the shorter query matched, and finds what a new index does.
+        foreach (var text in new[] { "I", "In", "Inv", "Invr", "Invoicer", "Invoicerz", "x", "xx" })
+        {
+            var fresh = new CodeSearchIndex();
+            fresh.Replace(documents);
+            Assert.Equal(
+                fresh.Search(CodeSearchQuery.Parse(text), CodeSearchRankContext.Empty, null, 10, Ct).Select(r => (r.Key, r.Score)),
+                index.Search(CodeSearchQuery.Parse(text), CodeSearchRankContext.Empty, null, 10, Ct).Select(r => (r.Key, r.Score)));
+        }
+    }
+
+    [Fact]
     public async Task The_index_is_saved_next_to_the_solution_and_read_without_the_files_that_changed()
     {
         var shapes = File("Lib/Shapes.cs", "class Circle {}\n");
@@ -200,11 +232,13 @@ public sealed class CodeSearchTests : IDisposable
         Assert.True(index.SymbolCount > 140_000, index.SymbolCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
         var context = new CodeSearchRankContext(files.Take(10).ToList(), files[0], "Company.Module00");
 
+        // The budget is for a user typing into a loaded index, so each query runs once before it is timed: the first
+        // run compiles what it reaches (a query that matches nothing, as "warm" did, leaves the results' code out).
         string[] queries = ["Inv", "CustomerService", "GUA", "ValidateLedger7", "zzzq", "t:Order", "m:upd"];
-        index.Search(CodeSearchQuery.Parse("warm"), context, null, 200, Ct); // JIT
-        CodeSearchIndex.SearchFiles(files, CodeSearchQuery.Parse("warm"), context, _root, null, 200, Ct);
         foreach (var text in queries)
         {
+            index.Search(CodeSearchQuery.Parse(text), context, null, 200, Ct);
+            CodeSearchIndex.SearchFiles(files, CodeSearchQuery.Parse(text), context, _root, null, 50, Ct);
             var times = new List<double>();
             for (var run = 0; run < 5; run++)
             {

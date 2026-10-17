@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Codalus.Workbench.Search;
 
 /// <summary>
@@ -72,6 +74,7 @@ public static class CodeSearchRanker
         matchScore + KindWeight(kind, external) + ContextBoost(path, project, context);
 
     /// <summary>What a result's file and project add: a recently opened file (the more recent, the more), the active document, the active project.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static int ContextBoost(string? path, string? project, CodeSearchRankContext context)
     {
         var score = 0;
@@ -79,25 +82,52 @@ public static class CodeSearchRanker
         {
             for (var i = 0; i < context.RecentFiles.Count && i < 8; i++)
             {
-                if (string.Equals(context.RecentFiles[i], path, StringComparison.OrdinalIgnoreCase))
+                if (SameIgnoringCase(context.RecentFiles[i], path))
                 {
                     score += Math.Max(3, 15 - 2 * i);
                     break;
                 }
             }
 
-            if (context.ActiveDocument is { } document && string.Equals(document, path, StringComparison.OrdinalIgnoreCase))
+            if (context.ActiveDocument is { } document && SameIgnoringCase(document, path))
             {
                 score += 4;
             }
         }
 
-        if (context.ActiveProject is { } active && string.Equals(active, project, StringComparison.OrdinalIgnoreCase))
+        if (context.ActiveProject is { } active && SameIgnoringCase(active, project))
         {
             score += 6;
         }
 
         return score;
+    }
+
+    /// <summary>
+    /// <see cref="StringComparison.OrdinalIgnoreCase"/> equality, the ends compared first: the paths of a folder share
+    /// a long start and differ at their ends, and Code Search compares every file it ranks with the recent ones (M47).
+    /// </summary>
+    private static bool SameIgnoringCase(string? a, string? b)
+    {
+        if (a is null || b is null)
+        {
+            return a is null && b is null;
+        }
+
+        if (a.Length != b.Length)
+        {
+            return false;
+        }
+
+        // Not between the two halves of a surrogate pair, which compare as one.
+        var tail = Math.Max(0, a.Length - 16);
+        while (tail > 0 && (char.IsLowSurrogate(a[tail]) || char.IsLowSurrogate(b[tail])))
+        {
+            tail--;
+        }
+
+        return a.AsSpan(tail).Equals(b.AsSpan(tail), StringComparison.OrdinalIgnoreCase)
+            && a.AsSpan(0, tail).Equals(b.AsSpan(0, tail), StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Orders results best first: score, then shorter names, then by name, and keeps one of each declaration.</summary>
@@ -116,7 +146,12 @@ public static class CodeSearchRanker
     /// A quick test that every character of <paramref name="query"/> occurs in <paramref name="text"/> in order (case
     /// ignored), so most of a large index is skipped without the matcher's allocations.
     /// </summary>
-    public static bool MayMatch(string query, string text)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool MayMatch(string query, string text) => MayMatch(query.AsSpan(), text.AsSpan());
+
+    /// <inheritdoc cref="MayMatch(string, string)"/>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static bool MayMatch(ReadOnlySpan<char> query, ReadOnlySpan<char> text)
     {
         var t = 0;
         foreach (var q in query)
@@ -128,15 +163,13 @@ public static class CodeSearchRanker
 
             var lower = char.ToLowerInvariant(q);
             var upper = char.ToUpperInvariant(q);
-            while (t < text.Length && text[t] != lower && text[t] != upper)
-            {
-                t++;
-            }
-
-            if (t++ >= text.Length)
+            var found = lower == upper ? text[t..].IndexOf(lower) : text[t..].IndexOfAny(lower, upper);
+            if (found < 0)
             {
                 return false;
             }
+
+            t += found + 1;
         }
 
         return true;
