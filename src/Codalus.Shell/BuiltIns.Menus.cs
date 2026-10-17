@@ -130,6 +130,10 @@ internal static partial class BuiltIns
             Sub(Edit, EditRefactorMenu, "Refactor", "4-more"),
 
             Item(EditGoToMenu, "workbench.action.gotoAll", "1-all"),
+            Item(EditGoToMenu, "workbench.action.gotoFile", "1-all"),
+            Item(EditGoToMenu, "workbench.action.gotoType", "1-all"),
+            Item(EditGoToMenu, "workbench.action.gotoMember", "1-all"),
+            Item(EditGoToMenu, "workbench.action.gotoText", "1-all"),
             Item(EditGoToMenu, "editor.action.gotoLine", "1-all"),
             Item(EditGoToMenu, "workbench.action.navigateToLastEditLocation", "1-all"),
             Item(EditGoToMenu, "editor.action.revealDefinition", "2-symbol"),
@@ -443,6 +447,7 @@ internal static partial class BuiltIns
 
             // Help. The Start page comes from the welcome plugin ("navigation").
             Item(Help, "workbench.showLogs", "help"),
+            Item(Help, "help.setUp", "help"),
             Item(Help, "help.checkEnvironment", "help"),
             Item(Help, "help.openCrashReports", "help"),
             Item(Help, "help.about", "help"),

@@ -135,6 +135,16 @@
         <views:DocumentSwitcherView DataContext="{Binding Switcher}" HorizontalAlignment="Center" VerticalAlignment="Center" />
       </Panel>
 
+      <!-- Code Search and Feature Search (M47): floats over the editor, centered under the title row. A click outside
+           closes it unless it is pinned (then clicks go through). -->
+      <Panel x:Name="CodeSearchLayer" Background="Transparent" IsVisible="{Binding CodeSearch.IsFloatingOpen}" ZIndex="1">
+        <views:CodeSearchView x:Name="CodeSearch"
+                              DataContext="{Binding CodeSearch}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Top"
+                              Margin="0,6,0,0" />
+      </Panel>
+
       <Panel x:Name="PaletteLayer" Background="Transparent" IsVisible="{Binding Palette.IsOpen}">
         <views:QuickPickView x:Name="Palette"
                              DataContext="{Binding Palette}"

@@ -185,7 +185,7 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `solution.getInfo` | none; returns `{ path, format, trusted }` of the open solution, or null |
 | `solution.addProjectFile` | project path; adds it to the open solution (in the selected solution folder) |
 | `editor.action.revealDefinition`, `editor.action.goToImplementation`, `editor.action.triggerSuggest`, `editor.action.showHover`, `editor.action.find`, `editor.action.gotoLine` | none; act on the active editor |
-| `editor.action.referenceSearch`, `editor.action.rename`, `editor.action.quickFix`, `editor.action.formatDocument`, `editor.action.formatSelection`, `workbench.action.gotoAll`, `workbench.action.findInFiles` | none; act on the active editor (Go To All and Find in Files on the solution) |
+| `editor.action.referenceSearch`, `editor.action.rename`, `editor.action.quickFix`, `editor.action.formatDocument`, `editor.action.formatSelection`, `workbench.action.gotoAll`, `workbench.action.gotoFile`, `workbench.action.gotoType`, `workbench.action.gotoMember`, `workbench.action.gotoText`, `workbench.action.findInFiles` | none; act on the active editor (Code Search and Find in Files on the solution) |
 | `build.buildSolution`, `build.rebuildSolution`, `build.cleanSolution`, `build.cancel`, `run.stop`, `run.selectStartupProject` | none |
 | `build.buildProject`, `build.rebuildProject`, `build.cleanProject`, `run.startWithoutDebugging`, `run.setStartupProject`, `run.selectLaunchProfile` | optional project path (default: the selected or active document's project; for run commands, the startup project) |
 | `debug.start`, `debug.continue`, `debug.stop`, `debug.restart`, `debug.stepOver`, `debug.stepInto`, `debug.stepOut`, `debug.pause`, `debug.toggleBreakpoint`, `debug.toggleBreakpointEnabled`, `debug.editBreakpoint`, `debug.deleteAllBreakpoints`, `debug.exceptionSettings` | none (`debug.start` takes an optional project path) |
@@ -364,6 +364,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### M47 (no API version change)
+
+Code Search ([ADR 0078](adr/0078-code-search-and-its-persistent-index.md)): `workbench.action.gotoAll` and `workbench.action.featureSearch` keep their ids and open Code Search's window on its Code Search and Feature Search tabs, and `workbench.action.gotoFile`, `gotoType`, `gotoMember` and `gotoText` open it on a filter. A language server a plugin contributes through the LSP bridge appears in Code Search when it answers `workspace/symbol`, and a plugin's commands and settings in Feature Search. The API didn't change.
 
 ### M45 (no API version change)
 
