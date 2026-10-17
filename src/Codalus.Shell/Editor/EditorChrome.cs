@@ -409,12 +409,14 @@ public sealed class StickyScroll : Border
     {
         var view = _editor.TextArea.TextView;
         var tabSize = Math.Max(1, _editor.Options.IndentationSize);
+        // A line wider than the text column (a narrow docked editor) ends in an ellipsis at the column's edge, and its
+        // tooltip shows it whole (M34g): the text view scrolls sideways, a pinned header doesn't.
         var code = new TextBlock
         {
             FontFamily = _editor.FontFamily,
             FontSize = _editor.FontSize,
             Height = view.DefaultLineHeight,
-            TextTrimming = TextTrimming.None,
+            TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.NoWrap,
         };
         var column = 0;
@@ -467,7 +469,9 @@ public sealed class StickyScroll : Border
             _editor.TextArea.Focus();
             e.Handled = true;
         };
-        AutomationProperties.SetName(row, $"Line {line.Number}: {string.Concat(line.Runs.Select(r => r.Text)).Trim()}");
+        var whole = string.Concat(line.Runs.Select(r => r.Text)).Trim();
+        AutomationProperties.SetName(row, $"Line {line.Number}: {whole}");
+        ToolTip.SetTip(code, whole);
         return row;
     }
 

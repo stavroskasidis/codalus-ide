@@ -16,7 +16,7 @@
         <Button x:Name="AddButton" Classes="accent" Content="{l:T scaffold.add}" Command="{Binding AddCommand}" IsEnabled="{Binding !IsBusy}" IsDefault="True" AutomationProperties.Name="{l:T scaffold.addScaffoldedItem}" />
         <ProgressBar IsIndeterminate="True" Width="120" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
       </StackPanel>
-      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding Result}" IsVisible="{Binding HasResult}" FontWeight="SemiBold" TextWrapping="Wrap" />
     </StackPanel>
 

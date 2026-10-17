@@ -108,5 +108,5 @@ public sealed partial class ShellHost
     }
 
     private async Task<string?> BrowseWsdlAsync() =>
-        Window is null ? null : await Window.PickFileAsync("Choose a WSDL file", "WSDL documents", ["*.wsdl", "*.xml"]).ConfigureAwait(true);
+        Window is null ? null : await Window.PickFileAsync(Localizer.Get("msg.wcf.pickWsdl", "Choose a WSDL file"), Localizer.Get("msg.wcf.wsdlDocuments", "WSDL documents"), ["*.wsdl", "*.xml"]).ConfigureAwait(true);
 }

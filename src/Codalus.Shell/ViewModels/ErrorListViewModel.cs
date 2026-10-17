@@ -16,7 +16,8 @@ public sealed record ErrorListRow(string Icon, string Code, string Description, 
 {
     public string Source { get; init; } = ErrorListViewModel.IntelliSenseSource;
 
-    public string AccessibleName => $"{Icon} {Code}: {Description}, {File} line {Line}";
+    /// <summary>"error CS0103: …, Program.cs line 4"; a diagnostic without a code (a project that can't build, M43a) reads "error: …".</summary>
+    public string AccessibleName => $"{Icon}{(Code.Length > 0 ? " " + Code : string.Empty)}: {Description}, {File} line {Line}";
 
     public string Location => $"{File}({Line},{Column})";
 

@@ -25,18 +25,21 @@
   <DockPanel>
     <Border DockPanel.Dock="Top" Padding="8,4" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.Border}">
       <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
-        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
         <Button Grid.Column="1" Classes="toolbar" Command="{Binding AddMetadataCommand}" IsVisible="{Binding !HasDesignerSource}" ToolTip.Tip="{l:T properties.addMetadata}" AutomationProperties.Name="{l:T properties.addMetadata2}">
           <controls:Icon Kind="file-add" />
         </Button>
-        <!-- A designer's selection (M41a): by category or name, properties or events, as a classic IDE's property grid. -->
-        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="2" Margin="0,4,0,0" IsVisible="{Binding HasDesignerSource}">
+        <!--
+          A designer's selection (M41a): by category or name, properties or events, as a classic IDE's property grid. One
+          toolbar row that overflows (M34g: the four buttons ran off the tool window's 280 px).
+        -->
+        <controls:ToolbarPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,4,0,0" IsVisible="{Binding HasDesignerSource}">
           <ToggleButton Classes="toolbar" IsChecked="{Binding !Alphabetical, Mode=OneWay}" Command="{Binding CategorizedCommand}" Content="{l:T properties.categorized}" AutomationProperties.Name="{l:T properties.categorized}" />
           <ToggleButton Classes="toolbar" IsChecked="{Binding Alphabetical, Mode=OneWay}" Command="{Binding AlphabeticalCommand}" Content="{l:T properties.alphabetical}" AutomationProperties.Name="{l:T properties.alphabetical}" />
-          <Border Width="1" Margin="4,2" Background="{DynamicResource Shell.Border}" />
+          <Border Classes="toolbarSeparator" />
           <ToggleButton Classes="toolbar" IsChecked="{Binding !ShowEvents, Mode=OneWay}" Command="{Binding PropertiesCommand}" Content="{l:T properties.properties}" AutomationProperties.Name="{l:T properties.properties}" />
           <ToggleButton Classes="toolbar" IsChecked="{Binding ShowEvents, Mode=OneWay}" Command="{Binding EventsCommand}" Content="{l:T properties.events}" AutomationProperties.Name="{l:T properties.events}" />
-        </StackPanel>
+        </controls:ToolbarPanel>
       </Grid>
     </Border>
     <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
@@ -71,7 +74,7 @@
                     <DataTemplate x:DataType="vm:PropertyRowViewModel">
                       <Border Classes="row">
                         <Grid ColumnDefinitions="0.45*,0.55*,Auto,Auto">
-                          <TextBlock VerticalAlignment="Center" Text="{Binding Name}" Classes.set="{Binding IsSet}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
+                          <TextBlock VerticalAlignment="Center" Text="{Binding Name}" Classes.set="{Binding IsSet}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding NameToolTip}" />
                           <DockPanel Grid.Column="1" IsVisible="{Binding IsTextEditor}">
                             <Border DockPanel.Dock="Left" Width="14" Height="14" Margin="4,0,0,0" VerticalAlignment="Center" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}"
                                     Background="{Binding Swatch}" IsVisible="{Binding IsColor}" />

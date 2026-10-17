@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Previewer;
 
 namespace Codalus.Shell.ViewModels;
@@ -53,9 +54,9 @@ public sealed class LiveTreeViewModel : ObservableObject
     private int _generation;
 
     /// <summary>What the tree says before an app runs: WPF apps run (and get the live tools) on Windows only (D31).</summary>
-    internal static string NotRunning { get; } = OperatingSystem.IsWindows()
-        ? "Start an Avalonia or WPF app (F5 or Ctrl+F5) to see its live visual tree."
-        : "Start an Avalonia app (F5 or Ctrl+F5) to see its live visual tree. A WPF app's live visual tree is Windows only.";
+    internal static string NotRunning => OperatingSystem.IsWindows()
+        ? Localizer.Get("msg.liveTree.notRunningWindows", "Start an Avalonia or WPF app (F5 or Ctrl+F5) to see its live visual tree.")
+        : Localizer.Get("msg.liveTree.notRunning", "Start an Avalonia app (F5 or Ctrl+F5) to see its live visual tree. A WPF app's live visual tree is Windows only.");
 
     public LiveTreeViewModel(Func<LiveSession?> session, Func<LiveNodeViewModel, Task> goToXaml)
     {
@@ -191,7 +192,7 @@ public sealed class LiveTreeViewModel : ObservableObject
                 Roots.Add(root);
             }
 
-            Message = roots.Count == 0 ? "The app has no window open." : string.Empty;
+            Message = roots.Count == 0 ? Localizer.Get("msg.liveTree.noWindow", "The app has no window open.") : string.Empty;
             Selected = selectedId is { } id ? Find(id) : null;
             if (roots.Count == 0)
             {
@@ -297,6 +298,9 @@ public sealed class LivePropertyRow(LiveProperty property, Func<LivePropertyRow,
 
     public string AccessibleName => $"{Name}: {Value} ({Source})";
 
+    /// <summary>The name and type, for the trimmed name (M34g: the tooltip had the type alone).</summary>
+    public string ToolTip => $"{Name}: {Type}";
+
     public string Value
     {
         get => _value;
@@ -343,7 +347,7 @@ public sealed class LivePropertiesViewModel : ObservableObject
 
     public ObservableCollection<LivePropertyRow> Rows { get; } = [];
 
-    public string Title => _element is null ? "Select an element in the Live Visual Tree." : _element.Label;
+    public string Title => _element is null ? Localizer.Get("msg.liveTree.selectElement", "Select an element in the Live Visual Tree.") : _element.Label;
 
     public string Filter
     {

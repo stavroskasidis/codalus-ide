@@ -13,7 +13,25 @@ public sealed class HighlightedText : TextBlock
     public static readonly StyledProperty<IReadOnlyList<int>?> HighlightsProperty =
         AvaloniaProperty.Register<HighlightedText, IReadOnlyList<int>?>(nameof(Highlights));
 
+    /// <summary>
+    /// The matched characters' color: <c>Shell.Match</c>, and the selection's text on a selected row (ShellStyles'
+    /// <c>TextBlock.highlighted</c>, M34g: in Shell.Match on Code Search's selected result they were 1.00:1 in Daylight
+    /// High contrast). They stay bold either way.
+    /// </summary>
+    public static readonly StyledProperty<IBrush?> MatchForegroundProperty = AvaloniaProperty.Register<HighlightedText, IBrush?>(nameof(MatchForeground));
+
+    public HighlightedText()
+    {
+        Classes.Add("highlighted");
+    }
+
     protected override Type StyleKeyOverride => typeof(TextBlock);
+
+    public IBrush? MatchForeground
+    {
+        get => GetValue(MatchForegroundProperty);
+        set => SetValue(MatchForegroundProperty, value);
+    }
 
     public string? Source
     {
@@ -61,7 +79,7 @@ public sealed class HighlightedText : TextBlock
                 if (highlighted)
                 {
                     run.FontWeight = FontWeight.Bold;
-                    run.Bind(TextElement.ForegroundProperty, this.GetResourceObservable("Shell.Match"));
+                    run.Bind(TextElement.ForegroundProperty, this.GetObservable(MatchForegroundProperty));
                 }
 
                 inlines.Add(run);

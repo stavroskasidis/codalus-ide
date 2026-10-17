@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Previewer;
 
 namespace Codalus.Shell.ViewModels;
@@ -18,7 +19,7 @@ public sealed class XamlPreviewViewModel : ObservableObject
     public const string ToolWindowId = "xaml.preview";
 
     /// <summary>The status with nothing to preview.</summary>
-    public const string NothingPreviewed = "Open an Avalonia .axaml file or a WPF .xaml file to preview it.";
+    public static string NothingPreviewed => Localizer.Get("msg.xamlPreview.nothing", "Open an Avalonia .axaml file or a WPF .xaml file to preview it.");
 
     private static readonly double[] s_zooms = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 

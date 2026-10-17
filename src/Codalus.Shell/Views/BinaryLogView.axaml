@@ -20,7 +20,7 @@
         <Button Grid.Column="1" Margin="6,0,0,0" Content="{l:T binaryLog.search}" Command="{Binding SearchCommand}" IsDefault="True" />
       </Grid>
       <TextBlock Classes="muted" Text="{Binding Summary}" />
-      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <Grid ColumnDefinitions="*,Auto,*">
       <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T binaryLog.binaryLogTree}">

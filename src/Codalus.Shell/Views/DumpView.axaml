@@ -19,7 +19,7 @@
               <DataTemplate x:DataType="vm:DumpThreadRow">
                 <StackPanel Margin="2,1" AutomationProperties.Name="{Binding AccessibleName}">
                   <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding Exception}" IsVisible="{Binding HasException}" Foreground="{DynamicResource Shell.Error}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding Exception}" IsVisible="{Binding HasException}" Foreground="{DynamicResource Shell.Error.Foreground}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Text="{Binding TopFrame}" Classes="muted" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
               </DataTemplate>

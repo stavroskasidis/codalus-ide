@@ -54,6 +54,13 @@ public sealed partial class ShellHost : IEditorServices
 
     public IEnumerable<CodeEditorDocument> Editors => Layout.Documents.OfType<CodeEditorDocument>();
 
+    /// <summary>
+    /// The editor tabs and Code Search's preview, which isn't a tab but asks the language service for the same things
+    /// (semantic colors, the navigation bar's symbols, sticky scroll): what the language service's start, restart and
+    /// readiness refresh.
+    /// </summary>
+    private IEnumerable<CodeEditorDocument> LanguageViews => _previewDocument is { } preview ? Editors.Append(preview) : Editors;
+
     public event EventHandler? ThemeChanged;
 
     public event EventHandler? ProjectContextsChanged;
@@ -428,7 +435,7 @@ public sealed partial class ShellHost : IEditorServices
 
         if (await Languages.OpenAsync(new LanguageDocument(model.Path, languageId, Text)).ConfigureAwait(true))
         {
-            foreach (var editor in Editors.Where(e => e.Model == model))
+            foreach (var editor in LanguageViews.Where(e => e.Model == model))
             {
                 editor.Controller?.RefreshAll();
             }
@@ -473,7 +480,7 @@ public sealed partial class ShellHost : IEditorServices
     /// <summary>Asks the language service for everything again (after it restarted or finished loading projects).</summary>
     private void RefreshEditors()
     {
-        foreach (var editor in Editors)
+        foreach (var editor in LanguageViews)
         {
             editor.Controller?.RefreshAll();
         }

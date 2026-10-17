@@ -242,8 +242,8 @@ public static class SolutionTree
             : [];
         return node with
         {
-            Detail = info.CannotBuildReason is not null ? "(non-SDK-style, can't build here)"
-                : info.IsNonSdkStyle ? "(non-SDK-style)"
+            Detail = info.CannotBuildReason is not null ? Localization.Localizer.Get("msg.solutionTree.nonSdkStyleCannotBuild", "(non-SDK-style, can't build here)")
+                : info.IsNonSdkStyle ? Localization.Localizer.Get("msg.solutionTree.nonSdkStyle", "(non-SDK-style)")
                 : info.TargetFrameworks.Length > 1 ? string.Join(", ", info.TargetFrameworks) : null,
             IsWarning = info.CannotBuildReason is not null,
             Children = [.. cannotBuild, .. dependencies is null ? [] : new[] { dependencies }, .. Contents(entry.Path, info, disk)],

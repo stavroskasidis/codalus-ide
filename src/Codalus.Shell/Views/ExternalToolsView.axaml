@@ -9,7 +9,7 @@
     <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,10">
       <TextBlock Classes="heading" Text="{l:T externalTools.externalTools}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T externalTools.yourOwnCommandsInTheTools}" />
-      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,10,0,0">
       <Button Classes="accent" Content="{l:T externalTools.save}" Command="{Binding SaveCommand}" AutomationProperties.Name="{l:T externalTools.saveExternalTools}" />

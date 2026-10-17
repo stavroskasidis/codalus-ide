@@ -65,6 +65,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         }
 
         var status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Classes = { "muted" }, Margin = new Thickness(8, 0) };
+        Avalonia.Automation.AutomationProperties.SetLiveSetting(status, Avalonia.Automation.AutomationLiveSetting.Polite);
         var busy = new ProgressBar { IsIndeterminate = true, Width = 60, Height = 2, MinHeight = 2, VerticalAlignment = VerticalAlignment.Center };
         var language = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0), Classes = { "muted" } };
         var toolbar = new DockPanel
@@ -86,8 +87,10 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
 
         DockPanel.SetDock(toolbar, Avalonia.Controls.Dock.Top);
 
-        var problems = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 4), MaxHeight = 120 };
-        var problemBar = new Border { Child = problems, BorderThickness = new Thickness(0, 1, 0, 0) };
+        // The statements the designer couldn't run, in the error color; a long list scrolls (M34g: it was cut at 120 px).
+        var problems = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 4), Classes = { "error" } };
+        Avalonia.Automation.AutomationProperties.SetName(problems, Localizer.Get("msg.winFormsDesigner.problems", "What the designer couldn't run"));
+        var problemBar = new Border { Child = new ScrollViewer { Content = problems, MaxHeight = 120, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }, BorderThickness = new Thickness(0, 1, 0, 0) };
         problemBar.Bind(Border.BorderBrushProperty, problemBar.GetResourceObservable("Shell.Border"));
         DockPanel.SetDock(problemBar, Avalonia.Controls.Dock.Bottom);
 
@@ -95,14 +98,23 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         trayBar.Bind(Border.BorderBrushProperty, trayBar.GetResourceObservable("Shell.Border"));
         DockPanel.SetDock(trayBar, Avalonia.Controls.Dock.Bottom);
 
+        // Before the first frame (opening, reading the form, starting the designer) and when it fails: the status where
+        // the form will be, wrapped (M34g: a failure's reason was one trimmed line in the toolbar).
+        var message = new TextBlock { Classes = { "emptyState" }, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Top };
+        Avalonia.Automation.AutomationProperties.SetLiveSetting(message, Avalonia.Automation.AutomationLiveSetting.Polite);
         _collectionHost.Bind(Border.BackgroundProperty, _collectionHost.GetResourceObservable("Shell.Panel"));
         _collectionHost.Bind(Border.BorderBrushProperty, _collectionHost.GetResourceObservable("Shell.Border"));
-        Content = new DockPanel { Children = { toolbar, problemBar, trayBar, new Grid { Children = { _scroll, _collectionHost } } } };
+        var surfaceArea = new Grid { Children = { _scroll, message, _collectionHost } };
+
+        Content = new DockPanel { Children = { toolbar, problemBar, trayBar, surfaceArea } };
 
         // The document's state, without reflection bindings (the shell is Native AOT).
         void Update()
         {
             status.Text = document.Status;
+            ToolTip.SetTip(status, string.IsNullOrEmpty(document.Status) ? null : document.Status);
+            message.Text = document.Status;
+            message.IsVisible = document.Frame is null && !string.IsNullOrEmpty(document.Status);
             busy.IsVisible = document.IsBusy;
             problems.Text = document.Problems;
             problemBar.IsVisible = document.HasProblems;
@@ -124,6 +136,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 ShowCollectionEditor();
             }
         });
+        document.SurfaceChanged += (_, _) => Infrastructure.Ui.Post(Update);
         Avalonia.Automation.AutomationProperties.SetName(_surface, document.Title);
         _surface.ContextRequested += (_, e) =>
         {
@@ -716,7 +729,9 @@ public sealed class DesignerSurface : Control
             context.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
         }
 
-        var accent = Resource("Shell.Accent", Brushes.DodgerBlue);
+        // The adorners in the theme's tokens (M34g: the handles were white and the rubber band DodgerBlue in every theme).
+        var accent = Token("Shell.Accent") ?? Token("Shell.Focus") ?? Brushes.Gray;
+        var handleFill = Token("Shell.Panel") ?? Brushes.Transparent;
         var thin = new Pen(accent, 1, new DashStyle([2, 2], 0));
         var solid = new Pen(accent, 1);
         if (_document.IsTabOrderMode)
@@ -752,7 +767,7 @@ public sealed class DesignerSurface : Control
             {
                 foreach (var handle in Handles(rect))
                 {
-                    context.DrawRectangle(Brushes.White, solid, handle);
+                    context.DrawRectangle(handleFill, solid, handle);
                 }
 
                 RenderLayoutAdorners(context, view, rect, thin, accent);
@@ -777,9 +792,12 @@ public sealed class DesignerSurface : Control
 
         if (_mode is Mode.Band or Mode.Draw && _pressed is { } start)
         {
-            context.DrawRectangle(new SolidColorBrush(Colors.DodgerBlue, 0.1), thin, new Rect(start, _current).Normalize());
+            var band = accent is ISolidColorBrush solidAccent ? new SolidColorBrush(solidAccent.Color, 0.12) : null;
+            context.DrawRectangle(band, thin, new Rect(start, _current).Normalize());
         }
     }
+
+    private IBrush? Token(string key) => this.TryFindResource(key, ActualThemeVariant, out var found) ? found as IBrush : null;
 
     /// <summary>Tab order mode: each control's tab index (after its containers', <c>2.1</c>) in a box at its top left, as Visual Studio shows them.</summary>
     private void RenderTabOrder(DrawingContext context, IBrush accent)

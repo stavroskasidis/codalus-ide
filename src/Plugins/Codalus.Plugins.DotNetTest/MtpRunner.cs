@@ -216,12 +216,14 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
         var (program, arguments) = Command(target);
         arguments.AddRange(["--server", "jsonrpc", "--client-host", "127.0.0.1", "--client-port", port.ToString(CultureInfo.InvariantCulture), "--no-banner"]);
         arguments.AddRange(extraArguments);
+        var wrapped = false;
         if (options.Mode == RunMode.Coverage && options.Coverage is { } coverage && !CoverageTools.ProjectHasCoverletMtp(target))
         {
             (program, arguments) = CoverageTools.WrapWithConsole(target, program, arguments, coverage);
+            wrapped = true;
         }
 
-        var session = new Session(listener, log);
+        var session = new Session(listener, log, wrapped, cancellationToken);
         try
         {
             if (options.Mode == RunMode.Debug)
@@ -255,9 +257,12 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
         return (DotnetHost.Path, ["exec", target.AssemblyPath]);
     }
 
-    private sealed class Session(TcpListener listener, Action<string> log) : IAsyncDisposable
+    /// <param name="wrapped">Whether the process is <c>coverlet.console</c> running the test application (CoverageTools.WrapWithConsole).</param>
+    /// <param name="cancellationToken">The request's: cancelling it stops waiting for a wrapping console to write its report.</param>
+    private sealed class Session(TcpListener listener, Action<string> log, bool wrapped, CancellationToken cancellationToken) : IAsyncDisposable
     {
         private readonly TaskCompletionSource _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _applicationExited = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Action<JsonElement, bool>> _runs = new(StringComparer.Ordinal);
         private Process? _process;
         private TcpClient? _client;
@@ -303,6 +308,11 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
         {
             if (line is not null)
             {
+                if (wrapped && line.Trim() == CoverageTools.ConsoleApplicationExited)
+                {
+                    _applicationExited.TrySetResult();
+                }
+
                 Output?.Invoke(this, line + "\n");
             }
         }
@@ -421,6 +431,15 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
             if (_process is { } process)
             {
                 await _exited.Task.WaitAsync(s_killAfter).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+                // Coverlet's console outlives the test application: once the application has exited it reads the hits,
+                // restores the assemblies and writes the report, which takes a loaded machine more than s_killAfter.
+                // Killing it then lost the report, so it may finish unless the request is cancelled.
+                if (!_exited.Task.IsCompleted && _applicationExited.Task.IsCompleted)
+                {
+                    await _exited.Task.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                }
+
                 if (!_exited.Task.IsCompleted)
                 {
                     try

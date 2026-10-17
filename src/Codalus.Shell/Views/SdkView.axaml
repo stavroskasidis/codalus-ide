@@ -11,8 +11,8 @@
       <TextBlock Classes="heading" Text="{l:T sdk.netSdks}" />
       <TextBlock TextWrapping="Wrap" Text="{Binding ResolvedText}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding GlobalJsonText}" />
-      <TextBlock Foreground="{DynamicResource Shell.Warning}" TextWrapping="Wrap" Text="{Binding Warning}" IsVisible="{Binding HasWarning}" />
-      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock Foreground="{DynamicResource Shell.Warning.Foreground}" TextWrapping="Wrap" Text="{Binding Warning}" IsVisible="{Binding HasWarning}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <Grid ColumnDefinitions="*,16,*">
       <DockPanel>
@@ -31,7 +31,7 @@
               <StackPanel>
                 <TextBlock Text="{Binding Display}" />
                 <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Support}" IsVisible="{Binding !IsOutOfSupport}" />
-                <TextBlock Foreground="{DynamicResource Shell.Warning}" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Support}" IsVisible="{Binding IsOutOfSupport}" />
+                <TextBlock Foreground="{DynamicResource Shell.Warning.Foreground}" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Support}" IsVisible="{Binding IsOutOfSupport}" />
                 <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Path}" />
               </StackPanel>
             </DataTemplate>

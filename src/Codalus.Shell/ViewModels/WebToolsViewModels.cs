@@ -397,7 +397,10 @@ public sealed record ServiceReferenceRow(ServiceReferenceInfo? Info, WcfReferenc
     public string Icon => Wcf is not null ? "globe" : Info!.Kind == ServiceReferenceKinds.OpenApi ? "cloud" : "link";
 
     public string Detail => Wcf is { } wcf
-        ? $"dotnet-svcutil, namespace {wcf.Namespace ?? wcf.Name}{(wcf.CollectionType is { } collection ? ", " + collection : string.Empty)}{(wcf.Sync ? ", synchronous too" : string.Empty)}{(wcf.Internal ? ", internal" : string.Empty)}"
+        ? Localizer.Format("msg.serviceReferences.wcfDetail", "dotnet-svcutil, namespace {0}", wcf.Namespace ?? wcf.Name)
+          + (wcf.CollectionType is { } collection ? ", " + collection : string.Empty)
+          + (wcf.Sync ? Localizer.Get("msg.serviceReferences.wcfSync", ", synchronous too") : string.Empty)
+          + (wcf.Internal ? Localizer.Get("msg.serviceReferences.wcfInternal", ", internal") : string.Empty)
         : Info!.Kind == ServiceReferenceKinds.OpenApi
             ? $"{Info.CodeGenerator ?? "NSwagCSharp"}{(Info.ClassName is { } name ? ", class " + name : string.Empty)}{(Info.Namespace is { } ns ? ", namespace " + ns : string.Empty)}"
             : $"Services: {Info.GrpcServices ?? GrpcServiceKinds.Both}{(Info.Access is { } access ? ", " + access.ToLowerInvariant() : string.Empty)}";
@@ -644,9 +647,9 @@ public sealed class ServiceReferencesViewModel : ObservableObject
 
     public bool NeedsWcfTool => _wcfStatus is { ToolAvailable: false };
 
-    public string WcfToolMessage => _wcfStatus is null ? "Checking dotnet-svcutil…"
+    public string WcfToolMessage => _wcfStatus is null ? Localizer.Get("msg.serviceReferences.checkingSvcutil", "Checking dotnet-svcutil…")
         : _wcfStatus.ToolAvailable ? $"dotnet-svcutil {_wcfStatus.ToolVersion} ({_wcfStatus.ToolSource})"
-        : (_wcfStatus.Message ?? "dotnet-svcutil isn't available.") + " Install adds it as a local tool of this solution.";
+        : (_wcfStatus.Message ?? Localizer.Get("msg.serviceReferences.noSvcutil", "dotnet-svcutil isn't available.")) + " " + Localizer.Get("msg.serviceReferences.installSvcutil", "Install adds it as a local tool of this solution.");
 
     /// <summary>Running CoreWCF services whose metadata answers, found by Discover.</summary>
     public ObservableCollection<DiscoveredService> Discovered { get; } = [];
@@ -840,14 +843,14 @@ public sealed class ServiceReferencesViewModel : ObservableObject
         if (action == "add" && Source.Trim().Length == 0)
         {
             Error = IsWcf
-                ? "Enter the service's metadata address (…/Service.svc?wsdl), choose a WSDL file, or discover a running service."
-                : "Choose the document: a file, or the URL of an OpenAPI document or a .proto file.";
+                ? Localizer.Get("msg.serviceReferences.wcfNoAddress", "Enter the service's metadata address (…/Service.svc?wsdl), choose a WSDL file, or discover a running service.")
+                : Localizer.Get("msg.serviceReferences.noDocument", "Choose the document: a file, or the URL of an OpenAPI document or a .proto file.");
             return;
         }
 
         if (action == "add" && IsWcf && WcfName.Trim().Length == 0)
         {
-            Error = "Name the reference: its folder under Connected Services.";
+            Error = Localizer.Get("msg.serviceReferences.wcfNoName", "Name the reference: its folder under Connected Services.");
             return;
         }
 
