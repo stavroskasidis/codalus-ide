@@ -934,7 +934,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         WriteJson(Paths.LayoutFile, Layout.Capture(placement), ShellJsonContext.Default.LayoutSnapshot);
         WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds, CodeSearch = CodeSearch.CaptureState() }, ShellJsonContext.Default.ShellState);
-        SaveCodeSearchIndex(onlyIfChanged: true);
+        _ = SaveCodeSearchIndex(onlyIfChanged: true); // flushed in DisposeAsync
         SaveEditorSession(); // next to the solution, written in the background (flushed in DisposeAsync)
     }
 
