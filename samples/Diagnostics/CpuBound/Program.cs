@@ -78,18 +78,32 @@ namespace CpuBound
     {
         public static long Rounds;
 
+        // A round works 25 ms by the clock, then sleeps 125: the thread works a sixth of the time, well behind the main
+        // thread, so IsPrime keeps the most self time and its [hot] line the most of the file's (Mix had 6 to 9% of a
+        // trace's samples here, IsPrime 85 to 90%). The work outlasts a timer tick (15.6 ms on Windows), so it spans one
+        // wherever it starts. The sampler sleeps a millisecond between samples, but a process that doesn't get the 1 ms
+        // timer period it asks for sleeps to the next tick: a round of 2 ms between sleeps of 15 ms then woke on the same
+        // tick as the sampler, which found it still leaving Thread.Sleep and didn't sample again before it slept once
+        // more, so Mix could get no samples at all (twice on PR #25's Windows runs, while IsPrime had plenty). The clock
+        // is read every 50 calls (about 0.3 ms), so the samples a late stop moves to the GC poll after the read (see
+        // da35619d) stay few.
         public static void Run(DateTime until)
         {
             var value = 17UL;
+            var round = new Stopwatch();
             while (DateTime.UtcNow < until)
             {
-                for (var i = 0; i < 300; i++)
+                round.Restart();
+                while (round.ElapsedMilliseconds < 25)
                 {
-                    value = Mix(value);
+                    for (var i = 0; i < 50; i++)
+                    {
+                        value = Mix(value);
+                    }
                 }
 
                 Interlocked.Increment(ref Rounds);
-                Thread.Sleep(15);
+                Thread.Sleep(125);
             }
 
             GC.KeepAlive(value);
@@ -98,12 +112,8 @@ namespace CpuBound
         // The rounds loop inside, without calls, as in Primes.IsPrime: the JIT makes such a method fully interruptible,
         // so a sample stops the thread in it. A one-round Mix had no safe point of its own (a leaf called from Run's
         // loop): where the interruption comes late (some Windows runners), the thread stopped at the call's return or at
-        // Thread.Sleep, Run's frames, and Mix got no samples at all. A round of Run's loop takes about 2 ms in the Debug
-        // build the tests profile, and sleeps 15 ms, which is a timer tick (15.6 ms) on Windows too: the thread works
-        // about an eighth of the time on every platform, sampled often enough, and stays well behind the main thread, so
-        // IsPrime keeps the most self time and its [hot] line the most of the file's. (A round of 1,000 calls slept 1 ms
-        // on Linux and macOS: the thread worked 85% of the time, nearly as much as the main thread, and Mix's multiply
-        // line was the hottest of Program.cs on a Linux runner.)
+        // Thread.Sleep, Run's frames, and Mix got no samples at all. A call takes about 7 µs in the Debug build the
+        // tests profile.
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static ulong Mix(ulong value)
         {

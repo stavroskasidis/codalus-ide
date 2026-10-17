@@ -53,9 +53,9 @@ public sealed partial class ShellHost
         });
         Languages.StatusChanged += (_, e) => Ui.Post(() =>
         {
-            if (e.LanguageId == CSharpLanguageId && e.Status.State == WorkspaceStates.Ready && Layout.IsVisible(EntityFrameworkViewModel.ToolWindowId) && EfExplorer.Contexts.Count == 0)
+            if (e.LanguageId == CSharpLanguageId && e.Status.State == WorkspaceStates.Ready && Layout.IsVisible(EntityFrameworkViewModel.ToolWindowId))
             {
-                _ = EfExplorer.ReloadAsync(fromTool: false);
+                _ = EfExplorer.ReloadIfNoContextsAsync();
             }
         });
     }
