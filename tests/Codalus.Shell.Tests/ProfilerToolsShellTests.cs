@@ -192,14 +192,23 @@ public sealed class ProfilerToolsShellTests
         // Running one from its glyph: BenchmarkDotNet's Dry job in process, then again for the history.
         window.Job = "Dry";
         window.InProcess = true;
+        string Describe()
+        {
+            var output = f.Shell.BenchmarkLog.GetText();
+            return $"status '{window.Status}', running {window.IsRunning}, {window.Results.Count} results, {window.History.Count} in the history, "
+                + $"{f.Shell.Benchmarks.History().Runs.Count} runs in {f.Shell.Benchmarks.HistoryPath}, project of the file '{f.Shell.Benchmarks.ProjectOf(file)}'\n"
+                + "Notifications:\n" + string.Join('\n', f.Shell.Workbench.Notifications.Items.Select(n => n.Message))
+                + "\nBenchmarks output (the end):\n" + output[Math.Max(0, output.Length - 6000)..];
+        }
+
         await f.Shell.RunBenchmarkAsync(file, concat);
-        await ShellFixture.PumpUntil(() => window.Results.Count > 0 && !window.IsRunning, seconds: 600);
+        await ShellFixture.PumpUntil(() => window.Results.Count > 0 && !window.IsRunning, seconds: 600, Describe);
         var result = Assert.Single(window.Results);
         Assert.Equal("Concat", result.Result.Method);
         Assert.True(result.Result.Mean > 0);
         Assert.True(result.Result.Allocated > 0, "MemoryDiagnoser's allocations");
         await f.Shell.RunBenchmarkAsync(file, concat);
-        await ShellFixture.PumpUntil(() => window.History.Count == 2 && !window.IsRunning, seconds: 600);
+        await ShellFixture.PumpUntil(() => window.History.Count == 2 && !window.IsRunning, seconds: 600, Describe);
         Assert.True(File.Exists(f.Shell.Benchmarks.HistoryPath));
         Assert.StartsWith(Path.Combine(folder, ".codalus", "benchmarks"), f.Shell.Benchmarks.HistoryPath, StringComparison.Ordinal);
     }
