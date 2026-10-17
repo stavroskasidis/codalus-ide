@@ -292,8 +292,19 @@ public sealed class DebugAdapter : IDebugAdapter
     public Task StepOutAsync(int threadId, CancellationToken cancellationToken) =>
         _connection.RequestAsync("stepOut", new ThreadArguments(threadId), Json.ThreadArguments, cancellationToken);
 
-    public Task PauseAsync(int threadId, CancellationToken cancellationToken) =>
-        _connection.RequestAsync("pause", new ThreadArguments(threadId), Json.ThreadArguments, cancellationToken);
+    /// <summary>
+    /// Pauses the program. DAP's pause names a thread, and netcoredbg refuses 0 (E_INVALIDARG): Break All (0) names the
+    /// program's first thread, and netcoredbg stops every thread and reports that one.
+    /// </summary>
+    public async Task PauseAsync(int threadId, CancellationToken cancellationToken)
+    {
+        if (threadId == 0 && (await ThreadsAsync(cancellationToken).ConfigureAwait(false)) is [var first, ..])
+        {
+            threadId = first.Id;
+        }
+
+        await _connection.RequestAsync("pause", new ThreadArguments(threadId), Json.ThreadArguments, cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task<DapThread[]> ThreadsAsync(CancellationToken cancellationToken) =>
         (await _connection.RequestAsync("threads", new EmptyArguments(), Json.EmptyArguments, Json.ThreadsResponse, cancellationToken).ConfigureAwait(false)).Threads;
