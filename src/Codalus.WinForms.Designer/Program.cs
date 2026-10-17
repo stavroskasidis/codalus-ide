@@ -59,6 +59,11 @@ internal static class Program
         connection.OnRequest(WinFormsDesignerMethods.Delete, json.DesignerComponentsParams, json.DesignerChangeResult, (p, _) => window.Run(() => session.Delete(p)));
         connection.OnRequest(WinFormsDesignerMethods.Properties, json.DesignerComponentsParams, json.DesignerPropertiesResult, (p, _) => window.Run(() => session.Properties(p)));
         connection.OnRequest(WinFormsDesignerMethods.Events, json.DesignerComponentsParams, json.DesignerEventsResult, (p, _) => window.Run(() => session.Events(p)));
+        connection.OnRequest(WinFormsDesignerMethods.SetChildIndex, json.DesignerChildIndexParams, json.DesignerChangeResult, (p, _) => window.Run(() => session.SetChildIndex(p)));
+        connection.OnRequest(WinFormsDesignerMethods.Collection, json.DesignerCollectionParams, json.DesignerCollectionResult, (p, _) => window.Run(() => session.Collection(p)));
+        connection.OnRequest(WinFormsDesignerMethods.SetCollection, json.DesignerSetCollectionParams, json.DesignerChangeResult, (p, _) => window.Run(() => session.SetCollection(p)));
+        connection.OnRequest(WinFormsDesignerMethods.Actions, json.DesignerComponentsParams, json.DesignerActionsResult, (p, _) => window.Run(() => session.Actions(p)));
+        connection.OnRequest(WinFormsDesignerMethods.InvokeAction, json.DesignerInvokeActionParams, json.DesignerChangeResult, (p, _) => window.Run(() => session.InvokeAction(p)));
         connection.OnRequest(WinFormsDesignerMethods.Select, async (p, _) =>
         {
             var selection = p.Deserialize(json.DesignerComponentsParams) ?? new DesignerComponentsParams([]);

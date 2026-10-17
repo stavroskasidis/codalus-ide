@@ -135,6 +135,12 @@ public sealed record DesignerComponentView(string Name, string Type, string? Par
 
     /// <summary>An item that has drop-down items (a menu item, a drop-down button).</summary>
     public bool HasDropDown { get; init; }
+
+    /// <summary>
+    /// It shows in the component tray (M41b): a component that isn't a control (a timer, a tool tip), a control with no
+    /// parent (a context menu), and, as in Visual Studio, a menu, tool or status strip.
+    /// </summary>
+    public bool InTray { get; init; }
 }
 
 /// <summary>The surface after a load or a change: its frame, its components (in z-order, front first, parents before children), and what went wrong.</summary>

@@ -29,6 +29,21 @@ public interface IWinFormsDesignerHost : IAsyncDisposable
 
     Task SelectAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken);
 
+    /// <summary>Moves a control in its parent's z-order (M41b).</summary>
+    Task<DesignerChangeResult> SetChildIndexAsync(DesignerChildIndexParams parameters, CancellationToken cancellationToken);
+
+    /// <summary>A collection's items, for its editor (M41b).</summary>
+    Task<DesignerCollectionResult> CollectionAsync(DesignerCollectionParams parameters, CancellationToken cancellationToken);
+
+    /// <summary>Replaces a collection's items (M41b: the collection editors, a menu's Type Here).</summary>
+    Task<DesignerChangeResult> SetCollectionAsync(DesignerSetCollectionParams parameters, CancellationToken cancellationToken);
+
+    /// <summary>A component's smart tag: its designer actions (M41b).</summary>
+    Task<DesignerActionsResult> ActionsAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken);
+
+    /// <summary>Runs a designer action, or sets an action's property (M41b).</summary>
+    Task<DesignerChangeResult> InvokeActionAsync(DesignerInvokeActionParams parameters, CancellationToken cancellationToken);
+
     /// <summary>A line of the host's output (any thread).</summary>
     event EventHandler<string>? Log;
 
@@ -230,7 +245,7 @@ public sealed class WinFormsDesignerService
 
             foreach (var item in info.Items)
             {
-                if (item.Kind is "Folder" || SolutionService.PathComparer.Equals(item.Path, target.CodeFile) || SolutionService.PathComparer.Equals(item.Path, designer))
+                if (item.Kind is "Folder" || SolutionService.PathComparer.Equals(item.Path, target.CodeFile) || SolutionService.PathComparer.Equals(item.Path, designer) || FormResources(target.CodeFile).Any(r => SolutionService.PathComparer.Equals(r.Path, item.Path)))
                 {
                     continue;
                 }
@@ -243,6 +258,36 @@ public sealed class WinFormsDesignerService
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The form's resource files that exist (M41b): the default one first (an empty culture), then one per culture
+    /// (<c>MainForm.fr.resx</c>). The designer reads them from the editor, so they don't need a build.
+    /// </summary>
+    public static IReadOnlyList<(string Culture, string Path)> FormResources(string codeFile)
+    {
+        var folder = Path.GetDirectoryName(codeFile)!;
+        var stem = Path.GetFileNameWithoutExtension(codeFile);
+        var files = new List<(string, string)>();
+        var main = Path.Combine(folder, stem + ".resx");
+        if (File.Exists(main))
+        {
+            files.Add((string.Empty, main));
+        }
+
+        if (Directory.Exists(folder))
+        {
+            foreach (var file in Directory.EnumerateFiles(folder, stem + ".*.resx").Order(StringComparer.OrdinalIgnoreCase))
+            {
+                var culture = Path.GetFileName(file)[(stem.Length + 1)..^".resx".Length];
+                if (culture.Length > 0 && !culture.Contains('.', StringComparison.Ordinal))
+                {
+                    files.Add((culture, file));
+                }
+            }
+        }
+
+        return files;
     }
 
     /// <summary>Builds when the output is stale, then starts a designer host for the target.</summary>
@@ -371,6 +416,21 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
 
     public async Task SelectAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken) =>
         await InvokeAsync(WinFormsDesignerMethods.Select, parameters, s_json.DesignerComponentsParams, s_json.JsonElement, cancellationToken).ConfigureAwait(false);
+
+    public Task<DesignerChangeResult> SetChildIndexAsync(DesignerChildIndexParams parameters, CancellationToken cancellationToken) =>
+        InvokeAsync(WinFormsDesignerMethods.SetChildIndex, parameters, s_json.DesignerChildIndexParams, s_json.DesignerChangeResult, cancellationToken);
+
+    public Task<DesignerCollectionResult> CollectionAsync(DesignerCollectionParams parameters, CancellationToken cancellationToken) =>
+        InvokeAsync(WinFormsDesignerMethods.Collection, parameters, s_json.DesignerCollectionParams, s_json.DesignerCollectionResult, cancellationToken);
+
+    public Task<DesignerChangeResult> SetCollectionAsync(DesignerSetCollectionParams parameters, CancellationToken cancellationToken) =>
+        InvokeAsync(WinFormsDesignerMethods.SetCollection, parameters, s_json.DesignerSetCollectionParams, s_json.DesignerChangeResult, cancellationToken);
+
+    public Task<DesignerActionsResult> ActionsAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken) =>
+        InvokeAsync(WinFormsDesignerMethods.Actions, parameters, s_json.DesignerComponentsParams, s_json.DesignerActionsResult, cancellationToken);
+
+    public Task<DesignerChangeResult> InvokeActionAsync(DesignerInvokeActionParams parameters, CancellationToken cancellationToken) =>
+        InvokeAsync(WinFormsDesignerMethods.InvokeAction, parameters, s_json.DesignerInvokeActionParams, s_json.DesignerChangeResult, cancellationToken);
 
     public ValueTask DisposeAsync() => _process.DisposeAsync();
 }
