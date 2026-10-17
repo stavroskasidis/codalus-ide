@@ -1,6 +1,7 @@
 using System.Collections;
 using System.ComponentModel;
 using System.ComponentModel.Design;
+using System.ComponentModel.Design.Serialization;
 using System.Globalization;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Workbench.WinForms;
@@ -356,17 +357,42 @@ internal sealed partial class DesignerSession
     }
 
     /// <summary>Visual Studio's name for a new component: its type's name, first letter lowercased, and the first free number.</summary>
-    private string NewComponentName(Type type) => NewLocalName(char.ToLowerInvariant(type.Name[0]) + type.Name[1..]);
+    private string NewComponentName(Type type, IContainer? container = null) => NewLocalName(char.ToLowerInvariant(type.Name[0]) + type.Name[1..], container);
 
     /// <summary>The first free name of a stem and a number (<c>listViewItem3</c>).</summary>
-    private string NewLocalName(string stem)
+    private string NewLocalName(string stem, IContainer? container = null)
     {
+        container ??= Host.Container;
         for (var i = 1; ; i++)
         {
             var name = stem + i.ToString(CultureInfo.InvariantCulture);
-            if (Host.Container.Components[name] is null && !_locals.ContainsKey(name))
+            if (container.Components[name] is null && !_locals.ContainsKey(name))
             {
                 return name;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The design surface's names for what a designer creates itself (a tab control's Add Tab, a new tab control's two
+    /// pages, a strip's standard items): Visual Studio's (<c>tabPage3</c>). Without a name service the surface gives
+    /// them an empty name, the root's in the captured state, so the difference never saw them come.
+    /// </summary>
+    private sealed class NameCreation(DesignerSession session) : INameCreationService
+    {
+        public string CreateName(IContainer? container, Type dataType) => session.NewComponentName(dataType, container);
+
+        /// <summary>A free identifier (the standard items try numbered names until one is).</summary>
+        public bool IsValidName(string name) =>
+            name.Length > 0 && (char.IsLetter(name[0]) || name[0] == '_') && name.All(c => char.IsLetterOrDigit(c) || c == '_')
+            && session._host?.Container.Components[name] is null && !session._locals.ContainsKey(name);
+
+        /// <summary>The code's names and the IDE's renames are the IDE's to check; an empty name would be the root's.</summary>
+        public void ValidateName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                throw new ArgumentException("A component needs a name.", nameof(name));
             }
         }
     }

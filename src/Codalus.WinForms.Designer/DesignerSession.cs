@@ -1,6 +1,7 @@
 using System.Collections;
 using System.ComponentModel;
 using System.ComponentModel.Design;
+using System.ComponentModel.Design.Serialization;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.Reflection;
@@ -28,6 +29,7 @@ internal sealed partial class DesignerSession : IDisposable
     private readonly DesignerTypes _types = new();
     private readonly Dictionary<string, object?> _locals = new(StringComparer.Ordinal);
     private readonly System.ComponentModel.Container _components = new();
+    private readonly ServiceContainer _services = new();
     private readonly DesignerValues _values;
     private DesignSurface? _surface;
     private IDesignerHost? _host;
@@ -44,6 +46,7 @@ internal sealed partial class DesignerSession : IDisposable
     {
         _window = window;
         _values = new DesignerValues(_types, Target, NameOf, Resource);
+        _services.AddService(typeof(INameCreationService), new NameCreation(this));
     }
 
     private IDesignerHost Host => _host ?? throw new InvalidOperationException("No form is loaded.");
@@ -86,7 +89,7 @@ internal sealed partial class DesignerSession : IDisposable
 
         var model = parameters.Model;
         var rootType = _types.Find(model.BaseType) ?? throw new InvalidOperationException($"The base type {model.BaseType} wasn't found (build the project).");
-        _surface = new DesignSurface();
+        _surface = new DesignSurface(_services);
         _surface.BeginLoad(rootType);
         if (_surface.LoadErrors.Count > 0)
         {
@@ -803,6 +806,7 @@ internal sealed partial class DesignerSession : IDisposable
     {
         Unload();
         _components.Dispose();
+        _services.Dispose();
     }
 
     // ------------------------------------------------------------------ data bindings (M41b)
