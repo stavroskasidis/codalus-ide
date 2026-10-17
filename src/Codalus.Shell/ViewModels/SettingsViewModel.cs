@@ -352,6 +352,7 @@ public abstract class SettingItemViewModel : ObservableObject
 
     public static SettingItemViewModel Create(SettingDescriptor descriptor, SettingsService settings, Func<SettingScope> scope) => descriptor.Type switch
     {
+        _ when descriptor.Key == Theming.ThemeService.SettingKey => new ColorThemeSettingViewModel(descriptor, settings, scope),
         SettingType.Boolean => new BoolSettingViewModel(descriptor, settings, scope),
         SettingType.String when descriptor.Enum is { Count: > 0 } => new EnumSettingViewModel(descriptor, settings, scope),
         _ => new TextSettingViewModel(descriptor, settings, scope),

@@ -48,9 +48,10 @@ public sealed class TerminalTheme
 
     public IBrush Cursor { get; }
 
-    public static TerminalTheme For(string theme, Color? foreground = null, Color? background = null) => theme switch
+    /// <summary>The terminal colors of a resolved theme (Classic's or a family's variant), by its kind.</summary>
+    public static TerminalTheme For(string theme, Color? foreground = null, Color? background = null) => Theming.ThemeService.KindOf(theme) switch
     {
-        "light" or "blue" => new TerminalTheme(
+        "light" => new TerminalTheme(
             [0x000000, 0xCD3131, 0x00BC00, 0x949800, 0x0451A5, 0xBC05BC, 0x0598BC, 0x555555, 0x666666, 0xCD3131, 0x14CE14, 0xB5BA00, 0x0451A5, 0xBC05BC, 0x0598BC, 0xA5A5A5],
             foreground ?? Color.FromRgb(0x33, 0x33, 0x33), background ?? Colors.White, Color.FromArgb(0x60, 0x00, 0x78, 0xD4), Color.FromRgb(0x00, 0x00, 0x00)),
         "highContrast" => new TerminalTheme(

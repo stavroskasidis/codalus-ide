@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
@@ -10,15 +11,40 @@ using Codalus.Workbench.Debugging;
 
 namespace Codalus.Shell.Editor;
 
-/// <summary>Colors of the debugger's editor adornments (readable on light, dark and high-contrast backgrounds).</summary>
+/// <summary>
+/// Colors of the debugger's editor adornments: the theme's breakpoint glyph, breakpoint line and current statement line
+/// (<c>Shell.Editor.Breakpoint</c>, <c>.Breakpoint.Line</c>, <c>Shell.Editor.CurrentStatement</c>, M45), and the arrow.
+/// </summary>
 internal static class DebugColors
 {
-    public static readonly IBrush Breakpoint = new ImmutableSolidColorBrush(Color.FromRgb(0xE5, 0x14, 0x00));
-    public static readonly IBrush BreakpointLine = new ImmutableSolidColorBrush(Color.FromArgb(0x40, 0xE5, 0x14, 0x00));
+    private static readonly IBrush s_breakpoint = new ImmutableSolidColorBrush(Color.FromRgb(0xE5, 0x14, 0x00));
+    private static readonly IBrush s_breakpointLine = new ImmutableSolidColorBrush(Color.FromArgb(0x40, 0xE5, 0x14, 0x00));
+    private static readonly IBrush s_currentLine = new ImmutableSolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xCC, 0x00));
+    private static readonly Dictionary<Color, IPen> s_outlines = [];
     public static readonly IBrush Current = new ImmutableSolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x00));
-    public static readonly IBrush CurrentLine = new ImmutableSolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xCC, 0x00));
-    public static readonly IPen Outline = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromRgb(0xE5, 0x14, 0x00)), 1.5);
     public static readonly IPen ArrowOutline = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromRgb(0x80, 0x60, 0x00)), 1);
+
+    public static IBrush Breakpoint(Control control) => Find(control, "Shell.Editor.Breakpoint") ?? s_breakpoint;
+
+    public static IBrush BreakpointLine(Control control) => Find(control, "Shell.Editor.Breakpoint.Line") ?? s_breakpointLine;
+
+    public static IBrush CurrentLine(Control control) => Find(control, "Shell.Editor.CurrentStatement") ?? s_currentLine;
+
+    /// <summary>The breakpoint glyph's outline, in its color.</summary>
+    public static IPen Outline(Control control)
+    {
+        var color = (Breakpoint(control) as ISolidColorBrush)?.Color ?? Colors.Red;
+        if (!s_outlines.TryGetValue(color, out var pen))
+        {
+            pen = new ImmutablePen(new ImmutableSolidColorBrush(color), 1.5);
+            s_outlines[color] = pen;
+        }
+
+        return pen;
+    }
+
+    private static IBrush? Find(Control control, string key) =>
+        control.TryFindResource(key, control.ActualThemeVariant, out var value) ? value as IBrush : null;
 }
 
 /// <summary>
@@ -175,11 +201,11 @@ public sealed class BreakpointMargin : AbstractMargin
                     var diamond = new PolylineGeometry(
                         [new Point(center.X, center.Y - radius), new Point(center.X + radius, center.Y), new Point(center.X, center.Y + radius), new Point(center.X - radius, center.Y)],
                         isFilled: true);
-                    context.DrawGeometry(filled ? DebugColors.Breakpoint : null, DebugColors.Outline, diamond);
+                    context.DrawGeometry(filled ? DebugColors.Breakpoint(this) : null, DebugColors.Outline(this), diamond);
                 }
                 else
                 {
-                    context.DrawEllipse(filled ? DebugColors.Breakpoint : null, DebugColors.Outline, center, radius, radius);
+                    context.DrawEllipse(filled ? DebugColors.Breakpoint(this) : null, DebugColors.Outline(this), center, radius, radius);
                 }
 
                 if (breakpoint.Condition is not null || breakpoint.HitCondition is not null)
@@ -258,7 +284,7 @@ public sealed class DebugLineRenderer(Func<string> path, BreakpointStore store, 
         foreach (var line in textView.VisualLines)
         {
             var number = line.FirstDocumentLine.LineNumber;
-            var brush = number == current ? DebugColors.CurrentLine : lines.Contains(number) ? DebugColors.BreakpointLine : null;
+            var brush = number == current ? DebugColors.CurrentLine(textView) : lines.Contains(number) ? DebugColors.BreakpointLine(textView) : null;
             if (brush is null)
             {
                 continue;
