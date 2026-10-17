@@ -1,3 +1,4 @@
+using Codalus.Projects.Protocol;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Diagnostics;
@@ -22,7 +23,7 @@ public sealed partial class ShellHost
 
     private void InitializeBenchmarks()
     {
-        Benchmarks = new BenchmarkService(() => Solutions.Solution?.Path is { } path ? (Directory.Exists(path) ? path : Path.GetDirectoryName(path)) : null, Paths.State);
+        Benchmarks = new BenchmarkService(() => Solutions.Solution?.Path is { } path ? (Directory.Exists(path) ? path : Path.GetDirectoryName(path)) : null, Paths.State, BuildForBenchmarksAsync);
         Benchmarks.Output += (_, line) => BenchmarkLog.AppendLine(line);
         BenchmarksWindow = new BenchmarksViewModel(Benchmarks, RunBenchmarksAsync, OpenSourceLineAsync);
         Solutions.SolutionChanged += (_, _) => Ui.Post(() => _ = ScanBenchmarks());
@@ -82,6 +83,34 @@ public sealed partial class ShellHost
         {
             Workbench.Notifications.Error("The benchmarks could not run: " + ex.Message);
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Builds a benchmark project in Release through the IDE's build before <c>dotnet run --no-build</c>: the build host
+    /// runs it after its restore (the one after opening the solution) and holds off restores during it, so no second
+    /// restore of the project runs at the same time (both wrote its <c>obj/*.nuget.g.props</c>). A build in progress
+    /// finishes first, as for <c>dotnet ef</c>.
+    /// </summary>
+    private async Task<bool> BuildForBenchmarksAsync(string project, CancellationToken cancellationToken)
+    {
+        var properties = new Dictionary<string, string> { ["Configuration"] = BenchmarkService.Configuration };
+        while (true)
+        {
+            while (Builds.IsBuilding)
+            {
+                await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+            }
+
+            try
+            {
+                var result = await Builds.BuildAsync(BuildTargets.Build, project, properties, cancellationToken).ConfigureAwait(false);
+                return result is { Succeeded: true, Canceled: false };
+            }
+            catch (InvalidOperationException)
+            {
+                // Another build started in between (the only reason BuildAsync throws): wait for it, then build.
+            }
         }
     }
 

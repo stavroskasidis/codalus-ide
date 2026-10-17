@@ -373,12 +373,22 @@ public sealed record BenchmarkRequest(string Project, IReadOnlyList<string> Filt
 /// artifacts folder of our own), their results read from BenchmarkDotNet's JSON report, and the history of runs. The
 /// user's code runs, so the shell asks for a trusted solution first. UI-agnostic; events arrive on any thread.
 /// </summary>
+/// <remarks>
+/// Given the IDE's build (the shell's), the project is built by it first and <c>dotnet run</c> gets <c>--no-build</c>,
+/// as <c>dotnet ef</c> and test runs do: the IDE's build waits for the build host's restore and holds off the restores
+/// asked for meanwhile, where <c>dotnet run</c>'s own restore ran at the same time as the restore after opening the
+/// solution and both wrote the project's <c>obj/*.nuget.g.props</c> ("already exists", the run failed: Linux CI).
+/// </remarks>
 public sealed class BenchmarkService
 {
     public const int MaxRuns = 200;
 
+    /// <summary>The configuration benchmarks build and run in (BenchmarkDotNet measures optimized code).</summary>
+    public const string Configuration = "Release";
+
     private readonly Func<string?> _folder;
     private readonly string _stateFolder;
+    private readonly Func<string, CancellationToken, Task<bool>>? _build;
     private readonly Lock _gate = new();
     private Dictionary<string, string> _projectOfFile = new(StringComparer.Ordinal);
     private IReadOnlyList<(string Project, string File, BenchmarkMethod Method)> _all = [];
@@ -386,10 +396,15 @@ public sealed class BenchmarkService
 
     /// <param name="solutionFolder">The open solution's folder (history and artifacts go to its <c>.codalus/benchmarks</c>).</param>
     /// <param name="stateFolder">Where they go without a solution.</param>
-    public BenchmarkService(Func<string?> solutionFolder, string stateFolder)
+    /// <param name="build">
+    /// Builds a project in <see cref="Configuration"/> through the IDE's build (the build host's, coordinated with its
+    /// restores) and tells whether it succeeded; null: <c>dotnet run</c> restores and builds on its own.
+    /// </param>
+    public BenchmarkService(Func<string?> solutionFolder, string stateFolder, Func<string, CancellationToken, Task<bool>>? build = null)
     {
         _folder = solutionFolder;
         _stateFolder = stateFolder;
+        _build = build;
     }
 
     /// <summary>The benchmarks found, or a run started or finished.</summary>
@@ -513,6 +528,18 @@ public sealed class BenchmarkService
         Changed?.Invoke(this, EventArgs.Empty);
         try
         {
+            if (_build is not null)
+            {
+                Output?.Invoke(this, $"Building {Path.GetFileNameWithoutExtension(request.Project)} ({Configuration})…");
+                var built = await _build(request.Project, running.Token).ConfigureAwait(false);
+                running.Token.ThrowIfCancellationRequested();
+                if (!built)
+                {
+                    Output?.Invoke(this, "The build failed; see the Build output and the Error List.");
+                    throw new InvalidOperationException($"The build of {Path.GetFileNameWithoutExtension(request.Project)} failed; see the Error List.");
+                }
+            }
+
             var at = DateTimeOffset.Now;
             var artifacts = Path.Combine(Root, "runs", at.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture));
             Directory.CreateDirectory(artifacts);
@@ -525,7 +552,7 @@ public sealed class BenchmarkService
                 CreateNoWindow = true,
                 WorkingDirectory = Path.GetDirectoryName(request.Project)!,
             };
-            foreach (var argument in Arguments(request, artifacts))
+            foreach (var argument in Arguments(request, artifacts, noBuild: _build is not null))
             {
                 start.ArgumentList.Add(argument);
             }
@@ -625,10 +652,19 @@ public sealed class BenchmarkService
         }
     }
 
-    /// <summary>The <c>dotnet run</c> arguments of a request (BenchmarkDotNet measures optimized code: Release).</summary>
-    public static IReadOnlyList<string> Arguments(BenchmarkRequest request, string artifacts)
+    /// <summary>
+    /// The <c>dotnet run</c> arguments of a request (BenchmarkDotNet measures optimized code: Release); with
+    /// <paramref name="noBuild"/>, the project was built already and <c>dotnet run</c> neither restores nor builds.
+    /// </summary>
+    public static IReadOnlyList<string> Arguments(BenchmarkRequest request, string artifacts, bool noBuild = false)
     {
-        List<string> arguments = ["run", "-c", "Release", "--project", request.Project, "--", "--filter", .. request.Filters, "--exporters", "json", "--artifacts", artifacts];
+        List<string> arguments = ["run", "-c", Configuration, "--project", request.Project];
+        if (noBuild)
+        {
+            arguments.Add("--no-build");
+        }
+
+        arguments.AddRange(["--", "--filter", .. request.Filters, "--exporters", "json", "--artifacts", artifacts]);
         if (request.Job is { Length: > 0 } job && job != "Default")
         {
             arguments.AddRange(["--job", job]);
