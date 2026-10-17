@@ -861,7 +861,7 @@ public sealed class DesignerSurface : Control
         var typeface = new Typeface(FontFamily.Default);
         var background = Resource("Shell.Panel", Brushes.White);
         var foreground = Resource("Shell.Foreground", Brushes.Black);
-        var muted = Resource("Shell.Muted", Brushes.Gray);
+        var muted = Resource("Shell.MutedForeground", Brushes.Gray);
         var typeHereText = Localizer.Get("msg.winFormsDesigner.typeHere", "Type Here");
         void TypeHere(DesignerTypeHere typeHere)
         {
