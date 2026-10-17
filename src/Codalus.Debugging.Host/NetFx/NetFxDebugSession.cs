@@ -50,6 +50,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private bool _breakOnUnhandled = true;
     private string[] _thrownTypes = [];
     private bool _thrownTypesNegated;
+    private ulong _lastException;
     private int _nextHandle = 1000;
     private int _nextBreakpoint = 1;
 
@@ -593,21 +594,29 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     internal static bool BreaksWhenThrown(string typeName, string[] types, bool negated) =>
         types.Length == 0 || (types.Contains(typeName, StringComparer.Ordinal) != negated);
 
+    /// <summary>
+    /// An exception notification. Thrown: with Just My Code, where it's thrown in the user's code (a first chance there,
+    /// or the runtime's user first chance when it reaches the user's code), once per exception; without, every first
+    /// chance. Unhandled: always, when asked.
+    /// </summary>
     private bool ExceptionThrown(ClrExceptionThrown thrown)
     {
         var value = SafeValue(thrown.Thread.CurrentException);
         var typeName = value is null ? "System.Exception" : Types.FullName(value.Type);
+        var thrownHere = _breakOnThrown && BreaksWhenThrown(typeName, _thrownTypes, _thrownTypesNegated);
         var breaks = thrown.Stage switch
         {
             ClrExceptionStage.Unhandled => _breakOnUnhandled,
-            ClrExceptionStage.FirstChance => _breakOnThrown && !_justMyCode && BreaksWhenThrown(typeName, _thrownTypes, _thrownTypesNegated),
-            ClrExceptionStage.UserFirstChance => _breakOnThrown && _justMyCode && BreaksWhenThrown(typeName, _thrownTypes, _thrownTypesNegated),
+            ClrExceptionStage.FirstChance => thrownHere && (!_justMyCode || IsUserCode(TopFrame(thrown.Thread))),
+            ClrExceptionStage.UserFirstChance => thrownHere && _justMyCode && (value is null || value.Address == 0 || value.Address != _lastException),
             _ => false,
         };
         if (!breaks)
         {
             return false;
         }
+
+        _lastException = value?.Address ?? 0;
 
         if (value is not null)
         {
@@ -724,6 +733,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         Stop("step", thread);
         return true;
     }
+
+    private bool IsUserCode(IClrFrame? frame) =>
+        frame?.Module is { } module && Types.Info(module) is { HasSymbols: true, IsOptimized: false } info && !info.IsNonUserCode(frame.MethodToken);
 
     private static bool IsFiltered(ClrMethodInfo method) =>
         method.IsSpecialName && (method.Name.StartsWith("get_", StringComparison.Ordinal) || method.Name.StartsWith("set_", StringComparison.Ordinal) || method.Name.StartsWith("op_", StringComparison.Ordinal));

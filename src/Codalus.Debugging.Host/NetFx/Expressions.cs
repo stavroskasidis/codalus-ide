@@ -235,9 +235,9 @@ internal static class ExpressionParser
     /// <summary>An integer literal's type, as C# picks it: the first of int, uint, long, ulong that holds it (narrowed by its suffix).</summary>
     private static object Integer(ulong value, string suffix, string text) => suffix switch
     {
-        "" => value <= int.MaxValue ? (int)value : value <= uint.MaxValue ? (uint)value : value <= long.MaxValue ? (long)value : value,
-        "u" => value <= uint.MaxValue ? (uint)value : value,
-        "l" => value <= long.MaxValue ? (long)value : value,
+        "" => value <= int.MaxValue ? (int)value : value <= uint.MaxValue ? (object)(uint)value : value <= long.MaxValue ? (object)(long)value : value,
+        "u" => value <= uint.MaxValue ? (object)(uint)value : value,
+        "l" => value <= long.MaxValue ? (object)(long)value : value,
         "ul" or "lu" => value,
         _ => throw new ExpressionException($"'{text}' isn't a number C# accepts."),
     };

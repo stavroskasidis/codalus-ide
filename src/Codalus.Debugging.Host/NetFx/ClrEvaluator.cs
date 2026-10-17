@@ -701,7 +701,7 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
                     "%" => dx % dy,
                     _ => throw new ExpressionException($"'{op}' can't be applied to floating-point numbers."),
                 };
-                return Promote(a, b) == "float" ? (float)result : result;
+                return Promote(a, b) == "float" ? (object)(float)result : result;
             case "ulong":
                 var ux = Convert.ToUInt64(a, CultureInfo.InvariantCulture);
                 var uy = Convert.ToUInt64(b, CultureInfo.InvariantCulture);

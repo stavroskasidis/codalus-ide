@@ -289,15 +289,25 @@ internal sealed class CorDebugTarget : IClrProcess
 
         Id = process.Id;
         _os = process;
+        try
+        {
+            _ = process.Handle;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+        }
     }
 
+    /// <summary>The process, with its handle open now (its exit code is read after it ends).</summary>
     private static System.Diagnostics.Process? TryGetProcess(int id)
     {
         try
         {
-            return System.Diagnostics.Process.GetProcessById(id);
+            var process = System.Diagnostics.Process.GetProcessById(id);
+            _ = process.Handle;
+            return process;
         }
-        catch (ArgumentException)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             return null;
         }
@@ -370,6 +380,15 @@ internal sealed class CorDebugTarget : IClrProcess
         {
             case CreateProcessCorDebugManagedCallbackEventArgs created:
                 _process ??= created.Process;
+                try
+                {
+                    // Debugger.Log (and Debug.WriteLine's default listener) reports to the debugger only when asked.
+                    created.Process.EnableLogMessages(true);
+                }
+                catch (COMException)
+                {
+                }
+
                 ContinueFromCallback(e);
                 return;
             case CreateAppDomainCorDebugManagedCallbackEventArgs domain:
