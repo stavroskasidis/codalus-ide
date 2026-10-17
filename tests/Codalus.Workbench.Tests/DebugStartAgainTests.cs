@@ -23,7 +23,57 @@ public sealed class DebugStartAgainTests : IDisposable
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token).Token;
 
-    public void Dispose() => File.Delete(_starts);
+    public void Dispose()
+    {
+        foreach (var program in Programs())
+        {
+            program.Kill();
+            program.Dispose();
+        }
+
+        File.Delete(_starts);
+        File.Delete(_starts + ".programs");
+    }
+
+    /// <summary>The ids of the "programs" the timed-out starts left (the scripted adapter lists them), with those still running.</summary>
+    private (int[] Ids, List<System.Diagnostics.Process> Running) LeftPrograms()
+    {
+        var ids = File.Exists(_starts + ".programs")
+            ? File.ReadAllLines(_starts + ".programs").Where(l => l.Length > 0).Select(l => int.Parse(l, System.Globalization.CultureInfo.InvariantCulture)).ToArray()
+            : [];
+        return (ids, Programs());
+    }
+
+    private List<System.Diagnostics.Process> Programs()
+    {
+        var running = new List<System.Diagnostics.Process>();
+        if (!File.Exists(_starts + ".programs"))
+        {
+            return running;
+        }
+
+        foreach (var line in File.ReadAllLines(_starts + ".programs").Where(l => l.Length > 0))
+        {
+            try
+            {
+                var process = System.Diagnostics.Process.GetProcessById(int.Parse(line, System.Globalization.CultureInfo.InvariantCulture));
+                if (process.WaitForExit(5000))
+                {
+                    process.Dispose();
+                }
+                else
+                {
+                    running.Add(process);
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Gone.
+            }
+        }
+
+        return running;
+    }
 
     private JsonElement Launch(int failStarts) =>
         JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["failStarts"] = failStarts, ["startsFile"] = _starts });
@@ -56,6 +106,12 @@ public sealed class DebugStartAgainTests : IDisposable
         Assert.Contains("starting again (3 of 3)", text, StringComparison.Ordinal);
         Assert.Contains("Hello from the scripted program", text, StringComparison.Ordinal);
         Assert.Equal(DebugState.Idle, debug.State);
+
+        // Each timed-out start's program went with its adapter (netcoredbg's disconnect doesn't end one it never saw
+        // the runtime of): none is left running.
+        var (ids, running) = LeftPrograms();
+        Assert.Equal(DebugService.StartupAttempts - 1, ids.Length);
+        Assert.True(running.Count == 0, "still running: " + string.Join(", ", running.Select(p => p.Id)));
     }
 
     [Fact]
@@ -71,6 +127,11 @@ public sealed class DebugStartAgainTests : IDisposable
         Assert.Equal(DebugService.StartupAttempts.ToString(System.Globalization.CultureInfo.InvariantCulture), File.ReadAllText(_starts));
         Assert.Equal(1, Volatile.Read(ref ended));
         Assert.Equal(DebugState.Idle, debug.State);
+
+        // The last start's program went too.
+        var (ids, running) = LeftPrograms();
+        Assert.Equal(DebugService.StartupAttempts, ids.Length);
+        Assert.True(running.Count == 0, "still running: " + string.Join(", ", running.Select(p => p.Id)));
     }
 
     [Fact]

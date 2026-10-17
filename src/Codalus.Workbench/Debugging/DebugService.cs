@@ -758,7 +758,11 @@ public sealed class DebugService : IAsyncDisposable
         {
             if (adapter is not null)
             {
-                await adapter.DisconnectAsync(terminateDebuggee: !attached, CancellationToken.None).ConfigureAwait(false);
+                if (attached || !IsStartupTimeout(ex) || !KillWithProgram(adapter))
+                {
+                    await adapter.DisconnectAsync(terminateDebuggee: !attached, CancellationToken.None).ConfigureAwait(false);
+                }
+
                 KillTerminalPrograms();
                 await EndAsync().ConfigureAwait(false);
             }
@@ -811,7 +815,11 @@ public sealed class DebugService : IAsyncDisposable
             }
         }
 
-        await adapter.DisconnectAsync(terminateDebuggee: !attached, CancellationToken.None).ConfigureAwait(false);
+        if (attached || !KillWithProgram(adapter))
+        {
+            await adapter.DisconnectAsync(terminateDebuggee: !attached, CancellationToken.None).ConfigureAwait(false);
+        }
+
         KillTerminalPrograms();
         await adapter.DisposeAsync().ConfigureAwait(false);
 
@@ -835,6 +843,25 @@ public sealed class DebugService : IAsyncDisposable
         Breakpoints.ClearStates();
         ProcessesChanged?.Invoke(this, EventArgs.Empty);
         ModulesChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Ends a timed-out launch's local adapter with the program it started, instead of a <c>disconnect</c>, and says
+    /// whether it did. netcoredbg's terminate only reaches a program whose runtime it saw start (its
+    /// <c>TerminateProcess</c> returns early while unattached), so each abandoned start left its program running; on
+    /// Windows one whose runtime had already signalled its start waits for the gone debugger forever (the runtime's
+    /// <c>NotifyDebuggerOfStartup</c>), and on a loaded machine the leftovers compete with the next start. The program is
+    /// the adapter's child: killing the adapter's process tree ends both.
+    /// </summary>
+    private static bool KillWithProgram(IDebugAdapter adapter)
+    {
+        if ((adapter is CompoundDebugAdapter compound ? compound.Primary : adapter) is DebugAdapter { Transport: null } local)
+        {
+            local.Kill();
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>Ends the session: terminates a launched program, detaches from an attached one.</summary>
