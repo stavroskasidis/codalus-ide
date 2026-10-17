@@ -108,7 +108,29 @@ public static partial class ProcessTree
             CloseHandle(snapshot);
         }
 
+        // An entry keeps its parent's id after the parent ended, and Windows reuses process ids: a process that started
+        // before this one is an earlier process's child that this one's id was given to (a build server whose build
+        // ended, say), not a program this one started. Process.Kill's tree walk checks the same.
+        if (children.Count > 0 && StartTime(processId) is { } started)
+        {
+            children.RemoveAll(id => StartTime(id) is { } childStarted && childStarted < started);
+        }
+
         return children;
+    }
+
+    /// <summary>When a process started; null when it ended or can't be read.</summary>
+    private static DateTime? StartTime(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return process.StartTime;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return null;
+        }
     }
 
     private static bool IsConsoleHost(string? image) =>
