@@ -85,7 +85,7 @@ public class ChromeTests
         Assert.Equal(["PART_PrimaryButton", "PART_SecondaryButton"], parts.Select(p => p.Name));
         static void SetPointerOver(Control control, bool value) => ((IPseudoClasses)control.Classes).Set(":pointerover", value);
         static IBrush? Brush(ContentPresenter presenter) => presenter.Background;
-        foreach (var theme in new[] { ThemeService.Blue, ThemeVariant.Light, ThemeVariant.Dark, ThemeService.HighContrast })
+        foreach (var theme in ThemeService.Themes.Select(t => t.Variant))
         {
             f.Window.RequestedThemeVariant = theme;
             ShellFixture.Pump();

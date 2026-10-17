@@ -146,6 +146,45 @@ internal sealed class StartTree(ICommands? commands, ISettings? settings = null,
 {
     private string T(string key, string english) => localize?.Invoke(key, english) ?? english;
 
+    /// <summary>
+    /// <c>workbench.colorTheme</c> as a line (M45): "Harbor, Follow System", "Ember, Dark"; the values from before the theme
+    /// families read as Classic. A plugin's theme shows its id.
+    /// </summary>
+    internal string ThemeLabel(string theme)
+    {
+        var (family, variant) = theme switch
+        {
+            "followSystem" => ("classic", (string?)null),
+            "blue" or "light" or "dark" or "highContrast" => ("classic", theme),
+            _ when theme.Split('.') is [var f, var v] => (f, v),
+            _ => (theme, null),
+        };
+        var familyName = family switch
+        {
+            "harbor" => "Harbor",
+            "graphite" => "Graphite",
+            "daylight" => "Daylight",
+            "ember" => "Ember",
+            "classic" => "Classic",
+            _ => null,
+        };
+        if (familyName is null)
+        {
+            return theme;
+        }
+
+        var mode = variant switch
+        {
+            null => T("start.followSystem", "Follow System"),
+            "light" => T("start.themeLight", "Light"),
+            "dark" => T("start.themeDark", "Dark"),
+            "highContrast" => T("start.themeHighContrast", "High Contrast"),
+            "blue" => T("start.themeBlue", "Blue"),
+            _ => variant,
+        };
+        return $"{familyName}, {mode}";
+    }
+
     private const string Repository = "https://github.com/stavroskasidis/codalus-ide";
 
     /// <summary>Tips: each runs what it describes.</summary>
@@ -221,10 +260,10 @@ internal sealed class StartTree(ICommands? commands, ISettings? settings = null,
     /// <summary>The first-run steps (M23a): the look, the keys, and what to bring from elsewhere.</summary>
     private StartNode GetStarted()
     {
-        var theme = settings?.GetValue(WelcomePlugin.ThemeSetting, "followSystem") ?? "followSystem";
+        var theme = settings?.GetValue(WelcomePlugin.ThemeSetting, "harbor") ?? "harbor";
         var scheme = settings?.GetValue(WelcomePlugin.KeyboardSchemeSetting, "default") ?? "default";
         return Group(T("start.getStarted", "Get Started"),
-            Action(T("start.chooseAColorTheme", "Choose a Color Theme"), "color-mode", "workbench.selectTheme") with { Description = theme == "followSystem" ? T("start.followSystem", "Follow System") : theme },
+            Action(T("start.chooseAColorTheme", "Choose a Color Theme"), "color-mode", "workbench.selectTheme") with { Description = ThemeLabel(theme) },
             Action(T("start.chooseAKeyboardScheme", "Choose a Keyboard Scheme"), "keyboard", "welcome.chooseKeyboardScheme") with
             {
                 Description = WelcomePlugin.KeyboardSchemes.FirstOrDefault(s => s.Id == scheme).Title ?? scheme,

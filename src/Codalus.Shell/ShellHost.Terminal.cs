@@ -2,6 +2,7 @@ using Avalonia.Media;
 using Codalus.Platform;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.Terminal;
+using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Settings;
@@ -37,7 +38,7 @@ public sealed partial class ShellHost
 
     public TerminalViewModel TerminalWindow { get; private set; } = null!;
 
-    private TerminalAppearance TerminalLook { get; } = new();
+    internal TerminalAppearance TerminalLook { get; } = new();
 
     /// <summary>Detects the shells (for the default-profile setting) before settings are read.</summary>
     private void InitializeTerminalProfiles()
@@ -78,12 +79,18 @@ public sealed partial class ShellHost
         var size = settings.GetDouble(TerminalFontSizeSetting, 0);
         TerminalLook.FontSize = size >= 6 ? Math.Min(size, 72) : EditorFont.Size;
         TerminalLook.CopyOnSelect = settings.GetBoolean(TerminalCopyOnSelectSetting, false);
-        TerminalLook.Palette = TerminalTheme.For(Theme.ActiveTheme ?? "dark");
+        // Classic keeps the terminal's own colors; a theme family's terminal takes its editor's background and text (M45).
+        TerminalLook.Palette = Theme.ActiveFamily is ThemeService.Classic or ""
+            ? TerminalTheme.For(Theme.ActiveTheme ?? "dark")
+            : TerminalTheme.For(Theme.ActiveTheme, ThemeColor("Shell.Editor.Foreground"), ThemeColor("Shell.Editor.Background"));
         Terminals.Scrollback = Math.Clamp(settings.GetInt32(TerminalScrollbackSetting, Codalus.Terminal.VirtualTerminal.DefaultScrollback), 0, 1_000_000);
         Terminals.ShellIntegration = settings.GetBoolean(TerminalShellIntegrationSetting, true);
         var skip = settings.GetStrings(TerminalCommandsToSkipShellSetting);
         _commandsToSkipShell = new HashSet<string>(skip.Count > 0 ? skip : DefaultCommandsToSkipShell, StringComparer.Ordinal);
     }
+
+    private static Color? ThemeColor(string key) =>
+        Avalonia.Application.Current is { } app && app.TryGetResource(key, app.ActualThemeVariant, out var value) && value is ISolidColorBrush brush ? brush.Color : null;
 
     /// <summary>Whether a key bound to <paramref name="command"/> stays with the IDE while a terminal has focus.</summary>
     public bool KeepsCommandFromTerminal(string command) => _commandsToSkipShell.Contains(command);

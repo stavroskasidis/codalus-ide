@@ -185,13 +185,13 @@ public class UxPassTests
     public async Task Icon_accents_are_colored_in_every_theme_but_High_Contrast()
     {
         await using var f = ShellFixture.Create();
-        foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark, ThemeService.Blue, ThemeService.HighContrast })
+        foreach (var variant in ThemeService.Themes.Select(t => t.Variant))
         {
             foreach (var family in new[] { "Run", "Stop", "Save", "Open", "Build", "Git", "Test", "Navigate" })
             {
                 Assert.True(Application.Current!.TryGetResource("Shell.Icon." + family, variant, out var value) && value is ISolidColorBrush, $"{variant} {family}");
                 var color = ((ISolidColorBrush)value!).Color;
-                if (variant == ThemeService.HighContrast)
+                if (ThemeService.IsHighContrast(variant))
                 {
                     Assert.Equal(Colors.White, color);
                 }

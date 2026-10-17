@@ -14,6 +14,31 @@
     <Style Selector="Border.setting.modified">
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Modified}" />
     </Style>
+    <!-- The color theme's family cards (M45): the chosen one outlined in the accent. -->
+    <Style Selector="ToggleButton.themeCard">
+      <Setter Property="Width" Value="196" />
+      <Setter Property="Margin" Value="0,0,8,8" />
+      <Setter Property="Padding" Value="8" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Top" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
+    </Style>
+    <Style Selector="ToggleButton.themeCard:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+    </Style>
+    <Style Selector="ToggleButton.themeCard:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+    </Style>
+    <Style Selector="ToggleButton.themeCard:checked TextBlock.muted">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+    </Style>
   </UserControl.Styles>
 
   <!-- Editors by setting type. -->
@@ -31,6 +56,91 @@
           </ComboBox.ItemTemplate>
         </ComboBox>
         <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding SelectedDescription}" />
+      </StackPanel>
+    </DataTemplate>
+    <!--
+      The color theme (M45): the families as cards, each with a picture drawn in its own tokens in the mode chosen, and
+      the mode. A plugin's theme comes from its own list.
+    -->
+    <DataTemplate DataType="vm:ColorThemeSettingViewModel">
+      <StackPanel Spacing="8" HorizontalAlignment="Left">
+        <ItemsControl ItemsSource="{Binding Families}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T settings.themeFamilies}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ThemeFamilyOption">
+              <ToggleButton Classes="themeCard" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                            ToolTip.Tip="{Binding Description}" AutomationProperties.Name="{Binding Title}">
+                <StackPanel Spacing="6">
+                  <Border Width="178" Height="100" HorizontalAlignment="Left" Background="{Binding Picture.Background}" BorderBrush="{Binding Picture.Border}" BorderThickness="1" ClipToBounds="True">
+                    <DockPanel>
+                      <Border DockPanel.Dock="Top" Height="12" Background="{Binding Picture.TitleBar}">
+                        <Border Width="44" Height="6" HorizontalAlignment="Center" Background="{Binding Picture.Search}" BorderBrush="{Binding Picture.SearchBorder}" BorderThickness="1" CornerRadius="2" />
+                      </Border>
+                      <Border DockPanel.Dock="Top" Height="9" Background="{Binding Picture.Toolbar}" BorderBrush="{Binding Picture.ToolbarBorder}" BorderThickness="0,0,0,1">
+                        <StackPanel Orientation="Horizontal" Spacing="3" Margin="4,0" VerticalAlignment="Center">
+                          <Border Width="5" Height="5" Background="{Binding Picture.IconBlue}" />
+                          <Border Width="5" Height="5" Background="{Binding Picture.IconFolder}" />
+                          <Border Width="14" Height="5" CornerRadius="2" Background="{Binding Picture.Start}">
+                            <Border Width="4" Height="4" HorizontalAlignment="Left" Margin="1,0" Background="{Binding Picture.StartIcon}" />
+                          </Border>
+                        </StackPanel>
+                      </Border>
+                      <Border DockPanel.Dock="Bottom" Height="7" Background="{Binding Picture.StatusBar}" />
+                      <Grid ColumnDefinitions="*,Auto,52" Margin="2">
+                        <Border Background="{Binding Picture.EditorBackground}" CornerRadius="{Binding Picture.PanelCorners}">
+                          <StackPanel Spacing="3" Margin="5,5,0,0">
+                            <Border Width="30" Height="3" HorizontalAlignment="Left" Background="{Binding Picture.Accent}" />
+                            <Border Width="54" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Picture.EditorForeground}" />
+                            <Border Width="40" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Picture.Link}" />
+                            <Border Height="5" Background="{Binding Picture.CurrentLine}">
+                              <Border Width="46" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Picture.Muted}" />
+                            </Border>
+                            <Border Width="26" Height="3" HorizontalAlignment="Left" Background="{Binding Picture.EditorForeground}" />
+                          </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" Width="{Binding Picture.Gutter}" Background="{Binding Picture.GutterBackground}" />
+                        <Border Grid.Column="2" Background="{Binding Picture.Panel}" CornerRadius="{Binding Picture.PanelCorners}">
+                          <StackPanel Spacing="3">
+                            <Border Height="7" Background="{Binding Picture.Caption}" />
+                            <Border Height="5" Margin="3,0" Background="{Binding Picture.Selection}" />
+                            <Border Width="30" Height="3" HorizontalAlignment="Left" Margin="5,0" Background="{Binding Picture.Foreground}" />
+                            <Border Width="24" Height="3" HorizontalAlignment="Left" Margin="5,0" Background="{Binding Picture.Foreground}" />
+                          </StackPanel>
+                        </Border>
+                      </Grid>
+                    </DockPanel>
+                  </Border>
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                  <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" />
+                </StackPanel>
+              </ToggleButton>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SelectedFamily, Converter={x:Static ObjectConverters.IsNotNull}}">
+          <TextBlock Text="{l:T settings.mode}" VerticalAlignment="Center" />
+          <ComboBox MinWidth="180" ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T settings.themeMode}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ThemeModeOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasPluginThemes}">
+          <TextBlock Text="{l:T settings.pluginTheme}" VerticalAlignment="Center" />
+          <ComboBox MinWidth="220" ItemsSource="{Binding PluginThemes}" SelectedItem="{Binding SelectedPluginTheme}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T settings.pluginColorTheme}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:EnumOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
       </StackPanel>
     </DataTemplate>
     <DataTemplate DataType="vm:TextSettingViewModel">

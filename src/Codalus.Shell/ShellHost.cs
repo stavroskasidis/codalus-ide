@@ -644,9 +644,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Color Theme (the quick pick): every family following the system and in each variant, Classic's four, then the
+    /// plugins' themes. Up and Down preview a theme; Enter saves it, Escape goes back (M45).
+    /// </summary>
     public async Task SelectThemeAsync()
     {
-        var current = Theme.Setting;
+        var current = ThemeService.Normalize(Theme.Setting);
         var choices = Theme.AllChoices;
         var items = choices.Select(c => new QuickPickItem(c.Title) { Tag = c.Id, Detail = c.Id == current ? "current" : null }).ToList();
         var active = Math.Max(0, choices.ToList().FindIndex(c => c.Id == current));
