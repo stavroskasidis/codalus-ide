@@ -148,7 +148,9 @@ public sealed class WindowsDesktopTests : IAsyncLifetime
             built = await _builds.BuildAsync(BuildTargets.Build, project, Timeout());
             Assert.False(built.Succeeded);
             var error = Assert.Single(_builds.Diagnostics, d => d.Code?.StartsWith("WMC", StringComparison.Ordinal) == true);
-            Assert.Equal(page, error.File, ignoreCase: true);
+            Assert.True(
+                string.Equals(page, error.File, StringComparison.OrdinalIgnoreCase),
+                $"The XAML compiler's error isn't in MainPage.xaml: {error.Code} at {error.File}({error.Line},{error.Column}): {error.Message}\n{_builds.Channel.GetText()}");
             var squiggles = XamlBuildDiagnostics.ByFile(_builds.Diagnostics);
             Assert.StartsWith("WMC", Assert.Single(Assert.Single(squiggles, f => string.Equals(f.Key, page, StringComparison.OrdinalIgnoreCase)).Value).Code, StringComparison.Ordinal);
             await File.WriteAllTextAsync(page, text, TestContext.Current.CancellationToken);
