@@ -24,7 +24,10 @@ public class SolutionStateTests
     {
         await f.Shell.OpenSolutionAsync(solution);
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.Projects.Count == 3, seconds: 90);
-        await ShellFixture.PumpUntil(() => f.Shell.Explorer.Rows.Any(r => r.Name == "App"));
+
+        // App's row with its folders: the row is there from the solution file ("loading…", nothing to expand), and the
+        // explorer shows the evaluated project on its next refresh, which can come after Projects counts it.
+        await ShellFixture.PumpUntil(() => Row(f, "App") is { HasChildren: true });
     }
 
     private static ExplorerRowViewModel? Row(ShellFixture f, string name) => f.Shell.Explorer.Rows.FirstOrDefault(r => r.Name == name);
