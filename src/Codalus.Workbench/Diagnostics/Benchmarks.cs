@@ -532,30 +532,34 @@ public sealed class BenchmarkService
 
             start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
             start.Environment["DOTNET_NOLOGO"] = "1";
+            NoLingeringBuildProcesses(start);
             Output?.Invoke(this, "> dotnet " + string.Join(' ', start.ArgumentList));
             int exit;
-            using (var process = Process.Start(start) ?? throw new InvalidOperationException("dotnet did not start."))
+            using (var process = new Process { StartInfo = start, EnableRaisingEvents = true })
             {
+                var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var outputEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var errorEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                process.Exited += (_, _) => exited.TrySetResult();
+                process.OutputDataReceived += (_, e) => OnLine(e.Data, outputEnded);
+                process.ErrorDataReceived += (_, e) => OnLine(e.Data, errorEnded);
+                if (!process.Start())
+                {
+                    throw new InvalidOperationException("dotnet did not start.");
+                }
+
                 process.StandardInput.Close(); // BenchmarkDotNet asks which benchmark to run when nothing matches
-                process.OutputDataReceived += (_, e) =>
-                {
-                    if (e.Data is { } line)
-                    {
-                        Output?.Invoke(this, line);
-                    }
-                };
-                process.ErrorDataReceived += (_, e) =>
-                {
-                    if (e.Data is { } line)
-                    {
-                        Output?.Invoke(this, line);
-                    }
-                };
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
+                if (process.HasExited)
+                {
+                    exited.TrySetResult();
+                }
+
                 try
                 {
-                    await process.WaitForExitAsync(running.Token).ConfigureAwait(false);
+                    // The process's exit, not the end of its output as WaitForExitAsync does (see DrainTimeout).
+                    await exited.Task.WaitAsync(running.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -563,6 +567,8 @@ public sealed class BenchmarkService
                     throw;
                 }
 
+                await Task.WhenAll(outputEnded.Task, errorEnded.Task).WaitAsync(DrainTimeout, running.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                running.Token.ThrowIfCancellationRequested();
                 exit = process.ExitCode;
             }
 
@@ -584,6 +590,40 @@ public sealed class BenchmarkService
 
     /// <summary>Stops the run in progress.</summary>
     public void Cancel() => _running?.Cancel();
+
+    /// <summary>
+    /// How long a run's output is still read after <c>dotnet</c> exits. A process its build starts (an MSBuild node or
+    /// server, the compiler server) can inherit the output pipes and keep them open for many minutes after the run ends,
+    /// and WaitForExitAsync waits for the end of the output too, so such a process held the run (as it held
+    /// <c>dotnet ef</c>, which the build host's DotnetProcess.DrainAsync bounds the same way). The build is asked to
+    /// leave no such process (<see cref="NoLingeringBuildProcesses"/>), and what arrives within this time of the exit is
+    /// all of the output.
+    /// </summary>
+    internal static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// The variables of a <c>dotnet</c> that builds: nothing it starts outlives it holding its pipes, and its build
+    /// doesn't go to MSBuild nodes or an MSBuild server another build left running (a Windows runner logged one that
+    /// didn't answer during the run that timed out), so each run builds alone.
+    /// </summary>
+    internal static void NoLingeringBuildProcesses(ProcessStartInfo start)
+    {
+        start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        start.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+        start.Environment["UseSharedCompilation"] = "false";
+    }
+
+    private void OnLine(string? line, TaskCompletionSource ended)
+    {
+        if (line is null)
+        {
+            ended.TrySetResult();
+        }
+        else
+        {
+            Output?.Invoke(this, line);
+        }
+    }
 
     /// <summary>The <c>dotnet run</c> arguments of a request (BenchmarkDotNet measures optimized code: Release).</summary>
     public static IReadOnlyList<string> Arguments(BenchmarkRequest request, string artifacts)
