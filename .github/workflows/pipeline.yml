@@ -97,9 +97,11 @@ jobs:
           fi
           publish=true
           [[ "$DRY_RUN" == "true" ]] && publish=false
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "previous=$previous" >> "$GITHUB_OUTPUT"
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "previous=$previous"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
           echo "Release ($KIND) $version from ${GITHUB_SHA::7} (previous: ${previous:-none}; publish: $publish)" >> "$GITHUB_STEP_SUMMARY"
       # The tag comes first, while the commit is still the branch's head: the workflow token may create a tag only on
       # a commit whose workflow files match the default branch's (otherwise it needs the workflows permission, which
@@ -316,7 +318,8 @@ jobs:
   # The benchmarks on GitHub-hosted runners, a gate of every stable release (and on a dispatch that asks). These are
   # GPU-less VMs, so the numbers are indicative only; authoritative numbers come from reference hardware
   # (docs/adr/0002-performance-budgets.md). On master the regression gate (`compare`) fails when a scenario regresses
-  # against the median of earlier runs on the same runner OS.
+  # against the median of earlier runs on the same runner OS: sizes against one run or a value accepted in
+  # benchmarks/accepted.json, latency and memory only against 3 runs on the same runner CPU (fewer: a warning).
   benchmarks:
     needs: plan
     if: needs.plan.outputs.kind == 'stable' || inputs.benchmarks
@@ -366,26 +369,49 @@ jobs:
       - name: Report
         if: always()
         run: dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release -- report --results ci-results --out ci-results/summary-${{ runner.os }}.md
-      - name: Download the baseline (last 10 successful runs)
+      - name: Download the baseline (the last 10 runs on master whose benchmarks passed on this OS)
         if: github.ref == 'refs/heads/master'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          BENCH_RUNNER: ${{ matrix.os }}
         run: |
           mkdir -p baseline
           # Earlier results: this pipeline's runs, and those of the workflows it replaced (benchmarks.yml, release.yml).
+          # A run counts when its benchmarks job for this OS passed, whatever its other jobs did (ADR 0002, amendment
+          # 2026-10-17). The job is "benchmarks (<os>)" here, "bench (<os>)" in benchmarks.yml and
+          # "benchmarks / bench (<os>)" in release.yml.
+          found=0
           for id in $(for workflow in pipeline.yml release.yml benchmarks.yml; do
-                        gh run list --workflow "$workflow" --branch master --status success --limit 10 --json databaseId -q '.[].databaseId' 2> /dev/null || true
-                      done | sort -rn | head -n 10); do
-            gh run download "$id" --name "bench-results-${RUNNER_OS}" --dir "baseline/$id" || echo "run $id has no results for ${RUNNER_OS}"
+                        gh run list --workflow "$workflow" --branch master --status completed --limit 30 --json databaseId -q '.[].databaseId' 2> /dev/null || true
+                      done | sort -rn); do
+            conclusion=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" \
+              | jq -rs --arg os "$BENCH_RUNNER" \
+                  '[.[].jobs[] | select((.name | split(" / ") | last) as $n | ($n == "benchmarks (\($os))" or $n == "bench (\($os))")) | .conclusion] | first // ""' || true)
+            if [[ "$conclusion" != "success" ]]; then
+              continue
+            fi
+            if gh run download "$id" --name "bench-results-${RUNNER_OS}" --dir "baseline/$id"; then
+              found=$((found + 1))
+              if (( found >= 10 )); then
+                break
+              fi
+            else
+              echo "run $id has no results for ${RUNNER_OS}"
+            fi
           done
+          echo "Baseline: $found run(s) whose benchmarks passed on ${RUNNER_OS}"
       - name: Regression gate (ADR 0002)
         if: github.ref == 'refs/heads/master'
         shell: bash
         run: |
+          # The table goes to the job summary whether the gate passes or not; warnings are in it too.
+          status=0
           dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release -- compare \
-            --results ci-results --baseline baseline --confirm --out ci-results/regression-${RUNNER_OS}.md
-          cat ci-results/regression-${RUNNER_OS}.md >> "$GITHUB_STEP_SUMMARY"
+            --results ci-results --baseline baseline --accepted benchmarks/accepted.json --confirm \
+            --out "ci-results/regression-${RUNNER_OS}.md" || status=$?
+          cat "ci-results/regression-${RUNNER_OS}.md" >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

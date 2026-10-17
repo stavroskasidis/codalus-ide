@@ -6,7 +6,7 @@ using Codalus.Benchmarks.Harness.Model;
 // codalus-bench run [--targets a,b] [--scenarios x,y] [--runs N] [--allow-input] [--results DIR]
 // codalus-bench report [--results DIR] [--out FILE]
 // codalus-bench check [--results DIR] [--budgets FILE]                  absolute budgets (reference hardware)
-// codalus-bench compare --baseline DIR [--results DIR] [--confirm]      regression gate (CI)
+// codalus-bench compare --baseline DIR [--results DIR] [--accepted FILE] [--confirm]   regression gate (CI)
 var repoRoot = FindRepoRoot();
 var command = args.FirstOrDefault() ?? "help";
 string? Option(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
@@ -109,8 +109,10 @@ switch (command)
         }
 
         var policy = Gates.Load(Option("--budgets") ?? Path.Combine(repoRoot, "benchmarks", "budgets.json")).Regression;
+        var accepted = Gates.LoadAccepted(Option("--accepted") ?? Path.Combine(repoRoot, "benchmarks", "accepted.json"));
         var baseline = Gates.LoadAll(baselineDir);
-        var findings = Gates.Compare(policy, Report.LoadLatest(resultsDir), baseline);
+        var latest = Report.LoadLatest(resultsDir);
+        var findings = Gates.Compare(policy, latest, baseline, accepted);
 
         // Runner noise: a regression only counts if a fresh run of the same scenario confirms it.
         if (args.Contains("--confirm") && findings.Any(f => f.Failed))
@@ -130,15 +132,38 @@ switch (command)
                 Directory.CreateDirectory(dir);
                 await File.WriteAllTextAsync(Path.Combine(dir, $"{scenario}-{confirmation.StartedAt:yyyyMMdd-HHmmss}-confirm.json"),
                     JsonSerializer.Serialize(confirmation, ResultsJsonContext.Default.ScenarioResult));
-                var second = Gates.Compare(policy, [confirmation], baseline);
+                // The rest of the run goes along: latency may be normalized by the reference application's time in it.
+                var second = Gates.Compare(policy, [confirmation, .. latest.Where(r => r.Target != targetName || r.Scenario != scenario)], baseline, accepted)
+                    .Where(s => s.Target == targetName && s.Scenario == scenario)
+                    .ToList();
                 findings = [.. findings.Select(f => f.Target == targetName && f.Scenario == scenario && f.Failed
-                    ? f with { Failed = second.Any(s => s.Metric == f.Metric && s.Stat == f.Stat && s.Failed), Rule = f.Rule + " (confirmation run)" }
+                    ? f with { Failed = second.Any(s => s.Os == f.Os && s.Metric == f.Metric && s.Stat == f.Stat && s.Failed), Rule = f.Rule + " (confirmation run)" }
                     : f)];
             }
         }
 
-        var report = Gates.Format("Regression gate", findings);
+        // Which runners were compared: latency and memory follow the CPU and its L3 cache.
+        var preamble = latest.Select(r => r.Machine.Os).Distinct().Order().Select(os =>
+        {
+            var machine = latest.First(r => r.Machine.Os == os).Machine;
+            var runs = baseline.Where(b => b.Machine.Os == os).GroupBy(b => b.Run ?? b.StartedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture))
+                .Select(g => g.First().Machine).ToList();
+            var sameCpu = runs.Count(m => Gates.SameCpu(m.Cpu, machine.Cpu));
+            return $"- {os}: {machine.Cpu.Trim()}, L3 {Codalus.Benchmarks.Harness.Platform.Machine.FormatCache(machine.L3CacheBytes)}; " +
+                   $"baseline: {runs.Count} run(s), {sameCpu} on this CPU; {accepted.Count(a => a.Os == os)} accepted value(s).";
+        }).ToList();
+        var report = Gates.Format("Regression gate", findings, preamble);
         Console.WriteLine(report);
+
+        // In GitHub Actions, warnings also show as annotations on the run.
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        {
+            foreach (var f in findings.Where(f => f.Warning))
+            {
+                Console.WriteLine($"::warning title=Benchmarks ({f.Os})::{f.Target} {f.Scenario} {f.Metric} {f.Stat}: {f.Value:F1} over {f.Limit:F1} ({f.Rule})");
+            }
+        }
+
         if (Option("--out") is { } output)
         {
             await File.WriteAllTextAsync(output, report);
@@ -148,7 +173,7 @@ switch (command)
     }
 
     default:
-        Console.WriteLine("usage: codalus-bench (list | run [--targets a,b] [--scenarios x,y] [--runs N] [--allow-input] [--results DIR] | report [--results DIR] [--out FILE] | check [--budgets FILE] | compare --baseline DIR [--confirm] [--out FILE])");
+        Console.WriteLine("usage: codalus-bench (list | run [--targets a,b] [--scenarios x,y] [--runs N] [--allow-input] [--results DIR] | report [--results DIR] [--out FILE] | check [--budgets FILE] | compare --baseline DIR [--accepted FILE] [--confirm] [--out FILE])");
         return command == "help" ? 0 : 2;
 }
 

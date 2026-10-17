@@ -1,0 +1,21 @@
+// Values the maintainer accepted for the regression gate (ADR 0002, amendment 2026-10-17). `codalus-bench compare`
+// drops the baseline runs from before an entry's date for its OS, target, scenario, metric and stat, and compares with
+// the entry's value until newer runs exist; their median takes over from then on. Each entry is a decision: change this
+// file in a pull request, with the reason, the date and where the value was measured (commit and CI run).
+//
+// Fields: os (linux, windows, macos), target, scenario, metric and stat (default p50) as the result files name them;
+// value in the metric's unit (sizes in MiB, as codalus-bench measures them); date (yyyy-MM-dd); reason; commit and run
+// (where it was measured); cpu (latency and memory only: the runner CPU the value holds for).
+{
+  "accepted": [
+    { "os": "linux", "target": "shell", "scenario": "binary-size", "metric": "lshost_mb", "value": 93.519, "date": "2026-10-17", "commit": "f72b78e8", "run": "38933321849", "reason": "M35 added Visual Basic's Roslyn assemblies to the language host (~18 MB ReadyToRun); .NET 11 RC2 adds 1.4 MB; accepted by the maintainer 2026-10-17, see docs/benchmarks/net11-release-gate.md" },
+    { "os": "linux", "target": "shell", "scenario": "binary-size", "metric": "markuphost_mb", "value": 3.576, "date": "2026-10-17", "commit": "f72b78e8", "run": "38933321849", "reason": "M35 added Visual Basic's Roslyn assemblies to the language host (~18 MB ReadyToRun); .NET 11 RC2 adds 1.4 MB; accepted by the maintainer 2026-10-17, see docs/benchmarks/net11-release-gate.md" },
+    { "os": "linux", "target": "shell", "scenario": "binary-size", "metric": "pluginhost_mb", "value": 4.139, "date": "2026-10-17", "commit": "f72b78e8", "run": "38933321849", "reason": "M35 added Visual Basic's Roslyn assemblies to the language host (~18 MB ReadyToRun); .NET 11 RC2 adds 1.4 MB; accepted by the maintainer 2026-10-17, see docs/benchmarks/net11-release-gate.md" },
+    { "os": "windows", "target": "shell", "scenario": "binary-size", "metric": "lshost_mb", "value": 92.645, "date": "2026-10-17", "commit": "f72b78e8", "run": "38933321849", "reason": "M35 added Visual Basic's Roslyn assemblies to the language host (~18 MB ReadyToRun); .NET 11 RC2 adds 1.4 MB; accepted by the maintainer 2026-10-17, see docs/benchmarks/net11-release-gate.md" },
+    { "os": "windows", "target": "shell", "scenario": "binary-size", "metric": "markuphost_mb", "value": 3.589, "date": "2026-10-17", "commit": "f72b78e8", "run": "38933321849", "reason": "M35 added Visual Basic's Roslyn assemblies to the language host (~18 MB ReadyToRun); .NET 11 RC2 adds 1.4 MB; accepted by the maintainer 2026-10-17, see docs/benchmarks/net11-release-gate.md" },
+    { "os": "windows", "target": "shell", "scenario": "binary-size", "metric": "pluginhost_mb", "value": 4.140, "date": "2026-10-17", "commit": "f72b78e8", "run": "38933321849", "reason": "M35 added Visual Basic's Roslyn assemblies to the language host (~18 MB ReadyToRun); .NET 11 RC2 adds 1.4 MB; accepted by the maintainer 2026-10-17, see docs/benchmarks/net11-release-gate.md" },
+    { "os": "macos", "target": "shell", "scenario": "binary-size", "metric": "lshost_mb", "value": 102.326, "date": "2026-10-17", "commit": "f72b78e8", "run": "38933321849", "reason": "M35 added Visual Basic's Roslyn assemblies to the language host (~18 MB ReadyToRun); .NET 11 RC2 adds 1.4 MB; accepted by the maintainer 2026-10-17, see docs/benchmarks/net11-release-gate.md" },
+    { "os": "macos", "target": "shell", "scenario": "binary-size", "metric": "markuphost_mb", "value": 4.046, "date": "2026-10-17", "commit": "f72b78e8", "run": "38933321849", "reason": "M35 added Visual Basic's Roslyn assemblies to the language host (~18 MB ReadyToRun); .NET 11 RC2 adds 1.4 MB; accepted by the maintainer 2026-10-17, see docs/benchmarks/net11-release-gate.md" },
+    { "os": "macos", "target": "shell", "scenario": "binary-size", "metric": "pluginhost_mb", "value": 4.679, "date": "2026-10-17", "commit": "f72b78e8", "run": "38933321849", "reason": "M35 added Visual Basic's Roslyn assemblies to the language host (~18 MB ReadyToRun); .NET 11 RC2 adds 1.4 MB; accepted by the maintainer 2026-10-17, see docs/benchmarks/net11-release-gate.md" }
+  ]
+}
