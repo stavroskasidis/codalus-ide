@@ -85,6 +85,10 @@ public sealed partial class ShellHost
         return true;
     }
 
+    /// <summary>Whether a project is a .NET Framework one (M43a): multiple startup projects run it without the debugger.</summary>
+    internal bool IsNetFrameworkProject(string project) =>
+        Solutions.Projects.TryGetValue(project, out var info) && NetFrameworkProjects.IsNetFramework(info);
+
     // ------------------------------------------------------------------ Convert to SDK-style
 
     /// <summary>
