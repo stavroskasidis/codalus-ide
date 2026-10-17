@@ -36,7 +36,13 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         File.WriteAllText(Path.Combine(_root, "Directory.Build.props"), "<Project />");
         Codalus.Tests.FixtureSdk.Pin(_root);
         File.WriteAllText(Path.Combine(_root, "Directory.Packages.props"), "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
-        _solutions = new SolutionService(() => BuildHostIntegrationTests.HostAssemblyPath);
+        // The fixture's batches of design-time builds always use worker nodes, as on a runner with more processors: the
+        // project loaded without its missing imports (LegacyWebApp) failed on one (PR #27's Linux CI).
+        _solutions = new SolutionService(() => BuildHostIntegrationTests.HostAssemblyPath, hostEnvironment: async (folder, cancellationToken) =>
+            new Dictionary<string, string>(await BuildHostRuntime.EnvironmentAsync(folder, cancellationToken) ?? new Dictionary<string, string>())
+            {
+                ["CODALUS_DESIGNTIME_NODES"] = "4",
+            });
         _solutions.Log += (_, line) => Console.Error.WriteLine("[host] " + line);
         _solutions.RestoreOutput += (_, line) => Console.Error.WriteLine("[restore] " + line);
         _builds = new BuildService(_solutions, _output);
@@ -422,7 +428,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.Contains("WebApplications/Microsoft.WebApplication.targets", web.CannotBuildReason, StringComparison.Ordinal);
         Assert.Contains("Visual Studio's is proprietary", web.CannotBuildReason, StringComparison.Ordinal);
         await WaitUntilAsync(() => _solutions.CompilerInputs.ContainsKey(Project("LegacyWebApp")), DesignTimeState);
-        Assert.Equal(CompilerInputStates.Ok, _solutions.CompilerInputs[Project("LegacyWebApp")].State);
+        Assert.True(_solutions.CompilerInputs[Project("LegacyWebApp")].State == CompilerInputStates.Ok, DesignTimeState());
         AssertReference(_solutions.CompilerInputs[Project("LegacyWebApp")].Arguments, "System.Web.dll");
 
         // The solution builds without it, saying so.
