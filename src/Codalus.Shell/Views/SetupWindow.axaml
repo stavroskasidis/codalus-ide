@@ -119,7 +119,7 @@
               <Border Classes="step" Classes.current="{Binding IsCurrent}" AutomationProperties.Name="{Binding AccessibleName}">
                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                   <Border Classes="stepDot">
-                    <TextBlock Text="{Binding Number}" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Number}" FontSize="{DynamicResource Shell.FontSize.Body}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                   </Border>
                   <TextBlock Classes="stepTitle" Text="{Binding Title}" VerticalAlignment="Center" />
                 </StackPanel>
@@ -186,7 +186,7 @@
                         <views:ThemePictureView DataContext="{Binding Picture}" />
                       </Viewbox>
                       <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{DynamicResource Shell.FontSize.Heading}" VerticalAlignment="Center" />
                         <controls:Icon Grid.Column="1" Kind="check-circle" IsVisible="{Binding IsSelected}" />
                       </Grid>
                       <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" />
@@ -209,7 +209,7 @@
                   <ToggleButton Classes="setupCard" HorizontalAlignment="Stretch" Margin="0,0,0,10" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
                                 AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
-                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" />
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{DynamicResource Shell.FontSize.Heading}" />
                       <controls:Icon Grid.Column="1" Grid.RowSpan="2" Kind="check-circle" IsVisible="{Binding IsSelected}" VerticalAlignment="Center" />
                       <TextBlock Grid.Row="1" Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" Margin="0,4,0,0" />
                     </Grid>

@@ -912,7 +912,7 @@ public sealed class CodeSearchViewModel : ObservableObject, IDisposable
         {
             return IsSearching
                 ? Localizer.Get("msg.codeSearch.searching", "Searching…")
-                : Localizer.Format("msg.codeSearch.noResults", "No results for '{0}'.", query.Text);
+                : Localizer.Format("msg.codeSearch.noResults", "No results for '{0}'. Try fewer characters, all kinds (Alt+A), or a wider scope.", query.Text);
         }
 
         return count == 1 ? Localizer.Get("msg.codeSearch.oneResult", "1 result") : Localizer.Format("msg.codeSearch.results", "{0} results", count);

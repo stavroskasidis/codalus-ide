@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Input;
 using Avalonia;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Wcf;
 
 namespace Codalus.Shell.ViewModels;
@@ -48,7 +49,10 @@ public sealed class SoapFieldRow : ObservableObject
 
     public IReadOnlyList<string> Choices => Field.Choices;
 
-    public string Placeholder => Field.Truncated ? "(nested too deep: edit the XML)" : Field.BuiltIn ?? string.Empty;
+    public string Placeholder => Field.Truncated ? Localizer.Get("msg.wcf.nestedTooDeep", "(nested too deep: edit the XML)") : Field.BuiltIn ?? string.Empty;
+
+    /// <summary>The field's name and type, for its trimmed name (M34g).</summary>
+    public string ToolTip => $"{Name}: {Type}";
 
     public string? Value
     {
@@ -89,6 +93,9 @@ public sealed record WcfEndpointRow(WsdlEndpoint Endpoint)
     public string Label => $"{Endpoint.Name} ({Endpoint.BindingLabel})";
 
     public string Address => Endpoint.Address;
+
+    /// <summary>The whole name and address: the drop-down trims both (M34g).</summary>
+    public string ToolTip => $"{Label}\n{Address}";
 }
 
 /// <summary>
@@ -130,7 +137,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         ResetCommand = new RelayCommand(() => SelectedOperation = _operation is { } op ? Reselect(op) : null);
     }
 
-    public string Title => "WCF Test Client";
+    public string Title => Localizer.Get("msg.wcf.title", "WCF Test Client");
 
     /// <summary>The editor's font, for the XML.</summary>
     public EditorFont? Font { get; init; }
@@ -207,6 +214,9 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
     public ObservableCollection<SoapFieldRow> Rows { get; } = [];
 
     public bool HasNoParameters => _request is not null && Rows.Count == 0;
+
+    /// <summary>No operation yet: the request area says how to get one (M34g: it was blank).</summary>
+    public bool HasNoRequest => _request is null;
 
     /// <summary>The request's envelope: generated from the form, or edited (then sent as it is).</summary>
     public string RequestXml
@@ -311,23 +321,23 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
     {
         if (Address.Trim().Length == 0)
         {
-            Error = "Enter the service's metadata address (…/Service.svc or …?wsdl) or choose a WSDL file.";
+            Error = Localizer.Get("msg.wcf.noAddress", "Enter the service's metadata address (…/Service.svc or …?wsdl) or choose a WSDL file.");
             return;
         }
 
         Error = null;
         IsBusy = true;
-        Status = "Reading the metadata…";
+        Status = Localizer.Get("msg.wcf.reading", "Reading the metadata…");
         try
         {
             using var limit = new CancellationTokenSource(TimeSpan.FromMinutes(2));
             var document = await _client.LoadAsync(Address, limit.Token).ConfigureAwait(true);
             SetDocument(document);
-            Status = $"{document.Endpoints.Count} endpoint{(document.Endpoints.Count == 1 ? "" : "s")}, {document.Endpoints.SelectMany(e => e.Operations).Select(o => o.Name).Distinct(StringComparer.Ordinal).Count()} operations, from {document.DocumentCount} document{(document.DocumentCount == 1 ? "" : "s")}.";
+            Status = Localizer.Format("msg.wcf.loaded", "Endpoints: {0}. Operations: {1}. Documents read: {2}.", document.Endpoints.Count, document.Endpoints.SelectMany(e => e.Operations).Select(o => o.Name).Distinct(StringComparer.Ordinal).Count(), document.DocumentCount);
         }
         catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or IOException or UnauthorizedAccessException or OperationCanceledException or UriFormatException)
         {
-            Error = ex is OperationCanceledException ? "The service didn't answer within 2 minutes." : ex.Message;
+            Error = ex is OperationCanceledException ? Localizer.Get("msg.wcf.noAnswer", "The service didn't answer within 2 minutes.") : ex.Message;
             Status = null;
         }
         finally
@@ -408,6 +418,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         }
 
         OnPropertyChanged(nameof(HasNoParameters));
+        OnPropertyChanged(nameof(HasNoRequest));
     }
 
     private void AddRows(SoapField field, int depth, SoapField? repeatedParent)
@@ -454,7 +465,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
     {
         if (_request is not { } request)
         {
-            Error = "Load the service's metadata and choose an operation.";
+            Error = Localizer.Get("msg.wcf.noOperation", "Load the service's metadata and choose an operation.");
             return;
         }
 
@@ -483,7 +494,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
 
         Error = null;
         IsBusy = true;
-        Status = $"Calling {request.Operation.Name}…";
+        Status = Localizer.Format("msg.wcf.calling", "Calling {0}…", request.Operation.Name);
         _sending?.Dispose();
         _sending = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         try
@@ -493,7 +504,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or OperationCanceledException or IOException)
         {
-            Error = ex is OperationCanceledException ? "Canceled, or no answer within 2 minutes." : ex.Message;
+            Error = ex is OperationCanceledException ? Localizer.Get("msg.wcf.canceled", "Canceled, or no answer within 2 minutes.") : ex.Message;
             Status = null;
         }
         finally
@@ -506,7 +517,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
     {
         Error = null;
         IsBusy = true;
-        Status = "Looking for running CoreWCF services…";
+        Status = Localizer.Get("msg.wcf.discovering", "Looking for running CoreWCF services…");
         try
         {
             var found = await _discover().ConfigureAwait(true);
@@ -517,7 +528,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
             }
 
             OnPropertyChanged(nameof(HasDiscovered));
-            Status = found.Count == 0 ? "No running CoreWCF service publishes metadata. Run the service (Ctrl+F5), with ServiceMetadataBehavior.HttpGetEnabled." : null;
+            Status = found.Count == 0 ? Localizer.Get("msg.wcf.noneRunning", "No running CoreWCF service publishes metadata. Run the service (Ctrl+F5), with ServiceMetadataBehavior.HttpGetEnabled.") : null;
             if (found.Count > 0)
             {
                 SelectedDiscovered = found[0];

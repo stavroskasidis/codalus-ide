@@ -74,7 +74,7 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:ThemeFamilyOption">
               <ToggleButton Classes="themeCard" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
-                            ToolTip.Tip="{Binding Description}" AutomationProperties.Name="{Binding Title}">
+                            ToolTip.Tip="{Binding Description}" AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
                 <StackPanel Spacing="6">
                   <views:ThemePictureView DataContext="{Binding Picture}" HorizontalAlignment="Left" />
                   <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
@@ -137,7 +137,7 @@
           <ToggleButton Content="{l:T settings.workspace}" IsChecked="{Binding IsWorkspaceScope}" AutomationProperties.Name="{l:T settings.workspaceSettings}" />
         </StackPanel>
         <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding FileLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FileLabel}" />
-        <TextBlock Foreground="{DynamicResource Shell.Warning}" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
+        <TextBlock Foreground="{DynamicResource Shell.Warning.Foreground}" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
       </StackPanel>
     </Border>
     <Grid ColumnDefinitions="210,*">
@@ -182,7 +182,7 @@
                     <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
                     <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="{l:T settings.thisSettingCanOnlyBeChanged}" IsVisible="{Binding IsUserOnlyHere}" />
                     <ContentControl Content="{Binding}" Margin="0,4,0,0" />
-                    <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+                    <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
                     <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Key}" />
                   </StackPanel>
                 </Border>

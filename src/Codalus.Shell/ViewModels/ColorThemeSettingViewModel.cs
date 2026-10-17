@@ -6,6 +6,7 @@ using Avalonia.Styling;
 using Codalus.Shell.Docking;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.Theming;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Settings;
 
 namespace Codalus.Shell.ViewModels;
@@ -97,7 +98,16 @@ public sealed class ThemeFamilyOption : ObservableObject
 
     public string Title => Family.Title;
 
-    public string Description => Family.Description;
+    /// <summary>The card's line, translated (M34g; the setup's cards were, Options' weren't).</summary>
+    public string Description => Family.Id switch
+    {
+        ThemeService.Harbor => Localizer.Get("msg.colorTheme.harbor", "The closest to the classic IDE: a deep navy title bar, docked tool windows with gutters, a cobalt accent."),
+        ThemeService.Graphite => Localizer.Get("msg.colorTheme.graphite", "Compact and dense, for more code on the screen: hairlines instead of gutters, a teal accent."),
+        ThemeService.Daylight => Localizer.Get("msg.colorTheme.daylight", "Flat and airy: rounded tabs, the Start button filled with a violet accent."),
+        ThemeService.Ember => Localizer.Get("msg.colorTheme.ember", "Warm, with floating panels: rounded cards on the window's background, a copper accent."),
+        ThemeService.Classic => Localizer.Get("msg.colorTheme.classic", "The themes from before 0.3: Blue, Light, Dark and High Contrast."),
+        _ => Family.Description,
+    };
 
     /// <summary>The variant the card's picture shows.</summary>
     public ThemeVariant PreviewVariant
@@ -236,10 +246,20 @@ public sealed class ColorThemeSettingViewModel : SettingItemViewModel
         }
 
         OnPropertyChanged(nameof(SelectedFamily));
-        Modes = family is null ? [] : [new ThemeModeOption(null, "Follow System"), .. family.Family.Variants.Select(v => new ThemeModeOption(v, ThemeService.VariantTitle(v)))];
+        Modes = family is null ? [] : [new ThemeModeOption(null, Localizer.Get("msg.colorTheme.followSystem", "Follow System")), .. family.Family.Variants.Select(v => new ThemeModeOption(v, ModeTitle(v)))];
         SetSilently(ref _selectedMode, Modes.FirstOrDefault(m => m.Variant == parsed?.Variant), nameof(SelectedMode));
         SetSilently(ref _selectedPluginTheme, parsed is null ? PluginThemes.FirstOrDefault(p => p.Value == setting) : null, nameof(SelectedPluginTheme));
     }
+
+    /// <summary>A mode's title, translated (the setting's own names, <see cref="ThemeService.VariantTitle"/>, stay English).</summary>
+    private static string ModeTitle(string variant) => variant switch
+    {
+        "light" => Localizer.Get("msg.colorTheme.light", "Light"),
+        "dark" => Localizer.Get("msg.colorTheme.dark", "Dark"),
+        "highContrast" => Localizer.Get("msg.colorTheme.highContrast", "High Contrast"),
+        "blue" => Localizer.Get("msg.colorTheme.blue", "Blue"),
+        _ => ThemeService.VariantTitle(variant),
+    };
 
     private void SetSilently<T>(ref T field, T value, string property)
     {

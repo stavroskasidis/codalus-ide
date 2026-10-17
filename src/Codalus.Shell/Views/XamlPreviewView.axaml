@@ -26,7 +26,7 @@
       <ComboBox Classes="toolbar" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}" IsVisible="{Binding SupportsThemes}" ToolTip.Tip="{l:T xamlPreview.themeVariant}" AutomationProperties.Name="{l:T xamlPreview.themeVariant}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Margin="8,0,8,4" Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
-    <Border DockPanel.Dock="Top" IsVisible="{Binding HasError}" Margin="8,0,8,6" Padding="8,6" BorderThickness="1" BorderBrush="{DynamicResource Shell.Error}" CornerRadius="2">
+    <Border DockPanel.Dock="Top" IsVisible="{Binding HasError}" Margin="8,0,8,6" Padding="8,6" BorderThickness="1" BorderBrush="{DynamicResource Shell.Error}" CornerRadius="{DynamicResource Shell.CornerRadius}">
       <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
     </Border>
     <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" AllowAutoHide="False">

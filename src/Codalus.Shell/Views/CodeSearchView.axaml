@@ -131,6 +131,8 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+        <!-- Nothing to list (M34g): what to type, or what to try when nothing matched, where the results would be. -->
+        <TextBlock Classes="emptyState" Text="{Binding Status}" IsVisible="{Binding IsEmpty}" IsHitTestVisible="False" />
         <GridSplitter x:Name="PreviewSplitter" Grid.Row="1" Height="4" ResizeDirection="Rows" Background="{DynamicResource Shell.Border}" IsVisible="{Binding HasPreview}"
                       AutomationProperties.Name="{l:T codeSearch.previewSize}" />
         <DockPanel x:Name="PreviewPane" Grid.Row="2" IsVisible="{Binding HasPreview}" MinHeight="80">
