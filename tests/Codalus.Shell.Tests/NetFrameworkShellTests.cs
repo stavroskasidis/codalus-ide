@@ -22,7 +22,7 @@ public sealed class NetFrameworkShellTests
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "NetFramework.slnx"));
         var legacy = Project(folder, "LegacyApp");
         await ShellFixture.PumpUntil(
-            () => f.Shell.Solutions.Projects.Count == 6 && f.Shell.Solutions.Progress is { Completed: true }
+            () => f.Shell.Solutions.Projects.Count == 8 && f.Shell.Solutions.Progress is { Completed: true }
                   && f.Shell.Solutions.Projects.TryGetValue(legacy, out var info) && info.References.Any(r => r.Kind == ReferenceKinds.Package && r.Resolved),
             seconds: 300);
         return (f, folder);

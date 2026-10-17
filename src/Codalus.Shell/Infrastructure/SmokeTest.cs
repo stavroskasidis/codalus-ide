@@ -2046,7 +2046,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// .NET Framework in the shipped app (M43a, ADR 0075): samples/NetFramework opens, the old-style project gets its
     /// packages.config package and reference assemblies, the project that needs Visual Studio's targets says why it
     /// can't build (<c>netfx-projects.png</c>), and the SDK-style net48 console app builds. On Windows Start Without
-    /// Debugging runs its .exe on the desktop CLR and its output comes back; elsewhere starting it says Windows only.
+    /// Debugging runs its .exe on the desktop CLR and its output comes back, and F5 debugs it there to a breakpoint (M43b,
+    /// ADR 0076: <c>netfx-debugging.png</c>); elsewhere starting it says Windows only.
     /// </summary>
     private async Task NetFrameworkStepAsync()
     {
@@ -2062,7 +2063,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var web = Path.Combine(target, "LegacyWebApp", "LegacyWebApp.csproj");
         var app = Path.Combine(target, "ConsoleApp", "ConsoleApp.csproj");
         await WaitAsync(
-            () => shell.Solutions.Projects.Count == 6 && shell.Solutions.Progress is { Completed: true }
+            () => shell.Solutions.Projects.Count == 8 && shell.Solutions.Progress is { Completed: true }
                   && shell.Solutions.Projects.TryGetValue(legacy, out var info) && info.References.Any(r => r.Kind == Codalus.Projects.Protocol.ReferenceKinds.Package && r.Resolved),
             "the NetFramework solution is open, LegacyApp's packages.config package restored", 600).ConfigureAwait(true);
         Check(shell.Solutions.Projects[legacy].IsNonSdkStyle, "LegacyApp is a non-SDK-style project");
@@ -2089,6 +2090,21 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(Output().Contains("has exited with code 0 (0x0)", StringComparison.Ordinal), "it exits with code 0: " + Output());
         Check(Output().Contains("Runtime: .NET Framework 4.", StringComparison.Ordinal), "its output names the desktop CLR: " + Output());
         Check(Output().Contains("Hello from .NET Framework, Codalus!", StringComparison.Ordinal), "its output comes back");
+
+        // F5: the desktop-CLR debugger (codalus-debughost --netfx-dap) stops at a breakpoint in Main and evaluates.
+        var source = Path.Combine(target, "ConsoleApp", "Program.cs");
+        var line = Array.FindIndex(File.ReadAllLines(source), l => l.Contains("Console.WriteLine(greeter.Greet())", StringComparison.Ordinal)) + 1;
+        shell.Debugger.Breakpoints.Set(new Codalus.Workbench.Debugging.BreakpointSpec(source, line));
+        await shell.StartDebuggingAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == Codalus.Workbench.Debugging.DebugState.Stopped, () => "F5 stops ConsoleApp (net48) at its breakpoint: " + shell.DebugLog.GetText(), 300).ConfigureAwait(true);
+        Check(shell.Debugger.SelectedFrame is { Name: "ConsoleApp.Program.Main" } frame && frame.Line == line, $"it stopped in Main on line {line}: {shell.Debugger.SelectedFrame?.Name} {shell.Debugger.SelectedFrame?.Line}");
+        var greeting = await shell.Debugger.EvaluateAsync("greeter.Greet()", "watch", CancellationToken.None).ConfigureAwait(true);
+        Check(greeting.Result == "\"Hello from .NET Framework, Codalus!\"", "greeter.Greet() evaluates through func-eval: " + greeting.Result);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("netfx-debugging.png");
+        shell.Debugger.Breakpoints.Clear();
+        await shell.Debugger.StopAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == Codalus.Workbench.Debugging.DebugState.Idle, "the debug session ends", 60).ConfigureAwait(true);
     }
 
     /// <summary>
