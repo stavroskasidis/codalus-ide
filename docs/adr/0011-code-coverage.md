@@ -42,6 +42,7 @@ The roadmap lists `Microsoft.CodeCoverage` and `Microsoft.Testing.Extensions.Cod
 - **MTP:**
   - If the project references `coverlet.mtp`, the app gets `--coverlet --coverlet-output-format cobertura --coverlet-output <file>`.
   - Otherwise the app runs under the bundled `coverlet.console`: `<test app dll> --target <dotnet|apphost> --targetargs "<server-mode arguments>" --format cobertura --output <file>`. The server-mode connection works as in a normal run.
+  - After a run the app gets 5 s to exit before its process tree is stopped; once `coverlet.console` says the app has exited ("Calculating coverage result..."), it may finish reading the hits and writing the report however long that takes, unless the run is cancelled (amended in M34g's CI fixes; a loaded Windows runner lost the report).
 - **Filters:**
   - By default only the solution's own projects are instrumented. Test projects and generated code (`[GeneratedCode]`, `[CompilerGenerated]`, `*.g.cs`) are excluded.
   - `coverage.include` and `coverage.exclude` take Coverlet filter expressions (`[Assembly]Namespace.Type`).

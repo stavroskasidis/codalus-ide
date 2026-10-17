@@ -32,7 +32,7 @@ public sealed class DotNetTestCoverageTests(DotNetTestFixture fixture)
             var cls = fixture.Node(project, project, "CalculatorTests");
             Assert.True(await fixture.Tests.RunAsync(TestRunKind.Coverage, [cls.Key], Timeout()), fixture.Log);
 
-            var runOutput = string.Join("\n", fixture.Tests.Runs.Select(r => r.Output));
+            var runOutput = fixture.Tests.Runs[^1].Output; // this run's (the fixture keeps the earlier cases' runs too)
             Assert.True(reports.Count(r => r.Files.Any(f => f.Uri.EndsWith("/Calculator.cs", StringComparison.OrdinalIgnoreCase))) == 1, $"{reports.Count} coverage reports. Run output: {runOutput} Log: {fixture.Log}");
             var report = reports.Single(r => r.Files.Any(f => f.Uri.EndsWith("/Calculator.cs", StringComparison.OrdinalIgnoreCase)));
             var file = report.Files.Single(f => f.Uri.EndsWith("/Calculator.cs", StringComparison.OrdinalIgnoreCase));
