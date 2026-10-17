@@ -78,46 +78,44 @@ namespace CpuBound
     {
         public static long Rounds;
 
-        // A round works 25 ms by the clock, then sleeps 125: the thread works a sixth of the time, well behind the main
-        // thread, so IsPrime keeps the most self time and its [hot] line the most of the file's (Mix had 6 to 9% of a
-        // trace's samples here, IsPrime 85 to 90%). The work outlasts a timer tick (15.6 ms on Windows), so it spans one
-        // wherever it starts. The sampler sleeps a millisecond between samples, but a process that doesn't get the 1 ms
-        // timer period it asks for sleeps to the next tick: a round of 2 ms between sleeps of 15 ms then woke on the same
-        // tick as the sampler, which found it still leaving Thread.Sleep and didn't sample again before it slept once
-        // more, so Mix could get no samples at all (twice on PR #25's Windows runs, while IsPrime had plenty). The clock
-        // is read every 50 calls (about 0.3 ms), so the samples a late stop moves to the GC poll after the read (see
-        // da35619d) stay few.
+        // A round is one call of Mix that works about 50 ms, then a sleep of 350: the thread works an eighth of the
+        // time, well behind the main thread, so IsPrime keeps the most self time and its [hot] line the most of the
+        // file's.
+        //
+        // The work has no safe point but Mix's loop itself, as the main thread's long batches (see BatchLimit): the
+        // sampler stops each thread for every sample, and a thread it can't interrupt at once stops at its next GC poll
+        // (or at Thread.Sleep). Where the interruption comes milliseconds late (some Windows runners), every sample of
+        // a thread that polls more often than that lands at the poll. Run once read Stopwatch's clock every 50 calls of
+        // Mix (0.35 ms) to end a round: that read is a call without the GC transition, with a poll after it, so the
+        // hashing thread's samples all went to Stopwatch.get_ElapsedMilliseconds and Thread.Sleep, and Mix had none (PR
+        // #23's and #25's Windows runs, while IsPrime had plenty). Even on Linux, where a thread is interrupted within
+        // microseconds, the poll took a sixth to a quarter of the thread's samples; with the runtime's interruption off
+        // (DOTNET_INTERNAL_ThreadSuspendInjection=0) it took all of them. Now the clock is read only around the call,
+        // to size the next one, so a stop that comes up to tens of milliseconds late still lands in Mix.
         public static void Run(DateTime until)
         {
             var value = 17UL;
-            var round = new Stopwatch();
+            var rounds = 1_000_000;
+            var call = new Stopwatch();
             while (DateTime.UtcNow < until)
             {
-                round.Restart();
-                while (round.ElapsedMilliseconds < 25)
-                {
-                    for (var i = 0; i < 50; i++)
-                    {
-                        value = Mix(value);
-                    }
-                }
-
+                call.Restart();
+                value = Mix(value, rounds);
+                rounds = (int)Math.Clamp(rounds * 50.0 / Math.Max(call.Elapsed.TotalMilliseconds, 0.1), 10_000, 1_000_000_000);
                 Interlocked.Increment(ref Rounds);
-                Thread.Sleep(125);
+                Thread.Sleep(350);
             }
 
             GC.KeepAlive(value);
         }
 
-        // The rounds loop inside, without calls, as in Primes.IsPrime: the JIT makes such a method fully interruptible,
-        // so a sample stops the thread in it. A one-round Mix had no safe point of its own (a leaf called from Run's
-        // loop): where the interruption comes late (some Windows runners), the thread stopped at the call's return or at
-        // Thread.Sleep, Run's frames, and Mix got no samples at all. A call takes about 7 µs in the Debug build the
-        // tests profile.
+        // A loop without calls, as in Primes.IsPrime: no GC poll, and the JIT makes such a method fully interruptible, so
+        // a sample stops the thread in it. NoInlining keeps it a frame of its own in an optimized build too. A round
+        // takes about 7 ns in the Debug build the tests profile.
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        private static ulong Mix(ulong value)
+        private static ulong Mix(ulong value, int rounds)
         {
-            for (var round = 0; round < 1_000; round++)
+            for (var round = 0; round < rounds; round++)
             {
                 value ^= value >> 33;
                 value *= 0xff51afd7ed558ccdUL;
