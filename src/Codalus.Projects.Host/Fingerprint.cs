@@ -43,7 +43,8 @@ internal sealed class Fingerprint
         }
     }
 
-    public string Finish(IEnumerable<string> imports, string? assetsFile)
+    /// <param name="restored">Further files a restore changes (M43a: a non-SDK-style project's <c>packages.config</c> and its references' hint paths).</param>
+    public string Finish(IEnumerable<string> imports, string? assetsFile, IEnumerable<string>? restored = null)
     {
         foreach (var file in imports.Order(StringComparer.OrdinalIgnoreCase))
         {
@@ -51,6 +52,11 @@ internal sealed class Fingerprint
         }
 
         Stamp(assetsFile);
+        foreach (var file in (restored ?? []).Order(StringComparer.OrdinalIgnoreCase))
+        {
+            Stamp(file);
+        }
+
         var result = Convert.ToHexString(_hash.GetHashAndReset());
         if (_trace is not null && Environment.GetEnvironmentVariable("CODALUS_DESIGNTIME_CACHE_TRACE") is { } folder)
         {
