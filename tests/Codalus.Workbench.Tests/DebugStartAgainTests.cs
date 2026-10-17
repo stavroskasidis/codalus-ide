@@ -6,10 +6,12 @@ using Codalus.Workbench.Debugging;
 namespace Codalus.Workbench.Tests;
 
 /// <summary>
-/// A session whose start netcoredbg gave up on (<c>configurationDone</c> failing with 0x80004005: the program's runtime
-/// didn't report within its fixed 5 seconds, as on the loaded Windows runners) starts again, a bounded number of times,
-/// without ending in between; so does a later program of several startup projects, in its place. The adapter is the
-/// scripted one (<c>Codalus.LspConformance.Server --dap</c>), told to fail its first starts.
+/// A start netcoredbg gave up on (<c>configurationDone</c> failing with 0x80004005: the program's runtime didn't report
+/// within its fixed 5 seconds, as on the loaded Windows runners). While the program runs, the session waits for its
+/// runtime and goes on once netcoredbg reports it; a program that ended first starts again, a bounded number of times,
+/// without the session ending in between; so does a later program of several startup projects, in its place. The
+/// adapter is the scripted one (<c>Codalus.LspConformance.Server --dap</c>), told to fail its first starts and what the
+/// program does next (<c>runtimeAfter</c>).
 /// </summary>
 public sealed class DebugStartAgainTests : IDisposable
 {
@@ -36,13 +38,13 @@ public sealed class DebugStartAgainTests : IDisposable
     }
 
     /// <summary>The ids of the "programs" the timed-out starts left (the scripted adapter lists them), with those still running.</summary>
-    private (int[] Ids, List<System.Diagnostics.Process> Running) LeftPrograms()
-    {
-        var ids = File.Exists(_starts + ".programs")
+    private (int[] Ids, List<System.Diagnostics.Process> Running) LeftPrograms() => (ProgramIds(), Programs());
+
+    /// <summary>The ids of the programs the timed-out starts started.</summary>
+    private int[] ProgramIds() =>
+        File.Exists(_starts + ".programs")
             ? File.ReadAllLines(_starts + ".programs").Where(l => l.Length > 0).Select(l => int.Parse(l, System.Globalization.CultureInfo.InvariantCulture)).ToArray()
             : [];
-        return (ids, Programs());
-    }
 
     private List<System.Diagnostics.Process> Programs()
     {
@@ -75,13 +77,82 @@ public sealed class DebugStartAgainTests : IDisposable
         return running;
     }
 
-    private JsonElement Launch(int failStarts) =>
-        JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["failStarts"] = failStarts, ["startsFile"] = _starts });
+    private JsonElement Launch(int failStarts, string? runtimeAfter = null)
+    {
+        var launch = new Dictionary<string, object> { ["failStarts"] = failStarts, ["startsFile"] = _starts };
+        if (runtimeAfter is not null)
+        {
+            launch["runtimeAfter"] = runtimeAfter;
+        }
+
+        return JsonSerializer.SerializeToElement(launch);
+    }
 
     private static DebugAdapterStartInfo Adapter() => new("dotnet", [ScriptedAdapter, "--dap"], AppContext.BaseDirectory);
 
     [Fact]
-    public async Task A_start_the_debugger_timed_out_on_starts_again_and_the_session_ends_once()
+    public async Task A_start_whose_program_runs_on_waits_for_its_runtime_instead_of_starting_again()
+    {
+        // PR #23's Windows CI: netcoredbg gave up on the pinned data tip test's net11.0 program three times, each start
+        // after exactly 5 seconds, and starting again began each one from nothing on the loaded runner.
+        await using var debug = new DebugService(() => null);
+        var output = new System.Text.StringBuilder();
+        var ended = new List<int?>();
+        var done = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
+        debug.Ended += (_, code) => { lock (ended) { ended.Add(code); } done.TrySetResult(code); };
+
+        await debug.LaunchAdapterAsync("Scripted", Adapter(), Launch(failStarts: 1, runtimeAfter: "1500"), Timeout());
+
+        // One start: the program's runtime reported 1.5 s after netcoredbg gave up, and the session went on with it,
+        // under the program's process id, which netcoredbg doesn't report then.
+        var program = Assert.Single(ProgramIds());
+        Assert.Equal(program, await debug.WaitForProcessIdAsync(Timeout()));
+        Assert.Equal(program, debug.Processes.Single().Id);
+        Assert.Equal(7, await done.Task.WaitAsync(Timeout()));
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Assert.Equal([7], ended);
+        string text;
+        lock (output)
+        {
+            text = output.ToString();
+        }
+
+        Assert.Contains("The debugger didn't see the program's runtime start within its 5 seconds; waiting for it", text, StringComparison.Ordinal);
+        Assert.Contains("The debugger saw the program's runtime start ", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("starting again", text, StringComparison.Ordinal);
+        Assert.Contains("Hello from the scripted program", text, StringComparison.Ordinal);
+        Assert.Equal("1", File.ReadAllText(_starts));
+        Assert.Equal(DebugState.Idle, debug.State);
+        Assert.True(LeftPrograms().Running.Count == 0);
+    }
+
+    [Fact]
+    public async Task A_start_whose_runtime_never_reports_ends_its_program_after_the_longer_wait()
+    {
+        await using var adapter = await DebugAdapter.StartAsync(Adapter(), Timeout());
+        adapter.LateRuntimeWait = TimeSpan.FromSeconds(2);
+        var log = new System.Text.StringBuilder();
+        adapter.Log += (_, line) => { lock (log) { log.AppendLine(line); } };
+        await adapter.LaunchAsync(Launch(failStarts: 1, runtimeAfter: "never"), DapJsonContext.Default.JsonElement, Timeout());
+        await adapter.Initialized.WaitAsync(Timeout());
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => adapter.ConfigurationDoneAsync(Timeout()));
+
+        Assert.Contains("didn't see the program's runtime start within 7 seconds, and ended the program", error.Message, StringComparison.Ordinal);
+        Assert.True(DebugAdapter.IsStartupTimeout(error.InnerException!));
+        lock (log)
+        {
+            Assert.Contains("waiting for it (up to 2 seconds more)", log.ToString(), StringComparison.Ordinal);
+        }
+
+        var (ids, running) = LeftPrograms();
+        Assert.Single(ids);
+        Assert.True(running.Count == 0, "still running: " + string.Join(", ", running.Select(p => p.Id)));
+    }
+
+    [Fact]
+    public async Task A_start_whose_program_ended_before_its_runtime_started_starts_again_and_the_session_ends_once()
     {
         await using var debug = new DebugService(() => null);
         var output = new System.Text.StringBuilder();
@@ -139,10 +210,15 @@ public sealed class DebugStartAgainTests : IDisposable
     /// starts it: the scripted adapter on this machine (behind a path mapping, as a WSL launch is), told through the
     /// launch's environment how many of its starts to fail.
     /// </summary>
-    private DebugLaunch StartupProject(string name, int failStarts)
+    private DebugLaunch StartupProject(string name, int failStarts, string? runtimeAfter = null)
     {
         var folder = AppContext.BaseDirectory;
         var env = new Dictionary<string, string> { ["failStarts"] = failStarts.ToString(System.Globalization.CultureInfo.InvariantCulture), ["startsFile"] = _starts };
+        if (runtimeAfter is not null)
+        {
+            env["runtimeAfter"] = runtimeAfter;
+        }
+
         return new DebugLaunch(name, new Codalus.Workbench.Build.LaunchPlan("program", string.Empty, folder, new Dictionary<string, string>(), null))
         {
             Remote = new RemoteLaunch(Adapter(), new LaunchArguments("program", [], folder, env), new SourceMap(), "here"),
@@ -150,7 +226,42 @@ public sealed class DebugStartAgainTests : IDisposable
     }
 
     [Fact]
-    public async Task A_later_startup_project_whose_start_timed_out_starts_again_in_its_place()
+    public async Task A_later_startup_project_whose_program_runs_on_joins_once_its_runtime_reports()
+    {
+        await using var debug = new DebugService(() => null);
+        var output = new System.Text.StringBuilder();
+        var ended = new List<int?>();
+        var done = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
+        debug.Ended += (_, code) => { lock (ended) { ended.Add(code); } done.TrySetResult(code); };
+
+        await debug.LaunchAsync([StartupProject("First", failStarts: 0), StartupProject("Second", failStarts: 1, runtimeAfter: "1500")], Timeout());
+
+        // The second program joined on its first start, under its process id, and the session ended once, after both.
+        Assert.Equal(Assert.Single(ProgramIds()), debug.Processes[1].Id);
+        Assert.Equal(7, await done.Task.WaitAsync(Timeout()));
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Assert.Equal([7], ended);
+        string text;
+        lock (output)
+        {
+            text = output.ToString();
+        }
+
+        Assert.Contains("[Second] The debugger didn't see the program's runtime start within its 5 seconds; waiting for it", text, StringComparison.Ordinal);
+        Assert.Contains("[Second] The debugger saw the program's runtime start ", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("starting again", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Could not start", text, StringComparison.Ordinal);
+        Assert.Contains("[Second] The program has exited with code 7", text, StringComparison.Ordinal);
+        Assert.Equal(["First", "Second"], debug.Processes.Select(p => p.Name));
+        Assert.All(debug.Processes, p => Assert.Equal(7, p.ExitCode));
+        Assert.Equal("1", File.ReadAllText(_starts));
+        Assert.Equal(DebugState.Idle, debug.State);
+        Assert.True(LeftPrograms().Running.Count == 0);
+    }
+
+    [Fact]
+    public async Task A_later_startup_project_whose_program_ended_before_its_runtime_started_starts_again_in_its_place()
     {
         // PR #23's Linux CI: with two programs starting on a loaded runner, netcoredbg didn't see the second one's
         // runtime start within its 5 seconds, and the second program never joined ("[Partner] Could not start: Failed
@@ -175,7 +286,7 @@ public sealed class DebugStartAgainTests : IDisposable
             text = output.ToString();
         }
 
-        Assert.Contains("[Second] The debugger didn't see the program's runtime start within its 5 seconds; starting again (2 of 3).", text, StringComparison.Ordinal);
+        Assert.Contains("[Second] The debugger didn't see the program's runtime start; starting again (2 of 3).", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Could not start", text, StringComparison.Ordinal);
         Assert.Contains("[Second] The program has exited with code 7", text, StringComparison.Ordinal);
         Assert.Equal(2, text.Split("Hello from the scripted program").Length - 1);

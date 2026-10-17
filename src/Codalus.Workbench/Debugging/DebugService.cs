@@ -373,9 +373,10 @@ public sealed class DebugService : IAsyncDisposable
         Action? Abandon = null);
 
     /// <summary>
-    /// A program joins the running multi-program session. A start netcoredbg gave up on (<see cref="IsStartupTimeout"/>)
-    /// is made again in its place, as the session's first program's is: with several programs starting on a loaded
-    /// machine, the later one's runtime can take longer than netcoredbg's 5 seconds too.
+    /// A program joins the running multi-program session. With several programs starting on a loaded machine, the later
+    /// one's runtime can take longer than netcoredbg's 5 seconds too: as for the session's first program, one that still
+    /// runs gets more time (<see cref="DebugAdapter.ConfigurationDoneAsync"/>), and a start netcoredbg gave up on
+    /// otherwise (<see cref="IsStartupTimeout"/>) is made again in its place.
     /// </summary>
     private async Task JoinAsync(CompoundDebugAdapter session, LaunchPart part, CancellationToken cancellationToken)
     {
@@ -774,20 +775,21 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     private static string StartingAgain(int attempt) =>
-        $"The debugger didn't see the program's runtime start within its 5 seconds; starting again ({(attempt + 1).ToString(CultureInfo.InvariantCulture)} of {StartupAttempts.ToString(CultureInfo.InvariantCulture)}).\n";
+        $"The debugger didn't see the program's runtime start; starting again ({(attempt + 1).ToString(CultureInfo.InvariantCulture)} of {StartupAttempts.ToString(CultureInfo.InvariantCulture)}).\n";
 
     /// <summary>How many times a session starts when netcoredbg gives up waiting for the program's runtime (<see cref="IsStartupTimeout"/>).</summary>
     internal const int StartupAttempts = 3;
 
     /// <summary>
     /// netcoredbg's answer to <c>configurationDone</c> when the program's runtime didn't report to it within 5 seconds
-    /// of the launch or attach (its fixed <c>startupWaitTimeout</c>; E_FAIL). On a loaded machine the runtime can take
-    /// longer (the first Windows runs: a VSTest test host attached to, Visual Basic and F# programs launched); the
-    /// program is ended (or detached from) and the session starts again; a program joining a multi-program session
-    /// (a later startup project) starts again in its place. TODO(issue): ask Samsung/netcoredbg for a configurable wait.
+    /// of the launch or attach (<see cref="DebugAdapter.IsStartupTimeout"/>). On a loaded machine the runtime can take
+    /// longer (the first Windows runs: a VSTest test host attached to, Visual Basic, F# and C# programs launched).
+    /// A program on this machine that still runs gets more time first (<see cref="DebugAdapter.ConfigurationDoneAsync"/>):
+    /// netcoredbg debugs it once its runtime reports. Otherwise (the program ended before its runtime started, or it
+    /// runs on another machine) it is ended (or detached from) and the session starts again; a program joining a
+    /// multi-program session (a later startup project) starts again in its place.
     /// </summary>
-    internal static bool IsStartupTimeout(Exception ex) =>
-        ex is DapException { Command: "configurationDone" } && ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsStartupTimeout(Exception ex) => DebugAdapter.IsStartupTimeout(ex);
 
     /// <summary>
     /// One start of the session: the adapter, the launch or attach, the configuration. False when netcoredbg timed out

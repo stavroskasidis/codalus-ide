@@ -1669,7 +1669,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await shell.ShowEntityFrameworkAsync().ConfigureAwait(true);
         var ef = shell.EfExplorer;
         string Log() => Tail(shell.EntityFramework.Channel.GetText(), 2500) + "\n" + ef.Message;
-        await WaitAsync(() => ef.Context is { Name: "BloggingContext", Provider: "Microsoft.EntityFrameworkCore.Sqlite" }, "the window finds BloggingContext on SQLite", 120).ConfigureAwait(true);
+        await WaitAsync(
+            () => ef.Context is { Name: "BloggingContext", Provider: "Microsoft.EntityFrameworkCore.Sqlite" },
+            () => $"the window finds BloggingContext on SQLite (contexts: {string.Join(", ", ef.Contexts.Select(c => $"{c.Name} on {c.Provider ?? "no provider"}"))}; "
+                + $"restore {shell.Solutions.RestoreState ?? "not started"}; C# {shell.Languages.Status(ShellHost.CSharpLanguageId)?.State ?? "not running"}):\n" + Log(),
+            120).ConfigureAwait(true);
         await WaitAsync(() => ef.Migrations.Count == 1 && !ef.IsBusy, "the window lists InitialCreate", 420).ConfigureAwait(true);
         Check(ef.Migrations[0].State == "Pending", "InitialCreate is pending: " + Log());
 

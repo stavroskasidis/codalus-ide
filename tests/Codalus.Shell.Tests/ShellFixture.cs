@@ -137,13 +137,18 @@ internal sealed class ShellFixture : IAsyncDisposable
         Dispatcher.UIThread.RunJobs();
     }
 
-    public static async Task PumpUntil(Func<bool> condition, int seconds = 30)
+    /// <param name="describe">What the shell was doing, added to the failure on a timeout.</param>
+    public static async Task PumpUntil(Func<bool> condition, int seconds = 30, Func<string>? describe = null)
     {
         // A monotonic clock: a machine that sleeps during the wait (a Mac with the display off) doesn't time out at once.
         var started = System.Diagnostics.Stopwatch.StartNew();
         while (!condition())
         {
-            Assert.True(started.Elapsed < TimeSpan.FromSeconds(seconds), "Timed out waiting for the shell.");
+            if (started.Elapsed >= TimeSpan.FromSeconds(seconds))
+            {
+                Assert.Fail(describe is null ? "Timed out waiting for the shell." : "Timed out waiting for the shell: " + describe());
+            }
+
             Pump();
             await Task.Delay(15);
         }

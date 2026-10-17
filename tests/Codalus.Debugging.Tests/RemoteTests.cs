@@ -222,7 +222,7 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
         }
         finally
         {
-            RemoteFixture.Run(tool[0], [.. tool.Skip(1), "rm", "-f", name], 60);
+            RemoteFixture.Run(tool[0], [.. tool.Skip(1), "rm", "-f", "-v", name], 60);
         }
     }
 

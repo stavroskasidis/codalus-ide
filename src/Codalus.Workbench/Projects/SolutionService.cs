@@ -471,7 +471,8 @@ public sealed class SolutionService : IAsyncDisposable
 
     /// <summary>
     /// Sends a request to the build host, for the services built on its connection (packages, project properties…).
-    /// It times out after <paramref name="timeout"/> (default two minutes).
+    /// It completes after the notifications the host sent before its result (a tool's output: Entity Framework,
+    /// scaffolding, WCF), and times out after <paramref name="timeout"/> (default two minutes).
     /// </summary>
     public async Task<TResult> RequestAsync<TParams, TResult>(
         string method,
@@ -483,7 +484,10 @@ public sealed class SolutionService : IAsyncDisposable
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limit.CancelAfter(timeout ?? s_operationTimeout);
-        return await Connection.InvokeAsync(method, parameters, parametersInfo, resultInfo, limit.Token).ConfigureAwait(false);
+        var connection = Connection;
+        var result = await connection.InvokeAsync(method, parameters, parametersInfo, resultInfo, limit.Token).ConfigureAwait(false);
+        await connection.WhenDispatchedAsync().ConfigureAwait(false); // as for a build: the output sent before the result first
+        return result;
     }
 
     private async Task InvokeAsync<T>(string method, T parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken)

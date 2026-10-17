@@ -43,7 +43,7 @@ internal sealed class ContainerDatabase : IAsyncDisposable
         var (code, output) = Run([.. arguments], timeoutSeconds: 600);
         if (code != 0)
         {
-            Run("rm", "-f", name); // a run that timed out (pulling) may still start it
+            Run("rm", "-f", "-v", name); // a run that timed out (pulling) may still start it
             Skip($"The container {image} didn't start: {output.Trim()}");
         }
 
@@ -52,7 +52,7 @@ internal sealed class ContainerDatabase : IAsyncDisposable
         var port = 0;
         if (portCode != 0 || !int.TryParse(mapping.Trim().Split('\n')[0].Split(':')[^1], out port))
         {
-            Run("rm", "-f", id);
+            Run("rm", "-f", "-v", id);
             Skip($"The container {image} has no port mapping: {mapping.Trim()}");
         }
 
@@ -133,7 +133,8 @@ internal sealed class ContainerDatabase : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
-        Run("rm", "-f", _id);
+        // -v: the anonymous volumes the database images declare (their data folders) go with the container.
+        Run("rm", "-f", "-v", _id);
         return ValueTask.CompletedTask;
     }
 }
