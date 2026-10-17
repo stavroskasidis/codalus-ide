@@ -194,7 +194,8 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
         {
             if (c.Info.Fields(c.Token).FirstOrDefault(f => f.IsStatic && f.Name == name) is { } field)
             {
-                return field.IsLiteral ? new LocalValue(field.Constant) : new RemoteValue(process.GetStaticField(Thread, ClrTypeSystem.TypeOf(c.Module, c.Token), field.Token));
+                var (staticModule, staticType, staticField) = (c.Module, c.Token, field.Token);
+                return field.IsLiteral ? new LocalValue(field.Constant) : new RemoteValue(Live(() => process.GetStaticField(Thread, ClrTypeSystem.TypeOf(staticModule, staticType), staticField)));
             }
 
             if (c.Info.Properties(c.Token).FirstOrDefault(p => p.Name == name && p.IsStatic && p.IndexParameters == 0 && p.GetterToken != 0) is { } property)
@@ -454,11 +455,13 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
         switch (value)
         {
             case RemoteValue { Value: { Kind: ClrValueKind.Primitive } primitive } when parameter is not null && s_numeric.Contains(parameter) && primitive.Primitive is { } raw && Keyword(raw) != parameter:
-                return process.NewPrimitive(Thread, ConvertTo(raw, parameter));
+                var converted = ConvertTo(raw, parameter);
+                return Live(() => process.NewPrimitive(Thread, converted));
             case RemoteValue remote:
                 return remote.Value;
             case LocalValue { Value: string s }:
-                return process.NewString(Thread, s, timeout);
+                var text = process.NewString(Thread, s, timeout);
+                return ClrLiveValue.Of(process, text, () => text);
             case LocalValue { Value: null }:
                 throw new ExpressionException("null can't be passed as an argument here.");
             case LocalValue { Value: decimal }:
@@ -469,17 +472,25 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
                     throw new ExpressionException("A number can't be passed where an object is expected here (it would need boxing).");
                 }
 
-                return process.NewPrimitive(Thread, parameter is not null && s_numeric.Contains(parameter) ? ConvertTo(local.Value!, parameter) : local.Value!);
+                var number = parameter is not null && s_numeric.Contains(parameter) ? ConvertTo(local.Value!, parameter) : local.Value!;
+                return Live(() => process.NewPrimitive(Thread, number));
             default:
                 throw new ExpressionException("A type or a namespace isn't a value.");
         }
     }
 
+    /// <summary>
+    /// A value as a <see cref="ClrLiveValue"/>: an expression's values outlive the func-evals after them (<c>Math.Max(item.Price, Count)</c>
+    /// reads <c>item.Price</c>, then calls <c>Count</c>'s getter, which neuters it, then passes it to <c>Max</c>).
+    /// </summary>
+    private IClrValue Live(Func<IClrValue> read) => ClrLiveValue.Of(process, read(), read);
+
     private IClrValue Invoke(IClrModule module, int methodToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, string display)
     {
         try
         {
-            return process.Call(Thread, module, methodToken, typeArguments, arguments, timeout);
+            var result = process.Call(Thread, module, methodToken, typeArguments, arguments, timeout);
+            return ClrLiveValue.Of(process, result, () => result); // its fields and elements are read again after the next func-eval
         }
         catch (ClrEvalException ex)
         {

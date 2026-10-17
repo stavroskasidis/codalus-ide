@@ -18,6 +18,12 @@ internal interface IClrProcess : IDisposable
 
     ChannelReader<ClrEvent> Events { get; }
 
+    /// <summary>
+    /// Counts the times the process ran: continued, stepped or a func-eval. ICorDebug neuters the values (and frames)
+    /// it handed out when the process runs, so a value read before is read again after (<see cref="ClrLiveValue"/>).
+    /// </summary>
+    int Generation { get; }
+
     /// <summary>Lets the process run after an event or a pause.</summary>
     void Continue();
 
@@ -44,11 +50,13 @@ internal interface IClrProcess : IDisposable
     /// <summary>
     /// Calls a method in the debuggee on <paramref name="thread"/> (func-eval), the other threads suspended, and waits
     /// for its result. Throws <see cref="ClrEvalException"/> when the method threw, and <see cref="TimeoutException"/>
-    /// when it didn't return in time (it's aborted).
+    /// when it didn't return in time (it's aborted). The arguments may be <see cref="ClrLiveValue"/>s. The result (and
+    /// the exception's value) stays valid when the process runs again: an object is held by a strong handle, a
+    /// primitive is kept.
     /// </summary>
     IClrValue Call(IClrThread thread, IClrModule module, int methodToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout);
 
-    /// <summary>A string created in the debuggee (func-eval).</summary>
+    /// <summary>A string created in the debuggee (func-eval); it stays valid, as a call's result does.</summary>
     IClrValue NewString(IClrThread thread, string text, TimeSpan timeout);
 
     /// <summary>A primitive value created in the debuggee, to pass to a call.</summary>
@@ -122,6 +130,10 @@ internal enum ClrValueKind
     Object,
 }
 
+/// <summary>
+/// A value of the debuggee, as ICorDebug hands it out: valid until the process runs again (a func-eval included),
+/// neutered after, except a func-eval's result. What the session keeps beyond that is a <see cref="ClrLiveValue"/>.
+/// </summary>
 internal interface IClrValue
 {
     ClrValueKind Kind { get; }
@@ -151,6 +163,79 @@ internal interface IClrValue
 
     /// <summary>Changes a primitive in place (a local, an argument, a field, an element).</summary>
     void SetPrimitive(object value);
+}
+
+/// <summary>
+/// A value that outlives func-evals (M43b): ICorDebug neuters the values it handed out whenever the process runs, a
+/// func-eval included, so a variable read before a getter ran (a local, <c>this</c>'s field, an array's element) is
+/// read again from where it came from (the frame, its parent's field or element, the static field, the thread's
+/// exception) once the process has run. The session wraps every value it keeps (variables to expand, an expression's
+/// intermediate values, a stop's exception) in one; its fields and elements are live values too.
+/// </summary>
+internal sealed class ClrLiveValue : IClrValue
+{
+    private readonly IClrProcess _process;
+    private readonly Func<IClrValue?> _read;
+    private IClrValue _current;
+    private int _generation;
+
+    private ClrLiveValue(IClrProcess process, IClrValue current, Func<IClrValue?> read)
+    {
+        _process = process;
+        _current = current;
+        _read = read;
+        _generation = process.Generation;
+    }
+
+    /// <summary>A value read now by <paramref name="read"/>, and again by it after the process ran; null when there's none.</summary>
+    public static IClrValue? Read(IClrProcess process, Func<IClrValue?> read) =>
+        read() is { } value ? Of(process, value, read) : null;
+
+    /// <summary><paramref name="value"/>, just read, and read again by <paramref name="read"/> after the process ran.</summary>
+    public static IClrValue Of(IClrProcess process, IClrValue value, Func<IClrValue?> read) =>
+        value is ClrLiveValue ? value : new ClrLiveValue(process, value, read);
+
+    /// <summary>The value ICorDebug has for a (live) value now: what a func-eval takes as an argument.</summary>
+    public static IClrValue Unwrap(IClrValue value) => value is ClrLiveValue live ? live.Current : value;
+
+    /// <summary>The value, read again when the process has run since it was read.</summary>
+    public IClrValue Current
+    {
+        get
+        {
+            var generation = _process.Generation;
+            if (generation != _generation)
+            {
+                _current = _read() is { } value ? Unwrap(value) : throw new ClrException("The value isn't available any more.");
+                _generation = generation;
+            }
+
+            return _current;
+        }
+    }
+
+    public ClrValueKind Kind => Current.Kind;
+
+    public object? Primitive => Current.Primitive;
+
+    public string? Text => Current.Text;
+
+    public ClrType Type => Current.Type;
+
+    public bool IsValueType => Current.IsValueType;
+
+    public int Length => Current.Length;
+
+    public IReadOnlyList<int> Dimensions => Current.Dimensions;
+
+    public ulong Address => Current.Address;
+
+    public IClrValue Element(int index) => new ClrLiveValue(_process, Current.Element(index), () => Current.Element(index));
+
+    public IClrValue Field(IClrModule module, int typeToken, int fieldToken) =>
+        new ClrLiveValue(_process, Current.Field(module, typeToken, fieldToken), () => Current.Field(module, typeToken, fieldToken));
+
+    public void SetPrimitive(object value) => Current.SetPrimitive(value);
 }
 
 /// <summary>

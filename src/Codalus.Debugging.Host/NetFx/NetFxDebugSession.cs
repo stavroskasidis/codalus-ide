@@ -37,6 +37,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private readonly Dictionary<int, Func<IReadOnlyList<Variable>>> _children = [];
     private readonly Dictionary<int, Lazy<Dictionary<string, IClrValue>>> _childValues = [];
     private readonly Dictionary<int, IClrValue> _exceptions = [];
+    private readonly HashSet<int> _stoppedWhenThrown = [];
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _configured = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private IClrProcess? _process;
@@ -640,7 +641,15 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     /// </summary>
     private bool ExceptionThrown(ClrExceptionThrown thrown)
     {
-        var value = SafeValue(thrown.Thread.CurrentException);
+        // The runtime's user first chance of an exception it stopped at already when it was thrown in the user's code
+        // (on the same thread, right after): not again. Its address may have changed since (a func-eval may collect).
+        var stoppedWhenThrown = _stoppedWhenThrown.Remove(thrown.Thread.Id);
+        if (thrown.Stage == ClrExceptionStage.UserFirstChance && stoppedWhenThrown)
+        {
+            return false;
+        }
+
+        var value = SafeValue(Live(thrown.Thread.CurrentException));
         var typeName = value is null ? "System.Exception" : Types.FullName(value.Type);
         var thrownHere = _breakOnThrown && BreaksWhenThrown(typeName, _thrownTypes, _thrownTypesNegated);
         var breaks = thrown.Stage switch
@@ -656,6 +665,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         }
 
         _lastException = value?.Address ?? 0;
+        if (thrown.Stage == ClrExceptionStage.FirstChance)
+        {
+            _stoppedWhenThrown.Add(thrown.Thread.Id);
+        }
 
         if (value is not null)
         {
@@ -942,18 +955,18 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             ns = typeName.LastIndexOf('.') is var dot and > 0 ? typeName[..dot] : null;
             if (!method.IsStatic)
             {
-                self = () => frame.Argument(0);
+                self = Live(() => frame.Argument(0));
             }
 
             for (var i = 0; i < method.ParameterNames.Count; i++)
             {
                 var index = i + (method.IsStatic ? 0 : 1);
-                variables.Add((method.ParameterNames[i], () => frame.Argument(index)));
+                variables.Add((method.ParameterNames[i], Live(() => frame.Argument(index))));
             }
 
             foreach (var (slot, name) in info.Locals(frame.MethodToken, frame.IlOffset))
             {
-                variables.Add((name, () => frame.Local(slot)));
+                variables.Add((name, Live(() => frame.Local(slot))));
             }
 
             // A state machine (async, iterator): its fields are the method's variables.
@@ -985,6 +998,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         return new ClrFrameContext(frame, variables, self, declaring, ns);
     }
+
+    /// <summary>
+    /// Reads a value as a <see cref="ClrLiveValue"/>: one kept for later (a variable to expand, a stop's exception) is
+    /// read again after a func-eval, which neuters the values ICorDebug handed out before it.
+    /// </summary>
+    private Func<IClrValue?> Live(Func<IClrValue?> read) => () => ClrLiveValue.Read(Process, read);
 
     /// <summary>A state machine field's variable name: <c>&lt;total&gt;5__2</c> is <c>total</c>, a parameter keeps its name; compiler state is hidden (null).</summary>
     internal static string? HoistedName(string field)
@@ -1049,8 +1068,17 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         return id;
     }
 
-    private Variable VariableOf(string name, IClrValue? value, string? evaluateName) =>
-        new(name, Types.Format(value), value is null ? null : TypeName(value), ChildrenOf(value, evaluateName), evaluateName);
+    private Variable VariableOf(string name, IClrValue? value, string? evaluateName)
+    {
+        try
+        {
+            return new(name, Types.Format(value), value is null ? null : TypeName(value), ChildrenOf(value, evaluateName), evaluateName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new(name, "(" + ex.Message + ")", null, 0, evaluateName); // a value that couldn't be read again
+        }
+    }
 
     private string TypeName(IClrValue value) => value.Kind switch
     {
@@ -1153,7 +1181,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 try
                 {
                     var value = Process.Call(thread, module, property.GetterToken, target.Type.TypeArguments, [target], EvalTimeout);
-                    result.Add(VariableOf(property.Name, value, path));
+                    result.Add(VariableOf(property.Name, ClrLiveValue.Of(Process, value, () => value), path));
                 }
                 catch (ClrEvalException ex)
                 {
@@ -1283,7 +1311,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         {
             if (!_exceptions.TryGetValue(threadId, out var exception))
             {
-                exception = SafeValue(Thread(threadId).CurrentException) ?? throw new DapRequestException("The thread didn't stop on an exception.");
+                exception = SafeValue(Live(Thread(threadId).CurrentException)) ?? throw new DapRequestException("The thread didn't stop on an exception.");
             }
 
             var details = Details(exception, CurrentStackThread(threadId), depth: 0);
@@ -1312,11 +1340,51 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             {
                 log.WriteLine("Exception.StackTrace: " + ex.Message);
             }
+
+            if (string.IsNullOrEmpty(stackTrace))
+            {
+                // Not filled in yet (a first chance, before the runtime has walked the stack) or not readable: the thread
+                // stopped where it's thrown, before anything unwound, so its stack is the exception's.
+                stackTrace = StackTraceOf(thread);
+            }
         }
 
         var inner = depth < 5 && SafeValue(() => Types.Field(exception, "_innerException")) is { Kind: ClrValueKind.Object } innerValue ? Details(innerValue, thread, depth + 1) : null;
         var shortName = typeName.LastIndexOf('.') is var dot and >= 0 ? typeName[(dot + 1)..] : typeName;
         return new ExceptionDetails(message, shortName, typeName, stackTrace, "$exception", inner is null ? null : [inner]);
+    }
+
+    /// <summary>A thread's managed frames as <c>Exception.StackTrace</c> lists them; null when there are none.</summary>
+    private string? StackTraceOf(IClrThread thread)
+    {
+        var lines = new List<string>();
+        foreach (var frame in SafeFrames(thread))
+        {
+            if (frame.Module is { } module && Types.Info(module) is { } info)
+            {
+                var line = "   at " + info.MethodDisplayName(frame.MethodToken);
+                if (info.LineAt(frame.MethodToken, frame.IlOffset) is { Document.Length: > 0 } point)
+                {
+                    line += $" in {point.Document}:line {point.StartLine.ToString(CultureInfo.InvariantCulture)}";
+                }
+
+                lines.Add(line);
+            }
+        }
+
+        return lines.Count == 0 ? null : string.Join(Environment.NewLine, lines);
+    }
+
+    private static IReadOnlyList<IClrFrame> SafeFrames(IClrThread thread)
+    {
+        try
+        {
+            return thread.Frames();
+        }
+        catch (InvalidOperationException)
+        {
+            return [];
+        }
     }
 
     private void ClearHandles()
