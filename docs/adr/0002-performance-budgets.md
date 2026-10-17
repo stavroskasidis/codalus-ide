@@ -1,6 +1,6 @@
 # 0002. Performance budgets
 
-- **Status:** accepted (2026-10-08), amended 2026-10-10 ([see below](#amendment-2026-10-10-rider-dropped-proposed-budgets-approved)). All budgets are final. Rider is no longer a reference, so budget 4 (solution) is final as it stands, and the budgets proposed at M8–M16 are gates. *Update 2026-10-14:* `benchmarks.yml` is gone; the benchmarks are `pipeline.yml`'s `benchmarks` job, run for stable releases or on a dispatch with `benchmarks` checked, with the regression gate against the last 10 runs on `master`. Hosted macOS and Linux results aren't committed yet (`benchmarks/results/` holds Windows only).
+- **Status:** accepted (2026-10-08), amended 2026-10-10 ([see below](#amendment-2026-10-10-rider-dropped-proposed-budgets-approved)) and 2026-10-17 (the regression gate: [accepted values and runner-aware comparisons](#amendment-2026-10-17-accepted-values-and-runner-aware-comparisons)). All budgets are final. Rider is no longer a reference, so budget 4 (solution) is final as it stands, and the budgets proposed at M8–M16 are gates. *Update 2026-10-14:* `benchmarks.yml` is gone; the benchmarks are `pipeline.yml`'s `benchmarks` job, run for stable releases or on a dispatch with `benchmarks` checked, with the regression gate against the last 10 runs on `master`. Hosted macOS and Linux results aren't committed yet (`benchmarks/results/` holds Windows only).
 - **Date:** 2026-10-08
 - **Deciders:** maintainer
 
@@ -109,3 +109,22 @@ The maintainer decided this on 2026-10-10 (roadmap decision D28).
 - **The budgets proposed at M8–M16 are approved** and gate like the others.
   - Those in `budgets.json` apply now: Test Explorer (M8), packages and properties (M9), the terminal (M10) and the 100k-line markup files (M11).
   - The proposed budgets that have no harness scenario yet become gates when their scenario lands: the M13 history graph, the M14 debugger, and the M15 Endpoints Explorer and Hot Reload. Their checkpoints track them as `TODO(issue)`.
+
+## Amendment (2026-10-17): accepted values and runner-aware comparisons
+
+The 0.3.0 release failed the regression gate on all three runner OSes ([the investigation](../benchmarks/net11-release-gate.md)). The sizes were real: M35 added Visual Basic's Roslyn assemblies to the language host (about 18 MB of ReadyToRun code), and .NET 11 RC2 added 1.4 MB. The latency and memory failures followed the runner's CPU model and L3 cache, not the release. The gate itself had two faults. Its baseline took only runs whose whole workflow had succeeded, so it had one run (0.2.1). And a change, once accepted, could never enter the baseline: the run carrying it failed the gate, and a failed run was never a baseline.
+
+The maintainer decided on 2026-10-17: **accept the 0.3.0 sizes, and fix the gate.** The relative regression gate (*Enforcement in CI*, item 2) now works like this; the thresholds and noise floors don't change.
+
+- **Accepted values.** `benchmarks/accepted.json` holds values the maintainer accepted, per OS, target, scenario, metric and stat. Each entry has a reason, a date, the commit and CI run it was measured in, and, for latency or memory, the runner CPU it holds for. For that metric, baseline runs from before the entry's date don't count, and `codalus-bench compare` uses the entry's value in place of their median until newer runs exist. From then on, the newer runs' median takes over. Accepting a regression is a change to that file, reviewed in its pull request. The first entries are the 0.3.0 sizes of `lshost_mb`, `markuphost_mb` and `pluginhost_mb` on each OS.
+- **Baseline runs.** The baseline takes the runs on `master` (this pipeline's, and `release.yml`'s and `benchmarks.yml`'s before it) whose benchmarks job passed on that OS, whatever their other jobs did. It takes the last 10, as before, and counts one result per run.
+- **Binary size** is deterministic and stays strict: it fails against the median of the earlier runs, and one run, or an accepted value, is enough.
+- **Latency and memory** compare only with earlier runs on the same runner CPU model, and fail only against at least 3 of them (`minComparableRuns`). With fewer, an increase over the limit is a warning in the job summary and an annotation on the run, not a failure:
+  - Latency is then divided by the reference application's time in the same run (VS Code's self-reported startup in `cold-start`), and the ratio is compared with the earlier runs' ratios. A normalized comparison only warns, because on CI the ratio of Codalus's startup to VS Code's ranges from 0.13 to 0.19 between runs, which is wider than the thresholds. `failNormalized` in `budgets.json` would make it fail from 3 such runs.
+  - Memory has nothing to divide by: the GC sizes its generation-0 budget from the L3 cache, and VS Code's memory doesn't follow that. It is compared with the runs there are.
+- **The reference application's own numbers** (VS Code's) are compared and reported, but never fail. They measure the runner and VS Code's latest release, not Codalus.
+- **The L3 cache** is recorded in each result's machine block, next to the CPU. The summary and the gate's table show it.
+- The gate's table goes to the job summary whether the gate passes or fails.
+
+Replayed on the 0.3.0 results: they pass against the baseline that release had (0.2.1). A language host 6% over its accepted value still fails. Against the runs the new baseline selection finds, the Mac's `file_highlight_ms` fails against three earlier runs on the same CPU, confirmation included. That metric also rose on Linux on the same CPU. It is left to the maintainer, either to accept or to investigate.
+
