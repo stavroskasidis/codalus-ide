@@ -7,4 +7,8 @@
     <ProjectReference Include="..\..\src\Codalus.Plugins.Host\Codalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\samples\plugins\DictionaryVisualizer\DictionaryVisualizer.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Properties and items of the fixtures' projects, read from MSBuild's answer file. -->
+    <Compile Include="..\Shared\MSBuildQuery.cs" Link="Shared\MSBuildQuery.cs" />
+  </ItemGroup>
 </Project>

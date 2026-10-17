@@ -23,6 +23,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
+    <!-- Properties and items of the fixtures' projects, read from MSBuild's answer file. -->
+    <Compile Include="..\Shared\MSBuildQuery.cs" Link="Shared\MSBuildQuery.cs" />
   </ItemGroup>
   <ItemGroup>
     <!--
