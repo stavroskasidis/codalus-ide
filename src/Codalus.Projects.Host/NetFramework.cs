@@ -57,6 +57,11 @@ internal static class NetFramework
           <ItemGroup Condition="'$(CodalusReferenceAssemblies)' != ''">
             <Reference Include="mscorlib" Pack="false" IsImplicitlyDefined="true" Visible="false" />
           </ItemGroup>
+          <!-- M43b (ADR 0076): portable PDBs, which Codalus IDE's .NET Framework debugger reads, instead of Windows PDBs
+               (full, pdbonly), Visual Studio's old default. CodalusKeepDebugType=true keeps the project's. -->
+          <PropertyGroup Condition="'$(UsingMicrosoftNETSdk)' != 'true' and ('$(TargetFrameworkIdentifier)' == '' or '$(TargetFrameworkIdentifier)' == '.NETFramework') and '$(CodalusKeepDebugType)' != 'true' and ('$(DebugType)' == 'full' or '$(DebugType)' == 'pdbonly')">
+            <DebugType>portable</DebugType>
+          </PropertyGroup>
         </Project>
         """;
 
@@ -99,6 +104,14 @@ internal static class NetFramework
 
     /// <summary>Tells the targets file where the global packages folder is (the solution's NuGet settings decide).</summary>
     public static void SetPackageRoot(string folder) => Environment.SetEnvironmentVariable(PackageRootProperty, folder);
+
+    /// <summary>The project type GUID Visual Studio marks old-style test projects with (MSTest's "Test Project").</summary>
+    public const string TestProjectTypeGuid = "{3AC096D0-A1C2-E12C-1390-A8335801FDAB}";
+
+    /// <summary>Whether an old-style project's <c>ProjectTypeGuids</c> (<c>{guid};{guid}</c>) make it a test project (M43b).</summary>
+    public static bool IsTestProjectType(string? projectTypeGuids) =>
+        projectTypeGuids is not null && projectTypeGuids.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(g => string.Equals(g, TestProjectTypeGuid, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// The short name of a .NET Framework version as NuGet spells it: <c>v4.7.2</c> → <c>net472</c>, <c>v4.8</c> →
@@ -209,7 +222,9 @@ internal static class NetFramework
     {
         foreach (var (expanded, condition) in imports)
         {
-            if (string.Equals(condition?.Trim(), "false", StringComparison.OrdinalIgnoreCase))
+            // Never imported, or imported only where it exists (a test project's TeamTest targets, M43b): no reason.
+            if (string.Equals(condition?.Trim(), "false", StringComparison.OrdinalIgnoreCase)
+                || (condition is not null && condition.Trim().StartsWith("Exists(", StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }

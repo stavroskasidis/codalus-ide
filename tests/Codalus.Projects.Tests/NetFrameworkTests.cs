@@ -163,9 +163,29 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.NotNull(reason);
         Assert.Contains("WebApp imports Visual Studio's own MSBuild targets (WebApplications/Microsoft.WebApplication.targets)", reason, StringComparison.Ordinal);
         Assert.Null(NetFramework.VisualStudioTargetsReason("WebApp", [(web, "false")])); // never imported
+        Assert.Null(NetFramework.VisualStudioTargetsReason("Tests", [(web, $"Exists('{web}')")])); // imported only where it is (M43b)
         Directory.CreateDirectory(Path.GetDirectoryName(web)!);
         File.WriteAllText(web, "<Project />");
         Assert.Null(NetFramework.VisualStudioTargetsReason("WebApp", [(web, null)])); // there (the user's Build Tools): it builds
+    }
+
+    [Theory]
+    [InlineData("{3AC096D0-A1C2-E12C-1390-A8335801FDAB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}", true)]
+    [InlineData("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}; {3ac096d0-a1c2-e12c-1390-a8335801fdab}", true)]
+    [InlineData("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Old_style_test_projects_are_told_by_their_project_type(string? guids, bool expected) =>
+        Assert.Equal(expected, NetFramework.IsTestProjectType(guids));
+
+    [Fact]
+    public void Old_style_projects_build_portable_pdbs_unless_they_keep_their_debug_type()
+    {
+        // M43b: the desktop-CLR debugger reads portable PDBs; Visual Studio's old projects ask for Windows ones.
+        Assert.Contains("<DebugType>portable</DebugType>", NetFramework.ReferenceAssembliesTargetsText, StringComparison.Ordinal);
+        Assert.Contains("'$(DebugType)' == 'full' or '$(DebugType)' == 'pdbonly'", NetFramework.ReferenceAssembliesTargetsText, StringComparison.Ordinal);
+        Assert.Contains("'$(CodalusKeepDebugType)' != 'true'", NetFramework.ReferenceAssembliesTargetsText, StringComparison.Ordinal);
+        Assert.Contains("'$(UsingMicrosoftNETSdk)' != 'true'", NetFramework.ReferenceAssembliesTargetsText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -320,7 +340,8 @@ public sealed class NetFrameworkTests : IAsyncLifetime
             () => _solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) >= solution.Projects.Length - 1
                   && _solutions.CompilerInputs.TryGetValue(legacy, out var app) && app.State == CompilerInputStates.Ok
                   && app.Arguments.Any(a => a.Contains("Codalus.Sample.Legacy.dll", StringComparison.OrdinalIgnoreCase))
-                  && _solutions.CompilerInputs.TryGetValue(console, out var sdk) && sdk.Arguments.Any(a => a.Contains(ReferenceAssembliesOf("net48"), StringComparison.OrdinalIgnoreCase)),
+                  && _solutions.CompilerInputs.TryGetValue(console, out var sdk) && sdk.Arguments.Any(a => a.Contains(ReferenceAssembliesOf("net48"), StringComparison.OrdinalIgnoreCase))
+                  && _solutions.Projects.TryGetValue(Project("LegacyTests"), out var tests) && tests.References.Count(r => r.Kind == ReferenceKinds.Package && r.Resolved) == 2,
             () => $"restore: {string.Join(", ", restore)}; {DesignTimeState()}");
 
         // The SDK-style app: net48, C# 7.3, the reference assemblies package as its framework (the Developer Pack where it's installed).
@@ -334,6 +355,15 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.Contains(sdkArguments, a => a.Contains(ReferenceAssembliesOf("net48"), StringComparison.OrdinalIgnoreCase) && a.EndsWith("mscorlib.dll", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(["net48", "net472"], _solutions.Projects[Project("Library")].TargetFrameworks);
         Assert.True(_solutions.Projects[Project("ConsoleApp.Tests")].IsTestProject);
+        Assert.Equal(TestPlatforms.VSTest, _solutions.Projects[Project("NUnitTests")].TestPlatform);
+
+        // The old-style MSTest project (M43b): a test project by its ProjectTypeGuids, its packages from packages.config.
+        var legacyTests = _solutions.Projects[Project("LegacyTests")];
+        Assert.True(legacyTests.IsNonSdkStyle);
+        Assert.True(legacyTests.IsTestProject);
+        Assert.Equal(TestPlatforms.VSTest, legacyTests.TestPlatform);
+        Assert.Null(legacyTests.CannotBuildReason);
+        Assert.Contains(legacyTests.References, r => r is { Kind: ReferenceKinds.Package, Name: "MSTest.TestAdapter", Resolved: true });
         Assert.True(_solutions.Projects[Project("WinFormsApp")].UsesWindowsForms);
 
         // The old-style app: net472, its items, its Dependencies (framework, packages.config, references, the project).
@@ -390,6 +420,12 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(Fixture, "ConsoleApp", "bin", "Debug", "net48", "ConsoleApp.exe.config")));
         Assert.True(File.Exists(Path.Combine(Fixture, "WinFormsApp", "bin", "Debug", "net48", "WinFormsApp.exe")));
         Assert.True(File.Exists(Path.Combine(Fixture, "ConsoleApp.Tests", "bin", "Debug", "net48", "ConsoleApp.Tests.dll")));
+        Assert.True(File.Exists(Path.Combine(Fixture, "NUnitTests", "bin", "Debug", "net48", "NUnitTests.dll")));
+        Assert.True(File.Exists(Path.Combine(Fixture, "LegacyTests", "bin", "Debug", "LegacyTests.dll")));
+        Assert.True(File.Exists(Path.Combine(Fixture, "LegacyTests", "bin", "Debug", "Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.dll")));
+
+        // Old-style projects' Windows PDBs (DebugType full) are built portable, which the debugger reads (M43b).
+        Assert.Equal("BSJB"u8.ToArray(), File.ReadAllBytes(Path.Combine(Fixture, "LegacyApp", "bin", "Debug", "LegacyApp.pdb")).Take(4).ToArray());
         Assert.False(File.Exists(Path.Combine(Fixture, "LegacyWebApp", "bin", "LegacyWebApp.dll")));
 
         // On its own it doesn't build, and says why.

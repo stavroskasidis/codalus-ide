@@ -252,6 +252,10 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
         var hintPaths = outer.GetItems("Reference").Select(i => NullIfEmpty(i.GetMetadataValue("HintPath"))).OfType<string>()
             .Select(h => Path.GetFullPath(Path.Combine(directory, FixSeparators(h)))).ToList();
         var restore = new NetFrameworkRestore(packages, PackagesRepository, installed is null || used is not null ? moniker : null, GlobalPackagesFolder);
+
+        // A test project: IsTestProject (a test SDK's props from packages.config), or Visual Studio's test project type (M43b).
+        var test = TestProperties.Of(outer);
+        var isTest = test.IsTestProject || NetFramework.IsTestProjectType(outer.GetPropertyValue("ProjectTypeGuids"));
         var info = new ProjectInfo(
             path,
             name,
@@ -262,7 +266,9 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             [.. Items(outer)],
             [.. references],
             [],
-            restore.IsComplete)
+            restore.IsComplete,
+            isTest,
+            isTest ? TestPlatforms.VSTest : null)
         {
             IsNonSdkStyle = true,
             CannotBuildReason = reason,
