@@ -10,7 +10,7 @@ namespace Codalus.Projects.Tests;
 /// .NET Framework projects (M43a, ADR 0075) in the real build host on a copy of samples/NetFramework, on every OS:
 /// SDK-style <c>net48</c> projects restore the reference assemblies package and build; the old-style project gets its
 /// <c>packages.config</c> package (from the fixture's local feed) and the reference assemblies from Codalus's own
-/// restore, loads with C# 7.3 and builds with the SDK's MSBuild; the project that imports Visual Studio's web targets
+/// restore (both use the Developer Pack's instead where it's installed, as on CI's Windows runners), loads with C# 7.3 and builds with the SDK's MSBuild; the project that imports Visual Studio's web targets
 /// loads, says why it can't build and is left out of the solution's build; the converter's output builds. The reference
 /// assemblies and xUnit come from nuget.org, as the other restore tests' targeting packs do.
 /// </summary>
@@ -77,6 +77,25 @@ public sealed class NetFrameworkTests : IAsyncLifetime
             await Task.Delay(100, TestContext.Current.CancellationToken);
         }
     }
+
+    /// <summary>
+    /// The Developer Pack's reference assemblies of <paramref name="moniker"/> where they're installed (a Windows machine
+    /// with Visual Studio or the targeting pack, as CI's runners), or null. The SDK and Codalus's targets then use them
+    /// instead of the reference assemblies package.
+    /// </summary>
+    private static string? InstalledReferenceAssemblies(string moniker)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Reference Assemblies", "Microsoft", "Framework", ".NETFramework", NetFramework.VersionFolder(moniker));
+        return File.Exists(Path.Combine(folder, "mscorlib.dll")) ? folder : null;
+    }
+
+    /// <summary>What the compiler's references to <paramref name="moniker"/>'s reference assemblies contain: the Developer Pack's folder, or the package's.</summary>
+    private static string ReferenceAssembliesOf(string moniker) => InstalledReferenceAssemblies(moniker) ?? NetFramework.ReferenceAssembliesPackageOf(moniker);
 
     private string DesignTimeState() =>
         $"design-time builds: {string.Join("; ", _solutions.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)} {i.Value.State} {i.Value.TargetFramework} {i.Value.Error}"))}";
@@ -301,18 +320,18 @@ public sealed class NetFrameworkTests : IAsyncLifetime
             () => _solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) >= solution.Projects.Length - 1
                   && _solutions.CompilerInputs.TryGetValue(legacy, out var app) && app.State == CompilerInputStates.Ok
                   && app.Arguments.Any(a => a.Contains("Codalus.Sample.Legacy.dll", StringComparison.OrdinalIgnoreCase))
-                  && _solutions.CompilerInputs.TryGetValue(console, out var sdk) && sdk.Arguments.Any(a => a.Contains("microsoft.netframework.referenceassemblies.net48", StringComparison.OrdinalIgnoreCase)),
+                  && _solutions.CompilerInputs.TryGetValue(console, out var sdk) && sdk.Arguments.Any(a => a.Contains(ReferenceAssembliesOf("net48"), StringComparison.OrdinalIgnoreCase)),
             () => $"restore: {string.Join(", ", restore)}; {DesignTimeState()}");
 
-        // The SDK-style app: net48, C# 7.3, the reference assemblies package as its framework.
+        // The SDK-style app: net48, C# 7.3, the reference assemblies package as its framework (the Developer Pack where it's installed).
         var sdkInfo = _solutions.Projects[console];
         Assert.False(sdkInfo.IsNonSdkStyle);
         Assert.Equal(["net48"], sdkInfo.TargetFrameworks);
         Assert.Equal("Exe", sdkInfo.OutputType);
-        Assert.Contains(sdkInfo.References, r => r.Kind == ReferenceKinds.Framework && r.Name == "Microsoft.NETFramework.ReferenceAssemblies");
+        Assert.Contains(sdkInfo.References, r => r.Kind == ReferenceKinds.Framework && r.Name == (InstalledReferenceAssemblies("net48") is null ? "Microsoft.NETFramework.ReferenceAssemblies" : ".NETFramework,Version=v4.8"));
         var sdkArguments = _solutions.CompilerInputs[console].Arguments;
         Assert.Contains("/langversion:7.3", sdkArguments);
-        Assert.Contains(sdkArguments, a => a.Contains("microsoft.netframework.referenceassemblies.net48", StringComparison.OrdinalIgnoreCase) && a.EndsWith("mscorlib.dll", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(sdkArguments, a => a.Contains(ReferenceAssembliesOf("net48"), StringComparison.OrdinalIgnoreCase) && a.EndsWith("mscorlib.dll", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(["net48", "net472"], _solutions.Projects[Project("Library")].TargetFrameworks);
         Assert.True(_solutions.Projects[Project("ConsoleApp.Tests")].IsTestProject);
         Assert.True(_solutions.Projects[Project("WinFormsApp")].UsesWindowsForms);
@@ -328,7 +347,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.DoesNotContain(info.Items, i => i.Path.EndsWith("NotInProject.cs", StringComparison.Ordinal));
         Assert.Contains(info.Items, i => i.Kind == "None" && i.Path.EndsWith("packages.config", StringComparison.Ordinal));
         var framework = Assert.Single(info.References, r => r.Kind == ReferenceKinds.Framework);
-        Assert.Equal("Microsoft.NETFramework.ReferenceAssemblies.net472", framework.Name);
+        Assert.Equal(InstalledReferenceAssemblies("net472") is null ? "Microsoft.NETFramework.ReferenceAssemblies.net472" : ".NETFramework,Version=v4.7.2", framework.Name);
         Assert.True(framework.Resolved);
         var package = Assert.Single(info.References, r => r.Kind == ReferenceKinds.Package);
         Assert.Equal(("Codalus.Sample.Legacy", "1.0.0", true), (package.Name, package.Version, package.Resolved));
@@ -344,7 +363,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         var inputs = _solutions.CompilerInputs[legacy];
         Assert.Equal("net472", inputs.TargetFramework);
         Assert.Contains("/langversion:7.3", inputs.Arguments);
-        Assert.Contains(inputs.Arguments, a => a.Contains("microsoft.netframework.referenceassemblies.net472", StringComparison.OrdinalIgnoreCase) && a.EndsWith("System.Configuration.dll", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(inputs.Arguments, a => a.Contains(ReferenceAssembliesOf("net472"), StringComparison.OrdinalIgnoreCase) && a.EndsWith("System.Configuration.dll", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(inputs.Arguments, a => a.EndsWith("Greeting.cs", StringComparison.Ordinal));
         Assert.Contains(Project("Library"), inputs.ProjectReferences);
 
