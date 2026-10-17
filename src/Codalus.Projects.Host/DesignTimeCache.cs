@@ -18,7 +18,7 @@ internal static class DesignTimeCache
     public const string FileName = "codalus.designtime.json";
 
     /// <summary>Changes when what goes into a key or an entry changes, so older caches miss.</summary>
-    public const string Schema = "codalus-designtime-2"; // 2: WPF's XAML as additional files (M40a)
+    public const string Schema = "codalus-designtime-3"; // 2: WPF's XAML as additional files (M40a); 3: WinUI off Windows (M44)
 
     private static readonly Lock s_writeGate = new();
 

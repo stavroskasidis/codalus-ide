@@ -89,12 +89,14 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             var test = TestProperties.None;
             var fingerprint = new Fingerprint(path, global, outer);
             var missingPacks = new SortedSet<string>(MissingWorkloadPacks(outer), StringComparer.OrdinalIgnoreCase);
+            string? windowsPackageType = null;
 
             if (frameworks.Length <= 1)
             {
                 references.AddRange(References(outer, frameworks.FirstOrDefault() ?? string.Empty, assets));
                 items.AddRange(Items(outer));
                 test = TestProperties.Of(outer);
+                windowsPackageType = NullIfEmpty(outer.GetPropertyValue("WindowsPackageType").Trim());
             }
             else
             {
@@ -113,6 +115,12 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                         // Package props (Microsoft.NET.Test.Sdk, the testing platform) are imported per framework.
                         test = test.Or(TestProperties.Of(inner));
                         missingPacks.UnionWith(MissingWorkloadPacks(inner));
+
+                        // MAUI's Windows target (M44): the Windows App SDK's targets evaluate it in that framework only.
+                        if (windowsPackageType is null && framework.Contains("-windows", StringComparison.OrdinalIgnoreCase))
+                        {
+                            windowsPackageType = NullIfEmpty(inner.GetPropertyValue("WindowsPackageType").Trim());
+                        }
                     }
                     finally
                     {
@@ -139,6 +147,8 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 UsesMaui = string.Equals(outer.GetPropertyValue("UseMaui").Trim(), "true", StringComparison.OrdinalIgnoreCase),
                 UsesWpf = string.Equals(outer.GetPropertyValue("UseWPF").Trim(), "true", StringComparison.OrdinalIgnoreCase),
                 UsesWindowsForms = string.Equals(outer.GetPropertyValue("UseWindowsForms").Trim(), "true", StringComparison.OrdinalIgnoreCase),
+                UsesWinUI = string.Equals(outer.GetPropertyValue("UseWinUI").Trim(), "true", StringComparison.OrdinalIgnoreCase),
+                WindowsPackageType = windowsPackageType,
                 MissingWorkloadPacks = [.. missingPacks],
                 Packages = assets is null ? [] : [.. frameworks.SelectMany(assets.Graph)],
             };

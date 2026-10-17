@@ -38,10 +38,11 @@ public sealed class MobileTests : IDisposable
         // Linux runs only Android; the Mac runs the active framework when it can.
         Assert.Equal("net10.0-android", MobileTargets.RunFramework(app, "net10.0-ios", PlatformKind.Linux));
         Assert.Equal("net10.0-ios", MobileTargets.RunFramework(app, "net10.0-ios", PlatformKind.MacOS));
-        Assert.Null(MobileTargets.RunFramework(Project("/w/W.csproj", maui: true, "net10.0-windows10.0.19041.0"), null, PlatformKind.Windows));
+        Assert.Equal("net10.0-windows10.0.19041.0", MobileTargets.RunFramework(Project("/w/W.csproj", maui: true, "net10.0-windows10.0.19041.0"), null, PlatformKind.Windows)); // M44
+        Assert.Null(MobileTargets.RunFramework(Project("/w/W.csproj", maui: true, "net10.0-windows10.0.19041.0"), null, PlatformKind.Linux));
 
         // Workloads: MAUI's for a MAUI project, only those of frameworks this machine builds; "maui" covers them all.
-        Assert.Equal(["maui-android"], MobileTargets.MissingWorkloads(app, [], PlatformKind.Windows));
+        Assert.Equal(["maui-android"], MobileTargets.MissingWorkloads(app, [], PlatformKind.Windows)); // no Windows framework here
         Assert.Equal(["maui-android", "maui-ios", "maui-maccatalyst"], MobileTargets.MissingWorkloads(app, [], PlatformKind.MacOS));
         Assert.Equal(["maui-ios"], MobileTargets.MissingWorkloads(app, ["maui-android", "maui-maccatalyst"], PlatformKind.MacOS));
         Assert.Empty(MobileTargets.MissingWorkloads(app, ["maui"], PlatformKind.MacOS));

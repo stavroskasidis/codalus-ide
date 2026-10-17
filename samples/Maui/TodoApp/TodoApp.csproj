@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- A .NET MAUI app (from `dotnet new maui`, trimmed): Android everywhere, iOS and Mac Catalyst on macOS. It needs the
-       maui-android workload (and maui-ios, maui-maccatalyst on a Mac) and, to run, the Android SDK and a JDK. -->
+  <!-- A .NET MAUI app (from `dotnet new maui`, trimmed): Android everywhere, iOS and Mac Catalyst on macOS, Windows (WinUI,
+       unpackaged) on Windows. It needs the maui-android workload (and maui-ios, maui-maccatalyst on a Mac, maui-windows on
+       Windows) and, to run on Android, the Android SDK and a JDK. -->
   <PropertyGroup>
     <TargetFrameworks>net10.0-android</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>TodoApp</RootNamespace>
     <UseMaui>true</UseMaui>
@@ -17,9 +19,14 @@
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
 
+    <!-- The Windows target runs unpackaged, as the template has it (WindowsPackageType=MSIX packages it). -->
+    <WindowsPackageType>None</WindowsPackageType>
+
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -65,7 +65,8 @@ public sealed partial class ShellHost
     public bool IsMobileProject(string project) => Solutions.Projects.TryGetValue(project, out var info) && MobileTargets.IsMobile(info);
 
     /// <summary>The framework a run of <paramref name="project"/> uses on this machine, or null.</summary>
-    public string? MobileRunFramework(ProjectInfo project) => MobileTargets.RunFramework(project, Solutions.ActiveFramework(project.Path), Workbench.Platform);
+    public string? MobileRunFramework(ProjectInfo project) =>
+        MobileTargets.RunFramework(project, Solutions.ActiveFrameworks.GetValueOrDefault(project.Path), Workbench.Platform); // the chosen framework; none chosen: Windows first on Windows (M44)
 
     private void OnMobileProjectChanged(ProjectInfo project)
     {
@@ -137,18 +138,16 @@ public sealed partial class ShellHost
         }
 
         await RefreshDevicesAsync().ConfigureAwait(true);
-        var platforms = project.TargetFrameworks.Select(MobileTargets.PlatformOf).Where(p => MobileTargets.RunsOn(p, Workbench.Platform)).Distinct().ToList();
         var current = MobileTargets.PlatformOf(MobileRunFramework(project));
-        var items = new List<QuickPickItem>();
-        foreach (var device in Mobile.Devices.Where(d => platforms.Contains(d.Platform)).OrderBy(d => d.Platform != current).ThenBy(d => d.Platform).ThenByDescending(d => d.IsRunning))
-        {
-            var chosen = Mobile.DeviceFor(device.Platform)?.Id == device.Id && device.Platform == current;
-            items.Add(new QuickPickItem(device.Label) { Tag = device, Icon = "phone", Detail = device.Problem ?? (chosen ? Localizer.Get("msg.mobile.current", "current") : null) });
-        }
-
-        items.Add(new QuickPickItem(Localizer.Get("msg.mobile.openDevices", "Open the Devices window")) { Tag = "devices" });
+        var items = DevicePickerItems(project, Workbench.Platform);
         if (await Palette.ShowAsync(items, Localizer.Format("msg.mobile.pickDevice", "Run {0} on", project.Name)).ConfigureAwait(true) is not { } picked)
         {
+            return;
+        }
+
+        if (picked.Tag is MobileDevice { IsUsable: false } unusable)
+        {
+            Workbench.Notifications.Info(Localizer.Format("msg.mobile.unusable", "{0}: {1}", unusable.Name, unusable.Problem));
             return;
         }
 
@@ -166,6 +165,32 @@ public sealed partial class ShellHost
         {
             ShowDevices();
         }
+    }
+
+    /// <summary>
+    /// The device picker's items for <paramref name="project"/> on <paramref name="host"/>: the devices of the platforms
+    /// this machine runs, the current platform's first. A Windows framework off Windows lists "Windows Machine" as
+    /// Windows only (D31, M44), so the target is visible but not chosen.
+    /// </summary>
+    internal List<QuickPickItem> DevicePickerItems(ProjectInfo project, Codalus.Platform.PlatformKind host)
+    {
+        var platforms = project.TargetFrameworks.Select(MobileTargets.PlatformOf).Where(p => MobileTargets.RunsOn(p, host)).Distinct().ToList();
+        var current = MobileTargets.PlatformOf(MobileTargets.RunFramework(project, Solutions.ActiveFrameworks.GetValueOrDefault(project.Path), host));
+        var items = new List<QuickPickItem>();
+        foreach (var device in Mobile.Devices.Where(d => platforms.Contains(d.Platform)).OrderBy(d => d.Platform != current).ThenBy(d => d.Platform).ThenByDescending(d => d.IsRunning))
+        {
+            var chosen = Mobile.DeviceFor(device.Platform)?.Id == device.Id && device.Platform == current;
+            items.Add(new QuickPickItem(device.Label) { Tag = device, Icon = device.Kind == MobileDeviceKind.ThisPc ? "window" : "phone", Detail = device.Problem ?? (chosen ? Localizer.Get("msg.mobile.current", "current") : null) });
+        }
+
+        if (host != Codalus.Platform.PlatformKind.Windows && MobileTargets.FrameworkFor(project, MobilePlatform.Windows) is { } windows)
+        {
+            var problem = Localizer.Format("msg.mobile.windowsOnly", "Windows only: {0} runs on Windows (from this OS, a Windows machine as a target comes later).", windows);
+            items.Add(new QuickPickItem(MobileTargets.WindowsMachine.Label) { Tag = MobileTargets.WindowsMachine with { Problem = problem }, Icon = "window", Detail = problem });
+        }
+
+        items.Add(new QuickPickItem(Localizer.Get("msg.mobile.openDevices", "Open the Devices window")) { Tag = "devices" });
+        return items;
     }
 
     public void ShowDevices()
@@ -231,9 +256,10 @@ public sealed partial class ShellHost
     /// <summary>
     /// Runs a mobile project on its device: the workloads, the Android SDK and the device first (starting an emulator
     /// that isn't running), then <c>dotnet build -t:Run</c>, its output in the project's Run channel. The platform's
-    /// SDK builds what's needed, so there's no separate build first.
+    /// SDK builds what's needed, so there's no separate build first. The Windows target ("Windows Machine", M44) runs as
+    /// a desktop app instead: <see cref="StartWindowsTargetAsync"/>, with <paramref name="hotReload"/> when unpackaged.
     /// </summary>
-    public async Task StartOnDeviceAsync(string projectPath, bool debug)
+    public async Task StartOnDeviceAsync(string projectPath, bool debug, bool hotReload = false)
     {
         if (!Solutions.Projects.TryGetValue(projectPath, out var project))
         {
@@ -242,7 +268,7 @@ public sealed partial class ShellHost
 
         if (MobileRunFramework(project) is not { } framework)
         {
-            Workbench.Notifications.Warning(Localizer.Format("msg.mobile.noFramework", "{0} has no target framework this machine runs: Android runs everywhere, iOS and Mac Catalyst need a Mac.", project.Name));
+            Workbench.Notifications.Warning(Localizer.Format("msg.mobile.noFrameworkHere", "{0} has no target framework this machine runs: Android runs everywhere, iOS and Mac Catalyst need a Mac, Windows needs Windows.", project.Name));
             return;
         }
 
@@ -253,6 +279,12 @@ public sealed partial class ShellHost
         }
 
         var platform = MobileTargets.PlatformOf(framework);
+        if (platform == MobilePlatform.Windows)
+        {
+            await StartWindowsTargetAsync(project, framework, debug, hotReload).ConfigureAwait(true);
+            return;
+        }
+
         if (platform == MobilePlatform.Android && !Mobile.Android().IsComplete)
         {
             var install = Localizer.Get("msg.mobile.installAndroid", "Install…");

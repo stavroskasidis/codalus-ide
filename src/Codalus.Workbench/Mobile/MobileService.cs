@@ -81,6 +81,11 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
             devices.Add(new MobileDevice(MobileTargets.ThisMacId, "This Mac", MobilePlatform.MacCatalyst, MobileDeviceKind.ThisMac, IsRunning: true));
         }
 
+        if (platform == PlatformKind.Windows)
+        {
+            devices.Add(MobileTargets.WindowsMachine); // MAUI's Windows target (M44)
+        }
+
         lock (_gate)
         {
             _devices = devices;

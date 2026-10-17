@@ -43,6 +43,12 @@ public sealed partial class ShellHost
             return null;
         }
 
+        if (RunsAsPackage(info))
+        {
+            // dotnet watch starts programs, and a packaged app starts only through its registration (M44).
+            return Localizer.Format("msg.windowsApps.noHotReload", "Hot Reload isn't available for {0}: it's a packaged (MSIX) app, which dotnet watch can't start. Set WindowsPackageType to None to use it.", info.Name);
+        }
+
         var framework = Solutions.ActiveFramework(project) ?? info.TargetFrameworks.FirstOrDefault();
         return DotnetFrameworks.HotReloadUnsupportedReason(framework, info.Name);
     }

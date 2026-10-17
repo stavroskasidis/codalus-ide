@@ -223,7 +223,7 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
             {
                 try
                 {
-                    var properties = await _shell.ProjectManagement.GetPropertiesAsync(Project, ["UsingMicrosoftNETSdkWeb", "UsingMicrosoftNETSdkRazor", "UseMaui", "UseWPF", "UseWindowsForms", "IsTestProject", "RootNamespace"], null, CancellationToken.None).ConfigureAwait(true);
+                    var properties = await _shell.ProjectManagement.GetPropertiesAsync(Project, ["UsingMicrosoftNETSdkWeb", "UsingMicrosoftNETSdkRazor", "UseMaui", "UseWPF", "UseWindowsForms", "UseWinUI", "IsTestProject", "RootNamespace"], null, CancellationToken.None).ConfigureAwait(true);
                     bool True(string name) => string.Equals(properties.Properties.FirstOrDefault(p => p.Name == name)?.Value, "true", StringComparison.OrdinalIgnoreCase);
                     var frameworks = info.TargetFrameworks;
                     _kind = new ItemTemplateProject(
@@ -233,6 +233,7 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
                         IsTest: True("IsTestProject") || info.IsTestProject,
                         IsWpf: True("UseWPF"),
                         IsWinForms: True("UseWindowsForms"),
+                        IsWinUI: True("UseWinUI"),
                         IsMobile: frameworks.Any(f => f.Contains("-android", StringComparison.OrdinalIgnoreCase) || f.Contains("-ios", StringComparison.OrdinalIgnoreCase) || f.Contains("-maccatalyst", StringComparison.OrdinalIgnoreCase)));
                     _rootNamespace = properties.Properties.FirstOrDefault(p => p.Name == "RootNamespace")?.Value is { Length: > 0 } ns ? ns : _rootNamespace;
                     _fileScoped = ItemTemplates.SupportsFileScopedNamespaces(frameworks);

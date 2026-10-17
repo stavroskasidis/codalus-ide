@@ -1,6 +1,6 @@
-# WPF and Windows Forms
+# WPF, Windows Forms and WinUI 3
 
-Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NET (`net8.0-windows` and later) on Windows, Linux and macOS. They run, debug, test and use Hot Reload on Windows, where WPF XAML also gets a previewer, running WPF apps the Live Visual Tree, and forms the Windows Forms designer. On Linux and macOS, starting one says that it runs only on Windows.
+Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NET (`net8.0-windows` and later) on Windows, Linux and macOS. They run, debug, test and use Hot Reload on Windows, where WPF XAML also gets a previewer, running WPF apps the Live Visual Tree, and forms the Windows Forms designer. On Linux and macOS, starting one says that it runs only on Windows. [WinUI 3](#winui-3) apps (the Windows App SDK) open and edit everywhere, and build, run and debug on Windows, packaged or not.
 
 | | Windows | Linux and macOS |
 |---|---|---|
@@ -10,6 +10,8 @@ Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NE
 | Run their tests (`net*-windows` test projects) | ✓ | Windows only |
 | WPF XAML Previewer, Live Visual Tree and Live Property Explorer | ✓ | Windows only |
 | Windows Forms designer and Toolbox | ✓ | Windows only (forms open as code) |
+| WinUI 3: open the project, IntelliSense, WinUI XAML editing | ✓ | ✓ |
+| WinUI 3: build, run, debug, Hot Reload, packaged (MSIX) apps | ✓ | Windows only |
 
 ## Opening and building on Linux and macOS
 
@@ -126,9 +128,45 @@ With the designer active, the **Properties** window (`F4`) shows the selected co
 
 On Linux and macOS, forms open as code (the status bar says once that the designer is Windows only), View Designer says so, and the code edits, completes and builds as usual.
 
+## WinUI 3
+
+WinUI 3 apps (`<UseWinUI>true</UseWinUI>`, the Windows App SDK's `Microsoft.WindowsAppSDK` package) open on every OS with IntelliSense for their C# and their XAML. Their packages restore everywhere (Codalus IDE sets `EnableWindowsTargeting`, as for WPF), but WinUI's XAML compiler is a Windows program, so they build, run and debug on Windows. On Linux and macOS, Start, Start Without Debugging, Build and Rebuild say so and build nothing, and the code-behind shows errors for `InitializeComponent` and the named elements' fields (the XAML compiler writes them, on Windows).
+
+### Running and debugging unpackaged apps
+
+An unpackaged app (`<WindowsPackageType>None</WindowsPackageType>`) runs on CoreCLR like any .NET program: **Start Without Debugging** builds and starts it, **Start** (`F5`) debugs it with breakpoints, stepping and the debugger windows, and **Start with Hot Reload** runs it under `dotnet watch`, where C# changes apply when you save. It needs the Windows App SDK runtime installed, unless it carries it (`<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>`, which needs a runtime identifier: `win-x64`, `win-arm64`…). Help → Check Environment lists the runtime each app's `Microsoft.WindowsAppSDK` version needs, and installs it with winget when you agree.
+
+### Packaged apps and Developer Mode
+
+A packaged app (MSIX, the default when the project has a `Package.appxmanifest` and doesn't set `WindowsPackageType`) can't be started as a plain program: Windows gives it its identity when it starts it. So **Start Without Debugging** and **Start**:
+1. check that **Developer Mode** is on, since Windows registers a build's files as an app only then. When it's off, Codalus IDE says why and opens **Settings → System → For developers** for you (Help → Check Environment does too). The other way is to set `WindowsPackageType` to `None` and run it unpackaged;
+2. build the app, then register its build's layout (the `AppxManifest.xml` next to its output) with `Add-AppxPackage -Register` in PowerShell, with the Windows App SDK runtime it depends on, from the restored package. The command and its output are in the app's Run channel;
+3. start it the way Windows starts packaged apps (the application user model id, `<package family name>!App`), and follow it until it exits (**Stop** ends it), or, with **Start**, attach the debugger to it.
+
+The app stays registered afterwards, as after a deployment from Visual Studio; remove it from Settings → Apps. Breakpoints in code that runs before the debugger attaches (the app's start-up) aren't hit: attach to a running app's later code, or debug it unpackaged. Hot Reload isn't available for packaged apps.
+
+### Editing WinUI XAML
+
+`.xaml` files in a WinUI project get WinUI's XAML, on every OS:
+- **Completion** of WinUI's controls (`Microsoft.UI.Xaml.Controls` and the other `Microsoft.UI.Xaml` namespaces, from the default XML namespace) and yours through `using:` prefixes, properties, events, attached properties (`Grid.Row`, `ToolTipService.ToolTip`, your own), values (enums, named colors, `FontWeights`), and WinUI's directives: `x:Load`, `x:Phase`, `x:DefaultBindMode`, `x:DataType`, `x:Uid`, `x:FieldModifier`.
+- **Markup extensions:** `x:Bind`, `Binding`, `StaticResource`, `ThemeResource`, `CustomResource`, `TemplateBinding`, `RelativeSource` and `x:Null`, with their arguments (`Mode`, `BindBack`, `UpdateSourceTrigger`…).
+- **`x:Bind` paths** start from the page's (or user control's, or window's) own class: its properties, fields, methods (function bindings like `{x:Bind Format(ViewModel.Count)}`) and named elements, private ones included; in a data template, from its `x:DataType`. They're compiled, so a path the class doesn't have is an **error**, as WinUI's XAML compiler reports it. `{Binding}` paths are resolved when the app runs, so they're **warnings**, from `d:DataContext` or a data template's `x:DataType`.
+- **Resources:** `StaticResource` and `ThemeResource` keys from the file, `App.xaml`, and the dictionaries they merge (`ms-appx:///Themes/Colors.xaml`, or a relative path). Keys aren't reported missing, since WinUI's own theme resources (`XamlControlsResources`) aren't listed in any file.
+- **Live errors:** syntax errors, unknown types and properties, setter properties, invalid enum values, `x:Load` and `x:DefaultBindMode` values, and `x:Bind` paths. WinUI's XAML compiler's errors (`WMC…`) from the last build show in their `.xaml` files.
+- **Hover**, **Go to Definition** (into WinUI's types, your classes, the code-behind, resources, event handlers and `x:Bind` paths), `x:Name` rename, formatting, folding and the Document Outline.
+
+`.xaml` files of WPF, .NET MAUI and Avalonia projects keep their own XAML; a MAUI app's `Platforms/Windows/App.xaml` is WinUI's.
+
+### New items
+
+**Add New Item** in a WinUI project offers **Blank Window**, **Blank Page** and **User Control** (the `.xaml` file and its `.xaml.cs` code-behind) and **Resource Dictionary**. File → New Project has no WinUI 3 template: the .NET SDK has none, and there's no maintained open-source template pack yet. Create one in Visual Studio, or start from a [WinUI sample](https://github.com/microsoft/WindowsAppSDK-Samples).
+
+There's no WinUI previewer (Microsoft has none either), and XAML Hot Reload isn't available.
+
 ## Not available yet
 
 - XAML Hot Reload (changes made in the Live Property Explorer stay in the running app).
+- A WinUI 3 previewer, WinUI templates in New Project, and building WinUI apps on Linux and macOS.
 - The WPF previewer and the Live Visual Tree on Linux and macOS (through a Windows machine), and for WPF on .NET Framework.
 - The Windows Forms designer on Linux and macOS (through a Windows machine), and its later parts (snap lines, tab order, smart tags, menus and tool strips, localizable forms).
 - Running and debugging these apps from Linux and macOS through a Windows machine.
