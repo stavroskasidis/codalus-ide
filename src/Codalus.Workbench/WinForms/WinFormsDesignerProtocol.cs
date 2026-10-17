@@ -51,7 +51,23 @@ public static class WinFormsDesignerMethods
 
     /// <summary>Runs a designer action or sets an action's property (M41b): <see cref="DesignerInvokeActionParams"/> → <see cref="DesignerChangeResult"/>.</summary>
     public const string InvokeAction = "designer/invokeAction";
+
+    /// <summary>
+    /// Answered from the host's UI thread once its window's message loop runs: → <see cref="DesignerStatus"/>. The shell's
+    /// start waits for it, so a cold start (the runtime, Windows Forms and the app's assemblies loaded for the first time
+    /// on a busy machine) has its own limit and a request's limit counts only the request's work.
+    /// </summary>
+    public const string Ready = "designer/ready";
+
+    /// <summary>
+    /// What the host is doing, answered off its UI thread: → <see cref="DesignerStatus"/>. The shell asks when a request
+    /// runs out of time, so the failure says whether the request reached the UI thread and where the work is.
+    /// </summary>
+    public const string Status = "designer/status";
 }
+
+/// <summary>The host's state in words (<see cref="WinFormsDesignerMethods.Ready"/>, <see cref="WinFormsDesignerMethods.Status"/>): its uptime, its window's message loop, the UI thread's work and what waits for it.</summary>
+public sealed record DesignerStatus(string State);
 
 /// <summary>
 /// What to load: the C# host's model, the project's build output (its types, and its compiled resources for
@@ -404,5 +420,6 @@ public sealed record DesignerEventsResult(DesignerEventInfo[] Events, string? De
 [JsonSerializable(typeof(DesignerSetCollectionParams))]
 [JsonSerializable(typeof(DesignerActionsResult))]
 [JsonSerializable(typeof(DesignerInvokeActionParams))]
+[JsonSerializable(typeof(DesignerStatus))]
 [JsonSerializable(typeof(System.Text.Json.JsonElement))]
 public sealed partial class WinFormsDesignerJsonContext : JsonSerializerContext;

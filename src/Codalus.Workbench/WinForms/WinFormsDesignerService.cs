@@ -311,22 +311,67 @@ public sealed class WinFormsDesignerService
         new(model, target.ProjectAssembly, classFullName, [.. new[] { Path.GetDirectoryName(target.ProjectAssembly), target.HostAssembly is null ? null : Path.GetDirectoryName(target.HostAssembly) }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)]);
 }
 
+/// <summary>How long the shell waits for the designer host (<see cref="WinFormsDesignerProcess"/>; tests shorten them).</summary>
+public sealed record WinFormsDesignerTimeouts
+{
+    public static WinFormsDesignerTimeouts Default { get; } = new();
+
+    /// <summary>From the process's start to <c>designer/ready</c>: a cold start loads the runtime, Windows Forms and the app's assemblies for the first time.</summary>
+    public TimeSpan Start { get; init; } = TimeSpan.FromSeconds(120);
+
+    /// <summary><c>designer/load</c>: the first one loads the designers' assemblies and the user's code, and draws with fonts and GDI+ not yet warm.</summary>
+    public TimeSpan Load { get; init; } = TimeSpan.FromSeconds(120);
+
+    /// <summary>Every other request.</summary>
+    public TimeSpan Request { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>The <c>designer/status</c> asked when a request runs out of time.</summary>
+    public TimeSpan Status { get; init; } = TimeSpan.FromSeconds(5);
+}
+
 /// <summary>
 /// The designer host process (ADR 0073): started on the app's runtime (<c>dotnet exec --runtimeconfig … --depsfile …
 /// codalus-winformsdesigner.dll</c>; a library on its own runs on the host's own runtimeconfig), supervised (a crash
-/// restarts it and the document loads the form again), speaking JSON-RPC on stdio.
+/// restarts it and the document loads the form again), speaking JSON-RPC on stdio. A start waits until the host's window
+/// pumps messages (<c>designer/ready</c>), so a request's limit counts only its own work; a request that runs out of
+/// time fails with what the host says it's doing (<c>designer/status</c>), whether it's still running, and its last
+/// lines of standard error.
 /// </summary>
 public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
 {
+    private const int ErrorLines = 20;
     private static readonly WinFormsDesignerJsonContext s_json = WinFormsDesignerJsonContext.Default;
+    private static readonly System.Text.Json.JsonElement s_noParams = EmptyObject();
     private readonly SupervisedProcess _process;
+    private readonly WinFormsDesignerTimeouts _timeouts;
+    private readonly Queue<string> _errors = new();
+    private readonly System.Diagnostics.Stopwatch _started = System.Diagnostics.Stopwatch.StartNew();
+    private string? _exited;
 
-    private WinFormsDesignerProcess(SupervisedProcess process)
+    private WinFormsDesignerProcess(SupervisedProcess process, WinFormsDesignerTimeouts timeouts)
     {
         _process = process;
-        _process.Log += (_, line) => Log?.Invoke(this, line);
+        _timeouts = timeouts;
+        _process.Log += (_, line) =>
+        {
+            lock (_errors)
+            {
+                _errors.Enqueue(line);
+                while (_errors.Count > ErrorLines)
+                {
+                    _errors.Dequeue();
+                }
+            }
+
+            Log?.Invoke(this, line);
+        };
         _process.Restarted += (_, _) => Restarted?.Invoke(this, EventArgs.Empty);
-        _process.Crashed += (_, e) => Log?.Invoke(this, $"The designer host exited ({e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no exit code"}){(e.WillRestart ? ": restarting it." : ".")}");
+        _process.Crashed += (_, e) =>
+        {
+            var exit = $"The designer host exited ({e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no exit code"}) after {_started.Elapsed.TotalSeconds:0} s";
+            _exited = exit;
+            Log?.Invoke(this, exit + (e.WillRestart ? ": restarting it." : "."));
+        };
     }
 
     public event EventHandler<string>? Log;
@@ -353,36 +398,82 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
         };
     }
 
-    public static async Task<IWinFormsDesignerHost> StartAsync(WinFormsDesignerTarget target, CancellationToken cancellationToken)
+    /// <summary>Starts the host for a target and waits until it's ready (<c>designer/ready</c>).</summary>
+    public static Task<IWinFormsDesignerHost> StartAsync(WinFormsDesignerTarget target, CancellationToken cancellationToken) =>
+        StartAsync(LaunchFor(target), WinFormsDesignerTimeouts.Default, cancellationToken);
+
+    internal static async Task<IWinFormsDesignerHost> StartAsync(ProcessLaunchInfo launch, WinFormsDesignerTimeouts timeouts, CancellationToken cancellationToken)
     {
-        var process = new SupervisedProcess("Windows Forms designer", LaunchFor(target), new SupervisionPolicy { MaxRestarts = 2 });
-        var host = new WinFormsDesignerProcess(process);
+        var process = new SupervisedProcess("Windows Forms designer", launch, new SupervisionPolicy { MaxRestarts = 2 });
+        var host = new WinFormsDesignerProcess(process, timeouts);
+        process.Initialize = async (connection, isRestart, ct) =>
+        {
+            try
+            {
+                await host.WaitReadyAsync(connection, ct).ConfigureAwait(false);
+            }
+            catch (PreviewerException ex) when (isRestart)
+            {
+                // A restart's failure is the supervisor's to log (it catches this type); the next request reports the host's state.
+                throw new InvalidOperationException(ex.Message, ex);
+            }
+        };
         try
         {
             await process.StartAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or PreviewerException)
         {
             await process.DisposeAsync().ConfigureAwait(false);
-            throw new PreviewerException($"The designer didn't start: {ex.Message}", ex);
+            throw ex as PreviewerException ?? new PreviewerException($"The designer didn't start: {ex.Message}", ex);
+        }
+        catch (OperationCanceledException)
+        {
+            await process.DisposeAsync().ConfigureAwait(false);
+            throw;
         }
 
         return host;
     }
 
-    private static TimeSpan Timeout => TimeSpan.FromSeconds(60);
-
-    private async Task<TResult> InvokeAsync<TParams, TResult>(string method, TParams parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsInfo, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken)
+    /// <summary>Waits for <c>designer/ready</c>: the host's UI thread runs its window's message loop.</summary>
+    private async Task WaitReadyAsync(JsonRpcConnection connection, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(Timeout);
+        timeout.CancelAfter(_timeouts.Start);
         try
         {
-            return await _process.Connection.InvokeAsync(method, parameters, paramsInfo, resultInfo, timeout.Token).ConfigureAwait(false);
+            var ready = await connection.InvokeAsync(WinFormsDesignerMethods.Ready, s_noParams, s_json.JsonElement, s_json.DesignerStatus, timeout.Token).ConfigureAwait(false);
+            Log?.Invoke(this, $"The designer host is ready after {_started.Elapsed.TotalSeconds:0.0} s: {ready?.State}");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new PreviewerException($"The designer didn't answer {method} in {Timeout.TotalSeconds:0} seconds.");
+            throw new PreviewerException($"The designer didn't start in {_timeouts.Start.TotalSeconds:0} seconds: {await DiagnoseAsync(connection).ConfigureAwait(false)}");
+        }
+        catch (JsonRpcConnectionLostException ex)
+        {
+            throw new PreviewerException($"The designer exited while starting: {await DiagnoseAsync(null).ConfigureAwait(false)}", ex);
+        }
+        catch (JsonRpcRemoteException ex)
+        {
+            throw new PreviewerException($"The designer didn't start: {ex.Message}", ex);
+        }
+    }
+
+    private async Task<TResult> InvokeAsync<TParams, TResult>(string method, TParams parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsInfo, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken, TimeSpan? limit = null)
+    {
+        var allowed = limit ?? _timeouts.Request;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(allowed);
+        JsonRpcConnection? connection = null;
+        try
+        {
+            connection = _process.Connection;
+            return await connection.InvokeAsync(method, parameters, paramsInfo, resultInfo, timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new PreviewerException($"The designer didn't answer {method} in {allowed.TotalSeconds:0} seconds: {await DiagnoseAsync(connection).ConfigureAwait(false)}");
         }
         catch (JsonRpcRemoteException ex)
         {
@@ -390,8 +481,52 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
         }
     }
 
+    /// <summary>
+    /// Why the host doesn't answer, in words: whether it's running, what it says it's doing (<c>designer/status</c>,
+    /// answered off its UI thread: the work there, its phase, what waits for it), and its last lines of standard error.
+    /// </summary>
+    private async Task<string> DiagnoseAsync(JsonRpcConnection? connection)
+    {
+        string state;
+        if (_exited is { } exited && (connection is null || !_process.IsRunning))
+        {
+            state = exited + ".";
+        }
+        else if (connection is null)
+        {
+            state = "the designer host isn't running.";
+        }
+        else
+        {
+            using var timeout = new CancellationTokenSource(_timeouts.Status);
+            try
+            {
+                var status = await connection.InvokeAsync(WinFormsDesignerMethods.Status, s_noParams, s_json.JsonElement, s_json.DesignerStatus, timeout.Token).ConfigureAwait(false);
+                state = $"the host (process {_process.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}, started {_started.Elapsed.TotalSeconds:0} s ago) says: {status?.State}";
+            }
+            catch (OperationCanceledException)
+            {
+                state = $"the host (process {_process.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}, started {_started.Elapsed.TotalSeconds:0} s ago) didn't answer {WinFormsDesignerMethods.Status} in {_timeouts.Status.TotalSeconds:0} seconds either: it isn't reading its input, or its output is blocked.";
+            }
+            catch (Exception ex) when (ex is JsonRpcConnectionLostException or JsonRpcRemoteException or IOException or ObjectDisposedException)
+            {
+                state = (_exited ?? "the designer host's connection failed") + $": {ex.Message}";
+            }
+        }
+
+        string[] errors;
+        lock (_errors)
+        {
+            errors = [.. _errors];
+        }
+
+        return errors.Length == 0
+            ? state + " It wrote nothing to standard error."
+            : state + " Its last standard error:" + Environment.NewLine + string.Join(Environment.NewLine, errors);
+    }
+
     public Task<DesignerRenderResult> LoadAsync(DesignerLoadParams parameters, CancellationToken cancellationToken) =>
-        InvokeAsync(WinFormsDesignerMethods.Load, parameters, s_json.DesignerLoadParams, s_json.DesignerRenderResult, cancellationToken);
+        InvokeAsync(WinFormsDesignerMethods.Load, parameters, s_json.DesignerLoadParams, s_json.DesignerRenderResult, cancellationToken, _timeouts.Load);
 
     public Task<DesignerRenderResult> RenderAsync(CancellationToken cancellationToken) =>
         InvokeAsync(WinFormsDesignerMethods.Render, new DesignerComponentsParams([]), s_json.DesignerComponentsParams, s_json.DesignerRenderResult, cancellationToken);
@@ -433,4 +568,10 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
         InvokeAsync(WinFormsDesignerMethods.InvokeAction, parameters, s_json.DesignerInvokeActionParams, s_json.DesignerChangeResult, cancellationToken);
 
     public ValueTask DisposeAsync() => _process.DisposeAsync();
+
+    private static System.Text.Json.JsonElement EmptyObject()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse("{}");
+        return document.RootElement.Clone();
+    }
 }

@@ -41,6 +41,7 @@ internal sealed partial class DesignerSession : IDisposable
     private bool _localizable;
     private string _className = string.Empty;
     private string[] _searchFolders = [];
+    private string? _phase;
 
     public DesignerSession(HostWindow window)
     {
@@ -52,6 +53,11 @@ internal sealed partial class DesignerSession : IDisposable
     private IDesignerHost Host => _host ?? throw new InvalidOperationException("No form is loaded.");
 
     private Control Root => _root ?? throw new InvalidOperationException("No form is loaded.");
+
+    /// <summary>Where a load or a drawing is (read off the UI thread by <c>designer/status</c>), or null.</summary>
+    public string? Phase => Volatile.Read(ref _phase);
+
+    private void Enter(string? phase) => Volatile.Write(ref _phase, phase);
 
     /// <summary>The project's references, from its output folder (a library's, which has no deps.json of its own).</summary>
     public Assembly? ResolveAssembly(AssemblyLoadContext context, AssemblyName name)
@@ -72,12 +78,26 @@ internal sealed partial class DesignerSession : IDisposable
 
     public DesignerRenderResult Load(DesignerLoadParams parameters)
     {
+        try
+        {
+            return LoadCore(parameters);
+        }
+        finally
+        {
+            Enter(null);
+        }
+    }
+
+    private DesignerRenderResult LoadCore(DesignerLoadParams parameters)
+    {
+        Enter("unloading the previous form");
         Unload();
         var errors = new List<string>();
         _searchFolders = [.. parameters.SearchFolders.Append(Path.GetDirectoryName(parameters.ProjectAssembly)!).Distinct(StringComparer.OrdinalIgnoreCase)];
         Assembly? project = null;
         if (File.Exists(parameters.ProjectAssembly))
         {
+            Enter($"loading {Path.GetFileName(parameters.ProjectAssembly)}");
             project = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => !a.IsDynamic && string.Equals(a.Location, parameters.ProjectAssembly, StringComparison.OrdinalIgnoreCase))
                 ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(parameters.ProjectAssembly);
             _types.Add(project);
@@ -89,6 +109,7 @@ internal sealed partial class DesignerSession : IDisposable
 
         var model = parameters.Model;
         var rootType = _types.Find(model.BaseType) ?? throw new InvalidOperationException($"The base type {model.BaseType} wasn't found (build the project).");
+        Enter($"loading the design surface for {model.BaseType}");
         _surface = new DesignSurface(_services);
         _surface.BeginLoad(rootType);
         if (_surface.LoadErrors.Count > 0)
@@ -130,6 +151,7 @@ internal sealed partial class DesignerSession : IDisposable
         {
             try
             {
+                Enter($"running line {statement.Line + 1} of the designer file");
                 Execute(statement, locals);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -309,6 +331,20 @@ internal sealed partial class DesignerSession : IDisposable
     // ------------------------------------------------------------------ drawing
 
     public DesignerRenderResult Render()
+    {
+        var phase = Phase;
+        Enter("drawing the form");
+        try
+        {
+            return RenderCore();
+        }
+        finally
+        {
+            Enter(phase);
+        }
+    }
+
+    private DesignerRenderResult RenderCore()
     {
         var root = Root;
         var errors = new List<string>();
