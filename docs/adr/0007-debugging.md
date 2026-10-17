@@ -106,3 +106,4 @@ The workbench's `DebugService` owns sessions and breakpoints, and the shell draw
 - Hit counts and logpoints cost a round trip per hit (the program stops briefly), unlike in an adapter that supports them.
 - macOS x64 has no netcoredbg build: debugging there is unavailable until there is one.
 - On macOS (arm64), netcoredbg reports every exit code as 0 (found by the M5 CI run); the tests skip that assertion there.
+- netcoredbg waits a fixed 5 seconds for a launched program's runtime to report; the IDE waits up to 60 seconds more for one that reports later (`DebugAdapter.ConfigurationDoneAsync`). On macOS netcoredbg takes such a runtime up only once a request arrives (its CreateProcess callback waits for the stdin lock its main thread holds while reading; PR #24's CI), so while waiting the IDE sends netcoredbg a request it answers with "not implemented" (`codalus/wake`) every 250 ms. TODO(issue): report upstream (Samsung/netcoredbg).
