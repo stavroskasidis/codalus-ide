@@ -53,13 +53,33 @@ public sealed partial class ShellHost
         return DotnetFrameworks.HotReloadUnsupportedReason(framework, info.Name);
     }
 
-    /// <summary>Alt+F10: saves the modified documents, which <c>dotnet watch</c> applies to the running program.</summary>
+    /// <summary>How long Apply Code Changes waits for <c>dotnet watch</c> to start watching before it saves anyway.</summary>
+    private static readonly TimeSpan s_hotReloadStartWait = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// Alt+F10: saves the modified documents, which <c>dotnet watch</c> applies to the running program. While it is still
+    /// starting, the save waits until it watches (<see cref="HotReloadSession.Started"/>): a change saved before then
+    /// never reaches the app.
+    /// </summary>
     public async Task ApplyCodeChangesAsync()
     {
-        if (HotReloadProgram is null)
+        if (HotReloadProgram is not { } program)
         {
             ShowMessage("Start with Hot Reload first (Debug → Start with Hot Reload).");
             return;
+        }
+
+        if (program.HotReload is { Started.IsCompleted: false } session)
+        {
+            StatusBar.ShowMessage(Localizer.Get("msg.hotReload.theCodeChangesAreSavedOnceItWatches", "Hot Reload is starting: the code changes are saved and applied once it watches for them…"), s_hotReloadStartWait);
+            try
+            {
+                await Task.WhenAny(session.Started, program.Exited).WaitAsync(s_hotReloadStartWait).ConfigureAwait(true);
+            }
+            catch (TimeoutException)
+            {
+                // Its output didn't say (another SDK's wording): saving is still the trigger.
+            }
         }
 
         await SaveAllAsync().ConfigureAwait(true);
