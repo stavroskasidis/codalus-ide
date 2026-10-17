@@ -42,7 +42,7 @@ public sealed class VsCodeImportTests
 
         var settings = f.Shell.Workbench.Settings;
         await ShellFixture.PumpUntil(() => settings.GetInt32("editor.fontSize") == 16);
-        Assert.Equal("light", settings.GetString(Theming.ThemeService.SettingKey));
+        Assert.Equal("classic.light", settings.GetString(Theming.ThemeService.SettingKey)); // Classic's Light, the closest (M45)
         Assert.Equal("#26496980", settings.GetValue(Theming.ColorCustomizations.WorkbenchKey).GetProperty("editor.selectionBackground").GetString());
         Assert.Equal("#6A9955", settings.GetValue(Theming.ColorCustomizations.TokensKey).GetProperty("comments").GetString());
         Assert.NotEqual(0, settings.GetInt32("editor.tabSize")); // "four" is no tab size: left as it was

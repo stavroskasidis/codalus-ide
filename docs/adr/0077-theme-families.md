@@ -1,0 +1,47 @@
+# 0077. Theme families as variants and tokens
+
+- **Status:** accepted (M45, 2026-10-17; D32 decided 2026-10-16)
+- **Date:** 2026-10-17
+- **Deciders:** maintainer
+- **Amends:** [ADR 0019](0019-classic-ide-look-and-feel.md) (themes as tokens: Blue, Light, Dark and High Contrast become the Classic family)
+
+## Context
+
+The maintainer asked for a look "close to Visual Studio style but original too" and chose all four directions of the design ([`design/shell-themes.md`](../design/shell-themes.md)): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with every color in the design's tables. D32 settled the rest: Harbor following the system for new installs, today's four themes kept as a Classic family so a saved setting keeps its look, and `workbench.colorTheme` taking `<family>` (follows the system) or `<family>.<light|dark|highContrast>`. The roadmap asked for an ADR, before code, on how a family's shapes become tokens and style classes so that views don't change. What had to be decided:
+- how twelve more themes sit next to Classic's four, with Fluent's controls, Dock's templates, the editor and the terminal following;
+- what the setting's values are, how today's are read, and what a new install gets;
+- how the families' layout differences (gutters, corners, tabs, captions, the status bar) are expressed without per-family views;
+- how a plugin's color theme keeps applying.
+
+## Decisions
+
+**Each family variant is an Avalonia theme variant.** `ThemeService` defines twelve `ThemeVariant`s (`Harbor.Light`, `Harbor.Dark`, `Harbor.HighContrast`…), each inheriting Classic's variant of its kind: Light, Dark, or Classic's High Contrast (itself inheriting Dark). Fluent's palettes only know Light and Dark, so the inheritance gives every family variant Fluent's colors of its kind, and High contrast variants Classic's high-contrast Fluent overrides (black menus, outlined buttons). Each variant's dictionary sits in `Theming/Tokens.axaml`'s `ThemeDictionaries`, next to Classic's: Avalonia searches a dictionary's own theme dictionaries, with inheritance, before its merged ones, so a family in a merged file would lose to Classic's Light or Dark it inherits. Each family dictionary sets every `Shell.*` token itself (a test reads the file and checks it), so nothing of Classic's leaks through the inheritance; Dock's brushes; and the Fluent keys where the family's colors matter: text boxes and combo boxes (`Shell.Input`), list and tree selection (`Shell.Selection`, `Shell.Selection.Foreground`), check boxes, toggle switches and accent buttons (the accent), and in High contrast white borders and the accent as focus.
+
+**The design is the source of the colors.** The design's tables are copied as they are. A token the design leaves out takes the family's panel colors (the design's rule: captions, Daylight's editor background, Ember's text boxes), and the others (hover, overlays, the status bar's hover, tab states, project tab colors, inlay hints, Fluent overrides) are mixes of the family's own colors or Classic's state colors of the same kind, chosen to meet every contrast pair. The tests read `design/shell-themes.md` and check every color of every table in every variant, and the editor's.
+
+**New tokens**, in every theme (Classic's keep its look: its values are what it drew before):
+- from the design: `Shell.Selection.Foreground`, `Shell.Input`, `Shell.Editor.CurrentLine`, `Shell.Editor.Breakpoint.Line`, `Shell.Editor.CurrentStatement`, `Shell.Editor.Breakpoint` (the debugger's adornments now draw them);
+- found while applying it: `Shell.StatusBar.Empty.Foreground` and `.Debugging.Foreground` with their `.Hover` (Ember's bar is the window's color with dark text, white only while debugging; a High contrast bar without a solution is black under white text); `Shell.TitleBar.Hover` and `Shell.TitleBar.Chip` (Harbor Light's navy title bar: the menu bar's items and the solution's name on it); `Shell.Search.Foreground` (the search box on that title bar); `Shell.Toolbar.Start`, `.Foreground` and `.Icon` (Daylight's Start button filled with the accent).
+
+**Shapes are tokens too, applied by `ShellStyles.axaml`.** A theme dictionary can hold any value, and `DynamicResource` follows the variant, so a family's shape is a resource next to its colors, and a style applies it to Dock's template parts and the shell's chrome. No view changes, no style class per family, and floating windows follow on their own:
+- `Shell.Gutter` and `Shell.Gutter.Background`: the splitter between docked windows (`ProportionalStackPanelSplitter.Thickness`): Harbor's 6 px and Ember's 8 px of window, Graphite's and Daylight's 1 px hairline, Classic Dock's 4 px, transparent.
+- `Shell.Panel.CornerRadius.Top` and `.Bottom`: Ember's 10 px cards (the tool window's caption and content, the document well's content, clipped).
+- Dock's own `DockDocumentTabItemCornerRadius` and `DockDocumentTabItemMargin`: Daylight's and Ember's rounded tabs.
+- `Shell.Tab.Active.Indicator` and `.IndicatorBrush`: the active document tab's border, on Dock's `PART_TabGutter` (every tab has it, transparent, so the active one doesn't move): Harbor's 3 px accent bar on top, Graphite's 2 px underline, Ember's 1 px edge.
+- `Shell.Caption.Active.FontWeight`: the focused tool window's title, bold where the family has no caption color; `Shell.Caption.Active.Marker` and `.MarkerPadding`: Graphite's accent dot before it, a drawing brush as the title's background.
+- `Shell.StatusBar.ShowDot`: Ember's state dot, an ellipse in the status bar colored by the state.
+
+**The setting** (D32). `harbor` follows the system, `harbor.dark` doesn't; Classic is `classic`, `classic.blue`, `classic.light`, `classic.dark` and `classic.highContrast`. The values written before M45 (`followSystem`, `blue`, `light`, `dark`, `highContrast`) **read as Classic** and stay valid values of the setting, so a saved setting keeps its look and isn't reported, and the file isn't rewritten (an older version still reads it). The default is `harbor`, so an install without the setting gets Harbor following the system; M46's setup will offer the choice. An unknown value resolves as the default. Following the system resolves within the family: the OS's high contrast first, then its light or dark (`PlatformSettings.ColorValuesChanged` re-applies it).
+
+**What the rest of the shell sees.** `ThemeService.ActiveTheme` is Classic's `blue`, `light`, `dark` or `highContrast`, as before, or a family's `harbor.dark`; `ActiveFamily` its family. The `theme` context key stays the kind (`light`, `dark`, `highContrast`; Classic's `blue`), so plugins' `when` clauses keep working, and a new **`themeFamily`** key names the family. The editor takes its kind's colors with the family's C# classification colors (keywords, types, methods, strings, numbers, comments) and current line over them; TextMate grammars and the terminal's ANSI palette follow the kind, the terminal's background and text are the family's editor's. Fonts and Colors still goes over all of it; its customizations take a family's name (`"[Harbor]"`) for the three variants and the variant's (`"[Harbor Dark]"`) over it, and Classic's keep their names (`"[Dark]"`, `"[High Contrast]"`).
+
+**Plugins.** A contributed color theme applies over Classic's variant for its `uiTheme` base, as it did (M22a); `themeFamily` is `classic` then. The plugin API doesn't change.
+
+**Choosing.** Color Theme (the quick pick) lists each family following the system and in each variant, Classic's, then the plugins'; moving previews (`ThemeService.Preview`) and Enter saves. Tools → Options → Environment → Appearance shows the setting as the families' cards, each with a picture drawn from that family's tokens in the chosen mode (read by its view model: a `ThemeVariantScope` drew nothing when its variant was the window's), a mode (Follow System, Light, Dark, High Contrast; Classic also Blue), and a plugin's theme from its own list.
+
+## Consequences
+
+- The twelve variants add about 2,100 lines of tokens to `Tokens.axaml` (compiled XAML) and no code paths per family. Startup applies one variant as before; a switch is a resource change.
+- Contrast: every pair in `contrast-pairs.txt`, which gained the design's new pairs, holds in all sixteen themes; text in the families' High contrast variants is held to 7:1, the design's rule, and the design's syntax colors are checked against the editor and its current line.
+- The structural differences in the design that need more than a value are left: Daylight's tool window rail and its toolbar's rounded groups, Ember's run controls in a pill in the title bar and its Locals empty state, Graphite's modified-tab dot and its search box in the middle of the title row, tool window tabs in the header (Graphite, Daylight, Ember). Each needs a template or a view of its own and its own decision. `TODO(issue)`
+- The smoke test's gallery photographs the sixteen themes only with `CODALUS_GALLERY_THEMES=all` (four times the pictures, more than the smoke test's time on CI); its `shell.themeFamilies` step photographs the window in each family variant on every run. `TODO(issue)`: the full gallery on CI.

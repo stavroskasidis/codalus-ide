@@ -137,12 +137,12 @@ public sealed class TextMateSupport : IRegistryOptions
         };
     }
 
-    /// <summary>The TextMate theme for the shell's theme (<c>dark</c>, <c>light</c>, <c>highContrast</c>).</summary>
+    /// <summary>The TextMate theme for the shell's theme, by its kind (<c>dark</c>, <c>light</c>, <c>highContrast</c>; a family's variant too).</summary>
     public IRawTheme ThemeFor(string themeId)
     {
-        _theme = themeId switch
+        _theme = Theming.ThemeService.KindOf(themeId) switch
         {
-            "light" or "blue" => ThemeName.LightPlus,
+            "light" => ThemeName.LightPlus,
             "highContrast" => ThemeName.HighContrastDark,
             _ => ThemeName.DarkPlus,
         };

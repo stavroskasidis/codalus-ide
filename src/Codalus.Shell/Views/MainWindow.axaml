@@ -40,7 +40,7 @@
                 ToolTip.Tip="{l:T main.searchCommandsSettingsFilesAndCode}" AutomationProperties.Name="{l:T main.searchCtrlQ}">
           <Grid ColumnDefinitions="Auto,*">
             <controls:Icon Kind="search" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1" Classes="muted" Text="{l:T main.searchCtrlQ}" Margin="6,0,0,0" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Classes="searchText" Text="{l:T main.searchCtrlQ}" Margin="6,0,0,0" VerticalAlignment="Center" />
           </Grid>
         </Button>
         <Border Grid.Column="3" Classes="solutionName" IsVisible="{Binding Toolbar.HasSolution}" VerticalAlignment="Center">
@@ -62,16 +62,20 @@
             IsVisible="{Binding StatusBar.IsVisible}"
             AutomationProperties.Name="{l:T main.statusBar}">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-        <ItemsControl ItemsSource="{Binding StatusBar.Left}" ItemTemplate="{StaticResource StatusItemTemplate}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <StackPanel Orientation="Horizontal" />
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-        </ItemsControl>
+        <StackPanel Orientation="Horizontal">
+          <!-- Ember's state dot (M45, Shell.StatusBar.ShowDot): its bar is the window's color, the dot says the state. -->
+          <Ellipse Classes="statusDot" Width="8" Height="8" Margin="10,0,2,0" VerticalAlignment="Center" />
+          <ItemsControl ItemsSource="{Binding StatusBar.Left}" ItemTemplate="{StaticResource StatusItemTemplate}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+          </ItemsControl>
+        </StackPanel>
         <TextBlock Grid.Column="1"
+                   Classes="statusMessage"
                    Text="{Binding StatusBar.DisplayMessage}"
-                   Foreground="{DynamicResource Shell.StatusBar.Foreground}"
                    FontSize="12"
                    Margin="12,0"
                    VerticalAlignment="Center"
