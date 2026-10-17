@@ -171,15 +171,23 @@ public sealed class InteractiveService : IAsyncDisposable
         }
     }
 
-    /// <summary>Runs one submission. A host that dies while running it yields a failed result, not an exception.</summary>
+    /// <summary>
+    /// Runs one submission, completing after its output. A host that dies while running it yields a failed result, not
+    /// an exception.
+    /// </summary>
     public async Task<ExecuteResult> ExecuteAsync(string code, CancellationToken cancellationToken)
     {
         var connection = await ConnectionAsync(cancellationToken).ConfigureAwait(false);
         var json = InteractiveJsonContext.Default;
         try
         {
-            return await connection.InvokeAsync(
+            var result = await connection.InvokeAsync(
                 InteractiveMethods.Execute, new ExecuteParams(Interlocked.Increment(ref _submission), code), json.ExecuteParams, json.ExecuteResult, cancellationToken).ConfigureAwait(false);
+
+            // The host flushes the submission's output before its result, but the result completes this call as soon
+            // as it is read, ahead of the output notifications still being dispatched: wait for them.
+            await connection.WhenDispatchedAsync().ConfigureAwait(false);
+            return result;
         }
         catch (JsonRpcConnectionLostException)
         {
