@@ -171,9 +171,9 @@ public sealed class WindowsDesktopShellTests
             var line = Array.FindIndex(File.ReadAllLines(model), l => l.Contains("Items.Add(new TodoItem(\"Open the WPF fixture\"))", StringComparison.Ordinal)) + 1;
             f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(model, line));
             f.Shell.Run("debug.start");
-            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 240);
-            await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line);
-            await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0);
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 240, describe: () => DebugStates(f));
+            await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line, describe: () => DebugStates(f));
+            await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0, describe: () => DebugStates(f));
             Assert.Contains("MainViewModel", f.Shell.CallStack.Frames[0].Name, StringComparison.Ordinal);
             f.Shell.Debugger.Breakpoints.Clear();
             f.Shell.Run("debug.stop");
@@ -196,6 +196,21 @@ public sealed class WindowsDesktopShellTests
                         + string.Join(" || ", f.Shell.Tests.Runs.Select(r => $"{r.Name} ({r.Results.Count} results): {r.Output}"))
                         + $" Build output (end): {build[Math.Max(0, build.Length - 4000)..]}");
         }
+    }
+
+    /// <summary>
+    /// What F5 did, for a failure: the wait for the breakpoint timed out once on Windows CI with nothing else to go on
+    /// (PR #26, job 117494115864). The session's state, the programs still running, the notifications, the build F5 ran
+    /// first and the Debug Console.
+    /// </summary>
+    private static string DebugStates(ShellFixture f)
+    {
+        var console = f.Shell.DebugLog.GetText();
+        var build = f.Shell.Builds.Channel.GetText();
+        return $"Debugger: {f.Shell.Debugger.State}. Running: {string.Join(", ", f.Shell.Runs.Running.Select(p => $"{p.Name} (exited: {p.HasExited})"))}. "
+               + $"Notifications: {string.Join(" || ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}. "
+               + $"Last build: {f.Shell.Builds.LastBuild?.Result}. Debug Console (end): {console[Math.Max(0, console.Length - 4000)..]} "
+               + $"Build output (end): {build[Math.Max(0, build.Length - 2000)..]}";
     }
 
     private static string TestStates(ShellFixture f) => f.Shell.Tests.Read(roots => string.Join(" || ", roots.Where(r => r.Label is "WpfApp.Tests" or "WinFormsApp.Tests").Select(r =>
