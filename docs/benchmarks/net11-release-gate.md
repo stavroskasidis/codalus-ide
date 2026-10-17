@@ -1,5 +1,16 @@
 # The 0.3.0 benchmark gate on .NET 11: what regressed
 
+## Decision
+
+2026-10-17, the maintainer: **accept the 0.3.0 sizes and fix the gate** (no host is made smaller). As done ([ADR 0002, amendment 2026-10-17](../adr/0002-performance-budgets.md#amendment-2026-10-17-accepted-values-and-runner-aware-comparisons)):
+
+- `benchmarks/accepted.json` holds the sizes in [the recommendation](#recommendation), at the 0.3.0 run's measured values (`lshost_mb` 93.519 / 92.645 / 102.326 MiB on Linux / Windows / macOS, `markuphost_mb` 3.576 / 3.589 / 4.046, `pluginhost_mb` 4.139 / 4.140 / 4.679). `compare` uses an accepted value in place of the median until runs newer than it exist.
+- The baseline takes runs on `master` whose benchmarks job passed on that OS, whatever their other jobs did.
+- Latency and memory fail only against at least 3 earlier runs on the same runner CPU model. With fewer, an increase is a warning, with latency divided by VS Code's startup in the same run. Size stays strict, and one run (or an accepted value) is enough. VS Code's own numbers never fail.
+- Each result records the runner's L3 cache next to its CPU, and the summary shows it.
+
+Replayed against the results of this note's runs (the first measurement, then the confirmation run as the gate would): the 0.3.0 run passes on every OS against the baseline it had (0.2.1). The language host 6% over its accepted value still fails. Against the baseline the new selection finds (five Linux and macOS runs, two Windows), Linux and Windows pass with warnings, but the Mac's `file_highlight_ms` fails against its three earlier runs on the same CPU, confirmation included (`editor-100k` 6037 ms, then 4200, against a 3610 ms median; `self-driven` 3302, then 3496, against 2120). That metric rose on Linux on the same CPU too ([Latency on Linux](#latency-on-linux)). It waits for the maintainer: it can be accepted (an entry with the Mac's CPU) or investigated.
+
 Date: 2026-10-16. The stable release run [Release 0.3.0](https://github.com/stavroskasidis/codalus-ide/actions/runs/38933321849) (`f72b78e8`, the first full CI run on .NET 11 RC2) failed the regression gate of the `benchmarks` job ([ADR 0002](../adr/0002-performance-budgets.md)) on all three runner OSes. This note separates what is real from what is the runner, and recommends new baseline values. Nothing here changes the budgets, the baseline or the gate; those wait for the maintainer.
 
 **In short:**
