@@ -17,6 +17,8 @@ On Windows, **.NET Framework** programs (and their tests) are debugged by Codalu
 | Restart | `Ctrl+Shift+F5` |
 | Break All | `Ctrl+Alt+Break` |
 
+**Break All** stops every thread, and the Call Stack shows the first thread running code of your own (or, when no thread is, the first that has managed frames); choose another thread in the Call Stack's thread list or the Threads window.
+
 The program's output and the debugger's messages appear in the **Debug Console**.
 
 ### The program's console

@@ -1547,10 +1547,9 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_resumedAt);
-        var threadId = stopped.ThreadId ?? 0;
         try
         {
-            var frames = (await adapter.StackTraceAsync(threadId, 200, _session.Token).ConfigureAwait(false)).StackFrames;
+            var (threadId, frames) = await StoppedThreadAsync(adapter, stopped).ConfigureAwait(false);
             var atRunTarget = _runTo is { } target && (IsRunToHit(stopped) || frames.Length > 0 && frames[0] is { Source.Path: { } topPath } top
                 && target.Location.Matches(new BreakpointLocation(topPath, top.Line)));
             if (stopped.Reason == "breakpoint" && !atRunTarget && _runTo is { Force: true })
@@ -1612,6 +1611,78 @@ public sealed class DebugService : IAsyncDisposable
         {
             Output?.Invoke(this, new DebugOutput("console", $"Could not read the stopped program's state: {ex.Message}\n"));
         }
+    }
+
+    /// <summary>
+    /// The thread a stop shows, and its frames: the stopped event's thread. A pause (Break All) stops every thread and
+    /// names one the adapter picked: netcoredbg names the thread it was asked to pause, the first it lists, by the
+    /// lowest thread id, which on Windows can be a runtime thread without managed frames, whose stack is empty (or
+    /// unreadable). The stop then shows the first thread with code of the program's own (frames with source), as
+    /// Visual Studio does after Break All, or else the first thread with any frames. An event that names no thread
+    /// shows one the same way.
+    /// </summary>
+    private async Task<(int ThreadId, StackFrame[] Frames)> StoppedThreadAsync(IDebugAdapter adapter, StoppedEvent stopped)
+    {
+        var pause = stopped.Reason == "pause";
+        StackFrame[] frames = [];
+        if (stopped.ThreadId is { } reported)
+        {
+            try
+            {
+                frames = (await adapter.StackTraceAsync(reported, 200, _session.Token).ConfigureAwait(false)).StackFrames;
+            }
+            catch (DapException) when (pause)
+            {
+            }
+
+            if (!pause || frames.Any(HasSource))
+            {
+                return (reported, frames);
+            }
+        }
+
+        (int ThreadId, StackFrame[] Frames)? withFrames = frames.Length > 0 ? (stopped.ThreadId!.Value, frames) : null;
+        DapThread[] threads;
+        try
+        {
+            threads = await adapter.ThreadsAsync(_session.Token).ConfigureAwait(false);
+        }
+        catch (DapException) when (withFrames is not null)
+        {
+            threads = [];
+        }
+
+        foreach (var thread in threads)
+        {
+            if (thread.Id == stopped.ThreadId)
+            {
+                continue;
+            }
+
+            StackFrame[] stack;
+            try
+            {
+                stack = (await adapter.StackTraceAsync(thread.Id, 200, _session.Token).ConfigureAwait(false)).StackFrames;
+            }
+            catch (DapException)
+            {
+                continue;
+            }
+
+            if (stack.Any(HasSource))
+            {
+                return (thread.Id, stack);
+            }
+
+            if (withFrames is null && stack.Length > 0)
+            {
+                withFrames = (thread.Id, stack);
+            }
+        }
+
+        return withFrames ?? (stopped.ThreadId ?? 0, frames);
+
+        static bool HasSource(StackFrame frame) => frame.Source?.Path is not null;
     }
 
     private static string ExceptionType(ExceptionInfoResponse exception) =>
