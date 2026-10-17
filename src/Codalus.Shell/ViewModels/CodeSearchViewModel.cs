@@ -48,14 +48,17 @@ public interface ICodeSearchHost
     /// <summary>Runs a command, opens a setting or an options page.</summary>
     void RunFeature(FeatureSearchItem item);
 
-    /// <summary>The window closed (or docked away): the preview lets go of its document; the state is saved.</summary>
+    /// <summary>The window closed: the preview lets go of its document.</summary>
     void OnClosed();
 
-    /// <summary>The scope, external items or the window's state changed (saved with the settings or the shell's state).</summary>
+    /// <summary>The scope or external items changed (saved as settings; the window's own state goes with the shell's state when it closes).</summary>
     void OnOptionsChanged();
 
     /// <summary>The window moves between floating and docked as a tool window.</summary>
     void SetDocked(bool docked);
+
+    /// <summary>Esc in the docked window: the focus goes back to the document.</summary>
+    void ReturnFocus();
 }
 
 /// <summary>A row: a group's header, a code result or a feature.</summary>
@@ -250,6 +253,7 @@ public sealed class CodeSearchViewModel : ObservableObject, IDisposable
     private double _height = 600;
     private double _offsetX;
     private double _offsetY;
+    private bool _applying;
 
     public CodeSearchViewModel(ICodeSearchHost host)
     {
@@ -421,6 +425,14 @@ public sealed class CodeSearchViewModel : ObservableObject, IDisposable
         get => _selectedIndex;
         set
         {
+            if (_applying)
+            {
+                // The list's own reset while the rows are replaced: taken without a preview, so the list and the
+                // binding agree, and Apply's selection afterwards is a change the list hears.
+                _selectedIndex = value;
+                return;
+            }
+
             if (value >= 0 && value < Rows.Count && Rows[value].IsHeader)
             {
                 value = NextItem(value, value > _selectedIndex ? 1 : -1);
@@ -611,6 +623,12 @@ public sealed class CodeSearchViewModel : ObservableObject, IDisposable
     /// <summary>Esc: closes the floating window (a docked one stays, and gives the focus back).</summary>
     public void Close()
     {
+        if (IsDocked && IsOpen)
+        {
+            _host.ReturnFocus();
+            return;
+        }
+
         if (!IsOpen)
         {
             return;
@@ -803,11 +821,14 @@ public sealed class CodeSearchViewModel : ObservableObject, IDisposable
     private void ShowFeatures(IReadOnlyList<FeatureSearchItem> items)
     {
         var query = _query.Trim();
+        _applying = true;
         Rows.Clear();
         foreach (var item in items)
         {
             Rows.Add(CodeSearchRow.ForFeature(item, FuzzyMatcher.Match(query, item.Title)?.Positions ?? []));
         }
+
+        _applying = false;
 
         IsIncomplete = false;
         IsSearching = false;
@@ -815,13 +836,14 @@ public sealed class CodeSearchViewModel : ObservableObject, IDisposable
             ? Localizer.Get("msg.codeSearch.featureHint", "Type to search commands, settings and options pages.")
             : Rows.Count == 0 ? Localizer.Format("msg.codeSearch.noFeatures", "No commands, settings or options pages match '{0}'.", query) : string.Empty;
         OnPropertyChanged(nameof(IsEmpty));
-        _selectedIndex = -1;
+        _selectedIndex = -2;
         SelectedIndex = Rows.Count == 0 ? -1 : 0;
     }
 
     private void Apply(IReadOnlyList<CodeSearchResult> results, bool incomplete, CodeSearchQuery query)
     {
         var keep = Selected?.Result?.Key;
+        _applying = true;
         Rows.Clear();
         if (_grouped && !query.IsLine)
         {
@@ -854,6 +876,7 @@ public sealed class CodeSearchViewModel : ObservableObject, IDisposable
             }
         }
 
+        _applying = false;
         IsIncomplete = incomplete;
         Status = StatusFor(query);
         OnPropertyChanged(nameof(IsEmpty));

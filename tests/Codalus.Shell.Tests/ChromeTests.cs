@@ -235,12 +235,12 @@ public class ChromeTests
         await using var f = ShellFixture.Create();
         Assert.Equal("default", f.Shell.Workbench.Context.GetValue("keyboardScheme"));
 
-        // Default: Ctrl+, (Cmd+, on macOS) is Go To All.
+        // Default: Ctrl+, (Cmd+, on macOS) is Go To All, Code Search (M47).
         var primary = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
         f.Press(Key.OemComma, primary);
-        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen);
-        f.Shell.Palette.Cancel();
-        await ShellFixture.PumpUntil(() => !f.Shell.Palette.IsOpen);
+        await ShellFixture.PumpUntil(() => f.Shell.CodeSearch is { IsOpen: true, IsCodeTab: true });
+        f.Shell.CodeSearch.Close();
+        await ShellFixture.PumpUntil(() => !f.Shell.CodeSearch.IsOpen);
 
         // VS Code: Ctrl+, opens Settings and F1 the command palette.
         await f.Shell.Workbench.Settings.SetAsync(BuiltIns.KeyboardSchemeSetting, "vscode", SettingScope.User, CancellationToken.None);

@@ -926,7 +926,6 @@ public sealed partial class ShellHost : IAsyncDisposable
             Workbench.Commands.SetRecent(recent);
         }
 
-        _codeSearchState = state?.CodeSearch;
         CodeSearch.RestoreState(state?.CodeSearch);
     }
 

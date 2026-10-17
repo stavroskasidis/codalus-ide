@@ -39,12 +39,12 @@ public sealed partial class ShellHost : ICodeSearchHost
     private SolutionStateKey? _indexKey;
     private bool _indexUnsaved;
     private Dictionary<string, string>? _projectOfFile;
-    private CodeSearchWindowState? _codeSearchState;
 
     private CodeDocument? _previewModel;
     private CodeEditorDocument? _previewDocument;
     private CodeEditorView? _previewView;
     private int _previewVersion;
+    private string? _previewKey;
 
     public CodeSearchViewModel CodeSearch { get; private set; } = null!;
 
@@ -71,8 +71,10 @@ public sealed partial class ShellHost : ICodeSearchHost
         Solutions.ProjectChanged += (_, _) =>
         {
             _projectOfFile = null;
+            Interlocked.Increment(ref _codeSearchFilesVersion);
             Ui.Post(RefreshCodeSearchSoon);
         };
+        Solutions.SolutionChanged += (_, _) => Interlocked.Increment(ref _codeSearchFilesVersion);
     }
 
     private void ApplyCodeSearchSettings()
@@ -160,7 +162,7 @@ public sealed partial class ShellHost : ICodeSearchHost
 
         var context = RankContext();
         var include = ScopeFilter(scope);
-        var files = CodeSearchFiles();
+        var files = await CodeSearchFilesAsync().ConfigureAwait(true);
         var root = Solutions.Solution?.Directory;
         var projects = ProjectOfFile();
         var all = new List<CodeSearchResult>();
@@ -237,17 +239,56 @@ public sealed partial class ShellHost : ICodeSearchHost
         };
     }
 
-    /// <summary>The files Code Search lists: the projects' items, or the saved index's while the projects evaluate.</summary>
-    private IReadOnlyList<string> CodeSearchFiles()
+    /// <summary>
+    /// The files Code Search lists: the projects' items that exist (or the open files without a solution), and the
+    /// saved index's while the projects evaluate. Checked on disk off the UI thread, once per change of the projects.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> CodeSearchFilesAsync()
     {
-        var files = SearchableFiles();
-        if (Solutions.Solution is not null && Solutions.Progress is not { Completed: true } && CodeSearchIndex.Files.Count > 0)
+        var version = _codeSearchFilesVersion;
+        if (_codeSearchFiles is { } cached && cached.Version == version)
         {
-            return [.. files.Concat(CodeSearchIndex.Files).Distinct(SolutionService.PathComparer)];
+            return cached.Files;
+        }
+
+        IReadOnlyList<string> candidates;
+        if (Solutions.Solution is not { } solution)
+        {
+            candidates = [.. _models.Values.Where(m => !m.IsReadOnly).Select(m => m.Path)];
+        }
+        else
+        {
+            var set = new HashSet<string>(SolutionService.PathComparer);
+            foreach (var project in Solutions.Projects.Values)
+            {
+                set.Add(project.Path);
+                set.UnionWith(project.Items.Where(i => i.Kind != "Folder").Select(i => i.Path));
+            }
+
+            foreach (var folder in solution.Folders)
+            {
+                set.UnionWith(folder.Files);
+            }
+
+            if (Solutions.Progress is not { Completed: true })
+            {
+                set.UnionWith(CodeSearchIndex.Files);
+            }
+
+            candidates = [.. set];
+        }
+
+        var files = await Task.Run(() => (IReadOnlyList<string>)[.. candidates.Where(File.Exists).Order(StringComparer.OrdinalIgnoreCase)]).ConfigureAwait(true);
+        if (Solutions.Solution is not null && Solutions.Progress is { Completed: true })
+        {
+            _codeSearchFiles = (version, files); // while projects evaluate, every query looks again
         }
 
         return files;
     }
+
+    private (int Version, IReadOnlyList<string> Files)? _codeSearchFiles;
+    private int _codeSearchFilesVersion;
 
     /// <summary>The scope as a filter of files: null for the whole solution.</summary>
     private Func<string, bool>? ScopeFilter(CodeSearchScope scope)
@@ -559,7 +600,6 @@ public sealed partial class ShellHost : ICodeSearchHost
     void ICodeSearchHost.OnClosed()
     {
         _ = ReleasePreviewAsync();
-        SaveCodeSearchWindowState();
     }
 
     void ICodeSearchHost.OnOptionsChanged()
@@ -585,8 +625,6 @@ public sealed partial class ShellHost : ICodeSearchHost
         {
             _ = settings.SetAsync(CodeSearchExternalSetting, CodeSearch.IncludeExternal, SettingScope.User, CancellationToken.None);
         }
-
-        SaveCodeSearchWindowState();
     }
 
     void ICodeSearchHost.SetDocked(bool docked)
@@ -607,10 +645,9 @@ public sealed partial class ShellHost : ICodeSearchHost
         }
 
         CodeSearch.Open(CodeSearch.TabIndex);
-        SaveCodeSearchWindowState();
     }
 
-    private void SaveCodeSearchWindowState() => _codeSearchState = CodeSearch.CaptureState();
+    void ICodeSearchHost.ReturnFocus() => ActiveEditor?.View?.FocusPrimary();
 
     // ------------------------------------------------------------------ the preview
 
@@ -623,6 +660,11 @@ public sealed partial class ShellHost : ICodeSearchHost
         {
             await ReleasePreviewAsync().ConfigureAwait(true);
             return;
+        }
+
+        if (_previewModel is { } same && SolutionService.PathComparer.Equals(same.Path, path) && _previewKey == result.Key)
+        {
+            return; // the same result again (a refresh, a later batch): the caret stays where the user put it
         }
 
         if (_previewModel is not { } current || !SolutionService.PathComparer.Equals(current.Path, path))
@@ -656,6 +698,7 @@ public sealed partial class ShellHost : ICodeSearchHost
             UpdatePreviewTitle();
         }
 
+        _previewKey = result.Key;
         RevealInPreview(result);
     }
 
@@ -734,6 +777,7 @@ public sealed partial class ShellHost : ICodeSearchHost
         }
 
         var view = _previewView;
+        _previewKey = null;
         _previewModel = null;
         _previewDocument = null;
         _previewView = null;
@@ -802,7 +846,11 @@ public sealed partial class ShellHost : ICodeSearchHost
         }
 
         _indexUnsaved = false;
-        CodeSearchIndex.SetFiles(SearchableFiles());
+        if (_codeSearchFiles is { } files)
+        {
+            CodeSearchIndex.SetFiles(files.Files);
+        }
+
         _ = CodeSearchIndex.SaveAsync(SolutionState, key);
     }
 
@@ -840,6 +888,13 @@ public sealed partial class ShellHost : ICodeSearchHost
             }
 
             CodeSearchIndex.Replace(index.Documents);
+            var files = await CodeSearchFilesAsync().ConfigureAwait(true);
+            if (_indexKey != key)
+            {
+                return;
+            }
+
+            CodeSearchIndex.SetFiles(files);
             _indexUnsaved = true;
             SaveCodeSearchIndex(onlyIfChanged: false);
             Workbench.Log.AppendLine($"[code search] Indexed {CodeSearchIndex.SymbolCount} symbols in {CodeSearchIndex.DocumentCount} documents in {started.ElapsedMilliseconds} ms.");

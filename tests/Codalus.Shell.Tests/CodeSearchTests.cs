@@ -83,6 +83,7 @@ public sealed class CodeSearchTests
         Assert.Equal(shapes, preview.Controller.Model.Path);
         Assert.Contains("class Circle", preview.Controller.Model.Text.GetText(preview.Controller.Model.Text.GetLineByOffset(preview.Editor.CaretOffset)), StringComparison.Ordinal);
         Assert.Same(preview, f.Window.FindDescendantOfType<CodeSearchView>()!.Preview.Content);
+        Assert.Equal(search.SelectedIndex, f.Window.FindDescendantOfType<CodeSearchView>()!.FindDescendantOfType<Avalonia.Controls.ListBox>()!.SelectedIndex); // the list shows it selected
         Assert.Equal(shapes, search.PreviewTitle);
         Assert.StartsWith("Ln ", search.PreviewStatus, StringComparison.Ordinal);
         await ShellFixture.PumpUntil(() => f.Shell.CodeSearchPreview?.Controller.Colorizer.HasTokens == true, seconds: 60); // the language service's colors, as in a tab
