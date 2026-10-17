@@ -119,6 +119,47 @@ public class EditorTests
     }
 
     [AvaloniaFact]
+    public async Task Redraws_while_a_large_file_is_classified_keep_its_first_semantic_tokens_request()
+    {
+        // file_highlight_ms (docs/benchmarks/net11-release-gate.md): every redraw during an open (CodeLens, inlay hints,
+        // Git lenses arriving) cancelled the first semantic tokens request and sent another, so a large file's first
+        // colors waited for the last redraw. A count of requests, not a time: the first one is the one applied.
+        await using var f = ShellFixture.Create();
+        var folder = Directory.CreateDirectory(Path.Combine(f.UserData, "large")).FullName;
+        var source = new StringBuilder("namespace Large;\n\n");
+        for (var i = 0; i < 2500; i++)
+        {
+            source.Append(System.Globalization.CultureInfo.InvariantCulture, $$"""
+                public sealed class Item{{i}}
+                {
+                    private readonly List<string> _names = new();
+                    public int Count => _names.Count;
+                    public string Describe(int index) => $"{index}: {_names[index % _names.Count]}";
+                    public void Add(string name) => _names.Add(name.Trim());
+                }
+
+                """);
+        }
+
+        var path = Path.Combine(folder, "Large.cs");
+        await File.WriteAllTextAsync(path, "using System.Collections.Generic;\n" + source, TestContext.Current.CancellationToken);
+        var editor = await OpenAsync(f, path);
+        int? sentWhenApplied = null;
+        editor.TokensApplied += (_, _) => sentWhenApplied ??= editor.TokenRequests;
+        await ShellFixture.PumpUntil(() => editor.TokenRequests > 0 || editor.Colorizer.HasTokens, seconds: 60);
+        var sent = editor.TokenRequests;
+        for (var i = 0; i < 20 && !editor.Colorizer.HasTokens; i++)
+        {
+            editor.Editor.TextArea.TextView.Redraw();
+            ShellFixture.Pump();
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        await ShellFixture.PumpUntil(() => editor.Colorizer.HasTokens, seconds: 120);
+        Assert.Equal(sent, sentWhenApplied);
+    }
+
+    [AvaloniaFact]
     public async Task Documents_reopen_with_their_solution()
     {
         await using var f = ShellFixture.Create();
