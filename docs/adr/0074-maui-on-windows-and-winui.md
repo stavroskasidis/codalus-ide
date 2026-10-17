@@ -39,13 +39,14 @@ D31 moved the Windows desktop phase into scope as Windows-only features, the oth
 - **Directives:** `x:Load` (Boolean or an `x:Bind`, checked), `x:DefaultBindMode` (`OneTime`, `OneWay`, `TwoWay`, checked), `x:Phase`, `x:Uid`, `x:FieldModifier`, `x:DataType`; completion of each.
 - **Markup extensions:** `x:Bind` (with `Mode`, `BindBack`, converters…), `Binding`, `StaticResource`, `ThemeResource`, `CustomResource`, `TemplateBinding`, `RelativeSource`, `x:Null`.
 - **Resources** (ADR 0071's `XamlResources`): the file's own, `App.xaml`'s and the dictionaries merged with `ms-appx:///` sources (the project's root; a library's under its assembly name), completed and navigated, never reported missing: `StaticResource` and `ThemeResource` also find the framework's theme resources (`XamlControlsResources`), which no file lists.
-- **WinUI's XAML compiler errors** (`WMC…`) map to their files from builds, as `MC…` and `AVLN` errors do (`XamlBuildDiagnostics` takes any `.xaml`).
+- **WinUI's XAML compiler errors** (`WMC…`) map to their files from builds, as `MC…` and `AVLN` errors do (`XamlBuildDiagnostics` takes any `.xaml`), when they name one. On `dotnet` MSBuild they don't (the first Windows run): `XamlCompiler.exe` embeds its messages under another name (`Microsoft.Windows.UI.Xaml.Build.Tasks.ErrorMessages.resources`) than the one it looks up, so every error becomes `WMC9999` ("Could not find any resources…") on the compiler task's line in the package's targets.
 
 **Templates.** No template pack is offered (no reliable MIT one exists; New Project has no WinUI template, a gap). Add New Item has WinUI 3's Blank Window, Blank Page, User Control and Resource Dictionary built in, as WPF's are, with the code-behind nested.
 
 ## Consequences
 
 - WinUI XAML is edited, checked and navigated on every OS, and its tests run on every CI runner; building, running, deploying and debugging are proven only on Windows (the Windows-only tests and the smoke step `maui.windows`).
+- A WinUI build's XAML errors say only `WMC9999`, without their file (a Windows App SDK defect, 1.8 and 2.3 alike); the editor's live checks (`x:Bind` paths, types, properties) are what point at the XAML. `TODO(issue)`
 - Off Windows, a WinUI project's code-behind shows C# errors for `InitializeComponent` and the named elements' fields until it's built on Windows (the compiler that writes them doesn't run there). `TODO(issue)`
 - A packaged app registered from the IDE stays registered (as after a deployment), and the Windows App SDK runtime's framework package it depends on may be installed by the registration.
 - Breakpoints in a packaged app's start-up code are missed: netcoredbg attaches after the activation. Launching suspended through `IPackageDebugSettings` would fix it. `TODO(issue)`
