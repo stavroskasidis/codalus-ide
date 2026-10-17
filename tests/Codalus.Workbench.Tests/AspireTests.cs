@@ -259,6 +259,10 @@ public sealed class AspireTests : IAsyncLifetime
 
         Assert.Contains("Stopping run session", Log(), StringComparison.Ordinal);
         log.Enqueue("[test] Done: disposing the resource client and the IDE server.");
+        client.Dispose();
+        log.Enqueue("[test] The resource client is disposed.");
+        await server.DisposeAsync();
+        log.Enqueue("[test] The IDE server is disposed.");
     }
 }
 

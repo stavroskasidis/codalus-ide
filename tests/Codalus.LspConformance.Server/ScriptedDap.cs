@@ -42,7 +42,7 @@ internal static class ScriptedDap
                     // As netcoredbg answers when the program's runtime didn't report within its 5 seconds. Like netcoredbg,
                     // it started the program first, as its child, and doesn't end it on disconnect: its id is listed
                     // next to the starts file.
-                    StartProgram(launch!.Value.GetProperty("startsFile").GetString()! + ".programs");
+                    StartProgram(StartsFile(launch!.Value) + ".programs");
                     await FailAsync(output, requestSeq, command, "Failed command 'configurationDone' : 0x80004005");
                     continue;
                 case "configurationDone" when Threads(launch) is not null:
@@ -126,18 +126,29 @@ internal static class ScriptedDap
     /// <summary>
     /// A launch configuration with <c>failStarts</c> (a count) and <c>startsFile</c> (a file the adapters share) fails
     /// that many starts, one per adapter process, before one succeeds (the debug service starts again, as after netcoredbg's startup timeout).
+    /// A netcoredbg launch (a debug service's own <c>LaunchArguments</c>) carries the two in its <c>env</c>.
     /// </summary>
     private static bool FailsToStart(JsonElement? launch)
     {
-        if (launch is not { ValueKind: JsonValueKind.Object } arguments
-            || !arguments.TryGetProperty("failStarts", out var fail) || !arguments.TryGetProperty("startsFile", out var file))
+        if (launch is not { ValueKind: JsonValueKind.Object } arguments)
+        {
+            return false;
+        }
+
+        if (arguments.TryGetProperty("env", out var env) && env.ValueKind == JsonValueKind.Object)
+        {
+            arguments = env;
+        }
+
+        if (!arguments.TryGetProperty("failStarts", out var fail) || !arguments.TryGetProperty("startsFile", out var file))
         {
             return false;
         }
 
         var path = file.GetString()!;
         var failed = File.Exists(path) ? int.Parse(File.ReadAllText(path), System.Globalization.CultureInfo.InvariantCulture) : 0;
-        if (failed >= fail.GetInt32())
+        var count = fail.ValueKind == JsonValueKind.String ? int.Parse(fail.GetString()!, System.Globalization.CultureInfo.InvariantCulture) : fail.GetInt32();
+        if (failed >= count)
         {
             return false;
         }
@@ -145,6 +156,9 @@ internal static class ScriptedDap
         File.WriteAllText(path, (failed + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
         return true;
     }
+
+    private static string StartsFile(JsonElement launch) =>
+        (launch.TryGetProperty("env", out var env) && env.ValueKind == JsonValueKind.Object ? env : launch).GetProperty("startsFile").GetString()!;
 
     private static void StartProgram(string programs)
     {
