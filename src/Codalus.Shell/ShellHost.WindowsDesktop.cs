@@ -46,6 +46,8 @@ public sealed partial class ShellHost
 
     internal static string WindowsOnlyMessage(ProjectInfo info) => WindowsDesktopProjects.BuildsOnlyOnWindows(info)
         ? Localizer.Format("msg.windowsDesktop.winUIWindowsOnly", "{0} is a WinUI 3 project: it builds, runs and debugs only on Windows (WinUI's XAML compiler is a Windows program). On this OS it opens and edits, with XAML IntelliSense.", info.Name)
+        : NetFrameworkProjects.IsNetFramework(info)
+        ? Localizer.Format("msg.netFramework.windowsOnly", "{0} targets .NET Framework ({1}): it runs, debugs and tests only on Windows (running it on Mono isn't supported). On this OS it opens, edits and builds.", info.Name, string.Join(", ", info.TargetFrameworks))
         : WindowsDesktopProjects.Kind(info) is { } kind
         ? Localizer.Format("msg.windowsDesktop.windowsOnly", "{0} is a {1} project: it runs, debugs and tests only on Windows. On this OS it opens, edits and builds.", info.Name, kind)
         : Localizer.Format("msg.windowsDesktop.windowsOnlyFramework", "{0} targets Windows ({1}): it runs, debugs and tests only on Windows. On this OS it opens, edits and builds.", info.Name, string.Join(", ", info.TargetFrameworks));

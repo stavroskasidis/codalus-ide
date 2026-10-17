@@ -66,7 +66,7 @@ public sealed partial class ShellHost
     {
         try
         {
-            Tools = [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true), .. await MobileToolsAsync().ConfigureAwait(true), .. await WindowsAppToolsAsync().ConfigureAwait(true)];
+            Tools = [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true), .. await MobileToolsAsync().ConfigureAwait(true), .. await WindowsAppToolsAsync().ConfigureAwait(true), .. NetFrameworkTools()];
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {
@@ -158,6 +158,8 @@ public sealed partial class ShellHost
         ? new InstallPlan(tool.Id, InstallKind.Terminal, Localizer.Format("msg.setup.installWorkload", "Install the .NET workload {0}", tool.Id[WorkloadToolPrefix.Length..]), "dotnet workload install " + tool.Id[WorkloadToolPrefix.Length..])
         : WindowsApps.PlanFor(tool, hasWinget: Workbench.Platform == PlatformKind.Windows && EnvironmentCheck.FindOnPath("winget") is not null) is { } windowsApp
         ? windowsApp // Developer Mode's Settings page, the Windows App SDK runtime (M44)
+        : NetFrameworkProjects.PlanFor(tool) is { } netFramework
+        ? netFramework // .NET Framework's download page (M43a)
         : InstallPlans.For(
         tool,
         Workbench.Platform,

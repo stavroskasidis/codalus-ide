@@ -1217,6 +1217,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("maui.windows", "M44", winUITitle, "skipped", 0, "WinUI 3 apps build and run on Windows only (D31); their XAML editing and the Windows-only gates are covered by the tests on every OS.");
         }
 
+        // M43a: .NET Framework projects (ADR 0075, D31): they open and build on every OS, and run on Windows only.
+        await StepAsync("netfx.projects", "M43a", OperatingSystem.IsWindows()
+            ? "The .NET Framework fixture opens (the old-style project restored from packages.config), the net48 console app builds and runs on the desktop CLR"
+            : "The .NET Framework fixture opens (the old-style project restored from packages.config), the net48 console app builds, and starting it says Windows only", NetFrameworkStepAsync).ConfigureAwait(true);
+
         await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.interactive", "M36", "A selection in an F# script runs in F# Interactive (dotnet fsi in a terminal), which shows the values defined", FSharpInteractiveStepAsync, "projects.open").ConfigureAwait(true);
@@ -2035,6 +2040,52 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(shell.Runs.Running.Any(p => p.Name == "WpfApp" && !p.HasExited), "the WPF app is still running (its window is up)");
         shell.StopRunning();
         await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the WPF app stops", 60).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// .NET Framework in the shipped app (M43a, ADR 0075): samples/NetFramework opens, the old-style project gets its
+    /// packages.config package and reference assemblies, the project that needs Visual Studio's targets says why it
+    /// can't build (<c>netfx-projects.png</c>), and the SDK-style net48 console app builds. On Windows Start Without
+    /// Debugging runs its .exe on the desktop CLR and its output comes back; elsewhere starting it says Windows only.
+    /// </summary>
+    private async Task NetFrameworkStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "NetFramework");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "NetFramework"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "NetFramework.slnx")).ConfigureAwait(true);
+        var legacy = Path.Combine(target, "LegacyApp", "LegacyApp.csproj");
+        var web = Path.Combine(target, "LegacyWebApp", "LegacyWebApp.csproj");
+        var app = Path.Combine(target, "ConsoleApp", "ConsoleApp.csproj");
+        await WaitAsync(
+            () => shell.Solutions.Projects.Count == 6 && shell.Solutions.Progress is { Completed: true }
+                  && shell.Solutions.Projects.TryGetValue(legacy, out var info) && info.References.Any(r => r.Kind == Codalus.Projects.Protocol.ReferenceKinds.Package && r.Resolved),
+            "the NetFramework solution is open, LegacyApp's packages.config package restored", 600).ConfigureAwait(true);
+        Check(shell.Solutions.Projects[legacy].IsNonSdkStyle, "LegacyApp is a non-SDK-style project");
+        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("Visual Studio's own MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
+        shell.Explorer.Reveal("p:" + legacy);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("netfx-projects.png");
+
+        Check(await shell.BuildAsync(Codalus.Projects.Protocol.BuildTargets.Build, app).ConfigureAwait(true), "ConsoleApp (net48) builds:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+        Check(File.Exists(Path.Combine(target, "ConsoleApp", "bin", "Debug", "net48", "ConsoleApp.exe")), "ConsoleApp.exe was built");
+        shell.SetStartupProject(app);
+        if (!OperatingSystem.IsWindows())
+        {
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            Check(shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("ConsoleApp targets .NET Framework (net48): it runs, debugs and tests only on Windows", StringComparison.Ordinal)), "starting it says Windows only");
+            return;
+        }
+
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "ConsoleApp" && p.HasExited), "ConsoleApp ran: " + Tail(shell.Builds.Channel.GetText(), 2000), 300).ConfigureAwait(true);
+        var program = shell.Runs.Running.Last(p => p.Name == "ConsoleApp");
+        await WaitAsync(() => program.Channel?.GetText().Contains("Runtime: .NET Framework 4.", StringComparison.Ordinal) == true, "its output names the desktop CLR: " + program.Channel?.GetText(), 60).ConfigureAwait(true);
+        Check(program.Channel!.GetText().Contains("Hello from .NET Framework, Codalus!", StringComparison.Ordinal), "its output comes back");
     }
 
     /// <summary>
