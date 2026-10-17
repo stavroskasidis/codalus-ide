@@ -247,7 +247,9 @@ public sealed class ContainerEngineTests : IAsyncLifetime
             schema: "dbo",
             notice: "PRINT 'hello from sql server'",
             noticeText: "hello from sql server",
-            slow: "WAITFOR DELAY '00:01:00'",
+            // A minute of short waits, not one WAITFOR of a minute: SQL Server may end a WAITFOR before its time (it
+            // ends WAITFOR threads when it runs short of workers), and one that ended early would leave nothing to cancel.
+            slow: "DECLARE @waits int = 0; WHILE @waits < 600 BEGIN WAITFOR DELAY '00:00:00.100'; SET @waits += 1; END",
             insertId: false);
 
         // Databases of the server.
@@ -312,7 +314,15 @@ public sealed class ContainerEngineTests : IAsyncLifetime
         var run = _data.ExecuteAsync(new ExecuteParams("db", slow, Session: "slow"), cancellation.Token);
         await Task.Delay(1000, TestContext.Current.CancellationToken);
         await cancellation.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+        try
+        {
+            var ended = await run;
+            Assert.Fail($"The slow statement ended by itself {watch.Elapsed.TotalMilliseconds:0} ms after it was sent ({ended.ElapsedMilliseconds:0} ms in the host) instead of being cancelled; its messages: {string.Join(" | ", ended.Messages.Select(m => m.Kind + ": " + m.Text))}");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30), $"Cancel took {watch.Elapsed}.");
         Assert.Equal("1", (await _data.ExecuteAsync(new ExecuteParams("db", "SELECT 1"), Timeout())).ResultSets[0].Rows[0][0]);
 
