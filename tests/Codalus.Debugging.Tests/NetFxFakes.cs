@@ -48,9 +48,12 @@ internal sealed class FakeBreakpoint(IClrModule module, int method, int offset) 
     public void Activate(bool active) => Active = active;
 }
 
-internal sealed class FakeThread(int id) : IClrThread
+/// <summary>A thread; with its <paramref name="process"/>, the values it and its frames hand out are neutered as ICorDebug's are (<see cref="FakeView"/>).</summary>
+internal sealed class FakeThread(int id, FakeProcess? process = null) : IClrThread
 {
     public int Id { get; } = id;
+
+    public FakeProcess? Process { get; } = process;
 
     public List<IClrFrame> FrameList { get; } = [];
 
@@ -58,7 +61,7 @@ internal sealed class FakeThread(int id) : IClrThread
 
     public IReadOnlyList<IClrFrame> Frames() => [.. FrameList];
 
-    public IClrValue? CurrentException() => Exception;
+    public IClrValue? CurrentException() => FakeView.Of(Exception, Process);
 
     public IClrValue? ThreadObject() => null;
 }
@@ -81,9 +84,48 @@ internal sealed class FakeFrame(IClrThread thread, IClrModule? module, int metho
 
     public Dictionary<int, IClrValue> Locals { get; } = [];
 
-    public IClrValue? Argument(int index) => index < Arguments.Count ? Arguments[index] : null;
+    public IClrValue? Argument(int index) => FakeView.Of(index < Arguments.Count ? Arguments[index] : null, (Thread as FakeThread)?.Process);
 
-    public IClrValue? Local(int slot) => Locals.GetValueOrDefault(slot);
+    public IClrValue? Local(int slot) => FakeView.Of(Locals.GetValueOrDefault(slot), (Thread as FakeThread)?.Process);
+}
+
+/// <summary>
+/// A value as ICorDebug hands it out: neutered when the process runs (continued, stepped or a func-eval), unless it's
+/// a func-eval's result (<paramref name="pinned"/>, held by a handle). Its fields and elements are views too. The
+/// session must read what it keeps again after the process ran (ClrLiveValue), as it must with ICorDebug.
+/// </summary>
+internal sealed class FakeView(FakeValue value, FakeProcess process, bool pinned = false) : IClrValue
+{
+    private readonly int _generation = process.Generation;
+
+    public FakeValue Value => pinned || process.Generation == _generation
+        ? value
+        : throw new ClrException("CORDBG_E_OBJECT_NEUTERED: the value was read before the process last ran.");
+
+    public static IClrValue? Of(IClrValue? value, FakeProcess? process, bool pinned = false) =>
+        value is FakeValue fake && process is not null ? new FakeView(fake, process, pinned) : value;
+
+    public ClrValueKind Kind => Value.Kind;
+
+    public object? Primitive => Value.Primitive;
+
+    public string? Text => Value.Text;
+
+    public ClrType Type => Value.Type;
+
+    public bool IsValueType => Value.IsValueType;
+
+    public int Length => Value.Length;
+
+    public IReadOnlyList<int> Dimensions => Value.Dimensions;
+
+    public ulong Address => Value.Address;
+
+    public IClrValue Element(int index) => Of(Value.Element(index), process)!;
+
+    public IClrValue Field(IClrModule module, int typeToken, int fieldToken) => Of(Value.Field(module, typeToken, fieldToken), process)!;
+
+    public void SetPrimitive(object value) => Value.SetPrimitive(value);
 }
 
 internal sealed class FakeValue : IClrValue
@@ -181,6 +223,10 @@ internal sealed class FakeProcess : IClrProcess
 
     public int Continues;
 
+    private int _generation;
+
+    public int Generation => Volatile.Read(ref _generation);
+
     public int Pauses { get; private set; }
 
     public int CancelledSteps { get; private set; }
@@ -202,7 +248,11 @@ internal sealed class FakeProcess : IClrProcess
         Assert.True(Volatile.Read(ref Continues) >= total, $"The process was continued {Continues} times, not {total}.");
     }
 
-    public void Continue() => Interlocked.Increment(ref Continues);
+    public void Continue()
+    {
+        Interlocked.Increment(ref _generation);
+        Interlocked.Increment(ref Continues);
+    }
 
     public void Pause() => Pauses++;
 
@@ -234,8 +284,9 @@ internal sealed class FakeProcess : IClrProcess
     public void SetUserCode(IClrModule module, bool userCode) => UserCode.Add((module, userCode));
 
     public IClrValue GetStaticField(IClrThread thread, ClrType type, int fieldToken) =>
-        StaticFields.TryGetValue(fieldToken, out var value) ? value : throw new ClrException("No such static field in the fake.");
+        StaticFields.TryGetValue(fieldToken, out var value) ? FakeView.Of(value, Owner(thread))! : throw new ClrException("No such static field in the fake.");
 
+    /// <summary>A func-eval: its arguments must be valid now (neutered ones throw); the process runs; the result is held.</summary>
     public IClrValue Call(IClrThread thread, IClrModule module, int methodToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout)
     {
         lock (Calls)
@@ -243,12 +294,22 @@ internal sealed class FakeProcess : IClrProcess
             Calls.Add(methodToken);
         }
 
-        return OnCall?.Invoke(module, methodToken, arguments) ?? throw new ClrException("The fake can't call that.");
+        var values = arguments.Select(a => ClrLiveValue.Unwrap(a) is FakeView view ? view.Value : ClrLiveValue.Unwrap(a)).ToList();
+        Interlocked.Increment(ref _generation);
+        var result = OnCall?.Invoke(module, methodToken, values) ?? throw new ClrException("The fake can't call that.");
+        return FakeView.Of(result, Owner(thread), pinned: true)!;
     }
 
-    public IClrValue NewString(IClrThread thread, string text, TimeSpan timeout) => FakeValue.String(text);
+    public IClrValue NewString(IClrThread thread, string text, TimeSpan timeout)
+    {
+        Interlocked.Increment(ref _generation);
+        return FakeView.Of(FakeValue.String(text), Owner(thread), pinned: true)!;
+    }
 
-    public IClrValue NewPrimitive(IClrThread thread, object value) => FakeValue.Of(value);
+    public IClrValue NewPrimitive(IClrThread thread, object value) => FakeView.Of(FakeValue.Of(value), Owner(thread))!;
+
+    /// <summary>This process when the thread neuters its values (it was made with it), else none.</summary>
+    private FakeProcess? Owner(IClrThread thread) => thread is FakeThread { Process: { } process } && ReferenceEquals(process, this) ? process : null;
 
     public void Terminate()
     {

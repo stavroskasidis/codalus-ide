@@ -272,7 +272,7 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
             .With(FieldToken(info, itemType, "<Name>k__BackingField"), FakeValue.String("Tea"))
             .With(FieldToken(info, itemType, "<Price>k__BackingField"), FakeValue.Of(3));
         var sumValue = FakeValue.Of(0);
-        var thread = new FakeThread(7);
+        var thread = new FakeThread(7, process); // its values are neutered when the process runs, a func-eval included, as ICorDebug's are
         var frame = new FakeFrame(thread, module, total, offset);
         frame.Arguments.Add(cart);
         foreach (var (slot, name) in info.Locals(total, offset))
@@ -323,6 +323,8 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         Assert.Equal("null", members.Single(v => v.Name == "_items").Value);
         var codes = members.Single(v => v.Name == "_codes");
         Assert.Equal("{int[3]}", codes.Value);
+
+        // Count's getter ran (a func-eval neuters the values read before it): what's expanded now is read again.
         Assert.Equal(["7", "8", "9"], (await dap.VariablesAsync(codes.VariablesReference)).Select(v => v.Value));
         Assert.Contains(await dap.VariablesAsync(locals.Single(v => v.Name == "item").VariablesReference), v => v is { Name: "Name", Value: "\"Tea\"" });
 
@@ -330,6 +332,8 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         Assert.Equal("3", await dap.EvaluateAsync("item.Price", top.Id));
         Assert.Equal("3", await dap.EvaluateAsync("Owner.Length", top.Id));
         Assert.Equal("4", await dap.EvaluateAsync("Twice(Count)", top.Id));
+        Assert.Equal("5", await dap.EvaluateAsync("item.Price + Count", top.Id)); // item.Price read before Count's getter ran
+        Assert.Equal("8", await dap.EvaluateAsync("Twice(Twice(Count))", top.Id));
         Assert.Equal("10", await dap.EvaluateAsync("this.Twice(5)", top.Id));
         Assert.Equal("9", await dap.EvaluateAsync("_codes[1] + 1", top.Id));
         Assert.Equal("true", await dap.EvaluateAsync("Count > 1 && Owner == \"Ada\"", top.Id));
@@ -432,7 +436,8 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         continues = process.Continues;
         process.Send(new ClrExceptionThrown(thread, ClrExceptionStage.UserFirstChance));
         await process.WaitForContinuesAsync(continues + 1, Ct);
-        thread.Exception = FakeValue.Object(mscorlib, exceptionType).With(FieldToken(corelib, exceptionBase, "_message"), FakeValue.String("The till is closed.")).With(FieldToken(corelib, exceptionBase, "_innerException"), FakeValue.Null());
+        var innerException = FakeValue.Object(mscorlib, corelib.FindType("System.ArgumentException")).With(FieldToken(corelib, exceptionBase, "_message"), FakeValue.String("The key is lost.")).With(FieldToken(corelib, exceptionBase, "_innerException"), FakeValue.Null());
+        thread.Exception = FakeValue.Object(mscorlib, exceptionType).With(FieldToken(corelib, exceptionBase, "_message"), FakeValue.String("The till is closed.")).With(FieldToken(corelib, exceptionBase, "_innerException"), innerException);
         var userFrame = thread.FrameList[0];
         thread.FrameList[0] = new FakeFrame(thread, mscorlib, corelib.FindMethods("Object.ToString").First(), 0); // thrown in the framework
         process.Send(new ClrExceptionThrown(thread, ClrExceptionStage.FirstChance));
@@ -446,6 +451,8 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         Assert.Equal("System.InvalidOperationException", exceptionInfo.ExceptionId);
         Assert.Equal("The till is closed.", exceptionInfo.Description);
         Assert.Equal("   at NetFxDebuggee.Cart.Checkout()", exceptionInfo.Details?.StackTrace);
+        var inner = Assert.Single(exceptionInfo.Details!.InnerException!); // read after StackTrace's getter ran
+        Assert.Equal(("System.ArgumentException", "The key is lost."), (inner.FullTypeName, inner.Message));
 
         // Pause while running; Debugger.Log's output; the end.
         await dap.RequestAsync("continue", new ThreadArguments(7), s_json.ThreadArguments, s_json.ContinueResponse);

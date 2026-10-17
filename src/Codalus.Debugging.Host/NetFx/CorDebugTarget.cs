@@ -183,6 +183,8 @@ internal sealed class CorDebugTarget : IClrProcess
     private readonly Dictionary<(ulong, string), CorModule> _modules = [];
     private readonly Dictionary<int, CorThread> _threads = [];
     private readonly Dictionary<(ulong, int, int), CorBreakpoint> _breakpoints = [];
+    private readonly List<CorDebugHandleValue> _handles = [];
+    private readonly List<Task> _pumps = [];
     private CorDebugProcess? _process;
     private System.Diagnostics.Process? _os;
     private CorDebugStepper? _stepper;
@@ -262,8 +264,8 @@ internal sealed class CorDebugTarget : IClrProcess
                 stdin!.DisposeLocalCopyOfClientHandle();
                 stdin.Dispose();
                 stdin = null;
-                Pump(stdout, "stdout", output);
-                Pump(stderr, "stderr", output);
+                _pumps.Add(Pump(stdout, "stdout", output));
+                _pumps.Add(Pump(stderr, "stderr", output));
                 stdout = stderr = null;
             }
         }
@@ -337,8 +339,8 @@ internal sealed class CorDebugTarget : IClrProcess
         return Marshal.StringToHGlobalUni(block.ToString());
     }
 
-    private static void Pump(AnonymousPipeServerStream pipe, string category, Action<string, string> output) =>
-        _ = Task.Run(async () =>
+    private static Task Pump(AnonymousPipeServerStream pipe, string category, Action<string, string> output) =>
+        Task.Run(async () =>
         {
             using (pipe)
             using (var reader = new StreamReader(pipe, Encoding.Default))
@@ -512,6 +514,15 @@ internal sealed class CorDebugTarget : IClrProcess
         {
         }
 
+        try
+        {
+            // The program's last output before its end: the pipes are at their end once it has exited.
+            Task.WaitAll([.. _pumps], TimeSpan.FromSeconds(3));
+        }
+        catch (AggregateException)
+        {
+        }
+
         _eval?.TrySetCanceled();
         _events.Writer.TryWrite(new ClrExited(code));
         _events.Writer.TryComplete();
@@ -521,6 +532,7 @@ internal sealed class CorDebugTarget : IClrProcess
 
     public void Continue()
     {
+        ReleaseHandles();
         Generation++;
         Translate(() => Process.Continue(false));
     }
@@ -565,6 +577,8 @@ internal sealed class CorDebugTarget : IClrProcess
             catch (COMException)
             {
             }
+
+            ReleaseHandles();
 
             _process.Detach();
         });
@@ -652,6 +666,7 @@ internal sealed class CorDebugTarget : IClrProcess
             }
 
             _stepper = stepper;
+            ReleaseHandles();
             Generation++;
             Process.Continue(false);
         });
@@ -691,7 +706,7 @@ internal sealed class CorDebugTarget : IClrProcess
         {
             var function = ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(methodToken));
             var types = typeArguments.Select(t => t.Native as CorDebugType).ToList();
-            var values = arguments.Select(a => ((CorValue)a).Original.Raw).ToArray();
+            var values = arguments.Select(a => ((CorValue)ClrLiveValue.Unwrap(a)).Original.Raw).ToArray();
             if (types.Count > 0 && types.All(t => t is not null))
             {
                 eval.CallParameterizedFunction(function.Raw, types.Count, [.. types.Select(t => t!.Raw)], values.Length, values);
@@ -706,14 +721,46 @@ internal sealed class CorDebugTarget : IClrProcess
         Evaluate(thread, timeout, eval => eval.NewString(text));
 
     public IClrValue NewPrimitive(IClrThread thread, object value) =>
-        Translate(() =>
+        Translate(() => (IClrValue)CorValue.Wrap(this, CreatePrimitive(((CorThread)thread).Raw, value)));
+
+    /// <summary>A primitive value created in the debuggee (no func-eval runs).</summary>
+    internal CorDebugValue CreatePrimitive(CorDebugThread thread, object value)
+    {
+        var created = thread.CreateEval().CreateValue(CorValue.ElementTypeOf(value), null);
+        CorValue.Write(new CorDebugGenericValue((ICorDebugGenericValue)created.Raw), value);
+        return created;
+    }
+
+    /// <summary>Keeps a func-eval result's handle until the process is continued (or stepped).</summary>
+    internal void Hold(CorDebugHandleValue handle)
+    {
+        lock (_gate)
         {
-            var eval = ((CorThread)thread).Raw.CreateEval();
-            var created = eval.CreateValue(CorValue.ElementTypeOf(value), null);
-            var generic = new CorDebugGenericValue((ICorDebugGenericValue)created.Raw);
-            CorValue.Write(generic, value);
-            return CorValue.Wrap(this, created);
-        });
+            _handles.Add(handle);
+        }
+    }
+
+    /// <summary>Releases the handles of func-eval results: the session drops its values when the program runs on.</summary>
+    private void ReleaseHandles()
+    {
+        List<CorDebugHandleValue> handles;
+        lock (_gate)
+        {
+            handles = [.. _handles];
+            _handles.Clear();
+        }
+
+        foreach (var handle in handles)
+        {
+            try
+            {
+                handle.Dispose();
+            }
+            catch (COMException)
+            {
+            }
+        }
+    }
 
     /// <summary>Runs a func-eval on <paramref name="thread"/>, the other threads suspended, and waits for it (aborting it after <paramref name="timeout"/>).</summary>
     private CorValue Evaluate(IClrThread thread, TimeSpan timeout, Action<CorDebugEval> start)
@@ -757,7 +804,7 @@ internal sealed class CorDebugTarget : IClrProcess
                 throw new ClrException("The process ended during the evaluation.");
             }
 
-            var result = Translate(() => CorValue.Wrap(this, eval.Result));
+            var result = Translate(() => CorValue.Result(this, corThread, eval.Result));
             return completed ? result : throw new ClrEvalException(result, "The evaluation threw an exception.");
         }
         finally
@@ -939,8 +986,15 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
         return (IReadOnlyList<IClrFrame>)result;
     });
 
-    /// <summary>The IL frame at <paramref name="index"/> now (after a func-eval, frames are read again).</summary>
-    public CorDebugILFrame? IlFrame(int index) => Frames().ElementAtOrDefault(index) is CorFrame { Cached: { } il } ? il : null;
+    /// <summary>
+    /// <paramref name="frame"/>'s IL frame now (after a func-eval, frames are read again): the frame of the same method
+    /// at the same place on the stack, else the same method at the same index, else the innermost of the method.
+    /// </summary>
+    public CorDebugILFrame? IlFrame(CorFrame frame)
+    {
+        var frames = Frames().OfType<CorFrame>().Where(f => f.Cached is not null && f.MethodToken == frame.MethodToken && ReferenceEquals(f.Module, frame.Module)).ToList();
+        return (frames.FirstOrDefault(f => f.StackStart != 0 && f.StackStart == frame.StackStart) ?? frames.FirstOrDefault(f => f.Index == frame.Index) ?? frames.FirstOrDefault())?.Cached;
+    }
 
     public IClrValue? CurrentException() => CorDebugTarget.Translate(() => Raw.CurrentException is { } value ? CorValue.Wrap(target, value) : null);
 
@@ -951,13 +1005,14 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
 internal sealed class CorFrame : IClrFrame
 {
     private readonly CorThread _thread;
-    private readonly int _index;
     private readonly int _generation;
+    private CorDebugILFrame? _reread;
+    private int _rereadGeneration;
 
     public CorFrame(CorThread thread, int index, CorDebugILFrame? frame, string? description)
     {
         _thread = thread;
-        _index = index;
+        Index = index;
         Cached = frame;
         Description = description;
         _generation = thread.Target.Generation;
@@ -967,10 +1022,22 @@ internal sealed class CorFrame : IClrFrame
             Module = thread.Target.Module(function.Module);
             MethodToken = (int)function.Token.Value;
             IlOffset = frame.IP.pnOffset;
+            try
+            {
+                StackStart = frame.StackRange.pStart.Value;
+            }
+            catch (COMException)
+            {
+            }
         }
     }
 
     public CorDebugILFrame? Cached { get; }
+
+    public int Index { get; }
+
+    /// <summary>Where the frame starts on the stack: the same frame when frames are read again.</summary>
+    public ulong StackStart { get; }
 
     public IClrThread Thread => _thread;
 
@@ -983,7 +1050,20 @@ internal sealed class CorFrame : IClrFrame
     public string? Description { get; }
 
     /// <summary>The frame as ICorDebug has it now: the cached one until the process ran (a func-eval), then read again.</summary>
-    private CorDebugILFrame Il => (_generation == _thread.Target.Generation ? Cached : _thread.IlFrame(_index)) ?? throw new ClrException("The frame is no longer valid.");
+    private CorDebugILFrame Il
+    {
+        get
+        {
+            var generation = _thread.Target.Generation;
+            if (generation != _generation && (_reread is null || _rereadGeneration != generation))
+            {
+                _reread = _thread.IlFrame(this);
+                _rereadGeneration = generation;
+            }
+
+            return (generation == _generation ? Cached : _reread) ?? throw new ClrException("The frame is no longer valid.");
+        }
+    }
 
     public IReadOnlyList<ClrType> TypeArguments
     {
@@ -1017,44 +1097,94 @@ internal sealed class CorFrame : IClrFrame
     }
 }
 
-/// <summary>A value of the debuggee: references dereferenced and boxes opened, read lazily (M43b).</summary>
+/// <summary>
+/// A value of the debuggee: references dereferenced and boxes opened, read lazily (M43b). ICorDebug neuters it when
+/// the process runs (a func-eval included); the session reads such values again (<see cref="ClrLiveValue"/>). A
+/// func-eval's result (<see cref="Result"/>) stays valid itself: an object is held by a strong handle and dereferenced
+/// again, a primitive is kept and created again when it's passed to another call.
+/// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class CorValue : IClrValue
 {
     private readonly CorDebugTarget _target;
-    private readonly CorDebugValue _value;
-    private readonly Lazy<ClrType> _type;
+    private readonly Func<CorDebugValue>? _reacquire;
+    private readonly object? _snapshot;
+    private CorDebugValue _original;
+    private CorDebugValue _value;
+    private ulong _address;
+    private int _generation;
+    private ClrType? _type;
 
-    private CorValue(CorDebugTarget target, CorDebugValue original, CorDebugValue value, ClrValueKind kind, ulong address)
+    private CorValue(CorDebugTarget target, CorDebugValue original, Func<CorDebugValue>? reacquire = null, object? snapshot = null)
     {
         _target = target;
-        Original = original;
-        _value = value;
-        Kind = kind;
-        Address = address;
-        _type = new(() => TypeOfValue(target, value));
+        _reacquire = reacquire;
+        _snapshot = snapshot;
+        (_original, _value, Kind, _address) = Open(original);
+        _generation = target.Generation;
     }
 
-    /// <summary>The value as ICorDebug gave it (a reference for objects): what a func-eval takes.</summary>
-    public CorDebugValue Original { get; }
+    /// <summary>The value as ICorDebug has it now (a reference for objects): what a func-eval takes.</summary>
+    public CorDebugValue Original
+    {
+        get
+        {
+            Refresh();
+            return _original;
+        }
+    }
+
+    /// <summary>The opened value now (dereferenced, unboxed).</summary>
+    private CorDebugValue Value
+    {
+        get
+        {
+            Refresh();
+            return _value;
+        }
+    }
+
+    /// <summary>A func-eval's result after the process ran: its handle dereferenced again, or its primitive created again.</summary>
+    private void Refresh()
+    {
+        if (_reacquire is not null && _generation != _target.Generation)
+        {
+            CorDebugTarget.Translate(() =>
+            {
+                (_original, _value, _, _address) = Open(_reacquire());
+                _generation = _target.Generation;
+            });
+        }
+    }
 
     public ClrValueKind Kind { get; }
 
-    public ulong Address { get; }
+    public ulong Address
+    {
+        get
+        {
+            Refresh();
+            return _address;
+        }
+    }
 
-    public ClrType Type => _type.Value;
+    public ClrType Type => _type ??= CorDebugTarget.Translate(() => TypeOfValue(_target, Value));
 
-    public bool IsValueType => Kind == ClrValueKind.Object && _value.Raw is ICorDebugObjectValue o && new CorDebugObjectValue(o).IsValueClass;
+    public bool IsValueType => Kind == ClrValueKind.Object && CorDebugTarget.Translate(() => Value.Raw is ICorDebugObjectValue o && new CorDebugObjectValue(o).IsValueClass);
 
-    public object? Primitive => Kind == ClrValueKind.Primitive ? CorDebugTarget.Translate(() => Read(new CorDebugGenericValue((ICorDebugGenericValue)_value.Raw), _value.Type)) : null;
+    public object? Primitive => Kind != ClrValueKind.Primitive ? null : _snapshot ?? CorDebugTarget.Translate(() =>
+    {
+        var value = Value;
+        return Read(new CorDebugGenericValue((ICorDebugGenericValue)value.Raw), value.Type);
+    });
 
     public string? Text => Kind == ClrValueKind.String ? CorDebugTarget.Translate(() =>
     {
-        var text = new CorDebugStringValue((ICorDebugStringValue)_value.Raw);
+        var text = new CorDebugStringValue((ICorDebugStringValue)Value.Raw);
         return text.GetString(text.Length);
     }) : null;
 
-    private CorDebugArrayValue Array => new((ICorDebugArrayValue)_value.Raw);
+    private CorDebugArrayValue Array => new((ICorDebugArrayValue)Value.Raw);
 
     public int Length => Kind == ClrValueKind.Array ? CorDebugTarget.Translate(() => Array.Count) : 0;
 
@@ -1069,22 +1199,53 @@ internal sealed class CorValue : IClrValue
     public IClrValue Field(IClrModule module, int typeToken, int fieldToken) => CorDebugTarget.Translate(() =>
     {
         var cls = ((CorModule)module).Raw.GetClassFromToken(new mdTypeDef(typeToken));
-        var objectValue = new CorDebugObjectValue((ICorDebugObjectValue)_value.Raw);
+        var objectValue = new CorDebugObjectValue((ICorDebugObjectValue)Value.Raw);
         return Wrap(_target, objectValue.GetFieldValue(cls.Raw, new mdFieldDef(fieldToken)));
     });
 
     public void SetPrimitive(object value) => CorDebugTarget.Translate(() =>
     {
-        if (Kind != ClrValueKind.Primitive)
+        if (Kind != ClrValueKind.Primitive || _snapshot is not null)
         {
             throw new ClrException("Only primitive values can be changed.");
         }
 
-        Write(new CorDebugGenericValue((ICorDebugGenericValue)_value.Raw), value);
+        Write(new CorDebugGenericValue((ICorDebugGenericValue)Value.Raw), value);
     });
 
     /// <summary>Wraps a value as ICorDebug gives it: null references, strings, arrays, primitives and objects (boxes opened).</summary>
-    public static CorValue Wrap(CorDebugTarget target, CorDebugValue value)
+    public static CorValue Wrap(CorDebugTarget target, CorDebugValue value) => new(target, value);
+
+    /// <summary>
+    /// A func-eval's result (or the exception it threw), kept valid when the process runs again, as ICorDebug's own
+    /// values aren't: an object (a string, an array, a box) is held by a strong handle (released when the process is
+    /// continued), a primitive is read now and created again when it's passed to another call. A value type's value
+    /// can't have a handle: it's valid until the next func-eval.
+    /// </summary>
+    public static CorValue Result(CorDebugTarget target, CorDebugThread thread, CorDebugValue value)
+    {
+        if (value.Raw is ICorDebugReferenceValue referenceRaw && new CorDebugReferenceValue(referenceRaw) is { IsNull: false } reference
+            && reference.Dereference().Raw is ICorDebugHeapValue2 heap
+            && heap.CreateHandle(CorDebugHandleType.HANDLE_STRONG, out var raw) == HRESULT.S_OK && raw is not null)
+        {
+            var handle = new CorDebugHandleValue(raw);
+            target.Hold(handle);
+            return new CorValue(target, handle, () => handle);
+        }
+
+        var result = new CorValue(target, value);
+        if (result.Kind == ClrValueKind.Primitive && result.Primitive is { } primitive && IsCreatable(primitive))
+        {
+            return new CorValue(target, value, () => target.CreatePrimitive(thread, primitive), primitive);
+        }
+
+        return result;
+    }
+
+    private static bool IsCreatable(object value) => value is bool or char or sbyte or byte or short or ushort or int or uint or long or ulong or float or double;
+
+    /// <summary>A value opened: a reference dereferenced (its address kept, for reference equality), a box opened, and its kind.</summary>
+    private static (CorDebugValue Original, CorDebugValue Value, ClrValueKind Kind, ulong Address) Open(CorDebugValue value)
     {
         var original = value;
         ulong address = 0;
@@ -1093,7 +1254,7 @@ internal sealed class CorValue : IClrValue
             var reference = new CorDebugReferenceValue(referenceRaw);
             if (reference.IsNull)
             {
-                return new CorValue(target, original, value, ClrValueKind.Null, 0);
+                return (original, value, ClrValueKind.Null, 0);
             }
 
             address = reference.Value.Value;
@@ -1114,7 +1275,7 @@ internal sealed class CorValue : IClrValue
                 or CorElementType.I or CorElementType.U or CorElementType.Ptr or CorElementType.FnPtr => value.Raw is ICorDebugGenericValue ? ClrValueKind.Primitive : ClrValueKind.Object,
             _ => ClrValueKind.Object,
         };
-        return new CorValue(target, original, value, kind, address);
+        return (original, value, kind, address);
     }
 
     private static ClrType TypeOfValue(CorDebugTarget target, CorDebugValue value)
