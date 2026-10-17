@@ -6,7 +6,7 @@ Language services run out of process and speak **LSP 3.17** over **stdio** (JSON
 
 - The workbench's `LanguageService` starts a language's host when the first file of that language opens, or when the first design-time build of one of its projects arrives. It never starts at shell startup.
 - The host is supervised (`SupervisedProcess`): on a crash it restarts with backoff (at most 5 times a minute), and the client sends `initialize`, the projects (`codalus/projects/update`) and every open document (`didOpen` with the editor's current text) again. Diagnostics of a host that gives up are cleared.
-- Notifications are handled in arrival order, and a request reads the server's state when it arrives, so it observes every earlier edit. Cancelled requests send `$/cancelRequest`.
+- Notifications are handled in arrival order, and a request reads the server's state when it arrives, so it observes every earlier edit. Cancelled requests send `$/cancelRequest`. A response completes its request as soon as it is read (it never waits behind a slow handler), so it can be seen before the notifications sent ahead of it are handled; `JsonRpcConnection.WhenDispatchedAsync` waits for those (a build's result waits for its output and diagnostics, a build-host tool request such as Entity Framework, scaffolding or WCF for its output, and a C# Interactive submission for what it printed).
 
 ## LSP subset
 

@@ -201,7 +201,8 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
 
         if (coverage is not null)
         {
-            Child(configuration, "TestAdaptersPaths").Value = CoverageTools.CollectorFolder(targets.Count > 0 ? targets[0].Framework : null);
+            var collectorFolder = CoverageTools.CollectorFolder(targets.Count > 0 ? targets[0].Framework : null);
+            Child(configuration, "TestAdaptersPaths").Value = collectorFolder;
             Child(configuration, "ResultsDirectory").Value = coverage.OutputDirectory;
             var collectors = Child(Child(root, "DataCollectionRunSettings"), "DataCollectors");
             var collector = new XElement("DataCollector", new XAttribute("friendlyName", "XPlat code coverage"));
@@ -216,6 +217,21 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
             settings.Add(new XElement("ExcludeByAttribute", "GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverageAttribute"));
             collector.Add(settings);
             collectors.Add(collector);
+
+            // Coverlet's in-process collector flushes the hits in the test host when the session ends. Without it the
+            // instrumented assemblies write them on the host's exit, which VSTest cuts short (it kills a host that hasn't
+            // exited 100 ms after the session): a loaded machine then reports every line uncovered. `dotnet test
+            // --collect` adds it; run settings given to vstest.console don't get it, so we add it as that does
+            // (the test host wants its codebase absolute).
+            var inProc = Child(Child(root, "InProcDataCollectionRunSettings"), "InProcDataCollectors");
+            if (!inProc.Elements("InProcDataCollector").Any(e => ((string?)e.Attribute("assemblyQualifiedName"))?.StartsWith(CoverageTools.InProcCollectorType, StringComparison.Ordinal) == true))
+            {
+                inProc.Add(new XElement(
+                    "InProcDataCollector",
+                    new XAttribute("friendlyName", "XPlat Code Coverage"),
+                    new XAttribute("assemblyQualifiedName", CoverageTools.InProcCollectorType + ", coverlet.collector, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"),
+                    new XAttribute("codebase", Path.Combine(collectorFolder, "coverlet.collector.dll"))));
+            }
         }
 
         return document.ToString(SaveOptions.DisableFormatting);

@@ -51,4 +51,33 @@ public sealed class HotReloadOutputTests
         Assert.Equal(TimeSpan.FromMilliseconds(90), session.LastApplied);
         Assert.Equal(HotReloadState.Restarting, session.State);
     }
+
+    [Fact]
+    public void A_session_has_started_once_dotnet_watch_watches_not_when_the_app_listens()
+    {
+        // dotnet watch drops the changes saved before it watches; the app can already listen by then.
+        var session = new HotReloadSession();
+        foreach (var line in new[]
+                 {
+                     "dotnet watch : Hot reload enabled. For a list of supported edits, see https://aka.ms/dotnet/hot-reload.",
+                     "dotnet watch : Press Ctrl+R to restart.",
+                     "Build succeeded.",
+                     "dotnet watch : Loading projects ...",
+                     "dotnet watch : Loaded 1 project(s) in 1.1s.",
+                     "      Now listening on: http://localhost:5280",
+                 })
+        {
+            session.OnLine(line);
+        }
+
+        Assert.False(session.Started.IsCompleted);
+        session.OnLine("dotnet watch : Waiting for changes");
+        Assert.True(session.Started.IsCompleted);
+        Assert.Equal(HotReloadState.Watching, session.State);
+
+        // A start that fails or ends doesn't keep anyone waiting.
+        var failed = new HotReloadSession();
+        failed.OnLine("dotnet watch : Build failed.");
+        Assert.True(failed.Started.IsCompleted);
+    }
 }

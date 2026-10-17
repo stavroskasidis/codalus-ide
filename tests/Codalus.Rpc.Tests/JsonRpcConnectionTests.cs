@@ -77,6 +77,101 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_response_can_overtake_the_notifications_before_it_and_when_dispatched_waits_for_them()
+    {
+        var release = new TaskCompletionSource();
+        var received = new List<string>();
+        _a.OnNotification("note", TestJsonContext.Default.Ping, async p =>
+        {
+            await release.Task.WaitAsync(TestContext.Current.CancellationToken);
+            lock (received)
+            {
+                received.Add(p.Text);
+            }
+        });
+        _b.OnRequest("build", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, async (p, ct) =>
+        {
+            await _b.NotifyAsync("note", new Ping("error 1"), TestJsonContext.Default.Ping, ct);
+            await _b.NotifyAsync("note", new Ping("error 2"), TestJsonContext.Default.Ping, ct);
+            return new Pong("failed");
+        });
+        _a.Start();
+        _b.Start();
+
+        // The response is read while the first notification's handler still runs: the call completes first.
+        var result = await _a.InvokeAsync("build", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+        Assert.Equal("failed", result.Text);
+        var dispatched = _a.WhenDispatchedAsync();
+        Assert.False(dispatched.IsCompleted);
+        lock (received)
+        {
+            Assert.Empty(received);
+        }
+
+        release.SetResult();
+        await dispatched.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        lock (received)
+        {
+            Assert.Equal(["error 1", "error 2"], received);
+        }
+
+        // Once the connection has ended, it completes at once.
+        await _bToA.Writer.CompleteAsync();
+        await _a.Completion.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        await _a.WhenDispatchedAsync().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task When_dispatched_called_from_a_notification_handler_does_not_wait_for_itself()
+    {
+        var handled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _a.OnNotification("note", TestJsonContext.Default.Ping, async _ =>
+        {
+            // The dispatch loop waits for this handler: a marker queued behind it would never be reached.
+            await Task.Yield();
+            await _a.WhenDispatchedAsync().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+            handled.TrySetResult();
+        });
+        _a.Start();
+        _b.Start();
+
+        await _b.NotifyAsync("note", new Ping("x"), TestJsonContext.Default.Ping, Timeout());
+        await handled.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+
+        // Outside the handler it waits for the dispatch loop again.
+        await _a.WhenDispatchedAsync().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task When_dispatched_completes_when_the_connection_is_disposed_behind_a_handler_that_never_ends()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _a.OnNotification("note", TestJsonContext.Default.Ping, async _ =>
+        {
+            entered.TrySetResult();
+            await release.Task;
+        });
+        _a.Start();
+        _b.Start();
+
+        await _b.NotifyAsync("note", new Ping("x"), TestJsonContext.Default.Ping, Timeout());
+        await entered.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        var dispatched = _a.WhenDispatchedAsync();
+        Assert.False(dispatched.IsCompleted);
+
+        // Disposing waits for the handler, but whoever waits for the dispatch doesn't: it completes, without failing.
+        var disposing = _a.DisposeAsync().AsTask();
+        await dispatched.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        Assert.True(dispatched.IsCompletedSuccessfully);
+        await _a.WhenDispatchedAsync().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+
+        release.SetResult();
+        await disposing.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        await _a.WhenDispatchedAsync().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Unknown_methods_and_failing_handlers_return_errors()
     {
         _b.OnRequest("fail", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (_, _) => throw new InvalidOperationException("boom"));

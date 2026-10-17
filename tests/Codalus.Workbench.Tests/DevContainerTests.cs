@@ -148,7 +148,7 @@ public sealed class DevContainerTests : IDisposable
         {
             if (name is not null)
             {
-                await engine.RunAsync(["rm", "-f", name], CancellationToken.None);
+                await engine.RunAsync(["rm", "-f", "-v", name], CancellationToken.None);
             }
         }
     }

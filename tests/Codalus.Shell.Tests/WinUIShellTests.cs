@@ -5,6 +5,7 @@ using Codalus.Platform;
 using Codalus.Projects.Protocol;
 using Codalus.Workbench.Debugging;
 using Codalus.Workbench.Mobile;
+using Codalus.Workbench.Notifications;
 using Codalus.Workbench.Projects;
 
 namespace Codalus.Shell.Tests;
@@ -209,10 +210,17 @@ public sealed class WinUIShellTests
             await ShellFixture.PumpUntil(() => f.Shell.Runs.Running.All(p => p.HasExited), seconds: 60);
 
             // F5: started again, and netcoredbg attaches to its process; Break All stops it with a stack.
+            // A start that fails says so in a notification (the build, the registration, the activation, the attach):
+            // the wait ends there, and the failure shows the Run output, the Debug Console and the notifications.
+            var notified = f.Shell.Workbench.Notifications.Items.Select(n => n.Id).DefaultIfEmpty().Max();
+            string Diagnostics() =>
+                $"Debugger: {f.Shell.Debugger.State}\nRun output:\n{channel.GetText()}\nDebug Console:\n{f.Shell.DebugLog.GetText()}\nNotifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}";
             f.Shell.Run("debug.start");
-            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Running, seconds: 600);
+            await WaitAsync(() => f.Shell.Debugger.State == DebugState.Running || f.Shell.Workbench.Notifications.Items.Any(n => n.Id > notified && n.Severity == NotificationSeverity.Error), seconds: 600);
+            Assert.True(f.Shell.Debugger.State == DebugState.Running, Diagnostics());
             f.Shell.Run("debug.pause");
-            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 120);
+            await WaitAsync(() => f.Shell.Debugger.State == DebugState.Stopped || f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
+            Assert.True(f.Shell.Debugger.State == DebugState.Stopped, Diagnostics());
             await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0);
             f.Shell.Run("debug.stop");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
@@ -222,6 +230,18 @@ public sealed class WinUIShellTests
             // What the test registered goes again (the framework package it depends on stays, as after a deployment).
             using var remove = Process.Start(new ProcessStartInfo("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-Process -Name WinUIApp -ErrorAction SilentlyContinue | Stop-Process -Force; Get-AppxPackage -Name 'Codalus.Samples.WinUIApp' | Remove-AppxPackage"]) { UseShellExecute = false, CreateNoWindow = true });
             remove?.WaitForExit(60_000);
+        }
+    }
+
+    /// <summary>A wait that ends at its timeout instead of failing there, so the assertion after it shows <c>Diagnostics()</c>.</summary>
+    private static async Task WaitAsync(Func<bool> condition, int seconds)
+    {
+        try
+        {
+            await ShellFixture.PumpUntil(condition, seconds);
+        }
+        catch (Xunit.Sdk.TrueException)
+        {
         }
     }
 }

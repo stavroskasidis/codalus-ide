@@ -97,8 +97,17 @@ public static partial class HotReloadOutput
 public sealed class HotReloadSession
 {
     private readonly Lock _gate = new();
+    private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public HotReloadState State { get; private set; } = HotReloadState.Starting;
+
+    /// <summary>
+    /// Completes when <c>dotnet watch</c> leaves <see cref="HotReloadState.Starting"/>: it watches for changes ("Waiting
+    /// for changes"), or its start failed or ended. It applies only the changes it sees from then on: until the app is
+    /// launched and its agent connected, its file watcher's events have no listener, so a file saved while it builds and
+    /// starts the app is dropped and the app runs the old code. The app can already be listening by then.
+    /// </summary>
+    public Task Started => _started.Task;
 
     /// <summary>The last message from <c>dotnet watch</c> about Hot Reload.</summary>
     public string? Message { get; private set; }
@@ -138,6 +147,7 @@ public sealed class HotReloadSession
             }
         }
 
+        _started.TrySetResult();
         Changed?.Invoke(this, e);
     }
 }

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace Codalus.Debugging;
@@ -93,7 +94,14 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
     private sealed class Part(IDebugAdapter adapter, string name, int index)
     {
-        public IDebugAdapter Adapter { get; } = adapter;
+        /// <summary>Its adapter: a new one each time its start is made again.</summary>
+        public IDebugAdapter Adapter { get; set; } = adapter;
+
+        /// <summary>
+        /// It is joining the session and not configured yet: until <c>configurationDone</c> is answered, which netcoredbg
+        /// does once the program's runtime started (up to its 5 seconds), holding every request behind it.
+        /// </summary>
+        public bool Starting { get; set; }
 
         public string Name { get; } = name;
 
@@ -134,36 +142,160 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
     private void Attach(Part part)
     {
-        part.Adapter.EventReceived += e => OnEventAsync(part, e);
-        part.Adapter.Log += (_, line) => Log?.Invoke(this, part.Index == 0 ? line : $"[{part.Name}] {line}");
+        Hook(part, part.Adapter, abandoned: null);
         lock (_gate)
         {
             _parts.Add(part);
         }
     }
 
+    /// <summary>Passes <paramref name="adapter"/>'s events and log on as <paramref name="part"/>'s; its events stop once its start is <paramref name="abandoned"/>.</summary>
+    private void Hook(Part part, IDebugAdapter adapter, StrongBox<bool>? abandoned)
+    {
+        adapter.EventReceived += e => abandoned is not null && Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : OnEventAsync(part, e);
+        adapter.Log += (_, line) => Log?.Invoke(this, part.Index == 0 ? line : $"[{part.Name}] {line}");
+    }
+
+    /// <summary>Ends <paramref name="part"/> when <paramref name="adapter"/> ends, unless its start was <paramref name="abandoned"/> by then.</summary>
+    private void EndWith(Part part, IDebugAdapter adapter, StrongBox<bool> abandoned) =>
+        _ = adapter.Closed.ContinueWith(_ => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : EndAsync(part), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+
     /// <summary>
     /// Adds <paramref name="adapter"/> to the running session: <paramref name="launch"/> starts its debuggee while the
     /// session's breakpoints and exception settings are replayed to it, then it is configured.
     /// </summary>
-    public async Task AddAsync(IDebugAdapter adapter, string name, Func<IDebugAdapter, Task> launch, CancellationToken cancellationToken)
+    public Task AddAsync(IDebugAdapter adapter, string name, Func<IDebugAdapter, Task> launch, CancellationToken cancellationToken) =>
+        AddAsync(name, _ => Task.FromResult(adapter), launch, static (_, _, _) => Task.FromResult(false), cancellationToken);
+
+    /// <summary>
+    /// Adds a program to the running session (multiple startup projects, M14c): <paramref name="create"/> starts its
+    /// adapter, which joins as with the other overload. When the start fails, <paramref name="startAgain"/> gets the
+    /// adapter, the error and the attempt (from 1): it undoes the attempt (ends the adapter with its program) and says
+    /// true to start again in the same place, under the same index, or says false to fail. An abandoned attempt's
+    /// events and end are no longer the session's.
+    /// </summary>
+    public async Task AddAsync(
+        string name,
+        Func<CancellationToken, Task<IDebugAdapter>> create,
+        Func<IDebugAdapter, Task> launch,
+        Func<IDebugAdapter, Exception, int, Task<bool>> startAgain,
+        CancellationToken cancellationToken)
     {
-        Part part;
         lock (_gate)
         {
             if (_parts.Count >= MaxParts)
             {
                 throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
             }
-
-            part = new Part(adapter, name, _parts.Count);
         }
 
-        Attach(part);
-        _ = adapter.Closed.ContinueWith(_ => EndAsync(part), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+        var adapter = await create(cancellationToken).ConfigureAwait(false);
+        Part? part = null;
+        lock (_gate)
+        {
+            if (_parts.Count < MaxParts)
+            {
+                part = new Part(adapter, name, _parts.Count) { Starting = true };
+                _parts.Add(part);
+            }
+        }
+
+        if (part is null)
+        {
+            await adapter.DisposeAsync().ConfigureAwait(false);
+            throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
+        }
+
+        var abandoned = new StrongBox<bool>();
+        Hook(part, adapter, abandoned);
+        for (var attempt = 1; ; attempt++)
+        {
+            EndWith(part, adapter, abandoned);
+            Exception failure;
+            try
+            {
+                await JoinAsync(part, adapter, launch, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+
+            // The attempt's events and end are no longer the session's, whether it starts again or fails.
+            Volatile.Write(ref abandoned.Value, true);
+            var again = await startAgain(adapter, failure, attempt).ConfigureAwait(false);
+            var disposed = false;
+            if (again)
+            {
+                await adapter.DisposeAsync().ConfigureAwait(false);
+                disposed = true;
+                try
+                {
+                    adapter = await create(cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                    again = false;
+                }
+            }
+
+            if (!again)
+            {
+                // The rest of the session goes on without it (an independent session ends if it was the last one).
+                if (Independent)
+                {
+                    await EndAsync(part).ConfigureAwait(false);
+                }
+                else
+                {
+                    lock (_gate)
+                    {
+                        part.Ended = true;
+                        Unqueue(part);
+                    }
+                }
+
+                if (!disposed)
+                {
+                    await adapter.DisposeAsync().ConfigureAwait(false);
+                }
+
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(failure);
+            }
+
+            abandoned = new StrongBox<bool>();
+            lock (_gate)
+            {
+                // A fresh start: what the abandoned attempt bound, stopped on or showed is gone.
+                part.Adapter = adapter;
+                part.Starting = true;
+                part.Ids.Clear();
+                part.Stopped = false;
+                part.StoppedThread = 0;
+                Unqueue(part);
+                if (_shown == part)
+                {
+                    _shown = null;
+                }
+
+                foreach (var states in _states.Values)
+                {
+                    states.Remove(part.Index);
+                }
+            }
+
+            Hook(part, adapter, abandoned);
+        }
+    }
+
+    /// <summary>One start of a joining program: its launch, the session's breakpoints and settings, its configuration.</summary>
+    private async Task JoinAsync(Part part, IDebugAdapter adapter, Func<IDebugAdapter, Task> launch, CancellationToken cancellationToken)
+    {
+        var launching = launch(adapter);
         try
         {
-            var launching = launch(adapter);
             await Task.WhenAny(launching, adapter.Initialized.WaitAsync(cancellationToken)).ConfigureAwait(false);
             if (launching.IsFaulted || launching.IsCanceled)
             {
@@ -173,25 +305,17 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             await adapter.Initialized.WaitAsync(cancellationToken).ConfigureAwait(false);
             await ReplayAsync(part, cancellationToken).ConfigureAwait(false);
             await adapter.ConfigurationDoneAsync(cancellationToken).ConfigureAwait(false);
+            lock (_gate)
+            {
+                part.Starting = false;
+            }
+
             await launching.ConfigureAwait(false);
         }
         catch
         {
-            // The rest of the session goes on without it (an independent session ends if it was the last one).
-            if (Independent)
-            {
-                await EndAsync(part).ConfigureAwait(false);
-            }
-            else
-            {
-                lock (_gate)
-                {
-                    part.Ended = true;
-                    Unqueue(part);
-                }
-            }
-
-            await adapter.DisposeAsync().ConfigureAwait(false);
+            // Some adapters answer the launch only after configurationDone: once the start failed, so may the launch.
+            _ = launching.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             throw;
         }
     }
@@ -673,6 +797,13 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         var result = new List<DapThread>();
         foreach (var part in Parts())
         {
+            if (part.Starting && !part.Stopped)
+            {
+                // A program still joining has no threads to list yet, and netcoredbg answers only after
+                // configurationDone (up to its 5 seconds): another program's stop would wait for it.
+                continue;
+            }
+
             try
             {
                 foreach (var thread in await part.Adapter.ThreadsAsync(cancellationToken).ConfigureAwait(false))
@@ -783,8 +914,10 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             await part.Adapter.DisposeAsync().ConfigureAwait(false);
         }
 
+        // _raising stays: the session's end is raised under it, and the session disposes this adapter on that end, on
+        // another thread, while the raise may still release it (seen when a startup project failed after the others
+        // ended). It has no wait handle to free.
         _closed.TrySetResult();
-        _raising.Dispose();
     }
 }
 

@@ -65,14 +65,15 @@ internal static class AgentLink
     }
 
     /// <summary>
-    /// Runs <paramref name="work"/> on <paramref name="dispatcher"/>'s thread and waits for it (at most 10 s; a thread
-    /// paused in the debugger doesn't answer). The work's exception comes back here, never to the app's dispatcher.
+    /// Runs <paramref name="work"/> on <paramref name="dispatcher"/>'s thread at <paramref name="priority"/> and waits
+    /// for it (at most 10 s; a thread paused in the debugger doesn't answer). The work's exception comes back here,
+    /// never to the app's dispatcher.
     /// </summary>
-    public static string OnUiThread(Dispatcher dispatcher, Func<string> work)
+    public static string OnUiThread(Dispatcher dispatcher, Func<string> work, DispatcherPriority priority)
     {
         string? result = null;
         Exception? error = null;
-        var operation = dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
+        var operation = dispatcher.BeginInvoke(priority, new Action(() =>
         {
             try
             {

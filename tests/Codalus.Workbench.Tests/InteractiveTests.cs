@@ -57,16 +57,6 @@ public sealed class InteractiveTests : IAsyncLifetime
         }
     }
 
-    private static async Task WaitForOutputAsync(Func<bool> condition)
-    {
-        var elapsed = System.Diagnostics.Stopwatch.StartNew();
-        while (!condition())
-        {
-            Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(10), "The output did not arrive.");
-            await Task.Delay(20, TestContext.Current.CancellationToken);
-        }
-    }
-
     private string Printed(bool isError = false) => string.Concat(_output.Where(o => o.IsError == isError).Select(o => o.Text));
 
     [Fact]
@@ -86,9 +76,9 @@ public sealed class InteractiveTests : IAsyncLifetime
         var print = await _service.ExecuteAsync("Console.WriteLine($\"count {numbers.Count}\"); Console.Error.Write(\"oops\")", ct);
         Assert.True(print.Success);
         Assert.Null(print.Value);
-        // Responses complete on the connection's read loop and notifications on its dispatch loop, so output sent
-        // before the result can be handled just after it.
-        await WaitForOutputAsync(() => Printed().ReplaceLineEndings("\n").Contains("count 3\n", StringComparison.Ordinal) && Printed(isError: true).Contains("oops", StringComparison.Ordinal));
+        // The output is in before the result (the host flushes it first, and the result waits for its notifications).
+        Assert.Contains("count 3\n", Printed().ReplaceLineEndings("\n"), StringComparison.Ordinal);
+        Assert.Contains("oops", Printed(isError: true), StringComparison.Ordinal);
 
         // Declarations persist too.
         Assert.True((await _service.ExecuteAsync("int Twice(int x) => x * 2;", ct)).Success);
@@ -189,7 +179,7 @@ public sealed class InteractiveTests : IAsyncLifetime
 
         var unknown = await _service.ExecuteAsync("#r \"nuget: Codalus.Sample.DoesNotExist, 1.0.0\"", ct);
         Assert.False(unknown.Success);
-        await WaitForOutputAsync(() => Printed(isError: true).Contains("DoesNotExist", StringComparison.Ordinal));
+        Assert.Contains("DoesNotExist", Printed(isError: true), StringComparison.Ordinal);
     }
 
     [Fact]

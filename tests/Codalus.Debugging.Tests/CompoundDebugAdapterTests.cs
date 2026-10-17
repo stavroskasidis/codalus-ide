@@ -293,6 +293,96 @@ public sealed class CompoundDebugAdapterTests
         Assert.Equal(M + 1, Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent)[1].ThreadId);
     }
 
+    private static bool Requested(FakeAdapter adapter, string request)
+    {
+        lock (adapter.Requests)
+        {
+            return adapter.Requests.Contains(request);
+        }
+    }
+
+    [Fact]
+    public async Task A_program_still_starting_holds_up_neither_the_threads_nor_another_programs_stop()
+    {
+        // netcoredbg answers configurationDone once the program's runtime started (up to its 5 seconds), and every
+        // request waits behind it: the first program's stop, which lists the threads, waited for the second's start.
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var configured = new TaskCompletionSource();
+        var second = new FakeAdapter([new DapThread(1, "Main Thread")]) { ConfigurationDoneGate = configured.Task };
+        await using var compound = new CompoundDebugAdapter(first, "App", independent: true);
+        var joining = compound.AddAsync(second, "Worker", _ => Task.CompletedTask, Ct);
+        await WaitAsync(() => Requested(second, "configurationDone"));
+
+        Assert.Equal([new DapThread(M, "App: Main Thread")], await compound.ThreadsAsync(Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct));
+        Assert.False(Requested(second, "threads"));
+
+        // A program that stopped while starting (an early breakpoint) lists its threads, as one that joined does.
+        await second.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        Assert.Equal(2, (await compound.ThreadsAsync(Ct)).Length);
+        configured.SetResult();
+        await joining;
+        Assert.Equal([new DapThread(M, "App: Main Thread"), new DapThread(M + 1, "Worker: Main Thread")], await compound.ThreadsAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_start_made_again_keeps_the_programs_place_and_drops_the_abandoned_attempt()
+    {
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var timedOut = new FakeAdapter([new DapThread(1, "Main Thread")]) { ConfigurationDoneError = "Failed command 'configurationDone' : 0x80004005" };
+        var started = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        await using var compound = new CompoundDebugAdapter(first, "App", independent: true);
+        var events = new List<DapEvent>();
+        compound.EventReceived += e =>
+        {
+            lock (events)
+            {
+                events.Add(e);
+            }
+
+            return Task.CompletedTask;
+        };
+        var changes = new List<CompoundPartEvent>();
+        compound.PartChanged += (_, e) =>
+        {
+            lock (changes)
+            {
+                changes.Add(e);
+            }
+        };
+        await compound.SetBreakpointsAsync("/app/Worker.cs", [new SourceBreakpoint(3)], Ct);
+
+        var adapters = new Queue<FakeAdapter>([timedOut, started]);
+        var attempts = new List<(Exception Error, int Attempt)>();
+        await compound.AddAsync(
+            "Worker",
+            _ => Task.FromResult<IDebugAdapter>(adapters.Dequeue()),
+            _ => Task.CompletedTask,
+            (adapter, error, attempt) =>
+            {
+                attempts.Add((error, attempt));
+                return Task.FromResult(true);
+            },
+            Ct);
+
+        // One failed attempt, undone: disposed, its end and events no longer the session's.
+        var (failure, number) = Assert.Single(attempts);
+        Assert.Equal(1, number);
+        Assert.Contains("0x80004005", failure.Message, StringComparison.Ordinal);
+        Assert.True(timedOut.Disposed);
+        await timedOut.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        Assert.Empty(Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent));
+        Assert.DoesNotContain(changes, c => c.Ended);
+
+        // The second attempt took the program's place (index 1) and got the session's breakpoints.
+        Assert.Equal(["App", "Worker"], compound.PartNames);
+        Assert.True(Requested(started, "setBreakpoints /app/Worker.cs 3"));
+        Assert.Equal([new DapThread(M, "App: Main Thread"), new DapThread(M + 1, "Worker: Main Thread")], await compound.ThreadsAsync(Ct));
+        await started.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1, HitBreakpointIds: [started.LastBreakpointIds[0]]), DapJsonContext.Default.StoppedEvent);
+        var stop = Assert.Single(Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent));
+        Assert.Equal(M + 1, stop.ThreadId);
+        Assert.Equal([1], stop.HitBreakpointIds!);
+    }
+
     /// <summary>An adapter that records its requests: thread 1, frame 7, scope reference 9.</summary>
     private sealed class FakeAdapter(DapThread[] threads) : IDebugAdapter
     {
@@ -302,6 +392,12 @@ public sealed class CompoundDebugAdapterTests
         public List<string> Requests { get; } = [];
 
         public bool Binds { get; init; } = true;
+
+        /// <summary><c>configurationDone</c> answers once this completes (netcoredbg waits for the program's runtime).</summary>
+        public Task ConfigurationDoneGate { get; init; } = Task.CompletedTask;
+
+        /// <summary><c>configurationDone</c> fails with this message (netcoredbg didn't see the runtime start in time).</summary>
+        public string? ConfigurationDoneError { get; init; }
 
         public int[] LastBreakpointIds { get; private set; } = [];
 
@@ -331,7 +427,15 @@ public sealed class CompoundDebugAdapterTests
             return Task.CompletedTask;
         }
 
-        public Task ConfigurationDoneAsync(CancellationToken cancellationToken) => Record("configurationDone");
+        public async Task ConfigurationDoneAsync(CancellationToken cancellationToken)
+        {
+            await Record("configurationDone");
+            await ConfigurationDoneGate.WaitAsync(cancellationToken);
+            if (ConfigurationDoneError is { } error)
+            {
+                throw new DapException("configurationDone", error);
+            }
+        }
 
         public async Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken)
         {
@@ -356,7 +460,11 @@ public sealed class CompoundDebugAdapterTests
 
         public Task PauseAsync(int threadId, CancellationToken cancellationToken) => Record($"pause {threadId}");
 
-        public Task<DapThread[]> ThreadsAsync(CancellationToken cancellationToken) => Task.FromResult(threads);
+        public async Task<DapThread[]> ThreadsAsync(CancellationToken cancellationToken)
+        {
+            await Record("threads");
+            return threads;
+        }
 
         public async Task<StackTraceResponse> StackTraceAsync(int threadId, int levels, CancellationToken cancellationToken)
         {

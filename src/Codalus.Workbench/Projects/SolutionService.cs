@@ -370,8 +370,13 @@ public sealed class SolutionService : IAsyncDisposable
     {
         var connection = Connection;
         await using var registration = cancellationToken.Register(() => _ = CancelBuildAsync(connection)).ConfigureAwait(false);
-        return await connection.InvokeAsync(
+        var result = await connection.InvokeAsync(
             ProjectMethods.Build, new BuildParams(target, projectPath, Options: options), ProjectJsonContext.Default.BuildParams, ProjectJsonContext.Default.BuildResultInfo, CancellationToken.None).ConfigureAwait(false);
+
+        // The host sends the build's output and diagnostics before its result, but the result completes this call as
+        // soon as it is read: wait until they have been raised (a failed build's errors were missing: Windows CI).
+        await connection.WhenDispatchedAsync().ConfigureAwait(false);
+        return result;
     }
 
     /// <summary>Batch Build (ADR 0034): each entry in turn, output and diagnostics as for a build; cancellable the same way.</summary>
@@ -379,8 +384,10 @@ public sealed class SolutionService : IAsyncDisposable
     {
         var connection = Connection;
         await using var registration = cancellationToken.Register(() => _ = CancelBuildAsync(connection)).ConfigureAwait(false);
-        return await connection.InvokeAsync(
+        var result = await connection.InvokeAsync(
             BuildDepthMethods.Batch, parameters, BuildDepthJsonContext.Default.BatchBuildParams, BuildDepthJsonContext.Default.BatchBuildResult, CancellationToken.None).ConfigureAwait(false);
+        await connection.WhenDispatchedAsync().ConfigureAwait(false); // its output and diagnostics first, as for a build
+        return result;
     }
 
     private static async Task CancelBuildAsync(JsonRpcConnection connection)
@@ -464,7 +471,8 @@ public sealed class SolutionService : IAsyncDisposable
 
     /// <summary>
     /// Sends a request to the build host, for the services built on its connection (packages, project properties…).
-    /// It times out after <paramref name="timeout"/> (default two minutes).
+    /// It completes after the notifications the host sent before its result (a tool's output: Entity Framework,
+    /// scaffolding, WCF), and times out after <paramref name="timeout"/> (default two minutes).
     /// </summary>
     public async Task<TResult> RequestAsync<TParams, TResult>(
         string method,
@@ -476,7 +484,10 @@ public sealed class SolutionService : IAsyncDisposable
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limit.CancelAfter(timeout ?? s_operationTimeout);
-        return await Connection.InvokeAsync(method, parameters, parametersInfo, resultInfo, limit.Token).ConfigureAwait(false);
+        var connection = Connection;
+        var result = await connection.InvokeAsync(method, parameters, parametersInfo, resultInfo, limit.Token).ConfigureAwait(false);
+        await connection.WhenDispatchedAsync().ConfigureAwait(false); // as for a build: the output sent before the result first
+        return result;
     }
 
     private async Task InvokeAsync<T>(string method, T parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken)

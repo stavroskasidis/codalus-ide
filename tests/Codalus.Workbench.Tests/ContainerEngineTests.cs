@@ -43,7 +43,7 @@ internal sealed class ContainerDatabase : IAsyncDisposable
         var (code, output) = Run([.. arguments], timeoutSeconds: 600);
         if (code != 0)
         {
-            Run("rm", "-f", name); // a run that timed out (pulling) may still start it
+            Run("rm", "-f", "-v", name); // a run that timed out (pulling) may still start it
             Skip($"The container {image} didn't start: {output.Trim()}");
         }
 
@@ -52,7 +52,7 @@ internal sealed class ContainerDatabase : IAsyncDisposable
         var port = 0;
         if (portCode != 0 || !int.TryParse(mapping.Trim().Split('\n')[0].Split(':')[^1], out port))
         {
-            Run("rm", "-f", id);
+            Run("rm", "-f", "-v", id);
             Skip($"The container {image} has no port mapping: {mapping.Trim()}");
         }
 
@@ -133,7 +133,8 @@ internal sealed class ContainerDatabase : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
-        Run("rm", "-f", _id);
+        // -v: the anonymous volumes the database images declare (their data folders) go with the container.
+        Run("rm", "-f", "-v", _id);
         return ValueTask.CompletedTask;
     }
 }
@@ -247,7 +248,9 @@ public sealed class ContainerEngineTests : IAsyncLifetime
             schema: "dbo",
             notice: "PRINT 'hello from sql server'",
             noticeText: "hello from sql server",
-            slow: "WAITFOR DELAY '00:01:00'",
+            // A minute of short waits, not one WAITFOR of a minute: SQL Server may end a WAITFOR before its time (it
+            // ends WAITFOR threads when it runs short of workers), and one that ended early would leave nothing to cancel.
+            slow: "DECLARE @waits int = 0; WHILE @waits < 600 BEGIN WAITFOR DELAY '00:00:00.100'; SET @waits += 1; END",
             insertId: false);
 
         // Databases of the server.
@@ -312,7 +315,15 @@ public sealed class ContainerEngineTests : IAsyncLifetime
         var run = _data.ExecuteAsync(new ExecuteParams("db", slow, Session: "slow"), cancellation.Token);
         await Task.Delay(1000, TestContext.Current.CancellationToken);
         await cancellation.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+        try
+        {
+            var ended = await run;
+            Assert.Fail($"The slow statement ended by itself {watch.Elapsed.TotalMilliseconds:0} ms after it was sent ({ended.ElapsedMilliseconds:0} ms in the host) instead of being cancelled; its messages: {string.Join(" | ", ended.Messages.Select(m => m.Kind + ": " + m.Text))}");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30), $"Cancel took {watch.Elapsed}.");
         Assert.Equal("1", (await _data.ExecuteAsync(new ExecuteParams("db", "SELECT 1"), Timeout())).ResultSets[0].Rows[0][0]);
 

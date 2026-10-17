@@ -162,11 +162,40 @@ public sealed class WindowsAppsTests : IDisposable
         Assert.Equal(Path.Combine("/home/me", ".nuget", "packages"), WindowsApps.PackagesRoot(_ => null, "/home/me"));
         Assert.Equal("/cache", WindowsApps.PackagesRoot(n => n == "NUGET_PACKAGES" ? "/cache" : null, "/home/me"));
 
-        // PowerShell's command: the manifest and the dependencies in single quotes (a quote doubled), failing on errors.
-        var arguments = WindowsApps.RegisterArguments(@"C:\src\Bob's App\bin\AppxManifest.xml", [@"C:\p\a.msix", @"C:\p\b.msix"]);
+        // A framework's identity comes from its package's manifest; a file that isn't a package has none.
+        var framework = Path.Combine(_dir, "Microsoft.WindowsAppRuntime.1.8.msix");
+        using (var zip = System.IO.Compression.ZipFile.Open(framework, System.IO.Compression.ZipArchiveMode.Create))
+        using (var writer = new StreamWriter(zip.CreateEntry("AppxManifest.xml").Open()))
+        {
+            writer.Write(Manifest.Replace("Name=\"Codalus.Samples.WinUIApp\"", "Name=\"Microsoft.WindowsAppRuntime.1.8\"", StringComparison.Ordinal)
+                .Replace("Version=\"1.0.0.0\"", "Version=\"8000.879.2017.0\"", StringComparison.Ordinal));
+        }
+
+        var runtime = WindowsApps.ReadPackageIdentity(framework);
+        Assert.Equal(("Microsoft.WindowsAppRuntime.1.8", "8000.879.2017.0", "x64"), (runtime?.Name, runtime?.Version, runtime?.Architecture));
+        Assert.Null(WindowsApps.ReadPackageIdentity(Path.Combine(msix, "Microsoft.WindowsAppRuntime.1.8.msix")));
+        Assert.Null(WindowsApps.ReadPackageIdentity(Path.Combine(_dir, "missing.msix")));
+
+        // PowerShell's command: each framework installed first unless that version or a higher one is there for its
+        // architecture (adding it again while an app that uses it runs fails with 0x80073D02); one whose identity is
+        // unknown is installed, a higher version there being fine. Then the layout is registered; paths in single quotes
+        // (a quote doubled), failing on errors. Never -DependencyPath: with -Register it takes layouts only (0x80073CF9
+        // for an .msix).
+        var arguments = WindowsApps.RegisterArguments(@"C:\src\Bob's App\bin\AppxManifest.xml", [new FrameworkPackage(@"C:\p\a.msix", runtime), new FrameworkPackage(@"C:\p\b's.msix", null)]);
         Assert.Equal(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"], arguments.Take(5));
-        Assert.Equal(@"$ErrorActionPreference = 'Stop'; Add-AppxPackage -Register 'C:\src\Bob''s App\bin\AppxManifest.xml' -ForceApplicationShutdown -ForceUpdateFromAnyVersion -DependencyPath 'C:\p\a.msix','C:\p\b.msix'", arguments[^1]);
-        Assert.DoesNotContain("-DependencyPath", WindowsApps.RegisterArguments("m.xml", [])[^1], StringComparison.Ordinal);
+        Assert.Equal(
+            "$ErrorActionPreference = 'Stop'; "
+            + "if (-not (Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.1.8' | Where-Object { \"$($_.Architecture)\" -eq 'x64' -and [version]$_.Version -ge [version]'8000.879.2017.0' })) "
+            + @"{ try { Add-AppxPackage -Path 'C:\p\a.msix' } catch { if ($_.Exception.Message -notmatch '0x80073D06') { throw } } }; "
+            + @"try { Add-AppxPackage -Path 'C:\p\b''s.msix' } catch { if ($_.Exception.Message -notmatch '0x80073D06') { throw } }; "
+            + @"Add-AppxPackage -Register 'C:\src\Bob''s App\bin\AppxManifest.xml' -ForceApplicationShutdown -ForceUpdateFromAnyVersion",
+            arguments[^1]);
+        Assert.Contains(
+            "Where-Object { [version]$_.Version -ge [version]'2.0.0.0' }",
+            WindowsApps.RegisterArguments("m.xml", [new FrameworkPackage("f.msix", runtime! with { Version = "2.0.0.0", Architecture = null })])[^1],
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("-DependencyPath", arguments[^1], StringComparison.Ordinal);
+        Assert.Equal("$ErrorActionPreference = 'Stop'; Add-AppxPackage -Register 'm.xml' -ForceApplicationShutdown -ForceUpdateFromAnyVersion", WindowsApps.RegisterArguments("m.xml", [])[^1]);
 
         // The companion's activation: its arguments, and the process id it prints.
         Assert.Equal(["--activate-app", "A_b!App"], WindowsApps.ActivateArguments("A_b!App", null));

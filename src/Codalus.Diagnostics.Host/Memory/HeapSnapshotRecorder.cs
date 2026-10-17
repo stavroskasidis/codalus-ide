@@ -30,6 +30,7 @@ internal static class HeapSnapshotRecorder
             rundown: false,
             stacks: false,
             bufferMegabytes: 512,
+            slowStart: true,
             cancellationToken).ConfigureAwait(false);
         using (session)
         {
