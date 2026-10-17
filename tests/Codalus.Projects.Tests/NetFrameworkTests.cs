@@ -229,6 +229,52 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(folder, "bin", "Debug", "Net35Lib.dll")));
     }
 
+    /// <summary>
+    /// Convert to SDK-style's output (the golden file of the workbench's tests) builds: the old-style app converted,
+    /// written as the IDE writes it, loads SDK-style with its package as a PackageReference from the local feed, keeps
+    /// its stray file out (it would fail the build), and builds with the SDK's AssemblyInfo attributes.
+    /// </summary>
+    [Fact]
+    public async Task The_converted_old_style_project_builds()
+    {
+        var legacy = Project("LegacyApp");
+        var conversion = SdkStyleConverter.Convert(legacy, Path.Combine(Fixture, "packages"));
+        File.WriteAllText(legacy, conversion.ProjectText);
+        foreach (var file in conversion.ChangedFiles)
+        {
+            File.WriteAllText(file.Path, file.Text);
+        }
+
+        foreach (var file in conversion.DeletedFiles)
+        {
+            File.Delete(file);
+        }
+
+        await _solutions.OpenAsync(Path.Combine(Fixture, "NetFramework.slnx"), trusted: true, restore: true, Timeout());
+        await WaitUntilAsync(
+            () => _solutions.CompilerInputs.TryGetValue(legacy, out var inputs) && inputs.State == CompilerInputStates.Ok
+                  && inputs.Arguments.Any(a => a.Contains("codalus.sample.legacy", StringComparison.OrdinalIgnoreCase)),
+            DesignTimeState);
+
+        var info = _solutions.Projects[legacy];
+        Assert.False(info.IsNonSdkStyle);
+        Assert.Equal(["net472"], info.TargetFrameworks);
+        Assert.Contains(info.References, r => r.Kind == ReferenceKinds.Package && r.Name == "Codalus.Sample.Legacy" && r.Version == "1.0.0" && r.Resolved);
+        Assert.DoesNotContain(info.Items, i => i.Path.EndsWith("NotInProject.cs", StringComparison.Ordinal));
+        Assert.Contains("/langversion:7.3", _solutions.CompilerInputs[legacy].Arguments);
+
+        var result = await _builds.BuildAsync(BuildTargets.Build, legacy, Timeout());
+        Assert.True(result.Succeeded, _builds.Channel.GetText());
+        var output = Path.Combine(Fixture, "LegacyApp", "bin", "Debug", "net472");
+        Assert.True(File.Exists(Path.Combine(output, "LegacyApp.exe")));
+        Assert.True(File.Exists(Path.Combine(output, "Codalus.Sample.Legacy.dll")));
+        Assert.True(File.Exists(Path.Combine(output, "LegacyApp.exe.config")));
+        var generated = Directory.EnumerateFiles(Path.Combine(Fixture, "LegacyApp", "obj"), "LegacyApp.AssemblyInfo.cs", SearchOption.AllDirectories).Single();
+        var attributes = await File.ReadAllTextAsync(generated, TestContext.Current.CancellationToken);
+        Assert.Contains("AssemblyCompanyAttribute(\"Codalus IDE fixtures\")", attributes, StringComparison.Ordinal);
+        Assert.Contains("AssemblyVersionAttribute(\"1.2.0.0\")", attributes, StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------------------------ the fixture
 
     /// <summary>
