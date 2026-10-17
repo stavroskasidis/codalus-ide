@@ -1195,6 +1195,28 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("wpf.preview", "M40b", wpfPreviewTitle, "skipped", 0, "The WPF previewer runs on Windows only (D31); off Windows it says so, which the tests cover on every OS.");
         }
 
+        // M41a: the Windows Forms designer (ADR 0073, D31: Windows only).
+        const string winFormsDesignerTitle = "The WinForms app's OrderForm opens in the Windows Forms designer; a Button from the Toolbox and its Text set in the Properties window become code in OrderForm.Designer.cs";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.designer", "M41a", winFormsDesignerTitle, WinFormsDesignerStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.designer", "M41a", winFormsDesignerTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); off Windows a form opens as code, which the tests cover on every OS.");
+        }
+
+        // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
+        const string winUITitle = "The WinUI 3 app opens, its XAML completes x:Bind paths from the page's class, and it builds and runs unpackaged";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("maui.windows", "M44", winUITitle, WinUIStepAsync).ConfigureAwait(true);
+        }
+        else
+        {
+            Report("maui.windows", "M44", winUITitle, "skipped", 0, "WinUI 3 apps build and run on Windows only (D31); their XAML editing and the Windows-only gates are covered by the tests on every OS.");
+        }
+
         await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.interactive", "M36", "A selection in an F# script runs in F# Interactive (dotnet fsi in a terminal), which shows the values defined", FSharpInteractiveStepAsync, "projects.open").ConfigureAwait(true);
@@ -2015,6 +2037,63 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the WPF app stops", 60).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// WinUI 3 in the shipped app (M44, Windows): the WinUI fixture opens, MainPage.xaml completes an x:Bind path from
+    /// the page's class (<c>winui-xaml.png</c>), and Start Without Debugging builds the unpackaged app and runs it until
+    /// it's stopped.
+    /// </summary>
+    private async Task WinUIStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "WindowsDesktop");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "WindowsDesktop"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "WinUIApp.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the WinUI solution is open (its packages restored)", 600).ConfigureAwait(true);
+        var app = Path.Combine(target, "WinUIApp", "WinUIApp.csproj");
+        Check(shell.Solutions.Projects.TryGetValue(app, out var info) && info.UsesWinUI && info.WindowsPackageType == "None", "WinUIApp is an unpackaged WinUI 3 project: " + info?.WindowsPackageType);
+
+        var path = Path.Combine(target, "WinUIApp", "MainPage.xaml");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.XamlLanguageId, "the file is XAML for the C# host: " + editor.Model.LanguageId);
+        const string Marker = "{x:Bind ViewModel.NewTitle,";
+        MoveCaret(editor, Marker, "{x:Bind ViewModel.".Length);
+        var asked = Stopwatch.StartNew();
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "IsTyping"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                MoveCaret(editor, Marker, "{x:Bind ViewModel.".Length);
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "the x:Bind path completes the view model's members (from the page's class)", 360).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("winui-xaml.png");
+        editor.CompletionWindow!.Close();
+
+        // Start Without Debugging builds the app and runs it: a WinUI window on the desktop, until it's stopped.
+        shell.SetStartupProject(app);
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited), "the WinUI app is running: " + Tail(shell.Builds.Channel.GetText(), 2000), 600).ConfigureAwait(true);
+        await Task.Delay(3000).ConfigureAwait(true);
+        Check(shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited), "the WinUI app is still running (its window is up)");
+        shell.StopRunning();
+        await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the WinUI app stops", 60).ConfigureAwait(true);
+    }
+
     private async Task VisualBasicStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
@@ -2154,6 +2233,58 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("fsharp-interactive.png");
         shell.Terminals.Close(session!);
+    }
+
+    /// <summary>
+    /// The Windows Forms designer in the shipped app (M41a): the solution windows.desktop opened, OrderForm in the
+    /// designer, a Button from the Toolbox, its Text from the Properties window, and the designer file's new code.
+    /// </summary>
+    private async Task WinFormsDesignerStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var app = Path.Combine(Work, "WindowsDesktop", "WinFormsApp");
+        Check(shell.Solutions.Projects.Values.Any(p => p.UsesWindowsForms), "the WindowsDesktop solution is still open");
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready }, "the C# host has loaded the solution", 300).ConfigureAwait(true);
+
+        var started = Stopwatch.StartNew();
+        await shell.OpenFileAsync(Path.Combine(app, "OrderForm.cs")).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault();
+        Check(designer is not null, "OrderForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0, "the designer builds the app, loads the form and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        Check(designer!.Problems is null, "every statement applied: " + designer.Problems);
+        Check(designer.Components.Any(c => c.Name == "placeOrderButton" && c.Parent == "buttonPanel"), "the form's controls are on the surface, nested");
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  first frame (build included) in {started.Elapsed.TotalSeconds:0.0} s, {designer.FrameWidth}×{designer.FrameHeight}"));
+
+        var code = designer.DesignerCode!;
+        var original = code.Text.Text;
+        shell.Layout.ShowToolWindow(ViewModels.ToolboxViewModel.ToolWindowId, focus: false);
+        var button = shell.Toolbox.Items.FirstOrDefault(i => i.Type == "System.Windows.Forms.Button");
+        Check(button is not null && shell.Toolbox.IsAvailable, "the Toolbox has the Button");
+        shell.Toolbox.Armed = button;
+        var root = designer.Root!;
+        await designer.CreateAsync(button!.Type, root.ClientX + 290, root.ClientY + 300).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("button1 = new Button();", StringComparison.Ordinal) && code.Text.Text.Contains("Controls.Add(button1);", StringComparison.Ordinal),
+            "the new button is in OrderForm.Designer.cs: " + designer.Status);
+
+        shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
+        await shell.PropertiesWindow.RefreshAsync().ConfigureAwait(true);
+        var text = shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "Text");
+        Check(text is { Value: "button1" }, "the Properties window shows the new button's Text");
+        text!.Text = "Smoke test";
+        await WaitAsync(() => code.Text.Text.Contains("button1.Text = \"Smoke test\";", StringComparison.Ordinal), "the Text set in the Properties window is in the code", 60).ConfigureAwait(true);
+        var added = code.Text.Text.Split('\n').Length - original.Split('\n').Length;
+        Check(added == 12, $"the diff is the button's field, creation, section and Controls.Add: {added} lines");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer.png");
+
+        while (code.Text.UndoStack.CanUndo)
+        {
+            code.Text.UndoStack.Undo();
+        }
+
+        Check(code.Text.Text == original, "undo takes the designer file back to the original");
+        shell.Layout.CloseDocument(designer);
+        shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
     }
 
     /// <summary>The WPF previewer in the shipped app (M40b): the solution windows.desktop opened, its MainWindow.xaml previewed.</summary>

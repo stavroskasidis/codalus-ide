@@ -169,6 +169,7 @@ public static class CommandIcons
         ["issue"] = Orange,
         ["debug"] = Orange,
         ["build"] = Purple,
+        ["toolbox"] = Orange,
         ["color"] = Purple,
         ["extensions"] = Purple,
         ["sparkle"] = Purple,

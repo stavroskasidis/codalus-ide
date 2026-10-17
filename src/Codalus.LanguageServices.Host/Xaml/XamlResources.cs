@@ -31,7 +31,9 @@ internal static class XamlResources
             documents.TryAdd(Path.GetFullPath(path), document);
         }
 
-        var complete = true;
+        // WinUI's StaticResource and ThemeResource also find the framework's theme resources (XamlControlsResources,
+        // generic.xaml), which no file lists: its keys are offered, never reported (M44).
+        var complete = !context.IsWinUI;
         var projects = Projects(context.Project);
         var self = Path.GetFullPath(context.Path);
 
@@ -131,6 +133,21 @@ internal static class XamlResources
         if (value.StartsWith(Pack, StringComparison.OrdinalIgnoreCase))
         {
             value = value[Pack.Length..];
+        }
+
+        const string AppX = "ms-appx:///";
+        if (value.StartsWith(AppX, StringComparison.OrdinalIgnoreCase))
+        {
+            // WinUI (M44): from the package's root, the app's project; a library's files are under its assembly's name.
+            var rest = value[AppX.Length..];
+            var slash = rest.IndexOf('/', StringComparison.Ordinal);
+            var library = slash > 0 ? projects.FirstOrDefault(p => string.Equals(p.AssemblyName, rest[..slash], StringComparison.OrdinalIgnoreCase)) : default;
+            if (library.Directory is not null)
+            {
+                return Path.GetFullPath(Path.Combine(library.Directory, rest[(slash + 1)..]));
+            }
+
+            value = "/" + rest;
         }
 
         if (value.Contains("://", StringComparison.Ordinal))

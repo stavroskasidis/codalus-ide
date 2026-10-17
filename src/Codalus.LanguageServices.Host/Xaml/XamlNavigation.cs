@@ -148,6 +148,20 @@ internal static partial class XamlNavigation
 
                 var prefix = segmentStart > start ? value[start..(segmentStart - 1)] : string.Empty;
                 var segment = value[segmentStart..segmentEnd].TrimStart('!');
+                if (extension.IsXBind && context.IsWinUI)
+                {
+                    // x:Bind (M44): a named element first, then members of any access on the page's class.
+                    var root = context.XBindRoot(element, out var isRoot);
+                    if (prefix.Length == 0 && isRoot && XamlBindingPaths.NamedElement(context, segment) is not null)
+                    {
+                        return Task.FromResult(Result(new XamlTarget(attribute.ValueStart + segmentStart, attribute.ValueStart + segmentEnd) { ElementName = segment }));
+                    }
+
+                    var from = prefix.Length == 0 ? root : XamlBindingPaths.ResolveXBind(context, element, prefix);
+                    var bound = from is null ? null : XamlTypeSystem.XBindMembers(from, anyAccess: prefix.Length == 0 && isRoot).FirstOrDefault(m => m.Name == segment);
+                    return Task.FromResult(bound is null ? null : Result(new XamlTarget(attribute.ValueStart + segmentStart, attribute.ValueStart + segmentEnd) { Symbol = bound }));
+                }
+
                 if (XamlBindingPaths.Resolve(context, element, prefix, value) is { } type)
                 {
                     var member = XamlTypeSystem.BindableMembers(type).FirstOrDefault(m => m.Name == segment);

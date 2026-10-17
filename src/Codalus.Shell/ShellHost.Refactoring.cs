@@ -377,7 +377,7 @@ public sealed partial class ShellHost
     /// Applies a workspace edit: open documents change in the editor (undoable, left unsaved, like Visual Studio);
     /// other files are changed on disk with their encoding kept; files that don't exist are created.
     /// </summary>
-    public async Task<bool> ApplyWorkspaceEditAsync(WorkspaceEdit edit)
+    public async Task<bool> ApplyWorkspaceEditAsync(WorkspaceEdit edit, bool quiet = false)
     {
         var failed = new List<string>();
         foreach (var change in edit.DocumentChanges)
@@ -446,7 +446,10 @@ public sealed partial class ShellHost
         }
 
         var count = edit.DocumentChanges.Length + edit.ResourceOperations.Count(o => !edit.DocumentChanges.Any(c => c.TextDocument.Uri == o.Uri));
-        ShowMessage(count == 1 ? "Changed 1 file." : $"Changed {count} files.");
+        if (!quiet)
+        {
+            ShowMessage(count == 1 ? "Changed 1 file." : $"Changed {count} files.");
+        }
         return true;
     }
 

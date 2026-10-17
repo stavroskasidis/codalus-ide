@@ -85,13 +85,13 @@ internal static partial class XamlAnalysis
                 CheckAttribute(context, types, element, type, attribute, Ignored, Report);
             }
 
-            if (context.IsWpf)
+            if (context.IsWpfStyle)
             {
                 CheckWpfSetter(context, element, Report);
             }
         }
 
-        if (context.IsWpf && resources is { Complete: true })
+        if (context.IsWpfStyle && resources is { Complete: true })
         {
             CheckStaticResources(context, resources, Report);
         }
@@ -156,7 +156,7 @@ internal static partial class XamlAnalysis
         var name = attribute.Name;
         if (name == "xmlns" || name.StartsWith("xmlns:", StringComparison.Ordinal) || name.StartsWith("Classes.", StringComparison.Ordinal) || ignored(attribute.Prefix, element))
         {
-            if (context.IsWpf && attribute.Prefix is { } design && XamlDocument.ResolvePrefix(element, design) == XamlNames.Design && attribute.LocalName == "DataContext"
+            if (context.IsWpfStyle && attribute.Prefix is { } design && XamlDocument.ResolvePrefix(element, design) == XamlNames.Design && attribute.LocalName == "DataContext"
                 && attribute.Value is { } designValue && XamlContext.DesignInstanceTypeName(designValue) is { } designType && context.ResolveTypeName(element, designType) is null)
             {
                 var at = designValue.IndexOf(designType, StringComparison.Ordinal);
@@ -167,6 +167,23 @@ internal static partial class XamlAnalysis
                 && !dataType.TrimStart().StartsWith('{') && context.ResolveTypeName(element, dataType) is null)
             {
                 report(attribute.ValueStart, attribute.ValueEnd, "XAML0003", $"The type '{dataType.Trim()}' isn't found.", DiagnosticSeverity.Error);
+            }
+
+            if (context.IsWinUI && attribute.Prefix is { } x && XamlDocument.ResolvePrefix(element, x) == XamlNames.XamlLanguage && attribute.Value is { } directive && attribute.ValueStart >= 0)
+            {
+                // WinUI's directives (M44): x:Load takes a Boolean or an x:Bind; x:DefaultBindMode a mode x:Bind knows.
+                if (attribute.LocalName == "Load" && directive.TrimStart().StartsWith('{'))
+                {
+                    CheckBinding(context, element, attribute, report);
+                }
+                else if (attribute.LocalName == "Load" && !bool.TryParse(directive.Trim(), out _))
+                {
+                    report(attribute.ValueStart, attribute.ValueEnd, "XAML0005", $"'{directive.Trim()}' isn't a value of x:Load (True, False, or an x:Bind).", DiagnosticSeverity.Error);
+                }
+                else if (attribute.LocalName == "DefaultBindMode" && directive.Trim() is not ("OneTime" or "OneWay" or "TwoWay"))
+                {
+                    report(attribute.ValueStart, attribute.ValueEnd, "XAML0005", $"'{directive.Trim()}' isn't a mode x:Bind knows (OneTime, OneWay, TwoWay).", DiagnosticSeverity.Error);
+                }
             }
 
             return;
@@ -252,8 +269,18 @@ internal static partial class XamlAnalysis
             return;
         }
 
+        if (binding.IsXBind)
+        {
+            if (context.IsWinUI)
+            {
+                CheckXBind(context, element, attribute, value, open, close, binding, report);
+            }
+
+            return;
+        }
+
         ITypeSymbol? origin;
-        var wpf = context.IsWpf;
+        var wpf = context.IsWpfStyle;
         if (wpf)
         {
             if (binding.Kind != "Binding" || XamlBindingSource.Of(value) is not { } source)
@@ -361,6 +388,73 @@ internal static partial class XamlAnalysis
                 return;
             }
 
+            segmentStart += raw.Length + 1;
+        }
+    }
+
+    /// <summary>
+    /// A WinUI <c>{x:Bind}</c>'s path (M44): compiled, so a member the path's type lacks is an error, as WinUI's XAML
+    /// compiler reports it (WMC1110). It starts from the page's class (its named elements, and its private members too)
+    /// or a data template's <c>x:DataType</c>. Function bindings, casts, attached properties and static paths (a
+    /// <c>(</c> or a prefix in the path) aren't checked.
+    /// </summary>
+    private static void CheckXBind(XamlContext context, XamlElement element, XamlAttribute attribute, string value, int open, int close, MarkupExtensionContext binding, Action<int, int, string, string, int> report)
+    {
+        if (XamlBindingPaths.XBindPath(value[(open + 1 + binding.Name.Length)..close]) is not { } found)
+        {
+            return;
+        }
+
+        var (path, pathOffset) = found;
+        if (path.Length == 0 || path.Contains('(', StringComparison.Ordinal) || path.Contains(':', StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (context.XBindRoot(element, out var isRoot) is not { } root)
+        {
+            return;
+        }
+
+        ITypeSymbol? type = root;
+        var segmentStart = 0;
+        var first = true;
+        foreach (var raw in path.Split('.'))
+        {
+            var segment = raw.Trim();
+            var indexer = segment.IndexOf('[', StringComparison.Ordinal);
+            var memberName = indexer >= 0 ? segment[..indexer] : segment;
+            ITypeSymbol? next;
+            if (first && isRoot && XamlBindingPaths.NamedElement(context, memberName) is { } named)
+            {
+                next = context.TypeOf(named); // a named element: a field the XAML compiler generates
+            }
+            else
+            {
+                var member = XamlTypeSystem.XBindMembers(type!, anyAccess: first && isRoot).FirstOrDefault(m => m.Name == memberName);
+                if (member is null)
+                {
+                    var at = attribute.ValueStart + open + 1 + binding.Name.Length + pathOffset + segmentStart;
+                    report(at, at + raw.Length, "XAML0006", $"'{memberName}' isn't a property, field or method of {type!.Name}: x:Bind compiles against {root.Name}{(isRoot ? " (the page's class)" : " (x:DataType)")}, so WinUI's XAML compiler would reject it.", DiagnosticSeverity.Error);
+                    return;
+                }
+
+                next = member switch
+                {
+                    IPropertySymbol property => property.Type,
+                    IFieldSymbol field => field.Type,
+                    IMethodSymbol method => method.ReturnType,
+                    _ => null,
+                };
+            }
+
+            type = indexer >= 0 && next is not null ? XamlTypeSystem.ElementType(next) : next;
+            if (type is null || type.TypeKind is TypeKind.TypeParameter or TypeKind.Dynamic || type.SpecialType == SpecialType.System_Object)
+            {
+                return;
+            }
+
+            first = false;
             segmentStart += raw.Length + 1;
         }
     }

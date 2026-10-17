@@ -93,6 +93,11 @@ public sealed partial class ShellHost
             return false;
         }
 
+        if (target != BuildTargets.Clean && WarnIfBuildsOnlyOnWindows(project))
+        {
+            return false; // a WinUI 3 project off Windows (M44)
+        }
+
         if (Workbench.Settings.GetBoolean(SaveAllBeforeBuildSetting, true))
         {
             await SaveAllAsync().ConfigureAwait(true);
@@ -232,13 +237,18 @@ public sealed partial class ShellHost
         if (Remote is null && IsMobileProject(project))
         {
             // A .NET MAUI or mobile app (M20a): the platform SDK's Run target builds, deploys and starts it on its device.
-            await StartOnDeviceAsync(project, debug: false).ConfigureAwait(true);
+            await StartOnDeviceAsync(project, debug: false, hotReload).ConfigureAwait(true);
             return;
         }
 
         if (WarnIfWindowsOnly(project))
         {
-            return; // a WinForms or WPF app off Windows (M40a), with or without Hot Reload
+            return; // a WinForms, WPF or WinUI app off Windows (M40a, M44), with or without Hot Reload
+        }
+
+        if (!hotReload && await TryStartPackagedAppAsync(project, debug: false).ConfigureAwait(true))
+        {
+            return; // a packaged WinUI 3 app (M44): registered, then started by Windows
         }
 
         if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))

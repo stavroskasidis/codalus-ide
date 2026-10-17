@@ -30,7 +30,10 @@ public sealed record LaunchProfile(
     /// <summary>The "Container (Dockerfile)" profile (M17a, ADR 0042): the project runs in a container built from its Dockerfile.</summary>
     public const string Docker = "Docker";
 
-    public bool IsRunnable => CommandName is "Project" or "Executable" or Wsl or RoslynComponent or Docker;
+    public bool IsRunnable => CommandName is "Project" or "Executable" or Wsl or RoslynComponent or Docker or MsixPackage;
+
+    /// <summary>A packaged Windows app (M44): MAUI's and WinUI's templates name the packaged run so; the project's WindowsPackageType decides how it starts.</summary>
+    public const string MsixPackage = "MsixPackage";
 
     /// <summary>A container profile's host port for the container's HTTP port (<c>httpPort</c>); null: a free one.</summary>
     public int? HttpPort { get; init; }

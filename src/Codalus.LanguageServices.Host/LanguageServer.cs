@@ -294,6 +294,15 @@ internal sealed class LanguageServer : IAsyncDisposable
             (p, ct) => AspNetEndpointsFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
         _connection.OnRequest(Methods.EfContexts, json.EfContextsParams, json.EfDiscoveredContextsResult,
             (p, ct) => EntityFrameworkFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
+        // The Windows Forms designer (M41a, ADR 0073): read InitializeComponent, write the designer's changes, the Toolbox's project components.
+        _connection.OnRequest(Methods.WinFormsRead, json.WinFormsReadParams, json.WinFormsReadResult, (p, ct) =>
+            DocumentUris.ToPath(p.TextDocument.Uri) is { } path
+                ? WinForms.WinFormsFeature.ReadAsync(_workspace.CurrentSolution, path, _workspace.OpenText, ct)
+                : Task.FromResult(new WinFormsReadResult(null, null, false, null, "The designer opens files on disk.", null)));
+        _connection.OnRequest(Methods.WinFormsEdit, json.WinFormsEditParams, json.WinFormsEditResult, (p, ct) =>
+            WinForms.WinFormsFeature.EditAsync(_workspace.CurrentSolution, p, _workspace.OpenText, _workspace.Version, ct));
+        _connection.OnRequest(Methods.WinFormsToolbox, json.WinFormsToolboxParams, json.WinFormsToolboxResult, (p, ct) =>
+            WinForms.WinFormsFeature.ToolboxAsync(_workspace.CurrentSolution, p.Project, ct));
         OnDocument(Methods.XamlLogicalTree, json.XamlLogicalTreeParams, json.XamlLogicalTreeResult, p => p.TextDocument,
             (_, _, _) => Task.FromResult<XamlLogicalTreeResult?>(null), new XamlLogicalTreeResult([]),
             (xaml, _, _) => Task.FromResult<XamlLogicalTreeResult?>(new XamlLogicalTreeResult(Xaml.XamlAnalysis.LogicalTree(xaml))));

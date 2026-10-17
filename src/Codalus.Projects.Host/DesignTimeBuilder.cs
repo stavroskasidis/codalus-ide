@@ -21,7 +21,11 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
     private readonly SemaphoreSlim _gate = gate;
 
     /// <summary>One project to build: its configuration and, for multi-targeted projects, the framework.</summary>
-    public sealed record Request(string Path, string Configuration, string Platform, string? TargetFramework);
+    public sealed record Request(string Path, string Configuration, string Platform, string? TargetFramework)
+    {
+        /// <summary>A WinUI 3 project (M44): off Windows, the design-time pass of its XAML compiler is left out.</summary>
+        public bool WinUI { get; init; }
+    }
 
     /// <summary>
     /// Builds <paramref name="requests"/>, calling <paramref name="completed"/> as each one finishes. A newer batch
@@ -133,6 +137,15 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             if (request.TargetFramework is { } tfm)
             {
                 global["TargetFramework"] = tfm;
+            }
+
+            if (request.WinUI && WindowsDesktop.WinUIDesignTimeTargets() is { } skipXamlCompiler)
+            {
+                // WinUI's XAML compiler is a Windows program (M44): off Windows its design-time pass would fail the build.
+                // A self-contained Windows App SDK needs a Windows runtime identifier, which only Windows infers; a
+                // design-time build writes nothing, so it doesn't need one.
+                global[WindowsDesktop.CustomAfterDirectoryBuildTargets] = skipXamlCompiler;
+                global["WindowsAppSDKSelfContained"] = "false";
             }
 
             var data = new BuildRequestData(request.Path, global, null, s_targets, null, BuildRequestDataFlags.ProvideSubsetOfStateAfterBuild, s_state);

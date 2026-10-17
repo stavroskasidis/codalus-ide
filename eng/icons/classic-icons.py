@@ -319,6 +319,8 @@ ICONS = {
     "docker": page("whale", BLUE),
     "image": [(GRAY, bitmap(IMAGE_FRAME, 1, 2)), (YELLOW, bitmap(IMAGE_SUN, 10, 4)), (GREEN, bitmap(IMAGE_HILLS, 2, 8))],
     "application": [(GRAY, bitmap(WINDOW, 2, 2)), (BLUE, bitmap(["##########", "##########"], 3, 3))],
+    # A Windows Forms form or user control (M41a): a window with its title bar, and the C# badge.
+    "form": badge_on([(GRAY, bitmap(WINDOW, 4, 1)), (BLUE, bitmap(["##########", "##########"], 5, 2))], "C#", GREEN),
     "solution": [(GRAY, bitmap(WINDOW, 4, 1) - around(bitmap(DIAMOND, 0, 8))), (PURPLE, bitmap(DIAMOND, 0, 8))],
     "folder": [(TAN, bitmap(FOLDER, 1, 2))],
     "folder-open": [(TAN, bitmap(FOLDER_OPEN, 1, 2))],

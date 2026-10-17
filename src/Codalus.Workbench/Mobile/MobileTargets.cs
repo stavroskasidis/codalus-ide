@@ -11,7 +11,7 @@ public enum MobilePlatform
     iOS,
     MacCatalyst,
 
-    /// <summary>WinUI: out of scope (ADR 0064; proposed for M44).</summary>
+    /// <summary>WinUI, the Windows App SDK (M44, ADR 0074): runs on Windows only (D31).</summary>
     Windows,
     Tizen,
 }
@@ -27,6 +27,9 @@ public enum MobileDeviceKind
 
     /// <summary>This Mac (Mac Catalyst).</summary>
     ThisMac,
+
+    /// <summary>This Windows machine (MAUI's Windows target, M44): "Windows Machine", as other IDEs call it.</summary>
+    ThisPc,
 }
 
 /// <summary>
@@ -56,10 +59,11 @@ public sealed record MobileDevice(string Id, string Name, MobilePlatform Platfor
                 MobileDeviceKind.Emulator => IsRunning ? "emulator" : "emulator, not running",
                 MobileDeviceKind.Simulator => IsRunning ? "simulator" : "simulator, shut down",
                 MobileDeviceKind.ThisMac => "Mac Catalyst",
+                MobileDeviceKind.ThisPc => "Windows",
                 _ => "device",
             };
             var os = OsVersion is null ? null : $"{MobileTargets.Title(Platform)} {OsVersion}";
-            return Kind == MobileDeviceKind.ThisMac ? Name : $"{Name} ({(os is null ? kind : os + ", " + kind)})";
+            return Kind is MobileDeviceKind.ThisMac or MobileDeviceKind.ThisPc ? Name : $"{Name} ({(os is null ? kind : os + ", " + kind)})";
         }
     }
 }
@@ -69,6 +73,12 @@ public static class MobileTargets
 {
     /// <summary>The id of this Mac as a Mac Catalyst target.</summary>
     public const string ThisMacId = "maccatalyst";
+
+    /// <summary>The id of this Windows machine as the Windows target (M44).</summary>
+    public const string WindowsMachineId = "windows";
+
+    /// <summary>This Windows machine as a target: MAUI's Windows framework runs here as a desktop app (M44).</summary>
+    public static MobileDevice WindowsMachine { get; } = new(WindowsMachineId, "Windows Machine", MobilePlatform.Windows, MobileDeviceKind.ThisPc, IsRunning: true);
 
     /// <summary>The platform of a target framework: its platform part (<c>net10.0-ios18.0</c> → iOS).</summary>
     public static MobilePlatform PlatformOf(string? framework)
@@ -102,12 +112,14 @@ public static class MobileTargets
 
     /// <summary>
     /// Whether Codalus IDE runs and deploys this platform's apps on <paramref name="host"/>: Android everywhere, iOS and
-    /// Mac Catalyst on macOS. WinUI is out of scope, and Tizen isn't supported.
+    /// Mac Catalyst on macOS, Windows (WinUI, M44) on Windows (D31: no Windows remote target yet). Tizen isn't
+    /// supported.
     /// </summary>
     public static bool RunsOn(MobilePlatform platform, PlatformKind host) => platform switch
     {
         MobilePlatform.Android => true,
         MobilePlatform.iOS or MobilePlatform.MacCatalyst => host == PlatformKind.MacOS,
+        MobilePlatform.Windows => host == PlatformKind.Windows,
         _ => false,
     };
 
@@ -116,14 +128,20 @@ public static class MobileTargets
         project.UsesMaui || project.TargetFrameworks.Any(f => PlatformOf(f) is MobilePlatform.Android or MobilePlatform.iOS or MobilePlatform.MacCatalyst);
 
     /// <summary>
-    /// The framework a run uses: the active one when this machine runs it, else the first that runs here (Android
-    /// before Apple's on macOS, as the templates list them), or null when none does.
+    /// The framework a run uses: the chosen one (<paramref name="active"/>) when this machine runs it; else, on Windows,
+    /// the Windows framework (the "Windows Machine" other IDEs start with, M44); else the first that runs here (Android
+    /// before Apple's on macOS, as the templates list them); or null when none does.
     /// </summary>
     public static string? RunFramework(ProjectInfo project, string? active, PlatformKind host)
     {
         if (active is not null && RunsOn(PlatformOf(active), host) && project.TargetFrameworks.Contains(active, StringComparer.OrdinalIgnoreCase))
         {
             return active;
+        }
+
+        if (host == PlatformKind.Windows && FrameworkFor(project, MobilePlatform.Windows) is { } windows)
+        {
+            return windows;
         }
 
         return project.TargetFrameworks.FirstOrDefault(f => RunsOn(PlatformOf(f), host));

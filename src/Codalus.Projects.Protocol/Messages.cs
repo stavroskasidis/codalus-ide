@@ -180,6 +180,18 @@ public sealed record ProjectInfo(
     public bool UsesWindowsForms { get; init; }
 
     /// <summary>
+    /// A WinUI 3 project (<c>UseWinUI</c>, M44): it builds, runs and debugs only on Windows (WinUI's XAML compiler runs
+    /// only there); its <c>.xaml</c> files get WinUI's XAML language service on every OS.
+    /// </summary>
+    public bool UsesWinUI { get; init; }
+
+    /// <summary>
+    /// The evaluated <c>WindowsPackageType</c> of the project's Windows framework (M44): <c>MSIX</c> for a packaged app,
+    /// <c>None</c> for an unpackaged one, <c>Sparse</c>; null when nothing sets it (no Windows App SDK).
+    /// </summary>
+    public string? WindowsPackageType { get; init; }
+
+    /// <summary>
     /// Workload packs the project needs and the SDK doesn't have (the SDK's <c>MissingWorkloadPack</c> items, M20a), so
     /// it can't build until <c>dotnet workload restore</c> or an install; empty when none is missing.
     /// </summary>
@@ -398,7 +410,14 @@ public sealed record RunInfo(
     string? RunCommand,
     string? RunArguments,
     string? RunWorkingDirectory,
-    string? LaunchSettings);
+    string? LaunchSettings)
+{
+    /// <summary>The framework's <c>WindowsPackageType</c> (M44): <c>MSIX</c> runs as a package; null when nothing sets it.</summary>
+    public string? WindowsPackageType { get; init; }
+
+    /// <summary>The <c>AppxManifest.xml</c> a packaged app's build writes (<c>FinalAppxManifestName</c>, M44), or null.</summary>
+    public string? AppxManifest { get; init; }
+}
 
 // ------------------------------------------------------------------ log
 

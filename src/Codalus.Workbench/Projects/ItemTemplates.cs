@@ -59,7 +59,7 @@ public sealed record ItemTemplate(string Name, string ShortName, string Category
 public sealed record ItemTemplateCompanion(string Suffix, Func<ItemTemplateContext, string> Content);
 
 /// <summary>The project Add New Item adds to: its language and the kinds that filter the templates.</summary>
-public sealed record ItemTemplateProject(string Language, bool IsWeb = false, bool IsMaui = false, bool IsTest = false, bool IsWpf = false, bool IsWinForms = false, bool IsMobile = false)
+public sealed record ItemTemplateProject(string Language, bool IsWeb = false, bool IsMaui = false, bool IsTest = false, bool IsWpf = false, bool IsWinForms = false, bool IsMobile = false, bool IsWinUI = false)
 {
     /// <summary>The language of a project file: C#, F# or VB.</summary>
     public static string LanguageOf(string projectPath) => Path.GetExtension(projectPath).ToLowerInvariant() switch
@@ -87,6 +87,7 @@ public static class ItemTemplates
         ("Mobile", p => p.IsMaui || p.IsMobile),
         ("Tizen", p => p.IsMaui),
         ("WinUI", p => p.IsMaui),
+        ("WinUI 3", p => p.IsWinUI),
         ("WPF", p => p.IsWpf),
         ("WinForms", p => p.IsWinForms),
         ("Test", p => p.IsTest),
@@ -162,6 +163,17 @@ public static class ItemTemplates
             Content = _ => "<ResourceDictionary xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"\n                    xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">\n\n</ResourceDictionary>\n",
         },
 
+        // WinUI 3 (M44): XAML with its code-behind, as the Windows App SDK's own templates write them; a resource dictionary alone.
+        WinUI("winuiwindow", "Blank Window (WinUI 3)", "A WinUI 3 window with its code-behind.", "BlankWindow1", "Window", "Microsoft.UI.Xaml", "Title=\"{0}\""),
+        WinUI("winuipage", "Blank Page (WinUI 3)", "A WinUI 3 page, for navigation in a Frame, with its code-behind.", "BlankPage1", "Page", "Microsoft.UI.Xaml.Controls", string.Empty),
+        WinUI("winuiusercontrol", "User Control (WinUI 3)", "A WinUI 3 user control with its code-behind.", "UserControl1", "UserControl", "Microsoft.UI.Xaml.Controls", string.Empty),
+        new("Resource Dictionary (WinUI 3)", "winuiresourcedictionary", "WinUI 3", "Styles, templates and other resources to merge into App.xaml.", "Dictionary1", ".xaml")
+        {
+            Languages = ["C#"],
+            Tags = ["WinUI 3"],
+            Content = _ => "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<ResourceDictionary\n    xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"\n    xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">\n\n</ResourceDictionary>\n",
+        },
+
         // Windows Forms (M40a): the code with its Designer.cs, as the designer writes it.
         WinForms("winformsform", "Form (Windows Forms)", "A Windows Forms form with its designer file.", "Form1", "Form", isForm: true),
         WinForms("winformsusercontrol", "User Control (Windows Forms)", "A Windows Forms user control with its designer file.", "UserControl1", "UserControl", isForm: false),
@@ -198,6 +210,24 @@ public static class ItemTemplates
             },
             Companions = [new(".xaml.cs", c => $"using {rootNamespace};\n\n"
                 + CSharp(c, $"/// <summary>Interaction logic for {c.Name}.xaml.</summary>\npublic partial class {c.Name} : {root}\n{{\n    public {c.Name}()\n    {{\n        InitializeComponent();\n    }}\n}}\n"))],
+        };
+
+    /// <summary>A WinUI 3 window, page or user control (M44): its XAML, with <c>using:</c> for the folder's namespace, and its code-behind.</summary>
+    private static ItemTemplate WinUI(string shortName, string name, string description, string defaultName, string root, string rootNamespace, string attributes) =>
+        new(name, shortName, "WinUI 3", description, defaultName, ".xaml")
+        {
+            Languages = ["C#"],
+            Tags = ["WinUI 3"],
+            Content = c =>
+            {
+                var className = c.Namespace.Length == 0 ? c.Name : c.Namespace + "." + c.Name;
+                var extra = attributes.Length == 0 ? string.Empty : "\n    " + string.Format(System.Globalization.CultureInfo.InvariantCulture, attributes, c.Name);
+                var local = c.Namespace.Length == 0 ? string.Empty : $"\n    xmlns:local=\"using:{c.Namespace}\"";
+                return $"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<{root}\n    x:Class=\"{className}\"\n    xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"\n    xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"{local}\n"
+                       + $"    xmlns:d=\"http://schemas.microsoft.com/expression/blend/2008\"\n    xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\"\n    mc:Ignorable=\"d\"{extra}>\n\n    <Grid>\n\n    </Grid>\n</{root}>\n";
+            },
+            Companions = [new(".xaml.cs", c => $"using {rootNamespace};\n\n"
+                + CSharp(c, $"/// <summary>The code-behind of {c.Name}.xaml.</summary>\npublic sealed partial class {c.Name} : {root}\n{{\n    public {c.Name}()\n    {{\n        InitializeComponent();\n    }}\n}}\n"))],
         };
 
     /// <summary>A Windows Forms form or user control: its code, and the Designer.cs the designer reads and writes.</summary>
