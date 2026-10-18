@@ -25,7 +25,7 @@ internal static partial class BuiltIns
           { "key": "alt+pageup", "command": "editor.action.marker.prev", "when": "editorTextFocus && keyboardScheme == resharper" },
           { "key": "ctrl+alt+j", "command": "editor.action.surroundWithSnippet", "when": "editorTextFocus && keyboardScheme == resharper" },
           { "key": "ctrl+shift+alt+h", "command": "editor.action.showCallHierarchy", "when": "editorTextFocus && keyboardScheme == resharper" },
-          { "key": "shift+alt+l", "command": "explorer.reveal", "when": "keyboardScheme == resharper" },
+          { "key": "shift+alt+l", "command": "explorer.syncWithActiveDocument", "when": "keyboardScheme == resharper" },
           { "key": "ctrl+shift+t", "command": "workbench.action.gotoAll", "when": "keyboardScheme == resharper" },
 
           { "key": "ctrl+f", "command": "cursorRight", "when": "editorTextFocus && keyboardScheme == emacs" },
@@ -56,7 +56,7 @@ internal static partial class BuiltIns
           { "key": "alt+x", "command": "workbench.showCommandPalette", "when": "keyboardScheme == emacs" },
           { "key": "ctrl+x ctrl+s", "command": "file.save", "when": "activeDocumentKind == textFile && keyboardScheme == emacs" },
           { "key": "ctrl+x s", "command": "file.saveAll", "when": "keyboardScheme == emacs" },
-          { "key": "ctrl+x ctrl+f", "command": "workbench.openFile", "when": "keyboardScheme == emacs" },
+          { "key": "ctrl+x ctrl+f", "command": "workbench.action.gotoFile", "when": "keyboardScheme == emacs" },
           { "key": "ctrl+x b", "command": "workbench.action.gotoAll", "when": "keyboardScheme == emacs" },
           { "key": "ctrl+x k", "command": "workbench.closeActiveDocument", "when": "activeDocumentKind && keyboardScheme == emacs" },
           { "key": "ctrl+x h", "command": "edit.selectAll", "when": "editorTextFocus && keyboardScheme == emacs" },

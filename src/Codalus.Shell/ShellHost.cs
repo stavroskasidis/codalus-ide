@@ -224,6 +224,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         Layout.ActiveDocumentChanged += (_, _) => OnSqlEditorActivated();
         Notifications.Changed += (_, _) => UpdateStatusItems();
         Theme.Changed += (_, _) => UpdateStatusItems();
+        // Any quick pick (the palette is the shared one): Escape closes it before it hides the toasts.
+        Palette.Opened += (_, _) => Workbench.Context.Set("inCommandPalette", true);
         Palette.Closed += (_, _) => Workbench.Context.Set("inCommandPalette", false);
 
         DiscoverPlugins();

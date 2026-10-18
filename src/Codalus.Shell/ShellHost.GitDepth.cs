@@ -70,10 +70,22 @@ public sealed partial class ShellHost
         return document;
     }
 
-    /// <summary>The history of the active document's file (or the Solution Explorer's selected file or folder).</summary>
+    /// <summary>
+    /// The file a Git command acts on: the Solution Explorer's selected item while it has the focus (its context menu acts
+    /// on the item right-clicked, as Run Custom Tool's does), else the active editor's file, else that selection.
+    /// </summary>
+    private string? ExplorerSelectionOrActiveFile() =>
+        Equals(Workbench.Context.GetValue("focusedView"), ViewModels.SolutionExplorerViewModel.ToolWindowId) && Explorer.Selected?.Node.Path is { } selected
+            ? selected
+            : Layout.ActiveDocument is CodeEditorDocument { Model.Path: { } file } ? file : Explorer.Selected?.Node.Path;
+
+    /// <summary>
+    /// The history of the Solution Explorer's selected file or folder while it has the focus (its context menu), else of
+    /// the active document's file.
+    /// </summary>
     public Task ShowFileHistoryAsync()
     {
-        var path = Layout.ActiveDocument is CodeEditorDocument { Model.Path: { } file } ? file : Explorer.Selected?.Node.Path;
+        var path = ExplorerSelectionOrActiveFile();
         return path is null
             ? Task.CompletedTask
             : ShowHistoryAsync(new GitLogQuery { Path = path }, "History: " + Path.GetFileName(path));

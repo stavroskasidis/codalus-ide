@@ -1,5 +1,5 @@
 # Every command the menus offered before M34a restructured them (menuBar/*, editor/context, solutionExplorer/context).
-# MenuLayoutTests checks each one is still reachable from its menu tree.
+# UxPassTests checks each one is still reachable from its menu tree.
 [menuBar/]
 analysis.codeMetrics.project
 analysis.codeMetrics.solution

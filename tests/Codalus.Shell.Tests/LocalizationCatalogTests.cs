@@ -110,7 +110,9 @@ public sealed partial class LocalizationCatalogTests
         Assert.True(conflicts.Count == 0, $"Keys used with different English: {string.Join(", ", conflicts)}");
 
         // A title with a key per OS (translated where it's declared) has no key of its own: every OS's catalogue is the same.
-        foreach (var key in expected.Keys.Where(k => expected.Keys.Any(v => v.StartsWith(k + ".", StringComparison.Ordinal) && k.StartsWith("command.", StringComparison.Ordinal))).ToList())
+        // Only the OS suffixes count: command.workbench.view.plugins is a key of its own next to …plugins.gallery's.
+        string[] perOs = [".windows", ".mac", ".linux", ".other"];
+        foreach (var key in expected.Keys.Where(k => k.StartsWith("command.", StringComparison.Ordinal) && perOs.Any(os => expected.ContainsKey(k + os))).ToList())
         {
             expected.Remove(key);
         }

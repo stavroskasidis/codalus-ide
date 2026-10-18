@@ -791,7 +791,7 @@ public sealed partial class ShellHost : IHostingActions
                     return false;
                 }
 
-                var folder = Path.GetDirectoryName(solution.Path)!;
+                var folder = solution.Directory; // the folder itself in folder mode
                 await Git.InitAsync(folder, CancellationToken.None).ConfigureAwait(true);
                 await OpenRepositoryAsync(folder).ConfigureAwait(true);
             }
@@ -890,7 +890,7 @@ public sealed partial class ShellHost : IHostingActions
 
         try
         {
-            var folders = solution.Projects.Select(p => Path.GetDirectoryName(p.Path)).OfType<string>().Prepend(Path.GetDirectoryName(solution.Path)!).ToList();
+            var folders = solution.Projects.Select(p => Path.GetDirectoryName(p.Path)).OfType<string>().Prepend(solution.Directory).ToList();
             var roots = await Git.FindRepositoriesAsync(folders).ConfigureAwait(true);
             Git.Repositories = roots;
             GitChanges.SetRepositories(roots, Git.Root);
@@ -1154,7 +1154,7 @@ public sealed partial class ShellHost : IHostingActions
 
     /// <summary>Locks or unlocks the active file (or the Solution Explorer's selection) in Git LFS.</summary>
     public Task LockActiveFileAsync(bool unlock) =>
-        (ActiveEditor?.Model.Path ?? Explorer.Selected?.Node.Path) is { } path
+        ExplorerSelectionOrActiveFile() is { } path
             ? GitActionAsync(async () =>
             {
                 if (unlock)
