@@ -33,6 +33,7 @@ public sealed class TextMateSupport : IRegistryOptions
     private readonly ConcurrentDictionary<string, IRawGrammar?> _files = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, LanguageConfiguration?> _configurations = new(StringComparer.Ordinal);
     private ThemeName _theme = ThemeName.DarkPlus;
+    private TextMateSharp.Registry.Registry? _registry;
 
     public TextMateSupport(LanguageRegistry languages)
     {
@@ -73,6 +74,29 @@ public sealed class TextMateSupport : IRegistryOptions
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log?.Invoke($"TextMate: no grammar for '{languageId}': {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A language's grammar loaded for tokenizing outside an editor (Add New Item's preview, M34h), or null when it has
+    /// none or it can't be read.
+    /// </summary>
+    public IGrammar? GrammarFor(string? languageId)
+    {
+        if (GrammarScopeFor(languageId) is not { } scope)
+        {
+            return null;
+        }
+
+        try
+        {
+            _registry ??= new TextMateSharp.Registry.Registry(this);
+            return _registry.LoadGrammar(scope);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Log?.Invoke($"TextMate: the grammar {scope} could not be loaded: {ex.Message}");
             return null;
         }
     }

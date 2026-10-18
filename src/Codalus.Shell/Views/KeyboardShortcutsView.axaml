@@ -59,9 +59,34 @@
              AutomationProperties.Name="{l:T keyboardShortcuts.keyboardShortcuts}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:KeybindingRowViewModel">
-          <Setter Property="Padding" Value="14,4" />
+          <Setter Property="Padding" Value="11,4,14,4" />
           <Setter Property="MinHeight" Value="0" />
+          <Setter Property="BorderThickness" Value="3,0,0,0" />
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+        <!--
+          M34h: the row under the pointer and the selected command in the theme's colors (Fluent's were a neutral gray):
+          Shell.Hover, and Shell.Selection with an accent bar on its left edge, as the maintainer asked for a bit of color.
+          The selected style comes last, so it wins over the hover on the selected row.
+        -->
+        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+          <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+        </Style>
+        <!-- The muted columns (When, Source) are 4.3:1 on Classic Light's and Dark's hover: the text's color there. -->
+        <Style Selector="ListBoxItem:pointerover TextBlock.muted">
+          <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+        </Style>
+        <Style Selector="ListBoxItem:selected TextBlock.muted">
+          <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+        </Style>
+        <Style Selector="ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+          <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
         </Style>
       </ListBox.Styles>
       <ListBox.ItemTemplate>

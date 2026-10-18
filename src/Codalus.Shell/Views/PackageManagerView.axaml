@@ -27,19 +27,50 @@
     <Style Selector="Border.badge.warning">
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Warning}" />
     </Style>
+    <Style Selector="Border.badge.warning > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Warning.Foreground}" />
+    </Style>
     <Style Selector="Border.badge.error">
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Error}" />
     </Style>
+    <Style Selector="Border.badge.error > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Error.Foreground}" />
+    </Style>
     <Style Selector="Border.badge.muted">
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    </Style>
+    <!-- M34h: the versions as badges: installed (a green outline and a check), an update (the accent), one to install (plain). -->
+    <Style Selector="Border.badge.installed">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Diff.Added}" />
+    </Style>
+    <Style Selector="Border.badge.update">
+      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+    </Style>
+    <Style Selector="Border.badge.update > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.AccentForeground}" />
     </Style>
     <Style Selector="Border.avatar">
       <Setter Property="Width" Value="32" />
       <Setter Property="Height" Value="32" />
       <Setter Property="CornerRadius" Value="4" />
-      <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
-      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Icon.Blue}" />
+    </Style>
+    <!-- M34h: each package's initial on one of the icon palette's colors (High Contrast: the foreground, with black). -->
+    <Style Selector="Border.avatar.green">
+      <Setter Property="Background" Value="{DynamicResource Shell.Icon.Green}" />
+    </Style>
+    <Style Selector="Border.avatar.purple">
+      <Setter Property="Background" Value="{DynamicResource Shell.Icon.Purple}" />
+    </Style>
+    <Style Selector="Border.avatar.orange">
+      <Setter Property="Background" Value="{DynamicResource Shell.Icon.Orange}" />
+    </Style>
+    <Style Selector="Border.avatar.tan">
+      <Setter Property="Background" Value="{DynamicResource Shell.Icon.Folder}" />
+    </Style>
+    <Style Selector="Border.avatar > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Panel}" />
     </Style>
   </UserControl.Styles>
 
@@ -108,22 +139,36 @@
                   <TextBlock Classes="muted" FontWeight="SemiBold" Margin="0,6,0,2" Text="{Binding Id}" IsVisible="{Binding IsHeader}" />
                   <Grid ColumnDefinitions="Auto,Auto,*,Auto" IsVisible="{Binding !IsHeader}">
                     <CheckBox VerticalAlignment="Top" IsChecked="{Binding IsChecked}" IsVisible="{Binding HasCheckBox}" Margin="0,0,4,0" AutomationProperties.Name="{Binding Id, StringFormat='Select {0}'}" />
-                    <Border Grid.Column="1" Classes="avatar" VerticalAlignment="Top" Margin="0,0,8,0">
-                      <TextBlock Text="{Binding Initial}" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" />
+                    <Border Grid.Column="1" Classes="avatar" VerticalAlignment="Top" Margin="0,0,8,0"
+                            Classes.green="{Binding AvatarGreen}" Classes.purple="{Binding AvatarPurple}" Classes.orange="{Binding AvatarOrange}" Classes.tan="{Binding AvatarTan}">
+                      <TextBlock Text="{Binding Initial}" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="19" FontWeight="Bold" />
                     </Border>
+                    <!-- M34h: the name and the byline share the line and trim (in a horizontal stack panel the byline ran
+                         under the versions' column). -->
                     <StackPanel Grid.Column="2" Spacing="1">
-                      <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock FontWeight="SemiBold" Text="{Binding Id}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Classes="muted" FontSize="12" VerticalAlignment="Center" Text="{Binding Byline}" TextTrimming="CharacterEllipsis" />
-                      </StackPanel>
-                      <TextBlock Classes="muted" FontSize="12" Text="{Binding Description}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding Id}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Id}" />
+                        <TextBlock Classes="muted" Margin="6,0,0,0" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Text="{Binding Byline}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Byline}" />
+                      </DockPanel>
+                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Description}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
                     </StackPanel>
-                    <StackPanel Grid.Column="3" Spacing="2" Margin="8,0,0,0" HorizontalAlignment="Right">
+                    <StackPanel Grid.Column="3" Spacing="3" Margin="8,0,0,0" HorizontalAlignment="Right">
                       <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                        <controls:Icon Kind="check" Classes="passed" IsVisible="{Binding IsInstalled}" ToolTip.Tip="{l:T packageManager.installed}" />
-                        <TextBlock Text="{Binding VersionLine}" />
+                        <Border Classes="badge muted" IsVisible="{Binding IsAvailable}" ToolTip.Tip="{l:T packageManager.latestVersion}">
+                          <TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Version}" />
+                        </Border>
+                        <Border Classes="badge installed" IsVisible="{Binding IsInstalled}" ToolTip.Tip="{l:T packageManager.installed}">
+                          <StackPanel Orientation="Horizontal" Spacing="2">
+                            <controls:Icon Kind="check" Classes="passed" Width="{DynamicResource Shell.Size.IconSmall}" Height="{DynamicResource Shell.Size.IconSmall}" VerticalAlignment="Center" />
+                            <TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding InstalledVersion}" />
+                          </StackPanel>
+                        </Border>
+                        <Border Classes="badge update" IsVisible="{Binding IsUpdatable}" ToolTip.Tip="{l:T packageManager.updateAvailable}">
+                          <TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding UpdateLabel}" />
+                        </Border>
                       </StackPanel>
                       <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                        <Border Classes="badge warning" IsVisible="{Binding IsPrerelease}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T packageManager.prerelease}" /></Border>
                         <Border Classes="badge muted" IsVisible="{Binding HasNote}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Note}" /></Border>
                         <Border Classes="badge warning" IsVisible="{Binding IsDeprecated}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T packageManager.deprecated}" /></Border>
                         <Border Classes="badge error" IsVisible="{Binding IsVulnerable}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T packageManager.vulnerable}" /></Border>

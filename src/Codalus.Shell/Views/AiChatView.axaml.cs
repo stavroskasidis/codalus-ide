@@ -156,7 +156,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
         private readonly AiChatView _owner;
         private readonly ContentControl _answer = new();
         private readonly StackPanel _steps = new() { Spacing = 2 };
-        private readonly StackPanel _status = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+        private readonly WrapPanel _status = new() { Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 4 };
         private string? _rendered;
 
         public TurnView(AiChatTurn turn, AiChatView owner)
@@ -241,10 +241,13 @@ public sealed partial class AiChatView : UserControl, IPaneView
             }
         }
 
-        /// <summary>Copy, Insert and Apply under a code block (by its index in the answer).</summary>
-        private StackPanel? Footer(int index)
+        /// <summary>
+        /// Copy, Insert and Apply under a code block (by its index in the answer). They wrap onto another line in a narrow
+        /// pane (M34h: in a row, Apply… was cut off at the tool window's width).
+        /// </summary>
+        private WrapPanel? Footer(int index)
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            var row = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 4, LineSpacing = 4 };
             AiCodeBlock? Block() => AiCodeBlocks.Parse(_turn.Answer) is var blocks && index < blocks.Count ? blocks[index] : null;
             row.Children.Add(Button(Localizer.Get("msg.ai.copy", "Copy"), Localizer.Get("msg.ai.copyTheCode", "Copy the code"), () =>
             {

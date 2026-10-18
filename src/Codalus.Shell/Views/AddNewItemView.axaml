@@ -28,19 +28,39 @@
       </StackPanel>
     </Grid>
 
+    <!-- M34h: the lists' rows are the shared row height (Shell.Size.Row, Shell.Padding.Row): one line each, the template's
+         detail on its right, as Solution Explorer's rows (they were two lines with Fluent's 9 px above and below). -->
     <Grid ColumnDefinitions="150,2*,1.5*">
-      <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" AutomationProperties.Name="{l:T addNewItem.templateCategories}" />
+      <Grid.Styles>
+        <Style Selector="ListBox.rows ListBoxItem">
+          <Setter Property="Padding" Value="{DynamicResource Shell.Padding.Row}" />
+          <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Row}" />
+          <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+      </Grid.Styles>
+      <ListBox Classes="rows" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" AutomationProperties.Name="{l:T addNewItem.templateCategories}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="x:String">
+            <TextBlock Margin="8,0" Text="{Binding}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
       <DockPanel Grid.Column="1" Margin="8,0">
         <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
-        <ListBox x:Name="TemplateList" ItemsSource="{Binding Templates}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T addNewItem.itemTemplates}">
+        <ListBox x:Name="TemplateList" Classes="rows" ItemsSource="{Binding Templates}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T addNewItem.itemTemplates}">
+          <ListBox.Styles>
+            <Style Selector="ListBoxItem" x:DataType="vm:ItemTemplateRowViewModel">
+              <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+            </Style>
+          </ListBox.Styles>
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ItemTemplateRowViewModel">
-              <Grid ColumnDefinitions="Auto,*" Margin="0,2" AutomationProperties.Name="{Binding AccessibleName}">
-                <controls:Icon Kind="{Binding Icon}" Margin="0,0,8,0" VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1">
-                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
-                  <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
-                </StackPanel>
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="6,0" AutomationProperties.Name="{Binding AccessibleName}">
+                <controls:Icon Kind="{Binding Icon}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                <TextBlock Grid.Column="2" Classes="muted" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="{DynamicResource Shell.FontSize.Small}"
+                           MaxWidth="{Binding $parent[ListBoxItem].Bounds.Width, Converter={x:Static vm:QuickPickRow.HalfWidth}}"
+                           Text="{Binding Detail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
@@ -48,10 +68,10 @@
       </DockPanel>
       <Border Grid.Column="2" Padding="10" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}">
         <DockPanel>
-          <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{Binding PreviewTitle}" Margin="0,0,0,6" />
+          <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{Binding PreviewTitle}" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PreviewTitle}" />
           <TextBlock DockPanel.Dock="Top" Classes="muted" TextWrapping="Wrap" Text="{Binding Selected.Description}" Margin="0,0,0,8" />
-          <TextBox IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
-                   Text="{Binding Preview}" AutomationProperties.Name="{l:T addNewItem.preview}" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+          <!-- The new file in the editor's colors in the current theme (M34h: it was plain text in a text box). -->
+          <Border x:Name="PreviewHost" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}" />
         </DockPanel>
       </Border>
     </Grid>
