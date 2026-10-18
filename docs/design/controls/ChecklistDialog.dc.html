@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Checklist dialog: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.canvas{width:1280px;height:800px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+.wtitle{height:34px;display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--title-bar);color:var(--title-bar-fg);flex:none}
+.wtitle .menu-items{display:flex;gap:14px}
+.tbar{height:32px;background:var(--toolbar);border-bottom:1px solid var(--toolbar-border);flex:none;display:flex;align-items:center;gap:4px;padding:0 8px}
+.work{flex:1;display:flex;gap:6px;padding:6px;min-height:0}
+.fam-classic .work{gap:4px;padding:4px}
+.ed{flex:1;display:flex;flex-direction:column;min-width:0}
+.ed .code{flex:1;padding:6px 0;border:1px solid var(--border);border-top:0}
+.ed .code .ln{height:19px}
+.ed .code .ln.cur{background:var(--cur-line)}
+.se{width:300px;flex:none}
+.se .row{height:22px}
+.status{height:24px;background:var(--accent);color:var(--accent-fg);display:flex;align-items:center;padding:0 10px;flex:none}
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.dialog{position:absolute;left:50%;top:150px;transform:translateX(-50%);width:520px;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:8px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.fam-classic .dialog{border-radius:6px}
+.kind-hc .dialog{border-width:2px}
+.dh{display:flex;align-items:flex-start;gap:10px;padding:16px 12px 4px 20px}
+.dh .ttl{flex:1;min-width:0}
+.dh h1{margin:0;font-size:14px;line-height:20px;font-weight:600;color:var(--strong)}
+.dh .ctx{color:var(--muted);font-size:11px;line-height:16px;display:flex;gap:6px;align-items:center}
+.dh .glyph{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:var(--chip-warn);flex:none;margin-top:-1px}
+.kind-hc .dh .glyph{background:transparent;border:1px solid var(--fg)}
+.db{padding:12px 20px 18px;display:flex;flex-direction:column;gap:8px}
+.db label.msg{font-weight:600;color:var(--fg)}
+.listwrap{display:flex;gap:8px;align-items:flex-start}
+.list{flex:1;border:1px solid var(--input-border);border-radius:var(--radius);background:var(--input);overflow:hidden}
+.lh{display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;background:var(--header);border-bottom:1px solid var(--soft-border)}
+.li{display:grid;grid-template-columns:16px 16px minmax(0,1fr) auto;align-items:center;column-gap:8px;height:30px;padding:0 10px;border-bottom:1px solid var(--rule)}
+.li:last-child{border-bottom:0}
+.li .sig{font-family:var(--mono);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .sig .t-kw,.li .sig .t-ty{font-weight:400}
+.li .det{color:var(--muted);font-size:11px}
+.li.sel{background:var(--sel);color:var(--sel-fg)}
+.li.sel .det,.li.sel .sig span{color:inherit}
+.li.hover{background:var(--row-hover)}
+.li.kfocus{box-shadow:inset 0 0 0 1px var(--focus)}
+.mover{display:flex;flex-direction:column;gap:4px}
+.df{display:flex;align-items:center;gap:8px;padding:12px 20px;background:var(--dlg-footer);border-top:1px solid var(--soft-border)}
+.df .hint{flex:1;color:var(--muted);font-size:11px;display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}">
+<div class="canvas">
+  <div aria-hidden="true" data-nocheck style="display:contents">
+    <div class="wtitle"><svg class="i" style="width:18px;height:18px" viewBox="0 0 256 256"><polygon fill="#A47BFF" points="20,218 124,38 124,92 58,208"></polygon><polygon fill="#F0662A" points="236,218 132,38 132,92 198,208"></polygon></svg><span class="menu-items"><span>File</span><span>Edit</span><span>View</span><span>Git</span><span>Project</span><span>Build</span><span>Debug</span><span>Test</span><span>Tools</span><span>Window</span><span>Help</span></span></div>
+    <div class="tbar"><svg class="i c-blue"><use href="#i-arrow-up"></use></svg><svg class="i c-blue"><use href="#i-save"></use></svg><span class="tb-sep"></span><svg class="i c-green"><use href="#i-play"></use></svg><span>CalculatorService</span></div>
+    <div class="work">
+      <div class="ed">
+        <div class="doc-tabs"><span class="doc-tab on"><svg class="i md"><use href="#i-cs-file"></use></svg>ICalculatorService.cs</span><span class="doc-tab"><svg class="i md"><use href="#i-cs-file"></use></svg>CalculatorService.cs</span></div>
+        <div class="code"><sc-for list="{{code}}" as="l"><div class="ln {{l.cls}}"><span class="no">{{l.n}}</span><span><sc-for list="{{l.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span></div></sc-for></div>
+      </div>
+      <div class="tw se"><div class="tw-cap"><span class="title">Solution Explorer</span></div>
+        <div class="row"><svg class="i c-purple"><use href="#i-solution"></use></svg>Solution 'Wcf' (2 of 2 projects)</div>
+        <div class="row" style="padding-left:24px"><svg class="i c-green"><use href="#i-cube"></use></svg>CalculatorClient</div>
+        <div class="row" style="padding-left:24px"><svg class="i c-green"><use href="#i-cube"></use></svg>CalculatorService</div>
+        <div class="row" style="padding-left:44px"><svg class="i"><use href="#i-cs-file"></use></svg>CalculatorService.cs</div>
+        <div class="row sel" style="padding-left:44px"><svg class="i"><use href="#i-cs-file"></use></svg>ICalculatorService.cs</div>
+        <div class="row" style="padding-left:44px"><svg class="i"><use href="#i-cs-file"></use></svg>Program.cs</div>
+      </div>
+    </div>
+    <div class="status">Ready</div>
+  </div>
+  <div class="scrim"></div>
+
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+    <div class="dh">
+      <span class="glyph"><svg class="i c-yellow" aria-hidden="true"><use href="#i-wrench"></use></svg></span>
+      <div class="ttl">
+        <h1 id="dlg-title">Generate Constructor</h1>
+        <div class="ctx"><svg class="i sm c-orange" aria-hidden="true"><use href="#i-cube"></use></svg>Person · ICalculatorService.cs</div>
+      </div>
+      <button class="btn subtle icon sm" aria-label="Close (Esc)" title="Close (Esc)"><svg class="i" aria-hidden="true"><use href="#i-close"></use></svg></button>
+    </div>
+    <div class="db">
+      <label class="msg" id="msg">Members to initialize:</label>
+      <div class="listwrap">
+        <div class="list" role="listbox" aria-labelledby="msg" aria-multiselectable="true">
+          <div class="lh"><span class="chk mixed"><span class="box"><span class="bar"></span></span>Select all</span><span class="grow"></span><span class="small muted">2 of 4</span></div>
+          <sc-for list="{{members}}" as="m">
+            <div class="li {{m.state}}" role="option" aria-selected="{{m.selected}}" aria-checked="{{m.checked}}">
+              <span class="chk {{m.on}}"><span class="box"><sc-if value="{{m.checked}}"><svg aria-hidden="true"><use href="#i-check"></use></svg></sc-if></span></span>
+              <svg class="i c-blue" aria-hidden="true"><use href="#i-wrench"></use></svg>
+              <span class="sig"><sc-for list="{{m.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span>
+              <span class="det">property</span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="mover" role="toolbar" aria-label="Order" aria-orientation="vertical">
+          <button class="btn icon sm" aria-label="Move Up (Alt+Up)" title="Move Up (Alt+Up)"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-up"></use></svg></button>
+          <button class="btn icon sm" aria-label="Move Down (Alt+Down)" title="Move Down (Alt+Down)"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-down"></use></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="df">
+      <span class="hint"><span class="kbd-key">Space</span>checks<span class="kbd-key">Alt+↑</span><span class="kbd-key">Alt+↓</span>move</span>
+      <sc-if value="{{mac}}"><button class="btn dlg">Cancel</button><button class="btn primary dlg">OK</button></sc-if>
+      <sc-if value="{{win}}"><button class="btn primary dlg">OK</button><button class="btn dlg">Cancel</button></sc-if>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"os":{"editor":"enum","default":"Windows","options":["Windows","Linux","macOS"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const mac = this.props.os === 'macOS';
+    const src = [
+      '[DataContract(Namespace = Namespaces.Contract)]',
+      'public sealed class Person',
+      '{',
+      '    [DataMember(Order = 0)]',
+      '    public string Name { get; set; } = string.Empty;',
+      '',
+      '    [DataMember(Order = 1)]',
+      '    public int Age { get; set; }',
+      '',
+      '    [DataMember(Order = 2)]',
+      '    public Mood Mood { get; set; }',
+      '',
+      '    [DataMember(Order = 3)]',
+      '    public List<string> Tags { get; set; } = [];',
+      '}',
+      '',
+      '[DataContract(Namespace = Namespaces.Contract)]',
+      'public enum Mood',
+      '{',
+      '    [EnumMember]',
+      '    Calm,'
+    ];
+    const code = src.map((s, i) => ({ n: 30 + i, cls: i === 1 ? 'cur' : '', toks: s ? C.csharp(s) : [{ t: ' ', cls: '' }] }));
+    const member = (sig, checked, state) => ({ toks: C.csharp(sig), checked, on: checked ? 'on' : '', state: state ?? '', selected: String(state === 'sel kfocus') });
+    const members = [
+      member('string Name', true),
+      member('int Age', true, 'sel kfocus'),
+      member('Mood Mood', false, 'hover'),
+      member('List<string> Tags', false)
+    ];
+    return { t, code, members, mac, win: !mac };
+  }
+}
+</script>
+</body>
+</html>

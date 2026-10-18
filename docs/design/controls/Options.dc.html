@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Options: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.canvas{width:1280px;height:800px;padding:6px;display:flex;flex-direction:column}
+.fam-classic .canvas{padding:4px}
+.doc{flex:1}
+.head{display:flex;flex-direction:column;gap:6px;padding:12px 16px 10px;border-bottom:1px solid var(--soft-border)}
+.head .r1{display:flex;align-items:center;gap:10px}
+.head .file{font-size:11px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.cols2{flex:1;min-height:0;display:flex}
+.nav{width:250px;flex:none;border-right:1px solid var(--soft-border);padding:8px 6px;display:flex;flex-direction:column;gap:1px;overflow:hidden}
+.ni{display:flex;align-items:center;gap:6px;height:26px;padding:0 8px;border-radius:var(--radius);white-space:nowrap}
+.ni .chev{width:12px;height:12px;color:var(--muted);flex:none}
+.ni .sp{width:12px;flex:none}
+.ni .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ni .c{font-size:11px;color:var(--muted)}
+.ni.grp .n{font-weight:600}
+.ni.sel{background:var(--sel);color:var(--sel-fg)}
+.ni.sel .c,.ni.sel .chev{color:inherit}
+.ni.hover{background:var(--row-hover)}
+.ni.child{padding-left:30px}
+.page{flex:1;min-width:0;overflow:hidden;padding:14px 24px 16px}
+.ph{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.ph .tile{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--chip-info)}
+.kind-hc .ph .tile{background:transparent;border:1px solid var(--fg)}
+.ph h1{margin:0;font-size:18px;line-height:24px;font-weight:600;color:var(--strong)}
+.ph .sub{color:var(--muted);font-size:11px}
+.set{position:relative;display:flex;flex-direction:column;gap:4px;padding:10px 14px 10px 16px;border-radius:calc(var(--radius) + 2px);max-width:780px}
+.set::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:transparent}
+.set.mod::before{background:var(--accent)}
+.set.hover{background:var(--row-hover)}
+.set .t{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--strong)}
+.set .d{color:var(--muted);max-width:640px}
+.set .k{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.set .ctl{margin-top:4px;display:flex;align-items:center;gap:8px}
+.num{display:flex;align-items:center;width:110px;padding-right:0}
+.num .steps{display:flex;flex-direction:column;border-left:1px solid var(--input-border);height:100%;margin-left:auto}
+.num .steps span{flex:1;width:20px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.num .steps span+span{border-top:1px solid var(--input-border)}
+.set .chk{font-weight:600;color:var(--strong)}
+.divider{height:1px;background:var(--soft-border);margin:2px 0 2px 16px;max-width:764px}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}">
+<div class="canvas">
+<div class="doc-tabs" role="tablist" aria-label="Open documents">
+  <span class="doc-tab on" role="tab" aria-selected="true"><svg class="i md c-blue" aria-hidden="true"><use href="#i-gear"></use></svg>Options<svg class="i sm c-fg" aria-hidden="true" style="margin-left:6px"><use href="#i-close"></use></svg></span>
+  <span class="doc-tab" role="tab" aria-selected="false"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>CalculatorService.cs</span>
+</div>
+<section class="doc" aria-label="Options">
+  <div class="head">
+    <div class="r1">
+      <span class="field grow"><svg class="i lead" aria-hidden="true"><use href="#i-search"></use></svg><input aria-label="Search settings" placeholder="Search settings (@modified shows changed ones)"><span class="kbd">Ctrl+E</span></span>
+      <div class="seg" role="group" aria-label="Settings scope" title="Where changes are saved"><button class="on" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-file"></use></svg>User</button><button aria-pressed="false"><svg class="i c-purple" aria-hidden="true"><use href="#i-solution"></use></svg>Workspace</button></div>
+      <button class="btn link has-icon"><svg class="i md c-blue" aria-hidden="true"><use href="#i-braces"></use></svg>Edit in settings.json</button>
+    </div>
+    <div class="file"><svg class="i sm c-outline" aria-hidden="true"><use href="#i-file"></use></svg>User settings: ~/.config/Codalus/settings.json</div>
+  </div>
+  <div class="cols2">
+    <nav class="nav" role="tree" aria-label="Setting categories">
+      <sc-for list="{{nav}}" as="n">
+        <div class="ni {{n.cls}}" role="treeitem" aria-selected="{{n.selected}}" aria-expanded="{{n.expanded}}">
+          <sc-if value="{{n.chev}}"><svg class="chev" aria-hidden="true"><use href="#i-{{n.chev}}"></use></svg></sc-if><sc-if value="{{n.leaf}}"><span class="sp"></span></sc-if>
+          <svg class="i {{n.ic}}" aria-hidden="true"><use href="#i-{{n.icon}}"></use></svg><span class="n">{{n.name}}</span><span class="c">{{n.count}}</span>
+        </div>
+      </sc-for>
+    </nav>
+    <div class="page">
+      <div class="ph"><span class="tile"><svg class="i c-blue" aria-hidden="true"><use href="#i-doc-text"></use></svg></span><div><h1>Text Editor</h1><div class="sub">27 settings · 2 modified</div></div></div>
+
+      <div class="set">
+        <div class="t">Font Family</div>
+        <div class="d">Comma-separated fonts for text views such as Output; the first installed one is used.</div>
+        <div class="ctl"><span class="field" style="width:440px"><input aria-label="Font Family" value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace"></span></div>
+        <div class="k">editor.fontFamily</div>
+      </div>
+      <div class="set mod hover">
+        <div class="t">Font Size<span class="chip info">Modified</span><button class="btn link small" aria-label="Reset Font Size">Reset</button></div>
+        <div class="d">Font size in points for text views. 6 to 72.</div>
+        <div class="ctl"><span class="field num"><input aria-label="Font Size" value="14"><span class="steps" aria-hidden="true"><span><svg class="i sm"><use href="#i-chevron-up"></use></svg></span><span><svg class="i sm"><use href="#i-chevron-down"></use></svg></span></span></span><span class="small muted">Default: 13</span></div>
+        <div class="k">editor.fontSize</div>
+      </div>
+      <div class="set">
+        <div class="t">Tab Size</div>
+        <div class="d">Columns per indentation level. An .editorconfig file overrides it.</div>
+        <div class="ctl"><span class="field num"><input aria-label="Tab Size" value="4"><span class="steps" aria-hidden="true"><span><svg class="i sm"><use href="#i-chevron-up"></use></svg></span><span><svg class="i sm"><use href="#i-chevron-down"></use></svg></span></span></span></div>
+        <div class="k">editor.tabSize</div>
+      </div>
+      <div class="set">
+        <span class="chk on is-focus"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Insert Spaces</span>
+        <div class="d" style="padding-left:24px">Indent with spaces instead of tabs. An .editorconfig file overrides it.</div>
+        <div class="k" style="padding-left:24px">editor.insertSpaces</div>
+      </div>
+      <div class="set">
+        <span class="chk"><span class="box"></span>Word Wrap</span>
+        <div class="d" style="padding-left:24px">Wrap long lines in the editor.</div>
+        <div class="k" style="padding-left:24px">editor.wordWrap</div>
+      </div>
+      <div class="set">
+        <div class="t">Render Whitespace</div>
+        <div class="d">Show spaces and tabs.</div>
+        <div class="ctl"><span class="field combo" style="width:220px" role="combobox" aria-label="Render Whitespace"><span class="value">Hidden</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></div>
+        <div class="k">editor.renderWhitespace</div>
+      </div>
+      <div class="set mod">
+        <div class="t">Rulers<span class="chip info">Modified</span><button class="btn link small" aria-label="Reset Rulers">Reset</button></div>
+        <div class="d">Columns at which to draw vertical rulers, e.g. 120.</div>
+        <div class="ctl"><span class="field" style="width:220px"><input aria-label="Rulers" value="120"></span></div>
+        <div class="k">editor.rulers</div>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const g = (name, icon, ic, open, count, state) => ({ name, icon, ic, count, cls: 'grp ' + (state ?? ''), chev: open ? 'chevron-down' : 'chevron-right', leaf: false, expanded: String(open), selected: String(state === 'sel') });
+    const c = (name, icon, ic, count, state) => ({ name, icon, ic, count, cls: 'child ' + (state ?? ''), chev: '', leaf: true, expanded: 'false', selected: 'false' });
+    const nav = [
+      { name: 'All Settings', icon: 'list', ic: 'c-blue', count: '', cls: 'grp', chev: '', leaf: true, expanded: 'false', selected: 'false' },
+      g('Environment', 'window', 'c-blue', true, ''),
+      c('Appearance', 'palette', 'c-purple', ''),
+      c('Keyboard', 'keyboard', 'c-blue', ''),
+      c('Notifications', 'bell', 'c-yellow', ''),
+      c('Updates', 'cloud-download', 'c-blue', ''),
+      g('Text Editor', 'doc-text', 'c-blue', true, '', 'sel'),
+      c('Code Cleanup', 'broom', 'c-blue', ''),
+      c('JSON', 'braces', 'c-blue', ''),
+      c('Navigation', 'arrow-sort', 'c-blue', '', 'hover'),
+      c('XML', 'code', 'c-blue', ''),
+      g('Projects and Solutions', 'cube', 'c-purple', false, ''),
+      g('Debugging', 'bug', 'c-orange', false, ''),
+      g('Source Control', 'branch', 'c-orange', false, ''),
+      g('Testing', 'beaker', 'c-green', false, ''),
+      g('Terminal and Interactive', 'terminal', 'c-blue', false, ''),
+      g('Other', 'more', 'c-blue', false, ''),
+      c('AI', 'sparkle', 'c-purple', ''),
+      c('Containers', 'container', 'c-blue', '')
+    ];
+    return { t, nav };
+  }
+}
+</script>
+</body>
+</html>
