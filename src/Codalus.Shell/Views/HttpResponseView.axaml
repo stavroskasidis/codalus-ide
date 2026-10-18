@@ -38,6 +38,7 @@
     </Style>
     <!-- The view's tabs: the tabs inside a view (28 px, muted until selected, the accent underline, counts as badges). -->
     <Style Selector="TabStrip#Tabs TabStripItem">
+      <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing}" />
       <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
       <Setter Property="FontWeight" Value="Normal" />
       <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Tab}" />

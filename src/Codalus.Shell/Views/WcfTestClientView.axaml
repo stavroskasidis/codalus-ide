@@ -68,7 +68,7 @@
     </StackPanel>
     <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,12,0,0">
       <DockPanel>
-        <DropDownButton x:Name="RunningServices" DockPanel.Dock="Right" Margin="6,0,0,0" controls:ButtonIcon.Kind="attach" Content="{l:T wcfTestClient.runningServices}"
+        <DropDownButton x:Name="RunningServices" DockPanel.Dock="Right" Margin="6,0,0,0" Classes="iconText" controls:ButtonIcon.Kind="attach" Content="{l:T wcfTestClient.runningServices}"
                         IsEnabled="{Binding !IsBusy}" ToolTip.Tip="{l:T wcfTestClient.findTheMetadataOfTheCorewcf}">
           <DropDownButton.Flyout>
             <MenuFlyout Placement="BottomEdgeAlignedRight" />

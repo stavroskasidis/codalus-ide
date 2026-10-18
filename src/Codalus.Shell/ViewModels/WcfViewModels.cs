@@ -410,6 +410,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(ResponseReason));
                 OnPropertyChanged(nameof(HasResponseReason));
                 OnPropertyChanged(nameof(ResponseMeta));
+                OnPropertyChanged(nameof(IsLoaded));
             }
         }
     }
@@ -471,7 +472,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
     };
 
     /// <summary>The metadata is loaded and nothing went wrong: the status line shows its check mark.</summary>
-    public bool IsLoaded => _document is not null && !_isBusy && _error is null && _status is not null;
+    public bool IsLoaded => _document is not null && !_isBusy && _error is null && _status is not null && _response?.IsFault != true;
 
     public string Warnings => _document is null ? string.Empty : string.Join("\n", _document.Warnings);
 

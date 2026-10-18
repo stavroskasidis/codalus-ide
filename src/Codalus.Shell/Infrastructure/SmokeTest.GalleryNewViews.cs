@@ -142,11 +142,11 @@ internal sealed partial class SmokeTest
             find.MatchCase = true;
             find.WholeWord = true;
             find.LookIn = FindScopes.EntireSolution;
-            find.FileTypes = @"*.cs;!*\bin\*;!*\obj\*";
+            find.FileTypes = "*.cs";
             find.Query = "Divide";
             await find.FindAllAsync().ConfigureAwait(true);
             results.CurrentPage.KeepResults = true;
-            find.Query = "Calculator";
+            find.Query = "Add";
             await find.FindAllAsync().ConfigureAwait(true);
             var page = results.CurrentPage;
             page.FilesGroupBy = FindResultsGrouping.PathAndFile;

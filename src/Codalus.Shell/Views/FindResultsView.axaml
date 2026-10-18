@@ -13,6 +13,7 @@
   <UserControl.Styles>
     <!-- The page tabs are the tabs inside a view (28 px, muted until selected, an accent underline, counts as badges). -->
     <Style Selector="TabStrip#PageTabs TabStripItem">
+      <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing}" />
       <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
       <Setter Property="FontWeight" Value="Normal" />
       <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Tab}" />
@@ -139,7 +140,13 @@
         </DockPanel>
       </Border>
       <Border DockPanel.Dock="Top" Classes="findColumns">
-        <Grid ColumnDefinitions="*,220,60,52">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" />
+            <ColumnDefinition Width="*" MaxWidth="220" />
+            <ColumnDefinition Width="52" />
+            <ColumnDefinition Width="44" />
+          </Grid.ColumnDefinitions>
           <TextBlock Classes="muted" Text="{l:T findResults.code}" TextTrimming="CharacterEllipsis" />
           <TextBlock Grid.Column="1" Classes="muted" Text="{l:T findResults.file}" TextTrimming="CharacterEllipsis" />
           <TextBlock Grid.Column="2" Classes="muted" Text="{l:T findResults.line}" TextAlignment="Right" TextTrimming="CharacterEllipsis" />
@@ -154,7 +161,13 @@
         </ListBox.Styles>
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:FindResultRow">
-            <Grid ColumnDefinitions="*,220,60,52" Height="22" Opacity="{Binding IsReplaced, Converter={x:Static vm:FindResultsStyles.ReplacedOpacity}}">
+            <Grid Height="22" Opacity="{Binding IsReplaced, Converter={x:Static vm:FindResultsStyles.ReplacedOpacity}}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="*" MaxWidth="220" />
+                <ColumnDefinition Width="52" />
+                <ColumnDefinition Width="44" />
+              </Grid.ColumnDefinitions>
               <DockPanel Grid.ColumnSpan="{Binding Span}" Margin="{Binding Indent}">
                 <!-- A group's chevron: clicking it (or Left and Right, or a double-click on the header) collapses and expands it. -->
                 <Border DockPanel.Dock="Left" Classes="groupToggle" IsVisible="{Binding IsCollapsible}" Background="Transparent" Cursor="Hand" Width="16" Height="22">

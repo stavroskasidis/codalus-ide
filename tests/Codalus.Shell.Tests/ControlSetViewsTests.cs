@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -29,6 +30,32 @@ public sealed class ControlSetViewsTests
 {
     private static T? Visible<T>(Visual root, Func<T, bool>? where = null) where T : Visual =>
         root.GetVisualDescendants().OfType<T>().FirstOrDefault(c => c.IsEffectivelyVisible && (where?.Invoke(c) ?? true));
+
+    /// <summary>With <c>CODALUS_UI_SNAPSHOTS</c>, the window in Harbor Light, Classic Dark and Harbor High contrast, saved there.</summary>
+    private static void Snapshots(Window window, string name)
+    {
+        if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is not { Length: > 0 } folder)
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(folder);
+        var before = window.RequestedThemeVariant;
+        foreach (var variant in new[] { Theming.ThemeService.HarborLight, Avalonia.Styling.ThemeVariant.Dark, Theming.ThemeService.HarborHighContrast })
+        {
+            window.RequestedThemeVariant = variant;
+            for (var i = 0; i < 3; i++)
+            {
+                ShellFixture.Pump();
+            }
+
+            using var frame = window.CaptureRenderedFrame();
+            frame?.Save(Path.Combine(folder, $"{name}-{variant.Key}.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+
+        window.RequestedThemeVariant = before;
+        ShellFixture.Pump();
+    }
 
     private static IBrush? Resource(Control control, string key) =>
         control.TryFindResource(key, control.ActualThemeVariant, out var value) ? value as IBrush : null;
@@ -87,6 +114,8 @@ public sealed class ControlSetViewsTests
             var match = runs.Single(r => r.Text == "Person");
             Assert.Equal(FontWeight.Bold, match.FontWeight);
             Assert.Same(Resource(line, "Shell.Match.Background"), match.Background);
+
+            Snapshots(host, "find-results");
 
             // Selected, the line takes the selection's text and the match is underlined.
             page.SelectedRow = page.Rows.First(r => r.Code == "public sealed class Person");
@@ -207,7 +236,10 @@ public sealed class ControlSetViewsTests
             var chips = history.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("chip")).ToList();
             Assert.Contains(chips, c => c.Classes.Contains("square") && c.Classes.Contains("info"));
             Assert.Contains(chips, c => c.Classes.Contains("warning") && !c.Classes.Contains("square"));
-            NavigationDepthTests.Screenshot(f, "http-response-control-set");
+            var httpHost = new Window { Width = 1280, Height = 640, Content = new HttpResponseView { DataContext = http } };
+            httpHost.Show();
+            Snapshots(httpHost, "http-response");
+            httpHost.Close();
 
             // The link opens the .http file at the request.
             http.Selected = http.History.Last();
@@ -300,6 +332,7 @@ public sealed class ControlSetViewsTests
                 Border Chip() => (Border)view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "ResponseChipText").GetVisualParent()!.GetVisualParent()!;
                 Assert.Contains("success", Chip().Classes);
                 Assert.NotNull(Visible<XmlNodeText>(view, t => t.NodeName == "GreetResult"));
+                Snapshots(window, "wcf-test-client");
                 wcf.Select("Divide");
                 wcf.Row("a")!.Value = "10";
                 wcf.Row("b")!.Value = "0";
@@ -311,6 +344,8 @@ public sealed class ControlSetViewsTests
                 Assert.StartsWith("500 · ", wcf.ResponseMeta, StringComparison.Ordinal);
                 Assert.Contains("error", Chip().Classes);
                 Assert.True(wcf.Row("a")!.IsRequired);
+
+                Snapshots(window, "wcf-test-client-fault");
 
                 // Tree or XML for the response.
                 wcf.ResponseView = 1;
