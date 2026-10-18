@@ -554,14 +554,23 @@ public sealed class RunService : IDisposable
 
         if (!console)
         {
-            void OnLine(string? line)
+            void OnLine(string? line, bool isError)
             {
                 if (line is null)
                 {
                     return;
                 }
 
-                channel.AppendLine(line);
+                // Standard error shows in the error color (M34h).
+                if (isError)
+                {
+                    channel.AppendErrorLine(line);
+                }
+                else
+                {
+                    channel.AppendLine(line);
+                }
+
                 program.OnLine(line);
                 program.HotReload?.OnLine(line);
                 if (!browserOpened && s_listeningMarkers.Any(m => line.Contains(m, StringComparison.Ordinal)))
@@ -570,8 +579,8 @@ public sealed class RunService : IDisposable
                 }
             }
 
-            process.OutputDataReceived += (_, e) => OnLine(e.Data);
-            process.ErrorDataReceived += (_, e) => OnLine(e.Data);
+            process.OutputDataReceived += (_, e) => OnLine(e.Data, isError: false);
+            process.ErrorDataReceived += (_, e) => OnLine(e.Data, isError: true);
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             process.StandardInput.Close(); // no console to read from: input ends right away instead of hanging

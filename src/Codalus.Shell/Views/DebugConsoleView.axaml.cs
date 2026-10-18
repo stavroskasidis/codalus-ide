@@ -1,9 +1,6 @@
-using System.Collections.Concurrent;
-using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Threading;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Output;
@@ -11,20 +8,18 @@ using Codalus.Workbench.Output;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// The Debug Console: the debug output channel (appends batched per dispatcher pass, like the Output window) and an
-/// input line; Enter evaluates, Up and Down walk the history.
+/// The Debug Console: the debug output channel (appends batched per dispatcher pass and colored, like the Output window,
+/// M34h) and an input line; Enter evaluates, Up and Down walk the history.
 /// </summary>
 public sealed partial class DebugConsoleView : UserControl, IPaneView
 {
-    private readonly ConcurrentQueue<string?> _pending = new();
-    private OutputChannel? _channel;
-    private int _flushScheduled;
-
+    private readonly OutputPresenter _presenter;
     private readonly Controls.FollowTail _tail;
 
     public DebugConsoleView()
     {
         InitializeComponent();
+        _presenter = new OutputPresenter(Editor);
         _tail = Controls.FollowTail.Attach(Editor);
         Input.KeyDown += (_, e) =>
         {
@@ -72,58 +67,9 @@ public sealed partial class DebugConsoleView : UserControl, IPaneView
 
     private void Show(OutputChannel? channel)
     {
-        if (_channel is not null)
-        {
-            _channel.Appended -= OnAppended;
-        }
-
-        _channel = channel;
-        _pending.Clear();
-        Editor.Text = channel?.GetText() ?? string.Empty;
-        if (channel is not null)
-        {
-            channel.Appended += OnAppended;
-        }
-
-        _tail.Reset();
-    }
-
-    private void OnAppended(object? sender, string? text)
-    {
-        _pending.Enqueue(text);
-        if (Interlocked.Exchange(ref _flushScheduled, 1) == 0)
-        {
-            Dispatcher.UIThread.Post(Flush, DispatcherPriority.Background);
-        }
-    }
-
-    private void Flush()
-    {
-        Interlocked.Exchange(ref _flushScheduled, 0);
-        var batch = new StringBuilder();
-        var reload = false;
-        while (_pending.TryDequeue(out var text))
-        {
-            if (text is null)
-            {
-                reload = true;
-                batch.Clear();
-            }
-            else
-            {
-                batch.Append(text);
-            }
-        }
-
-        if (reload)
-        {
-            Editor.Text = _channel?.GetText() ?? string.Empty;
-        }
-        else if (batch.Length > 0)
-        {
-            Editor.AppendText(batch.ToString());
-        }
+        _presenter.Show(channel);
 
         // FollowTail keeps the end in view while the user is there (M34a).
+        _tail.Reset();
     }
 }

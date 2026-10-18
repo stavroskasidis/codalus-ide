@@ -156,7 +156,7 @@ A form with a `BindingSource` (from the Toolbox's **Data** category, its `DataSo
 
 ### The Toolbox
 
-View → **Toolbox** (`Ctrl+Alt+X`) lists Windows Forms' controls and components by Visual Studio's categories: **Common Controls**, **Containers**, **Menus & Toolbars**, **Data**, **Components**, **Printing** and **Dialogs**. Your project's own controls and components (and those of the projects it references) come first, under **_Project_ Components**; mark a class `[ToolboxItem(false)]` to leave it out. The search box filters them.
+View → **Toolbox** (`Ctrl+Alt+X`) lists Windows Forms' controls and components by Visual Studio's categories: **Common Controls**, **Containers**, **Menus & Toolbars**, **Data**, **Components**, **Printing** and **Dialogs**. Your project's own controls and components (and those of the projects it references) come first, under **_Project_ Components**; mark a class `[ToolboxItem(false)]` to leave it out. The search box filters them. Each control and component has an icon of its own (a button, a check box, a tree, a grid, a timer…); one of yours or a vendor's takes the icon of the control its name ends with (`OrderTextBox` a text box's), else a generic control's or component's.
 
 Click an item, then click on the form (it gets its default size) or drag a rectangle (it gets that size); or drag the item onto the form. It's named as in Visual Studio (`button1`, `textBox2`…) and selected; `Esc` or the **Pointer** cancels.
 

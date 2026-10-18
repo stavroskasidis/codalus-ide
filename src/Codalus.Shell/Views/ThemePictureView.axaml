@@ -1,50 +1,189 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.ThemePictureView"
-             x:DataType="vm:ThemePicture">
+             x:DataType="vm:ThemePicture"
+             IsHitTestVisible="False"
+             Focusable="False"
+             AutomationProperties.AccessibilityView="Raw">
   <!--
-    A theme variant's picture (M45, shared by Options' family cards and the first-run setup's, M46): the title bar and
-    search box, the toolbar and Start, the editor with its current line, the gutter, a panel with its caption and
-    selection, the status bar, each in the variant's own tokens. 178 × 100; a Viewbox scales it.
+    A theme variant's preview (M34h; M45's Options cards and M46's setup cards share it): a scaled-down sample of the
+    shell's real chrome drawn with the variant's own resources, not a drawing of it. Inside a ThemeVariantScope every
+    {DynamicResource} resolves in that variant, so the title bar with the menu, the search box and the solution's name,
+    the toolbar and Start, a document tab with the family's indicator, the editor with the variant's syntax colors and
+    current line, the gutter, Solution Explorer with its caption, file icons and selection, and the status bar are the
+    tokens the IDE draws with, its shapes included (Ember's cards, Graphite's hairlines). 356 × 200, shown at half size;
+    decorative (the card around it has the name and the line), so screen readers skip it.
   -->
-  <Border Width="178" Height="100" HorizontalAlignment="Left" Background="{Binding Background}" BorderBrush="{Binding Border}" BorderThickness="1" ClipToBounds="True">
-    <DockPanel>
-      <Border DockPanel.Dock="Top" Height="12" Background="{Binding TitleBar}">
-        <Border Width="44" Height="6" HorizontalAlignment="Center" Background="{Binding Search}" BorderBrush="{Binding SearchBorder}" BorderThickness="1" CornerRadius="2" />
-      </Border>
-      <Border DockPanel.Dock="Top" Height="9" Background="{Binding Toolbar}" BorderBrush="{Binding ToolbarBorder}" BorderThickness="0,0,0,1">
-        <StackPanel Orientation="Horizontal" Spacing="3" Margin="4,0" VerticalAlignment="Center">
-          <Border Width="5" Height="5" Background="{Binding IconBlue}" />
-          <Border Width="5" Height="5" Background="{Binding IconFolder}" />
-          <Border Width="14" Height="5" CornerRadius="2" Background="{Binding Start}">
-            <Border Width="4" Height="4" HorizontalAlignment="Left" Margin="1,0" Background="{Binding StartIcon}" />
-          </Border>
-        </StackPanel>
-      </Border>
-      <Border DockPanel.Dock="Bottom" Height="7" Background="{Binding StatusBar}" />
-      <Grid ColumnDefinitions="*,Auto,52" Margin="2">
-        <Border Background="{Binding EditorBackground}" CornerRadius="{Binding PanelCorners}">
-          <StackPanel Spacing="3" Margin="5,5,0,0">
-            <Border Width="30" Height="3" HorizontalAlignment="Left" Background="{Binding Accent}" />
-            <Border Width="54" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding EditorForeground}" />
-            <Border Width="40" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Link}" />
-            <Border Height="5" Background="{Binding CurrentLine}">
-              <Border Width="46" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Muted}" />
+  <UserControl.Styles>
+    <Style Selector="TextBlock.menu">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.TitleBar.Foreground}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.row">
+      <Setter Property="Height" Value="18" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.row TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <Style Selector="Border.row.selected">
+      <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    </Style>
+    <Style Selector="Border.row.selected TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+    </Style>
+    <Style Selector="Border.codeLine">
+      <Setter Property="Height" Value="14" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.codeLine.current">
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.CurrentLine}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border Width="178" Height="100" HorizontalAlignment="Left" ClipToBounds="True">
+    <Viewbox Stretch="Uniform">
+      <ThemeVariantScope x:Name="Scope">
+        <Border Width="356" Height="200" ClipToBounds="True"
+                Background="{DynamicResource Shell.Background}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1"
+                TextElement.FontSize="12" TextElement.Foreground="{DynamicResource Shell.Foreground}">
+          <DockPanel>
+            <!-- The title row: the menu, the search box, the solution's name. -->
+            <Border DockPanel.Dock="Top" Height="24" Background="{DynamicResource Shell.TitleBar}">
+              <StackPanel Orientation="Horizontal" Spacing="9" Margin="9,0,0,0">
+                <ItemsControl ItemsSource="{Binding Menus}" VerticalAlignment="Center">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" Spacing="9" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                      <TextBlock Classes="menu" Text="{Binding}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Border Background="{DynamicResource Shell.Search}" BorderBrush="{DynamicResource Shell.Search.Border}" BorderThickness="1"
+                        CornerRadius="4" Padding="5,1" MinWidth="64" Height="18" VerticalAlignment="Center">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <controls:Icon Kind="search" Width="12" Height="12" Foreground="{DynamicResource Shell.Search.Foreground}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Search}" FontSize="11" Foreground="{DynamicResource Shell.Search.Foreground}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Border>
+                <Border Background="{DynamicResource Shell.TitleBar.Chip}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding SolutionName}" Foreground="{DynamicResource Shell.TitleBar.Foreground}" />
+                </Border>
+              </StackPanel>
             </Border>
-            <Border Width="26" Height="3" HorizontalAlignment="Left" Background="{Binding EditorForeground}" />
-          </StackPanel>
+
+            <!-- The standard toolbar: navigation, open, save, undo, and Start. -->
+            <Border DockPanel.Dock="Top" Height="24" Background="{DynamicResource Shell.Toolbar}" BorderBrush="{DynamicResource Shell.Toolbar.Border}" BorderThickness="0,0,0,1">
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="8,0">
+                <controls:Icon Kind="arrow-left" Classes="accent-navigate" VerticalAlignment="Center" />
+                <controls:Icon Kind="arrow-right" Classes="accent-navigate" VerticalAlignment="Center" />
+                <controls:Icon Kind="folder-open" Classes="accent-open" VerticalAlignment="Center" />
+                <controls:Icon Kind="save" Classes="accent-save" VerticalAlignment="Center" />
+                <controls:Icon Kind="undo" VerticalAlignment="Center" />
+                <Border Width="1" Margin="0,5" Background="{DynamicResource Shell.Toolbar.Border}" />
+                <Border Background="{DynamicResource Shell.Toolbar.Start}" CornerRadius="{DynamicResource Shell.CornerRadius}" Padding="4,1,7,1" VerticalAlignment="Center">
+                  <StackPanel Orientation="Horizontal" Spacing="3">
+                    <controls:Icon Kind="play" Foreground="{DynamicResource Shell.Toolbar.Start.Icon}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Start}" Foreground="{DynamicResource Shell.Toolbar.Start.Foreground}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+            </Border>
+
+            <!-- The status bar, with Ember's state dot. -->
+            <Border DockPanel.Dock="Bottom" Height="20" Background="{DynamicResource Shell.StatusBar}" BorderBrush="{DynamicResource Shell.StatusBar.Border}" BorderThickness="0,1,0,0">
+              <DockPanel Margin="6,0">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Branch}" Foreground="{DynamicResource Shell.StatusBar.Foreground}" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <Ellipse Width="7" Height="7" Fill="{DynamicResource Shell.Accent}" IsVisible="{DynamicResource Shell.StatusBar.ShowDot}" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Ready}" Foreground="{DynamicResource Shell.StatusBar.Foreground}" VerticalAlignment="Center" />
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Grid ColumnDefinitions="*,Auto,124">
+              <!-- A document: its tabs (the active one with the family's indicator and corners) and the editor. -->
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Height="22" Spacing="1">
+                  <Border Background="{DynamicResource Shell.Tab.Active}" BorderBrush="{DynamicResource Shell.Tab.Active.IndicatorBrush}"
+                          BorderThickness="{DynamicResource Shell.Tab.Active.Indicator}" CornerRadius="{DynamicResource DockDocumentTabItemCornerRadius}" Padding="6,0">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <controls:Icon Kind="cl:csharp" Width="14" Height="14" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding ActiveTab}" Foreground="{DynamicResource Shell.Tab.Active.Foreground}" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Border>
+                  <Border Background="{DynamicResource Shell.Tab.Inactive}" CornerRadius="{DynamicResource DockDocumentTabItemCornerRadius}" Padding="6,0">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <controls:Icon Kind="cl:csharp" Width="14" Height="14" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding OtherTab}" Foreground="{DynamicResource Shell.Tab.Inactive.Foreground}" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+                <Border Background="{DynamicResource Shell.Editor.Background}" CornerRadius="{DynamicResource Shell.Panel.CornerRadius.Bottom}" Padding="0,3" ClipToBounds="True"
+                        TextElement.FontFamily="{Binding CodeFont}">
+                  <ItemsControl ItemsSource="{Binding Code}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ThemePictureCodeLine">
+                        <Border Classes="codeLine" Classes.current="{Binding IsCurrent}">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Width="22" Margin="0,0,8,0" Text="{Binding Number}" TextAlignment="Right"
+                                       Foreground="{DynamicResource Shell.Editor.LineNumbers}" VerticalAlignment="Center" />
+                            <ItemsControl ItemsSource="{Binding Segments}" VerticalAlignment="Center">
+                              <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                  <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                              </ItemsControl.ItemsPanel>
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ThemePictureSegment">
+                                  <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" />
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+              </DockPanel>
+
+              <!-- The gutter between docked windows (the family's width and color). -->
+              <Border Grid.Column="1" Width="{DynamicResource Shell.Gutter}" Background="{DynamicResource Shell.Gutter.Background}" />
+
+              <!-- Solution Explorer: its caption (focused), and the solution's tree with a file selected. -->
+              <DockPanel Grid.Column="2">
+                <Border DockPanel.Dock="Top" Height="20" Background="{DynamicResource Shell.Caption.Active}" CornerRadius="{DynamicResource Shell.Panel.CornerRadius.Top}">
+                  <TextBlock Text="{Binding ToolWindow}" Margin="6,0" VerticalAlignment="Center"
+                             Foreground="{DynamicResource Shell.Caption.Active.Foreground}" FontWeight="{DynamicResource Shell.Caption.Active.FontWeight}"
+                             Background="{DynamicResource Shell.Caption.Active.Marker}" Padding="{DynamicResource Shell.Caption.Active.MarkerPadding}" />
+                </Border>
+                <Border Background="{DynamicResource Shell.Panel}" CornerRadius="{DynamicResource Shell.Panel.CornerRadius.Bottom}" Padding="0,3" ClipToBounds="True">
+                  <ItemsControl ItemsSource="{Binding Tree}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ThemePictureTreeRow">
+                        <Border Classes="row" Classes.selected="{Binding IsSelected}">
+                          <StackPanel Orientation="Horizontal" Spacing="3" Margin="{Binding Indent}">
+                            <controls:Icon Kind="{Binding Chevron}" Width="10" Height="10" VerticalAlignment="Center" Foreground="{DynamicResource Shell.MutedForeground}" />
+                            <controls:Icon Kind="{Binding Icon}" Width="14" Height="14" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Border>
+              </DockPanel>
+            </Grid>
+          </DockPanel>
         </Border>
-        <Border Grid.Column="1" Width="{Binding Gutter}" Background="{Binding GutterBackground}" />
-        <Border Grid.Column="2" Background="{Binding Panel}" CornerRadius="{Binding PanelCorners}">
-          <StackPanel Spacing="3">
-            <Border Height="7" Background="{Binding Caption}" />
-            <Border Height="5" Margin="3,0" Background="{Binding Selection}" />
-            <Border Width="30" Height="3" HorizontalAlignment="Left" Margin="5,0" Background="{Binding Foreground}" />
-            <Border Width="24" Height="3" HorizontalAlignment="Left" Margin="5,0" Background="{Binding Foreground}" />
-          </StackPanel>
-        </Border>
-      </Grid>
-    </DockPanel>
+      </ThemeVariantScope>
+    </Viewbox>
   </Border>
 </UserControl>

@@ -1,9 +1,12 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using Avalonia.Styling;
 using Codalus.Shell.Docking;
+using Codalus.Shell.Editor;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.Theming;
 using Codalus.Workbench.Localization;
@@ -12,69 +15,115 @@ using Codalus.Workbench.Settings;
 namespace Codalus.Shell.ViewModels;
 
 /// <summary>
-/// The colors and shapes of a theme variant that a family card's picture draws, read from its tokens. (A
-/// <c>ThemeVariantScope</c> drew nothing when its variant was the window's: the picture takes the values instead.)
+/// A theme variant's preview (M34h): what <c>ThemePictureView</c> shows in its <see cref="Variant"/>, a scaled-down sample
+/// of the shell's chrome. The view draws the chrome with the variant's own resources (a <c>ThemeVariantScope</c>); this
+/// gives it the sample's words (translated), the editor's code in the variant's syntax colors (the editor's own theme,
+/// <see cref="EditorTheme"/>), and the solution's tree. A few values are read here too, for tests and Options.
 /// </summary>
-public sealed class ThemePicture(ThemeVariant variant)
+public sealed class ThemePicture
 {
-    private static readonly IBrush s_none = Brushes.Transparent;
+    private static readonly FontFamily s_codeFont = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace");
 
-    public IBrush Background { get; } = Brush("Shell.Background", variant);
+    public ThemePicture(ThemeVariant variant)
+    {
+        Variant = variant;
+        ThemeId = ThemeService.Themes.FirstOrDefault(t => t.Variant == variant).Id ?? "dark";
+        Background = Brush("Shell.Background", variant);
+        Gutter = Value("Shell.Gutter", variant, 4.0);
+        PanelCorners = Value("Shell.Panel.CornerRadius.Bottom", variant, default(CornerRadius));
 
-    public IBrush Border { get; } = Brush("Shell.Border", variant);
+        var editor = EditorTheme.For(ThemeId);
+        var plain = Brush("Shell.Editor.Foreground", variant);
+        IBrush Token(string type) => editor.TokenColor(type) is { } argb ? new ImmutableSolidColorBrush(argb) : plain;
+        ThemePictureSegment Plain(string text) => new(text, plain);
+        ThemePictureSegment Keyword(string text) => new(text, Token("keyword"));
+        ThemePictureSegment Type(string text) => new(text, Token("class"));
+        ThemePictureSegment Method(string text) => new(text, Token("method"));
+        ThemePictureSegment String(string text) => new(text, Token("string"));
+        ThemePictureSegment Number(string text) => new(text, Token("number"));
+        ThemePictureSegment Comment(string text) => new(text, Token("comment"));
+        ThemePictureCodeLine Line(int number, params ThemePictureSegment[] segments) => new(number.ToString(CultureInfo.InvariantCulture), number == 4, segments);
+        Code =
+        [
+            Line(1, Keyword("public "), Keyword("class "), Type("Cart")),
+            Line(2, Plain("{")),
+            Line(3, Comment("    // The total")),
+            Line(4, Keyword("    int "), Method("Count"), Plain("()")),
+            Line(5, Plain("        => "), Number("42"), Plain(";")),
+            Line(6, Keyword("    string "), Plain("Id = "), String("\"A\""), Plain(";")),
+            Line(7, Plain("}")),
+        ];
+    }
 
-    public IBrush TitleBar { get; } = Brush("Shell.TitleBar", variant);
+    /// <summary>The variant the preview draws in.</summary>
+    public ThemeVariant Variant { get; }
 
-    public IBrush Search { get; } = Brush("Shell.Search", variant);
+    /// <summary>The resolved theme of <see cref="Variant"/> (<c>harbor.dark</c>, <c>light</c>…).</summary>
+    public string ThemeId { get; }
 
-    public IBrush SearchBorder { get; } = Brush("Shell.Search.Border", variant);
+    public IBrush Background { get; }
 
-    public IBrush Toolbar { get; } = Brush("Shell.Toolbar", variant);
+    public double Gutter { get; }
 
-    public IBrush ToolbarBorder { get; } = Brush("Shell.Toolbar.Border", variant);
+    public CornerRadius PanelCorners { get; }
 
-    public IBrush IconBlue { get; } = Brush("Shell.Icon.Blue", variant);
+    public FontFamily CodeFont => s_codeFont;
 
-    public IBrush IconFolder { get; } = Brush("Shell.Icon.Folder", variant);
+    /// <summary>The menu bar's first menus, as the menu bar shows them (translated, without their access keys).</summary>
+    public IReadOnlyList<string> Menus { get; } =
+    [
+        Menu("menu.file", "_File"), Menu("menu.edit", "_Edit"), Menu("menu.view", "_View"), Menu("menu.build", "_Build"), Menu("menu.debug", "_Debug"),
+    ];
 
-    public IBrush Start { get; } = Brush("Shell.Toolbar.Start", variant);
+    public string Search { get; } = Localizer.Get("msg.themePicture.search", "Search");
 
-    public IBrush StartIcon { get; } = Brush("Shell.Toolbar.Start.Icon", variant);
+    public string SolutionName => "Shop";
 
-    public IBrush StatusBar { get; } = Brush("Shell.StatusBar", variant);
+    public string Start { get; } = Localizer.Get("msg.themePicture.start", "Start");
 
-    public IBrush EditorBackground { get; } = Brush("Shell.Editor.Background", variant);
+    public string ActiveTab => "Cart.cs";
 
-    public IBrush EditorForeground { get; } = Brush("Shell.Editor.Foreground", variant);
+    public string OtherTab => "Program.cs";
 
-    public IBrush CurrentLine { get; } = Brush("Shell.Editor.CurrentLine", variant);
+    public string ToolWindow { get; } = Localizer.Get("command.workbench.view.solutionExplorer", "Solution Explorer");
 
-    public IBrush Accent { get; } = Brush("Shell.Accent", variant);
+    public string Ready { get; } = Localizer.Get("msg.themePicture.ready", "Ready");
 
-    public IBrush Link { get; } = Brush("Shell.Link", variant);
+    public string Branch => "main";
 
-    public IBrush Muted { get; } = Brush("Shell.MutedForeground", variant);
+    /// <summary>The editor's lines, the fourth the current one.</summary>
+    public IReadOnlyList<ThemePictureCodeLine> Code { get; }
 
-    public IBrush Panel { get; } = Brush("Shell.Panel", variant);
+    /// <summary>Solution Explorer's rows: the solution, its project, a folder and two files, the first selected.</summary>
+    public IReadOnlyList<ThemePictureTreeRow> Tree { get; } =
+    [
+        new(0, "chevron-down", "cl:solution", "Shop", false),
+        new(1, "chevron-down", "cl:project-csharp", "Shop", false),
+        new(2, "chevron-right", "cl:folder", "Models", false),
+        new(2, null, "cl:csharp", "Cart.cs", true),
+        new(2, null, "cl:csharp", "Program.cs", false),
+    ];
 
-    public IBrush Caption { get; } = Brush("Shell.Caption.Active", variant);
+    private static string Menu(string key, string fallback) => Localizer.Get(key, fallback).Replace("_", string.Empty, StringComparison.Ordinal);
 
-    public IBrush Selection { get; } = Brush("Shell.Selection", variant);
-
-    public IBrush Foreground { get; } = Brush("Shell.Foreground", variant);
-
-    public IBrush GutterBackground { get; } = Brush("Shell.Gutter.Background", variant);
-
-    public double Gutter { get; } = Value("Shell.Gutter", variant, 4.0);
-
-    public CornerRadius PanelCorners { get; } = Value("Shell.Panel.CornerRadius.Bottom", variant, default(CornerRadius));
-
-    private static IBrush Brush(string key, ThemeVariant variant) => Lookup(key, variant) as IBrush ?? s_none;
+    private static IBrush Brush(string key, ThemeVariant variant) => Lookup(key, variant) as IBrush ?? Brushes.Transparent;
 
     private static T Value<T>(string key, ThemeVariant variant, T fallback) => Lookup(key, variant) is T value ? value : fallback;
 
     private static object? Lookup(string key, ThemeVariant variant) =>
         Avalonia.Application.Current is { } app && app.TryGetResource(key, variant, out var value) ? value : null;
+}
+
+/// <summary>A run of the preview's code in its syntax color.</summary>
+public sealed record ThemePictureSegment(string Text, IBrush Brush);
+
+/// <summary>A line of the preview's editor: its number, whether it's the current line, its runs.</summary>
+public sealed record ThemePictureCodeLine(string Number, bool IsCurrent, IReadOnlyList<ThemePictureSegment> Segments);
+
+/// <summary>A row of the preview's Solution Explorer.</summary>
+public sealed record ThemePictureTreeRow(int Level, string? Chevron, string Icon, string Name, bool IsSelected)
+{
+    public Thickness Indent => new(4 + (Level * 10), 0, 0, 0);
 }
 
 /// <summary>A theme family's card in Options: its name, a line about it, and a picture of it in the chosen mode.</summary>

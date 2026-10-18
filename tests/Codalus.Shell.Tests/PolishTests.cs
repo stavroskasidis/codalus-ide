@@ -132,6 +132,13 @@ public partial class PolishTests
     /// TextBlocks under <paramref name="root"/> whose text is cut off: wider than what their clipping ancestors show,
     /// without an ellipsis (or with one but no tooltip to read the rest), where the content doesn't scroll sideways.
     /// </summary>
+    /// <summary>
+    /// A theme's preview (M34h): the shell's chrome in miniature, scaled into a card and hidden from screen readers, whose
+    /// text no one reads at that size (its colors are the theme's own token pairs, checked as pairs). The text checks
+    /// measure unscaled layouts against scaled bounds, so they leave it out.
+    /// </summary>
+    internal static bool InThemePreview(Visual visual) => visual.FindAncestorOfType<Views.ThemePictureView>() is not null;
+
     internal static IEnumerable<string> Clipped(Visual root)
     {
         var rootRect = new Rect(root.Bounds.Size);
@@ -139,7 +146,7 @@ public partial class PolishTests
         {
             var content = text.Text ?? text.Inlines?.Text;
             if (!text.IsEffectivelyVisible || string.IsNullOrWhiteSpace(content) || text.Bounds.Width < 1 || text.Bounds.Height < 1
-                || text.TextWrapping != TextWrapping.NoWrap || text.FindAncestorOfType<TextBox>() is not null)
+                || text.TextWrapping != TextWrapping.NoWrap || text.FindAncestorOfType<TextBox>() is not null || InThemePreview(text))
             {
                 continue;
             }

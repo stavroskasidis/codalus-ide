@@ -11,7 +11,7 @@
 | Cancel the build | `Ctrl+Break`, or click the build item in the status bar |
 
 - Builds use the active configuration, restore packages first, and save modified documents before they start (setting **Build and Run → Save All Before Build**).
-- The output is in View → Output → Build.
+- The output is in View → Output → Build. Errors (`error CS1002:`, *Build failed*, an exception and its stack trace) show in red, warnings (`warning CS0168:`, `warning NU1603:`) in amber, and a build that succeeded in green, in each theme's colors.
 - Errors and warnings go to the **Error List**, which opens when a build fails. A problem that both the build and the language service report is listed once.
 - Only one build runs at a time.
 
@@ -75,6 +75,6 @@ A `.resx` file opens in the **resource editor**, a table of its resources:
   - environment variables
   - `applicationUrl`
   - `launchBrowser`, which opens the app's URL once it is listening
-- **Output**: the program's output appears in View → Output → Run: *project*. It has no console input there (reads see end of input). On Windows, the setting **Run Console Apps in an External Console** gives console apps a window of their own instead.
+- **Output**: the program's output appears in View → Output → Run: *project*. What it writes to standard error shows in red, and its ANSI colors (a logger's levels, a test runner's results) show as colors, made readable on the theme's background, instead of escape codes. It has no console input there (reads see end of input). On Windows, the setting **Run Console Apps in an External Console** gives console apps a window of their own instead.
 - **Stop**: Debug → Stop Running Programs (`Shift+F5`), or the status bar item. This ends the program and the processes it started.
 - **The runtime**: a program runs on the runtimes of the SDK the solution builds with, as with `dotnet run`: its apphost gets that SDK's folder in `DOTNET_ROOT` unless you set it. On Apple silicon, .NET 5 and earlier run as x64 programs on the x64 runtime; on Linux, .NET Core 2.x and 3.x get the system's ICU. The output says when Codalus changed something, and [Older .NET versions](dotnet-versions.md) says why.
