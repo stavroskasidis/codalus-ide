@@ -119,6 +119,32 @@ public class EditorTests
     }
 
     [AvaloniaFact]
+    public async Task Text_areas_have_no_watermark_bound_to_the_whole_text()
+    {
+        // AvaloniaEdit's text area template has a watermark whose visibility is bound to the document's Text: every change
+        // built the whole document as a string and kept the last one (6 MB per keystroke in a 100k-line file, and per
+        // append in the Output window). The shell's template leaves it out; the text view is still presented.
+        await using var f = ShellFixture.Create();
+        var path = Path.Combine(Directory.CreateDirectory(Path.Combine(f.UserData, "plain")).FullName, "notes.txt");
+        await File.WriteAllTextAsync(path, "one\ntwo\n", TestContext.Current.CancellationToken);
+        var editor = await OpenAsync(f, path);
+        await ShellFixture.PumpUntil(() => editor.Editor.TextArea.TextView.VisualLinesValid);
+
+        var areas = f.Window.GetVisualDescendants().OfType<AvaloniaEdit.Editing.TextArea>().ToList();
+        Assert.Contains(editor.Editor.TextArea, areas);
+        foreach (var area in areas)
+        {
+            Assert.DoesNotContain(area.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>(), t => t.Name == "PART_Watermark");
+            Assert.Contains(area.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>(), p => p.Name == "PART_CP" && ReferenceEquals(p.Content, area.TextView));
+        }
+
+        editor.Editor.TextArea.Focus();
+        editor.Editor.TextArea.PerformTextInput("zero ");
+        ShellFixture.Pump();
+        Assert.StartsWith("zero one", editor.Model.Text.Text, StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
     public async Task Redraws_while_a_large_file_is_classified_keep_its_first_semantic_tokens_request()
     {
         // file_highlight_ms (docs/benchmarks/net11-release-gate.md): every redraw during an open (CodeLens, inlay hints,

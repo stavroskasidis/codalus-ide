@@ -12,6 +12,9 @@ public sealed class FramedMessageReader(Stream stream)
     private int _start;
     private int _end;
 
+    /// <summary>The size of the read buffer (tests: a large message doesn't grow it).</summary>
+    internal int BufferCapacity => _buffer.Length;
+
     public async Task<byte[]?> ReadMessageAsync(CancellationToken cancellationToken)
     {
         int contentLength;
@@ -31,6 +34,11 @@ public sealed class FramedMessageReader(Stream stream)
             }
         }
 
+        if (contentLength > _buffer.Length)
+        {
+            return await ReadLargeMessageAsync(contentLength, cancellationToken).ConfigureAwait(false);
+        }
+
         while (_end - _start < contentLength)
         {
             if (!await FillAsync(cancellationToken).ConfigureAwait(false))
@@ -41,6 +49,32 @@ public sealed class FramedMessageReader(Stream stream)
 
         var message = _buffer.AsSpan(_start, contentLength).ToArray();
         _start += contentLength;
+        return message;
+    }
+
+    /// <summary>
+    /// A message larger than the buffer is read into its own array. Growing the buffer for it (doubling, then a copy of
+    /// the message out of it) made garbage of twice the message's size and kept the buffer at the largest message's size
+    /// for the connection's life: 8 MB in the shell after a 100k-line file's document symbols.
+    /// </summary>
+    private async Task<byte[]> ReadLargeMessageAsync(int contentLength, CancellationToken cancellationToken)
+    {
+        // What is buffered is the start of this message: the buffer is smaller than it.
+        var message = new byte[contentLength];
+        var filled = _end - _start;
+        _buffer.AsSpan(_start, filled).CopyTo(message);
+        _start = _end = 0;
+        while (filled < contentLength)
+        {
+            var read = await stream.ReadAsync(message.AsMemory(filled), cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+            {
+                throw new InvalidDataException("Stream ended in the middle of a message.");
+            }
+
+            filled += read;
+        }
+
         return message;
     }
 

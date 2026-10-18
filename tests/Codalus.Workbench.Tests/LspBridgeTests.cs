@@ -107,6 +107,46 @@ public sealed class LspBridgeTests : IAsyncLifetime
         Assert.False(noFlag.GetProperty("isIncomplete").GetBoolean());
     }
 
+    /// <summary>
+    /// Document symbols and inlay hints in the narrowed shape (our own servers') are returned as they are, checked in place:
+    /// the node round trip made about 100 MB of strings and copies of a 100k-line file's 4.8 MB of symbols. The shapes that
+    /// need a change still get it.
+    /// </summary>
+    [Fact]
+    public void Narrowed_document_symbols_and_inlay_hints_pass_unchanged_and_other_shapes_are_normalized()
+    {
+        static JsonElement Parse(string json)
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.Clone();
+        }
+
+        static string Range(int start, int end) => $$$"""{"start":{"line":{{{start}}},"character":0},"end":{"line":{{{end}}},"character":0}}""";
+
+        var symbols = Parse($$$"""
+            [{"name":"C","kind":5,"range":{{{Range(0, 9)}}},"selectionRange":{{{Range(0, 0)}}},"location":null,
+              "children":[{"name":"M","kind":6,"range":{{{Range(2, 3)}}},"selectionRange":{{{Range(2, 2)}}}}]}]
+            """);
+        Assert.Equal(symbols.GetRawText(), LanguageServices.Client.LspNormalizer.Result(Methods.DocumentSymbol, symbols).GetRawText());
+
+        // SymbolInformation[] (a location each, flat) is nested by range.
+        var information = Parse($$$"""
+            [{"name":"C","kind":5,"location":{"uri":"file:///a.cs","range":{{{Range(0, 9)}}}}},
+             {"name":"M","kind":6,"containerName":"C","location":{"uri":"file:///a.cs","range":{{{Range(2, 3)}}}}}]
+            """);
+        var nested = LanguageServices.Client.LspNormalizer.Result(Methods.DocumentSymbol, information).Deserialize(ProtocolJsonContext.Default.DocumentSymbolArray)!;
+        var type = Assert.Single(nested);
+        Assert.Equal(("C", "M"), (type.Name, Assert.Single(type.Children!).Name));
+
+        var hints = Parse("""[{"position":{"line":0,"character":5},"label":": int","kind":1,"tooltip":{"kind":"plaintext","value":"The type."}}]""");
+        Assert.Equal(hints.GetRawText(), LanguageServices.Client.LspNormalizer.Result(Methods.InlayHint, hints).GetRawText());
+
+        // Label parts are joined; a plain-string tooltip becomes MarkupContent.
+        var parts = Parse("""[{"position":{"line":0,"character":5},"label":[{"value":": "},{"value":"int"}],"tooltip":"The type."}]""");
+        var hint = Assert.Single(LanguageServices.Client.LspNormalizer.Result(Methods.InlayHint, parts).Deserialize(ProtocolJsonContext.Default.InlayHintArray)!);
+        Assert.Equal((": int", new MarkupContent("plaintext", "The type.")), (hint.Label, hint.Tooltip));
+    }
+
     [Fact]
     public async Task A_vs_code_style_server_works_through_the_bridge()
     {

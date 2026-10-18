@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Codalus.LanguageServices.Protocol;
 
@@ -18,7 +19,8 @@ public sealed record TextDocumentIdentifier(string Uri);
 
 public sealed record VersionedTextDocumentIdentifier(string Uri, int Version);
 
-public sealed record TextDocumentItem(string Uri, string LanguageId, int Version, string Text);
+/// <summary><see cref="Text"/> is the whole document, written in segments (<see cref="DocumentTextConverter"/>).</summary>
+public sealed record TextDocumentItem(string Uri, string LanguageId, int Version, [property: JsonConverter(typeof(DocumentTextConverter))] string Text);
 
 public sealed record TextDocumentPositionParams(TextDocumentIdentifier TextDocument, Position Position);
 
@@ -114,7 +116,7 @@ public sealed record SemanticTokensLegend(string[] TokenTypes, string[] TokenMod
 public sealed record DidOpenTextDocumentParams(TextDocumentItem TextDocument);
 
 /// <summary>An incremental change (<see cref="Range"/> set) or the whole text (<see cref="Range"/> null).</summary>
-public sealed record TextDocumentContentChangeEvent(Range? Range, string Text);
+public sealed record TextDocumentContentChangeEvent(Range? Range, [property: JsonConverter(typeof(DocumentTextConverter))] string Text);
 
 /// <summary>Changes apply in order, each to the result of the previous one.</summary>
 public sealed record DidChangeTextDocumentParams(VersionedTextDocumentIdentifier TextDocument, TextDocumentContentChangeEvent[] ContentChanges);
