@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Workbench.Projects;
 using Codalus.Workbench.Search;
@@ -6,7 +7,7 @@ using Codalus.Workbench.Search;
 namespace Codalus.Workbench.Tests;
 
 /// <summary>Code Search (M47): the query's prefixes, ranking, the persistent index and its budget.</summary>
-public sealed class CodeSearchTests : IDisposable
+public sealed partial class CodeSearchTests : IDisposable
 {
     private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-codesearch-" + Guid.NewGuid().ToString("N"));
 
@@ -201,7 +202,9 @@ public sealed class CodeSearchTests : IDisposable
     /// <summary>
     /// The roadmap's budget: results within 100 ms of typing once indexed, on the 96-project benchmark solution. This
     /// index has its shape: 96 projects of 60 files (FixtureGen's solution generator with 96 projects writes classes of
-    /// about twenty members), 5,760 files and over 140,000 symbols.
+    /// about twenty members), 5,760 files and over 140,000 symbols. The budget is the search's own cost, the CPU time of the
+    /// thread that runs it: on a shared CI runner the other test assemblies build and run hosts on the same few cores, and a
+    /// wall clock measured the wait for a core ('Inv' takes about 5 ms on a 4-core machine and took over 100 ms on CI).
     /// </summary>
     [Fact]
     public void A_query_on_a_96_project_index_answers_within_100_ms()
@@ -240,18 +243,58 @@ public sealed class CodeSearchTests : IDisposable
             index.Search(CodeSearchQuery.Parse(text), context, null, 200, Ct);
             CodeSearchIndex.SearchFiles(files, CodeSearchQuery.Parse(text), context, _root, null, 50, Ct);
             var times = new List<double>();
+            var walls = new List<double>();
             for (var run = 0; run < 5; run++)
             {
+                var cpu = ThreadCpuTime();
                 var watch = Stopwatch.StartNew();
                 var query = CodeSearchQuery.Parse(text);
                 var results = index.Search(query, context, null, 200, Ct);
                 var fileResults = CodeSearchIndex.SearchFiles(files, query, context, _root, null, 50, Ct);
-                times.Add(watch.Elapsed.TotalMilliseconds);
+                times.Add((ThreadCpuTime() - cpu).TotalMilliseconds);
+                walls.Add(watch.Elapsed.TotalMilliseconds);
                 Assert.True(text == "zzzq" ? results.Count == 0 : results.Count + fileResults.Count > 0, text);
             }
 
             var median = times.Order().ElementAt(times.Count / 2);
-            Assert.True(median < 100, $"'{text}' took {median:F1} ms (median of {string.Join(", ", times.Select(t => t.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)))})");
+            Assert.True(median < 100, $"'{text}' took {median:F1} ms of CPU time (median of {Join(times)}; wall clock {Join(walls)})");
         }
+
+        static string Join(List<double> times) => string.Join(", ", times.Select(t => t.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)));
     }
+
+    /// <summary>
+    /// The CPU time the calling thread has used, in user and kernel mode. A search runs on the thread that calls it. Windows
+    /// counts it at the clock's tick (about 15.6 ms), well inside the budget.
+    /// </summary>
+    private static TimeSpan ThreadCpuTime()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(GetThreadTimes(GetCurrentThread(), out _, out _, out var kernel, out var user));
+            return TimeSpan.FromTicks(kernel + user);
+        }
+
+        // CLOCK_THREAD_CPUTIME_ID: 3 on Linux, 16 on macOS.
+        Assert.Equal(0, clock_gettime(OperatingSystem.IsMacOS() ? 16 : 3, out var now));
+        return TimeSpan.FromTicks((now.Seconds * TimeSpan.TicksPerSecond) + (now.Nanoseconds / TimeSpan.NanosecondsPerTick));
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TimeSpec
+    {
+        public long Seconds;
+        public long Nanoseconds;
+    }
+
+    [LibraryImport("libc")]
+    private static partial int clock_gettime(int clock, out TimeSpec time);
+
+    // The times are FILETIMEs: 100 ns units, as TimeSpan's ticks.
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetThreadTimes(nint thread, out long creation, out long exit, out long kernel, out long user);
+
+    [LibraryImport("kernel32.dll")]
+    private static partial nint GetCurrentThread();
 }
