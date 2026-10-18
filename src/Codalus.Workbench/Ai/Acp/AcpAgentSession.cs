@@ -227,16 +227,24 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         {
             var response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, [AcpContentBlock.FromText(text)]), giveUp.Token).ConfigureAwait(false);
             _ai.LogAgent(Name, "session/prompt → " + response.StopReason);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                // The agent can answer (its permission cancelled) before CancelTurnAsync gets to the steps.
+                FinishSteps(turn, "cancelled");
+            }
+
             return response.StopReason;
         }
         catch (OperationCanceledException) when (giveUp.IsCancellationRequested)
         {
             _ai.LogAgent(Name, "session/prompt → the agent didn't confirm the cancel");
+            FinishSteps(turn, "cancelled");
             return "cancelled";
         }
         catch (AcpException) when (cancellationToken.IsCancellationRequested && client.IsRunning)
         {
             // An agent that answers a cancelled turn with an error rather than its stop reason: still a cancel.
+            FinishSteps(turn, "cancelled");
             return "cancelled";
         }
         catch (AcpException ex)

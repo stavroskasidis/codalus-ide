@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Ai;
 using Codalus.Workbench.Ai.Acp;
@@ -61,6 +62,24 @@ public sealed class AcpShellTests
         where T : Control =>
         root.GetVisualDescendants().OfType<T>().Single(c => c.Name == name);
 
+    /// <summary>
+    /// The chat view the window shows now. Opening the solution brings Solution Explorer to the front of the same group
+    /// (later when the load is slow), which takes AI Chat out of the visual tree; this brings it back, as clicking its tab
+    /// does, and the dock builds a new view for it.
+    /// </summary>
+    private static AiChatView ChatView(ShellFixture f)
+    {
+        if (!f.Window.GetVisualDescendants().OfType<AiChatView>().Any(v => v.IsEffectivelyVisible))
+        {
+            f.Shell.Layout.ShowToolWindow(AiChatViewModel.ToolWindowId, focus: false);
+        }
+
+        return f.Window.GetVisualDescendants().OfType<AiChatView>().LastOrDefault(v => v.IsEffectivelyVisible) ?? new AiChatView();
+    }
+
+    private static string Describe(ShellFixture f, AiChatTurn turn) =>
+        $"thought '{turn.Thought}', answer '{turn.Answer}', streaming {turn.IsStreaming}, {f.Window.GetVisualDescendants().OfType<AiChatView>().Count()} chat view(s), tool windows [{string.Join(", ", f.Shell.Layout.OpenToolWindows.Select(t => t.Id + (t.Owner is Dock.Model.Core.IDock d && d.ActiveDockable == t ? "*" : "")))}]";
+
     [AvaloniaFact]
     public async Task The_picker_and_the_label_show_and_an_agents_turn_renders_with_its_steps()
     {
@@ -95,7 +114,8 @@ public sealed class AcpShellTests
         var turn = await AskAsync(f, "hello");
         await ShellFixture.PumpUntil(() => !turn.IsStreaming);
         Assert.Equal(("Hello from the stand-in.", "stand-in"), (turn.Answer, turn.ExternalAgent));
-        await ShellFixture.PumpUntil(() => view.GetVisualDescendants().OfType<Expander>().Any(e => (e.Header as string) == "Thinking"));
+        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<Expander>().Any(e => (e.Header as string) == "Thinking"), describe: () => Describe(f, turn));
+        view = ChatView(f);
         Assert.False(view.GetVisualDescendants().OfType<Expander>().Single(e => (e.Header as string) == "Thinking").IsExpanded);
         Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "☑ Say hello");
         Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "stand-in · external agent");
@@ -124,7 +144,8 @@ public sealed class AcpShellTests
         // A read step with its location: clicking it opens the file at the line.
         turn = await AskAsync(f, "read src/Greetings/Greeter.cs");
         await ShellFixture.PumpUntil(() => !turn.IsStreaming);
-        await ShellFixture.PumpUntil(() => view.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "✓ read: Read src/Greetings/Greeter.cs"));
+        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "✓ read: Read src/Greetings/Greeter.cs"), describe: () => Describe(f, turn));
+        view = ChatView(f);
         var link = view.GetVisualDescendants().OfType<Button>().Single(b => (b.Content as string) == "src/Greetings/Greeter.cs:2");
         link.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         var greeter = Path.Combine(folder, "src", "Greetings", "Greeter.cs");
@@ -162,14 +183,14 @@ public sealed class AcpShellTests
         Assert.Equal("written by the agent\n", model.Text.Text);
         Assert.True(model.IsModified);
         Assert.Equal(before, File.ReadAllText(greeter));
-        await ShellFixture.PumpUntil(() => view.GetVisualDescendants().OfType<Expander>().Any(e => (e.Header as string)?.EndsWith("(reviewed in the preview)", StringComparison.Ordinal) == true));
+        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<Expander>().Any(e => (e.Header as string)?.EndsWith("(reviewed in the preview)", StringComparison.Ordinal) == true), describe: () => Describe(f, turn));
 
         // New Chat stops the agent and closes its pipe.
         var session = f.Shell.ExternalAgents.Current!;
         chat.NewChat();
         await ShellFixture.PumpUntil(() => f.Shell.ExternalAgents.Current is null && f.Shell.OpenAgentMcpPipes == 0, 30);
         Assert.False(session.IsAlive);
-        Assert.Equal("Agent", AutomationProperties.GetName(picker));
+        Assert.Equal("Agent", AutomationProperties.GetName(Visible<ComboBox>(ChatView(f), "AgentPicker")));
     }
 
     [AvaloniaFact]
