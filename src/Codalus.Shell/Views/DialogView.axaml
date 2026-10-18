@@ -14,75 +14,101 @@
     </Style>
     <Style Selector="TextBlock.header">
       <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Border.line">
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Padding" Value="6,0,8,0" />
+    </Style>
+    <Style Selector="Border.line.added">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Diff.Added}" />
+    </Style>
+    <Style Selector="Border.line.removed">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Diff.Removed}" />
+    </Style>
+    <Style Selector="Border.line.header">
       <Setter Property="Margin" Value="0,6,0,2" />
     </Style>
   </UserControl.Styles>
-  <Border Classes="overlay" Padding="20,16" MinWidth="420" MaxWidth="{Binding HasDetails, Converter={x:Static vm:DialogWidth.Converter}}" KeyboardNavigation.TabNavigation="Cycle"
+  <!--
+    M34h: a preview of changes takes most of the window (DialogView.PreviewSize: three quarters of it, at least 640 × 400
+    where the window has room), the changes filling what the title, the message and the buttons leave; other forms size
+    to their content, up to 560 px wide (960 with notes).
+  -->
+  <Border x:Name="Frame" Classes="overlay" Padding="20,16" MinWidth="420" KeyboardNavigation.TabNavigation="Cycle"
           AutomationProperties.Name="{Binding Title}">
-    <StackPanel Spacing="10">
-      <TextBlock Classes="heading" Text="{Binding Title}" TextWrapping="Wrap" />
-      <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-      <TextBox x:Name="Input"
-               Text="{Binding InputText}"
-               IsVisible="{Binding HasInput}"
-               PasswordChar="{Binding PasswordChar}"
-               AutomationProperties.Name="{Binding Title}" />
-      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasChoices}">
-        <Border BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="320">
-          <ListBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" Background="Transparent" AutomationProperties.Name="{l:T dialog.choices}">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:DialogChoiceViewModel">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <CheckBox IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Label}" />
-                  <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" />
-                  <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
-                </StackPanel>
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Top" Spacing="10">
+        <TextBlock Classes="heading" Text="{Binding Title}" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBox x:Name="Input"
+                 Text="{Binding InputText}"
+                 IsVisible="{Binding HasInput}"
+                 PasswordChar="{Binding PasswordChar}"
+                 AutomationProperties.Name="{Binding Title}" />
+        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasChoices}">
+          <Border BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="320">
+            <ListBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" Background="Transparent" AutomationProperties.Name="{l:T dialog.choices}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:DialogChoiceViewModel">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <CheckBox IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Label}" />
+                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" />
+                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Border>
+          <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0" IsVisible="{Binding Reorderable}">
+            <Button Content="{l:T dialog.up}" Command="{Binding MoveUpCommand}" MinWidth="64" AutomationProperties.Name="{l:T dialog.moveUp}" />
+            <Button Content="{l:T dialog.down}" Command="{Binding MoveDownCommand}" MinWidth="64" AutomationProperties.Name="{l:T dialog.moveDown}" />
+          </StackPanel>
+        </Grid>
+        <!-- Notes about the changes (Convert to SDK-Style's, M43a) wrap above them (M34g on M43: they ran off sideways in the monospace box). -->
+        <ScrollViewer IsVisible="{Binding HasNotes}" MaxHeight="160" HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T dialog.notesAboutTheChanges}">
+          <ItemsControl ItemsSource="{Binding Notes}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DetailLine">
+                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,0,0,2" />
               </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </Border>
-        <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0" IsVisible="{Binding Reorderable}">
-          <Button Content="{l:T dialog.up}" Command="{Binding MoveUpCommand}" MinWidth="64" AutomationProperties.Name="{l:T dialog.moveUp}" />
-          <Button Content="{l:T dialog.down}" Command="{Binding MoveDownCommand}" MinWidth="64" AutomationProperties.Name="{l:T dialog.moveDown}" />
-        </StackPanel>
-      </Grid>
-      <!-- Notes about the changes (Convert to SDK-Style's, M43a) wrap above them (M34g on M43: they ran off sideways in the monospace box). -->
-      <ScrollViewer IsVisible="{Binding HasNotes}" MaxHeight="160" HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T dialog.notesAboutTheChanges}">
-        <ItemsControl ItemsSource="{Binding Notes}">
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </StackPanel>
+      <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,10,0,0">
+        <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Assertive" />
+        <ItemsControl ItemsSource="{Binding Buttons}" HorizontalAlignment="Right" Margin="0,6,0,0">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="8" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:DetailLine">
-              <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,0,0,2" />
+            <DataTemplate x:DataType="vm:DialogButtonViewModel">
+              <Button Content="{Binding Label}" Command="{Binding Command}" MinWidth="84" HorizontalContentAlignment="Center"
+                      Classes.accent="{Binding IsDefault}" />
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-      </ScrollViewer>
-      <Border IsVisible="{Binding HasChanges}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="420">
+      </StackPanel>
+      <!-- The changes: each added or removed line marked in the diff's color at its left edge as well as in its text. -->
+      <Border x:Name="ChangesBox" Margin="0,10,0,0" IsVisible="{Binding HasChanges}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1"
+              Background="{DynamicResource Shell.Editor.Background}">
         <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="{l:T dialog.preview}">
-          <ItemsControl ItemsSource="{Binding Changes}" Margin="6,4">
+          <ItemsControl ItemsSource="{Binding Changes}" Margin="0,4">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:DetailLine">
-                <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
-                           Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" />
+                <Border Classes="line" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}">
+                  <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+                             Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" />
+                </Border>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </ScrollViewer>
       </Border>
-      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
-                 AutomationProperties.LiveSetting="Assertive" />
-      <ItemsControl ItemsSource="{Binding Buttons}" HorizontalAlignment="Right" Margin="0,6,0,0">
-        <ItemsControl.ItemsPanel>
-          <ItemsPanelTemplate>
-            <StackPanel Orientation="Horizontal" Spacing="8" />
-          </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:DialogButtonViewModel">
-            <Button Content="{Binding Label}" Command="{Binding Command}" MinWidth="84" HorizontalContentAlignment="Center"
-                    Classes.accent="{Binding IsDefault}" />
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-    </StackPanel>
+    </DockPanel>
   </Border>
 </UserControl>

@@ -12,9 +12,10 @@ using Codalus.Workbench.Settings;
 namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
-/// The UI gallery (M34d, D25): every tool window, the main documents and the window's chrome, photographed in Blue,
-/// Light, Dark and High Contrast, empty (before a solution opens), with data (the Testing solution after its tests
-/// ran) and in an error state (errors in the Error List and the build output, a failed test's details). The pictures
+/// The UI gallery (M34d, D25): every tool window, the main documents and the window's chrome, photographed in Classic's
+/// Blue, Light, Dark and High Contrast and Harbor's Light, Dark and High contrast (M34h), empty (before a solution
+/// opens), with data (the Testing solution after its tests ran) and in an error state (errors in the Error List and the
+/// build output, a failed test's details). The pictures
 /// go to <c>logs/gallery</c> with an index, <c>index.md</c>, for the maintainer's review; eng/smoke-test.sh copies them
 /// next to the report.
 /// </summary>
@@ -71,7 +72,17 @@ internal sealed partial class SmokeTest
         var documents = new List<(string Name, Func<ShellDocument?> Open)>
         {
             ("options", () => { shell.OpenSettings(); return shell.Layout.ActiveDocument; }),
-            ("keyboard-shortcuts", () => { shell.OpenKeyboardShortcuts(); return shell.Layout.ActiveDocument; }),
+            ("keyboard-shortcuts", () =>
+            {
+                // M34h: a command with a key binding selected, so the picture shows the selection's colors.
+                shell.OpenKeyboardShortcuts();
+                if (shell.Layout.ActiveDocument is KeyboardShortcutsDocument shortcuts)
+                {
+                    shortcuts.ViewModel.Selected = shortcuts.ViewModel.Rows.FirstOrDefault(r => r.KeyLabel.Length > 0) ?? shortcuts.ViewModel.Rows.FirstOrDefault();
+                }
+
+                return shell.Layout.ActiveDocument;
+            }),
             ("project-properties", () => shell.OpenProjectProperties(shell.Solutions.Projects.Keys.FirstOrDefault()) is null ? null : shell.Layout.ActiveDocument),
             ("nuget", () => shell.OpenPackageManager(shell.Solutions.Projects.Keys.FirstOrDefault()) is null ? null : shell.Layout.ActiveDocument),
             ("configuration-manager", () => shell.OpenConfigurationManager() is null ? null : shell.Layout.ActiveDocument),
@@ -109,9 +120,31 @@ internal sealed partial class SmokeTest
         // The in-window dialog (M34's final pass): a preview of changes and a checklist, over the window.
         var dialogs = new List<(string Name, DialogRequest Request)>
         {
-            ("dialog-preview", new DialogRequest("Preview Changes: Rename", "2 changes in 2 files.", ["Apply", "Cancel"])
+            ("dialog-preview", new DialogRequest("Preview Changes: Rename", "4 changes in 2 files.", ["Apply", "Cancel"])
             {
-                Details = [new DetailLine("src/Greeter.cs", "header"), new DetailLine("- public sealed class Greeter", "removed"), new DetailLine("+ public sealed class Welcomer", "added")],
+                // M34h: a rename's preview as the C# service gives it, context lines included, at the dialog's size.
+                Details =
+                [
+                    new DetailLine("src/Greeter.cs", "header"),
+                    new DetailLine("  namespace Greetings;"),
+                    new DetailLine("  "),
+                    new DetailLine("- public sealed class Greeter(string name)", "removed"),
+                    new DetailLine("+ public sealed class Welcomer(string name)", "added"),
+                    new DetailLine("  {"),
+                    new DetailLine("-     public static Greeter Default { get; } = new(\"world\");", "removed"),
+                    new DetailLine("+     public static Welcomer Default { get; } = new(\"world\");", "added"),
+                    new DetailLine("  "),
+                    new DetailLine("      public string Greet() => $\"Hello, {name}!\";"),
+                    new DetailLine("  }"),
+                    new DetailLine("src/Program.cs", "header"),
+                    new DetailLine("  using Greetings;"),
+                    new DetailLine("  "),
+                    new DetailLine("- var greeter = new Greeter(args.FirstOrDefault() ?? \"world\");", "removed"),
+                    new DetailLine("+ var greeter = new Welcomer(args.FirstOrDefault() ?? \"world\");", "added"),
+                    new DetailLine("  Console.WriteLine(greeter.Greet());"),
+                    new DetailLine("- Console.WriteLine(Greeter.Default.Greet());", "removed"),
+                    new DetailLine("+ Console.WriteLine(Welcomer.Default.Greet());", "added"),
+                ],
             }),
             ("dialog-checklist", new DialogRequest("Generate Constructor", "Members to initialize:", ["OK", "Cancel"])
             {
@@ -317,8 +350,9 @@ internal sealed partial class SmokeTest
         text.AppendLine("# UI gallery");
         text.AppendLine();
         text.AppendLine($"Codalus IDE {ShellInfo.Version} on {System.Runtime.InteropServices.RuntimeInformation.OSDescription}: every surface in each theme, empty, with data and in an error state (M34d, D25).");
+        text.AppendLine($"Themes: {string.Join(", ", s_galleryThemes.Select(t => $"{ThemeService.Title(t)} (`{t}`)"))}. A picture is `{{surface}}-{{state}}-{{theme}}.png`.");
         text.AppendLine();
-        text.AppendLine("| Surface | " + string.Join(" | ", s_galleryThemes) + " |");
+        text.AppendLine("| Surface | " + string.Join(" | ", s_galleryThemes.Select(ThemeService.Title)) + " |");
         text.AppendLine("|---|" + string.Concat(Enumerable.Repeat("---|", s_galleryThemes.Length)));
         foreach (var (surface, themes) in _gallery)
         {

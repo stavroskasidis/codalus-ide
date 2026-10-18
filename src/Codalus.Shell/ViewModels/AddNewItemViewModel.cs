@@ -166,6 +166,20 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
 
     public string PreviewTitle => _selected?.Name ?? string.Empty;
 
+    /// <summary>
+    /// The language of the new file, which colors the preview as the editor will (M34h), or null for what
+    /// <c>dotnet new</c> will be asked to do.
+    /// </summary>
+    public string? PreviewLanguage =>
+        _selected?.Template is { Content: not null } template
+            ? _shell.Languages.LanguageIdOf(Path.Combine(Folder, template.FileName(_name.Trim().Length > 0 ? _name.Trim() : template.DefaultName)))
+            : null;
+
+    /// <summary>The editor's services and font, for the preview's colors (M34h).</summary>
+    public Editor.IEditorServices Services => _shell;
+
+    public Infrastructure.EditorFont Font => _shell.EditorFont;
+
     /// <summary>What the item will be: a built-in template's content, or what <c>dotnet new</c> will be asked to do.</summary>
     public string Preview
     {
