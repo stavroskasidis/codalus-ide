@@ -212,8 +212,8 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         get => _agentIndex;
         set
         {
-            value = Math.Clamp(value, 0, _agentNames.Count);
-            if (value == _agentIndex)
+            // -1 is the picker clearing its selection while its items are replaced, not a choice.
+            if (value < 0 || value > _agentNames.Count || value == _agentIndex)
             {
                 return;
             }
