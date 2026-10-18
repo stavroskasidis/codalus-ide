@@ -160,10 +160,12 @@ public sealed class AcpShellTests
         await ShellFixture.PumpUntil(() => !turn.IsStreaming, 30);
         Assert.StartsWith("Run failed: The user didn't allow the command.", turn.Answer, StringComparison.Ordinal);
 
-        // A permission: Allow Once, Reject and Always Reject, never always allow; Enter rejects.
+        // A permission: Allow Once, Reject and Always Reject, never always allow; Enter rejects. macOS puts them in
+        // the reverse order (the primary last).
         turn = await AskAsync(f, "permission");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
-        Assert.Equal(["Allow Once", "Reject", "Always Reject"], f.Shell.Dialogs.Buttons.Select(b => b.Label));
+        string[] options = ["Allow Once", "Reject", "Always Reject"];
+        Assert.Equal(f.Shell.Dialogs.PrimaryLast ? options.AsEnumerable().Reverse() : options, f.Shell.Dialogs.Buttons.Select(b => b.Label));
         Assert.Equal("Reject", f.Shell.Dialogs.Buttons.Single(b => b.IsDefault).Label);
         Assert.Equal("shield", f.Shell.Dialogs.Icon);
         Assert.Contains(f.Shell.Dialogs.Details, d => d.Text == "+ new line" && d.IsAdded);
