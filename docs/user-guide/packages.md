@@ -13,6 +13,8 @@ Open it for a project with **Manage NuGet Packages…** (the project's or its De
 | **Updates** | Packages with a newer version. Tick the ones to update and click **Update**. |
 | **Consolidate** | (Solution only) Packages used at different versions in different projects. |
 
+Each package in the list shows its version as a badge: the installed version with a check (green), then an available update in the accent color (**↑ 1.1.0**); a package you haven't installed shows its latest version. **prerelease**, **deprecated** and **vulnerable** badges sit under the version.
+
 The **details** pane on the right shows the selected package:
 - the version picker (the installed, latest, deprecated and vulnerable versions are marked, and for a project the versions that don't support its target frameworks, from the package's dependency groups; the details open on the newest version that does)
 - **Install**, **Update** and **Uninstall** (at solution level, tick the projects first)

@@ -45,7 +45,8 @@ public partial class IconColorTests
         var views = Directory.EnumerateFiles(Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell"), "*.axaml", SearchOption.AllDirectories);
         var missing = views
             .SelectMany(v => ViewIcon().Matches(File.ReadAllText(v)).Select(m => (View: Path.GetFileName(v), Kind: m.Groups[1].Value)))
-            .Where(i => !i.Kind.Contains('@', StringComparison.Ordinal) && CommandIcons.DefaultColorOf(i.Kind) is not null && !CommandIcons.HasColor(i.Kind))
+            .Where(i => !i.Kind.Contains('@', StringComparison.Ordinal) && !i.Kind.StartsWith(IconSet.ClassicPrefix, StringComparison.Ordinal) && !i.Kind.StartsWith(IconSet.MaterialPrefix, StringComparison.Ordinal)
+                        && CommandIcons.DefaultColorOf(i.Kind) is not null && !CommandIcons.HasColor(i.Kind)) // file icons take the palette by their fills
             .Select(i => $"{i.View}: {i.Kind}")
             .Distinct()
             .ToList();

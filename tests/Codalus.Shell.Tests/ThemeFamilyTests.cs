@@ -497,9 +497,10 @@ public partial class ThemeFamilyTests
         Assert.Equal(5, cards.Count);
         var harbor = cards.Single(c => Avalonia.Automation.AutomationProperties.GetName(c) == "Harbor");
         Assert.True(harbor.IsChecked);
-        var picture = harbor.GetVisualDescendants().OfType<Border>().First(b => b.Width == 178);
+        // The picture is the shell's chrome at half size (M34h): the window's color, the title bar's.
+        var picture = harbor.GetVisualDescendants().OfType<Border>().First(b => b.Width == 356);
         Assert.Equal(Color.Parse("#D5DDEF"), ((ISolidColorBrush)picture.Background!).Color);
-        var title = picture.GetVisualDescendants().OfType<Border>().First(b => b.Height == 12);
+        var title = picture.GetVisualDescendants().OfType<Border>().First(b => b.Height == 24);
         Assert.Equal(Color.Parse("#1B2645"), ((ISolidColorBrush)title.Background!).Color);
         if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
         {

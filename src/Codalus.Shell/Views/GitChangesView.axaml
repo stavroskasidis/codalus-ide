@@ -177,20 +177,20 @@
           </ComboBox.ItemTemplate>
         </ComboBox>
 
-        <!-- The branch, and fetch, pull, push, sync and more. -->
+        <!-- The branch, and fetch, pull, push, sync and more: Git's commands in the Git family's color, as in the menus (M34h). -->
         <DockPanel>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="4,0,0,0">
             <Button Classes="toolbar" Tag="git.fetch" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.fetch}" AutomationProperties.Name="{l:T gitChanges.fetch}">
-              <controls:Icon Kind="arrow-down" />
+              <controls:Icon Kind="arrow-down" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" Tag="git.pull" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.pull}" AutomationProperties.Name="{l:T gitChanges.pull}">
-              <controls:Icon Kind="download" />
+              <controls:Icon Kind="download" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" Tag="git.push" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.push}" AutomationProperties.Name="{l:T gitChanges.push}">
-              <controls:Icon Kind="upload" />
+              <controls:Icon Kind="upload" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" Tag="git.sync" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.syncPullThenPush}" AutomationProperties.Name="{l:T gitChanges.sync}">
-              <controls:Icon Kind="sync" />
+              <controls:Icon Kind="sync" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.moreActions}" AutomationProperties.Name="{l:T gitChanges.moreActions}">
               <controls:Icon Kind="more" />

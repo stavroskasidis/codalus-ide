@@ -270,7 +270,7 @@ The tokens are those of [`ui-guidelines.md`](../ui-guidelines.md#tokens). Tokens
 
 The first step of the first-run setup (M46, built as `SetupWindow`; the smoke step `shell.setup` photographs it as the website's `setup.png`):
 
-- **The four families as cards:** each card has a small picture of the family's layout in the chosen mode and a line about it.
+- **The four families as cards:** each card has a small picture of the family's layout in the chosen mode and a line about it. Since M34h the picture is the shell's own chrome in miniature (`ThemePictureView`, shared with Options' cards), drawn with the variant's real resources and syntax colors, not the mockup's drawing: the maintainer asked for the actual look.
 - **A mode picker:** Light, Dark, High contrast or Match system. Match system is the default and follows the OS's light, dark and high-contrast settings, as Follow System does today.
 - **Live preview:** the setup window repaints in the chosen family and mode as the user clicks ([Ember, Dark](shell-themes/previews/setup-appearance-ember-dark.png)). The IDE behind it does too, through the theme picker's preview (`ThemeService.Preview`).
 - **The steps:** Appearance, Keyboard, Your settings, Tools. Skip setup keeps the defaults; Help → Set Up Codalus IDE runs it again.

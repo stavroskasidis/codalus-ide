@@ -650,7 +650,8 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
 /// <summary>The frame and the adorners over it, and the pointer and keyboard gestures (frame coordinates: one unit a pixel of the form).</summary>
 public sealed class DesignerSurface : Control
 {
-    private const double Handle = 6;
+    /// <summary>A grab handle's side in device pixels at 100 % (odd, so it centers on the frame's line).</summary>
+    private const int Handle = 7;
     private const double Glyph = 12;
     private readonly WinFormsDesignerDocument _document;
     private readonly WinFormsDesignerView _view;
@@ -732,8 +733,9 @@ public sealed class DesignerSurface : Control
         // The adorners in the theme's tokens (M34g: the handles were white and the rubber band DodgerBlue in every theme).
         var accent = Token("Shell.Accent") ?? Token("Shell.Focus") ?? Brushes.Gray;
         var handleFill = Token("Shell.Panel") ?? Brushes.Transparent;
-        var thin = new Pen(accent, 1, new DashStyle([2, 2], 0));
-        var solid = new Pen(accent, 1);
+        var stroke = Pixel * Math.Max(1, Math.Round(Scaling));
+        var thin = new Pen(accent, stroke, new DashStyle([2, 2], 0));
+        var solid = new Pen(accent, stroke);
         if (_document.IsTabOrderMode)
         {
             RenderTabOrder(context, accent);
@@ -762,18 +764,32 @@ public sealed class DesignerSurface : Control
                 rect = Rect(_snap?.Bounds ?? Resized(WinFormsDesignerDocument.Bounds(view)));
             }
 
-            context.DrawRectangle(null, name == _document.PrimarySelection ? solid : thin, rect.Inflate(1));
+            // M34h: a designer's selection: a thin accent frame on the device pixels just outside the control's bounds and
+            // grab handles centered on its corners and edges (the frame and the handles straddled pixels, drawn blurred
+            // two pixels wide, and the handles centered on the control's edges, a pixel inside the frame).
+            // Filled, not stroked: a filled rectangle on pixel edges covers its pixels fully, in the accent itself.
+            var outline = Frame(rect);
+            if (name == _document.PrimarySelection)
+            {
+                FillOutline(context, outline, stroke, accent);
+            }
+            else
+            {
+                context.DrawRectangle(null, thin, outline.Deflate(stroke / 2));
+            }
+
             if (name == _document.PrimarySelection && !view.IsItem)
             {
                 foreach (var handle in Handles(rect))
                 {
-                    context.DrawRectangle(handleFill, solid, handle);
+                    context.FillRectangle(accent, handle);
+                    context.FillRectangle(handleFill, handle.Deflate(stroke));
                 }
 
                 RenderLayoutAdorners(context, view, rect, thin, accent);
                 if (view.HasActions && _mode == Mode.None)
                 {
-                    RenderGlyph(context, GlyphRect(rect), solid, accent);
+                    RenderGlyph(context, GlyphRect(rect), solid, accent, handleFill);
                 }
             }
         }
@@ -799,6 +815,42 @@ public sealed class DesignerSurface : Control
 
     private IBrush? Token(string key) => this.TryFindResource(key, ActualThemeVariant, out var found) ? found as IBrush : null;
 
+    /// <summary>A rectangle's outline <paramref name="stroke"/> wide inside it, as four filled bars.</summary>
+    private static void FillOutline(DrawingContext context, Rect outline, double stroke, IBrush brush)
+    {
+        context.FillRectangle(brush, new Rect(outline.X, outline.Y, outline.Width, stroke));
+        context.FillRectangle(brush, new Rect(outline.X, outline.Bottom - stroke, outline.Width, stroke));
+        context.FillRectangle(brush, new Rect(outline.X, outline.Y + stroke, stroke, Math.Max(0, outline.Height - (2 * stroke))));
+        context.FillRectangle(brush, new Rect(outline.Right - stroke, outline.Y + stroke, stroke, Math.Max(0, outline.Height - (2 * stroke))));
+    }
+
+    /// <summary>The window's scale (device pixels per unit).</summary>
+    private double Scaling => TopLevel.GetTopLevel(this)?.RenderScaling is { } scaling and > 0 ? scaling : 1;
+
+    /// <summary>One device pixel, in units.</summary>
+    private double Pixel => 1 / Scaling;
+
+    /// <summary>Where the surface is in its window: device pixels count from the window's corner.</summary>
+    private Point Origin => TopLevel.GetTopLevel(this) is { } top && this.TranslatePoint(default, top) is { } at ? at : default;
+
+    /// <summary><paramref name="value"/> (along an axis on which the surface starts at <paramref name="origin"/>) on the nearest device pixel's edge.</summary>
+    private double Snap(double value, double origin) => (Math.Round((value + origin) * Scaling) / Scaling) - origin;
+
+    /// <summary>
+    /// The selection frame around <paramref name="rect"/>: its outer edge, one line's width outside the control's bounds
+    /// snapped to device pixels, so the line covers whole pixels and none of the control's.
+    /// </summary>
+    internal Rect Frame(Rect rect)
+    {
+        var line = Pixel * Math.Max(1, Math.Round(Scaling));
+        var origin = Origin;
+        var left = Snap(rect.Left, origin.X) - line;
+        var top = Snap(rect.Top, origin.Y) - line;
+        var right = Snap(rect.Right, origin.X) + line;
+        var bottom = Snap(rect.Bottom, origin.Y) + line;
+        return new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+    }
+
     /// <summary>Tab order mode: each control's tab index (after its containers', <c>2.1</c>) in a box at its top left, as Visual Studio shows them.</summary>
     private void RenderTabOrder(DrawingContext context, IBrush accent)
     {
@@ -810,7 +862,7 @@ public sealed class DesignerSurface : Control
                 continue;
             }
 
-            var text = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 11, Brushes.White);
+            var text = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 11, Resource("Shell.AccentForeground", Brushes.White));
             var box = new Rect(view.X, view.Y, text.Width + 6, text.Height + 2);
             context.FillRectangle(accent, box);
             context.DrawText(text, new Point(box.X + 3, box.Y + 1));
@@ -858,9 +910,9 @@ public sealed class DesignerSurface : Control
     private static Rect GlyphRect(Rect rect) => new(rect.Right + 4, rect.Top - 2, Glyph, Glyph);
 
     /// <summary>The smart tag's glyph: a small box with an arrow, at the selected component's top right.</summary>
-    private static void RenderGlyph(DrawingContext context, Rect glyph, Pen pen, IBrush accent)
+    private static void RenderGlyph(DrawingContext context, Rect glyph, Pen pen, IBrush accent, IBrush fill)
     {
-        context.DrawRectangle(Brushes.White, pen, glyph);
+        context.DrawRectangle(fill, pen, glyph);
         var geometry = new StreamGeometry();
         using (var g = geometry.Open())
         {
@@ -909,7 +961,7 @@ public sealed class DesignerSurface : Control
                 var rect = Rect(row.Bounds);
                 if (_document.Selection.Contains(row.Item))
                 {
-                    context.DrawRectangle(new SolidColorBrush(Colors.DodgerBlue, 0.15), solid, rect.Deflate(1));
+                    context.DrawRectangle(Resource("Shell.Accent", Brushes.DodgerBlue) is ISolidColorBrush accent ? new SolidColorBrush(accent.Color, 0.15) : null, solid, rect.Deflate(1));
                 }
 
                 if (row.IsSeparator)
@@ -932,13 +984,20 @@ public sealed class DesignerSurface : Control
 
     private static Rect Rect(DesignerRect r) => new(r.X, r.Y, r.Width, r.Height);
 
-    /// <summary>The eight grab handles: corners and edge middles, clockwise from the top left.</summary>
-    private static Rect[] Handles(Rect rect)
+    /// <summary>
+    /// The eight grab handles: corners and edge middles of the selection frame, clockwise from the top left, each a
+    /// square of whole device pixels centered on the frame's line.
+    /// </summary>
+    internal Rect[] Handles(Rect rect)
     {
-        double[] xs = [rect.Left, rect.Center.X, rect.Right];
-        double[] ys = [rect.Top, rect.Center.Y, rect.Bottom];
+        var frame = Frame(rect);
+        var line = Pixel * Math.Max(1, Math.Round(Scaling));
+        var size = ((Math.Floor(Handle * Scaling / 2) * 2) + 1) * Pixel; // odd in device pixels
+        var origin = Origin;
+        double[] xs = [frame.Left + (line / 2), Snap(frame.Center.X - (line / 2), origin.X) + (line / 2), frame.Right - (line / 2)];
+        double[] ys = [frame.Top + (line / 2), Snap(frame.Center.Y - (line / 2), origin.Y) + (line / 2), frame.Bottom - (line / 2)];
         (int X, int Y)[] at = [(0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2), (0, 1)];
-        return [.. at.Select(p => new Rect(xs[p.X] - (Handle / 2), ys[p.Y] - (Handle / 2), Handle, Handle))];
+        return [.. at.Select(p => new Rect(xs[p.X] - (size / 2), ys[p.Y] - (size / 2), size, size))];
     }
 
     private DesignerRect Resized(DesignerRect start)

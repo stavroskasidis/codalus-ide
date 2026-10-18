@@ -180,7 +180,7 @@ public static class ExternalToolRunner
         {
             if (e.Data is not null)
             {
-                channel.AppendLine(e.Data);
+                channel.AppendErrorLine(e.Data); // in the error color (M34h)
             }
         };
         process.BeginOutputReadLine();

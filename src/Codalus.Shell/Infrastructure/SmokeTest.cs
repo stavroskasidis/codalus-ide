@@ -268,7 +268,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }).ConfigureAwait(true);
 
         // M34d: the UI gallery's empty states, before a solution opens.
-        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
+        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Classic's four themes and Harbor's three (M34h)", GalleryEmptyStepAsync).ConfigureAwait(true);
 
         // M2: project system (build host, MSBuild evaluation, Solution Explorer).
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>
@@ -797,7 +797,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, "testing.run").ConfigureAwait(true);
 
         // M34d: the UI gallery with data (the Testing solution after its runs), the documents, the chrome and the error states.
-        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, the error states, Code Search's results, the color theme cards and the WCF references page (M34g), in every theme", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
+        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, the error states, Code Search's results, the color theme cards and the WCF references page (M34g), in Classic's four themes and Harbor's three (M34h)", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
 
         // M9: NuGet packages, on a copy of samples/Packages and its local feed (ADR 0012).
         await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>
@@ -2361,7 +2361,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(button is not null && shell.Toolbox.IsAvailable, "the Toolbox has the Button");
         shell.Toolbox.Armed = button;
         var root = designer.Root!;
-        await designer.CreateAsync(button!.Type, root.ClientX + 290, root.ClientY + 300).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        // On the form's free space left of the counter (M34h: dropped at 290, 300 it landed on the counter control and the
+        // gallery showed its selection around nothing, beside the counter's own button).
+        await designer.CreateAsync(button!.Type, root.ClientX + 48, root.ClientY + 300).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
         Check(code.Text.Text.Contains("button1 = new Button();", StringComparison.Ordinal) && code.Text.Text.Contains("Controls.Add(button1);", StringComparison.Ordinal),
             "the new button is in OrderForm.Designer.cs: " + designer.Status);
 
