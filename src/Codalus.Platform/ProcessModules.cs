@@ -8,17 +8,20 @@ namespace Codalus.Platform;
 /// them (M43b, ADR 0076).
 /// </summary>
 /// <remarks>
-/// On Windows this isn't <see cref="System.Diagnostics.Process.Modules"/>: that reads each module's information, base
-/// name and path, each by walking the process's loader list again, and silently leaves out a module whose read fails
-/// while the process loads or unloads a module (ERROR_PARTIAL_COPY), so a snapshot taken at the wrong moment can lack
-/// <c>clr.dll</c>; on a process that can't be read it retries 50 times a millisecond apart, a second or so per process
-/// on a loaded machine. Here each module costs one read, a snapshot with a failed read is taken again (a few times, a
-/// few milliseconds apart), and a process that has exited isn't retried.
+/// On Windows this isn't <see cref="System.Diagnostics.Process.Modules"/>, nor <c>GetModuleBaseNameW</c> a module: each
+/// of those walks the process's loader list again, through another process's memory, to find the module (three walks a
+/// module for <see cref="System.Diagnostics.Process.Modules"/>), so a process's list costs a walk times its modules, and
+/// Attach to Process reads every process: on a loaded four-core CI runner that took more than a minute. Here the loader
+/// list is walked once (<c>EnumProcessModulesEx</c>), and each module's file name is the name of the file mapped at its
+/// address, which the kernel looks up in the process's address map (<c>GetMappedFileNameW</c>) without reading the
+/// process's memory. That works the same for a WOW64 process's 32-bit modules, and a module unloaded meanwhile is just
+/// left out: it isn't loaded any more. Only a list that can't be walked (a process that isn't initialized yet, or is
+/// loading or unloading a module that moment) is walked again, a few times; a process that has exited isn't.
 /// </remarks>
 public static partial class ProcessModules
 {
-    /// <summary>How many times a Windows snapshot is taken when the process's module list changes while it's read.</summary>
-    internal const int Attempts = 8;
+    /// <summary>How many times a Windows process's module list is walked when the walk fails.</summary>
+    internal const int Attempts = 4;
 
     /// <summary>
     /// The file names (<c>clr.dll</c>, <c>libcoreclr.so</c>) of the modules process <paramref name="processId"/> has
@@ -84,7 +87,6 @@ public static partial class ProcessModules
 
         try
         {
-            List<string>? partial = null;
             for (var attempt = 0; attempt < Attempts; attempt++)
             {
                 if (attempt > 0)
@@ -94,20 +96,16 @@ public static partial class ProcessModules
                         return null;
                     }
 
-                    Thread.Sleep(Math.Min(1 << (attempt - 1), 8));
+                    Thread.Sleep(attempt - 1); // a yield, then a timer tick or two: no long waits on a process that can't be read
                 }
 
-                var (names, complete) = Snapshot(process);
-                if (complete)
+                if (Handles(process) is { } handles)
                 {
-                    return names;
+                    return MappedNames(process, handles);
                 }
-
-                partial = names ?? partial;
             }
 
-            // Still changing: what was read is better than nothing.
-            return partial;
+            return null; // no list to read: not initialized, or a process without one (System, Registry)
         }
         finally
         {
@@ -115,54 +113,67 @@ public static partial class ProcessModules
         }
     }
 
-    /// <summary>
-    /// One snapshot of the process's modules. Not complete when the list can't be read (a process that isn't initialized
-    /// yet, or ended) or a module's name can't be (it was being loaded or unloaded): the caller takes it again.
-    /// </summary>
-    private static unsafe (List<string>? Names, bool Complete) Snapshot(IntPtr process)
+    /// <summary>The process's module handles (their base addresses), from one walk of its loader list; null when the walk failed.</summary>
+    private static unsafe IntPtr[]? Handles(IntPtr process)
     {
         var handles = new IntPtr[256];
-        uint needed;
         while (true)
         {
+            uint needed;
             fixed (IntPtr* buffer = handles)
             {
                 if (!EnumProcessModulesEx(process, buffer, (uint)(handles.Length * IntPtr.Size), out needed, ListModulesAll))
                 {
-                    return (null, false);
+                    return null; // ERROR_PARTIAL_COPY: not initialized, or the list changed while it was walked
                 }
             }
 
-            if (needed <= handles.Length * IntPtr.Size)
+            var count = (int)(needed / IntPtr.Size);
+            if (count <= handles.Length)
             {
-                break;
+                return handles[..count];
             }
 
-            handles = new IntPtr[(needed / IntPtr.Size) + 16]; // too small (or it grew meanwhile): room for the list and a few more
+            handles = new IntPtr[count + 16]; // too small (or it grew meanwhile): room for the list and a few more
         }
+    }
 
-        var count = (int)(needed / IntPtr.Size);
-        var names = new List<string>(count);
+    /// <summary>The file names of the images mapped at <paramref name="handles"/>, each once; a module unloaded meanwhile is left out.</summary>
+    private static unsafe List<string> MappedNames(IntPtr process, IntPtr[] handles)
+    {
+        var names = new List<string>(handles.Length);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var complete = true;
-        var name = stackalloc char[MaxPath];
-        for (var i = 0; i < count; i++)
+        var path = System.Buffers.ArrayPool<char>.Shared.Rent(MappedPathLength);
+        try
         {
-            var length = GetModuleBaseNameW(process, handles[i], name, MaxPath);
-            if (length == 0)
+            fixed (char* buffer = path)
             {
-                complete = false; // unloaded or still loading (ERROR_PARTIAL_COPY, ERROR_INVALID_HANDLE)
-                continue;
-            }
-
-            var text = new string(name, 0, (int)length);
-            if (seen.Add(text))
-            {
-                names.Add(text);
+                foreach (var handle in handles)
+                {
+                    var length = (int)GetMappedFileNameW(process, handle, buffer, MappedPathLength);
+                    if (FileName(path.AsSpan(0, Math.Min(length, MappedPathLength))) is { } name && seen.Add(name))
+                    {
+                        names.Add(name);
+                    }
+                }
             }
         }
+        finally
+        {
+            System.Buffers.ArrayPool<char>.Shared.Return(path);
+        }
 
-        return (names, complete);
+        return names;
+    }
+
+    /// <summary>
+    /// The file name in a mapped file's NT path (<c>\Device\HarddiskVolume3\Windows\System32\ntdll.dll</c>); null for
+    /// an empty path (the address has nothing mapped any more).
+    /// </summary>
+    internal static string? FileName(ReadOnlySpan<char> mappedPath)
+    {
+        var name = mappedPath[(mappedPath.LastIndexOf('\\') + 1)..];
+        return name.IsEmpty ? null : name.ToString();
     }
 
     private static bool HasExited(IntPtr process) => GetExitCodeProcess(process, out var code) && code != StillActive;
@@ -175,7 +186,8 @@ public static partial class ProcessModules
 
     private const uint StillActive = 259;
 
-    private const int MaxPath = 260;
+    /// <summary>The longest NT path a mapped file can have (a UNICODE_STRING's), in characters.</summary>
+    private const int MappedPathLength = 32767;
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     private static partial IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
@@ -184,8 +196,8 @@ public static partial class ProcessModules
     [return: MarshalAs(UnmanagedType.Bool)]
     private static unsafe partial bool EnumProcessModulesEx(IntPtr process, IntPtr* modules, uint size, out uint needed, uint filter);
 
-    [LibraryImport("kernel32.dll", EntryPoint = "K32GetModuleBaseNameW", SetLastError = true)]
-    private static unsafe partial uint GetModuleBaseNameW(IntPtr process, IntPtr module, char* name, uint size);
+    [LibraryImport("kernel32.dll", EntryPoint = "K32GetMappedFileNameW", SetLastError = true)]
+    private static unsafe partial uint GetMappedFileNameW(IntPtr process, IntPtr address, char* name, uint size);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

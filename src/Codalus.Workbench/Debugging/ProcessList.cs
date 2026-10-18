@@ -16,13 +16,21 @@ public sealed record ProcessEntry(int Id, string Name, string? Title, bool IsDot
 }
 
 /// <summary>Lists processes for Attach to Process, with the ones that run .NET (or .NET Framework, on Windows) first (best effort, per OS).</summary>
+/// <remarks>
+/// Each process costs one read of its modules (<see cref="Codalus.Platform.ProcessModules"/>: one walk of its loader
+/// list on Windows) and the windows' titles are read once for all processes (<see cref="Codalus.Platform.ProcessWindows"/>).
+/// Through <see cref="Process.Modules"/> and <see cref="Process.MainWindowTitle"/> the list took more than a minute on a
+/// loaded CI runner. A process that ends while the list is read is still listed (from the processes' snapshot), not as .NET.
+/// </remarks>
 public static class ProcessList
 {
     public static IReadOnlyList<ProcessEntry> Get()
     {
         var result = new List<ProcessEntry>();
         var self = Environment.ProcessId;
-        foreach (var process in Process.GetProcesses())
+        var processes = Process.GetProcesses();
+        var titles = Codalus.Platform.ProcessWindows.MainWindowTitles();
+        foreach (var process in processes)
         {
             using (process)
             {
@@ -32,14 +40,9 @@ public static class ProcessList
                 }
 
                 string name;
-                string? title = null;
                 try
                 {
                     name = process.ProcessName;
-                    if (OperatingSystem.IsWindows())
-                    {
-                        title = process.MainWindowTitle is { Length: > 0 } t ? t : null;
-                    }
                 }
                 catch (InvalidOperationException)
                 {
@@ -48,6 +51,7 @@ public static class ProcessList
 
                 // One snapshot of its modules decides both: .NET and .NET Framework can't disagree.
                 var (dotnet, desktop) = Classify(name, Codalus.Platform.ProcessModules.Names(process.Id), OperatingSystem.IsWindows());
+                var title = titles.TryGetValue(process.Id, out var t) && t.Length > 0 ? t : null;
                 result.Add(new ProcessEntry(process.Id, name, title, dotnet, desktop));
             }
         }
