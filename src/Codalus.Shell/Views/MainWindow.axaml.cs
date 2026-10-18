@@ -531,6 +531,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         var view = pane?.Dockable switch
         {
             ToolWindowDockable tool => tool.Id,
+            ViewModels.SolutionManagementDocument { Id: "wcfTestClient" } => "wcfTestClient", // F5 invokes there (M34h)
             ShellDocument document => document.Kind,
             _ => null,
         };

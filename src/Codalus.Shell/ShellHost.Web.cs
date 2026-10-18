@@ -37,7 +37,14 @@ public sealed partial class ShellHost
             ct => Languages.RunningClient(CSharpLanguageId) is { } client ? client.AspNetEndpointsAsync(null, ct) : Task.FromResult<AspNetEndpointsResult?>(null),
             OpenLocationWithHistoryAsync,
             GenerateRequestAsync);
-        HttpResponse = new HttpResponseViewModel(Http, EditorFont, this);
+        HttpResponse = new HttpResponseViewModel(Http, EditorFont, this)
+        {
+            // M34h: Send Again, the link to the request, and saving or opening the body.
+            SendAgain = exchange => SendHttpRequestAsync(exchange.File, OpenTextOf(exchange.File) ?? (File.Exists(exchange.File) ? File.ReadAllText(exchange.File) : string.Empty), exchange.Line),
+            OpenRequest = (file, line) => OpenFileAsync(file, preview: false, new LanguageServices.Protocol.Position(Math.Max(0, line - 1), 0)),
+            SaveBody = SaveHttpBodyAsync,
+            OpenBody = OpenHttpBodyAsync,
+        };
         _endpointsRefresh = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _endpointsRefresh.Tick += (_, _) =>
         {
@@ -174,6 +181,27 @@ public sealed partial class ShellHost
     }
 
     Task IEditorServices.SendHttpRequestAsync(string path, string text, int line) => SendHttpRequestAsync(path, text, line);
+
+    /// <summary>Save Response Body…: the body to a file the user picks.</summary>
+    private async Task SaveHttpBodyAsync(string name, string text)
+    {
+        if (Window is null || await Window.SaveFileAsync(Localizer.Get("msg.web.saveResponseBody", "Save Response Body"), name, Localizer.Get("msg.web.allFiles", "All files"), ["*"]).ConfigureAwait(true) is not { } path)
+        {
+            return;
+        }
+
+        await File.WriteAllTextAsync(path, text).ConfigureAwait(true);
+    }
+
+    /// <summary>Open in Editor: the body as a file of its own in the temporary folder, opened as a document.</summary>
+    private async Task OpenHttpBodyAsync(string name, string text)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "codalus-http", Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, name);
+        await File.WriteAllTextAsync(path, text).ConfigureAwait(true);
+        await OpenFileAsync(path, preview: false).ConfigureAwait(true);
+    }
 
     /// <summary>Ctrl+Alt+R in a .http file: sends the request at the caret.</summary>
     public Task SendHttpRequestAtCaretAsync()

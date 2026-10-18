@@ -43,9 +43,11 @@ internal sealed partial class SmokeTest
                 if (client.Operations.Any(o => o.Name == "Greet"))
                 {
                     client.Select("Greet");
+                    FillGreet(client); // M34h: the design's form, a list with two items
                 }
 
                 await GalleryDocumentAsync("wcf-test-client", "form", document).ConfigureAwait(true);
+                await GalleryWcfMockedAsync(client, wsdl, document).ConfigureAwait(true);
             }
         }
         finally
@@ -123,6 +125,137 @@ internal sealed partial class SmokeTest
             {
                 shell.Layout.CloseDocument(document);
             }
+        }
+    }
+
+    /// <summary>
+    /// M34h: what Find Results and the HTTP Response show in the gallery, as their designs do: two Find Results pages (the
+    /// first kept) with the Testing solution's matches grouped by path and file, one selected; and a history of requests
+    /// from a .http file to a loopback mock (a JSON list, a created item, a 404, a refused connection).
+    /// </summary>
+    private async Task GallerySampleResultsAsync()
+    {
+        var find = shell.FindReplace;
+        var results = shell.FindResults;
+        try
+        {
+            find.MatchCase = true;
+            find.WholeWord = true;
+            find.LookIn = FindScopes.EntireSolution;
+            find.FileTypes = @"*.cs;!*\bin\*;!*\obj\*";
+            find.Query = "Divide";
+            await find.FindAllAsync().ConfigureAwait(true);
+            results.CurrentPage.KeepResults = true;
+            find.Query = "Calculator";
+            await find.FindAllAsync().ConfigureAwait(true);
+            var page = results.CurrentPage;
+            page.FilesGroupBy = FindResultsGrouping.PathAndFile;
+            page.SelectedRow = page.Rows.Where(r => !r.IsHeader).Skip(2).FirstOrDefault();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        {
+            shell.Workbench.Log.AppendLine($"[smoke] gallery: Find Results' sample search failed: {ex.Message}");
+        }
+        finally
+        {
+            find.Close();
+        }
+
+        const string Todos = """[{"id":1,"title":"Write the fixture","done":false},{"id":2,"title":"Test the endpoints","done":false},{"id":3,"title":"From the .http file","done":false}]""";
+        await using var server = new Tests.MockHttpServer(request => request.Method == "POST"
+            ? Tests.MockHttpResponse.Json("""{"id":4,"title":"From the .http file","done":false}""", 201)
+            : request.Path.EndsWith("/42", StringComparison.Ordinal) ? Tests.MockHttpResponse.NotFound() : Tests.MockHttpResponse.Json(Todos));
+        var file = Path.Combine(Work, "Http", "WebApi.http");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        var text = $"""
+            @host = {server.BaseUrl}
+
+            GET http://127.0.0.1:1/ping
+
+            ###
+            GET {"{{host}}"}/api/todos/42
+
+            ###
+            # @name create
+            POST {"{{host}}"}/api/todos/
+            Content-Type: application/json
+
+            {"{"}"title": "From the .http file"{"}"}
+
+            ###
+            GET {"{{host}}"}/api/todos/
+            Accept: application/json
+
+            """;
+        await File.WriteAllTextAsync(file, text).ConfigureAwait(true);
+        shell.Http.ClearHistory();
+        var lines = text.Split('\n');
+        foreach (var request in new[] { "GET http://127.0.0.1:1/ping", "GET {{host}}/api/todos/42", "POST {{host}}/api/todos/", "GET {{host}}/api/todos/" })
+        {
+            var line = Array.FindIndex(lines, l => l.TrimEnd('\r') == request) + 1;
+            if (line > 0)
+            {
+                await shell.SendHttpRequestAsync(file, text, line).ConfigureAwait(true);
+            }
+        }
+
+        await SoftWaitAsync(() => shell.HttpResponse.History.Count >= 4, 30).ConfigureAwait(true);
+        shell.HttpResponse.Selected = shell.HttpResponse.History.FirstOrDefault();
+    }
+
+    /// <summary>Greet's form as the design shows it: Ada, 36, Happy, and the tags math and engines.</summary>
+    private static void FillGreet(WcfTestClientViewModel client)
+    {
+        if (client.Row("person.Name") is not { } name)
+        {
+            return;
+        }
+
+        name.Value = "Ada";
+        client.Row("person.Age")!.Value = "36";
+        client.Row("person.Mood")!.Value = "Happy";
+        if (client.Row("person.Tags.string") is { CanAdd: true } tags)
+        {
+            tags.AddCommand.Execute(null);
+            client.Rows[^1].Value = "math";
+            tags = client.Row("person.Tags.string")!;
+            tags.AddCommand.Execute(null);
+            client.Rows[^1].Value = "engines";
+        }
+    }
+
+    /// <summary>
+    /// M34h: the test client's response and fault without a running service (shell.galleryEmpty), from a loopback mock
+    /// that serves the samples' WSDL and answers as CoreWCF does; <c>wcf.testClient</c> photographs the real service's.
+    /// </summary>
+    private async Task GalleryWcfMockedAsync(WcfTestClientViewModel client, string wsdl, Dock.Model.Core.IDockable? document)
+    {
+        const string Greet = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><GreetResponse xmlns="http://samples.codalus.dev/calculator"><GreetResult>Hello Ada, 36 and happy (math, engines)!</GreetResult></GreetResponse></s:Body></s:Envelope>""";
+        const string Fault = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault><faultcode>s:Client</faultcode><faultstring>Division by zero</faultstring><detail><CalculationFault xmlns="http://samples.codalus.dev/calculator" xmlns:i="http://www.w3.org/2001/XMLSchema-instance"><Operation>Divide</Operation><Problem>Division by zero</Problem></CalculationFault></detail></s:Fault></s:Body></s:Envelope>""";
+        Tests.MockHttpServer? server = null;
+        server = new Tests.MockHttpServer(request => request.Method == "GET"
+            ? Tests.MockHttpResponse.Text(File.ReadAllText(wsdl).Replace("http://localhost:5280/", server!.BaseUrl + "/", StringComparison.Ordinal), contentType: "text/xml; charset=utf-8")
+            : request.Body.Contains("<Divide", StringComparison.Ordinal)
+                ? Tests.MockHttpResponse.Text(Fault, 500, "text/xml; charset=utf-8")
+                : Tests.MockHttpResponse.Text(Greet, 200, "text/xml; charset=utf-8"));
+        await using (server.ConfigureAwait(true))
+        {
+            client.Address = server.BaseUrl + "/CalculatorService.svc?wsdl";
+            await client.LoadAsync().ConfigureAwait(true);
+            if (client.Error is not null || !client.Operations.Any(o => o.Name == "Greet"))
+            {
+                return;
+            }
+
+            client.Select("Greet", Workbench.Wcf.SoapVersion.Soap11);
+            FillGreet(client);
+            await client.SendAsync().ConfigureAwait(true);
+            await GalleryDocumentAsync("wcf-test-client", "data", document).ConfigureAwait(true);
+            client.Select("Divide", Workbench.Wcf.SoapVersion.Soap11);
+            client.Row("a")!.Value = "10";
+            client.Row("b")!.Value = "0";
+            await client.SendAsync().ConfigureAwait(true);
+            await GalleryDocumentAsync("wcf-test-client", "fault", document).ConfigureAwait(true);
         }
     }
 

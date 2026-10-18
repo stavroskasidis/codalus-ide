@@ -7,7 +7,11 @@ using Codalus.Workbench.Wcf;
 
 namespace Codalus.Shell.ViewModels;
 
-/// <summary>A row of the request form: one field of the message, indented by its depth.</summary>
+/// <summary>
+/// A row of the request form: one field of the message, indented by its depth. A list wrapper (a data contract's
+/// <c>ArrayOfstring</c>: one element whose only child repeats) is one row with its items under it (M34h, the design's
+/// typed grid: <c>Tags  string[]  2 items  +</c>); the items are named by their index.
+/// </summary>
 public sealed class SoapFieldRow : ObservableObject
 {
     private readonly Action<SoapFieldRow> _changed;
@@ -23,17 +27,37 @@ public sealed class SoapFieldRow : ObservableObject
         _remove = remove;
         AddCommand = new RelayCommand(() => _add(this));
         RemoveCommand = new RelayCommand(() => _remove?.Invoke(this));
+        ToggleCommand = new RelayCommand(() => Toggle?.Invoke(this));
     }
 
     public SoapField Field { get; }
 
+    /// <summary>The repeated element of a list wrapper shown as this one row (its items are this row's children), or null.</summary>
+    public SoapField? Items { get; init; }
+
+    /// <summary>The field items are added to: the list's repeated element, or the field itself when it repeats.</summary>
+    public SoapField ItemsField => Items ?? Field;
+
+    /// <summary>An item of a list: its index (the row is named <c>[0]</c>, <c>[1]</c>…), or -1.</summary>
+    public int Index { get; init; } = -1;
+
     public int Depth { get; }
 
-    public Thickness Indent => new(Depth * 16, 0, 0, 0);
+    public Thickness Indent => new(Depth * 18, 0, 0, 0);
 
     public string Name => Field.Name.LocalName;
 
-    public string Type => Field.TypeLabel + (Field.Optional ? "" : " *");
+    /// <summary>The name shown: the field's, or an item's index.</summary>
+    public string Label => Index >= 0 ? $"[{Index.ToString(System.Globalization.CultureInfo.InvariantCulture)}]" : Name;
+
+    /// <summary>The schema type shown: <c>int</c>, <c>Person</c>, <c>string[]</c> (a list's items' type).</summary>
+    public string Type => Items?.TypeLabel ?? Field.TypeLabel;
+
+    /// <summary>
+    /// A value is expected (the red mark after the type): the schema requires the field, or it is a simple value that
+    /// can't be nil (a data contract's <c>int</c> or enum). Not on a list's items.
+    /// </summary>
+    public bool IsRequired => Index < 0 && (!Field.Optional || (Field.Kind is SoapFieldKind.Simple or SoapFieldKind.Choice && !Field.Nillable));
 
     public bool IsText => Field.Kind == SoapFieldKind.Simple;
 
@@ -41,7 +65,26 @@ public sealed class SoapFieldRow : ObservableObject
 
     public bool IsGroup => Field.Kind is SoapFieldKind.Complex or SoapFieldKind.Repeated;
 
-    public bool CanAdd => Field.CanAddItem;
+    /// <summary>A group's summary in the Value column: <c>Person: 4 members</c>, <c>2 items</c>.</summary>
+    public string Summary => !IsGroup ? string.Empty
+        : Items is not null || Field.Kind == SoapFieldKind.Repeated
+            ? ItemsField.Children.Count == 1 ? Localizer.Get("msg.wcf.oneItem", "1 item") : Localizer.Format("msg.wcf.items", "{0} items", ItemsField.Children.Count)
+        : Field.Truncated ? Localizer.Get("msg.wcf.nestedTooDeep", "(nested too deep: edit the XML)")
+        : Field.Children.Count == 1 ? Localizer.Format("msg.wcf.oneMember", "{0}: 1 member", Type) : Localizer.Format("msg.wcf.members", "{0}: {1} members", Type, Field.Children.Count);
+
+    /// <summary>A group with something under it collapses and expands with its chevron.</summary>
+    public bool HasChevron => IsGroup && (Items ?? Field).Children.Count > 0;
+
+    public bool IsExpanded { get; init; } = true;
+
+    public string Chevron => IsExpanded ? "chevron-down" : "chevron-right";
+
+    /// <summary>Collapses or expands the group (the view model's).</summary>
+    public Action<SoapFieldRow>? Toggle { get; init; }
+
+    public ICommand ToggleCommand { get; }
+
+    public bool CanAdd => ItemsField.CanAddItem;
 
     public bool CanRemove => _remove is not null;
 
@@ -52,7 +95,12 @@ public sealed class SoapFieldRow : ObservableObject
     public string Placeholder => Field.Truncated ? Localizer.Get("msg.wcf.nestedTooDeep", "(nested too deep: edit the XML)") : Field.BuiltIn ?? string.Empty;
 
     /// <summary>The field's name and type, for its trimmed name (M34g).</summary>
-    public string ToolTip => $"{Name}: {Type}";
+    public string ToolTip => IsRequired ? $"{Label}: {Type} (required)" : $"{Label}: {Type}";
+
+    /// <summary>The value box's and the nil box's names for screen readers.</summary>
+    public string ValueName => Index >= 0 ? $"{Name} {Label}" : Label;
+
+    public string NilName => Localizer.Format("msg.wcf.sendNil", "{0}: send xsi:nil", ValueName);
 
     public string? Value
     {
@@ -87,6 +135,14 @@ public sealed class SoapFieldRow : ObservableObject
     public ICommand RemoveCommand { get; }
 }
 
+/// <summary>An operation in the test client's list, with its signature: <c>Greet(Person person) → string</c>.</summary>
+public sealed record WcfOperationRow(WsdlOperation Operation, string Signature)
+{
+    public string Name => Operation.Name;
+
+    public string Action => Operation.Action;
+}
+
 /// <summary>An endpoint in the test client's list.</summary>
 public sealed record WcfEndpointRow(WsdlEndpoint Endpoint)
 {
@@ -117,7 +173,9 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
     private string _requestXml = string.Empty;
     private bool _xmlEdited;
     private int _requestTab;
+    private int _responseView;
     private SoapResponse? _response;
+    private readonly HashSet<SoapField> _collapsed = [];
     private DiscoveredService? _discovered;
     private bool _isBusy;
     private string? _error;
@@ -179,10 +237,15 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
             if (SetField(ref _endpoint, value))
             {
                 Operations.Clear();
+                OperationRows.Clear();
                 foreach (var operation in value?.Endpoint.Operations ?? [])
                 {
                     Operations.Add(operation);
+                    OperationRows.Add(new WcfOperationRow(operation, _document is null ? operation.Name : Signature(_document, value!.Endpoint, operation)));
                 }
+
+                OnPropertyChanged(nameof(OperationCount));
+                OnPropertyChanged(nameof(HasOperations));
 
                 OnPropertyChanged(nameof(EndpointProblem));
                 OnPropertyChanged(nameof(HasEndpointProblem));
@@ -197,6 +260,16 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<WsdlOperation> Operations { get; } = [];
 
+    /// <summary>The operations with their signatures, as the list shows them (M34h).</summary>
+    public ObservableCollection<WcfOperationRow> OperationRows { get; } = [];
+
+    public int OperationCount => Operations.Count;
+
+    public bool HasOperations => Operations.Count > 0;
+
+    /// <summary>The form has fields: its column headers show.</summary>
+    public bool HasFields => Rows.Count > 0;
+
     public WsdlOperation? SelectedOperation
     {
         get => _operation;
@@ -204,10 +277,56 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         {
             if (SetField(ref _operation, value))
             {
+                OnPropertyChanged(nameof(SelectedOperationRow));
+                OnPropertyChanged(nameof(HasOperation));
+                OnPropertyChanged(nameof(OperationName));
+                OnPropertyChanged(nameof(OperationAction));
                 BuildRequest();
             }
         }
     }
+
+    public WcfOperationRow? SelectedOperationRow
+    {
+        get => OperationRows.FirstOrDefault(r => ReferenceEquals(r.Operation, _operation));
+        set => SelectedOperation = value?.Operation;
+    }
+
+    public bool HasOperation => _operation is not null;
+
+    public string OperationName => _operation?.Name ?? string.Empty;
+
+    public string OperationAction => _operation?.Action ?? string.Empty;
+
+    /// <summary>
+    /// An operation as C# would declare it: <c>Greet(Person person) → string</c>, a list as its items' type
+    /// (<c>Person[]</c>), <c>void</c> for one-way operations and empty responses.
+    /// </summary>
+    public static string Signature(WsdlDocument document, WsdlEndpoint endpoint, WsdlOperation operation)
+    {
+        try
+        {
+            var parameters = new SoapRequest(document, endpoint, operation).Parameters;
+            var result = operation.Output is { } output ? new SoapRequest(document, endpoint, operation with { Input = output }).Parameters : [];
+            var returns = result.Count switch
+            {
+                0 => "void",
+                1 => TypeOf(result[0]),
+                _ => "(" + string.Join(", ", result.Select(TypeOf)) + ")",
+            };
+            return $"{operation.Name}({string.Join(", ", parameters.Select(p => $"{TypeOf(p)} {p.Name.LocalName}"))}) → {returns}";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException or ArgumentException)
+        {
+            return operation.Name;
+        }
+
+        static string TypeOf(SoapField field) => ListItems(field)?.TypeLabel ?? field.TypeLabel;
+    }
+
+    /// <summary>The repeated element of a list wrapper (a complex element whose only child repeats), or null.</summary>
+    public static SoapField? ListItems(SoapField field) =>
+        field is { Kind: SoapFieldKind.Complex, Truncated: false, Children: [{ Kind: SoapFieldKind.Repeated } items] } ? items : null;
 
     public SoapRequest? Request => _request;
 
@@ -231,15 +350,38 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>0: the response as a tree; 1: its XML (the Tree or XML segmented control, M34h).</summary>
+    public int ResponseView
+    {
+        get => _responseView;
+        set
+        {
+            if (SetField(ref _responseView, value == 1 ? 1 : 0))
+            {
+                OnPropertyChanged(nameof(IsResponseTree));
+                OnPropertyChanged(nameof(IsResponseXml));
+            }
+        }
+    }
+
+    public bool IsResponseTree => _responseView == 0;
+
+    public bool IsResponseXml => _responseView == 1;
+
     /// <summary>0: the form; 1: the XML. The XML follows the form until it is edited.</summary>
     public int RequestTab
     {
         get => _requestTab;
         set
         {
-            if (SetField(ref _requestTab, value) && value == 1 && !_xmlEdited)
+            if (SetField(ref _requestTab, value))
             {
-                RegenerateXml();
+                OnPropertyChanged(nameof(IsFormTab));
+                OnPropertyChanged(nameof(IsXmlTab));
+                if (value == 1 && !_xmlEdited)
+                {
+                    RegenerateXml();
+                }
             }
         }
     }
@@ -260,7 +402,14 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(ResponseText));
                 OnPropertyChanged(nameof(ResponseSummary));
                 OnPropertyChanged(nameof(HasResponse));
+                OnPropertyChanged(nameof(HasNoResponse));
                 OnPropertyChanged(nameof(IsFault));
+                OnPropertyChanged(nameof(IsResponseOk));
+                OnPropertyChanged(nameof(IsResponseError));
+                OnPropertyChanged(nameof(ResponseChip));
+                OnPropertyChanged(nameof(ResponseReason));
+                OnPropertyChanged(nameof(HasResponseReason));
+                OnPropertyChanged(nameof(ResponseMeta));
             }
         }
     }
@@ -275,6 +424,55 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
 
     public bool IsFault => _response?.IsFault == true;
 
+    public bool HasNoResponse => _response is null;
+
+    public bool IsFormTab => _requestTab == 0;
+
+    public bool IsXmlTab => _requestTab == 1;
+
+    /// <summary>The response's chip is green: a 2xx without a fault.</summary>
+    public bool IsResponseOk => _response is { IsFault: false, StatusCode: >= 200 and < 300 };
+
+    /// <summary>The response's chip is red: a fault, or an HTTP error.</summary>
+    public bool IsResponseError => _response is not null && !IsResponseOk;
+
+    /// <summary>The response's chip: <c>200 OK</c>, or the fault's code (<c>Fault s:Client</c>).</summary>
+    public string ResponseChip => _response is not { } response ? string.Empty
+        : response.IsFault ? Localizer.Format("msg.wcf.faultChip", "Fault {0}", response.FaultCode ?? string.Empty).TrimEnd()
+        : StatusLabel(response.StatusCode);
+
+    /// <summary>A fault's reason, beside its chip.</summary>
+    public string ResponseReason => _response?.IsFault == true ? _response.FaultReason ?? string.Empty : string.Empty;
+
+    public bool HasResponseReason => ResponseReason.Length > 0;
+
+    /// <summary>The status and time after the chip: <c>14 ms</c>, or <c>500 · 11 ms</c> after a fault.</summary>
+    public string ResponseMeta => _response is not { } response ? string.Empty
+        : response.IsFault ? $"{response.StatusCode.ToString(System.Globalization.CultureInfo.InvariantCulture)} · {(int)response.Elapsed.TotalMilliseconds} ms"
+        : $"{(int)response.Elapsed.TotalMilliseconds} ms";
+
+    /// <summary>A status code with its usual reason phrase (<c>200 OK</c>), or alone.</summary>
+    public static string StatusLabel(int code) => code switch
+    {
+        200 => "200 OK",
+        201 => "201 Created",
+        202 => "202 Accepted",
+        204 => "204 No Content",
+        400 => "400 Bad Request",
+        401 => "401 Unauthorized",
+        403 => "403 Forbidden",
+        404 => "404 Not Found",
+        405 => "405 Method Not Allowed",
+        415 => "415 Unsupported Media Type",
+        500 => "500 Internal Server Error",
+        502 => "502 Bad Gateway",
+        503 => "503 Service Unavailable",
+        _ => code.ToString(System.Globalization.CultureInfo.InvariantCulture),
+    };
+
+    /// <summary>The metadata is loaded and nothing went wrong: the status line shows its check mark.</summary>
+    public bool IsLoaded => _document is not null && !_isBusy && _error is null && _status is not null;
+
     public string Warnings => _document is null ? string.Empty : string.Join("\n", _document.Warnings);
 
     public bool HasWarnings => _document is { Warnings.Count: > 0 };
@@ -282,7 +480,13 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
     public bool IsBusy
     {
         get => _isBusy;
-        private set => SetField(ref _isBusy, value);
+        private set
+        {
+            if (SetField(ref _isBusy, value))
+            {
+                OnPropertyChanged(nameof(IsLoaded));
+            }
+        }
     }
 
     public string? Error
@@ -293,6 +497,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
             if (SetField(ref _error, value))
             {
                 OnPropertyChanged(nameof(HasError));
+                OnPropertyChanged(nameof(IsLoaded));
             }
         }
     }
@@ -302,7 +507,13 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
     public string? Status
     {
         get => _status;
-        private set => SetField(ref _status, value);
+        private set
+        {
+            if (SetField(ref _status, value))
+            {
+                OnPropertyChanged(nameof(IsLoaded));
+            }
+        }
     }
 
     public ICommand LoadCommand { get; }
@@ -390,7 +601,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
             level = field.Children;
         }
 
-        return Rows.FirstOrDefault(r => ReferenceEquals(r.Field, field));
+        return Rows.FirstOrDefault(r => ReferenceEquals(r.Field, field) || ReferenceEquals(r.Items, field));
     }
 
     private WsdlOperation? Reselect(WsdlOperation operation)
@@ -404,6 +615,7 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         _request = _document is not null && _endpoint is not null && _operation is not null ? new SoapRequest(_document, _endpoint.Endpoint, _operation) : null;
         OnPropertyChanged(nameof(Request));
         _xmlEdited = false;
+        _collapsed.Clear();
         RebuildRows();
         RegenerateXml();
         Response = null;
@@ -419,15 +631,42 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
 
         OnPropertyChanged(nameof(HasNoParameters));
         OnPropertyChanged(nameof(HasNoRequest));
+        OnPropertyChanged(nameof(HasFields));
     }
 
-    private void AddRows(SoapField field, int depth, SoapField? repeatedParent)
+    private void AddRows(SoapField field, int depth, SoapField? repeatedParent, int index = -1)
     {
-        Rows.Add(new SoapFieldRow(field, depth, OnFieldChanged, OnAdd, repeatedParent is null ? null : row => OnRemove(repeatedParent, row)));
-        foreach (var child in field.Children)
+        var items = ListItems(field);
+        var expanded = !_collapsed.Contains(field);
+        Rows.Add(new SoapFieldRow(field, depth, OnFieldChanged, OnAdd, repeatedParent is null ? null : row => OnRemove(repeatedParent, row))
         {
-            AddRows(child, depth + 1, field.Kind == SoapFieldKind.Repeated ? field : null);
+            Items = items,
+            Index = repeatedParent is null ? -1 : index,
+            IsExpanded = expanded,
+            Toggle = OnToggle,
+        });
+        if (!expanded)
+        {
+            return;
         }
+
+        var children = (items ?? field).Children;
+        var parent = items ?? (field.Kind == SoapFieldKind.Repeated ? field : null);
+        for (var i = 0; i < children.Count; i++)
+        {
+            AddRows(children[i], depth + 1, parent, i);
+        }
+    }
+
+    /// <summary>Collapses or expands a group's rows.</summary>
+    private void OnToggle(SoapFieldRow row)
+    {
+        if (!_collapsed.Remove(row.Field))
+        {
+            _collapsed.Add(row.Field);
+        }
+
+        RebuildRows();
     }
 
     private void OnFieldChanged(SoapFieldRow row)
@@ -440,7 +679,8 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
 
     private void OnAdd(SoapFieldRow row)
     {
-        row.Field.NewItem();
+        row.ItemsField.NewItem();
+        _collapsed.Remove(row.Field);
         RebuildRows();
         OnFieldChanged(row);
     }
@@ -513,7 +753,8 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task DiscoverAsync()
+    /// <summary>Looks for running CoreWCF services that publish metadata (Running Services); the first is loaded.</summary>
+    public async Task DiscoverAsync()
     {
         Error = null;
         IsBusy = true;
@@ -554,4 +795,12 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         _sending?.Dispose();
         _client.Dispose();
     }
+}
+
+/// <summary>Bindings for the WCF Test Client's view.</summary>
+public static class WcfStyles
+{
+    /// <summary>The required mark after a field's type.</summary>
+    public static Avalonia.Data.Converters.IValueConverter RequiredMark { get; } =
+        new Avalonia.Data.Converters.FuncValueConverter<bool, string>(required => required ? "*" : string.Empty);
 }

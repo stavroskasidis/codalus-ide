@@ -19,6 +19,7 @@ public sealed partial class ShellHost
     {
         FindResults = new FindResultsViewModel(FilesToSearchAsync, OpenTextOf, OpenFindResultAsync);
         FindResults.ShowRequested += (_, _) => Layout.ShowToolWindow(FindResultsViewModel.ToolWindowId, focus: false);
+        FindResults.RootFolder = () => Solutions.Solution?.Directory;
         FindReplace = new FindReplaceViewModel(
             FindResults,
             () => Window is { } window ? window.PickFolderAsync(Localizer.Get("msg.findInFiles.lookInFolder", "Look in Folder")) : Task.FromResult<string?>(null),

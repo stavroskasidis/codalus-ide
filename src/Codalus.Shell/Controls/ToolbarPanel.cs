@@ -73,7 +73,7 @@ public sealed class ToolbarPanel : Panel
 
     private static bool Stretches(Control child) => child is TextBox || child is AutoCompleteBox;
 
-    private static bool CanOverflow(Control child) => child is Button or ToggleButton or ComboBox or Separator || child.Classes.Contains("toolbarSeparator");
+    private static bool CanOverflow(Control child) => child is Button or ToggleButton or ComboBox or SegmentedControl or Separator || child.Classes.Contains("toolbarSeparator");
 
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -222,7 +222,8 @@ public sealed class ToolbarPanel : Panel
                 return item;
             }
 
-            case ComboBox combo:
+            // A combo box, or a segmented control (M34h): a submenu of its choices.
+            case SelectingItemsControl combo:
             {
                 var item = new MenuItem { Header = name, IsEnabled = combo.IsEffectivelyEnabled };
                 var index = 0;
@@ -248,6 +249,7 @@ public sealed class ToolbarPanel : Panel
         {
             Icon icon => Copy(icon),
             Panel panel when panel.Children.OfType<Icon>().FirstOrDefault() is { } icon => Copy(icon),
+            _ when ButtonIcon.GetKind(control) is { Length: > 0 } kind => new Icon { Kind = kind }, // the control set's icon buttons (M34h)
             _ => null,
         };
 
