@@ -2,8 +2,10 @@ name: GitHub Pages
 
 # Everything GitHub Pages serves, rebuilt as one site: the website and the package repositories. First the apt and dnf
 # repositories from the newest stable release and
-# the newest nightly (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret), checked by installing from
-# them with apt, dnf and zypper, signatures verified (eng/test-linux-repos.sh) (M31, D18); then the website, the Blazor
+# the newest nightly (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret): only their metadata, since
+# the packages are downloaded from their releases (2026-10-18: with the packages the site outgrew Pages' 1 GB limit).
+# They are checked by installing from them with apt, dnf and zypper, signatures verified (eng/test-linux-repos.sh), from
+# a copy built with file: addresses, since a release in the making has no assets yet (M31, D18); then the website, the Blazor
 # app in website/ exported to static files with those releases' download links. Only master deploys (the maintainer's
 # rule, 2026-10-13): each stable release does (pipeline.yml), and so does a push to master that changes only
 # documentation, which the pipeline ignores (docs/**, **/*.md). A push to master that changes anything else starts the
@@ -100,17 +102,18 @@ jobs:
               if gh release view "$tag" --json assets -q '.assets[].name' | grep -qE '^codalus.*\.deb$'; then echo "$tag"; break; fi
             done
           }
+          # Each release's packages in packages/<tag>/, under their asset names.
           if [ -n "$RELEASE" ]; then
             # A release in the making: its packages are this run's artifacts, not published yet.
             stable="$RELEASE"
-            mkdir -p packages/stable
-            find downloaded \( -name '*.deb' -o -name '*.rpm' \) -exec cp {} packages/stable/ \;
+            mkdir -p "packages/$stable"
+            find downloaded \( -name '*.deb' -o -name '*.rpm' \) -exec cp {} "packages/$stable/" \;
           else
             stable="$(newest '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)"
-            [ -n "$stable" ] && gh release download "$stable" -D packages/stable -p '*.deb' -p '*.rpm'
+            [ -n "$stable" ] && gh release download "$stable" -D "packages/$stable" -p '*.deb' -p '*.rpm'
           fi
           nightly="$(newest '-nightly\.' || true)"
-          [ -n "$nightly" ] && gh release download "$nightly" -D packages/nightly -p '*.deb' -p '*.rpm'
+          [ -n "$nightly" ] && gh release download "$nightly" -D "packages/$nightly" -p '*.deb' -p '*.rpm'
           echo "stable=$stable" >> "$GITHUB_OUTPUT"
           echo "nightly=$nightly" >> "$GITHUB_OUTPUT"
           mkdir -p packages && ls -R packages
@@ -122,17 +125,22 @@ jobs:
         shell: bash
         env:
           PACKAGES_GPG_PRIVATE_KEY: ${{ secrets.PACKAGES_GPG_PRIVATE_KEY }}
+          STABLE: ${{ steps.releases.outputs.stable }}
+          NIGHTLY: ${{ steps.releases.outputs.nightly }}
         run: |
           base="${{ steps.pages.outputs.base_url }}"
-          args=(--out site --base-url "https://${base#*://}")
-          [ -d packages/stable ] && args+=(--stable packages/stable)
-          [ -d packages/nightly ] && args+=(--nightly packages/nightly)
-          bash eng/linux-repos.sh "${args[@]}"
+          args=(--packages packages)
+          [ -n "$STABLE" ] && args+=(--stable "$STABLE")
+          [ -n "$NIGHTLY" ] && args+=(--nightly "$NIGHTLY")
+          bash eng/linux-repos.sh --out site --base-url "https://${base#*://}" \
+            --packages-url "${{ github.server_url }}/${{ github.repository }}/releases/download" "${args[@]}"
+          # The same repositories with file: addresses, which eng/test-linux-repos.sh mounts.
+          bash eng/linux-repos.sh --out test-site --base-url file:///site --packages-url file:///packages "${args[@]}"
       - name: Install from them (apt and dnf, signatures checked)
         shell: bash
         run: |
-          if [ -d site/rpm/stable ]; then bash eng/test-linux-repos.sh site stable; fi
-          if [ -d site/rpm/nightly ]; then bash eng/test-linux-repos.sh site nightly; fi
+          if [ -d test-site/rpm/stable ]; then bash eng/test-linux-repos.sh test-site packages stable; fi
+          if [ -d test-site/rpm/nightly ]; then bash eng/test-linux-repos.sh test-site packages nightly; fi
       - uses: ./.github/actions/setup
       # The app renders every page into the same folder (it leaves the repositories alone) and fails on a broken link
       # or anchor. A relative --export path is taken from the repository root.

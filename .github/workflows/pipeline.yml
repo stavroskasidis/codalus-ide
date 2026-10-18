@@ -246,6 +246,8 @@ jobs:
           CODALUS_FEED_KEY: ${{ secrets.FEED_SIGNING_KEY }}
           # Code signing (D19) waits behind this secret.
           CODALUS_CODESIGN_IDENTITY: ${{ secrets.CODALUS_CODESIGN_IDENTITY }}
+          # The .rpm's signature: the dnf repository serves the release's own file with gpgcheck on (eng/linux-repos.sh).
+          CODALUS_PACKAGES_KEY: ${{ secrets.PACKAGES_GPG_PRIVATE_KEY }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
           bash eng/package.sh "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.kind }}"
@@ -446,6 +448,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pages: read # the site's address, to keep the nightly it serves
     steps:
       - uses: actions/checkout@v4
         with:
@@ -460,14 +463,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash eng/publish-release.sh "${{ needs.plan.outputs.kind }}" "${{ needs.plan.outputs.version }}" "$GITHUB_SHA" downloaded
-      - name: Keep the newest 14 nightlies
+      # Pages holds only the repositories' metadata and the packages come from their release, so the nightly the site's
+      # nightly channel serves (packages.txt, eng/linux-repos.sh) stays until a stable release redeploys the site.
+      - name: Keep the newest 14 nightlies, and the one the site serves
         if: needs.plan.outputs.kind == 'nightly'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+        # The release is out by now: tidying up mustn't fail the job, which would untag it.
+        continue-on-error: true
         run: |
+          if ! site="$(gh api "repos/$GITHUB_REPOSITORY/pages" -q .html_url)" \
+            || ! served="$(curl -fsSL "https://$(sed -e 's|^[a-z]*://||' -e 's|/*$||' <<< "$site")/packages.txt")"; then
+            echo "::warning::Couldn't read the site's packages.txt, so no nightly is deleted this time."
+            exit 0
+          fi
+          keep="$(awk '$1 == "nightly" { print $2 }' <<< "$served")"
           gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- '-nightly\.' | sort -rV | tail -n +15 \
-            | while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done
+            | { grep -vxF -- "${keep:-none}" || true; } | while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done
 
   untag:
     needs: [plan, publish]
