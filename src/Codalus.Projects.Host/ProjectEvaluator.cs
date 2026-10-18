@@ -220,7 +220,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
         if (moniker is null)
         {
             return Failed(path, name, ProjectStates.Unsupported,
-                "Non-SDK-style projects load only for .NET Framework (a TargetFrameworkVersion from v2.0 to v4.8.1). Convert it to an SDK-style project, or open it in Visual Studio.");
+                "Non-SDK-style projects load only for .NET Framework (a TargetFrameworkVersion from v2.0 to v4.8.1). Convert it to an SDK-style project to open it here.");
         }
 
         var directory = outer.DirectoryPath;

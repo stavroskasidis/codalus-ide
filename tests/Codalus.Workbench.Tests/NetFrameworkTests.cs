@@ -161,7 +161,7 @@ public sealed class NetFrameworkTests : IDisposable
         var sdk = Assert.Throws<SdkConversionException>(() => SdkStyleConverter.Convert(Path.Combine(fixture, "ConsoleApp", "ConsoleApp.csproj")));
         Assert.Equal("ConsoleApp.csproj is SDK-style already.", sdk.Message);
         var web = Assert.Throws<SdkConversionException>(() => SdkStyleConverter.Convert(Path.Combine(fixture, "LegacyWebApp", "LegacyWebApp.csproj")));
-        Assert.StartsWith("LegacyWebApp imports Visual Studio's own targets ($(VSToolsPath))", web.Message, StringComparison.Ordinal);
+        Assert.StartsWith("LegacyWebApp imports proprietary MSBuild targets ($(VSToolsPath))", web.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

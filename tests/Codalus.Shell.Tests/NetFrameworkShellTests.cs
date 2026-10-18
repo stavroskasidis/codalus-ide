@@ -62,7 +62,7 @@ public sealed class NetFrameworkShellTests
         await ShellFixture.PumpUntil(() => explorer.Root is { } root && Find(root, "p:" + legacy) is { Detail: "(non-SDK-style)" } && Find(root, "p:" + web) is { } webNode && webNode.Children.Any(c => c.Id == "p:" + web + "|cannotBuild"), seconds: 60);
         var webNode = Find(explorer.Root!, "p:" + web)!;
         Assert.Equal("(non-SDK-style, can't build here)", webNode.Detail);
-        Assert.Contains("Visual Studio's own MSBuild targets", webNode.Children.Single(c => c.Id == "p:" + web + "|cannotBuild").Name, StringComparison.Ordinal);
+        Assert.Contains("imports proprietary MSBuild targets", webNode.Children.Single(c => c.Id == "p:" + web + "|cannotBuild").Name, StringComparison.Ordinal);
         Assert.True(f.Shell.Solutions.Projects[legacy].IsNonSdkStyle);
         Assert.True(NetFrameworkProjects.IsNetFramework(f.Shell.Solutions.Projects[console]));
 
