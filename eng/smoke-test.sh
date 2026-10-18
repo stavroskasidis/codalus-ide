@@ -105,7 +105,7 @@ test_app() {
     rm -rf "$jsdebug"
   fi
 
-  cp "$userdata"/logs/smoke-test* "$results/" 2> /dev/null || true
+  cp "$userdata"/logs/smoke-test* "$userdata"/logs/command-sweep.json "$results/" 2> /dev/null || true
   # The UI gallery (M34d): every surface in every theme, with data, empty and in an error state.
   if [ -d "$userdata/logs/gallery" ]; then
     rm -rf "$results/gallery"
@@ -130,6 +130,8 @@ if [ "${1:-}" != "--packages" ]; then
 fi
 
 packages="$(cd "${2:?usage: eng/smoke-test.sh --packages <dir> [results dir]}" && pwd)"
+# The command sweep runs once per OS, on the published app (the smoke job): an installed copy is the same build.
+export CODALUS_SMOKE_SKIP="${CODALUS_SMOKE_SKIP:-shell.commandSweep=the smoke job sweeps the commands of the same build}"
 results="${3:-$repo/artifacts/smoke-test}"
 # Installed outside the source checkout, so nothing can fall back to the checkout (netcoredbg in .work/, for one).
 install="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/codalus-package-XXXXXX")"
