@@ -104,7 +104,7 @@ public static class DebugAdapterLocator
 /// One debug adapter process (netcoredbg <c>--interpreter=vscode</c>) and its DAP connection, with typed requests.
 /// The adapter's stderr goes to <see cref="Log"/>.
 /// </summary>
-public sealed class DebugAdapter : IDebugAdapter
+public sealed partial class DebugAdapter : IDebugAdapter
 {
     /// <summary>How long <see cref="DisconnectAsync"/> waits for the adapter's answer.</summary>
     private static readonly TimeSpan DisconnectTimeout = TimeSpan.FromSeconds(10);
@@ -261,10 +261,29 @@ public sealed class DebugAdapter : IDebugAdapter
     public Task LaunchAsync<T>(T arguments, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken) =>
         _connection.RequestAsync("launch", arguments, info, cancellationToken);
 
-    public Task AttachAsync(AttachArguments arguments, CancellationToken cancellationToken)
+    /// <summary>
+    /// Attaches to process <see cref="AttachArguments.ProcessId"/>. netcoredbg attaches on whichever of <c>attach</c> and
+    /// <c>configurationDone</c> comes last, and waits its fixed 5 seconds for the runtime there. A program started in the
+    /// terminal or a console window is attached to once it reaches the startup hook, usually after
+    /// <c>configurationDone</c> (netcoredbg sends <c>initialized</c> with its answer to <c>initialize</c>), and then it's
+    /// this request that netcoredbg fails when the runtime reports late (<see cref="IsStartupTimeout"/>; PR #35's Windows
+    /// CI): as after <see cref="ConfigurationDoneAsync"/>, a program that still runs gets <see cref="LateRuntimeWait"/>
+    /// more, and netcoredbg debugs it once its runtime reports.
+    /// </summary>
+    public async Task AttachAsync(AttachArguments arguments, CancellationToken cancellationToken)
     {
         _attachedTo = arguments.ProcessId;
-        return _connection.RequestAsync("attach", arguments, Json.AttachArguments, cancellationToken);
+        try
+        {
+            await _connection.RequestAsync("attach", arguments, Json.AttachArguments, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DapException ex) when (IsStartupTimeout(ex) && !cancellationToken.IsCancellationRequested && RunningProgram() is { } program)
+        {
+            using (program)
+            {
+                await WaitForRuntimeAsync(program, ex, cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>Attaches with arguments of another shape (the desktop-CLR adapter's, M43b).</summary>
@@ -296,12 +315,15 @@ public sealed class DebugAdapter : IDebugAdapter
     }
 
     /// <summary>
-    /// netcoredbg's answer to <c>configurationDone</c> when the program's runtime didn't report to it within 5 seconds
-    /// of the launch or attach (its fixed <c>startupWaitTimeout</c>, which no option or variable changes; E_FAIL).
+    /// netcoredbg's answer when the program's runtime didn't report to it within 5 seconds of the launch or attach (its
+    /// fixed <c>startupWaitTimeout</c>, which no option or variable changes; E_FAIL), to the request that started it: the
+    /// later of the launch or attach and <c>configurationDone</c>. That's <c>configurationDone</c>, except for an attach
+    /// sent after it (a program started in the terminal, <see cref="AttachAsync(AttachArguments, CancellationToken)"/>);
+    /// a launch never comes after it.
     /// TODO(issue): ask Samsung/netcoredbg for a configurable wait.
     /// </summary>
     public static bool IsStartupTimeout(Exception ex) =>
-        ex is DapException { Command: "configurationDone" } && ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase);
+        ex is DapException { Command: "configurationDone" or "attach" } && ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// How long a start waits, past netcoredbg's 5 seconds, for the runtime of a program on this machine
@@ -644,8 +666,43 @@ public sealed class DebugAdapter : IDebugAdapter
     public async Task<Variable[]> VariablesAsync(int variablesReference, CancellationToken cancellationToken) =>
         (await _connection.RequestAsync("variables", new VariablesArguments(variablesReference), Json.VariablesArguments, Json.VariablesResponse, cancellationToken).ConfigureAwait(false)).Variables;
 
-    public Task<EvaluateResponse> EvaluateAsync(string expression, int? frameId, string context, CancellationToken cancellationToken) =>
-        _connection.RequestAsync("evaluate", new EvaluateArguments(expression, frameId, context), Json.EvaluateArguments, Json.EvaluateResponse, cancellationToken);
+    /// <summary>
+    /// Evaluates <paramref name="expression"/>. netcoredbg answers a request that runs past its fixed 15 seconds with
+    /// <see cref="CommandTimeoutMessage"/> while the request goes on: its worker finishes it before it takes the next.
+    /// On a loaded machine even a local's evaluation got there (PR #35's Windows CI: <c>i</c>, and a display's members),
+    /// a session's first one also loading netcoredbg's expression compiler (Roslyn's parser, in netcoredbg's own
+    /// runtime). An expression that only reads (<see cref="OnlyReads"/>) is asked once more then, which netcoredbg answers
+    /// once the first is done; any other could do what it does twice.
+    /// </summary>
+    public async Task<EvaluateResponse> EvaluateAsync(string expression, int? frameId, string context, CancellationToken cancellationToken)
+    {
+        var arguments = new EvaluateArguments(expression, frameId, context);
+        try
+        {
+            return await _connection.RequestAsync("evaluate", arguments, Json.EvaluateArguments, Json.EvaluateResponse, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DapException ex) when (IsCommandTimeout(ex) && OnlyReads(expression) && !cancellationToken.IsCancellationRequested)
+        {
+            Log?.Invoke(this, $"The debugger took longer than its 15 seconds to evaluate {expression}; asking again.");
+            return await _connection.RequestAsync("evaluate", arguments, Json.EvaluateArguments, Json.EvaluateResponse, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>netcoredbg's answer to a request that ran past its fixed 15 seconds (<c>COR_E_TIMEOUT</c>; the request goes on).</summary>
+    public const string CommandTimeoutMessage = "Command execution timed out.";
+
+    /// <summary>Whether netcoredbg gave up waiting for a request, not the request itself (<see cref="CommandTimeoutMessage"/>).</summary>
+    public static bool IsCommandTimeout(Exception ex) => ex is DapException { Message: CommandTimeoutMessage };
+
+    /// <summary>
+    /// Whether an expression only reads: a name, or members of one (<c>i</c>, <c>order.Lines.Count</c>,
+    /// <c>(order).Customer</c>), whose property getters the IDE runs again at every stop anyway. A call, an index, an
+    /// assignment or an operator doesn't.
+    /// </summary>
+    public static bool OnlyReads(string expression) => OnlyReadsPattern().IsMatch(expression);
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*(?:\(\s*)*@?[\p{L}_][\p{L}\p{Mn}\p{Nd}\p{Pc}]*\s*(?:\)\s*)*(?:\.\s*@?[\p{L}_][\p{L}\p{Mn}\p{Nd}\p{Pc}]*\s*(?:\)\s*)*)*$")]
+    private static partial System.Text.RegularExpressions.Regex OnlyReadsPattern();
 
     public Task<SetVariableResponse> SetVariableAsync(int variablesReference, string name, string value, CancellationToken cancellationToken) =>
         _connection.RequestAsync("setVariable", new SetVariableArguments(variablesReference, name, value), Json.SetVariableArguments, Json.SetVariableResponse, cancellationToken);

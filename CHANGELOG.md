@@ -36,6 +36,7 @@ In progress on `develop`; nightlies show these notes.
 - **Fixed:** Razor files were colored by their grammar alone: components in the color of an invalid tag, like HTML elements, and namespaces in `@using` like types. They're now colored as in Visual Studio's themes, in every theme: components teal and their parameters light blue, HTML elements blue, delimiters gray, `@` and directives in Razor's directive color, Razor comments green, and the C# in the markup as in a `.cs` file. Each kind has its own entry in Fonts and Colors.
 - **Fixed:** on a Mac whose home folder is on another disk than the app, **Restart to update** started the old version again and offered the same update. The update is now prepared on the app's own disk. A 0.2.1 install on such a Mac can't update past the bug itself: install this release's `.pkg` once.
 - **Fixed:** a large C# file took longer to show its colors than in 0.2.1 (a 100k-line file about a third longer). The editor asked the language service for them again each time CodeLens, inlay hints or document symbols arrived, and started over; it now waits for its first answer, and asks for those after it.
+- **Fixed:** opening a large file took far more memory than the file: a 100k-line C# file left about 120 MB of copies in the IDE's main process after it opened, and every keystroke in it built another copy of the whole text. Sending it to the language service, reading its outline back and a hidden placeholder in the editor each made copies; they don't any more.
 
 ## 0.2.1
 
