@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 using Codalus.Projects.Protocol;
 
 namespace Codalus.Debugging.Tests;
@@ -37,19 +36,14 @@ public sealed class SessionsFixture : IAsyncLifetime
     public async Task<(CompilerInputsInfo Inputs, string SdkPath)> CompilerInputsAsync(string project)
     {
         var path = Project(project);
-        var (code, output, error) = await RunAsync("dotnet",
+        var result = await Codalus.Tests.MSBuildQuery.RunAsync(path, ["MSBuildExtensionsPath"], ["CscCommandLineArgs"],
         [
-            "msbuild", path, "-t:Compile", "-nologo",
+            "-t:Compile",
             "-p:SkipCompilerExecution=true", "-p:ProvideCommandLineArgs=true", "-p:DesignTimeBuild=true",
             "-p:BuildingInsideVisualStudio=true", "-p:BuildProjectReferences=false",
-            "-getItem:CscCommandLineArgs", "-getProperty:MSBuildExtensionsPath",
         ]);
-        Assert.True(code == 0, output + error);
-
-        // -getItem writes its JSON to standard output; what MSBuild says on standard error (a node's message) isn't part of it.
-        using var json = JsonDocument.Parse(output[output.IndexOf('{', StringComparison.Ordinal)..]);
-        var arguments = json.RootElement.GetProperty("Items").GetProperty("CscCommandLineArgs").EnumerateArray().Select(i => i.GetProperty("Identity").GetString()!).ToArray();
-        var sdk = json.RootElement.GetProperty("Properties").GetProperty("MSBuildExtensionsPath").GetString()!;
+        var arguments = result.Items("CscCommandLineArgs").ToArray();
+        var sdk = result.Property("MSBuildExtensionsPath");
         Assert.NotEmpty(arguments);
         return (new CompilerInputsInfo(path, "net11.0", "C#", CompilerInputStates.Ok, null, arguments, [], null, null), sdk);
     }

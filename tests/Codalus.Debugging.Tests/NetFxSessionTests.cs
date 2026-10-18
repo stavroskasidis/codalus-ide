@@ -521,6 +521,55 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task Off_Windows_the_adapter_runs_without_ClrDebug_as_the_packages_ship_it()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows packages ship ClrDebug (the desktop-CLR debugger uses it).");
+
+        // A publish for Linux or macOS leaves ClrDebug.dll out, and out of the deps.json (Codalus.Debugging.Host.csproj):
+        // the host's files without it, as the package has them.
+        var folder = Path.Combine(Path.GetTempPath(), "codalus-debughost-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var deps = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.deps.json")))!;
+            foreach (var (_, target) in deps["targets"]!.AsObject())
+            {
+                foreach (var (name, library) in target!.AsObject().ToList())
+                {
+                    if (name.StartsWith("ClrDebug/", StringComparison.Ordinal))
+                    {
+                        target.AsObject().Remove(name);
+                        continue;
+                    }
+
+                    library!["dependencies"]?.AsObject().Remove("ClrDebug");
+                    foreach (var (file, _) in library["runtime"]?.AsObject() ?? [])
+                    {
+                        File.Copy(Path.Combine(AppContext.BaseDirectory, Path.GetFileName(file)), Path.Combine(folder, Path.GetFileName(file)), overwrite: true);
+                    }
+                }
+            }
+
+            foreach (var name in deps["libraries"]!.AsObject().Select(l => l.Key).Where(n => n.StartsWith("ClrDebug/", StringComparison.Ordinal)).ToList())
+            {
+                deps["libraries"]!.AsObject().Remove(name);
+            }
+
+            File.WriteAllText(Path.Combine(folder, "codalus-debughost.deps.json"), deps.ToJsonString());
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.runtimeconfig.json"), Path.Combine(folder, "codalus-debughost.runtimeconfig.json"));
+            Assert.False(File.Exists(Path.Combine(folder, "ClrDebug.dll")));
+
+            await using var adapter = await DebugAdapter.StartAsync(new DebugAdapterStartInfo("dotnet", [Path.Combine(folder, "codalus-debughost.dll"), DesktopClr.AdapterArgument], folder), Ct);
+            var launch = await Assert.ThrowsAsync<DapException>(() => adapter.LaunchAsync(new NetFxDebugArguments(Path.Combine(folder, "app.exe")), s_json.NetFxDebugArguments, Ct));
+            Assert.Contains("only on Windows", launch.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task The_debug_service_sends_dotnet_framework_programs_and_processes_to_the_desktop_clr_adapter()
     {
         // netcoredbg isn't there (null): the launch and the attach go to codalus-debughost --netfx-dap instead.
@@ -543,6 +592,56 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         // Other programs still go to netcoredbg.
         var other = await Assert.ThrowsAnyAsync<Exception>(() => debug.LaunchAsync(plan with { FileName = Path.Combine(Path.GetTempPath(), "app") }, Ct));
         Assert.Contains("netcoredbg", other.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Attach_to_process_tells_dotnet_framework_processes_by_one_snapshot_of_their_modules()
+    {
+        // The desktop CLR: clr.dll, or CLR 2's mscorwks.dll; CoreCLR wins when it's there too.
+        Assert.Equal("clr.dll", DesktopClr.RuntimeOf(["ntdll.dll", "mscoree.dll", "CLR.DLL", "clrjit.dll"]));
+        Assert.Equal("mscorwks.dll", DesktopClr.RuntimeOf(["mscorwks.dll"]));
+        Assert.Equal("clr.dll", DesktopClr.RuntimeOf(["mscorwks.dll", "clr.dll"]));
+        Assert.Null(DesktopClr.RuntimeOf(["clr.dll", "coreclr.dll"]));
+        Assert.Null(DesktopClr.RuntimeOf(["ntdll.dll", "kernel32.dll"]));
+
+        // One snapshot decides .NET and .NET Framework together: a desktop-CLR process is always .NET (Windows only).
+        Assert.Equal((true, true), Codalus.Workbench.Debugging.ProcessList.Classify("NetFxDebuggee", ["ntdll.dll", "mscoree.dll", "clr.dll"], windows: true));
+        Assert.Equal((true, false), Codalus.Workbench.Debugging.ProcessList.Classify("app", ["ntdll.dll", "coreclr.dll", "clr.dll"], windows: true));
+        Assert.Equal((true, false), Codalus.Workbench.Debugging.ProcessList.Classify("app", ["libc.so.6", "libcoreclr.so"], windows: false));
+        Assert.Equal((false, false), Codalus.Workbench.Debugging.ProcessList.Classify("NetFxDebuggee", ["clr.dll"], windows: false));
+        Assert.Equal((false, false), Codalus.Workbench.Debugging.ProcessList.Classify("notepad", ["ntdll.dll", "user32.dll"], windows: true));
+        Assert.Equal((true, false), Codalus.Workbench.Debugging.ProcessList.Classify("dotnet", null, windows: false));
+        Assert.Equal((false, false), Codalus.Workbench.Debugging.ProcessList.Classify("LegacyApp", null, windows: true));
+
+        // The entry keeps it so, and its runtime follows.
+        var legacy = new Codalus.Workbench.Debugging.ProcessEntry(4242, "LegacyApp", null, IsDotnet: false, IsDesktopClr: true);
+        Assert.True(legacy.IsDotnet);
+        Assert.Equal(".NET Framework", legacy.Runtime);
+        Assert.Equal(".NET", new Codalus.Workbench.Debugging.ProcessEntry(5150, "app", null, true).Runtime);
+        Assert.Null(new Codalus.Workbench.Debugging.ProcessEntry(6000, "notepad", null, false).Runtime);
+
+        // This test's own process, read the way Attach to Process reads every process (unknown on macOS).
+        var own = Codalus.Platform.ProcessModules.Names(Environment.ProcessId);
+        if (OperatingSystem.IsMacOS())
+        {
+            Assert.Null(own);
+        }
+        else
+        {
+            Assert.NotNull(own);
+            Assert.Contains(own, m => string.Equals(m, OperatingSystem.IsWindows() ? "coreclr.dll" : "libcoreclr.so", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(own.Count, own.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            Assert.Equal((true, false), Codalus.Workbench.Debugging.ProcessList.Classify("testhost", own, OperatingSystem.IsWindows()));
+            Assert.Null(DesktopClr.LoadedRuntime(Environment.ProcessId));
+        }
+
+        Assert.Null(Codalus.Platform.ProcessModules.Names(int.MaxValue)); // no such process
+
+        // The list leaves this process out and puts .NET first.
+        var list = Codalus.Workbench.Debugging.ProcessList.Get();
+        Assert.DoesNotContain(list, p => p.Id == Environment.ProcessId);
+        Assert.All(list, p => Assert.True(p.IsDotnet || !p.IsDesktopClr));
+        Assert.Equal(list.OrderByDescending(p => p.IsDotnet).Select(p => p.Id), list.Select(p => p.Id));
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)

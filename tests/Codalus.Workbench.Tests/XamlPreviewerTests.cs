@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 using Codalus.Workbench.Previewer;
 
 namespace Codalus.Workbench.Tests;
@@ -33,11 +32,9 @@ public sealed class AvaloniaFixture : IAsyncLifetime
         BuildTime = watch.Elapsed;
         Assert.True(code == 0, output);
 
-        (code, output) = await DotnetAsync("msbuild", Path.Combine(App, "AvaloniaApp.csproj"), "-nologo", "-getProperty:TargetPath", "-getProperty:AvaloniaPreviewerNetCoreToolPath");
-        Assert.True(code == 0, output);
-        using var properties = JsonDocument.Parse(output);
-        AppDll = properties.RootElement.GetProperty("Properties").GetProperty("TargetPath").GetString()!;
-        HostApp = Path.GetFullPath(properties.RootElement.GetProperty("Properties").GetProperty("AvaloniaPreviewerNetCoreToolPath").GetString()!);
+        var properties = await Codalus.Tests.MSBuildQuery.RunAsync(Path.Combine(App, "AvaloniaApp.csproj"), ["TargetPath", "AvaloniaPreviewerNetCoreToolPath"]);
+        AppDll = properties.Property("TargetPath");
+        HostApp = Path.GetFullPath(properties.Property("AvaloniaPreviewerNetCoreToolPath"));
         ControlsDll = Path.Combine(Path.GetDirectoryName(AppDll)!, "AvaloniaControls.dll");
     }
 
