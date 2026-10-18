@@ -36,6 +36,8 @@ internal sealed partial class SmokeTest
     /// <summary>Every tool window with data, the documents, the chrome, and the error states.</summary>
     private async Task GalleryDataStepAsync()
     {
+        // The Output window shows the build's output, its lines colored by what they report (M34h).
+        shell.Output.Selected = shell.Builds.Channel;
         await GalleryToolWindowsAsync("data").ConfigureAwait(true);
 
         // Documents and the window's chrome: tabs pinned, previewed and colored by project, a tool window focused so the
@@ -181,9 +183,15 @@ internal sealed partial class SmokeTest
                 await WaitAsync(() => shell.Builds.LastBuild is { } b && b != built, "the failing build finishes", 300).ConfigureAwait(true);
                 await GalleryThemesAsync(async theme =>
                 {
+                    // The failed build's output, its errors in the error color (M34h). The Output window and the Error
+                    // List share a group: each is shown and settled before its picture (the Output's was the window).
+                    shell.Output.Selected = shell.Builds.Channel;
+                    shell.Layout.ShowToolWindow(BuiltIns.OutputWindow, focus: true);
+                    await SettleAsync().ConfigureAwait(true);
                     GalleryTool(BuiltIns.OutputWindow, "error", theme);
+                    shell.Layout.ShowToolWindow(ErrorListViewModel.ToolWindowId, focus: true);
+                    await SettleAsync().ConfigureAwait(true);
                     GalleryTool(ErrorListViewModel.ToolWindowId, "error", theme);
-                    await Task.CompletedTask.ConfigureAwait(true);
                 }, settle: true).ConfigureAwait(true);
             }
             finally

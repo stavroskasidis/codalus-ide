@@ -80,6 +80,9 @@ public sealed class TerminalTheme
         return _palette[foreground && bold && index < 8 ? index + 8 : index];
     }
 
+    /// <summary>A color of the 256-color palette (the Output window's ANSI colors, M34h).</summary>
+    public Color PaletteColor(int index) => _palette[Math.Clamp(index, 0, 255)];
+
     public IBrush Brush(Color color)
     {
         var key = color.ToUInt32();

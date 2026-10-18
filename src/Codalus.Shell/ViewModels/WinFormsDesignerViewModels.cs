@@ -1425,16 +1425,111 @@ public sealed class ToolboxViewModel : ObservableObject
     public const string ToolWindowId = "toolbox";
 
     /// <summary>The framework's items by category, as Visual Studio's Toolbox has them for Windows Forms on .NET.</summary>
-    public static IReadOnlyList<(string Category, string Icon, string[] Types)> Framework { get; } =
+    public static IReadOnlyList<(string Category, string[] Types)> Framework { get; } =
     [
-        ("Common Controls", "window", ["Button", "CheckBox", "CheckedListBox", "ComboBox", "DateTimePicker", "Label", "LinkLabel", "ListBox", "ListView", "MaskedTextBox", "MonthCalendar", "NotifyIcon", "NumericUpDown", "PictureBox", "ProgressBar", "RadioButton", "RichTextBox", "TextBox", "ToolTip", "TrackBar", "TreeView", "WebBrowser"]),
-        ("Containers", "layers", ["FlowLayoutPanel", "GroupBox", "Panel", "SplitContainer", "TabControl", "TableLayoutPanel"]),
-        ("Menus & Toolbars", "list", ["ContextMenuStrip", "MenuStrip", "StatusStrip", "ToolStrip", "ToolStripContainer"]),
-        ("Data", "table", ["BindingNavigator", "BindingSource", "DataGridView"]),
-        ("Components", "gear", ["System.ComponentModel.BackgroundWorker", "ErrorProvider", "System.IO.FileSystemWatcher", "HelpProvider", "ImageList", "System.Diagnostics.Process", "Timer"]),
-        ("Printing", "file", ["PageSetupDialog", "PrintDialog", "System.Drawing.Printing.PrintDocument", "PrintPreviewControl", "PrintPreviewDialog"]),
-        ("Dialogs", "window", ["ColorDialog", "FolderBrowserDialog", "FontDialog", "OpenFileDialog", "SaveFileDialog"]),
+        ("Common Controls", ["Button", "CheckBox", "CheckedListBox", "ComboBox", "DateTimePicker", "Label", "LinkLabel", "ListBox", "ListView", "MaskedTextBox", "MonthCalendar", "NotifyIcon", "NumericUpDown", "PictureBox", "ProgressBar", "RadioButton", "RichTextBox", "TextBox", "ToolTip", "TrackBar", "TreeView", "WebBrowser"]),
+        ("Containers", ["FlowLayoutPanel", "GroupBox", "Panel", "SplitContainer", "TabControl", "TableLayoutPanel"]),
+        ("Menus & Toolbars", ["ContextMenuStrip", "MenuStrip", "StatusStrip", "ToolStrip", "ToolStripContainer"]),
+        ("Data", ["BindingNavigator", "BindingSource", "DataGridView"]),
+        ("Components", ["System.ComponentModel.BackgroundWorker", "ErrorProvider", "System.IO.FileSystemWatcher", "HelpProvider", "ImageList", "System.Diagnostics.Process", "Timer"]),
+        ("Printing", ["PageSetupDialog", "PrintDialog", "System.Drawing.Printing.PrintDocument", "PrintPreviewControl", "PrintPreviewDialog"]),
+        ("Dialogs", ["ColorDialog", "FolderBrowserDialog", "FontDialog", "OpenFileDialog", "SaveFileDialog"]),
     ];
+
+    /// <summary>
+    /// Each framework item's icon (M34h: they shared one per category), by its simple name; a palette color for each is in
+    /// <c>CommandIcons</c>. A type that isn't here takes the icon of the known control its name ends with (a project's
+    /// <c>OrderTextBox</c>, a vendor's <c>RadButton</c>), else <see cref="GenericControlIcon"/> or
+    /// <see cref="GenericComponentIcon"/>.
+    /// </summary>
+    private static readonly Dictionary<string, string> s_icons = new(StringComparer.Ordinal)
+    {
+        ["Button"] = "control-button",
+        ["CheckBox"] = "control-check-box",
+        ["CheckedListBox"] = "control-checked-list-box",
+        ["ComboBox"] = "control-combo-box",
+        ["DateTimePicker"] = "control-date-time-picker",
+        ["Label"] = "control-label",
+        ["LinkLabel"] = "control-link-label",
+        ["ListBox"] = "control-list-box",
+        ["ListView"] = "control-list-view",
+        ["MaskedTextBox"] = "control-masked-text-box",
+        ["MonthCalendar"] = "control-month-calendar",
+        ["NotifyIcon"] = "control-notify-icon",
+        ["NumericUpDown"] = "control-numeric-up-down",
+        ["PictureBox"] = "control-picture-box",
+        ["ProgressBar"] = "control-progress-bar",
+        ["RadioButton"] = "control-radio-button",
+        ["RichTextBox"] = "control-rich-text-box",
+        ["TextBox"] = "control-text-box",
+        ["ToolTip"] = "control-tool-tip",
+        ["TrackBar"] = "control-track-bar",
+        ["TreeView"] = "control-tree-view",
+        ["WebBrowser"] = "control-web-browser",
+        ["WebView2"] = "control-web-browser",
+        ["FlowLayoutPanel"] = "control-flow-layout-panel",
+        ["GroupBox"] = "control-group-box",
+        ["Panel"] = "control-panel",
+        ["SplitContainer"] = "control-split-container",
+        ["TabControl"] = "control-tab-control",
+        ["TableLayoutPanel"] = "control-table-layout-panel",
+        ["ContextMenuStrip"] = "control-context-menu-strip",
+        ["MenuStrip"] = "control-menu-strip",
+        ["StatusStrip"] = "control-status-strip",
+        ["ToolStrip"] = "control-tool-strip",
+        ["ToolStripContainer"] = "control-tool-strip-container",
+        ["BindingNavigator"] = "control-binding-navigator",
+        ["BindingSource"] = "control-binding-source",
+        ["DataGridView"] = "control-data-grid-view",
+        ["BackgroundWorker"] = "control-background-worker",
+        ["ErrorProvider"] = "control-error-provider",
+        ["FileSystemWatcher"] = "control-file-system-watcher",
+        ["HelpProvider"] = "control-help-provider",
+        ["ImageList"] = "control-image-list",
+        ["Process"] = "control-process",
+        ["Timer"] = "control-timer",
+        ["PageSetupDialog"] = "control-page-setup-dialog",
+        ["PrintDialog"] = "control-print-dialog",
+        ["PrintDocument"] = "control-print-document",
+        ["PrintPreviewControl"] = "control-print-preview-control",
+        ["PrintPreviewDialog"] = "control-print-preview-dialog",
+        ["ColorDialog"] = "control-color-dialog",
+        ["FolderBrowserDialog"] = "control-folder-browser-dialog",
+        ["FontDialog"] = "control-font-dialog",
+        ["OpenFileDialog"] = "control-open-file-dialog",
+        ["SaveFileDialog"] = "control-save-file-dialog",
+    };
+
+    /// <summary>The Pointer's icon (the arrow), and the icons of a control and a component the Toolbox has no icon for.</summary>
+    public const string PointerIcon = "control-pointer";
+
+    public const string GenericControlIcon = "control-generic";
+
+    public const string GenericComponentIcon = "control-component";
+
+    /// <summary>The icon of a Toolbox item by its type (full or simple name).</summary>
+    public static string IconFor(string type, bool isControl)
+    {
+        var name = type[(type.LastIndexOf('.') + 1)..];
+        if (s_icons.TryGetValue(name, out var icon))
+        {
+            return icon;
+        }
+
+        // A derived or third-party control usually ends with what it derives from: the longest such name wins
+        // (OrderRichTextBox is a rich text box, not a text box).
+        var best = string.Empty;
+        foreach (var (known, knownIcon) in s_icons)
+        {
+            if (known.Length > best.Length && name.EndsWith(known, StringComparison.Ordinal))
+            {
+                best = known;
+                icon = knownIcon;
+            }
+        }
+
+        return icon ?? (isControl ? GenericControlIcon : GenericComponentIcon);
+    }
 
     /// <summary>The framework's types that aren't controls (they go to the tray).</summary>
     private static readonly HashSet<string> s_components = new(StringComparer.Ordinal)
@@ -1535,21 +1630,21 @@ public sealed class ToolboxViewModel : ObservableObject
         foreach (var group in _projectItems.GroupBy(i => i.Project))
         {
             var category = Localizer.Format("msg.toolbox.projectComponents", "{0} Components", group.Key);
-            var items = group.Where(i => Matches(i.Name)).Select(i => new ToolboxItemViewModel(i.Name, i.Type, category, i.IsControl, i.IsControl ? "window" : "gear") { Description = i.Description }).ToList();
+            var items = group.Where(i => Matches(i.Name)).Select(i => new ToolboxItemViewModel(i.Name, i.Type, category, i.IsControl, IconFor(i.Type, i.IsControl)) { Description = i.Description }).ToList();
             if (items.Count > 0)
             {
-                Categories.Add(new ToolboxCategoryViewModel(category, [new ToolboxItemViewModel(pointer, string.Empty, category, false, "caret"), .. items]));
+                Categories.Add(new ToolboxCategoryViewModel(category, [new ToolboxItemViewModel(pointer, string.Empty, category, false, PointerIcon), .. items]));
             }
         }
 
-        foreach (var (title, icon, types) in Framework)
+        foreach (var (title, types) in Framework)
         {
             var category = CategoryTitle(title);
             var items = types.Select(t => (Type: t, Name: t[(t.LastIndexOf('.') + 1)..])).Where(t => Matches(t.Name))
-                .Select(t => new ToolboxItemViewModel(t.Name, FullType(t.Type), category, !s_components.Contains(t.Type), icon)).ToList();
+                .Select(t => new ToolboxItemViewModel(t.Name, FullType(t.Type), category, !s_components.Contains(t.Type), IconFor(t.Type, !s_components.Contains(t.Type)))).ToList();
             if (items.Count > 0)
             {
-                Categories.Add(new ToolboxCategoryViewModel(category, [new ToolboxItemViewModel(pointer, string.Empty, category, false, "caret"), .. items]));
+                Categories.Add(new ToolboxCategoryViewModel(category, [new ToolboxItemViewModel(pointer, string.Empty, category, false, PointerIcon), .. items]));
             }
         }
 

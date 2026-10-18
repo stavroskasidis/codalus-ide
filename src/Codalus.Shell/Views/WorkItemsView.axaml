@@ -9,7 +9,7 @@
     <DockPanel DockPanel.Dock="Top" Margin="4,3">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
         <Button Classes="toolbar" Command="{Binding MentionCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T workItems.mentionInTheCommitMessage}" AutomationProperties.Name="{l:T workItems.mentionInCommitMessage}">
-          <controls:Icon Kind="edit" />
+          <controls:Icon Kind="edit" Classes="accent-git" />
         </Button>
         <Button Classes="toolbar" Command="{Binding OpenCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T workItems.openInBrowser}" AutomationProperties.Name="{l:T workItems.openInBrowser}">
           <controls:Icon Kind="link-external" />

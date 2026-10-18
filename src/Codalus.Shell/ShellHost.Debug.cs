@@ -108,7 +108,16 @@ public sealed partial class ShellHost
 
     private void OnDebugOutput(DebugOutput output)
     {
-        DebugLog.Append(output.Text);
+        // The program's standard error shows in the error color (M34h).
+        if (output.Category == "stderr")
+        {
+            DebugLog.AppendError(output.Text);
+        }
+        else
+        {
+            DebugLog.Append(output.Text);
+        }
+
         if (output.Category != "stdout")
         {
             return;
