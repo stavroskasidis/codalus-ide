@@ -466,8 +466,17 @@ public sealed class ConfigurationManagerViewModel : ObservableObject, ILoadable
             _data = await _management.GetConfigurationsAsync(CancellationToken.None).ConfigureAwait(true);
             Replace(BuildTypes, _data.BuildTypes);
             Replace(Platforms, _data.Platforms);
-            _buildType = _data.BuildTypes.Contains(_buildType) ? _buildType : _data.BuildTypes.FirstOrDefault();
-            _platform = _data.Platforms.Contains(_platform) ? _platform : _data.Platforms.FirstOrDefault();
+            var buildType = _data.BuildTypes.Contains(_buildType) ? _buildType : _data.BuildTypes.FirstOrDefault();
+            var platform = _data.Platforms.Contains(_platform) ? _platform : _data.Platforms.FirstOrDefault();
+
+            // The combo boxes lost their choice while their lists were replaced (and kept none chosen before the first
+            // load): clear it, then choose again, so they show it (M34h, seen in the gallery).
+            _buildType = null;
+            _platform = null;
+            OnPropertyChanged(nameof(BuildType));
+            OnPropertyChanged(nameof(Platform));
+            _buildType = buildType;
+            _platform = platform;
             OnPropertyChanged(nameof(BuildType));
             OnPropertyChanged(nameof(Platform));
             BuildRows();

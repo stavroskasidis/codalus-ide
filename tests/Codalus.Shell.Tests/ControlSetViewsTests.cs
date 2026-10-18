@@ -195,7 +195,9 @@ public class ControlSetViewsTests
         Assert.Equal(2, attached.Count);
         var configuration = attached[0].GetVisualDescendants().OfType<ComboBox>().First();
         Assert.Equal(vm.BuildType, configuration.SelectedItem);
+        Assert.Equal(vm.BuildType, configuration.SelectionBoxItem);
         Assert.Equal(vm.Platform, attached[1].GetVisualDescendants().OfType<ComboBox>().First().SelectedItem);
+        Assert.Equal(vm.Platform, attached[1].GetVisualDescendants().OfType<ComboBox>().First().SelectionBoxItem);
         Assert.All(attached, a => Assert.Equal(["add", "trash"], a.GetVisualDescendants().OfType<Button>().Select(b => ButtonIcon.GetKind(b))));
 
         // The active pair: a chip, and Make Active disabled; another pair: no chip, Make Active enabled.
