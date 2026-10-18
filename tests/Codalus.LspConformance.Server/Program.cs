@@ -6,7 +6,7 @@ using Codalus.Rpc;
 // shell's narrowed types don't: options objects, location links, marked strings, numeric diagnostic codes,
 // insert/replace edits, snippets, offset parameter labels, `changes` maps and bare commands among code actions.
 // Documents are "key = value" lines; a line without '=' is an error with code 42. With --dap it is a scripted debug
-// adapter instead (ScriptedDap).
+// adapter instead (ScriptedDap), as with netcoredbg's --interpreter=vscode (a stand-in for netcoredbg).
 if (args.Contains("--program"))
 {
     // The scripted adapter's "program" in a start that times out: it runs until it's killed, as a program that netcoredbg
@@ -15,7 +15,7 @@ if (args.Contains("--program"))
     return;
 }
 
-if (args.Contains("--dap"))
+if (args.Contains("--dap") || args.Contains("--interpreter=vscode"))
 {
     await Codalus.LspConformance.Server.ScriptedDap.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput());
     return;
