@@ -240,13 +240,23 @@ public sealed partial class AiChatView : UserControl, IPaneView
         private static SelectableTextBlock Code(string text) =>
             new() { Text = text, FontFamily = s_monospace, FontSize = 11, TextWrapping = TextWrapping.Wrap };
 
-        private static string Glyph(string? status) => status switch
+        private static string StatusWord(string? status) => status switch
         {
-            "completed" => "✓",
-            "failed" => "✗",
-            "cancelled" => "⊘",
-            "in_progress" => "◐",
-            _ => "○",
+            "completed" => Localizer.Get("msg.acp.statusCompleted", "Done"),
+            "failed" => Localizer.Get("msg.acp.statusFailed", "Failed"),
+            "cancelled" => Localizer.Get("msg.acp.statusCancelled", "Cancelled"),
+            "in_progress" => Localizer.Get("msg.acp.statusInProgress", "Running"),
+            _ => Localizer.Get("msg.acp.statusPending", "Pending"),
+        };
+
+        /// <summary>The chip's tint for a step's status; pending stays neutral.</summary>
+        private static string? StatusClass(string? status) => status switch
+        {
+            "completed" => "success",
+            "failed" => "error",
+            "cancelled" => "warning",
+            "in_progress" => "info",
+            _ => null,
         };
 
         /// <summary>The thought (collapsed), the plan and the notices of an external agent's turn (M48).</summary>
@@ -294,23 +304,26 @@ public sealed partial class AiChatView : UserControl, IPaneView
         private StackPanel AgentStep(AiAgentStep step)
         {
             var panel = new StackPanel { Spacing = 2 };
-            var header = new TextBlock
+
+            // The status as a chip (a word on its Shell.Status tint, M34h's control set), then the kind and the title.
+            var chip = new Border { Child = new TextBlock { Text = StatusWord(step.Status) }, Margin = new Thickness(0, 0, 6, 0) };
+            chip.Classes.Add("chip");
+            if (StatusClass(step.Status) is { } tint)
             {
-                Text = Glyph(step.Status) + " " + step.Kind + ": " + step.Target + (step.Outcome is { } outcome && outcome != "done" ? " → " + outcome : ""),
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 11,
-            };
-            AutomationProperties.SetName(header, Localizer.Format("msg.acp.stepName", "{0} {1}: {2}", step.Kind ?? "", step.Target, (step.Status ?? "pending").Replace('_', ' ')));
-            if (step.IsError)
-            {
-                header.Bind(TextBlock.ForegroundProperty, header.GetResourceObservable("Shell.Warning.Foreground"));
-            }
-            else
-            {
-                header.Classes.Add("muted");
+                chip.Classes.Add(tint);
             }
 
-            panel.Children.Add(header);
+            var header = new TextBlock
+            {
+                Text = step.Kind + ": " + step.Target,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            header.Classes.Add("muted");
+            AutomationProperties.SetName(header, Localizer.Format("msg.acp.stepName", "{0} {1}: {2}", step.Kind ?? "", step.Target, StatusWord(step.Status)));
+            panel.Children.Add(new DockPanel { Children = { chip, header } });
+            DockPanel.SetDock(chip, Avalonia.Controls.Dock.Left);
             if (step.Locations.Count > 0)
             {
                 var links = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 6, Margin = new Thickness(14, 0, 0, 0) };

@@ -144,7 +144,7 @@ public sealed class AcpShellTests
         // A read step with its location: clicking it opens the file at the line.
         turn = await AskAsync(f, "read src/Greetings/Greeter.cs");
         await ShellFixture.PumpUntil(() => !turn.IsStreaming);
-        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "✓ read: Read src/Greetings/Greeter.cs"), describe: () => Describe(f, turn));
+        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<DockPanel>().Any(p => p.Children.OfType<Border>().Any(b => b.Classes.Contains("chip") && b.Classes.Contains("success") && b.Child is TextBlock { Text: "Done" }) && p.Children.OfType<TextBlock>().Any(t => t.Text == "read: Read src/Greetings/Greeter.cs")), describe: () => Describe(f, turn));
         view = ChatView(f);
         var link = view.GetVisualDescendants().OfType<Button>().Single(b => (b.Content as string) == "src/Greetings/Greeter.cs:2");
         link.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -155,6 +155,7 @@ public sealed class AcpShellTests
         turn = await AskAsync(f, "run echo from-the-agent");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.Details.Any(d => d.Text == "echo from-the-agent"), 30);
         Assert.Contains("stand-in", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        Assert.Equal(("terminal", "stand-in · external agent · the workspace"), (f.Shell.Dialogs.Icon, f.Shell.Dialogs.Context));
         f.Shell.Dialogs.Accept();
         await ShellFixture.PumpUntil(() => !turn.IsStreaming, 30);
         Assert.StartsWith("Run failed: The user didn't allow the command.", turn.Answer, StringComparison.Ordinal);
@@ -164,6 +165,7 @@ public sealed class AcpShellTests
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
         Assert.Equal(["Allow Once", "Reject", "Always Reject"], f.Shell.Dialogs.Buttons.Select(b => b.Label));
         Assert.Equal("Reject", f.Shell.Dialogs.Buttons.Single(b => b.IsDefault).Label);
+        Assert.Equal("shield", f.Shell.Dialogs.Icon);
         Assert.Contains(f.Shell.Dialogs.Details, d => d.Text == "+ new line" && d.IsAdded);
         Assert.Contains(f.Shell.Dialogs.Details, d => d.Text.Contains("\"path\": \"bin/\"", StringComparison.Ordinal));
         f.Shell.Dialogs.Accept();
@@ -175,6 +177,7 @@ public sealed class AcpShellTests
         turn = await AskAsync(f, "write src/Greetings/Greeter.cs");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.HasDetails, 30);
         Assert.Contains("stand-in", f.Shell.Dialogs.Title, StringComparison.Ordinal);
+        Assert.Equal(("edit", "stand-in · external agent · " + Path.Combine("src", "Greetings", "Greeter.cs")), (f.Shell.Dialogs.Icon, f.Shell.Dialogs.Context));
         Assert.Contains(f.Shell.Dialogs.Details, d => d.Text.Contains("written by the agent", StringComparison.Ordinal));
         f.Shell.Dialogs.Accept();
         await ShellFixture.PumpUntil(() => !turn.IsStreaming, 30);

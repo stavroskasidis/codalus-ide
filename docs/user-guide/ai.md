@@ -133,7 +133,7 @@ If AI assistance is off, no folder is open, or the folder isn't trusted, the cha
 ### What you see
 
 - **The answer** streams in as Markdown; the agent's **thinking** is folded under **Thinking**; its **plan** is a checklist above the steps.
-- **Steps** are the agent's tool calls: ✓ done, ◐ running, ✗ failed, ⊘ cancelled, with the kind and title (`✓ read: Read src/App/Program.cs`). The files a step works on are links that open the file at the line. Changes it reports show read-only, and a command's output shows live under **Output**.
+- **Steps** are the agent's tool calls: a chip with the status (**Pending**, **Running**, **Done**, **Failed** or **Cancelled**), then the kind and title (`read: Read src/App/Program.cs`). The files a step works on are links that open the file at the line. Changes it reports show read-only, and a command's output shows live under **Output**.
 - **Modes**: when the agent has modes (for example Ask and Code), a second picker switches them.
 - **Commands**: typing `/` offers the agent's slash commands; `Tab` or a click puts one in the box.
 - **Stop** asks the agent to stop (`session/cancel`), answers its open questions as cancelled, closes an open approval and stops its commands. **New Chat** stops the agent's process; each chat runs one process, which also stops when the folder closes and when the IDE exits.

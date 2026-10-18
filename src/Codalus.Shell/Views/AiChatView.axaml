@@ -22,14 +22,26 @@
       <TextBlock Text="{Binding OffMessage}" TextWrapping="Wrap" />
       <Button x:Name="TurnOn" Content="{l:T aiChat.turnOnAiAssistance}" AutomationProperties.Name="{l:T aiChat.turnOnAiAssistance}" HorizontalAlignment="Left" />
     </StackPanel>
-    <!-- An external agent (M48, ADR 0079): the label, whenever one is chosen, and why it can't run here. -->
-    <Border x:Name="ExternalAgentBanner" DockPanel.Dock="Top" Margin="8,8,8,0" Padding="8,6" CornerRadius="4" BorderThickness="1"
-            BorderBrush="{DynamicResource Shell.Info}" IsVisible="{Binding IsExternal}">
-      <StackPanel Spacing="4">
-        <TextBlock x:Name="ExternalAgentLabel" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
-        <TextBlock x:Name="AgentBlocked" Text="{Binding AgentBlockedMessage}" IsVisible="{Binding IsAgentBlocked}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Warning.Foreground}" />
-      </StackPanel>
-    </Border>
+    <!--
+      An external agent (M48, ADR 0079): the label as an info notice whenever one is chosen, and why it can't run here as
+      a warning notice; the control set's status tints (Shell.Status.*), outlined in High contrast like its chips.
+    -->
+    <StackPanel DockPanel.Dock="Top" Margin="8,8,8,0" Spacing="6" IsVisible="{Binding IsExternal}">
+      <Border x:Name="ExternalAgentBanner" Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}"
+              Background="{DynamicResource Shell.Status.Info}" BorderBrush="{DynamicResource Shell.Status.Info.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
+        <DockPanel>
+          <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,1,8,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
+          <TextBlock x:Name="ExternalAgentLabel" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Status.Info.Foreground}" AutomationProperties.LiveSetting="Polite" />
+        </DockPanel>
+      </Border>
+      <Border Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding IsAgentBlocked}"
+              Background="{DynamicResource Shell.Status.Warning}" BorderBrush="{DynamicResource Shell.Status.Warning.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
+        <DockPanel>
+          <controls:Icon DockPanel.Dock="Left" Kind="warning" Margin="0,1,8,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Warning.Foreground}" />
+          <TextBlock x:Name="AgentBlocked" Text="{Binding AgentBlockedMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Status.Warning.Foreground}" AutomationProperties.LiveSetting="Polite" />
+        </DockPanel>
+      </Border>
+    </StackPanel>
     <StackPanel DockPanel.Dock="Bottom" Margin="8" Spacing="6" IsVisible="{Binding IsOn}">
       <WrapPanel>
         <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeSelection}" Content="{l:T aiChat.selection}" AutomationProperties.Name="{l:T aiChat.sendTheSelection}" />

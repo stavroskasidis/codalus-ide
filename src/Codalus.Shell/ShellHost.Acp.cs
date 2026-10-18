@@ -96,6 +96,8 @@ public sealed partial class ShellHost
                 var choice = await shell.ShowCancellableAsync(new DialogRequest(title, Localizer.Get("msg.acp.changesInOneFile", "Changes in 1 file:"), [apply, Localizer.Get("msg.acp.reject", "Reject")])
                 {
                     Details = details,
+                    Icon = "edit",
+                    Context = Context(agent, relative),
                 }, cancellationToken).ConfigureAwait(true);
                 if (choice.Button != apply)
                 {
@@ -120,6 +122,12 @@ public sealed partial class ShellHost
 
                 return await shell.ApplyWorkspaceEditAsync(Edit(path, model.Text.Text, newText, model.Version)).ConfigureAwait(true);
             }).Unwrap();
+
+        /// <summary>The dialog's context line (M34h's dialog frame): which external agent asks, and what it acts on.</summary>
+        private static string Context(string agent, string? target) =>
+            target is { Length: > 0 }
+                ? Localizer.Format("msg.acp.dialogContextOn", "{0} · external agent · {1}", agent, target)
+                : Localizer.Format("msg.acp.dialogContext", "{0} · external agent", agent);
 
         /// <summary>A whole-file replacement (an insertion into an empty file creates it).</summary>
         private static WorkspaceEdit Edit(string path, string oldText, string newText, int? version) =>
@@ -174,6 +182,8 @@ public sealed partial class ShellHost
                 {
                     Details = details,
                     DefaultButton = reject,
+                    Icon = "shield",
+                    Context = Context(prompt.Agent, prompt.Kind),
                 }, cancellationToken).ConfigureAwait(true);
                 return buttons.FirstOrDefault(b => b.Label == choice.Button).OptionId is { Length: > 0 } id ? id : null;
             }).Unwrap();
@@ -192,6 +202,8 @@ public sealed partial class ShellHost
                 {
                     Details = [new DetailLine(commandLine)],
                     DefaultButton = reject,
+                    Icon = "terminal",
+                    Context = Context(agent, where),
                 }, cancellationToken).ConfigureAwait(true);
                 return choice.Button == allow;
             }).Unwrap();
@@ -207,6 +219,8 @@ public sealed partial class ShellHost
                 {
                     Details = [.. methods.Where(m => m.Description is { Length: > 0 }).Select(m => new DetailLine(m.Name + ": " + m.Description))],
                     DefaultButton = cancel,
+                    Icon = "key",
+                    Context = Context(agent, null),
                 }, cancellationToken).ConfigureAwait(true);
                 return methods.FirstOrDefault(m => m.Name == choice.Button);
             }).Unwrap();
