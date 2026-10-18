@@ -157,11 +157,7 @@ public sealed partial class ShellHost
         }
 
         Workbench.Log.AppendLine($"[setup] {tool.Detail}");
-        var message = Localizer.Format(
-            "msg.setup.runtimeMissing",
-            "Codalus IDE needs the .NET {0} runtime, which isn't installed (found: {1}). Without it, plugins, builds, language services and debugging can't start.",
-            tool.WantedVersion,
-            tool.Found ?? "none");
+        var message = Localizer.Format("msg.setup.runtimeMissing", "Codalus IDE needs the .NET {0} runtime, which isn't installed (found: {1}). Without it, plugins, builds, language services and debugging can't start.", tool.WantedVersion, tool.Found ?? "none");
         var install = Localizer.Format("msg.setup.installRuntime", "Install .NET {0}", tool.WantedChannel);
         var details = Localizer.Get("msg.setup.details", "Check Environment");
         var choice = await Workbench.Notifications.Error(message, install, details).Result.ConfigureAwait(true);

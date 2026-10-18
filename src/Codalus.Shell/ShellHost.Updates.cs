@@ -210,12 +210,7 @@ public sealed partial class ShellHost
         var anyway = Localizer.Get("msg.updates.updateAnyway", "Update Anyway");
         var notes = Localizer.Get("msg.updates.releaseNotes", "Release Notes");
         var actions = SelfUpdate.Install.Kind == InstallKind.SelfUpdating ? new[] { install, anyway, notes } : [install, notes];
-        var message = Localizer.Format(
-            "msg.updates.needsRuntime",
-            "Codalus IDE {0} is available, but it needs the .NET {1} runtime, which isn't installed (found: {2}). Install it first: without it, the updated IDE can't start its helper processes.",
-            offer.Version,
-            runtime.WantedVersion,
-            runtime.Found ?? "none");
+        var message = Localizer.Format("msg.updates.needsRuntime", "Codalus IDE {0} is available, but it needs the .NET {1} runtime, which isn't installed (found: {2}). Install it first: without it, the updated IDE can't start its helper processes.", offer.Version, runtime.WantedVersion, runtime.Found ?? "none");
         var choice = await Workbench.Notifications.Warning(message, actions).Result.ConfigureAwait(true);
         if (choice == install)
         {
