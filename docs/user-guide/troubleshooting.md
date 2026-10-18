@@ -27,7 +27,8 @@ Help → Show Logs opens the Codalus IDE channel. Crash reports are saved in the
 | Symptom | What to check |
 |---|---|
 | "No .NET SDK was found" | Install the .NET SDK. If the solution has a `global.json`, install the SDK version it asks for. |
-| Nothing loads, and the helper processes (build host, language service, plugin host) stop at start with "You must install or update .NET" | They run on .NET 11 or newer: install the .NET 11 SDK (Help → Check Environment offers it). SDKs of older versions alone can't start them. |
+| "Codalus IDE needs the .NET … runtime, which isn't installed" | The helper processes (build host, language service, plugin host and the others) run on .NET 11 or newer: choose **Install .NET 11.0** in the notification, or Help → Check Environment. SDKs of older versions alone can't start them, and neither can an earlier release candidate. If you're sure the runtime is installed and the check is wrong, set `CODALUS_SKIP_RUNTIME_CHECK=1` and report it. |
+| A helper process stops at start, with an error that quotes what it wrote | It exited while starting (a missing file, a bad setting, a runtime the check didn't catch): the error has its exit code and the first lines it wrote to standard error, and its Output channel has all of them. It isn't started again, because it would stop the same way: fix the cause, then reopen the solution or restart Codalus IDE. |
 | Projects stay in "Restricted mode" | The folder isn't trusted. Click the status bar item to trust it. |
 | Packages show as unresolved | Restore failed: see Output → Restore. |
 | No IntelliSense in a project | Its design-time build failed (Output → Build Host). It is often a missing restore or SDK. |
@@ -36,7 +37,7 @@ Help → Show Logs opens the Codalus IDE channel. Crash reports are saved in the
 | On macOS, git or restore fails with "Failed to connect to … port 443" or "Couldn't connect to server", though the same command works in Terminal | macOS's local network privacy may be blocking Codalus IDE: turn it on in System Settings → Privacy & Security → Local Network. Servers on your company network or a VPN count as local. Codalus IDE also takes the proxy and certificate variables your login shell exports (`HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, …); a proxy set only in `~/.zshrc` reaches it after a restart. |
 | Push or pull fails with an authentication error | Configure a git credential helper or SSH keys. Codalus IDE doesn't prompt for passwords. |
 
-A helper process that crashes (build host, language service, plugin host) is restarted automatically, and a notification tells you.
+A helper process that crashes (build host, language service, plugin host) is restarted automatically, and a notification tells you. One that exits while it starts isn't restarted (see above).
 
 ## Crash reports
 
