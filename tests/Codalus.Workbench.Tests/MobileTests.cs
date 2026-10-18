@@ -118,6 +118,13 @@ public sealed class MobileTests : IDisposable
         Assert.Equal(("18.2", true), (simulators[0].OsVersion, simulators[0].IsRunning));
         Assert.Equal("iPhone 16 Pro (iOS 18.2, simulator)", simulators[0].Label);
 
+        // The output comes with standard error after it: a warning there doesn't lose the simulators.
+        var warned = MobileDevices.ParseSimulators("""
+            {"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-18-2":[{"udid":"B2","isAvailable":true,"state":"Booted","name":"iPhone 16 Pro"}]}}
+            Malformed runtime bundle ignored: /Library/Developer/CoreSimulator/Volumes/iOS_22A3351
+            """);
+        Assert.Equal("iPhone 16 Pro", warned.Single().Name);
+
         var phones = MobileDevices.ParseAppleDevices("""
             {"result":{"devices":[
               {"identifier":"X","deviceProperties":{"name":"Jane's iPhone","osVersionNumber":"18.1"},"hardwareProperties":{"udid":"00008110-001","platform":"iOS","deviceType":"iPhone"},"connectionProperties":{"pairingState":"paired"}},

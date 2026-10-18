@@ -24,6 +24,7 @@ public sealed class LanguageService : IAsyncDisposable
     private readonly SupervisionPolicy? _policy;
     private readonly ConcurrentDictionary<string, Lazy<Task<LanguageHostClient?>>> _clients = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, LanguageDocument> _documents = new(SolutionService.PathComparer);
+    private readonly SemaphoreSlim _documentNotifications = new(1, 1);
     private readonly ConcurrentDictionary<string, ProjectData> _projects = new(SolutionService.PathComparer);
     private readonly ConcurrentDictionary<string, WorkspaceStatusParams> _status = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _lifetime = new();
@@ -335,9 +336,8 @@ public sealed class LanguageService : IAsyncDisposable
             {
                 try
                 {
-                    if (await ClientAsync(linter.LanguageId).ConfigureAwait(false) is { } lint && _documents.ContainsKey(document.Path))
+                    if (await ClientAsync(linter.LanguageId).ConfigureAwait(false) is { } lint && await SendOpenAsync(lint, document).ConfigureAwait(false))
                     {
-                        await lint.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
                         SchedulePull(linter.LanguageId, lint, document.Path);
                     }
                 }
@@ -353,13 +353,38 @@ public sealed class LanguageService : IAsyncDisposable
             return false;
         }
 
-        await client.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
-        if (ServerOf(document.LanguageId) is { } server)
+        if (await SendOpenAsync(client, document).ConfigureAwait(false) && ServerOf(document.LanguageId) is { } server)
         {
             SchedulePull(server, client, document.Path);
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Sends a document's <c>didOpen</c> unless it was closed (or opened again) while its service started: its text
+    /// is read now, and a closed document's may be gone already (its editor let go of the text model), so a late open
+    /// would leave the service with an empty file that no edit or close would ever correct (M47: Code Search's preview,
+    /// moving on while the C# host started, emptied Shapes.cs there, so neither the index nor workspace symbols had its
+    /// types). Opens and closes go out one at a time, so a close that comes while the open is sent follows it.
+    /// </summary>
+    private async Task<bool> SendOpenAsync(LanguageHostClient client, LanguageDocument document)
+    {
+        await _documentNotifications.WaitAsync(_lifetime.Token).ConfigureAwait(false);
+        try
+        {
+            if (!_documents.TryGetValue(document.Path, out var current) || !ReferenceEquals(current, document))
+            {
+                return false;
+            }
+
+            await client.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
+            return true;
+        }
+        finally
+        {
+            _documentNotifications.Release();
+        }
     }
 
     /// <summary>The running clients a document is open in: its language's service and its linters, with their ids.</summary>
@@ -468,14 +493,22 @@ public sealed class LanguageService : IAsyncDisposable
         {
             var clients = ClientsOf(document).ToList();
             _documents.TryRemove(path, out _);
-            foreach (var (server, client) in clients)
+            await _documentNotifications.WaitAsync(_lifetime.Token).ConfigureAwait(false);
+            try
             {
-                await client.DidCloseAsync(DocumentUris.FromPath(path), _lifetime.Token).ConfigureAwait(false);
-                if (client.Capabilities?.DiagnosticProvider == true)
+                foreach (var (server, client) in clients)
                 {
-                    // Pulled diagnostics belong to the open document.
-                    Diagnostics.Set(path, server, null, []);
+                    await client.DidCloseAsync(DocumentUris.FromPath(path), _lifetime.Token).ConfigureAwait(false);
+                    if (client.Capabilities?.DiagnosticProvider == true)
+                    {
+                        // Pulled diagnostics belong to the open document.
+                        Diagnostics.Set(path, server, null, []);
+                    }
                 }
+            }
+            finally
+            {
+                _documentNotifications.Release();
             }
         }
     }

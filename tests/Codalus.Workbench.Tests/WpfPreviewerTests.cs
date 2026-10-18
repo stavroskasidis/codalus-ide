@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 using Codalus.Workbench.Previewer;
 
 namespace Codalus.Workbench.Tests;
@@ -34,15 +33,7 @@ public sealed class WpfFixture : IAsyncLifetime
         Codalus.Tests.FixtureSdk.Pin(_root);
         var (code, output) = await AvaloniaFixture.DotnetAsync("build", Path.Combine(App, "WpfApp.csproj"), "-nologo", "-v", "quiet");
         Assert.True(code == 0, output);
-        (code, output) = await AvaloniaFixture.DotnetAsync("msbuild", Path.Combine(App, "WpfApp.csproj"), "-nologo", "-getProperty:TargetPath");
-        Assert.True(code == 0, output);
-        AppDll = output.Trim();
-        if (AppDll.StartsWith('{'))
-        {
-            using var properties = JsonDocument.Parse(output);
-            AppDll = properties.RootElement.GetProperty("Properties").GetProperty("TargetPath").GetString()!;
-        }
-
+        AppDll = (await Codalus.Tests.MSBuildQuery.RunAsync(Path.Combine(App, "WpfApp.csproj"), ["TargetPath"])).Property("TargetPath");
         Assert.True(File.Exists(AppDll), AppDll);
     }
 

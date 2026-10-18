@@ -4,10 +4,13 @@ namespace Codalus.Workbench.Debugging;
 
 /// <summary>
 /// A process that can be attached to. <see cref="IsDotnet"/>: it runs .NET (CoreCLR, or the desktop CLR when
-/// <see cref="IsDesktopClr"/>, which the .NET Framework debugger attaches to, M43b).
+/// <see cref="IsDesktopClr"/>, which the .NET Framework debugger attaches to, M43b); a desktop-CLR process is always .NET.
 /// </summary>
 public sealed record ProcessEntry(int Id, string Name, string? Title, bool IsDotnet, bool IsDesktopClr = false)
 {
+    /// <summary>Whether it runs .NET: CoreCLR, or the desktop CLR (<see cref="IsDesktopClr"/> implies it).</summary>
+    public bool IsDotnet { get; init; } = IsDotnet || IsDesktopClr;
+
     /// <summary>The runtime as the Attach to Process list shows it.</summary>
     public string? Runtime => IsDesktopClr ? ".NET Framework" : IsDotnet ? ".NET" : null;
 }
@@ -43,40 +46,27 @@ public static class ProcessList
                     continue; // exited meanwhile
                 }
 
-                var desktop = OperatingSystem.IsWindows() && Codalus.Debugging.DesktopClr.LoadedRuntime(process) is not null;
-                result.Add(new ProcessEntry(process.Id, name, title, desktop || IsDotnet(process), desktop));
+                // One snapshot of its modules decides both: .NET and .NET Framework can't disagree.
+                var (dotnet, desktop) = Classify(name, Codalus.Platform.ProcessModules.Names(process.Id), OperatingSystem.IsWindows());
+                result.Add(new ProcessEntry(process.Id, name, title, dotnet, desktop));
             }
         }
 
         return [.. result.OrderByDescending(p => p.IsDotnet).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Id)];
     }
 
-    /// <summary>Whether the process has loaded the .NET runtime (coreclr). Unknown (no access, macOS) counts as no.</summary>
-    private static bool IsDotnet(Process process)
+    /// <summary>
+    /// Whether a process runs .NET, and whether that's the desktop CLR (only looked for on Windows), from its loaded
+    /// modules' file names (null: unknown, as on macOS or without access, when only a process named <c>dotnet</c>
+    /// counts). CoreCLR is <c>coreclr.dll</c>, <c>libcoreclr.so</c> or <c>libcoreclr.dylib</c>; the desktop CLR is
+    /// <see cref="Codalus.Debugging.DesktopClr.RuntimeOf"/>'s (CoreCLR wins), and is .NET too.
+    /// </summary>
+    internal static (bool IsDotnet, bool IsDesktopClr) Classify(string processName, IReadOnlyCollection<string>? modules, bool windows)
     {
-        try
-        {
-            if (OperatingSystem.IsLinux())
-            {
-                return File.ReadAllText($"/proc/{process.Id}/maps").Contains("libcoreclr.so", StringComparison.Ordinal);
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                foreach (ProcessModule module in process.Modules)
-                {
-                    if (string.Equals(module.ModuleName, "coreclr.dll", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return string.Equals(process.ProcessName, "dotnet", StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            return false;
-        }
+        var desktop = windows && modules is not null && Codalus.Debugging.DesktopClr.RuntimeOf(modules) is not null;
+        var core = modules is not null && modules.Any(m => s_coreClr.Contains(m, StringComparer.OrdinalIgnoreCase));
+        return (desktop || core || string.Equals(processName, "dotnet", StringComparison.OrdinalIgnoreCase), desktop);
     }
+
+    private static readonly string[] s_coreClr = [Codalus.Debugging.DesktopClr.CoreClr, "libcoreclr.so", "libcoreclr.dylib"];
 }

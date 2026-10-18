@@ -174,17 +174,20 @@ public sealed partial class ShellHost
     internal async Task<CodeDocument> AcquireModelAsync(string path)
     {
         path = Path.GetFullPath(path);
-        if (!_models.TryGetValue(path, out var model))
+        BeginModelRequest(path);
+        try
         {
-            model = await CodeDocument.OpenAsync(path, CancellationToken.None).ConfigureAwait(true);
-            Track(model);
+            var model = await ModelAsync(path).ConfigureAwait(true);
+            _heldModels[model] = _heldModels.GetValueOrDefault(model) + 1;
+            return model;
         }
-
-        _heldModels[model] = _heldModels.GetValueOrDefault(model) + 1;
-        return model;
+        finally
+        {
+            EndModelRequest(path);
+        }
     }
 
-    /// <summary>A designer lets go of a text model: forgotten when no editor shows it either.</summary>
+    /// <summary>A designer lets go of a text model: forgotten when no editor shows it and no one else is about to take it.</summary>
     internal void ReleaseModel(CodeDocument model)
     {
         if (_heldModels.TryGetValue(model, out var count) && count > 1)
@@ -194,7 +197,7 @@ public sealed partial class ShellHost
         }
 
         _heldModels.Remove(model);
-        if (Editors.Any(e => e.Model == model))
+        if (Editors.Any(e => e.Model == model) || IsHeld(model))
         {
             return;
         }
@@ -213,7 +216,8 @@ public sealed partial class ShellHost
         model.Dispose();
     }
 
-    internal bool IsHeld(CodeDocument model) => _heldModels.ContainsKey(model);
+    /// <summary>Whether a designer (or the Code Search preview) holds the model, or a caller waits for its file's model to take it.</summary>
+    internal bool IsHeld(CodeDocument model) => _heldModels.ContainsKey(model) || _modelRequests.ContainsKey(model.Path);
 
     /// <summary>Whether a code editor shows <paramref name="path"/>.</summary>
     internal bool HasEditorFor(string path) => Editors.Any(e => SolutionPaths.Comparer.Equals(e.Model.Path, path) && e.Owner is not null);

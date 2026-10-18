@@ -70,13 +70,18 @@ public static class MobileDevices
     public static string? ParseAvdName(string output) =>
         output.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0 && l != "OK");
 
-    /// <summary>iOS simulators from <c>xcrun simctl list devices available --json</c> (not watchOS, tvOS or visionOS).</summary>
+    /// <summary>
+    /// iOS simulators from <c>xcrun simctl list devices available --json</c> (not watchOS, tvOS or visionOS). The tool's
+    /// output comes with what it wrote on standard error after it (<c>EnvironmentCheck.RunProcessAsync</c>), so only the
+    /// first JSON value is read and a warning after it doesn't lose the simulators.
+    /// </summary>
     public static IReadOnlyList<MobileDevice> ParseSimulators(string json)
     {
         var result = new List<MobileDevice>();
         try
         {
-            using var document = JsonDocument.Parse(json);
+            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
+            using var document = JsonDocument.ParseValue(ref reader);
             if (!document.RootElement.TryGetProperty("devices", out var runtimes) || runtimes.ValueKind != JsonValueKind.Object)
             {
                 return result;

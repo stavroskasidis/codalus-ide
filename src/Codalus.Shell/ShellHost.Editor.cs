@@ -38,6 +38,8 @@ public sealed partial class ShellHost : IEditorServices
     private const string StatusSource = "codalus.editor";
 
     private readonly Dictionary<string, CodeDocument> _models = new(SolutionPaths.Comparer);
+    private readonly Dictionary<string, Task<CodeDocument>> _modelReads = new(SolutionPaths.Comparer);
+    private readonly Dictionary<string, int> _modelRequests = new(SolutionPaths.Comparer);
     private readonly Dictionary<CodeDocument, ITextSource> _snapshots = [];
     private readonly List<(string Path, Position Position)> _back = [];
     private readonly List<(string Path, Position Position)> _forward = [];
@@ -294,36 +296,102 @@ public sealed partial class ShellHost : IEditorServices
             return open;
         }
 
-        CodeDocument model;
-        if (_models.TryGetValue(path, out var existing))
+        CodeEditorDocument view;
+        if (!_models.ContainsKey(path) && !File.Exists(path) && initialContent is not null)
         {
-            model = existing;
+            var created = CodeDocument.Create(path, initialContent);
+            Track(created);
+            view = CreateView(created, primary: true);
+            Layout.OpenDocument(view, preview, focus: !preview);
         }
         else
         {
+            BeginModelRequest(path);
             try
             {
-                model = File.Exists(path) || initialContent is null
-                    ? await CodeDocument.OpenAsync(path, CancellationToken.None).ConfigureAwait(true)
-                    : CodeDocument.Create(path, initialContent);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                Workbench.Notifications.Error(Localizer.Format("msg.editor.couldNotOpen", "Could not open {0}: {1}", path, ex.Message));
-                return null;
-            }
+                CodeDocument model;
+                try
+                {
+                    model = await ModelAsync(path).ConfigureAwait(true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Workbench.Notifications.Error(Localizer.Format("msg.editor.couldNotOpen", "Could not open {0}: {1}", path, ex.Message));
+                    return null;
+                }
 
-            Track(model);
+                view = CreateView(model, primary: true);
+                Layout.OpenDocument(view, preview, focus: !preview);
+            }
+            finally
+            {
+                EndModelRequest(path);
+            }
         }
 
-        var view = CreateView(model, primary: true);
-        Layout.OpenDocument(view, preview, focus: !preview);
         if (at is { } caret)
         {
             view.Navigate(caret);
         }
 
         return view;
+    }
+
+    /// <summary>
+    /// The text model of a file that editors, designers and Code Search's preview share: the tracked one, or the one
+    /// being read for another caller, or a new one. Two models of one file would be two documents for the language
+    /// service, and letting go of either would close the file there or send it the text of a model already gone (M47:
+    /// Code Search's preview, asked for the same result by two batches while the C# host started, left the host with
+    /// an empty Shapes.cs). A caller takes the model (an editor's view or a hold) between
+    /// <see cref="BeginModelRequest"/> and <see cref="EndModelRequest"/>, so another caller's release meanwhile keeps it.
+    /// </summary>
+    private Task<CodeDocument> ModelAsync(string path)
+    {
+        if (_models.TryGetValue(path, out var model))
+        {
+            return Task.FromResult(model);
+        }
+
+        if (_modelReads.TryGetValue(path, out var reading))
+        {
+            return reading;
+        }
+
+        reading = ReadModelAsync(path);
+        if (!reading.IsCompleted)
+        {
+            _modelReads[path] = reading;
+        }
+
+        return reading;
+    }
+
+    private async Task<CodeDocument> ReadModelAsync(string path)
+    {
+        try
+        {
+            var model = await CodeDocument.OpenAsync(path, CancellationToken.None).ConfigureAwait(true);
+            Track(model);
+            return model;
+        }
+        finally
+        {
+            _modelReads.Remove(path);
+        }
+    }
+
+    private void BeginModelRequest(string path) => _modelRequests[path] = _modelRequests.GetValueOrDefault(path) + 1;
+
+    private void EndModelRequest(string path)
+    {
+        if (_modelRequests.TryGetValue(path, out var count) && count > 1)
+        {
+            _modelRequests[path] = count - 1;
+        }
+        else
+        {
+            _modelRequests.Remove(path);
+        }
     }
 
     /// <summary>Kept for callers that open settings files: a file that may not exist yet, never as a preview.</summary>

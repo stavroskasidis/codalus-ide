@@ -120,6 +120,14 @@ public class GatesTests
         Assert.Contains(accepted, a => a is { Os: "linux", Target: "shell", Scenario: "binary-size", Metric: "lshost_mb" } && Math.Abs(a.Value - 93.5) < 0.05);
         Assert.Contains(accepted, a => a is { Os: "windows", Metric: "lshost_mb" } && Math.Abs(a.Value - 92.6) < 0.05);
         Assert.Contains(accepted, a => a is { Os: "macos", Metric: "pluginhost_mb" } && Math.Abs(a.Value - 4.7) < 0.05);
+        // The 0.3.0 release's content (M40–M47, M34g), each OS's shell, build host and markup host.
+        foreach (var os in new[] { "linux", "windows", "macos" })
+        {
+            foreach (var metric in new[] { "shell_mb", "shell_zip_mb", "buildhost_mb", "markuphost_mb" })
+            {
+                Assert.Contains(accepted, a => a.Os == os && a.Metric == metric && a.Date == new DateOnly(2026, 10, 18) && a.Commit is not null && a.Run is not null);
+            }
+        }
         Assert.Empty(Gates.LoadAccepted(Path.Combine(root, "benchmarks", "no-such-file.json")));
     }
 
