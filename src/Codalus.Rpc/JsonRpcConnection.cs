@@ -44,6 +44,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     private long _nextId;
     private int _started;
     private int _disposed;
+    private int _received;
+    private int _readEnded;
+    private readonly Lock _lostGate = new();
+    private Task<JsonRpcConnectionLostException>? _lost;
 
     /// <summary>Requests being handled: their method and when they started (slow-request reports).</summary>
     private readonly ConcurrentDictionary<string, (string Method, long Started)> _running = new(StringComparer.Ordinal);
@@ -96,6 +100,45 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     /// <summary>Completes when the connection has stopped reading.</summary>
     public Task Completion => _readLoop;
+
+    /// <summary>Whether a message has arrived from the peer (a host that got this far started).</summary>
+    public bool HasReceived => Volatile.Read(ref _received) != 0;
+
+    /// <summary>
+    /// Says why the connection was lost (M49): called once, when reading stops or a write finds the peer gone (not on
+    /// <see cref="DisposeAsync"/>), with the failure if there was one. The exception it returns is what pending and later
+    /// requests fail with (a supervisor puts the process's exit code and standard error in it); null, or no callback,
+    /// keeps "The connection was lost." Register before <see cref="Start"/>.
+    /// </summary>
+    public Func<Exception?, Task<JsonRpcConnectionLostException?>>? ExplainLoss { get; set; }
+
+    private Task<JsonRpcConnectionLostException> LostAsync(Exception? failure)
+    {
+        lock (_lostGate)
+        {
+            return _lost ??= ExplainAsync(failure);
+        }
+    }
+
+    private async Task<JsonRpcConnectionLostException> ExplainAsync(Exception? failure)
+    {
+        if (ExplainLoss is { } explain && !_shutdown.IsCancellationRequested)
+        {
+            try
+            {
+                if (await explain(failure).ConfigureAwait(false) is { } explained)
+                {
+                    return explained;
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The plain message below: an explanation that fails must not hide the loss itself.
+            }
+        }
+
+        return new JsonRpcConnectionLostException("The connection was lost.", failure);
+    }
 
     public void Start()
     {
@@ -259,6 +302,12 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 writeParams(writer);
             }, cancellationToken, "request " + method).ConfigureAwait(false);
 
+            if (Volatile.Read(ref _readEnded) != 0)
+            {
+                // Sent after the reading stopped: no answer can come.
+                completion.TrySetException(await LostAsync(null).ConfigureAwait(false));
+            }
+
             try
             {
                 return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -372,8 +421,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {
-            // The peer is gone (e.g. a crashed host's stdin pipe closed): one exception type for callers.
-            throw new JsonRpcConnectionLostException("The connection was lost.", ex);
+            // The peer is gone (e.g. a crashed host's stdin pipe closed): one exception type for callers, which says why
+            // when the supervisor knows (M49).
+            throw await LostAsync(ex).ConfigureAwait(false);
         }
         finally
         {
@@ -402,6 +452,8 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                     break;
                 }
 
+                Volatile.Write(ref _received, 1);
+
                 if (!TryCompleteResponse(payload))
                 {
                     await _inbox.Writer.WriteAsync(new Inbound(payload, null), _shutdown.Token).ConfigureAwait(false);
@@ -420,7 +472,8 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
 
         _inbox.Writer.TryComplete();
-        var lost = new JsonRpcConnectionLostException("The connection was lost.", failure);
+        var lost = await LostAsync(failure).ConfigureAwait(false);
+        Volatile.Write(ref _readEnded, 1);
         foreach (var pending in _pending.Values)
         {
             pending.TrySetException(lost);
@@ -696,4 +749,8 @@ public sealed class JsonRpcHandlerException(int code, string message) : Exceptio
     public int Code { get; } = code;
 }
 
-public sealed class JsonRpcConnectionLostException(string message, Exception? inner) : Exception(message, inner);
+/// <summary>
+/// The peer went away: pending and later requests fail with this. Subclasses say why when it's known (M49:
+/// <see cref="HostExitedException"/>, <see cref="HostRuntimeMissingException"/>).
+/// </summary>
+public class JsonRpcConnectionLostException(string message, Exception? inner) : Exception(message, inner);

@@ -23,6 +23,12 @@ public interface IHostProcess : IAsyncDisposable
 
     event Action<string>? ErrorLine;
 
+    /// <summary>
+    /// Completes once standard error has been read to its end (M49: the supervisor waits for a failed host's last
+    /// lines). Launchers that can't tell complete it at once.
+    /// </summary>
+    Task ErrorCompleted => Task.CompletedTask;
+
     void BeginErrorRead();
 
     /// <summary>Ends the process (and its children where the OS allows).</summary>
@@ -35,13 +41,25 @@ public interface IProcessLauncher
     Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken);
 }
 
-/// <summary>Starts processes on this machine, with their stdio redirected.</summary>
+/// <summary>
+/// Starts processes on this machine, with their stdio redirected. A framework-dependent .NET program is checked first
+/// (M49, <see cref="HostRuntimeCheck"/>): when the runtime it needs isn't under the .NET root it would use, it isn't
+/// started, and <see cref="HostRuntimeMissingException"/> says what's missing.
+/// </summary>
 public sealed class LocalProcessLauncher : IProcessLauncher
 {
     public static LocalProcessLauncher Instance { get; } = new();
 
+    /// <summary>How the check finds .NET roots (tests describe a machine).</summary>
+    public DotnetRootResolver Roots { get; init; } = DotnetRootResolver.Default;
+
     public Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
     {
+        if (launch.CheckRuntime && HostRuntimeCheck.Check(launch, Roots) is { IsSatisfied: false } missing)
+        {
+            throw new HostRuntimeMissingException(missing);
+        }
+
         var psi = new ProcessStartInfo(launch.FileName)
         {
             RedirectStandardInput = true,
@@ -75,6 +93,7 @@ public sealed class LocalHostProcess : IHostProcess
 {
     private readonly Process _process;
     private readonly TaskCompletionSource<int?> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _errorCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _errorReading;
 
     public LocalHostProcess(Process process)
@@ -86,6 +105,10 @@ public sealed class LocalHostProcess : IHostProcess
             if (e.Data is { } line)
             {
                 ErrorLine?.Invoke(line);
+            }
+            else
+            {
+                _errorCompleted.TrySetResult(); // the end of standard error
             }
         };
         process.Exited += (_, _) => _exited.TrySetResult(ExitCode());
@@ -117,6 +140,8 @@ public sealed class LocalHostProcess : IHostProcess
     }
 
     public Task<int?> Exited => _exited.Task;
+
+    public Task ErrorCompleted => _errorCompleted.Task;
 
     public event Action<string>? ErrorLine;
 
