@@ -886,6 +886,7 @@
   "counters.exportJson": "Export JSON",
   "counters.intervalInSeconds": "Interval in seconds",
   "counters.metersSystemNetHttpMyappOrders": "Meters: System.Net.Http, MyApp[orders.placed]",
+  "counters.processIdOrName": "Process id or name",
   "counters.processIdOrNameOrPick": "Process id or name, or pick a running .NET process",
   "counters.provider": "Provider",
   "counters.refresh": "Refresh",

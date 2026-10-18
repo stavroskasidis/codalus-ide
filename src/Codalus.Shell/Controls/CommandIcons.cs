@@ -61,6 +61,8 @@ public static class CommandIcons
         ["cube"] = Purple,
         ["mention"] = Blue,
         ["events"] = Yellow,
+        ["breakpoint-solid"] = Red,
+        ["breakpoint-hollow"] = Red,
         ["code"] = Blue,
         ["broom"] = Blue,
         ["save"] = Blue,

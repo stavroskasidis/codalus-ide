@@ -177,6 +177,42 @@ public class ControlSetViewsTests
     }
 
     [AvaloniaFact]
+    public async Task Configuration_manager_attaches_new_and_remove_to_their_combo_box_and_chips_the_active_pair()
+    {
+        await using var f = ShellFixture.Create();
+        var solution = f.CopyFixture();
+        f.Shell.Trust.Trust(Path.GetDirectoryName(Path.GetDirectoryName(solution))!);
+        await f.Shell.OpenSolutionAsync(solution);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count > 0 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+        var vm = f.Shell.OpenConfigurationManager()!;
+        await ShellFixture.PumpUntil(() => vm.BuildTypes.Count > 1 && vm.Rows.Count > 0, seconds: 120);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<ConfigurationManagerView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<ConfigurationManagerView>().Single();
+        ShellFixture.Pump();
+
+        // Each solution combo box shows its choice, with New… and Remove attached to it.
+        var attached = view.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("attached")).ToList();
+        Assert.Equal(2, attached.Count);
+        var configuration = attached[0].GetVisualDescendants().OfType<ComboBox>().First();
+        Assert.Equal(vm.BuildType, configuration.SelectedItem);
+        Assert.Equal(vm.Platform, attached[1].GetVisualDescendants().OfType<ComboBox>().First().SelectedItem);
+        Assert.All(attached, a => Assert.Equal(["add", "trash"], a.GetVisualDescendants().OfType<Button>().Select(b => ButtonIcon.GetKind(b))));
+
+        // The active pair: a chip, and Make Active disabled; another pair: no chip, Make Active enabled.
+        var chip = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("chip"));
+        var makeActive = view.GetVisualDescendants().OfType<Button>().Single(b => ButtonIcon.GetKind(b) == "check-circle");
+        Assert.True(vm.IsActivePair);
+        Assert.True(chip.IsVisible);
+        Assert.False(makeActive.IsEffectivelyEnabled);
+        vm.BuildType = vm.BuildTypes.First(b => b != vm.BuildType);
+        ShellFixture.Pump();
+        Assert.False(vm.IsActivePair);
+        Assert.False(chip.IsVisible);
+        Assert.True(makeActive.IsEffectivelyEnabled);
+        Assert.Equal(vm.BuildType, configuration.SelectedItem);
+    }
+
+    [AvaloniaFact]
     public async Task Options_has_category_icons_a_page_header_chips_and_booleans_as_one_check_box()
     {
         await using var f = ShellFixture.Create();

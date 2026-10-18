@@ -8,8 +8,8 @@
   <DockPanel>
     <!-- The control set's toolbar (M34h): Break on All, Break on None and Restore Defaults as icons; the search box takes the row. -->
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button x:Name="CheckAll" Classes="toolbar icon" controls:ButtonIcon.Kind="breakpoint" ToolTip.Tip="{l:T exceptionSettings.breakOnAllBreakWhenAnyException}" AutomationProperties.Name="{l:T exceptionSettings.breakOnAllExceptions}" />
-      <Button x:Name="UncheckAll" Classes="toolbar icon" controls:ButtonIcon.Kind="breakpoint-outline" ToolTip.Tip="{l:T exceptionSettings.breakOnNoneBreakOnlyOnUser}" AutomationProperties.Name="{l:T exceptionSettings.breakOnNoThrownExceptions}" />
+      <Button x:Name="CheckAll" Classes="toolbar icon" controls:ButtonIcon.Kind="breakpoint-solid" ToolTip.Tip="{l:T exceptionSettings.breakOnAllBreakWhenAnyException}" AutomationProperties.Name="{l:T exceptionSettings.breakOnAllExceptions}" />
+      <Button x:Name="UncheckAll" Classes="toolbar icon" controls:ButtonIcon.Kind="breakpoint-hollow" ToolTip.Tip="{l:T exceptionSettings.breakOnNoneBreakOnlyOnUser}" AutomationProperties.Name="{l:T exceptionSettings.breakOnNoThrownExceptions}" />
       <Button x:Name="Reset" Classes="toolbar icon" controls:ButtonIcon.Kind="reset" ToolTip.Tip="{l:T exceptionSettings.restoreDefaults}" AutomationProperties.Name="{l:T exceptionSettings.restoreTheDefaultExceptionSettings}" />
       <Border Classes="toolbarSeparator" />
       <TextBox x:Name="Search" Classes="search" Text="{Binding Filter}" PlaceholderText="{l:T exceptionSettings.searchExceptionTypes}" AutomationProperties.Name="{l:T exceptionSettings.searchExceptionTypes}" />
@@ -30,9 +30,9 @@
       </Grid>
     </Border>
     <Border DockPanel.Dock="Top" Classes="gridHeader">
-      <Grid ColumnDefinitions="*,220">
-        <TextBlock Text="{l:T exceptionSettings.breakWhenThrown}" />
-        <TextBlock Grid.Column="1" Margin="6,0,0,0" Text="{l:T exceptionSettings.onlyInModules}" />
+      <Grid ColumnDefinitions="3*,2*">
+        <TextBlock Text="{l:T exceptionSettings.breakWhenThrown}" ToolTip.Tip="{l:T exceptionSettings.breakWhenThrown}" />
+        <TextBlock Grid.Column="1" Margin="6,0,0,0" Text="{l:T exceptionSettings.onlyInModules}" ToolTip.Tip="{l:T exceptionSettings.onlyInModules}" />
       </Grid>
     </Border>
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T exceptionSettings.exceptionTypes}">
@@ -44,7 +44,7 @@
       </ListBox.Styles>
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:ExceptionTypeRow">
-          <Grid ColumnDefinitions="*,220">
+          <Grid ColumnDefinitions="3*,2*">
             <CheckBox IsChecked="{Binding BreakWhenThrown}" Content="{Binding Type}" AutomationProperties.Name="{Binding Type}" />
             <!-- The module condition as a compact field (M34h). -->
             <TextBox Grid.Column="1" Margin="6,0,0,0" Text="{Binding Condition, UpdateSourceTrigger=LostFocus}" PlaceholderText="{l:T exceptionSettings.allModules}"

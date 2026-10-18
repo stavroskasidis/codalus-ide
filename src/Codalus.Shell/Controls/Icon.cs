@@ -343,7 +343,6 @@ public static class IconSet
 
         // The control set's views (M34h): tool window toolbars and command rows as icon buttons.
         ["add"] = "add_16_regular",
-        ["subtract"] = "subtract_16_regular",
         ["export"] = "arrow_export_ltr_16_regular",
         ["import"] = "arrow_import_16_regular",
         ["window-new"] = "window_new_16_regular",
@@ -361,6 +360,8 @@ public static class IconSet
         ["cube"] = "cube_16_regular",
         ["mention"] = "number_symbol_16_regular",
         ["events"] = "flash_16_regular",
+        ["breakpoint-solid"] = "circle_16_filled",
+        ["breakpoint-hollow"] = "circle_16_regular",
 
         // The Windows Forms Toolbox's controls and components, one each (M34h; the stroke drawings below draw the
         // combo box, the progress bar and the group box, which Fluent has no picture of).
@@ -548,6 +549,7 @@ public static class IconSet
         ["dot"] = Circle(8, 8, 2),
         ["more"] = Dot(3, 8) + Dot(8, 8) + Dot(13, 8),
         ["arrow-up-down"] = "M5,13.5 V2.5 M2.5,5 L5,2.5 L7.5,5 M11,2.5 V13.5 M8.5,11 L11,13.5 L13.5,11",
+        ["subtract"] = "M3.5,8 H12.5",
         ["pin"] = "M5.5,2 H10.5 M6.5,2 V6.5 L4,9.5 H12 L9.5,6.5 V2 M8,9.5 V14.5",
 
         // Toolbox controls Fluent has no picture of (M34h): a combo box (a box with its drop-down button), a progress

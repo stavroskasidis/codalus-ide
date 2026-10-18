@@ -169,11 +169,17 @@
           </StackPanel>
         </Grid>
         <!-- svcutil's state, then Install when it's missing (M34g: the message pushed the button off a 640 px page); missing, a warning (M34h). -->
-        <DockPanel>
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="serviceReferenceLabel" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+        <DockPanel Grid.Column="1">
           <Button DockPanel.Dock="Right" Margin="8,0,0,0" VerticalAlignment="Center" Classes="iconText" controls:ButtonIcon.Kind="download" Content="{l:T serviceReferences.install}" Command="{Binding InstallWcfCommand}" IsVisible="{Binding NeedsWcfTool}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T serviceReferences.installDotnetSvcutil}" />
           <controls:Icon DockPanel.Dock="Left" Kind="warning" Margin="0,0,6,0" VerticalAlignment="Center" IsVisible="{Binding NeedsWcfTool}" />
           <TextBlock Classes="muted" Classes.warning="{Binding NeedsWcfTool}" Text="{Binding WcfToolMessage}" TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
         </DockPanel>
+        </Grid>
       </StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsOpenApi}">
         <TextBlock Text="{l:T serviceReferences.generator}" Classes="muted" VerticalAlignment="Center" />
