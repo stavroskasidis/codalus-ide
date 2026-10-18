@@ -9,11 +9,18 @@ using Codalus.Shell.ViewModels;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// The in-window modal dialog: Enter chooses the default button, Escape cancels, Tab stays inside. A preview of
-/// changes takes most of the window (<see cref="PreviewSize"/>, M34h); other forms size to their content.
+/// The in-window modal dialog (M34h's frame, docs/design/controls.md): Enter chooses the default button, Escape (or the
+/// header's close button) cancels, Tab stays inside; on a checklist Space checks the selected item and Alt+Up and
+/// Alt+Down move it. It is 520 px wide (Shell.Size.Dialog.Width), narrower only in a window too small for that, and
+/// grows with its content up to 720 (960 with notes); a preview of changes takes most of the window instead
+/// (<see cref="PreviewSize"/>, M34h's gallery fixes), its changes filling what the header, the message and the footer
+/// leave.
 /// </summary>
 public sealed partial class DialogView : UserControl
 {
+    private const double Width520 = 520;
+    private const double WindowMargin = 32;
+
     /// <summary>The share of the window a preview of changes takes.</summary>
     public const double PreviewShare = 0.75;
 
@@ -29,6 +36,55 @@ public sealed partial class DialogView : UserControl
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+    }
+
+    /// <summary>
+    /// The size of a preview of changes over an area of <paramref name="area"/> (the window's content): three quarters
+    /// of it, at least <see cref="PreviewMinSize"/>, at most the area less <see cref="PreviewMargin"/> on each side.
+    /// </summary>
+    public static Size PreviewSize(Size area)
+    {
+        static double Fit(double available, double minimum)
+        {
+            var most = Math.Max(0, available - (2 * PreviewMargin));
+            return Math.Min(most, Math.Max(available * PreviewShare, minimum));
+        }
+
+        return new Size(Fit(area.Width, PreviewMinSize.Width), Fit(area.Height, PreviewMinSize.Height));
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        // The layer gives the dialog the window's size to center in.
+        if (_viewModel is { HasChanges: true } && double.IsFinite(availableSize.Width) && double.IsFinite(availableSize.Height))
+        {
+            var size = PreviewSize(availableSize);
+            Set(Frame, MinWidthProperty, 0);
+            Set(Frame, MaxWidthProperty, double.PositiveInfinity);
+            Set(Frame, WidthProperty, size.Width);
+            Set(Frame, HeightProperty, size.Height);
+            Set(ChangesBox, MaxHeightProperty, double.PositiveInfinity);
+        }
+        else
+        {
+            var minimum = double.IsInfinity(availableSize.Width) ? Width520 : Math.Min(Width520, Math.Max(0, availableSize.Width - WindowMargin));
+            Set(Frame, MinWidthProperty, minimum);
+            Set(Frame, MaxWidthProperty, _viewModel?.HasDetails == true ? 960 : 720);
+            Set(Frame, WidthProperty, double.NaN);
+            Set(Frame, HeightProperty, double.NaN);
+            Set(ChangesBox, MaxHeightProperty, 420);
+        }
+
+        return base.MeasureOverride(availableSize);
+    }
+
+    /// <summary>Sets a size only when it changes, so measuring doesn't invalidate itself again.</summary>
+    private static void Set(Control control, Avalonia.StyledProperty<double> property, double value)
+    {
+        if (!control.GetValue(property).Equals(value))
+        {
+            control.SetValue(property, value);
+        }
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -54,43 +110,6 @@ public sealed partial class DialogView : UserControl
         {
             InvalidateMeasure();
         }
-    }
-
-    /// <summary>
-    /// The size of a preview of changes over an area of <paramref name="area"/> (the window's content): three quarters
-    /// of it, at least <see cref="PreviewMinSize"/>, at most the area less <see cref="PreviewMargin"/> on each side.
-    /// </summary>
-    public static Size PreviewSize(Size area)
-    {
-        static double Fit(double available, double minimum)
-        {
-            var most = Math.Max(0, available - (2 * PreviewMargin));
-            return Math.Min(most, Math.Max(available * PreviewShare, minimum));
-        }
-
-        return new Size(Fit(area.Width, PreviewMinSize.Width), Fit(area.Height, PreviewMinSize.Height));
-    }
-
-    protected override Size MeasureOverride(Size availableSize)
-    {
-        // The layer gives the dialog the window's size to center in.
-        if (_viewModel is { HasChanges: true } && double.IsFinite(availableSize.Width) && double.IsFinite(availableSize.Height))
-        {
-            var size = PreviewSize(availableSize);
-            Frame.MaxWidth = double.PositiveInfinity;
-            Frame.Width = Math.Max(size.Width, Frame.MinWidth);
-            Frame.Height = size.Height;
-            ChangesBox.MaxHeight = double.PositiveInfinity;
-        }
-        else
-        {
-            Frame.Width = double.NaN;
-            Frame.Height = double.NaN;
-            Frame.MaxWidth = _viewModel?.HasDetails == true ? 960 : 560;
-            ChangesBox.MaxHeight = 420;
-        }
-
-        return base.MeasureOverride(availableSize);
     }
 
     private void OnOpened(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
@@ -123,6 +142,14 @@ public sealed partial class DialogView : UserControl
                 break;
             case Key.Enter when e.Source is not Button:
                 vm.Accept();
+                e.Handled = true;
+                break;
+            case Key.Up or Key.Down when vm.Reorderable && vm.HasChoices && e.KeyModifiers == KeyModifiers.Alt:
+                vm.MoveChoice(e.Key == Key.Up ? -1 : 1);
+                e.Handled = true;
+                break;
+            case Key.Space when vm.HasChoices && e.Source is ListBoxItem:
+                vm.ToggleSelectedChoice();
                 e.Handled = true;
                 break;
         }

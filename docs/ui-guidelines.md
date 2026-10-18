@@ -24,7 +24,7 @@ Review a surface against each line, in every theme family (Harbor, Graphite, Day
 - **Typography**
   - UI text is 9 pt: `Shell.FontSize.Body` (12 px), the window's default; don't set it again.
   - Secondary text (details, counts, dates) is `Shell.FontSize.Small` (11 px), usually with `TextBlock.muted`.
-  - Two heading sizes: `TextBlock.heading` (`Shell.FontSize.Title`, 18 px, page and dialog titles) and `TextBlock.subheading` (`Shell.FontSize.Heading`, 14 px, sections and detail panes).
+  - Two heading sizes: `TextBlock.heading` (`Shell.FontSize.Title`, 18 px, page titles) and `TextBlock.subheading` (`Shell.FontSize.Heading`, 14 px, sections, detail panes and the in-window dialog's title, M34h).
   - Titles are sentence case except command and window names, which are title case as in the menus. Use the product's terms: solution, project, tool window, document.
 - **Text that doesn't fit**
   - Nothing is cut off without an ellipsis: single-line text in a constrained space has `TextTrimming="CharacterEllipsis"` and a tooltip with the full text (on the text or its row).
@@ -33,6 +33,7 @@ Review a surface against each line, in every theme family (Harbor, Graphite, Day
   - Inputs keep room to type: a text box or combo box squeezed under 48 px by the columns around it fails `PolishTests` (M34g).
   - Text never runs under other text: a text in a horizontal stack panel isn't constrained by its cell, so put a row's texts in a `DockPanel` or `Grid` where they trim. `PolishTests` fails on text drawn over text (M34g, found in the quick pick's rows). Rows of a form that show different controls share their fixed columns (`Grid.IsSharedSizeScope`, `SharedSizeGroup`), so the values line up.
   - Columns: give the main column `*` and the others proportional (`2*,1.5*`) or modest fixed widths. Fixed columns that add up to most of 640 px squeeze the main one to nothing (the Keyboard Shortcuts header and Add New Item's list did, until M34's final pass).
+- **Controls** (M34h): buttons, fields, choices, tabs and rows come from [the control set](#the-control-set): pick the kind of button by the rules there, never restyle one in a view.
 - **States**
   - Every surface has an empty state, a loading state and an error state, each with a next step: what to do (`Open Solution…`, `Press F9 in an editor to add one`), not only what is missing.
   - Empty and error messages use `TextBlock.emptyState` (muted, wrapped, `Shell.Padding.EmptyState` around).
@@ -118,11 +119,121 @@ The design's layout differences between the families, as values each theme sets 
 | `Shell.Size.Row` | 22 | List and tree rows |
 | `Shell.Size.ToolWindowMinWidth` | 280 | The narrowest a docked tool window is designed for |
 | `Shell.FontSize.Body`, `Small`, `Heading`, `Title` | 12, 11, 14, 18 | Text (see Typography) |
-| `Shell.CornerRadius`, `Shell.CornerRadius.Overlay` | 3, 6 | Buttons and inputs; popups |
+| `Shell.CornerRadius`, `Shell.CornerRadius.Overlay` | 3, 6 | Toolbar chrome from before M34h; popups and dialogs (controls take `Shell.Control.CornerRadius`, below) |
 
 ### Classes
 
-`ShellStyles.axaml` applies the tokens through classes, which views use instead of setting the values themselves: `Button.toolbar`, `ToggleButton.toolbar`, `ComboBox.toolbar`, `controls:ToolbarPanel`, `Border.toolbarSeparator`, `TextBlock.muted`, `Run.muted`, `TextBlock.small`, `TextBlock.heading`, `TextBlock.subheading`, `TextBlock.emptyState`, `TextBlock.error`, `TextBlock.warning`, `Button.link`, `Border.overlay`, and the icon classes below.
+`ShellStyles.axaml` applies the tokens through classes, which views use instead of setting the values themselves: `Button.toolbar`, `ToggleButton.toolbar`, `ComboBox.toolbar`, `controls:ToolbarPanel`, `Border.toolbarSeparator`, `TextBlock.muted`, `Run.muted`, `TextBlock.small`, `TextBlock.heading`, `TextBlock.subheading`, `TextBlock.emptyState`, `TextBlock.error`, `TextBlock.warning`, `Button.link`, `Border.overlay`, the control set's classes ([below](#the-control-set)), and the icon classes below.
+
+## The control set
+
+One look for every button, field, choice, tab and row (M34h, D33): the design and its pictures are [`design/controls.md`](design/controls.md), approved on 2026-10-18. The shell's control themes (`Theming/Controls.axaml`: `Button`, `ToggleButton`, `DropDownButton`, `CheckBox`, `RadioButton`, `ToggleSwitch`, `SegmentedControl`) and `ShellStyles.axaml` (text and combo boxes, split buttons, tabs, rows, chips) draw the set, so a plain control has the look already: a view picks a kind with a class and never sets colors, heights or corners on a control itself. `ControlSetTests` checks the states, and the smoke test's gallery photographs the whole set in every theme (`controls-*`, `Infrastructure/ControlGallery.cs`).
+
+### Which button
+
+| Kind | When | How |
+|---|---|---|
+| Primary | The one main action of a dialog, page or form (OK, Invoke, Add Reference, Send); at most one in view. A destructive primary keeps the accent and names what it does (Remove, not OK). | `<Button Classes="accent" …/>` (the dialog's default button is drawn so on its own) |
+| Default | Every other text button. | `<Button Content="{l:T …}"/>` |
+| Subtle | A secondary action in a crowded row (Reset beside Invoke): flat until hovered. | `Classes="subtle"` |
+| Icon only | A familiar command with a standard glyph (refresh, start, stop, delete, open, copy, move up and down, clear, filter, pin, collapse). A tooltip with its name and shortcut in the menus' format (`Refresh (F5)`) and an `AutomationProperties.Name`: a tooltip isn't a name. | `<Button Classes="icon" controls:ButtonIcon.Kind="refresh" ToolTip.Tip="{l:T …}" AutomationProperties.Name="{l:T …}"/>` |
+| Icon + text | A tool window's main command (Run All, Add…, Modify Find) and commands an icon can't name alone (Test Client, Make Active, Discover); one or two in a toolbar. The text stays the button's name. | `<Button Classes="iconText" controls:ButtonIcon.Kind="add" Content="{l:T …}"/>` |
+| Text only | A dialog's or page's button row (OK, Cancel, Apply…). | `Classes="dialog"` (80 px at least) |
+| Drop-down | Opens a choice (Running Services, the AI provider); never runs anything itself. | `<DropDownButton Content="…"><DropDownButton.Flyout>…` (its 12 px chevron is drawn for it) |
+| Split | Runs its last choice; its arrow opens the others (Export CSV, then JSON). | `<SplitButton Content="…" Command="…"><SplitButton.Flyout>…` |
+| Link | Navigates (Edit in settings.json, a file and line); never runs a command. | `Classes="link"` (underlined under the pointer) |
+| Toolbar | 24 px flat buttons in a tool window's toolbar. | `Classes="toolbar icon"` or `"toolbar iconText"`; `ToggleButton.toolbar` stays checked as a tint with an accent edge (Keep Results, In process, the Error List's filters); `SplitButton.toolbar`, `DropDownButton.toolbar` |
+
+Never: an icon-only button in a dialog's button row, two primaries in view, a check box in a toolbar (it becomes a `ToggleButton.toolbar`), a label between toolbar items (it becomes the tooltip, or a muted prefix inside the combo box it names).
+
+`controls:ButtonIcon.Kind` works on `Button`, `ToggleButton` and `DropDownButton`; the icon takes its kind's palette color like any icon (the accent's text on a primary button, the checked text in High contrast).
+
+### Sizes, spacing and order
+
+- One height per context: **28 px** (`Shell.Size.Control`, the default) for buttons, text boxes and combo boxes in dialogs, documents and pages; **24 px** in tool windows, toolbars, form grids and dense rows (`Classes="compact"` on a button; inside a `controls:ToolbarPanel` buttons, text boxes and combo boxes are 24 px on their own).
+- Inside a button: 12 px on each side (`Shell.Padding.Button`), 10 before an icon, 6 between the icon and the text (`Shell.Space.ButtonIcon`); 8 at 24 px (`Shell.Padding.ButtonCompact`). Icons 16 px, chevrons 12 px.
+- Corners: `Shell.Control.CornerRadius` (Classic 2, Harbor and Graphite 3, Daylight and Ember 6); dialogs and popups `Shell.CornerRadius.Overlay`.
+- A dialog's buttons are right-aligned in its footer, the primary is the default (Enter) and Cancel answers Escape. **Windows and Linux** put the primary first (`OK` `Cancel`); **macOS** puts it last (`Cancel` `OK`). A request lists its buttons primary first; `DialogViewModel` reverses them on macOS (`PrimaryLast`).
+
+### Focus
+
+- Buttons, toggles, segments, tabs, check boxes, radio buttons and switches: a **2 px ring in `Shell.Focus`, 1 px outside the control** (`Shell.Focus.Thickness`, `.Offset`, the ring's `Shell.Focus.Margin` and `.CornerRadius`), drawn by the control themes when the keyboard brings the focus.
+- Text and combo boxes: their border becomes a 2 px `Shell.Focus` edge.
+- Rows: a 1 px outline in `Shell.Focus` on the keyboard's row.
+
+### Fields and choices
+
+- Text boxes: `Shell.Input` with a 1 px `Shell.Input.Border` that darkens under the pointer (`.Hover`). An error (a binding's validation error, or `Classes="invalid"`) draws the border in `Shell.Error`, and the message goes under the box with the error icon in `TextBlock.error` (validation errors are drawn so on their own). Read-only is the panel's color; disabled is `Shell.Disabled`.
+- Placeholders are `Shell.Input.Placeholder`, the muted text at full opacity; a placeholder names what goes in the box.
+- Search boxes: `<TextBox Classes="search" PlaceholderText="{l:T …}"/>` has its search icon, and a clear button once there is text; in a toolbar it takes the rest of the row. A match count goes in its `InnerRightContent`.
+- Combo boxes: the field with a 12 px chevron; focused from the keyboard or open, the focus edge.
+- **Check box** in lists, forms and dialogs that commit with OK, and for Options' booleans: the title is the check box's own label, once. **Radio buttons** for one of a few choices that need descriptions. **Switch** (`ToggleSwitch`, its label as `Content`) only for an on/off that takes effect at once and has its own place: AI Chat's Agent mode.
+- **Segmented control** for two to four views of the same content (Form or XML, Tree or List, Pretty or Raw, User or Workspace), instead of a `TabControl` used as a view switch or a pair of toggle buttons:
+
+  ```xml
+  <controls:SegmentedControl SelectedIndex="{Binding ViewIndex}" AutomationProperties.Name="{l:T findResults.view}">
+    <controls:SegmentedControlItem Icon="type-hierarchy" Content="{l:T findResults.tree}" />
+    <controls:SegmentedControlItem Icon="list" Content="{l:T findResults.list}" />
+  </controls:SegmentedControl>
+  ```
+
+  It is a list underneath: Tab reaches the chosen segment, the arrow keys, Home and End move the choice, and there is always one. It can bind `ItemsSource` and `SelectedItem` too.
+- **Tabs** inside a view (`TabControl`, 28 px) switch between different content (Body, Headers, Request): muted until selected, the selected one bold with a 2 px accent underline; a count goes in a `Border.badge` in the header (`<StackPanel Orientation="Horizontal" Spacing="6"><TextBlock …/><Border Classes="badge"><TextBlock Text="{Binding Count}"/></Border></StackPanel>`), which takes the accent on the selected tab.
+
+### Lists, grids and states
+
+- Rows of 22 px (`Shell.Size.Row`; `<ListBox Classes="rows">` sets them), headers of 24 px on `Shell.Grid.Header`, separators in `Shell.Grid.Rule`, numbers right-aligned in tabular figures.
+- Every list and tree: `Shell.Row.Hover` under the pointer (quieter than a control's hover, so syntax-colored text stays AA; outlined in High contrast), `Shell.Selection`, and `Shell.Selection.Inactive` when the list hasn't the focus. The muted and matched text on a selected row follows on its own.
+- A find match in result text is `Shell.Match.Background` with bold `Shell.Match.Background.Foreground`, underlined on a selected row.
+- On a selected row, an icon under 3:1 takes the selection's text color (in practice the orange icons on Classic Blue's and Harbor Light's selections); in High Contrast every icon on a selection is black.
+- **Chips** say a state in a word (`200 OK`, `Fault s:Client`, `GET`): `<Border Classes="chip success"><TextBlock Text="200 OK"/></Border>` with `success`, `error`, `warning` or `info` (none: neutral; `square` for a method). **Badges** are counts: `<Border Classes="badge"><TextBlock Text="3"/></Border>`. Color never carries the meaning alone; High contrast outlines both.
+- Empty and error states: an icon, one sentence and the next step, centered: `<StackPanel Classes="emptyState"><controls:Icon Kind="…"/><TextBlock Text="{l:T …}"/><Button Classes="iconText" …/></StackPanel>`.
+
+### Dialogs
+
+The in-window dialog (`DialogView`, from `DialogViewModel.ShowAsync(new DialogRequest(…))`):
+
+- Header: a 28 px tile with the request's `Icon` in its color (a dangerous request gets the warning icon), the title at 14 px semibold, a muted line with its `Context` (the type and file it acts on), and a close button (Escape).
+- Body: `Shell.Padding.Dialog` (20 px at the sides). A checklist is a bordered list with a header row (Select all, `2 of 4`), rows of 30 px with each item's `Icon`, its label in the editor's font and its detail; Space checks the selected row, and a reorderable one has Move Up and Move Down as icon buttons beside it (Alt+Up, Alt+Down).
+- Footer: `Border.dialogFooter` (`Shell.Dialog.Footer`, a top separator, `Shell.Padding.DialogFooter`), a keyboard hint on the left (`Border.kbd` keys), the buttons on the right in the OS's order, the default one the only primary.
+- Width 520 px (`Shell.Size.Dialog.Width`), growing with its content up to 720 (`Shell.Size.Dialog.MaxWidth`; 960 with notes), narrower only in a smaller window. A preview of changes takes three quarters of the window instead (`DialogView.PreviewSize`: at least 640 × 400 where there is room, at most the window less 16 px on each side), its changes on the editor's background filling what the header, message and footer leave, each added or removed line marked in the diff's color at its left edge. The window behind is dimmed by `Shell.Dialog.Scrim`.
+
+### Tokens of the control set
+
+Colors (every theme; the values are in [`design/controls.md`](design/controls.md#colors)):
+
+| Token | Use |
+|---|---|
+| `Shell.Button`, `.Foreground`, `.Border`, `.Hover`, `.Hover.Border`, `.Pressed`, `.Pressed.Border` | The default button in its states |
+| `Shell.Accent.Hover`, `Shell.Accent.Pressed` | The primary button (and checked boxes, switches) under the pointer and pressed |
+| `Shell.Toolbar.Hover`, `.Hover.Border`, `.Pressed`, `.Checked`, `.Checked.Border`, `.Checked.Foreground` | Toolbar and subtle buttons; a checked toolbar toggle |
+| `Shell.Input.Border`, `.Border.Hover`, `.Placeholder` | Text and combo boxes |
+| `Shell.Disabled`, `.Border`, `.Foreground` | A disabled control (its text exempt from AA, about 3:1) |
+| `Shell.Check.Border` | An unchecked check box's, radio button's and switch's outline (3:1) |
+| `Shell.Segment.Selected`, `.Foreground` | The chosen segment |
+| `Shell.Selection.Inactive`, `.Foreground` | A list's selection without the focus |
+| `Shell.Row.Hover` (and `Shell.Row.Hover.Outline`, High contrast's) | A row under the pointer |
+| `Shell.Grid.Header`, `Shell.Grid.Rule` | Column headers; row separators |
+| `Shell.Match.Background`, `.Foreground` | A find match in result text |
+| `Shell.Badge`, `.Foreground` | Count badges, neutral chips |
+| `Shell.Status.Success`, `.Error`, `.Warning`, `.Info` (each with `.Foreground`) | Chips |
+| `Shell.Dialog.Footer`, `Shell.Dialog.Scrim` | A dialog's button row; the window behind it |
+| `Shell.Chat.User`, `.Foreground`; `Shell.CodeBlock.Header` | AI Chat's own messages; a code block's header row |
+
+Sizes and shapes:
+
+| Token | Value | Use |
+|---|---|---|
+| `Shell.Size.Control` | 28 | Buttons, text boxes and combo boxes in dialogs, documents and pages |
+| `Shell.Size.Button.MinWidth` | 80 | A button row's text buttons (`Button.dialog`) |
+| `Shell.Padding.Button`, `Shell.Padding.ButtonCompact` | 12,0; 8,0 | Inside a button at 28 and 24 px |
+| `Shell.Space.ButtonIcon` | 6 | Between a button's icon and its text |
+| `Shell.Control.CornerRadius` | Classic 2, Harbor 3, Graphite 3, Daylight 6, Ember 6 | Buttons, fields, segments (per family; `Shell.Check.CornerRadius` for check boxes) |
+| `Shell.Focus.Thickness`, `Shell.Focus.Offset` (`Shell.Focus.Margin`, `.CornerRadius`) | 2, 1 (−3) | The focus ring |
+| `Shell.Padding.Dialog`, `Shell.Padding.DialogFooter` | 20,16; 20,12 | A dialog's header and body; its footer |
+| `Shell.Size.Dialog.Width`, `Shell.Size.Dialog.MaxWidth` | 520, 720 | The in-window dialog |
+| `Shell.Size.Segment`, `Shell.Size.Tab` | 24, 28 | A segmented control; a tab strip inside a view |
+| `Shell.Chip.BorderThickness` | 0 (1 in High contrast) | Chips' and badges' outline |
 
 ## Icons
 

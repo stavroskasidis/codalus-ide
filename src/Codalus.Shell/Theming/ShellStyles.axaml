@@ -4,7 +4,8 @@
         xmlns:controls="using:Codalus.Shell.Controls"
         xmlns:core="using:Dock.Model.Core"
         xmlns:docking="using:Codalus.Shell.Docking"
-        xmlns:editing="using:AvaloniaEdit.Editing">
+        xmlns:editing="using:AvaloniaEdit.Editing"
+        xmlns:collections="using:System.Collections">
   <Styles.Resources>
     <!-- Dock's document tab strip takes its panel from this resource (a style can't replace it): ours fits (M34e). -->
     <ItemsPanelTemplate x:Key="DockDocumentTabStripHorizontalItemsPanel">
@@ -199,6 +200,358 @@
     <Setter Property="Margin" Value="{DynamicResource Shell.Padding.EmptyState}" />
   </Style>
 
+
+  <!--
+    The control set (M34h, docs/design/controls.md): what Fluent's templates draw for fields, choices, tabs and rows,
+    restyled from the Shell.* tokens; the buttons, check boxes, radio buttons, switches and the segmented control have
+    their own control themes (Theming/Controls.axaml). A style outranks Fluent's control theme in any state, and a style
+    with a class or a state outranks what a template sets, so each state is restated here. docs/ui-guidelines.md lists
+    the classes.
+  -->
+
+  <!-- The primary button's icon is drawn in the accent's text, as its label. -->
+  <Style Selector="Button.accent controls|Icon">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.AccentForeground}" />
+  </Style>
+  <Style Selector="Button.accent:disabled controls|Icon">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
+  </Style>
+
+  <!--
+    Text boxes: Shell.Input with a 1 px Shell.Input.Border that darkens under the pointer and becomes a 2 px accent edge
+    with the focus; an error (a validation error, or the invalid class) draws it in Shell.Error; read-only is the panel's
+    color; disabled is Shell.Disabled. Placeholders are the muted text at full opacity. 28 px high (24 in toolbars).
+  -->
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+    <Setter Property="CaretBrush" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource Shell.Input.Placeholder}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Control}" />
+    <Setter Property="Padding" Value="8,5" />
+  </Style>
+  <Style Selector="TextBox:not(.unstyled) /template/ TextBlock#PART_Placeholder">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+  <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border.Hover}" />
+  </Style>
+  <Style Selector="TextBox:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="TextBox:focus">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="TextBox[IsReadOnly=True] /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
+  </Style>
+  <Style Selector="TextBox:error /template/ Border#PART_BorderElement, TextBox.invalid /template/ Border#PART_BorderElement">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Error}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="TextBox:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
+  </Style>
+  <Style Selector="TextBox:disabled /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Shell.Disabled}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Disabled.Border}" />
+  </Style>
+  <Style Selector="TextBox:disabled /template/ TextBlock#PART_Placeholder">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
+  </Style>
+  <!--
+    A search box (TextBox.search): a search icon, the placeholder naming what is searched, and a clear button once there
+    is text. In a toolbar it takes the rest of the row.
+  -->
+  <Style Selector="TextBox.search">
+    <Setter Property="Padding" Value="6,5,8,5" />
+    <Setter Property="InnerLeftContent">
+      <Template>
+        <controls:Icon Kind="search" Width="14" Height="14" Margin="8,0,0,0" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Shell.MutedForeground}" />
+      </Template>
+    </Setter>
+  </Style>
+  <Style Selector="TextBox.search[IsReadOnly=False]:not(TextBox:empty)">
+    <Setter Property="InnerRightContent">
+      <Template>
+        <Button Classes="subtle" Command="{Binding $parent[TextBox].Clear}" Focusable="False" Padding="0"
+                Width="18" Height="18" MinWidth="18" MinHeight="18" Margin="0,0,4,0" VerticalAlignment="Center"
+                ToolTip.Tip="{l:T shellStyles.clearSearch}" AutomationProperties.Name="{l:T shellStyles.clearSearch}">
+          <controls:Icon Kind="close" Width="12" Height="12" Foreground="{DynamicResource Shell.MutedForeground}" />
+        </Button>
+      </Template>
+    </Setter>
+  </Style>
+  <!-- Validation errors say what to do under the field, with the error icon, in the error text color. -->
+  <Style Selector="DataValidationErrors">
+    <Setter Property="ErrorTemplate">
+      <DataTemplate x:DataType="collections:IEnumerable">
+        <ItemsControl ItemsSource="{Binding}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:Object">
+              <DockPanel Margin="0,4,0,0" TextElement.Foreground="{DynamicResource Shell.Error.Foreground}" TextElement.FontSize="{DynamicResource Shell.FontSize.Small}">
+                <controls:Icon Kind="error" Classes="error" Width="12" Height="12" Margin="0,1,4,0" VerticalAlignment="Top" DockPanel.Dock="Left" />
+                <TextBlock Text="{Binding Converter={x:Static controls:ValidationMessage.Converter}}" TextWrapping="Wrap" />
+              </DockPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </DataTemplate>
+    </Setter>
+  </Style>
+
+  <!--
+    Combo boxes: the field with a 12 px chevron; open or focused from the keyboard, the field keeps the focus edge. The
+    list's rows are 24 px, the chosen one in the selection's colors.
+  -->
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Control}" />
+    <Setter Property="Padding" Value="8,0,0,0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource Shell.Input.Placeholder}" />
+  </Style>
+  <Style Selector="ComboBox:not(.unstyled) /template/ PathIcon#DropDownGlyph">
+    <Setter Property="Width" Value="10" />
+    <Setter Property="Height" Value="10" />
+    <Setter Property="Margin" Value="0,0,9,0" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
+  <Style Selector="ComboBox:pointerover /template/ Border#Background, ComboBox:pressed /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border.Hover}" />
+  </Style>
+  <Style Selector="ComboBox:focus-visible /template/ Border#HighlightBackground">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="ComboBox:focus-visible /template/ Border#Background, ComboBox:dropdownopen /template/ Border#Background">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="ComboBox:focus-visible /template/ ContentControl#ContentPresenter, ComboBox:focus:pressed /template/ ContentControl#ContentPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="ComboBox:error /template/ Border#Background">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Error}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="ComboBox:disabled /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Shell.Disabled}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Disabled.Border}" />
+  </Style>
+  <Style Selector="ComboBox:disabled /template/ ContentControl#ContentPresenter, ComboBox:disabled /template/ TextBlock#PlaceholderTextBlock, ComboBox:disabled /template/ PathIcon#DropDownGlyph">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
+  </Style>
+  <Style Selector="ComboBox /template/ Border#PopupBorder">
+    <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
+    <Setter Property="Padding" Value="4,0" />
+  </Style>
+  <Style Selector="ComboBoxItem">
+    <Setter Property="MinHeight" Value="24" />
+    <Setter Property="Padding" Value="8,3" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+  </Style>
+  <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+
+  <!--
+    Tabs inside a view (TabControl, 28 px): different content (Body, Headers, Request), not a view switch (that is a
+    SegmentedControl). Muted until selected; the selected one bold with a 2 px accent underline. Counts go in a
+    Border.badge in the header, which takes the accent on the selected tab.
+  -->
+  <Style Selector="TabItem">
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+    <Setter Property="FontWeight" Value="Normal" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Tab}" />
+    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing}" />
+  </Style>
+  <Style Selector="TabItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="TabItem:pointerover /template/ Border#PART_LayoutRoot, TabItem:pressed /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="TabItem:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+    <Setter Property="Height" Value="2" />
+    <Setter Property="Margin" Value="-4,0,-4,0" />
+    <Setter Property="CornerRadius" Value="1" />
+    <Setter Property="VerticalAlignment" Value="Bottom" />
+  </Style>
+  <Style Selector="TabItem:disabled /template/ Border#PART_LayoutRoot">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
+  </Style>
+  <Style Selector="TabItem:selected Border.badge">
+    <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.AccentForeground}" />
+  </Style>
+
+  <!--
+    Rows of lists and trees: Shell.Row.Hover under the pointer (quieter than a control's hover, so colored text stays AA;
+    High contrast outlines it), Shell.Selection, and Shell.Selection.Inactive when the list hasn't the focus; a 1 px
+    outline in Shell.Focus marks the keyboard's row. ListBox.rows gives a list the design's 22 px rows.
+  -->
+  <Style Selector="ListBoxItem">
+    <Setter Property="FocusAdorner">
+      <FocusAdornerTemplate>
+        <Border BorderThickness="1" BorderBrush="{DynamicResource Shell.Focus}" />
+      </FocusAdornerTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Row.Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="BoxShadow" Value="{DynamicResource Shell.Row.Hover.Outline}" />
+  </Style>
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+  </Style>
+  <Style Selector="ListBox.rows ListBoxItem">
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Row}" />
+    <Setter Property="Padding" Value="8,0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="TreeViewItem:not(:selected) /template/ Border#PART_LayoutRoot:pointerover">
+    <Setter Property="Background" Value="{DynamicResource Shell.Row.Hover}" />
+    <Setter Property="BoxShadow" Value="{DynamicResource Shell.Row.Hover.Outline}" />
+  </Style>
+  <Style Selector="TreeViewItem:not(:selected) /template/ Border#PART_LayoutRoot:pointerover > ContentPresenter#PART_HeaderPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+
+  <!--
+    Chips say a state in a word (200 OK, Fault, GET) on a Shell.Status.* tint: Border.chip with .success, .error,
+    .warning or .info (none: neutral), .square for a method; badges are counts (Border.badge). Color never carries the
+    meaning alone; High contrast outlines both.
+  -->
+  <Style Selector="Border.chip">
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Padding" Value="7,0" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Badge}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Badge.Foreground}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Badge.Foreground}" />
+    <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+    <Setter Property="TextElement.FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Border.chip.square">
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+  </Style>
+  <Style Selector="Border.chip.success">
+    <Setter Property="Background" Value="{DynamicResource Shell.Status.Success}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Status.Success.Foreground}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Status.Success.Foreground}" />
+  </Style>
+  <Style Selector="Border.chip.error">
+    <Setter Property="Background" Value="{DynamicResource Shell.Status.Error}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Status.Error.Foreground}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Status.Error.Foreground}" />
+  </Style>
+  <Style Selector="Border.chip.warning">
+    <Setter Property="Background" Value="{DynamicResource Shell.Status.Warning}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Status.Warning.Foreground}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Status.Warning.Foreground}" />
+  </Style>
+  <Style Selector="Border.chip.info">
+    <Setter Property="Background" Value="{DynamicResource Shell.Status.Info}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Status.Info.Foreground}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Status.Info.Foreground}" />
+  </Style>
+  <Style Selector="Border.chip controls|Icon">
+    <Setter Property="Width" Value="12" />
+    <Setter Property="Height" Value="12" />
+  </Style>
+  <Style Selector="Border.badge">
+    <Setter Property="MinWidth" Value="18" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="Padding" Value="5,0" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Badge}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Badge.Foreground}" />
+    <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+    <Setter Property="TextElement.FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Border.chip > TextBlock, Border.badge > TextBlock">
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+
+  <!--
+    An empty or error state (StackPanel.emptyState): an icon (32 px), one sentence, and the next step as a button or a
+    link, centered.
+  -->
+  <Style Selector="StackPanel.emptyState">
+    <Setter Property="Spacing" Value="10" />
+    <Setter Property="Margin" Value="24" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="StackPanel.emptyState > controls|Icon">
+    <Setter Property="Width" Value="32" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="StackPanel.emptyState > TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="TextAlignment" Value="Center" />
+    <Setter Property="MaxWidth" Value="360" />
+  </Style>
+  <Style Selector="StackPanel.emptyState > Button">
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+
+  <!-- A dialog's button row (Border.dialogFooter) and a key in a hint (Border.kbd). -->
+  <Style Selector="Border.dialogFooter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Dialog.Footer}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+    <Setter Property="Padding" Value="{DynamicResource Shell.Padding.DialogFooter}" />
+  </Style>
+  <Style Selector="Border.kbd">
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="BorderThickness" Value="1,1,1,2" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Padding" Value="4,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+
   <!-- Tool window toolbars (M34d): one row that never wraps (ToolbarPanel), 24 px buttons with 16 px icons. -->
   <Style Selector="controls|ToolbarPanel">
     <Setter Property="Margin" Value="{DynamicResource Shell.Padding.Toolbar}" />
@@ -218,8 +571,15 @@
     <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
     <Setter Property="Padding" Value="8,2" />
   </Style>
+  <!--
+    Toolbar buttons and toggles (M34d, the control set's since M34h): flat 24 px squares, Shell.Toolbar.Hover under the
+    pointer with its border, Shell.Toolbar.Pressed while pressed; a checked toggle is a tint with an accent edge
+    (Shell.Toolbar.Checked), not a solid accent block; disabled, a dimmed icon, not a gray box. With classes icon or
+    iconText and controls:ButtonIcon.Kind they draw their icon (and text) themselves.
+  -->
   <Style Selector="Button.toolbar">
     <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="BorderBrush" Value="Transparent" />
     <Setter Property="Padding" Value="{DynamicResource Shell.Padding.ToolbarButton}" />
@@ -228,7 +588,10 @@
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="VerticalAlignment" Value="Center" />
-    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+  </Style>
+  <Style Selector="Button.toolbar.iconText, ToggleButton.toolbar.iconText">
+    <Setter Property="Padding" Value="5,0,7,0" />
   </Style>
   <!-- The Start button (M45): filled with the accent in Daylight, on the toolbar's color elsewhere. -->
   <Style Selector="Button.toolbar.start">
@@ -238,71 +601,126 @@
   <Style Selector="Button.toolbar.start controls|Icon.start">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Toolbar.Start.Icon}" />
   </Style>
-  <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
   </Style>
-  <!-- A disabled toolbar button is a dimmed icon, not a gray box. -->
-  <Style Selector="Button.toolbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="Transparent" />
-    <Setter Property="BorderBrush" Value="Transparent" />
-  </Style>
-  <Style Selector="ToggleButton.toolbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="Transparent" />
-    <Setter Property="BorderBrush" Value="Transparent" />
+  <Style Selector="Button.toolbar:pressed /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.toolbar:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Pressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
   </Style>
   <Style Selector="ToggleButton.toolbar">
     <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="Transparent" />
     <Setter Property="Padding" Value="{DynamicResource Shell.Padding.ToolbarButton}" />
     <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
     <Setter Property="MinWidth" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="VerticalAlignment" Value="Center" />
-    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+  </Style>
+  <Style Selector="ToggleButton.toolbar:checked /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Checked}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Checked.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Toolbar.Checked.Foreground}" />
+  </Style>
+  <Style Selector="Button.toolbar:disabled /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.toolbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
   </Style>
   <!--
-    A split button in a toolbar (the Hot Reload button and its menu's arrow) is flat like the buttons beside it: Fluent's
-    is a gray block. Its two parts are Buttons in its template that Fluent styles itself, so every state is restated on
-    their presenters: transparent, the hover color and border under the pointer or pressed or while the menu is open,
-    and transparent again when disabled. The tokens differ per theme, High Contrast included.
+    A split button (the control set): the default button's look with its arrow; in a toolbar (the Hot Reload button and
+    its menu's arrow) flat like the buttons beside it. Its two parts are Buttons in its template that Fluent styles
+    itself, so every state is restated on their presenters: the hover color and border under the pointer or pressed or
+    while the menu is open, and the disabled look. The tokens differ per theme, High Contrast included.
   -->
+  <Style Selector="SplitButton">
+    <Setter Property="Background" Value="{DynamicResource Shell.Button}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Button.Foreground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Button.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Control}" />
+    <Setter Property="Padding" Value="{DynamicResource Shell.Padding.Button}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing}" />
+  </Style>
+  <Style Selector="SplitButton.compact">
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    <Setter Property="Padding" Value="{DynamicResource Shell.Padding.ButtonCompact}" />
+  </Style>
+  <Style Selector="SplitButton /template/ Button#PART_SecondaryButton">
+    <Setter Property="MinWidth" Value="20" />
+    <Setter Property="Padding" Value="4,0" />
+  </Style>
+  <Style Selector="SplitButton /template/ Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Button.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Button.Hover.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Button.Foreground}" />
+  </Style>
+  <Style Selector="SplitButton /template/ Button:pressed /template/ ContentPresenter#PART_ContentPresenter, SplitButton:flyout-open /template/ Button#PART_SecondaryButton /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Button.Pressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Button.Pressed.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Button.Foreground}" />
+  </Style>
+  <Style Selector="SplitButton:disabled /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Disabled}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Disabled.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
+  </Style>
+  <Style Selector="SplitButton /template/ Border#SeparatorBorder">
+    <Setter Property="Background" Value="{DynamicResource Shell.Button.Border}" />
+  </Style>
   <Style Selector="SplitButton.toolbar">
     <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
     <Setter Property="BorderBrush" Value="Transparent" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="Padding" Value="{DynamicResource Shell.Padding.ToolbarButton}" />
     <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
     <Setter Property="VerticalAlignment" Value="Center" />
-    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
   </Style>
   <Style Selector="SplitButton.toolbar /template/ Button#PART_PrimaryButton">
     <Setter Property="MinWidth" Value="{DynamicResource Shell.Size.ToolbarButton}" />
   </Style>
   <Style Selector="SplitButton.toolbar /template/ Button#PART_SecondaryButton">
     <Setter Property="MinWidth" Value="14" />
+    <Setter Property="Padding" Value="1,0" />
   </Style>
   <Style Selector="SplitButton.toolbar /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
   <Style Selector="SplitButton.toolbar:pointerover /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
   </Style>
   <Style Selector="SplitButton.toolbar /template/ Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
   </Style>
   <Style Selector="SplitButton.toolbar /template/ Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Pressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
   </Style>
   <Style Selector="SplitButton.toolbar:flyout-open /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Pressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Border#SeparatorBorder">
+    <Setter Property="Background" Value="Transparent" />
   </Style>
   <Style Selector="SplitButton.toolbar:pointerover /template/ Border#SeparatorBorder, SplitButton.toolbar:flyout-open /template/ Border#SeparatorBorder">
-    <Setter Property="Background" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
   </Style>
-  <Style Selector="SplitButton.toolbar /template/ Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector="SplitButton.toolbar:disabled /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
@@ -345,6 +763,29 @@
   </Style>
   <Style Selector="TreeViewItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
     <Setter Property="Foreground" Value="{DynamicResource TreeViewItemForegroundSelected}" />
+  </Style>
+  <!--
+    M34h: a list or tree without the focus keeps its selection as Shell.Selection.Inactive, quieter, with its own text;
+    the secondary text and matched characters on it take that text too. After the styles above, which they override.
+  -->
+  <Style Selector="ListBox:not(:focus-within) ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Inactive}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
+  </Style>
+  <Style Selector="ListBox:not(:focus-within) ListBoxItem:selected TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
+  </Style>
+  <Style Selector="ListBox:not(:focus-within) ListBoxItem:selected Run.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
+  </Style>
+  <Style Selector="ListBox:not(:focus-within) ListBoxItem:selected TextBlock.highlighted">
+    <Setter Property="controls:HighlightedText.MatchForeground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
+  </Style>
+  <Style Selector="TreeView:not(:focus-within) TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Inactive}" />
+  </Style>
+  <Style Selector="TreeView:not(:focus-within) TreeViewItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
   </Style>
   <!-- Error and warning messages (M34g): the state colors made readable as text (4.5:1, 7:1 in a family's High contrast). -->
   <Style Selector="TextBlock.error, SelectableTextBlock.error">
@@ -393,7 +834,7 @@
   <Style Selector="Button.searchBox controls|Icon">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Search.Foreground}" />
   </Style>
-  <Style Selector="Button.searchBox:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector="Button.searchBox:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.searchBox:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.Search}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
   </Style>
@@ -582,10 +1023,14 @@
     <Setter Property="MinHeight" Value="0" />
     <Setter Property="Cursor" Value="Hand" />
   </Style>
-  <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+  <!-- A link navigates, never runs a command: underlined under the pointer (thicker while pressed), no fill. -->
+  <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.link:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Link}" />
-    <Setter Property="TextElement.FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.link:pointerover TextBlock, Button.link:pressed TextBlock">
+    <Setter Property="TextDecorations" Value="Underline" />
   </Style>
 
   <!-- A disabled link is dimmed text, not a gray box. -->
@@ -628,12 +1073,6 @@
   <Style Selector="controls|Icon.none">
     <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
   </Style>
-  <!-- Tabs inside documents and dialogs (dumps, HTTP responses, Reference Manager): body-sized headers, not Fluent's 24 pt. -->
-  <Style Selector="TabItem">
-    <Setter Property="FontSize" Value="14" />
-    <Setter Property="MinHeight" Value="30" />
-    <Setter Property="Padding" Value="10,4" />
-  </Style>
   <!-- Quick Info and diagnostics popup in the editor. -->
   <Style Selector="Border.editorHover">
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
@@ -657,7 +1096,7 @@
     <Setter Property="FontSize" Value="12" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
-  <Style Selector="Button.statusCancel:pointerover /template/ ContentPresenter">
+  <Style Selector="Button.statusCancel:pointerover /template/ ContentPresenter, Button.statusCancel:pressed /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.StatusBar.Hover}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Foreground}" />
   </Style>
