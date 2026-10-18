@@ -314,7 +314,13 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
             return new(ToolState.Missing, program, null);
         }
 
-        var line = output.Split('\n').FirstOrDefault(l => l.Contains(prefix, StringComparison.OrdinalIgnoreCase))?.Trim() ?? output.Trim();
+        // The tool's own version line; else a line that names a version (podman's docker emulation prints "podman version …"
+        // beside a notice), never the whole output.
+        var lines = output.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        var line = lines.FirstOrDefault(l => l.Contains(prefix, StringComparison.OrdinalIgnoreCase))
+            ?? lines.FirstOrDefault(l => l.Contains("version", StringComparison.OrdinalIgnoreCase))
+            ?? lines.FirstOrDefault()
+            ?? string.Empty;
         var at = line.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
         var version = at >= 0 ? line[(at + prefix.Length)..].Split(' ', ',', '(')[0] : line;
         return new(ToolState.Found, program, version.Length == 0 ? null : version);
