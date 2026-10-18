@@ -1,8 +1,8 @@
 # Controls: one look for buttons, fields and rows
 
-The control set every view uses: buttons, toolbar buttons and toggles, text, search and combo boxes, check boxes, radio buttons and switches, segmented controls, tabs inside a view, and list and grid rows, each in every state. The maintainer asked for it after reviewing the M34 gallery on 2026-10-18 ("All buttons and inputs should have a common look and feel. Most buttons are generic/bland. Most buttons that can be icon buttons should be converted or have them as Icon + text if needed."), and it is to be approved before the app changes. Nothing here is built yet: these are designs, and the views keep their current look until the set is applied (`TODO(issue)`: apply the control set, starting with the shared styles in `ShellStyles.axaml`, then the views in the findings table).
+The control set every view uses: buttons, toolbar buttons and toggles, text, search and combo boxes, check boxes, radio buttons and switches, segmented controls, tabs inside a view, and list and grid rows, each in every state. The maintainer asked for it after reviewing the M34 gallery on 2026-10-18 ("All buttons and inputs should have a common look and feel. Most buttons are generic/bland. Most buttons that can be icon buttons should be converted or have them as Icon + text if needed."), and the maintainer approved it on 2026-10-18 with every open question as proposed ([D33](../roadmap.md#decision-register), [below](#decided)). M34h builds it: first the foundation (the tokens in all sixteen themes, the control themes in `Theming/Controls.axaml`, the classes in `Theming/ShellStyles.axaml`, the segmented control, the in-window dialog's frame and the checklist dialog; [`ui-guidelines.md`](../ui-guidelines.md#the-control-set) says how a view uses them), then the views in the findings table on top of it.
 
-The designs are drawn in the Classic family (Blue, Light, Dark, High Contrast) and Harbor (Light, Dark, High contrast), with their real tokens ([`ui-guidelines.md`](../ui-guidelines.md#tokens), [`shell-themes.md`](shell-themes.md#harbor-colors)). Graphite, Daylight and Ember follow the same rules; their values for the new tokens are mixed from their own colors when the set is applied, as M45 did for the tokens the design left out.
+The designs are drawn in the Classic family (Blue, Light, Dark, High Contrast) and Harbor (Light, Dark, High contrast), with their real tokens ([`ui-guidelines.md`](../ui-guidelines.md#tokens), [`shell-themes.md`](shell-themes.md#harbor-colors)). Graphite, Daylight and Ember follow the same rules; their values for the new tokens are mixed from their own colors ([the derived families](#graphite-daylight-and-ember)), as M45 did for the tokens the design left out.
 
 | | Classic Light | Classic Dark | Harbor Light | Harbor Dark |
 |---|---|---|---|---|
@@ -143,7 +143,66 @@ The set uses the existing tokens for everything they already name (`Shell.Accent
 | `Shell.Chat.User.Foreground` | `#1E1E1E` | `#1E1E1E` | `#F1F1F1` | `#FFFFFF` | `#0E1735` | `#F1F4FB` | `#FFFFFF` | Their text |
 | `Shell.CodeBlock.Header` | `#EEF0F6` | `#F2F2F5` | `#2A2A2C` | `#000000` | `#EEF1F9` | `#1C2436` | `#000000` | The header row of a code block (language, Copy, Insert at Cursor, Apply…) |
 
-Classic's values keep its look: Blue's yellow hover and border for buttons and toolbars, Light's and Dark's blues. When the set is applied, Fluent's own keys for buttons, toggle buttons and text boxes (`ButtonBackground`, `ButtonBackgroundPointerOver`, `TextControlBorderBrush`…) take these values in each theme, as M45 did for check boxes and accent buttons ([ADR 0077](../adr/0077-theme-families.md)), so a plain `Button` gets the look without a class.
+Classic's values keep its look: Blue's yellow hover and border for buttons and toolbars, Light's and Dark's blues. As built (M34h), the shell's own control themes for `Button`, `ToggleButton`, `DropDownButton`, `CheckBox`, `RadioButton` and `ToggleSwitch` (`Theming/Controls.axaml`, in the application's resources, so they replace Fluent's) draw these tokens, and `ShellStyles.axaml` restyles Fluent's text boxes, combo boxes, split buttons, tabs and rows with them, so a plain `Button` gets the look without a class. That replaced the plan of setting Fluent's keys (`ButtonBackground`…) in each of the sixteen themes: one place per state instead of sixteen.
+
+#### Graphite, Daylight and Ember
+
+Mixed from each variant's own colors (its window, panel, text, muted text, border, hover, selection, accent, input, link and overlay) by the rules that give Harbor its values, then checked against the contrast pairs:
+
+- **Light:** buttons white with the border 10 % toward the text, their hover 60 % of the hover color, pressed 30 % toward the selection, its borders toward the accent; the accent's hover and pressed 12 % and 25 % darker; the toolbar's hover the hover color, checked a 15 % tint of the accent with the accent's edge; quiet surfaces (an inactive selection, badges, grid headers and rules, disabled fills, the dialog's footer) 6–18 % toward the muted text, so they show on Daylight's white too; a row's hover 80 % of the hover color; chips Harbor's tints, information a 12 % tint of the accent with the link color made AA on it; the scrim the text color at 42 %.
+- **Dark:** buttons halfway between the panel and the hover color, the text 20 % toward white, the border 12 % toward the accent, pressed toward the window; the accent's hover 20 % lighter and pressed 10 % darker; checked and your chat messages the selection 30 % toward the panel; quiet surfaces toward the hover color and the border; matches and chips Harbor's dark tints; the scrim the window darkened, at 60 %.
+- **High contrast:** black controls with white borders, the family's hover and accent for hover and focus, a checked toolbar toggle filled with the accent, Harbor's chip colors on black, the scrim at 72 %.
+- **Corners** (`Shell.Control.CornerRadius`): Graphite 3 px, Daylight and Ember 6 px (their rounded tabs and cards); a check box's corner (`Shell.Check.CornerRadius`) stays at 3 and 4 px, so it doesn't read as a radio button.
+
+| Token | Graphite Light | Graphite Dark | Graphite HC | Daylight Light | Daylight Dark | Daylight HC | Ember Light | Ember Dark | Ember HC |
+|---|---|---|---|---|---|---|---|---|---|
+| `Shell.Button` | `#FFFFFF` | `#202C2F` | `#000000` | `#FFFFFF` | `#2D283A` | `#000000` | `#FFFFFF` | `#2A2119` | `#000000` |
+| `Shell.Button.Foreground` | `#1F2226` | `#DDE0E5` | `#FFFFFF` | `#1F1F24` | `#E9E8F0` | `#FFFFFF` | `#2A211B` | `#EBE5E0` | `#FFFFFF` |
+| `Shell.Button.Border` | `#C1C4C9` | `#2A3D41` | `#FFFFFF` | `#CDCDD3` | `#423C56` | `#FFFFFF` | `#CBC3BB` | `#413327` | `#FFFFFF` |
+| `Shell.Button.Hover` | `#ECF3F3` | `#213839` | `#0F3A32` | `#F6F4FB` | `#38314B` | `#322B3D` | `#F8F2EC` | `#3A2A1C` | `#3D2B11` |
+| `Shell.Button.Hover.Border` | `#9BAEB0` | `#2A5C5B` | `#3FF2D2` | `#B2ABC4` | `#5D5082` | `#D2B3FF` | `#BDA896` | `#6A4A2C` | `#FFB547` |
+| `Shell.Button.Pressed` | `#DAECEA` | `#1B2326` | `#0F3A32` | `#EFEBF9` | `#262330` | `#322B3D` | `#F5E7DA` | `#1F1914` | `#3D2B11` |
+| `Shell.Button.Pressed.Border` | `#759294` | `#2BB3A3` | `#3FF2D2` | `#9288AD` | `#A98BFF` | `#D2B3FF` | `#A78A72` | `#E08A3C` | `#FFB547` |
+| `Shell.Accent.Hover` | `#0D6D64` | `#55C2B5` | `#8CF7E4` | `#5E37AC` | `#BAA2FF` | `#E4D1FF` | `#A24F10` | `#E6A163` | `#FFD391` |
+| `Shell.Accent.Pressed` | `#0B5D56` | `#27A193` | `#3FF2D2` | `#502F93` | `#987DE6` | `#D2B3FF` | `#8A440E` | `#CA7C36` | `#FFB547` |
+| `Shell.Toolbar.Hover` | `#E0EBEB` | `#213839` | `#0F3A32` | `#F0ECF9` | `#38314B` | `#322B3D` | `#F4E9E0` | `#3A2A1C` | `#3D2B11` |
+| `Shell.Toolbar.Hover.Border` | `#BBCBCE` | `#224A49` | `#3FF2D2` | `#D2CDE2` | `#493E66` | `#D2B3FF` | `#D9C6B7` | `#533821` | `#FFB547` |
+| `Shell.Toolbar.Pressed` | `#D5ECE9` | `#1D2E2F` | `#0F3A32` | `#EFEAFA` | `#302A3F` | `#322B3D` | `#F6E4D3` | `#2D2218` | `#3D2B11` |
+| `Shell.Toolbar.Checked` | `#D4E5E4` | `#1F3332` | `#3FF2D2` | `#E9E2F6` | `#332A4E` | `#D2B3FF` | `#F1E1D5` | `#30251A` | `#FFB547` |
+| `Shell.Toolbar.Checked.Border` | `#0F7C72` | `#2BB3A3` | `#3FF2D2` | `#6B3FC4` | `#A98BFF` | `#D2B3FF` | `#B85A12` | `#E08A3C` | `#FFB547` |
+| `Shell.Toolbar.Checked.Foreground` | `#062E2A` | `#E8F4F2` | `#000000` | `#2A1660` | `#F1EBFF` | `#000000` | `#4A2508` | `#F7E7D6` | `#000000` |
+| `Shell.Input.Border` | `#C1C4C9` | `#2A3D41` | `#FFFFFF` | `#CDCDD3` | `#423C56` | `#FFFFFF` | `#CBC3BB` | `#413327` | `#FFFFFF` |
+| `Shell.Input.Border.Hover` | `#94979C` | `#2A5C5B` | `#3FF2D2` | `#9C9CA2` | `#5D5082` | `#D2B3FF` | `#9E968F` | `#6A4A2C` | `#FFB547` |
+| `Shell.Input.Placeholder` | `#555A63` | `#9A9FAA` | `#D6D6D6` | `#5C5C66` | `#A7A3B8` | `#D6D6D6` | `#6B5E53` | `#A39A90` | `#D6D6D6` |
+| `Shell.Disabled.Foreground` | `#868990` | `#6F737B` | `#9A9A9A` | `#8D8D94` | `#787586` | `#9A9A9A` | `#968C84` | `#736C65` | `#9A9A9A` |
+| `Shell.Disabled` | `#EDEEEF` | `#1A1B1E` | `#000000` | `#F5F5F6` | `#1F1E26` | `#000000` | `#F2F0ED` | `#141312` | `#000000` |
+| `Shell.Disabled.Border` | `#DADBDD` | `#26282E` | `#6E6E6E` | `#E2E2E3` | `#2D2A36` | `#6E6E6E` | `#E1DDD9` | `#24211E` | `#6E6E6E` |
+| `Shell.Check.Border` | `#696E76` | `#888C96` | `#FFFFFF` | `#707078` | `#938FA3` | `#FFFFFF` | `#7D7168` | `#8E867E` | `#FFFFFF` |
+| `Shell.Segment.Selected` | `#0F7C72` | `#2BB3A3` | `#3FF2D2` | `#6B3FC4` | `#A98BFF` | `#D2B3FF` | `#B85A12` | `#E08A3C` | `#FFB547` |
+| `Shell.Segment.Selected.Foreground` | `#FFFFFF` | `#0B1F1C` | `#000000` | `#FFFFFF` | `#160A33` | `#000000` | `#FFFFFF` | `#1A0F05` | `#000000` |
+| `Shell.Selection.Inactive` | `#E4E4E6` | `#203133` | `#0F3A32` | `#EBEBED` | `#312C41` | `#322B3D` | `#EAE6E3` | `#30251A` | `#3D2B11` |
+| `Shell.Selection.Inactive.Foreground` | `#062E2A` | `#DDE0E5` | `#FFFFFF` | `#2A1660` | `#E9E8F0` | `#FFFFFF` | `#4A2508` | `#EBE5E0` | `#FFFFFF` |
+| `Shell.Row.Hover` | `#E5EDEE` | `#202A2D` | `#0F3A32` | `#F3F0FA` | `#2B2737` | `#322B3D` | `#F5ECE5` | `#271F18` | `#3D2B11` |
+| `Shell.Grid.Header` | `#EDEEEF` | `#1F2629` | `#000000` | `#F5F5F6` | `#262330` | `#000000` | `#F2F0ED` | `#201C17` | `#000000` |
+| `Shell.Grid.Rule` | `#EAEAEC` | `#23262B` | `#5C5C5C` | `#F2F2F3` | `#292732` | `#5C5C5C` | `#EFEDEA` | `#211E1C` | `#5C5C5C` |
+| `Shell.Match.Background` | `#FFE7A3` | `#5A4410` | `#000000` | `#FFE7A3` | `#5A4410` | `#000000` | `#FFE7A3` | `#5A4410` | `#000000` |
+| `Shell.Match.Background.Foreground` | `#1F2226` | `#FFF4D6` | `#FFE66D` | `#1F1F24` | `#FFF4D6` | `#FFE66D` | `#2A211B` | `#FFF4D6` | `#FFE66D` |
+| `Shell.Badge` | `#E4E4E6` | `#213839` | `#000000` | `#EBEBED` | `#38314B` | `#000000` | `#EAE6E3` | `#3A2A1C` | `#000000` |
+| `Shell.Badge.Foreground` | `#1F2226` | `#DDE0E5` | `#FFFFFF` | `#1F1F24` | `#E9E8F0` | `#FFFFFF` | `#2A211B` | `#EBE5E0` | `#FFFFFF` |
+| `Shell.Status.Success` | `#E2F1E6` | `#173326` | `#000000` | `#E2F1E6` | `#173326` | `#000000` | `#E2F1E6` | `#173326` | `#000000` |
+| `Shell.Status.Success.Foreground` | `#116329` | `#8FDBA8` | `#00FF00` | `#116329` | `#8FDBA8` | `#00FF00` | `#116329` | `#8FDBA8` | `#00FF00` |
+| `Shell.Status.Error` | `#FBE6E2` | `#3E2025` | `#000000` | `#FBE6E2` | `#3E2025` | `#000000` | `#FBE6E2` | `#3E2025` | `#000000` |
+| `Shell.Status.Error.Foreground` | `#9A220B` | `#F8A08F` | `#F48771` | `#9A220B` | `#F8A08F` | `#F48771` | `#9A220B` | `#F8A08F` | `#F48771` |
+| `Shell.Status.Warning` | `#FDF0CF` | `#352E13` | `#000000` | `#FDF0CF` | `#352E13` | `#000000` | `#FDF0CF` | `#352E13` | `#000000` |
+| `Shell.Status.Warning.Foreground` | `#6B4900` | `#E5C24A` | `#FFD700` | `#6B4900` | `#E5C24A` | `#FFD700` | `#6B4900` | `#E5C24A` | `#FFD700` |
+| `Shell.Status.Info` | `#E2EFEE` | `#213738` | `#000000` | `#EDE8F8` | `#363049` | `#000000` | `#F6EBE3` | `#38291C` | `#000000` |
+| `Shell.Status.Info.Foreground` | `#0B5CAD` | `#7CC4FF` | `#7CC7FF` | `#5A2FB0` | `#C4AEFF` | `#D2B3FF` | `#A04E10` | `#F2B27A` | `#7CF0FF` |
+| `Shell.Dialog.Footer` | `#EDEEEF` | `#1A1B1E` | `#000000` | `#F5F5F6` | `#1F1E26` | `#000000` | `#F2F0ED` | `#141312` | `#000000` |
+| `Shell.Dialog.Scrim` | `rgba(31,34,38,.42)` | `rgba(8,8,10,.60)` | `rgba(0,0,0,.72)` | `rgba(31,31,36,.42)` | `rgba(11,11,14,.60)` | `rgba(0,0,0,.72)` | `rgba(42,33,27,.42)` | `rgba(6,6,5,.60)` | `rgba(0,0,0,.72)` |
+| `Shell.Chat.User` | `#DBE8E8` | `#1F3332` | `#000000` | `#EDE8F8` | `#332A4E` | `#000000` | `#F3E6DC` | `#30251A` | `#000000` |
+| `Shell.Chat.User.Foreground` | `#062E2A` | `#E8F4F2` | `#FFFFFF` | `#2A1660` | `#F1EBFF` | `#FFFFFF` | `#4A2508` | `#F7E7D6` | `#FFFFFF` |
+| `Shell.CodeBlock.Header` | `#EDEEEF` | `#1F2629` | `#000000` | `#F5F5F6` | `#262330` | `#000000` | `#F2F0ED` | `#201C17` | `#000000` |
+
 
 ### Sizes and shapes
 
@@ -155,7 +214,7 @@ Classic's values keep its look: Blue's yellow hover and border for buttons and t
 | `Shell.Padding.Button` | 12,0 | Inside a text button (10 before an icon) |
 | `Shell.Padding.ButtonCompact` | 8,0 | Inside a 24 px text or icon + text button |
 | `Shell.Space.ButtonIcon` | 6 | Between a button's icon and its text |
-| `Shell.Control.CornerRadius` | Classic 2, Harbor 3 | Buttons, fields, check boxes, segments; a family value (Graphite, Daylight and Ember to choose) |
+| `Shell.Control.CornerRadius` | Classic 2, Harbor 3, Graphite 3, Daylight 6, Ember 6 | Buttons, fields, segments; a family value (`Shell.Check.CornerRadius`: check boxes, at most 4; `Shell.Focus.CornerRadius`: the ring) |
 | `Shell.Focus.Thickness`, `Shell.Focus.Offset` | 2, 1 | The focus ring, in `Shell.Focus`, 1 px outside the control |
 | `Shell.Padding.Dialog` | 20,16 | Around a dialog's header and body; its footer is 20,12 on `Shell.Dialog.Footer` |
 | `Shell.Size.Dialog.Width` | 520 | An in-window dialog's width; it grows with its content up to 720 |
@@ -164,7 +223,9 @@ Classic's values keep its look: Blue's yellow hover and border for buttons and t
 
 ### Classes
 
-The styles become classes in `ShellStyles.axaml`, next to today's `Button.toolbar` and `Button.link`: `Button.accent` (Fluent's, restyled), `Button.subtle`, `Button.icon`, `Button.compact` (24 px), `ToggleButton.toolbar` checked, `SplitButton.toolbar`, `TextBox.search`, a segmented control (a `ListBox` or `RadioButton`s with a `segment` class; to decide when built), `TabStrip.view`, `Border.chip` with `.success`, `.error`, `.warning`, `.info`, `Border.badge`, and `Border.dialogFooter`.
+As built (M34h; [`ui-guidelines.md`](../ui-guidelines.md#the-control-set) shows each in use): `Button.accent`, `Button.subtle`, `Button.icon` and `Button.iconText` with `controls:ButtonIcon.Kind`, `Button.compact` (24 px), `Button.dialog` (80 px), `Button.link`, `DropDownButton` (its own chevron), `SplitButton`, `Button.toolbar`, `ToggleButton.toolbar` (checked: a tint with an accent edge), `SplitButton.toolbar`, `DropDownButton.toolbar`, `TextBox.search`, `TextBox.invalid`, `controls:SegmentedControl` with `controls:SegmentedControlItem` (a `ListBox` underneath: Tab and the arrow keys, list and item names for screen readers), `TabItem` (every tab inside a view; counts in a `Border.badge`), `ListBox.rows` (22 px rows), `Border.chip` with `.success`, `.error`, `.warning`, `.info` and `.square`, `Border.badge`, `StackPanel.emptyState`, `Border.dialogFooter` and `Border.kbd`.
+
+Where the build differs from the pictures: Avalonia's borders draw no dashes, so High contrast's row under the pointer is outlined solid (`Shell.Row.Hover.Outline`, an inset shadow) and a read-only field is the panel's color with a solid border; a combo box's list marks the chosen item with the selection's colors, not yet with a check (`TODO(issue)`); a tab strip has no hairline under it yet (`TODO(issue)`); the view tabs' underline is the accent in every theme (Classic Blue's mockup draws its gold).
 
 ## The findings, and what answers them
 
@@ -190,7 +251,9 @@ Find Results follows Visual Studio's Find Results window (grouped by file, a hea
 
 Every text and background pair meets WCAG AA, 4.5:1, in Classic Blue, Light and Dark and Harbor Light and Dark, and 7:1 in both High Contrast themes; icons, focus rings and the outlines of unchecked check boxes, radio buttons and switches meet 3:1. The check was made on the pages as rendered, not on a list of pairs: `render.cjs` opens every mockup in all seven themes in Chromium, takes each visible text's color and the color under it (its ancestors' backgrounds, composited, with opacity), and fails under the minimum. It checked 10,927 pairs with none below. Disabled controls are exempt (WCAG 1.4.3) and draw about 3:1; the "Now" pictures of the current views and the dimmed window behind the dialog aren't checked. The checks found and fixed, while designing: syntax colors on a control's hover (hence `Shell.Row.Hover`), line numbers on a hovered row, orange icons on light selections, and a link on Classic High Contrast's hover (hence the outline). When the set is applied, its pairs join `tests/Codalus.Shell.Tests/TestData/contrast-pairs.txt`, so `PolishTests` keeps checking them in all sixteen themes.
 
-## To decide
+## Decided
+
+The maintainer approved these on 2026-10-18, all as proposed ([D33](../roadmap.md#decision-register)):
 
 - **Dialog titles:** 14 px with an icon tile and a close button, instead of the guidelines' 18 px heading for dialogs, for the in-window dialog.
 - **Switches:** only for AI Chat's Agent mode; Options keeps check boxes, as the classic IDE does.

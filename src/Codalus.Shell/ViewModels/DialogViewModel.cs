@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
 
@@ -32,10 +33,20 @@ public sealed record DialogRequest(string Title, string Message, IReadOnlyList<s
 
     /// <summary>The input is a secret: masked as it is typed (askpass's passwords and passphrases, M13b).</summary>
     public bool IsPassword { get; init; }
+
+    /// <summary>The header's icon (an <see cref="Controls.Icon"/> kind, in the command's color on a tile; M34h); null: a dangerous one gets the warning icon, others none.</summary>
+    public string? Icon { get; init; }
+
+    /// <summary>A muted line under the title saying what the dialog acts on (the type and file; M34h), or null.</summary>
+    public string? Context { get; init; }
 }
 
 /// <summary>An item of a dialog's checklist.</summary>
-public sealed record DialogChoice(string Id, string Label, bool Checked, string? Detail = null);
+public sealed record DialogChoice(string Id, string Label, bool Checked, string? Detail = null)
+{
+    /// <summary>The member's icon (an <see cref="Controls.Icon"/> kind) before its label, or null.</summary>
+    public string? Icon { get; init; }
+}
 
 /// <summary>A checklist row in the dialog.</summary>
 public sealed class DialogChoiceViewModel(DialogChoice choice) : ObservableObject
@@ -49,6 +60,10 @@ public sealed class DialogChoiceViewModel(DialogChoice choice) : ObservableObjec
     public string? Detail { get; } = choice.Detail;
 
     public bool HasDetail => Detail is { Length: > 0 };
+
+    public string? Icon { get; } = choice.Icon;
+
+    public bool HasIcon => Icon is { Length: > 0 };
 
     public bool IsChecked
     {
@@ -80,6 +95,7 @@ public sealed class DialogButtonViewModel(string label, bool isDefault, ICommand
 {
     public string Label { get; } = label;
 
+    /// <summary>The default button (Enter): the dialog's one primary, drawn with the accent.</summary>
     public bool IsDefault { get; } = isDefault;
 
     public ICommand Command { get; } = command;
@@ -87,10 +103,14 @@ public sealed class DialogButtonViewModel(string label, bool isDefault, ICommand
 
 /// <summary>
 /// One in-window modal dialog at a time (confirmations, names, the trust prompt). Requests made while one is open
-/// wait for it to close.
+/// wait for it to close. Its buttons show in the OS's order (M34h, docs/design/controls.md): the request lists them
+/// primary first, as Windows and Linux show them; macOS shows them reversed, the primary last.
 /// </summary>
 public sealed class DialogViewModel : ObservableObject
 {
+    /// <summary>Whether this OS puts a dialog's primary button last (macOS) rather than first (Windows, Linux).</summary>
+    public static bool PrimaryLastOnThisOs => OperatingSystem.IsMacOS();
+
     private Task _queue = Task.CompletedTask;
     private TaskCompletionSource<DialogResult>? _pending;
     private DialogRequest? _request;
@@ -115,9 +135,51 @@ public sealed class DialogViewModel : ObservableObject
                 OnPropertyChanged(nameof(HasNotes));
                 OnPropertyChanged(nameof(Changes));
                 OnPropertyChanged(nameof(HasChanges));
+                OnPropertyChanged(nameof(Icon));
+                OnPropertyChanged(nameof(HasIcon));
+                OnPropertyChanged(nameof(IconTone));
+                OnPropertyChanged(nameof(IsInfoTone));
+                OnPropertyChanged(nameof(IsWarningTone));
+                OnPropertyChanged(nameof(IsSuccessTone));
+                OnPropertyChanged(nameof(IsErrorTone));
+                OnPropertyChanged(nameof(Context));
+                OnPropertyChanged(nameof(HasContext));
+                OnPropertyChanged(nameof(ShowsMoveHint));
             }
         }
     }
+
+    /// <summary>The buttons' order: the primary last (macOS) or first (Windows and Linux). Tests set it.</summary>
+    public bool PrimaryLast { get; set; } = PrimaryLastOnThisOs;
+
+    /// <summary>The header's icon kind: the request's, the warning icon for a dangerous one, or null.</summary>
+    public string? Icon => _request?.Icon ?? (_request?.IsDanger == true ? "warning" : null);
+
+    public bool HasIcon => Icon is not null;
+
+    /// <summary>The icon tile's tint, from the icon's palette color: <c>warning</c> (yellow, orange, tan), <c>success</c>, <c>error</c> or <c>info</c>.</summary>
+    public string IconTone => Icon is not { } icon ? "info" : Controls.CommandIcons.ColorOf(icon) switch
+    {
+        "yellow" or "orange" or "folder" => "warning",
+        "green" => "success",
+        "red" => "error",
+        _ => "info",
+    };
+
+    public bool IsInfoTone => IconTone == "info";
+
+    public bool IsWarningTone => IconTone == "warning";
+
+    public bool IsSuccessTone => IconTone == "success";
+
+    public bool IsErrorTone => IconTone == "error";
+
+    public string? Context => _request?.Context;
+
+    public bool HasContext => _request?.Context is { Length: > 0 };
+
+    /// <summary>The footer's hint names Alt+Up and Alt+Down when the checklist can be reordered.</summary>
+    public bool ShowsMoveHint => _request?.Reorderable == true && HasChoices;
 
     public bool IsOpen => _request is not null;
 
@@ -150,6 +212,28 @@ public sealed class DialogViewModel : ObservableObject
     public ObservableCollection<DialogChoiceViewModel> Choices { get; } = [];
 
     public bool HasChoices => Choices.Count > 0;
+
+    /// <summary>
+    /// The checklist's Select all: true when every item is checked, false when none, null (mixed) otherwise. Checking it
+    /// checks all; unchecking it unchecks all, except from mixed, which checks all (as a click on a mixed box expects).
+    /// </summary>
+    public bool? AllChecked
+    {
+        get => Choices.Count == 0 || Choices.All(c => !c.IsChecked) ? false : Choices.All(c => c.IsChecked) ? true : null;
+        set
+        {
+            var check = value == true || (value == false && AllChecked is null);
+            foreach (var choice in Choices)
+            {
+                choice.IsChecked = check;
+            }
+
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>How many items are checked: "2 of 4".</summary>
+    public string CheckedSummary => Localizer.Format("dialog.checkedOfTotal", "{0} of {1}", Choices.Count(c => c.IsChecked), Choices.Count);
 
     public bool Reorderable => _request?.Reorderable == true;
 
@@ -230,7 +314,7 @@ public sealed class DialogViewModel : ObservableObject
         Request = request;
         Error = request.Validate?.Invoke(_input);
         Buttons.Clear();
-        foreach (var label in request.Buttons)
+        foreach (var label in PrimaryLast ? request.Buttons.Reverse() : request.Buttons)
         {
             Buttons.Add(new DialogButtonViewModel(label, label == DefaultButton, new RelayCommand(() => Choose(label))));
         }
@@ -238,14 +322,37 @@ public sealed class DialogViewModel : ObservableObject
         Choices.Clear();
         foreach (var choice in request.Choices ?? [])
         {
-            Choices.Add(new DialogChoiceViewModel(choice));
+            var row = new DialogChoiceViewModel(choice);
+            row.PropertyChanged += OnChoiceChanged;
+            Choices.Add(row);
         }
 
         SelectedChoice = Choices.FirstOrDefault();
         OnPropertyChanged(nameof(HasChoices));
         OnPropertyChanged(nameof(Reorderable));
+        OnPropertyChanged(nameof(ShowsMoveHint));
+        OnPropertyChanged(nameof(AllChecked));
+        OnPropertyChanged(nameof(CheckedSummary));
         Opened?.Invoke(this, EventArgs.Empty);
         return await _pending.Task.ConfigureAwait(true);
+    }
+
+    private void OnChoiceChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DialogChoiceViewModel.IsChecked))
+        {
+            OnPropertyChanged(nameof(AllChecked));
+            OnPropertyChanged(nameof(CheckedSummary));
+        }
+    }
+
+    /// <summary>Space on the checklist: checks or unchecks the selected item.</summary>
+    public void ToggleSelectedChoice()
+    {
+        if (_selectedChoice is { } choice)
+        {
+            choice.IsChecked = !choice.IsChecked;
+        }
     }
 
     private string? DefaultButton => _request?.DefaultButton ?? (_request is { Buttons.Count: > 0 } r ? r.Buttons[0] : null);
@@ -260,6 +367,9 @@ public sealed class DialogViewModel : ObservableObject
     }
 
     public void Cancel() => Close(new DialogResult(null, null));
+
+    /// <summary>The header's close button: the same as Escape.</summary>
+    public ICommand CancelCommand => new RelayCommand(Cancel);
 
     private void Choose(string button)
     {
@@ -281,6 +391,11 @@ public sealed class DialogViewModel : ObservableObject
         _pending = null;
         Request = null;
         Buttons.Clear();
+        foreach (var choice in Choices)
+        {
+            choice.PropertyChanged -= OnChoiceChanged;
+        }
+
         Choices.Clear();
         OnPropertyChanged(nameof(HasChoices));
         Closed?.Invoke(this, EventArgs.Empty);
@@ -299,9 +414,9 @@ public sealed class DialogViewModel : ObservableObject
     }
 }
 
-/// <summary>Dialogs with details (previews) are wider.</summary>
+/// <summary>Dialogs with details (previews) are wider; the others grow with their content up to 720 px (Shell.Size.Dialog.MaxWidth, M34h).</summary>
 public static class DialogWidth
 {
     public static Avalonia.Data.Converters.IValueConverter Converter { get; } =
-        new Avalonia.Data.Converters.FuncValueConverter<bool, double>(details => details ? 960 : 560);
+        new Avalonia.Data.Converters.FuncValueConverter<bool, double>(details => details ? 960 : 720);
 }

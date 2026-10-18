@@ -29,12 +29,15 @@ internal sealed partial class SmokeTest
     {
         await GalleryToolWindowsAsync("empty").ConfigureAwait(true);
         await GalleryNewViewsEmptyAsync().ConfigureAwait(true);
+        await GalleryControlSetAsync().ConfigureAwait(true); // M34h
         WriteGalleryIndex();
     }
 
     /// <summary>Every tool window with data, the documents, the chrome, and the error states.</summary>
     private async Task GalleryDataStepAsync()
     {
+        // The Output window shows the build's output, its lines colored by what they report (M34h).
+        shell.Output.Selected = shell.Builds.Channel;
         await GalleryToolWindowsAsync("data").ConfigureAwait(true);
 
         // Documents and the window's chrome: tabs pinned, previewed and colored by project, a tool window focused so the
@@ -106,19 +109,30 @@ internal sealed partial class SmokeTest
             shell.Layout.CloseDocument(document);
         }
 
-        // The in-window dialog (M34's final pass): a preview of changes and a checklist, over the window.
+        // The in-window dialog (M34's final pass; M34h's frame): a preview of changes, the checklist of
+        // docs/design/controls/ChecklistDialog.dc.html, a name with an error, a dangerous confirmation, over the window.
+        var checklist = new DialogRequest("Generate Constructor", "Members to initialize:", ["OK", "Cancel"])
+        {
+            Icon = "tools",
+            Context = "Person · ICalculatorService.cs",
+            Choices =
+            [
+                new DialogChoice("name", "string Name", true, "property") { Icon = "properties" },
+                new DialogChoice("age", "int Age", true, "property") { Icon = "properties" },
+                new DialogChoice("mood", "Mood Mood", false, "property") { Icon = "properties" },
+                new DialogChoice("tags", "List<string> Tags", false, "property") { Icon = "properties" },
+            ],
+            Reorderable = true,
+        };
         var dialogs = new List<(string Name, DialogRequest Request)>
         {
             ("dialog-preview", new DialogRequest("Preview Changes: Rename", "2 changes in 2 files.", ["Apply", "Cancel"])
             {
                 Details = [new DetailLine("src/Greeter.cs", "header"), new DetailLine("- public sealed class Greeter", "removed"), new DetailLine("+ public sealed class Welcomer", "added")],
             }),
-            ("dialog-checklist", new DialogRequest("Generate Constructor", "Members to initialize:", ["OK", "Cancel"])
-            {
-                Choices = [new DialogChoice("name", "string Name", true), new DialogChoice("age", "int Age", false, "a property")],
-                Reorderable = true,
-            }),
-            ("dialog-input", new DialogRequest("Rename", "The new name of the class and its file:", ["Rename", "Cancel"]) { Input = "Gr", Validate = text => text.Length < 3 ? "The name is too short." : null }),
+            ("dialog-checklist", checklist),
+            ("dialog-input", new DialogRequest("Rename", "The new name of the class and its file:", ["Rename", "Cancel"]) { Input = "Gr", Validate = text => text.Length < 3 ? "The name is too short." : null, Icon = "rename", Context = "Greeter · Greeter.cs" }),
+            ("dialog-confirm", new DialogRequest("Remove Worktree", "Remove the worktree and its folder? Its uncommitted changes are lost.", ["Remove", "Cancel"]) { IsDanger = true }),
         };
         foreach (var (name, request) in dialogs)
         {
@@ -131,6 +145,8 @@ internal sealed partial class SmokeTest
             shell.Dialogs.Cancel();
             await shown.ConfigureAwait(true);
         }
+
+        await GalleryDialogOnMacAsync(checklist).ConfigureAwait(true); // M34h: the buttons in macOS's order
 
         // Error states: a compile error in the Error List, the failed build's output, a failed test's details.
         if (sources.FirstOrDefault() is { } broken && await shell.OpenFileAsync(broken, preview: false).ConfigureAwait(true) is { } editorDocument)
@@ -148,9 +164,15 @@ internal sealed partial class SmokeTest
                 await WaitAsync(() => shell.Builds.LastBuild is { } b && b != built, "the failing build finishes", 300).ConfigureAwait(true);
                 await GalleryThemesAsync(async theme =>
                 {
+                    // The failed build's output, its errors in the error color (M34h). The Output window and the Error
+                    // List share a group: each is shown and settled before its picture (the Output's was the window).
+                    shell.Output.Selected = shell.Builds.Channel;
+                    shell.Layout.ShowToolWindow(BuiltIns.OutputWindow, focus: true);
+                    await SettleAsync().ConfigureAwait(true);
                     GalleryTool(BuiltIns.OutputWindow, "error", theme);
+                    shell.Layout.ShowToolWindow(ErrorListViewModel.ToolWindowId, focus: true);
+                    await SettleAsync().ConfigureAwait(true);
                     GalleryTool(ErrorListViewModel.ToolWindowId, "error", theme);
-                    await Task.CompletedTask.ConfigureAwait(true);
                 }, settle: true).ConfigureAwait(true);
             }
             finally
