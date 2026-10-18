@@ -185,9 +185,13 @@ public sealed class NetFxDebuggerTests(NetFxDebuggeeFixture fixture) : IClassFix
         {
             Assert.Equal("waiting", await program.StandardOutput.ReadLineAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(60), Ct));
 
-            // The Attach to Process list knows it runs the desktop CLR.
+            // The Attach to Process list knows it runs the desktop CLR, and is read quickly (it took more than the minute
+            // the program used to wait on a loaded CI runner, and the program had ended when its turn came).
+            var watch = Stopwatch.StartNew();
             var entry = ProcessList.Get().Single(p => p.Id == program.Id);
-            Assert.True(entry.IsDesktopClr);
+            watch.Stop();
+            Assert.False(program.HasExited, $"The program ended while the process list was read ({watch.Elapsed}).");
+            Assert.True(entry.IsDesktopClr, $"Not a desktop-CLR process (the list took {watch.Elapsed}); its modules: {string.Join(", ", Codalus.Platform.ProcessModules.Names(program.Id) ?? ["unknown"])}");
             Assert.True(entry.IsDotnet);
             Assert.Equal(".NET Framework", entry.Runtime);
             Assert.True(DesktopClr.RunsDesktopClr(program.Id));
@@ -202,7 +206,7 @@ public sealed class NetFxDebuggerTests(NetFxDebuggeeFixture fixture) : IClassFix
             Assert.Equal("breakpoint", stop.Reason);
             Assert.Equal(Line("netfx-tick"), debug.SelectedFrame?.Line);
             var i = int.Parse((await debug.EvaluateAsync("i", "watch", Ct)).Result, System.Globalization.CultureInfo.InvariantCulture);
-            Assert.InRange(i, 0, 600);
+            Assert.InRange(i, 0, 6000);
 
             // Stop detaches: the program goes on.
             await debug.StopAsync();

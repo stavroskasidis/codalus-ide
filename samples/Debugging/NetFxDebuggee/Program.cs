@@ -105,10 +105,11 @@ namespace NetFxDebuggee
             return result;
         }
 
+        // Ten minutes for a test to find it, attach and detach (it kills it then): a minute ran out on a loaded CI runner.
         private static int Wait()
         {
             Console.WriteLine("waiting");
-            for (var i = 0; i < 600; i++)
+            for (var i = 0; i < 6000; i++)
             {
                 Tick(i);
                 Thread.Sleep(100);
