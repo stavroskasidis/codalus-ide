@@ -1,0 +1,76 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.AiStepView"
+             x:DataType="vm:AiStepItem"
+             AutomationProperties.Name="{Binding AccessibleName}">
+  <!--
+    A step of an agent's turn (M34h, docs/design/controls/AiChat.dc.html): its status and kind as icons, its title (a
+    tool's name in the code font), the files it worked on as links, what else it worked on, how it ended, and its
+    details under it when there are any (the chevron at the end opens them). The steps of a turn stack in a rail.
+  -->
+  <UserControl.Styles>
+    <Style Selector="SelectableTextBlock.code">
+      <Setter Property="FontFamily" Value="{x:Static controls:MarkdownRenderer.Monospace}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <Style Selector="SelectableTextBlock.failed">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Error.Foreground}" />
+    </Style>
+    <Style Selector="ToggleButton.stepToggle">
+      <Setter Property="MinHeight" Value="16" />
+      <Setter Property="MinWidth" Value="16" />
+      <Setter Property="Height" Value="16" />
+      <Setter Property="Width" Value="16" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
+    <Style Selector="ToggleButton.stepToggle:checked controls|Icon">
+      <Setter Property="RenderTransform" Value="rotate(90deg)" />
+    </Style>
+    <!-- A disclosure chevron: open is the chevron turned down, not a checked toggle's tint. -->
+    <Style Selector="ToggleButton.stepToggle:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <Style Selector="ToggleButton.stepToggle:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+    </Style>
+  </UserControl.Styles>
+  <StackPanel Spacing="2">
+    <DockPanel>
+      <ToggleButton x:Name="DetailsToggle" DockPanel.Dock="Right" Classes="toolbar stepToggle" Margin="4,0,0,0"
+                    IsVisible="{Binding HasDetails}" IsChecked="{Binding IsExpanded}"
+                    ToolTip.Tip="{Binding DetailsToggleName}" AutomationProperties.Name="{Binding DetailsToggleName}">
+        <controls:Icon Kind="chevron-right" Width="12" Height="12" />
+      </ToggleButton>
+      <controls:Icon x:Name="StatusIcon" DockPanel.Dock="Left" Kind="{Binding StatusIcon}" Width="12" Height="12" Margin="0,2,6,0" VerticalAlignment="Top"
+                     ToolTip.Tip="{Binding StatusText}" />
+      <controls:Icon x:Name="KindIcon" DockPanel.Dock="Left" Kind="{Binding KindIcon}" Width="12" Height="12" Margin="0,2,6,0" VerticalAlignment="Top" />
+      <WrapPanel ItemSpacing="5" LineSpacing="1">
+        <SelectableTextBlock x:Name="Title" Text="{Binding Title}" Classes.code="{Binding TitleIsCode}" TextWrapping="Wrap" />
+        <ItemsControl ItemsSource="{Binding Locations}" IsVisible="{Binding HasLocations}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel ItemSpacing="5" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:AiStepLocation">
+              <Button Classes="link" Click="OnLocationClick" ToolTip.Tip="{Binding Path}" AutomationProperties.Name="{Binding Path}">
+                <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <SelectableTextBlock x:Name="Target" Text="{Binding Target}" IsVisible="{Binding HasTarget}" TextWrapping="Wrap" />
+        <SelectableTextBlock x:Name="Outcome" Text="{Binding OutcomeText}" IsVisible="{Binding HasOutcome}" Classes.failed="{Binding IsFailed}" TextWrapping="Wrap" />
+      </WrapPanel>
+    </DockPanel>
+    <SelectableTextBlock x:Name="Details" Classes="code" Text="{Binding Details}" IsVisible="{Binding IsExpanded}" TextWrapping="Wrap" Margin="36,0,0,2" />
+  </StackPanel>
+</UserControl>

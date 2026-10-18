@@ -341,6 +341,13 @@ public static class IconSet
         ["sparkle"] = "sparkle_16_regular",
         ["phone"] = "phone_16_regular",
 
+        // AI Chat (M34h, docs/design/controls/AiChat.dc.html): a new chat, sending a question, and a code block's Insert
+        // at Cursor and Apply….
+        ["chat-add"] = "chat_add_16_regular",
+        ["send"] = "send_16_regular",
+        ["insert"] = "arrow_import_16_regular",
+        ["document-check"] = "document_checkmark_16_regular",
+
         // The Windows Forms Toolbox's controls and components, one each (M34h; the stroke drawings below draw the
         // combo box, the progress bar and the group box, which Fluent has no picture of).
         ["control-pointer"] = "cursor_16_regular",

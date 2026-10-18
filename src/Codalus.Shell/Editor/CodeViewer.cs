@@ -61,6 +61,25 @@ public sealed class CodeViewer : UserControl
     /// <summary>The colorizer of <see cref="EditorColors"/>, or null when the language is colored by TextMate (tests).</summary>
     public GrammarColorizer? GrammarColors => _grammarColors;
 
+    /// <summary>
+    /// As high as its text, without line numbers or a vertical scroll bar: a code block among other content that scrolls
+    /// (AI Chat's answers, M34h). Long lines still scroll sideways.
+    /// </summary>
+    public bool FitsContent
+    {
+        get => !Editor.ShowLineNumbers && Editor.VerticalScrollBarVisibility == ScrollBarVisibility.Disabled;
+        init
+        {
+            if (value)
+            {
+                Editor.ShowLineNumbers = false;
+                Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                Editor.Options.AllowScrollBelowDocument = false;
+                Editor.Padding = new Thickness(12, 8, 8, 8);
+            }
+        }
+    }
+
     /// <summary>Shows <paramref name="text"/> with <paramref name="highlight"/> marked and scrolled into view.</summary>
     public void Show(string text, string? languageId, LanguageServices.Protocol.Range? highlight)
     {

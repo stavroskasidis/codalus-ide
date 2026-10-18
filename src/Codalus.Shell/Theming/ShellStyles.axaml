@@ -509,6 +509,43 @@
     <Setter Property="HorizontalAlignment" Value="Center" />
   </Style>
 
+  <!-- Inline code in rendered Markdown (MarkdownRenderer): the code font on a badge's quiet fill. -->
+  <Style Selector="Run.code">
+    <Setter Property="Background" Value="{DynamicResource Shell.Badge}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Badge.Foreground}" />
+  </Style>
+
+  <!--
+    A composer (Border.composer, M34h, AI Chat): one field that holds a multi-line text box and a row of its own
+    actions under the text (a hint, Send). It draws the text box's look around both: Shell.Input with its border,
+    darker under the pointer, and the 2 px focus edge while anything in it has the focus; the text box inside is bare.
+  -->
+  <Style Selector="Border.composer">
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
+    <Setter Property="Padding" Value="10,8,8,6" />
+  </Style>
+  <Style Selector="Border.composer:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border.Hover}" />
+  </Style>
+  <Style Selector="Border.composer:focus-within">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
+    <Setter Property="BorderThickness" Value="2" />
+    <Setter Property="Padding" Value="9,7,7,5" />
+  </Style>
+  <Style Selector="Border.composer TextBox">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="36" />
+  </Style>
+  <Style Selector="Border.composer TextBox /template/ Border#PART_BorderElement, Border.composer TextBox:pointerover /template/ Border#PART_BorderElement, Border.composer TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
   <!--
     An empty or error state (StackPanel.emptyState): an icon (32 px), one sentence, and the next step as a button or a
     link, centered.

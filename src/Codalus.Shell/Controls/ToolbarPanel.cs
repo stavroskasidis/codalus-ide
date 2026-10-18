@@ -12,7 +12,8 @@ namespace Codalus.Shell.Controls;
 /// (a search or filter box) takes the width that is left, down to <see cref="MinStretchWidth"/>. When the pane is too
 /// narrow, the items that don't fit move into the overflow menu at the right end (»): buttons become entries with
 /// their names, toggle buttons checkable entries, combo boxes submenus of their choices. Text boxes and labels never
-/// overflow.
+/// overflow. A spacer (a control with the <c>toolbarSpacer</c> class, M34h) takes the width that is left instead, down to
+/// nothing, so the items after it sit at the right end (AI Chat's Agent switch and its Request Log and Configure).
 /// </summary>
 public sealed class ToolbarPanel : Panel
 {
@@ -71,7 +72,9 @@ public sealed class ToolbarPanel : Panel
 
     private IEnumerable<Control> Items => Children.Where(c => c != _overflow && c.IsVisible);
 
-    private static bool Stretches(Control child) => child is TextBox || child is AutoCompleteBox;
+    private static bool Stretches(Control child) => child is TextBox || child is AutoCompleteBox || IsSpacer(child);
+
+    private static bool IsSpacer(Control child) => child.Classes.Contains("toolbarSpacer");
 
     private static bool CanOverflow(Control child) => child is Button or ToggleButton or ComboBox or Separator || child.Classes.Contains("toolbarSeparator");
 
@@ -99,7 +102,7 @@ public sealed class ToolbarPanel : Panel
     {
         var items = Items.ToList();
         var stretch = items.LastOrDefault(Stretches);
-        var widths = items.Select(c => Stretches(c) ? Math.Max(MinStretch, Math.Min(c.DesiredSize.Width, 200)) : c.DesiredSize.Width).ToList();
+        var widths = items.Select(c => IsSpacer(c) ? 0 : Stretches(c) ? Math.Max(MinStretch, Math.Min(c.DesiredSize.Width, 200)) : c.DesiredSize.Width).ToList();
         var total = widths.Sum() + Spacing * Math.Max(0, items.Count - 1);
 
         // Hide overflowable items from the right until the rest fits next to the overflow button.

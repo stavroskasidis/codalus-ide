@@ -122,6 +122,24 @@ public sealed partial class ShellHost : IAiChatHost
             : Localizer.Get("msg.ai.turnedOnForWorkspace", "AI assistance follows your settings in this workspace again."));
     }
 
+    IEditorServices IAiChatHost.EditorServices => this;
+
+    /// <summary>
+    /// Opens a file an agent's step worked on (M34h): a path relative to the workspace, as the agent's tools give it, at
+    /// its line when it has one.
+    /// </summary>
+    public async Task OpenAiLocationAsync(string path, int? line)
+    {
+        var full = Path.IsPathRooted(path) ? path : Solutions.Solution?.Directory is { } root ? Path.GetFullPath(Path.Combine(root, path)) : null;
+        if (full is null || !File.Exists(full))
+        {
+            ShowMessage(Localizer.Format("msg.ai.locationNotFound", "{0} isn't in the workspace any more.", path));
+            return;
+        }
+
+        await OpenFileAsync(full, at: line is > 0 ? new Position(line.Value - 1, 0) : null).ConfigureAwait(true);
+    }
+
     public void ShowAiLog()
     {
         var channel = Workbench.Output.GetOrCreate(AiService.OutputChannelId, "AI");

@@ -14,6 +14,7 @@ arrow_download_16_regular
 arrow_enter_16_regular
 arrow_expand_all_16_regular
 arrow_forward_16_regular
+arrow_import_16_regular
 arrow_left_16_regular
 arrow_next_16_regular
 arrow_redo_16_regular
@@ -42,6 +43,7 @@ bug_16_regular
 button_16_regular
 calendar_clock_16_regular
 calendar_month_16_regular
+chat_add_16_regular
 checkbox_checked_16_regular
 checkmark_16_regular
 checkmark_circle_16_regular
@@ -68,6 +70,7 @@ dismiss_circle_16_regular
 dismiss_square_multiple_16_regular
 document_16_regular
 document_add_16_regular
+document_checkmark_16_regular
 document_copy_16_regular
 document_data_16_regular
 document_data_link_16_regular
@@ -133,6 +136,7 @@ save_16_regular
 save_multiple_16_regular
 search_16_regular
 select_all_on_16_regular
+send_16_regular
 settings_16_regular
 shield_checkmark_16_regular
 sparkle_16_regular
