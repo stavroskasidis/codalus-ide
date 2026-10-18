@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HTTP Response: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.canvas{width:1280px;height:640px;padding:6px;display:flex}
+.fam-classic .canvas{padding:4px}
+.tw{flex:1}
+.body{flex:1;min-height:0;display:flex}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.resp{display:flex;flex-direction:column;gap:6px;padding:10px 12px 8px}
+.resp .line1{display:flex;align-items:center;gap:10px}
+.resp .chip.big{height:24px;padding:0 10px;font-size:12px;border-radius:12px}
+.meta{display:flex;align-items:center;gap:5px;color:var(--muted)}
+.meta svg.i{width:14px;height:14px;color:var(--muted)}
+.dot{width:3px;height:3px;border-radius:50%;background:var(--muted)}
+.resp .line2{display:flex;align-items:center;gap:8px;min-width:0}
+.url{font-family:var(--mono);font-size:12px;color:var(--strong)}
+.tabs .right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.ctype{color:var(--muted);font-size:11px;margin-right:4px}
+.editor{flex:1;min-height:0;padding:6px 0;overflow:hidden}
+.editor .ln{height:18px}
+.k{color:var(--ty)} .s{color:var(--st)} .n{color:var(--nu)} .b{color:var(--kw)} .p{color:var(--pu)}
+.side{width:360px;flex:none;display:flex;flex-direction:column;border-left:1px solid var(--border);background:var(--panel)}
+.side-head{display:flex;align-items:center;gap:6px;height:32px;padding:0 6px 0 12px;border-bottom:1px solid var(--soft-border)}
+.side-head h3{margin:0;font-size:12px;font-weight:600;color:var(--strong)}
+.hist{flex:1;overflow:hidden;padding:4px 0}
+.hrow{display:grid;grid-template-columns:52px minmax(0,1fr) auto;grid-template-rows:20px 16px;column-gap:8px;align-items:center;padding:4px 12px;border-left:2px solid transparent}
+.hrow .m{grid-row:1/3;justify-self:start}
+.hrow .path{font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrow .when{grid-column:2/4;font-size:11px;color:var(--muted);display:flex;gap:8px;min-width:0}
+.hrow .when>span{white-space:nowrap;flex:none}
+.hrow .when>span.trim{flex:1 1 auto}
+.hrow .st{justify-self:end}
+.hrow.sel{background:var(--sel);color:var(--sel-fg);border-left-color:var(--accent)}
+.hrow.sel .when{color:inherit}
+.hrow.hover{background:var(--row-hover)}
+.side-foot{padding:8px 12px;border-top:1px solid var(--soft-border);color:var(--muted);font-size:11px;display:flex;gap:6px;align-items:center}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}">
+<div class="canvas">
+<section class="tw" aria-label="HTTP Response">
+  <div class="tw-cap active">
+    <span class="title">HTTP Response</span>
+    <span class="cb"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+    <span class="cb"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-pin"></use></svg></span>
+    <span class="cb"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span>
+  </div>
+  <div class="body">
+    <div class="main">
+      <div class="resp">
+        <div class="line1">
+          <span class="chip ok big" role="status">200 OK</span>
+          <span class="meta">HTTP/1.1</span><span class="dot"></span>
+          <span class="meta"><svg class="i" aria-hidden="true"><use href="#i-clock"></use></svg>38 ms</span><span class="dot"></span>
+          <span class="meta"><svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>178 B</span>
+          <span class="grow"></span>
+          <div class="toolbar" role="toolbar" aria-label="Response" style="padding:0;min-height:24px">
+            <button class="tb text" title="Send Request Again (Ctrl+Alt+R)"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>Send Again</button>
+            <span class="tb-sep"></span>
+            <button class="tb" aria-label="Copy Response Body" title="Copy Response Body"><svg class="i c-blue" aria-hidden="true"><use href="#i-copy"></use></svg></button>
+            <button class="tb" aria-label="Save Response Body…" title="Save Response Body…"><svg class="i c-blue" aria-hidden="true"><use href="#i-save"></use></svg></button>
+            <button class="tb" aria-label="Open in Editor" title="Open in Editor"><svg class="i c-blue" aria-hidden="true"><use href="#i-link-external"></use></svg></button>
+          </div>
+        </div>
+        <div class="line2">
+          <span class="chip info square mono">GET</span>
+          <span class="url trim">http://localhost:5248/api/todos/</span>
+          <span class="muted small" style="flex:none">from</span>
+          <button class="btn link small" style="flex:none">WebApi.http, line 9</button>
+        </div>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Response">
+        <button class="tab sel" role="tab" aria-selected="true">Body</button>
+        <button class="tab" role="tab" aria-selected="false">Headers<span class="badge">4</span></button>
+        <button class="tab" role="tab" aria-selected="false">Request</button>
+        <div class="right">
+          <span class="ctype">application/json; charset=utf-8</span>
+          <div class="seg" role="group" aria-label="Body view"><button class="on" aria-pressed="true">Pretty</button><button aria-pressed="false">Raw</button></div>
+          <button class="tb" aria-pressed="false" aria-label="Word Wrap" title="Word Wrap (Alt+Z)"><svg class="i c-blue" aria-hidden="true"><use href="#i-wrap"></use></svg></button>
+        </div>
+      </div>
+      <div class="editor code" role="document" aria-label="Response body">
+        <sc-for list="{{json}}" as="l"><div class="ln"><span class="no">{{l.n}}</span><span><sc-for list="{{l.parts}}" as="p"><span class="{{p.c}}">{{p.t}}</span></sc-for></span></div></sc-for>
+      </div>
+    </div>
+    <aside class="side" aria-label="Request history">
+      <div class="side-head">
+        <h3>History</h3><span class="badge">6</span>
+        <span class="grow"></span>
+        <button class="tb" aria-label="Clear the request history" title="Clear History"><svg class="i c-red" aria-hidden="true"><use href="#i-clear-all"></use></svg></button>
+      </div>
+      <div class="hist" role="listbox" aria-label="Request history">
+        <sc-for list="{{history}}" as="h">
+          <div class="hrow {{h.state}}" role="option" aria-selected="{{h.selected}}" title="{{h.method}} {{h.path}}: {{h.status}}, {{h.ms}}">
+            <span class="m chip square mono {{h.mcls}}">{{h.method}}</span>
+            <span class="path">{{h.path}}</span>
+            <span class="st chip {{h.scls}}">{{h.status}}</span>
+            <span class="when"><span>{{h.ms}}</span><span>{{h.at}}</span><span class="trim">{{h.note}}</span></span>
+          </div>
+        </sc-for>
+      </div>
+      <div class="side-foot"><svg class="i sm c-blue" aria-hidden="true"><use href="#i-info"></use></svg>Send a request from a .http file: the ▶ next to it, or Ctrl+Alt+R.</div>
+    </aside>
+  </div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const P = (x) => ({ t: x, c: 'p' });
+    const todo = (id, title, last) => [
+      [P('  {')],
+      [P('    '), { t: '"id"', c: 'k' }, P(': '), { t: String(id), c: 'n' }, P(',')],
+      [P('    '), { t: '"title"', c: 'k' }, P(': '), { t: `"${title}"`, c: 's' }, P(',')],
+      [P('    '), { t: '"done"', c: 'k' }, P(': '), { t: 'false', c: 'b' }],
+      [P(last ? '  }' : '  },')]
+    ];
+    const lines = [[P('[')], ...todo(1, 'Write the fixture'), ...todo(2, 'Test the endpoints'), ...todo(3, 'From the .http file', true), [P(']')]];
+    const json = lines.map((parts, i) => ({ n: i + 1, parts }));
+    const row = (method, path, status, ms, at, note, state) => ({
+      method, path, status, ms, at, note, state: state ?? '', selected: String(state === 'sel'),
+      mcls: method === 'POST' ? 'ok' : method === 'DELETE' ? 'err' : 'info',
+      scls: /^2/.test(status) ? 'ok' : /^3/.test(status) ? 'warn' : 'err'
+    });
+    const history = [
+      row('GET', '/api/todos/', '200 OK', '38 ms', '14:32:08', 'localhost:5248', 'sel'),
+      row('POST', '/api/todos/', '201 Created', '52 ms', '14:31:57', 'create'),
+      row('GET', '/api/todos/42', '404 Not Found', '9 ms', '14:31:40', 'localhost:5248', 'hover'),
+      row('GET', '/api/todos/1', '200 OK', '12 ms', '14:31:22', 'localhost:5248'),
+      row('GET', '/', '200 OK', '141 ms', '14:30:51', 'localhost:5248'),
+      row('GET', '/ping', 'Error', '2 ms', '14:29:03', 'Connection refused (localhost:5249)')
+    ];
+    return { t, json, history };
+  }
+}
+</script>
+</body>
+</html>

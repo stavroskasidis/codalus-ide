@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Controls: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:24px 28px 32px;display:flex;flex-direction:column;gap:16px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.sheet h2{font-size:14px;line-height:20px;margin:0;font-weight:600;color:var(--strong)}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.card>.lead{color:var(--muted);max-width:980px}
+.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 28px}
+.matrix{display:grid;grid-template-columns:190px repeat(5,minmax(0,1fr));align-items:center;row-gap:10px;column-gap:12px}
+.matrix .mh{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.mlab{display:flex;flex-direction:column;gap:2px}
+.mlab b{font-weight:600}
+.mcell{display:flex;align-items:center;min-height:32px}
+.lbl{font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:600;letter-spacing:.02em}
+.stack{display:flex;flex-direction:column;gap:6px}
+.row-of{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cell-cap{font-size:11px;color:var(--muted);margin-top:6px}
+.state-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.state-strip>div{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.mini{border:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column}
+.order{display:flex;flex-direction:column;gap:10px}
+.order .dlgfoot{display:flex;justify-content:flex-end;gap:8px;padding:12px;background:var(--dlg-footer);border:1px solid var(--soft-border);border-radius:var(--radius)}
+.spec{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.spec .box{border:1px dashed var(--border);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.measure{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.tok{display:flex;flex-direction:column}
+.tok .th,.tok .tr{display:grid;grid-template-columns:36% 18% 1fr;align-items:center}
+.tok .th>*,.tok .tr>*{padding:4px 8px;border-bottom:1px solid var(--rule)}
+.tok .th>*{color:var(--muted);font-weight:600;background:var(--header)}
+.sw-chip{display:inline-block;width:28px;height:16px;border-radius:3px;border:1px solid var(--border);vertical-align:middle}
+.tok code{font-family:var(--mono);font-size:11.5px;color:var(--strong)}
+.tok .v{font-family:var(--mono);font-size:11.5px}
+.menu-wrap{position:relative;height:150px}
+.menu-wrap .menu{position:absolute;top:32px;left:0;width:300px}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}; min-height: 100vh">
+<main class="sheet">
+
+<header>
+  <h1>Codalus IDE controls</h1>
+  <div class="muted">The control set every view uses: one look for buttons, fields, choices, tabs and rows. {{t.name}}, {{t.p.family}} family.</div>
+  <nav class="themes" aria-label="Themes">
+    <sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for>
+  </nav>
+</header>
+
+<section class="card" aria-labelledby="h-buttons">
+  <h2 id="h-buttons">Buttons</h2>
+  <div class="lead">Text says what happens; an icon says it faster where the command is familiar. One primary button per dialog or page. Every icon-only button has a tooltip with its name and shortcut, and an accessible name.</div>
+  <div class="matrix" role="table" aria-label="Button states">
+    <div class="mh" role="columnheader">Kind</div><div class="mh">Normal</div><div class="mh">Hover</div><div class="mh">Pressed</div><div class="mh">Focused</div><div class="mh">Disabled</div>
+    <sc-for list="{{btnRows}}" as="r">
+      <div class="mlab"><b>{{r.label}}</b><span class="small muted">{{r.note}}</span></div>
+      <sc-for list="{{r.cells}}" as="c">
+        <div class="mcell"><button class="btn {{r.cls}} {{c.cls}}" aria-disabled="{{c.dis}}" aria-label="{{r.aria}}" title="{{r.tip}}"><sc-if value="{{r.icon}}"><svg class="i {{r.ic}}" aria-hidden="true"><use href="#i-{{r.icon}}"></use></svg></sc-if><sc-if value="{{r.text}}">{{r.text}}</sc-if><sc-if value="{{r.chev}}"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></sc-if></button></div>
+      </sc-for>
+    </sc-for>
+  </div>
+</section>
+
+<section class="cols">
+  <div class="card">
+    <h2>Sizes</h2>
+    <div class="lead">One height per context. Dialogs, documents and pages use 28 px controls; tool windows, toolbars and dense rows use 24 px.</div>
+    <div class="stack">
+      <div class="lbl">Dialogs, documents, pages: 28 px, text buttons at least 80 px wide</div>
+      <div class="row-of">
+        <button class="btn primary dlg">Invoke</button>
+        <button class="btn dlg">Reset</button>
+        <button class="btn has-icon"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg>Browse…</button>
+        <span class="field" style="width:220px"><span class="ph">Namespace</span></span>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="lbl">Tool windows and dense rows: 24 px</div>
+      <div class="row-of">
+        <button class="btn sm primary has-icon"><svg class="i" aria-hidden="true"><use href="#i-run-all"></use></svg>Run All</button>
+        <button class="btn sm has-icon"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg>Add</button>
+        <button class="btn sm icon" aria-label="Remove this item" title="Remove this item"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg></button>
+        <span class="field sm" style="width:200px"><svg class="i lead" aria-hidden="true"><use href="#i-search"></use></svg><span class="ph">Search containers</span></span>
+      </div>
+    </div>
+    <div class="spec" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+      <div class="box"><span class="measure">padding 12 · icon 10 · gap 6</span><button class="btn has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-download"></use></svg>Install</button></div>
+      <div class="box"><span class="measure">radius {{t.p.radius}} px ({{t.p.family}})</span><button class="btn">Discover</button></div>
+      <div class="box"><span class="measure">focus 2 px, 1 px out</span><button class="btn is-focus">Discover</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Dialog buttons</h2>
+    <div class="lead">Right-aligned in the footer. The primary button is the default (Enter); Cancel answers Escape. Windows and Linux put the primary button first; macOS puts it last.</div>
+    <div class="order">
+      <div class="lbl">Windows and Linux</div>
+      <div class="dlgfoot"><button class="btn primary dlg">OK</button><button class="btn dlg">Cancel</button></div>
+      <div class="lbl">macOS</div>
+      <div class="dlgfoot"><button class="btn dlg">Cancel</button><button class="btn primary dlg">OK</button></div>
+      <div class="lbl">A destructive primary keeps the accent and says what it does</div>
+      <div class="dlgfoot"><span class="grow muted" style="align-self:center">Remove the worktree and its folder?</span><button class="btn primary dlg">Remove</button><button class="btn dlg">Cancel</button></div>
+    </div>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-toolbar">
+  <h2 id="h-toolbar">Toolbars</h2>
+  <div class="lead">One row of 24 px flat buttons with 16 px icons, grouped by separators; a search box takes the rest of the row. A toggle is checked with a tint and an accent edge. A split button runs its last choice; its arrow opens the others.</div>
+  <div class="mini" style="width:100%">
+    <div class="tw-cap active"><span class="title">Find Results</span><span class="cb"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="cb"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+    <div class="toolbar" role="toolbar" aria-label="Find Results">
+      <button class="tb" aria-label="Go to Previous Location (Shift+F8)"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-up"></use></svg></button>
+      <button class="tb" aria-label="Go to Next Location (F8)"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-down"></use></svg></button>
+      <span class="tb-sep"></span>
+      <button class="tb" aria-label="Clear All"><svg class="i c-red" aria-hidden="true"><use href="#i-clear-all"></use></svg></button>
+      <button class="tb is-disabled" aria-disabled="true" aria-label="Stop Searching"><svg class="i c-red" aria-hidden="true"><use href="#i-stop"></use></svg></button>
+      <span class="tb-sep"></span>
+      <button class="tb" aria-pressed="true" aria-label="Keep Results"><svg class="i c-blue" aria-hidden="true"><use href="#i-pin"></use></svg></button>
+      <button class="tb" aria-pressed="false" aria-label="List View"><svg class="i c-blue" aria-hidden="true"><use href="#i-list"></use></svg></button>
+      <span class="tb-sep"></span>
+      <button class="tb text"><svg class="i c-blue" aria-hidden="true"><use href="#i-edit"></use></svg>Modify Find</button>
+      <span class="field sm combo" style="width:150px" role="combobox" aria-label="Group by"><span class="value">Path and file</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+      <span class="grow"></span>
+      <span class="field sm" style="width:260px"><input aria-label="Search Find Results" placeholder="Search Find Results"><svg class="i c-blue" aria-hidden="true"><use href="#i-search"></use></svg></span>
+    </div>
+  </div>
+  <div class="state-strip">
+    <div><div class="lbl">Toolbar button</div><div class="row-of"><button class="tb" aria-label="Refresh"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button><button class="tb is-hover" aria-label="Refresh"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button><button class="tb is-pressed" aria-label="Refresh"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button><button class="tb is-focus" aria-label="Refresh"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button><button class="tb is-disabled" aria-disabled="true" aria-label="Refresh"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button></div><div class="cell-cap">normal · hover · pressed · focused · disabled</div></div>
+    <div><div class="lbl">Toggle</div><div class="row-of"><button class="tb" aria-pressed="false" aria-label="Keep Results"><svg class="i c-blue" aria-hidden="true"><use href="#i-pin"></use></svg></button><button class="tb is-checked" aria-pressed="true" aria-label="Keep Results"><svg class="i c-blue" aria-hidden="true"><use href="#i-pin"></use></svg></button><button class="tb is-checked is-focus" aria-pressed="true" aria-label="Keep Results"><svg class="i c-blue" aria-hidden="true"><use href="#i-pin"></use></svg></button><button class="tb text is-checked" aria-pressed="true"><svg class="i c-orange" aria-hidden="true"><use href="#i-bug"></use></svg>In process</button></div><div class="cell-cap">off · on · on, focused · with a label</div></div>
+    <div><div class="lbl">Icon + text</div><div class="row-of"><button class="tb text"><svg class="i c-green" aria-hidden="true"><use href="#i-run-all"></use></svg>Run All</button><button class="tb text is-hover"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg>Add…</button></div><div class="cell-cap">the window's main command, or a command an icon can't name</div></div>
+    <div><div class="lbl">Split button</div><div class="row-of"><span class="split"><button class="tb" aria-label="Export CSV"><svg class="i c-blue" aria-hidden="true"><use href="#i-export"></use></svg></button><button class="tb" aria-label="More export formats"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></span><span class="split is-hover"><button class="tb" aria-label="Export CSV"><svg class="i c-blue" aria-hidden="true"><use href="#i-export"></use></svg></button><button class="tb" aria-label="More export formats"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></span><span class="split is-open"><button class="tb" aria-label="Export CSV"><svg class="i c-blue" aria-hidden="true"><use href="#i-export"></use></svg></button><button class="tb" aria-label="More export formats"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></span></div><div class="cell-cap">normal · hover · menu open</div></div>
+    <div><div class="lbl">Drop-down button</div><div class="row-of"><button class="tb text"><svg class="i c-blue" aria-hidden="true"><use href="#i-radar"></use></svg>Running Services<svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></div><div class="cell-cap">opens a menu; never runs anything itself</div></div>
+  </div>
+</section>
+
+<section class="cols">
+  <div class="card">
+    <h2>Text boxes</h2>
+    <div class="lead">A 1 px border that darkens under the pointer and turns into a 2 px accent edge with the focus. Errors draw the border in the error color and say what to do under the box.</div>
+    <div class="cols" style="gap:14px 16px">
+      <div><div class="lbl">Placeholder</div><span class="field"><span class="ph">http://localhost:5000/Service.svc, …?wsdl</span></span></div>
+      <div><div class="lbl">Hover</div><span class="field is-hover"><span class="ph">http://localhost:5000/Service.svc, …?wsdl</span></span></div>
+      <div><div class="lbl">Focused</div><span class="field is-focus"><span class="value">http://localhost:5280/CalculatorService.svc</span><span class="caret"></span></span></div>
+      <div><div class="lbl">Filled</div><span class="field"><span class="value">CalculatorClient.Calculator</span></span></div>
+      <div><div class="lbl">Error</div><span class="field is-error is-focus"><span class="value">Gr</span><span class="caret"></span></span><div class="field-msg error-text" role="alert"><svg class="i sm c-error" aria-hidden="true"><use href="#i-error"></use></svg>The name is too short.</div></div>
+      <div><div class="lbl">Disabled</div><span class="field is-disabled" aria-disabled="true"><span class="value">nil</span></span></div>
+      <div><div class="lbl">Read-only</div><span class="field is-readonly"><span class="value mono">.work/user-data/settings.json</span></span></div>
+      <div><div class="lbl">With a button</div><div class="row-of" style="gap:6px;flex-wrap:nowrap"><span class="field grow"><span class="value">contracts/CalculatorService.wsdl</span></span><button class="btn icon" aria-label="Browse… (choose a WSDL file)" title="Browse…"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg></button></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Search boxes</h2>
+    <div class="lead">A search icon, the placeholder naming what it searches, and a clear button once there is text. In a toolbar it is 24 px and takes the rest of the row.</div>
+    <div class="stack" style="gap:14px">
+      <div><div class="lbl">Empty</div><span class="field"><svg class="i lead" aria-hidden="true"><use href="#i-search"></use></svg><span class="ph">Search settings (@modified shows changed ones)</span></span></div>
+      <div><div class="lbl">Typed, focused</div><span class="field is-focus"><svg class="i lead" aria-hidden="true"><use href="#i-search"></use></svg><span class="value">tab size</span><span class="caret"></span><span class="grow"></span><span class="kbd">2 found</span><span class="clear" aria-label="Clear"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></span></div>
+      <div><div class="lbl">Toolbar, 24 px</div><span class="field sm"><svg class="i lead" aria-hidden="true"><use href="#i-search"></use></svg><span class="ph">Search exception types</span><span class="kbd">Ctrl+E</span></span></div>
+      <div><div class="lbl">Combo boxes</div>
+        <div class="row-of" style="align-items:flex-start">
+          <span class="field combo" style="width:130px" role="combobox" aria-label="Solution configuration"><span class="value">Debug</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+          <span class="field combo is-hover" style="width:130px" role="combobox" aria-label="Solution platform"><span class="value">Any CPU</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+          <span class="field combo is-focus" style="width:130px" role="combobox" aria-label="Job"><span class="value">Short</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+          <span class="field combo is-disabled" style="width:110px" role="combobox" aria-disabled="true" aria-label="Kind"><span class="value">gRPC</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+        </div>
+        <div class="cell-cap">normal · hover · focused · disabled</div>
+      </div>
+      <div class="menu-wrap">
+        <div class="lbl">Open</div>
+        <span class="field combo is-open" style="width:300px;position:absolute;top:18px" role="combobox" aria-expanded="true" aria-label="Collection type"><span class="value">System.Collections.Generic.List`1</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-up"></use></svg></span>
+        <div class="menu" role="listbox" style="top:50px">
+          <div class="mi" role="option"><span class="ck"></span>System.Array</div>
+          <div class="mi sel" role="option" aria-selected="true"><svg class="i ck" aria-hidden="true"><use href="#i-check"></use></svg>System.Collections.Generic.List`1</div>
+          <div class="mi hover" role="option"><span class="ck"></span>System.Collections.ObjectModel.Collection`1</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-choices">
+  <h2 id="h-choices">Check boxes, radio buttons, switches</h2>
+  <div class="lead">Check boxes in lists, forms and dialogs that commit with OK. A switch only for an on/off that takes effect at once and has its own row (AI Chat's Agent mode). The checked fill is the accent with its text color for the mark.</div>
+  <div class="matrix" style="grid-template-columns:190px repeat(4,minmax(0,1fr))">
+    <div class="mh">Control</div><div class="mh">Normal</div><div class="mh">Hover</div><div class="mh">Focused</div><div class="mh">Disabled</div>
+    <div class="mlab"><b>Check box</b><span class="small muted">unchecked</span></div>
+    <span class="chk"><span class="box"></span>Word Wrap</span>
+    <span class="chk is-hover"><span class="box"></span>Word Wrap</span>
+    <span class="chk is-focus"><span class="box"></span>Word Wrap</span>
+    <span class="chk is-disabled" aria-disabled="true"><span class="box"></span>Word Wrap</span>
+    <div class="mlab"><b>Check box</b><span class="small muted">checked</span></div>
+    <span class="chk on"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Insert Spaces</span>
+    <span class="chk on is-hover"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Insert Spaces</span>
+    <span class="chk on is-focus"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Insert Spaces</span>
+    <span class="chk on is-disabled" aria-disabled="true"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Insert Spaces</span>
+    <div class="mlab"><b>Check box</b><span class="small muted">some checked</span></div>
+    <span class="chk mixed"><span class="box"><span class="bar"></span></span>Select all (2 of 4)</span>
+    <span class="chk mixed is-hover"><span class="box"><span class="bar"></span></span>Select all (2 of 4)</span>
+    <span class="chk mixed is-focus"><span class="box"><span class="bar"></span></span>Select all (2 of 4)</span>
+    <span class="chk mixed is-disabled" aria-disabled="true"><span class="box"><span class="bar"></span></span>Select all (2 of 4)</span>
+    <div class="mlab"><b>Radio button</b><span class="small muted">one of a few</span></div>
+    <div class="row-of"><span class="rad on"><span class="dot"></span>Clients</span><span class="rad"><span class="dot"></span>Servers</span></div>
+    <div class="row-of"><span class="rad on"><span class="dot"></span>Clients</span><span class="rad is-hover"><span class="dot"></span>Servers</span></div>
+    <div class="row-of"><span class="rad on is-focus"><span class="dot"></span>Clients</span><span class="rad"><span class="dot"></span>Servers</span></div>
+    <div class="row-of"><span class="rad on is-disabled" aria-disabled="true"><span class="dot"></span>Clients</span><span class="rad is-disabled" aria-disabled="true"><span class="dot"></span>Servers</span></div>
+    <div class="mlab"><b>Switch</b><span class="small muted">applies at once</span></div>
+    <div class="row-of"><span class="sw"><span class="track"></span>Off</span><span class="sw on"><span class="track"></span>Agent</span></div>
+    <div class="row-of"><span class="sw is-hover"><span class="track"></span>Off</span><span class="sw on is-hover"><span class="track"></span>Agent</span></div>
+    <div class="row-of"><span class="sw on is-focus"><span class="track"></span>Agent</span></div>
+    <div class="row-of"><span class="sw is-disabled" aria-disabled="true"><span class="track"></span>Agent</span></div>
+  </div>
+</section>
+
+<section class="cols">
+  <div class="card">
+    <h2>Segmented controls</h2>
+    <div class="lead">Two to four views of the same thing (Form or XML, Tree or List, User or Workspace). The selected segment is the accent; the others are flat.</div>
+    <div class="state-strip" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+      <div><div class="lbl">Normal</div><div class="seg" role="group" aria-label="Request view"><button class="on" aria-pressed="true">Form</button><button aria-pressed="false">XML</button></div></div>
+      <div><div class="lbl">Hover</div><div class="seg" role="group" aria-label="Request view"><button class="on" aria-pressed="true">Form</button><button class="is-hover" aria-pressed="false">XML</button></div></div>
+      <div><div class="lbl">Focused, with icons</div><div class="seg" role="group" aria-label="Results view"><button class="on is-focus" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-tree"></use></svg>Tree</button><button aria-pressed="false"><svg class="i c-blue" aria-hidden="true"><use href="#i-list"></use></svg>List</button></div></div>
+      <div><div class="lbl">Disabled segment</div><div class="seg" role="group" aria-label="Settings scope"><button class="on" aria-pressed="true">User</button><button class="is-disabled" aria-disabled="true">Workspace</button></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Tabs in a tool window or document</h2>
+    <div class="lead">28 px, muted until selected; the selected tab is bold with a 2 px accent underline. Counts are badges. Kept pages close with their own button.</div>
+    <div class="mini">
+      <div class="tabs" role="tablist" aria-label="Response">
+        <button class="tab sel" role="tab" aria-selected="true">Body</button>
+        <button class="tab is-hover" role="tab" aria-selected="false">Headers<span class="badge">6</span></button>
+        <button class="tab is-focus" role="tab" aria-selected="false">Request</button>
+        <button class="tab is-disabled" role="tab" aria-disabled="true">Timeline</button>
+      </div>
+      <div style="height:10px"></div>
+      <div class="tabs" role="tablist" aria-label="Find Results pages">
+        <button class="tab" role="tab" aria-selected="false">Find Results 1<span class="x" aria-label="Close these results"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></button>
+        <button class="tab sel" role="tab" aria-selected="true">Find Results 2<span class="x" aria-label="Close these results"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-rows">
+  <h2 id="h-rows">Lists and grids</h2>
+  <div class="lead">Rows of 22 px; headers on their own tint with a sort arrow; a group header carries its count. The selection of a list without the focus is a quieter tint. A keyboard focus without a selection is a 1 px outline. Matches are highlighted, underlined on the selection.</div>
+  <div class="mini"><table class="grid" aria-label="Row states">
+    <colgroup><col style="width:44%"><col style="width:22%"><col style="width:10%"><col style="width:8%"><col style="width:16%"></colgroup>
+    <thead><tr><th>Code</th><th>File<svg class="i sm sort" aria-hidden="true"><use href="#i-chevron-down"></use></svg></th><th style="text-align:right">Line</th><th style="text-align:right">Col</th><th>State</th></tr></thead>
+    <tbody>
+      <tr class="r"><td><span style="display:inline-flex;align-items:center;gap:6px"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg><svg class="i" aria-hidden="true"><use href="#i-cs-file"></use></svg><b>ICalculatorService.cs</b><span class="muted">samples/Wcf/CalculatorService</span><span class="badge">3</span></span></td><td></td><td></td><td></td><td class="muted">group header</td></tr>
+      <tr class="r"><td class="mono" style="padding-left:44px">string Greet(<span class="hl">Person</span> person);</td><td>ICalculatorService.cs</td><td class="mono" style="text-align:right">19</td><td class="mono" style="text-align:right">18</td><td class="muted">normal</td></tr>
+      <tr class="r hover"><td class="mono" style="padding-left:44px"><span class="hl">Person</span>[] FindPeople(string prefix, int max);</td><td>ICalculatorService.cs</td><td class="mono" style="text-align:right">22</td><td class="mono" style="text-align:right">5</td><td>hover</td></tr>
+      <tr class="r sel"><td class="mono" style="padding-left:44px">public sealed class <span class="hl">Person</span></td><td>ICalculatorService.cs</td><td class="mono" style="text-align:right">31</td><td class="mono" style="text-align:right">21</td><td>selected</td></tr>
+      <tr class="r sel-i"><td class="mono" style="padding-left:44px">private static readonly <span class="hl">Person</span>[] s_people =</td><td>CalculatorService.cs</td><td class="mono" style="text-align:right">7</td><td class="mono" style="text-align:right">29</td><td>selected, list without the focus</td></tr>
+      <tr class="r kfocus"><td class="mono" style="padding-left:44px">public string Greet(<span class="hl">Person</span> person) =&gt;</td><td>CalculatorService.cs</td><td class="mono" style="text-align:right">21</td><td class="mono" style="text-align:right">25</td><td>keyboard focus</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="cols">
+  <div class="card">
+    <h2>Chips and badges</h2>
+    <div class="lead">A chip is a state in a word (a status code, a fault, a method); a badge is a count. Color never carries the meaning alone: the word does, and in High contrast chips are outlined.</div>
+    <div class="row-of"><span class="chip ok">200 OK</span><span class="chip ok">201 Created</span><span class="chip warn">304 Not Modified</span><span class="chip err">404 Not Found</span><span class="chip err"><svg class="i" aria-hidden="true"><use href="#i-error"></use></svg>Fault s:Client</span></div>
+    <div class="row-of"><span class="chip info square mono">GET</span><span class="chip ok square mono">POST</span><span class="chip err square mono">DELETE</span><span class="chip plain square">BasicHttpBinding</span><span class="badge">3</span><span class="badge">128</span></div>
+    <div class="row-of"><button class="tb text is-checked" aria-pressed="true"><svg class="i c-error" aria-hidden="true"><use href="#i-error"></use></svg>0 Errors</button><button class="tb text is-checked" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-warning"></use></svg>1 Warning</button><button class="tb text" aria-pressed="false"><svg class="i c-info" aria-hidden="true"><use href="#i-info"></use></svg>1 Message</button><span class="small muted">filter toggles: toolbar toggles with a count</span></div>
+  </div>
+  <div class="card">
+    <h2>Empty, loading and error states</h2>
+    <div class="lead">An icon, one sentence, and the next step as a button or link.</div>
+    <div class="mini" style="height:150px"><div class="empty" style="flex:1"><svg class="i big c-blue" aria-hidden="true"><use href="#i-container"></use></svg><div class="msg">No containers (Podman, Linux). Start one with Ctrl+F5 on a project with a Dockerfile, or run docker compose up.</div><button class="btn sm has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg>Refresh</button></div></div>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-tokens">
+  <h2 id="h-tokens">Proposed tokens in {{t.name}}</h2>
+  <div class="lead">Colors each theme sets (the families' Graphite, Daylight and Ember values follow the same rules when they are applied). The existing tokens these build on are in docs/ui-guidelines.md.</div>
+  <div class="tok" role="table" aria-label="Proposed color tokens">
+    <div class="th" role="row"><span role="columnheader">Token</span><span role="columnheader">Value</span><span role="columnheader">Use</span></div>
+    <sc-for list="{{tokens}}" as="k"><div class="tr" role="row"><code role="cell">{{k.name}}</code><span role="cell"><span class="sw-chip" style="background: {{k.value}}"></span> <span class="v">{{k.value}}</span></span><span role="cell" class="muted">{{k.use}}</span></div></sc-for>
+  </div>
+  <div class="tok" role="table" aria-label="Proposed size and shape tokens" style="margin-top:6px">
+    <div class="th" role="row"><span role="columnheader">Size or shape</span><span role="columnheader">Value</span><span role="columnheader">Use</span></div>
+    <sc-for list="{{shapes}}" as="k"><div class="tr" role="row"><code role="cell">{{k.name}}</code><span role="cell" class="v">{{k.value}}</span><span role="cell" class="muted">{{k.use}}</span></div></sc-for>
+  </div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":2900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const states = [
+      { cls: '', dis: 'false' }, { cls: 'is-hover', dis: 'false' }, { cls: 'is-pressed', dis: 'false' },
+      { cls: 'is-focus', dis: 'false' }, { cls: 'is-disabled', dis: 'true' }
+    ];
+    const row = (r) => ({ aria: r.aria ?? r.text, tip: r.tip ?? '', ...r, cells: states });
+    const btnRows = [
+      row({ label: 'Primary', note: 'the main action; at most one', cls: 'primary', text: 'Add Reference' }),
+      row({ label: 'Default', note: 'every other text button', cls: '', text: 'Browse…' }),
+      row({ label: 'Icon + text', note: 'a main command an icon can show', cls: 'has-icon', text: 'Discover', icon: 'radar', ic: 'c-blue' }),
+      row({ label: 'Subtle', note: 'secondary actions in a crowded row', cls: 'subtle has-icon', text: 'Reset', icon: 'reset', ic: 'c-blue' }),
+      row({ label: 'Icon only', note: 'familiar commands; tooltip + name', cls: 'icon', icon: 'refresh', ic: 'c-blue', aria: 'Refresh (F5)', tip: 'Refresh (F5)' }),
+      row({ label: 'Drop-down', note: 'opens a choice of commands', cls: 'has-icon', text: 'Ollama · qwen2.5', icon: 'sparkle', ic: 'c-purple', chev: true }),
+      row({ label: 'Link', note: 'navigates; never a command', cls: 'link', text: 'Edit in settings.json' })
+    ];
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+    const tokens = C.TOKENS.map(([key, name, use]) => ({ name, value: t.p[key], use }));
+    const shapes = C.SHAPES.map(([name, value, use]) => ({ name, value, use }));
+    return { t, btnRows, themes, tokens, shapes };
+  }
+}
+</script>
+</body>
+</html>

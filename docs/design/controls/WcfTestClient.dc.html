@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WCF Test Client: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.canvas{width:1280px;height:800px;padding:6px;display:flex;flex-direction:column}
+.fam-classic .canvas{padding:4px}
+.doc{flex:1}
+.page{flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 16px 16px;gap:12px}
+.top h1{margin:0;font-size:18px;line-height:24px;font-weight:600;color:var(--strong)}
+.top .desc{color:var(--muted);margin-top:2px}
+.svc{display:flex;gap:6px;align-items:center}
+.status{display:flex;align-items:center;gap:6px;color:var(--muted);margin-top:6px}
+.split{display:flex;gap:12px;flex:1;min-height:0}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 2px);display:flex;flex-direction:column;min-height:0}
+.fam-harbor .panel{background:var(--input)}
+.kind-dark.fam-harbor .panel{background:var(--panel)}
+.left{width:310px;flex:none}
+.sec{padding:10px 12px 6px;display:flex;align-items:center;gap:6px}
+.sec h2{margin:0;font-size:12px;font-weight:600;color:var(--strong)}
+.ep{height:auto;min-height:40px;padding:4px 8px;align-items:center}
+.ep .two{display:flex;flex-direction:column;min-width:0;flex:1}
+.ops{padding:2px 6px 8px;display:flex;flex-direction:column;gap:1px}
+.op{display:grid;grid-template-columns:16px minmax(0,1fr);grid-template-rows:18px 16px;column-gap:8px;padding:4px 8px;border-radius:var(--radius)}
+.op svg{grid-row:1/3;align-self:center}
+.op .sig{font-family:var(--mono);font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.op.sel{background:var(--sel);color:var(--sel-fg)}
+.op.sel .sig{color:inherit}
+.op.hover{background:var(--row-hover)}
+.right{flex:1;min-width:0}
+.ophead{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--soft-border)}
+.ophead h2{margin:0;font-size:14px;font-weight:600;color:var(--strong)}
+.action{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.form{padding:4px 0 6px}
+.fgrid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.8fr) minmax(0,2fr) 64px 58px;align-items:center;column-gap:10px;padding:0 12px}
+.fgrid.head{height:26px;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.frow{min-height:32px}
+.frow .nm{display:flex;align-items:center;gap:4px;font-weight:600;min-width:0}
+.frow .nm .chev{width:12px;height:12px;color:var(--muted);flex:none}
+.frow .ty{color:var(--muted);font-family:var(--mono);font-size:11.5px}
+.frow .req{color:var(--error-fg);font-weight:700;margin-left:1px}
+.frow .acts{display:flex;gap:2px;justify-content:flex-end}
+.frow .group{color:var(--muted);font-style:italic}
+.runbar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--soft-border);border-bottom:1px solid var(--soft-border);background:var(--dlg-footer)}
+.runbar .sum{display:flex;align-items:center;gap:8px;margin-left:auto;min-width:0}
+.resp{flex:1;min-height:0;display:flex;flex-direction:column}
+.resp .sec{padding-bottom:8px}
+.tree{padding:2px 12px 10px;font-family:var(--mono);font-size:12px}
+.tn{display:flex;align-items:center;gap:4px;height:22px;white-space:nowrap}
+.tn .chev{width:12px;height:12px;color:var(--muted);flex:none}
+.tn .el{color:var(--ty)}
+.tn .eq{color:var(--muted)}
+.tn .val{color:var(--st)}
+.tn .num{color:var(--nu)}
+.kbdhint{color:var(--muted);font-size:11px}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}">
+<div class="canvas">
+<div class="doc-tabs" role="tablist" aria-label="Open documents">
+  <span class="doc-tab on" role="tab" aria-selected="true"><svg class="i md c-blue" aria-hidden="true"><use href="#i-plug"></use></svg>WCF Test Client<svg class="i sm c-fg" aria-hidden="true" style="margin-left:6px"><use href="#i-close"></use></svg></span>
+  <span class="doc-tab" role="tab" aria-selected="false"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>ICalculatorService.cs</span>
+  <span class="doc-tab" role="tab" aria-selected="false"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>Program.cs</span>
+</div>
+<section class="doc" aria-label="WCF Test Client">
+  <div class="page">
+    <div class="top">
+      <h1>WCF Test Client</h1>
+      <div class="desc">Calls a WCF or CoreWCF service from its metadata: SOAP 1.1 (BasicHttpBinding) and SOAP 1.2 with WS-Addressing (WSHttpBinding without security).</div>
+    </div>
+    <div>
+      <div class="svc">
+        <span class="field grow"><svg class="i c-blue" aria-hidden="true"><use href="#i-globe"></use></svg><input aria-label="Service metadata address" value="http://localhost:5280/CalculatorService.svc?wsdl" placeholder="http://localhost:5000/Service.svc, …?wsdl, or a WSDL file"></span>
+        <button class="btn icon" aria-label="Browse… (choose a WSDL file)" title="Browse… (choose a WSDL file)"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg></button>
+        <button class="btn has-icon" title="Load the metadata (Enter)"><svg class="i c-blue" aria-hidden="true"><use href="#i-download"></use></svg>Load</button>
+        <button class="btn has-icon" title="Find the metadata of the CoreWCF services you run"><svg class="i c-blue" aria-hidden="true"><use href="#i-radar"></use></svg>Running Services<svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button>
+      </div>
+      <div class="status" role="status"><svg class="i sm c-ok" aria-hidden="true"><use href="#i-check-circle"></use></svg>Endpoints: 2. Operations: 4. Documents read: 1.</div>
+    </div>
+
+    <div class="split">
+      <aside class="panel left" aria-label="Endpoints and operations">
+        <div class="sec"><h2>Endpoint</h2></div>
+        <div style="padding:0 12px">
+          <span class="field combo ep" role="combobox" aria-label="Endpoint"><span class="two"><span class="trim">BasicHttpBinding_ICalculatorService (SOAP 1.1)</span><span class="small muted trim">http://localhost:5280/CalculatorService.svc</span></span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+        </div>
+        <div class="sec" style="padding-top:14px"><h2>Operations</h2><span class="badge">4</span></div>
+        <div class="ops" role="listbox" aria-label="Operations">
+          <sc-for list="{{ops}}" as="o">
+            <div class="op {{o.state}}" role="option" aria-selected="{{o.selected}}" title="{{o.action}}"><svg class="i c-purple" aria-hidden="true"><use href="#i-method"></use></svg><span>{{o.name}}</span><span class="sig">{{o.sig}}</span></div>
+          </sc-for>
+        </div>
+      </aside>
+
+      <section class="panel right" aria-label="Request and response">
+        <div class="ophead">
+          <svg class="i c-purple" aria-hidden="true"><use href="#i-method"></use></svg>
+          <h2>{{op.name}}</h2>
+          <span class="action trim">{{op.action}}</span>
+          <span class="grow"></span>
+          <div class="seg" role="group" aria-label="Request view"><button class="on" aria-pressed="true">Form</button><button aria-pressed="false">XML</button></div>
+        </div>
+        <div class="form">
+          <div class="fgrid head" role="row"><span>Name</span><span>Type</span><span>Value</span><span></span><span>Nil</span></div>
+          <sc-for list="{{fields}}" as="f">
+            <div class="fgrid frow" role="row">
+              <span class="nm" style="padding-left: {{f.indent}}px"><sc-if value="{{f.chev}}"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></sc-if><span class="trim">{{f.name}}</span></span>
+              <span class="ty trim">{{f.type}}<sc-if value="{{f.req}}"><span class="req" title="Required">*</span></sc-if></span>
+              <span>
+                <sc-if value="{{f.text}}"><span class="field sm"><input aria-label="{{f.name}}" value="{{f.value}}" placeholder="{{f.ph}}"></span></sc-if>
+                <sc-if value="{{f.choice}}"><span class="field sm combo" role="combobox" aria-label="{{f.name}}"><span class="value">{{f.value}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></sc-if>
+                <sc-if value="{{f.group}}"><span class="group small">{{f.value}}</span></sc-if>
+              </span>
+              <span class="acts">
+                <sc-if value="{{f.add}}"><button class="tb" aria-label="Add an item" title="Add an item"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg></button></sc-if>
+                <sc-if value="{{f.remove}}"><button class="tb" aria-label="Remove this item" title="Remove this item"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg></button></sc-if>
+              </span>
+              <span><sc-if value="{{f.nil}}"><span class="chk" title="Send xsi:nil"><span class="box"></span><span class="vh">nil</span></span></sc-if></span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="runbar">
+          <button class="btn primary has-icon" title="Invoke the operation (F5)"><svg class="i" aria-hidden="true"><use href="#i-play"></use></svg>Invoke</button>
+          <button class="btn subtle has-icon" title="Clear the form and the XML"><svg class="i c-blue" aria-hidden="true"><use href="#i-reset"></use></svg>Reset</button>
+          <span class="kbdhint">F5 invokes · Esc cancels</span>
+          <div class="sum" role="status" aria-live="polite">
+            <sc-if value="{{fault}}"><span class="chip err"><svg class="i" aria-hidden="true"><use href="#i-error"></use></svg>Fault s:Client</span><span class="trim">Division by zero</span><span class="muted" style="flex:none">500 · 11 ms</span></sc-if>
+            <sc-if value="{{ok}}"><span class="chip ok">200 OK</span><span class="muted" style="flex:none">14 ms</span></sc-if>
+          </div>
+        </div>
+        <div class="resp">
+          <div class="sec">
+            <h2>Response</h2>
+            <span class="grow"></span>
+            <div class="seg" role="group" aria-label="Response view"><button class="on" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-tree"></use></svg>Tree</button><button aria-pressed="false"><svg class="i c-blue" aria-hidden="true"><use href="#i-code"></use></svg>XML</button></div>
+            <button class="tb" aria-label="Copy the response XML" title="Copy the response XML"><svg class="i c-blue" aria-hidden="true"><use href="#i-copy"></use></svg></button>
+          </div>
+          <div class="tree" role="tree" aria-label="Response tree">
+            <sc-for list="{{tree}}" as="n">
+              <div class="tn" role="treeitem" style="padding-left: {{n.indent}}px"><sc-if value="{{n.kids}}"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></sc-if><sc-if value="{{n.leaf}}"><span style="width:12px;flex:none"></span></sc-if><span class="el">{{n.name}}</span><sc-if value="{{n.value}}"><span class="eq"> = </span><span class="{{n.vcls}}">{{n.value}}</span></sc-if></div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"mode":{"editor":"enum","default":"Response","options":["Response","Fault"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const fault = this.props.mode === 'Fault';
+    const ns = 'http://samples.codalus.dev/calculator/ICalculatorService/';
+    const opsRaw = [
+      ['Add', 'Add(double a, double b) → double'],
+      ['Divide', 'Divide(double a, double b) → double'],
+      ['Greet', 'Greet(Person person) → string'],
+      ['FindPeople', 'FindPeople(string prefix, int max) → Person[]']
+    ];
+    const current = fault ? 'Divide' : 'Greet';
+    const ops = opsRaw.map(([name, sig]) => ({ name, sig, action: ns + name, state: name === current ? 'sel' : name === 'FindPeople' ? 'hover' : '', selected: String(name === current) }));
+    const op = { name: current, action: ns + current };
+    const F = (o) => ({ indent: 0, text: false, choice: false, group: false, add: false, remove: false, nil: false, chev: false, req: false, ph: '', ...o });
+    const fields = fault
+      ? [
+          F({ name: 'a', type: 'double', req: true, text: true, value: '10', ph: 'double' }),
+          F({ name: 'b', type: 'double', req: true, text: true, value: '0', ph: 'double' })
+        ]
+      : [
+          F({ name: 'person', type: 'Person', group: true, value: 'Person: 4 members', chev: true, nil: true }),
+          F({ name: 'Name', type: 'string', text: true, value: 'Ada', ph: 'string', indent: 16, nil: true }),
+          F({ name: 'Age', type: 'int', req: true, text: true, value: '36', ph: 'int', indent: 16 }),
+          F({ name: 'Mood', type: 'Mood', req: true, choice: true, value: 'Happy', indent: 16 }),
+          F({ name: 'Tags', type: 'string[]', group: true, value: '2 items', chev: true, add: true, indent: 16, nil: true }),
+          F({ name: '[0]', type: 'string', text: true, value: 'math', ph: 'string', remove: true, indent: 36 }),
+          F({ name: '[1]', type: 'string', text: true, value: 'engines', ph: 'string', remove: true, indent: 36 })
+        ];
+    const N = (name, indent, value, vcls, kids) => ({ name, indent, value: value ?? '', vcls: vcls ?? 'val', kids: !!kids, leaf: !kids });
+    const tree = fault
+      ? [
+          N('Fault', 0, null, null, true),
+          N('faultcode', 18, 's:Client'),
+          N('faultstring', 18, 'Division by zero'),
+          N('detail', 18, null, null, true),
+          N('CalculationFault', 36, null, null, true),
+          N('Operation', 54, 'Divide'),
+          N('Problem', 54, 'Division by zero')
+        ]
+      : [
+          N('GreetResponse', 0, null, null, true),
+          N('GreetResult', 18, '"Hello Ada, 36 and happy (math, engines)!"')
+        ];
+    return { t, ops, op, fields, tree, fault, ok: !fault };
+  }
+}
+</script>
+</body>
+</html>
