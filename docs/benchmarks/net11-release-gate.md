@@ -8,6 +8,7 @@
 - The baseline takes runs on `master` whose benchmarks job passed on that OS, whatever their other jobs did.
 - Latency and memory fail only against at least 3 earlier runs on the same runner CPU model. With fewer, an increase is a warning, with latency divided by VS Code's startup in the same run. Size stays strict, and one run (or an accepted value) is enough. VS Code's own numbers never fail.
 - Each result records the runner's L3 cache next to its CPU, and the summary shows it.
+- *2026-10-18:* the same decision applied to the 0.3.0 release's content (M40–M47, M34g), after the release run failed on size on every OS: ClrDebug no longer ships off Windows, and the rest is accepted ([The 0.3.0 release's content](#the-030-releases-content-2026-10-18)).
 
 Replayed against the results of this note's runs (the first measurement, then the confirmation run as the gate would): the 0.3.0 run passes on every OS against the baseline it had (0.2.1). The language host 6% over its accepted value still fails. Against the baseline the new selection finds (five Linux and macOS runs, two Windows), Linux and Windows pass with warnings, but the Mac's `file_highlight_ms` fails against its three earlier runs on the same CPU, confirmation included (`editor-100k` 6037 ms, then 4200, against a 3610 ms median; `self-driven` 3302, then 3496, against 2120). That metric rose on Linux on the same CPU too ([Latency on Linux](#latency-on-linux)). Investigated on 2026-10-17: a regression of the editor since 0.2.1, fixed ([file_highlight_ms](#file_highlight_ms)).
 
@@ -205,3 +206,59 @@ They are deterministic and explained: Visual Basic (M35) by design, .NET 11 with
 5. **Measure a host's size whenever its dependencies change** (a milestone that adds a package to a host), so a jump like M35's is seen in its own milestone, not at the next release.
 
 **Follow-ups:** the AOT shell's startup on .NET 11 (profile, then GA); Windows memory with the generation-0 budget capped; whether VB's ReadyToRun code is worth its 11.6 MB (the trade above); partial ReadyToRun from a profile, if `dotnet-pgo` becomes available.
+
+## The 0.3.0 release's content (2026-10-18)
+
+The stable release run [Release 0.3.0](https://github.com/stavroskasidis/codalus-ide/actions/runs/39077731355) (`01015eed`, `develop` with M40–M47 and M34g merged into `master`) failed the size gate on every OS, confirmation included. Latency and memory were warnings or within the limits.
+
+| OS | `buildhost_mb` | `markuphost_mb` | `shell_mb` | `shell_zip_mb` |
+|---|---|---|---|---|
+| Linux | 7.3 (median 6.7) | 4.1 (accepted 3.6) | 392.3 (median 356.3) | 133.6 (median 121.5) |
+| Windows | 8.4 (7.8) | 4.1 (3.6) | 237.8 (215.6) | 91.1 (83.1) |
+| macOS | 8.1 (7.6) | 4.6 (4.0) | 486.4 (440.9) | 114.4 (104.8) |
+
+`shell_mb`, `shell_zip_mb` and `buildhost_mb` had no accepted value, so their reference was the median of the five runs before 0.3.0 (0.2.x). Part of their gap is 0.3.0's own first run (`f72b78e8`, Linux `shell_mb` 362.0), which was within 5% then.
+
+### Where it came from
+
+Linux, published as the benchmarks job publishes (`dotnet publish src/Codalus.Shell -c Release -r linux-x64`) at `f72b78e8`, the run the 2026-10-17 values came from, and on `claude/fix-intermittent-ci` before the trim below (the release's content; `shell_mb` 392.42 here against CI's 392.33). Sizes are `codalus-bench`'s: MiB, every file but `*.pdb`.
+
+| What | `f72b78e8` | 0.3.0 release | Change | Why |
+|---|---|---|---|---|
+| `codalus`, the Native AOT shell (`shell_mb`) | 74.58 | 78.93 | +4.35 | Its IL grew: `codalus.dll` 6.46 → 7.48 MB, `Codalus.Workbench` 2.73 → 3.35 MB, the protocols +0.26 MB. The Windows Forms designer's views (M41), Code Search (M47), the first-run setup (M46), the theme families' tokens (M45, 2,350 lines of XAML), WCF (M42), .NET Framework and Windows-app UI (M43, M44), the WPF previewer's routing (M40). |
+| `codalus.dbg`, the shell's native symbols (`shell_mb`) | 159.53 | 169.10 | +9.57 | Follows the code. |
+| `debughost/` (`shell_mb`) | 9.80 | 25.88 | +16.08 | `ClrDebug.dll` 15.13 (new in M43b: the desktop-CLR debugger's ICorDebug wrappers, 7.8 MB of IL); `codalus-debughost.dll` +0.57 (M43b's adapter, M44's app activation); `Codalus.Platform.dll` 0.17 (new, M43); ClrMD 4.2 +0.05 with its new `Microsoft.Security.AntiSSRF.dll` 0.06. |
+| `datahost/` (`shell_mb`) | 35.68 | 36.11 | +0.43 | The shared language protocol (below). |
+| `markuphost_mb` | 3.58 | 4.09 | +0.51 | `Codalus.LanguageServices.Protocol` +0.42 (0.87 → 1.05 MB of IL, 2.05 → 2.47 ReadyToRun): M41's Windows Forms designer model (`codalus/winforms/*`) and M47's symbol index (`codalus/symbolIndex`), with source-generated JSON for 11 new types. `codalus-markuphost` +0.08: M42's `system.serviceModel` schema (49 KB, embedded) and its config completion. |
+| `buildhost_mb` | 6.95 | 7.29 | +0.35 | `codalus-buildhost` +0.16 (M40's Windows desktop projects, M42's service references, M43a's .NET Framework projects and builds: 1,800 lines); `Codalus.Projects.Protocol` +0.19 (WCF messages, per-solution state). |
+| `lshost_mb` | 93.52 | 94.56 | +1.05 | `codalus-lshost` +0.62 (M41's designer reader, M47's index), the protocol +0.42. 1.1% over its accepted value. |
+| `replhost_mb` | 30.17 | 30.59 | +0.43 | The protocol. |
+| Everything else | | | +0.03 | |
+| **`shell_mb`** | **361.96** | **392.42** | **+30.46** | |
+
+- **Windows** (CI only): `shell_mb` 215.46 → 237.76 (+22.3). ClrDebug is 15.1 MB of ReadyToRun code for win-x64 (crossgen2, measured here); the rest is the shell's executable, the WPF previewer's and Windows Forms designer's hosts (`wpfpreviewer/` 0.1 MB and `winformsdesigner/` 0.4 MB, built here), and the debug and data hosts as on Linux. `buildhost_mb` 8.02 → 8.36, `markuphost_mb` 3.59 → 4.09.
+- **macOS** (CI only): `shell_mb` 447.70 → 486.39, of which ClrDebug for osx-arm64 is 16.4 MB.
+
+### Trimmed: ClrDebug off Windows
+
+The desktop CLR runs only on Windows (D31), and off Windows the adapter answers with `UnavailableDebugger`, but ClrDebug's 15–16 MB of ReadyToRun code shipped in the Linux and macOS packages. `Codalus.Debugging.Host.csproj` now marks the package `Publish="false"` for a non-Windows runtime identifier, which keeps it out of the published files and the publish deps.json. A build without a runtime identifier (the tests, on every OS) keeps it, and Windows packages keep it. `NetFxAdapter.CreateDebugger` keeps ClrDebug's types behind a method that is compiled only when it runs (on Windows). `NetFxSessionTests.Off_Windows_the_adapter_runs_without_ClrDebug_as_the_packages_ship_it` starts the adapter from the host's files without ClrDebug, as the packages have them, and checks its answer. The published Linux host started in its three modes (companion, `--mono-dap`, `--netfx-dap`; the last answers launch and attach with ".NET Framework programs run and debug only on Windows."). Linux `shell_mb` −15.13 MB, macOS about −16.4, the zip about −4.
+
+Nothing else was accidental. The Windows-only WPF previewer and Windows Forms designer hosts aren't in the Linux and macOS publish. No reference assemblies or XML documentation were added (the only `.xml` files are the plugin API's documentation in `pluginhost/` and Coverlet's, from before). No package went into a host that doesn't use it.
+
+### Accepted
+
+`benchmarks/accepted.json`, dated 2026-10-18, under the maintainer's 0.3.0 decision. The thresholds, the confirmation run and the latency and memory checks don't change.
+
+| OS | `shell_mb` | `shell_zip_mb` | `buildhost_mb` | `markuphost_mb` | Measured |
+|---|---|---|---|---|---|
+| Linux | 377.228 | 129.566 | 7.294 | 4.085 | Here, with the trim (CI's 392.331 minus ClrDebug's 15.129 gives 377.202). The zip is CI's 133.591 minus ClrDebug compressed (4.025): a zip made here is about 11% smaller than CI's for the same files, so CI's is the reference. |
+| Windows | 237.758 | 91.103 | 8.358 | 4.093 | CI run 39077731355, not measured here (the trim doesn't change Windows). |
+| macOS | 469.985 | 110.793 | 8.131 | 4.613 | CI run 39077731355 minus ClrDebug for osx-arm64 (16.409 MB, crossgen2 here; compressed 3.599, estimated). |
+
+Replayed with `codalus-bench compare` (this branch's Linux result, the release run's Windows and macOS results, 0.2.1 and 0.3.0's first run as the baseline): 0 failed. The macOS result from before the trim passes too (486.4 against a 493.5 limit), so the estimate can't fail the gate.
+
+### Found on the way
+
+- **Linux `shell_mb` counts the shell's native symbols:** `codalus.dbg` is 169 of its 377 MB. The harness leaves out only `*.pdb`. The packages publish with `DebugType=none`, so no package has the symbols, and `shell_mb` is not what users download. Leaving them out of the measurement (and the Mac's, if its publish has them) changes the metric, so it is the maintainer's call. `TODO(issue)`.
+- **The markup, data and REPL hosts carry the whole language protocol**, the Windows Forms designer's model included, which only the C# host and the designer use. Moving the designer's types to an assembly of their own would save about 0.4 MB per host. `TODO(issue)`.
+- [Recommendation 5](#recommendation) would have caught ClrDebug at M43b: the debug host gained 16 MB in that milestone, and no size was measured until the release.

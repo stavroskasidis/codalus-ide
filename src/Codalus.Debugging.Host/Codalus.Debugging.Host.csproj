@@ -37,6 +37,16 @@
     <PackageReference Include="ClrDebug" />
   </ItemGroup>
 
+  <!--
+    The desktop CLR runs only on Windows (D31), so a publish for another platform (the Linux and macOS packages) leaves
+    ClrDebug out of the files and the deps.json: 15 MB of ReadyToRun code nothing there can run. Off Windows the adapter
+    answers with UnavailableDebugger and never loads a ClrDebug type (NetFxAdapter.CreateDebugger). A build without a
+    runtime identifier (the tests) keeps it.
+  -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' != '' And !$(RuntimeIdentifier.StartsWith('win'))">
+    <PackageReference Update="ClrDebug" Publish="false" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Codalus.Debugging.Tests" />
   </ItemGroup>

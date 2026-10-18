@@ -521,6 +521,55 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task Off_Windows_the_adapter_runs_without_ClrDebug_as_the_packages_ship_it()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows packages ship ClrDebug (the desktop-CLR debugger uses it).");
+
+        // A publish for Linux or macOS leaves ClrDebug.dll out, and out of the deps.json (Codalus.Debugging.Host.csproj):
+        // the host's files without it, as the package has them.
+        var folder = Path.Combine(Path.GetTempPath(), "codalus-debughost-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var deps = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.deps.json")))!;
+            foreach (var (_, target) in deps["targets"]!.AsObject())
+            {
+                foreach (var (name, library) in target!.AsObject().ToList())
+                {
+                    if (name.StartsWith("ClrDebug/", StringComparison.Ordinal))
+                    {
+                        target.AsObject().Remove(name);
+                        continue;
+                    }
+
+                    library!["dependencies"]?.AsObject().Remove("ClrDebug");
+                    foreach (var (file, _) in library["runtime"]?.AsObject() ?? [])
+                    {
+                        File.Copy(Path.Combine(AppContext.BaseDirectory, Path.GetFileName(file)), Path.Combine(folder, Path.GetFileName(file)), overwrite: true);
+                    }
+                }
+            }
+
+            foreach (var name in deps["libraries"]!.AsObject().Select(l => l.Key).Where(n => n.StartsWith("ClrDebug/", StringComparison.Ordinal)).ToList())
+            {
+                deps["libraries"]!.AsObject().Remove(name);
+            }
+
+            File.WriteAllText(Path.Combine(folder, "codalus-debughost.deps.json"), deps.ToJsonString());
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.runtimeconfig.json"), Path.Combine(folder, "codalus-debughost.runtimeconfig.json"));
+            Assert.False(File.Exists(Path.Combine(folder, "ClrDebug.dll")));
+
+            await using var adapter = await DebugAdapter.StartAsync(new DebugAdapterStartInfo("dotnet", [Path.Combine(folder, "codalus-debughost.dll"), DesktopClr.AdapterArgument], folder), Ct);
+            var launch = await Assert.ThrowsAsync<DapException>(() => adapter.LaunchAsync(new NetFxDebugArguments(Path.Combine(folder, "app.exe")), s_json.NetFxDebugArguments, Ct));
+            Assert.Contains("only on Windows", launch.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task The_debug_service_sends_dotnet_framework_programs_and_processes_to_the_desktop_clr_adapter()
     {
         // netcoredbg isn't there (null): the launch and the attach go to codalus-debughost --netfx-dap instead.

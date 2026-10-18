@@ -1,3 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 using Codalus.Debugging.Host.Mono;
 namespace Codalus.Debugging.Host.NetFx;
 
@@ -12,7 +15,7 @@ internal static class NetFxAdapter
         }
 
         using var server = new DapServer(input, output);
-        var session = new NetFxDebugSession(server, log, OperatingSystem.IsWindows() ? new CorDebugger() : new UnavailableDebugger());
+        var session = new NetFxDebugSession(server, log, CreateDebugger());
         server.Handler = session.HandleAsync;
         using var stop = new CancellationTokenSource();
         var reading = server.RunAsync(stop.Token);
@@ -23,6 +26,17 @@ internal static class NetFxAdapter
         await stop.CancelAsync().ConfigureAwait(false);
         return 0;
     }
+
+    /// <summary>
+    /// The debugger for this platform. ClrDebug's types stay behind <see cref="CreateCorDebugger"/>, which is compiled
+    /// only when it's called (on Windows): the Linux and macOS packages don't ship ClrDebug.dll.
+    /// </summary>
+    internal static IClrDebugger CreateDebugger() => OperatingSystem.IsWindows() ? CreateCorDebugger() : new UnavailableDebugger();
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [SupportedOSPlatform("windows")]
+    [SuppressMessage("Performance", "CA1859", Justification = "The caller's signature must not name a type that needs ClrDebug.")]
+    private static IClrDebugger CreateCorDebugger() => new CorDebugger();
 
     /// <summary>Off Windows: the desktop CLR runs only there (D31).</summary>
     private sealed class UnavailableDebugger : IClrDebugger
