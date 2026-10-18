@@ -70,7 +70,7 @@ public static class InstallPlans
     {
         return tool.Id switch
         {
-            "dotnet" => Dotnet(tool, platform, home, hasWinget),
+            "dotnet" or "dotnet-runtime" => Dotnet(tool, platform, home, hasWinget),
             "git" => Git(platform, hasWinget, linuxDistribution),
             "git-lfs" => platform switch
             {
@@ -96,15 +96,15 @@ public static class InstallPlans
         if (platform == PlatformKind.Windows)
         {
             return hasWinget
-                ? Winget("dotnet", WingetSdk(channel, EnvironmentCheck.DefaultHostsRuntime()), pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})")
-                : new("dotnet", InstallKind.OpenPage, "The .NET download page (winget isn't available)", DotnetDownloadPage);
+                ? Winget(tool.Id, WingetSdk(channel, EnvironmentCheck.DefaultHostsRuntime()), pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})")
+                : new(tool.Id, InstallKind.OpenPage, "The .NET download page (winget isn't available)", DotnetDownloadPage);
         }
 
         // macOS and Linux: Microsoft's dotnet-install script, into the user's ~/.dotnet: no administrator password.
         var folder = home.TrimEnd('/') + "/.dotnet"; // a Unix path, whatever machine computes the plan
         var version = pinned is null ? $"--channel {channel}" : $"--version {pinned}";
         var command = $"curl -sSL {DotnetInstallScript} | bash -s -- {version} --install-dir \"{folder}\"";
-        return new("dotnet", InstallKind.Run, pinned is null ? $".NET SDK {channel} into {folder}" : $".NET SDK {pinned} into {folder}", command, "bash", ["-c", command])
+        return new(tool.Id, InstallKind.Run, pinned is null ? $".NET SDK {channel}{(tool.Id == "dotnet-runtime" ? ", with the runtime Codalus IDE needs," : string.Empty)} into {folder}" : $".NET SDK {pinned} into {folder}", command, "bash", ["-c", command])
         {
             AddsToPath = folder,
         };

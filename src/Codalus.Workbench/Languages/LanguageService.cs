@@ -144,6 +144,20 @@ public sealed class LanguageService : IAsyncDisposable
     public Task<bool> RetryAsync(string languageId) => StartAgainAsync(languageId, restart: false);
 
     /// <summary>
+    /// Every service that couldn't start is tried again (M49: once the .NET runtime its host needs is installed), with the
+    /// open documents of its languages.
+    /// </summary>
+    public async Task RetryFailedAsync()
+    {
+        var failed = _clients.Where(c => c.Value.IsValueCreated && c.Value.Value.IsCompleted && (!c.Value.Value.IsCompletedSuccessfully || c.Value.Value.Result is null))
+            .Select(c => c.Key).ToList();
+        foreach (var server in failed)
+        {
+            await RetryAsync(server).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Stops a running service and starts it again with the open documents: a server that loads the workspace itself
     /// (FsAutoComplete, M36) does it again for a newly opened solution. Returns whether it runs now.
     /// </summary>

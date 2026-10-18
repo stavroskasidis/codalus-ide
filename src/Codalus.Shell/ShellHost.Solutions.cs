@@ -173,6 +173,15 @@ public sealed partial class ShellHost
                 await OpenRepositoryAsync(folder).ConfigureAwait(true);
             }
         }
+        catch (HostRuntimeMissingException ex)
+        {
+            // The build host's .NET runtime isn't installed (M49): the one runtime notification says so, and the solution
+            // opens again once it is installed from there.
+            StatusBar.ClearMessage();
+            BuildHostLog.AppendLine($"[open] {path}: {ex.Message}");
+            _solutionWaitingForRuntime = path;
+            ReportHostRuntimeMissing(ex);
+        }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException or System.ComponentModel.Win32Exception)
         {
             StatusBar.ClearMessage();

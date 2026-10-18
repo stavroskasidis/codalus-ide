@@ -96,6 +96,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             DevelopmentDirs = Options.PluginDirs,
         };
         Plugins.Prompts = new PluginPrompts(this);
+        Plugins.HostRuntimeMissing += (_, e) => Ui.Post(() => ReportHostRuntimeMissing(e)); // one notification, not one per plugin (M49)
         EditorFont = new EditorFont(Workbench.Settings);
         Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
         Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));

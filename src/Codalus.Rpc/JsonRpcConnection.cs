@@ -46,7 +46,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     private int _disposed;
     private int _received;
     private int _readEnded;
-    private readonly Lock _lostGate = new();
+    private readonly object _lostGate = new(); // not Lock: the .NET 8 designer hosts compile this file too
     private Task<JsonRpcConnectionLostException>? _lost;
 
     /// <summary>Requests being handled: their method and when they started (slow-request reports).</summary>

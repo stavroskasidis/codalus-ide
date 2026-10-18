@@ -27,7 +27,7 @@ public sealed partial class ShellHost
     private void InitializeUpdates()
     {
         var (install, backend) = Infrastructure.Updates.Create(_updateHttp, line => Workbench.Log.AppendLine(line));
-        SelfUpdate = new UpdateService(install, backend, UpdateModeSetting, () => UpdateChannel(install));
+        SelfUpdate = new UpdateService(install, backend, UpdateModeSetting, () => UpdateChannel(install)) { RuntimeCheck = UpdateRuntimeStatus };
         SelfUpdate.StateChanged += (_, state) => Ui.Post(() => ShowUpdateState(state));
         SelfUpdate.Failed += (_, ex) => Workbench.Log.AppendLine($"[update] {ex.Message}");
         Workbench.Context.Changed += (_, key) =>
@@ -51,9 +51,12 @@ public sealed partial class ShellHost
     internal void UseUpdates(InstallInfo install, IUpdateBackend backend)
     {
         _ = SelfUpdate.DisposeAsync().AsTask();
-        SelfUpdate = new UpdateService(install, backend, UpdateModeSetting, () => UpdateChannel(install));
+        SelfUpdate = new UpdateService(install, backend, UpdateModeSetting, () => UpdateChannel(install)) { RuntimeCheck = UpdateRuntimeStatus };
         SelfUpdate.StateChanged += (_, state) => Ui.Post(() => ShowUpdateState(state));
     }
+
+    /// <summary>Whether a release's runtime (from its signed feed) is installed here (M49, ADR 0080).</summary>
+    private Workbench.Setup.ToolStatus UpdateRuntimeStatus(UpdateOffer offer) => EnvironmentCheck.RuntimeStatusFor(offer.Requires);
 
     private UpdateMode UpdateModeSetting() => Workbench.Settings.GetString(UpdateService.ModeSetting, "auto") switch
     {
@@ -86,6 +89,9 @@ public sealed partial class ShellHost
                 break;
             case UpdateStatus.Failed:
                 Workbench.Notifications.Warning(Localizer.Format("msg.updates.couldntCheckForUpdates", "Couldn't check for updates: {0}", state.Error));
+                break;
+            case UpdateStatus.NeedsRuntime when state is { Offer: { } offer, Runtime: { } runtime } && _notifiedVersion == offer.Version:
+                _ = OfferUpdateNeedingRuntimeAsync(offer, runtime); // asked for: said again (M49)
                 break;
         }
     }
@@ -155,7 +161,12 @@ public sealed partial class ShellHost
                 _notifiedVersion = offer.Version;
                 _ = OfferUpdateAsync(offer);
                 break;
-            case { Status: UpdateStatus.Available or UpdateStatus.Downloading or UpdateStatus.Ready }:
+            case { Status: UpdateStatus.NeedsRuntime, Offer: { } offer, Runtime: { } runtime } when _notifiedVersion != offer.Version:
+                _notifiedVersion = offer.Version;
+                Workbench.Log.AppendLine($"[update] {offer.Version} isn't downloaded: {runtime.Detail}");
+                _ = OfferUpdateNeedingRuntimeAsync(offer, runtime);
+                break;
+            case { Status: UpdateStatus.Available or UpdateStatus.Downloading or UpdateStatus.Ready or UpdateStatus.NeedsRuntime }:
                 break;
             default:
                 Workbench.StatusBar.Remove(UpdateStatusItem);
@@ -184,6 +195,45 @@ public sealed partial class ShellHost
             }
         }
         else if (choice is Notes or "Download Page" && offer.ReleasePage is { } page)
+        {
+            ShellIntegration.OpenUrl(page);
+        }
+    }
+
+    /// <summary>
+    /// A release whose hosts need a .NET runtime that isn't installed (M49, ADR 0080): it isn't downloaded on its own.
+    /// Install .NET runs M37's install flow, then checks again (and downloads); Update Anyway downloads it as it is.
+    /// </summary>
+    private async Task OfferUpdateNeedingRuntimeAsync(UpdateOffer offer, Workbench.Setup.ToolStatus runtime)
+    {
+        var install = Localizer.Format("msg.setup.installRuntime", "Install .NET {0}", runtime.WantedChannel);
+        var anyway = Localizer.Get("msg.updates.updateAnyway", "Update Anyway");
+        var notes = Localizer.Get("msg.updates.releaseNotes", "Release Notes");
+        var actions = SelfUpdate.Install.Kind == InstallKind.SelfUpdating ? new[] { install, anyway, notes } : [install, notes];
+        var message = Localizer.Format(
+            "msg.updates.needsRuntime",
+            "Codalus IDE {0} is available, but it needs the .NET {1} runtime, which isn't installed (found: {2}). Install it first: without it, the updated IDE can't start its helper processes.",
+            offer.Version,
+            runtime.WantedVersion,
+            runtime.Found ?? "none");
+        var choice = await Workbench.Notifications.Warning(message, actions).Result.ConfigureAwait(true);
+        if (choice == install)
+        {
+            await InstallToolAsync(runtime, then: async () =>
+            {
+                _notifiedVersion = null;
+                await SelfUpdate.CheckAsync(userInitiated: true, CancellationToken.None).ConfigureAwait(true);
+            }).ConfigureAwait(true);
+        }
+        else if (choice == anyway)
+        {
+            Workbench.Log.AppendLine($"[update] Downloading {offer.Version} although its runtime isn't installed (the user's choice).");
+            if ((await SelfUpdate.DownloadAsync(offer, CancellationToken.None).ConfigureAwait(true)).Status == UpdateStatus.Ready)
+            {
+                RestartToUpdate();
+            }
+        }
+        else if (choice == notes && offer.ReleasePage is { } page)
         {
             ShellIntegration.OpenUrl(page);
         }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Codalus.Platform;
+using Codalus.Rpc;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
 using Codalus.Workbench.Mobile;
@@ -18,7 +19,17 @@ public sealed partial class ShellHost
 {
     private EnvironmentCheck? _environmentCheck;
 
-    public EnvironmentCheck EnvironmentCheck => _environmentCheck ??= new EnvironmentCheck(Workbench.Platform, Environment.GetEnvironmentVariable);
+    public EnvironmentCheck EnvironmentCheck => _environmentCheck ??= new EnvironmentCheck(Workbench.Platform, Environment.GetEnvironmentVariable)
+    {
+        // What the hosts next to the shell ask for (M49): the IDE's own runtime requirement.
+        HostFrameworks = IdeRuntime.Requirements(AppContext.BaseDirectory, Environment.GetEnvironmentVariable),
+    };
+
+    /// <summary>The runtime notification is showing or was answered (M49): one per session, until an install.</summary>
+    private int _runtimeOffered;
+
+    /// <summary>A solution that couldn't open because the build host's runtime is missing: opened again after the install.</summary>
+    private string? _solutionWaitingForRuntime;
 
     /// <summary>The last check's results.</summary>
     public IReadOnlyList<ToolStatus> Tools { get; private set; } = [];
@@ -82,7 +93,9 @@ public sealed partial class ShellHost
 
         if (offer)
         {
-            foreach (var tool in Tools.Where(t => t is { Required: true, NeedsAttention: true }))
+            // Without any SDK, installing one brings the runtime too: the runtime isn't offered on its own then.
+            var noSdk = Tools.Any(t => t is { Id: "dotnet", State: ToolState.Missing });
+            foreach (var tool in Tools.Where(t => t is { Required: true, NeedsAttention: true } && !(noSdk && t.Id == "dotnet-runtime")))
             {
                 _ = OfferInstallAsync(tool);
             }
@@ -93,6 +106,12 @@ public sealed partial class ShellHost
 
     private async Task OfferInstallAsync(ToolStatus tool)
     {
+        if (tool.Id == "dotnet-runtime")
+        {
+            await OfferHostRuntimeAsync(tool).ConfigureAwait(true);
+            return;
+        }
+
         var message = tool switch
         {
             { Id: "dotnet", State: ToolState.Mismatch } => Localizer.Format("msg.setup.sdkMismatch", "{0} Codalus IDE uses another SDK for now.", tool.Detail),
@@ -110,6 +129,85 @@ public sealed partial class ShellHost
         else if (choice == details)
         {
             OpenCheckEnvironment();
+        }
+    }
+
+    /// <summary>
+    /// The one notification about the IDE's own .NET runtime (M49), however many hosts and plugins couldn't start: what's
+    /// needed and what's there, Install .NET (M37's flow: dotnet-install into <c>~/.dotnet</c>, or winget), then the hosts
+    /// start again.
+    /// </summary>
+    private async Task OfferHostRuntimeAsync(ToolStatus tool)
+    {
+        if (Interlocked.Exchange(ref _runtimeOffered, 1) != 0)
+        {
+            return;
+        }
+
+        Workbench.Log.AppendLine($"[setup] {tool.Detail}");
+        var message = Localizer.Format(
+            "msg.setup.runtimeMissing",
+            "Codalus IDE needs the .NET {0} runtime, which isn't installed (found: {1}). Without it, plugins, builds, language services and debugging can't start.",
+            tool.WantedVersion,
+            tool.Found ?? "none");
+        var install = Localizer.Format("msg.setup.installRuntime", "Install .NET {0}", tool.WantedChannel);
+        var details = Localizer.Get("msg.setup.details", "Check Environment");
+        var choice = await Workbench.Notifications.Error(message, install, details).Result.ConfigureAwait(true);
+        if (choice == install)
+        {
+            await InstallToolAsync(tool).ConfigureAwait(true);
+        }
+        else if (choice == details)
+        {
+            OpenCheckEnvironment();
+        }
+    }
+
+    /// <summary>
+    /// A host of the IDE wasn't started because its runtime is missing (M49): the runtime notification, once. A program
+    /// of the user's whose runtime is missing (a designer on the app's runtime) isn't the IDE's: its caller reports it.
+    /// </summary>
+    public void ReportHostRuntimeMissing(HostRuntimeMissingException error)
+    {
+        Workbench.Log.AppendLine($"[setup] {error.Message}");
+        if (!IsUnder(error.Result.RuntimeConfigPath, AppContext.BaseDirectory) || error.Result.Missing.FirstOrDefault() is not { } missing)
+        {
+            return;
+        }
+
+        var status = EnvironmentCheck.HostRuntimeStatus();
+        if (!status.NeedsAttention)
+        {
+            // The check's root and the host's differ (DOTNET_ROOT changed since): the host's own result.
+            status = status with
+            {
+                State = ToolState.Missing,
+                WantedVersion = missing.Reference.Version.Text,
+                WantedChannel = IdeRuntime.Channel(missing.Reference),
+                Found = missing.Installed.Count == 0 ? "none" : $"{FrameworkResolver.Describe(missing.Installed)} in {error.Result.DotnetRoot}",
+                Detail = error.Message,
+            };
+        }
+
+        _ = OfferHostRuntimeAsync(status);
+    }
+
+    private static bool IsUnder(string path, string folder) =>
+        Path.GetFullPath(path).StartsWith(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Starts the hosts again after the runtime they need was installed (M49): the plugins that failed with their host,
+    /// the language services that couldn't start, and the solution that couldn't open. They start with the IDE's
+    /// environment as it is now (the new <c>DOTNET_ROOT</c>).
+    /// </summary>
+    public async Task RestartHostsAsync()
+    {
+        Workbench.Log.AppendLine("[setup] Starting the helper processes again.");
+        await Plugins.RetryFailedHostsAsync(CancellationToken.None).ConfigureAwait(true);
+        await Languages.RetryFailedAsync().ConfigureAwait(true);
+        if (Interlocked.Exchange(ref _solutionWaitingForRuntime, null) is { } solution && !Solutions.IsOpen)
+        {
+            await OpenSolutionAsync(solution).ConfigureAwait(true);
         }
     }
 
@@ -171,7 +269,8 @@ public sealed partial class ShellHost
     /// Installs a tool after the user agrees to the exact command (<paramref name="confirm"/>: tests answer for the user),
     /// then checks again.
     /// </summary>
-    public async Task InstallToolAsync(ToolStatus tool, Func<InstallPlan, Task<bool>>? confirm = null, ProcessRunner? run = null)
+    /// <param name="then">After a successful install, in place of the usual follow-up (M49: an update checks again).</param>
+    public async Task InstallToolAsync(ToolStatus tool, Func<InstallPlan, Task<bool>>? confirm = null, ProcessRunner? run = null, Func<Task>? then = null)
     {
         if (tool.Id is "android-sdk" or "jdk")
         {
@@ -243,7 +342,18 @@ public sealed partial class ShellHost
         }
 
         var after = await CheckEnvironmentAsync(offer: false).ConfigureAwait(true);
-        if (after.FirstOrDefault(t => t.Id == tool.Id) is { NeedsAttention: false } installed)
+        if (then is not null)
+        {
+            await then().ConfigureAwait(true);
+        }
+        else if (tool.Id == "dotnet-runtime" && after.FirstOrDefault(t => t.Id == tool.Id) is { NeedsAttention: false } runtime)
+        {
+            // The hosts start again here and now (M49); a restart isn't needed.
+            Interlocked.Exchange(ref _runtimeOffered, 0);
+            await RestartHostsAsync().ConfigureAwait(true);
+            Workbench.Notifications.Info(Localizer.Format("msg.setup.runtimeInstalled", "The .NET {0} runtime is installed, and Codalus IDE's helper processes started again.", runtime.Version));
+        }
+        else if (after.FirstOrDefault(t => t.Id == tool.Id) is { NeedsAttention: false } installed)
         {
             // Offered, not awaited: the install is done whether or not the user restarts now.
             var restart = Localizer.Get("msg.setup.restart", "Restart Now");
