@@ -115,8 +115,15 @@ public sealed class DevContainerTests : IDisposable
                 Assert.Skip("No docker.io/library/ubuntu:24.04 image (tests never pull).");
             }
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (InvalidOperationException e) when (e.InnerException is System.ComponentModel.Win32Exception)
         {
+            // ContainerEngine reports a tool that won't start as "isn't installed". Locally that skips; CI's Linux
+            // runner has Podman, so there it fails (CLAUDE.md: prerequisites skip locally, fail in CI).
+            if (Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux())
+            {
+                Assert.Fail(e.Message);
+            }
+
             Assert.Skip("No podman.");
         }
 
