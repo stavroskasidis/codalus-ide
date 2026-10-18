@@ -41,9 +41,10 @@ public sealed record SupervisionPolicy
 
     /// <summary>
     /// Whether a process that ends during startup is started again (M49: no, by default). Startup lasts until
-    /// <see cref="SupervisedProcess.Initialize"/> finishes; without one, an exit with a failure code before the process
-    /// first writes a message and within <see cref="StartupWindow"/> counts. An exit that early is deterministic (a
-    /// missing runtime, a missing file, a bad setting): starting again would fail the same way.
+    /// <see cref="SupervisedProcess.Initialize"/> finishes; without one, an exit with a failure code and standard error
+    /// output, before the process first writes a message and within <see cref="StartupWindow"/>, counts (a process killed
+    /// early says nothing, and is restarted). An exit that early is deterministic (a missing runtime, a missing file, a
+    /// bad setting): starting again would fail the same way.
     /// </summary>
     public bool RestartAfterStartupExit { get; init; }
 
@@ -209,7 +210,9 @@ public sealed class SupervisedProcess : IAsyncDisposable
 
     /// <summary>Whether the process is still starting: before its handshake finished (or its first message, without one).</summary>
     private bool InStartup(Run run, JsonRpcConnection connection, int? exitCode) =>
-        Initialize is not null ? !run.Ready : exitCode is not (null or 0) && !connection.HasReceived && System.Diagnostics.Stopwatch.GetElapsedTime(run.Started) < _policy.StartupWindow;
+        Initialize is not null
+            ? !run.Ready
+            : exitCode is not (null or 0) && run.Lines().Count > 0 && !connection.HasReceived && System.Diagnostics.Stopwatch.GetElapsedTime(run.Started) < _policy.StartupWindow;
 
     /// <summary>
     /// The error for a lost connection: when the process ended, its exit code and first lines of standard error. It waits

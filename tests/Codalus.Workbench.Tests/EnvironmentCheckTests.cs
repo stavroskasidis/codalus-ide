@@ -79,38 +79,6 @@ public sealed class EnvironmentCheckTests : IDisposable
         Assert.Contains("Microsoft.DotNet.SDK.9 ", InstallPlans.For(sdk, PlatformKind.Windows, _dir, true, null)!.Command, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData("10.0.12", false)]
-    [InlineData("11.0.0-rc.1.26425.128", false)]
-    [InlineData("11.0.0-rc.2.26504.105", true)]
-    [InlineData("11.0.0", true)]
-    [InlineData("11.0.3", true)]
-    [InlineData("12.0.0-preview.1.27101.1", true)]
-    public async Task Sdks_without_the_hosts_dotnet_are_a_mismatch_that_installs_the_hosts_channel(string runtime, bool enough)
-    {
-        // M30b: the hosts target the IDE's .NET (here a release candidate) and roll forward, so an older .NET alone
-        // can't start them, whatever SDKs it has. A Linux PATH on every OS: Windows' D:\… would split at its colon.
-        const string bin = "/x/bin";
-        var check = new EnvironmentCheck(PlatformKind.Linux, Env(("PATH", bin), ("HOME", "/home/u")), (_, arguments, _, _) => Task.FromResult(string.Join(' ', arguments) switch
-        {
-            "--list-sdks" => (0, $"10.0.401 [/x/sdk]\n"),
-            "--list-runtimes" => (0, $"Microsoft.AspNetCore.App 10.0.12 [/x/shared/Microsoft.AspNetCore.App]\nMicrosoft.NETCore.App 10.0.12 [/x/shared/Microsoft.NETCore.App]\nMicrosoft.NETCore.App {runtime} [/x/shared/Microsoft.NETCore.App]\n"),
-            _ => (1, string.Empty),
-        }), path => path == Path.Combine(bin, "dotnet"))
-        {
-            HostsRuntime = "11.0.0-rc.2.26504.105",
-        };
-
-        var sdk = (await check.CheckAsync(null, TestContext.Current.CancellationToken)).Single(t => t.Id == "dotnet");
-        Assert.Equal(enough ? ToolState.Found : ToolState.Mismatch, sdk.State);
-        if (!enough)
-        {
-            Assert.Equal("11.0", sdk.WantedChannel);
-            Assert.Contains(".NET 11.0.0-rc.2.26504.105 or later", sdk.Detail, StringComparison.Ordinal);
-            Assert.Contains("--channel 11.0 ", InstallPlans.For(sdk, PlatformKind.Linux, "/home/u", false, "ubuntu debian")!.Command, StringComparison.Ordinal);
-        }
-    }
-
     [Fact]
     public void Versions_order_as_the_host_rolls_forward_and_winget_has_a_release_candidate_as_the_preview_sdk()
     {

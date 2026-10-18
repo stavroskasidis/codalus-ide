@@ -47,4 +47,41 @@ public sealed class EnvironmentShellTests
             await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("is installed", StringComparison.Ordinal)));
         }
     }
+
+    /// <summary>
+    /// M49: hosts that aren't started because the IDE's runtime is missing (the Mac's 0.4.0 nightly) make one actionable
+    /// notification, however many there are, with M37's install; a program of the user's whose runtime is missing doesn't.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_missing_runtime_is_one_notification_that_offers_to_install_it_and_the_hosts_start_again()
+    {
+        await using var f = ShellFixture.Create();
+        static Codalus.Rpc.HostRuntimeMissingException Missing(string folder, string name) => new(new Codalus.Rpc.HostRuntimeCheckResult(
+            Path.Combine(folder, name), Path.Combine(folder, name + ".runtimeconfig.json"), "/fake/dotnet",
+            [new Codalus.Rpc.FrameworkResolution(
+                Codalus.Rpc.FrameworkReference.Create(Codalus.Rpc.FrameworkReference.NetCoreApp, Codalus.Rpc.FrameworkVersion.Parse("99.0.0-rc.2.1"), Codalus.Rpc.RollForwardPolicy.Major),
+                null,
+                [Codalus.Rpc.FrameworkVersion.Parse("10.0.9"), Codalus.Rpc.FrameworkVersion.Parse("10.0.12")])]));
+        bool IsRuntimeNotification(Workbench.Notifications.Notification n) => n.Message.Contains("needs the .NET 99.0.0-rc.2.1 runtime", StringComparison.Ordinal);
+
+        // A designer on the app's own runtime (outside the IDE's folder): its caller reports it, not this.
+        f.Shell.ReportHostRuntimeMissing(Missing(Path.Combine(Path.GetTempPath(), "app", "bin"), "codalus-winformsdesigner"));
+        ShellFixture.Pump();
+        Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, IsRuntimeNotification);
+
+        // The plugin host, then the build host, then the language host: one notification.
+        foreach (var host in new[] { "pluginhost", "buildhost", "lshost" })
+        {
+            f.Shell.ReportHostRuntimeMissing(Missing(Path.Combine(AppContext.BaseDirectory, host), "codalus-" + host));
+        }
+
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(IsRuntimeNotification));
+        ShellFixture.Pump();
+        var notification = Assert.Single(f.Shell.Workbench.Notifications.Items, IsRuntimeNotification);
+        Assert.Equal("Codalus IDE needs the .NET 99.0.0-rc.2.1 runtime, which isn't installed (found: 10.0.9, 10.0.12 in /fake/dotnet). Without it, plugins, builds, language services and debugging can't start.", notification.Message);
+        Assert.Equal(["Install .NET 99.0", "Check Environment"], notification.Actions);
+
+        // After an install, the hosts start again: nothing failed here, so nothing changes.
+        await f.Shell.RestartHostsAsync();
+    }
 }

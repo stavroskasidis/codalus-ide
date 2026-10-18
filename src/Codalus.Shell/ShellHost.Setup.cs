@@ -63,6 +63,18 @@ public sealed partial class ShellHost
         {
             AddDotnetToEnvironment(root);
         }
+        else if (EnvironmentCheck.HostsRoot() is not { } hostsRoot || !string.Equals(Path.TrimEndingDirectorySeparator(hostsRoot), Path.TrimEndingDirectorySeparator(root), StringComparison.Ordinal))
+        {
+            // M49: the hosts are app hosts, which don't look on the PATH: without DOTNET_ROOT they'd use the default
+            // location (/usr/share/dotnet), not the root with the SDKs that's on the PATH (~/.dotnet).
+            Environment.SetEnvironmentVariable("DOTNET_ROOT", root);
+            Workbench.Log.AppendLine($"[setup] The helper processes use the .NET in {root} (DOTNET_ROOT).");
+        }
+
+        if (!EnvironmentCheck.HasHostRuntime(root))
+        {
+            Workbench.Log.AppendLine($"[setup] {EnvironmentCheck.HostRuntimeStatus().Detail}");
+        }
     }
 
     private void AddDotnetToEnvironment(string folder)
