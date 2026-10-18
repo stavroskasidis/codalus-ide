@@ -286,7 +286,7 @@ public sealed class WinUIShellTests
         {
             await ShellFixture.PumpUntil(condition, seconds);
         }
-        catch (Xunit.Sdk.TrueException)
+        catch (Xunit.Sdk.FailException)
         {
         }
     }
