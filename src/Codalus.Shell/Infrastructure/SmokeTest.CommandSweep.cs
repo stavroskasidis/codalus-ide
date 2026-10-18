@@ -65,6 +65,7 @@ internal sealed partial class SmokeTest
         ["remote.reopenInContainer"] = "builds or pulls a dev container's image from any registry",
         ["remote.open"] = "installs codalus-server on another machine (the remote.session step covers --remote local)",
         ["debug.justInTime"] = "registers the Just-In-Time debugger (tests never register it for real)",
+        ["debug.createDump"] = "writes a full dump of the program (6.7 GB on macOS); the debug.companion step covers dumps",
         ["debug.webPage"] = "starts a browser under the JavaScript debugger (the blazor.* steps cover it)",
         ["debug.webPageFile"] = "starts a browser under the JavaScript debugger (the blazor.* steps cover it)",
         ["workbench.openExternal"] = "opens the default browser (no stand-in for ShellIntegration.OpenUrl)",
@@ -78,8 +79,8 @@ internal sealed partial class SmokeTest
     /// <summary>Commands for plugins, CodeLens and the agent: they take arguments, and no menu, key or palette entry runs them.</summary>
     private static readonly HashSet<string> s_sweepApiCommands = new(StringComparer.Ordinal)
     {
-        "editor.activePosition", "fsharp.showReferences", "project.addReferenceTo", "solution.addProjectFile", "solution.getInfo",
-        "welcome.nextTip", "workbench.getRecentSolutions", "workbench.openExternal", "workbench.setSetting",
+        "editor.activePosition", "editor.action.showReferences", "fsharp.showReferences", "project.addReferenceTo", "solution.addProjectFile", "solution.getInfo",
+        "welcome.nextTip", "workbench.getRecentSolutions", "workbench.openExternal", "workbench.openFile", "workbench.setSetting",
     };
 
     /// <summary>Commands that end the sweep's context (the solution, the editor): run last, in that order.</summary>
@@ -98,7 +99,14 @@ internal sealed partial class SmokeTest
     /// Failures triaged and kept for later (TODO(issue)), "command|entry" or "command|*": the rows stay failed in the
     /// report, but they don't fail the step.
     /// </summary>
-    private static readonly Dictionary<string, string> s_sweepKnown = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, string> s_sweepKnown = new(StringComparer.Ordinal)
+    {
+        // TODO(issue): Ctrl+Alt+B toggles Blame in the editor (documented), so the Breakpoints window's key is lost there.
+        ["workbench.view.debug.breakpoints|key"] = "Ctrl+Alt+B runs Toggle Blame in a Git repository's editor (Windows, Linux)",
+
+        // TODO(issue): Split Right's Ctrl+\ runs at once in a text file, before the Error List's Ctrl+\ Ctrl+E.
+        ["workbench.view.errorList|key"] = "Ctrl+\\ splits the editor before Ctrl+\\ Ctrl+E can be typed",
+    };
 
     private sealed record SweepRow(string Command, string Entry, string Outcome, string? Reason)
     {
@@ -206,7 +214,9 @@ internal sealed partial class SmokeTest
             shell.Trust.Trust(_sweepFolder);
             await shell.OpenSolutionAsync(_sweepSolution).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the sweep's solution is evaluated", 240).ConfigureAwait(true);
-            await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 2 }, "the C# workspace is ready", 360).ConfigureAwait(true);
+            // At least its two projects: on macOS the workspace has been seen still counting a project of the step before's
+            // solution (dotnet.older's Core21.App), reported by the sweep's report as a finding.
+            await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: >= 2 }, () => $"the C# workspace is ready ({shell.Languages.Status(ShellHost.CSharpLanguageId)})", 360).ConfigureAwait(true);
             await WaitAsync(() => shell.HasRepository && shell.CurrentBranch is not null, "the Git repository is found", 60).ConfigureAwait(true);
 
             var commands = shell.Workbench.Commands.Descriptors
@@ -552,7 +562,8 @@ internal sealed partial class SmokeTest
         var build = shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Build")?.GetText() ?? string.Empty;
         var breakpoints = string.Join(", ", shell.Debugger.Breakpoints.All.Select(b =>
             $"{Path.GetFileName(b.Path)}:{b.Line}{(b.Enabled ? string.Empty : " disabled")}{(b.Temporary ? " temporary" : string.Empty)} {(shell.Debugger.Breakpoints.StateOf(b) is { } state ? $"verified={state.Verified} {state.Message}" : "no state")}"));
-        return $"the debugger didn't stop at line {line} ({(sawActive ? "the program ran to its end" : "no session started")}; breakpoints: {breakpoints}; saw: {string.Join(" | ", seen)}; "
+        var startup = shell.Runs.MultipleStartup ? "multiple: " + string.Join(", ", shell.Runs.StartupTargets.Select(t => $"{Path.GetFileNameWithoutExtension(t.Project)} {t.Action}")) : Path.GetFileName(shell.Runs.StartupProject);
+        return $"the debugger didn't stop at line {line} ({(sawActive ? "the program ran to its end" : "no session started")}; startup: {startup}; breakpoints: {breakpoints}; saw: {string.Join(" | ", seen)}; "
                + $"status: {shell.StatusBar.DisplayMessage}; Debug output: {Tail(shell.DebugLog.GetText(), 1500)}; Build output: {Tail(build, 500)})";
     }
 
@@ -1402,17 +1413,28 @@ internal sealed partial class SmokeTest
             shell.SetStartupProject(startup);
         }
 
+        if (shell.Runs.MultipleStartup != before.MultipleStartup || !shell.Runs.StartupEntries.SequenceEqual(before.StartupEntries))
+        {
+            lock (saw)
+            {
+                saw.Add($"startup projects: {(shell.Runs.MultipleStartup ? "multiple" : "single")}");
+            }
+
+            shell.Runs.SetStartupProjects(before.MultipleStartup, before.StartupEntries, before.StartupProject);
+        }
+
         await RestoreSweepSettingsAsync(before.UserSettings, saw).ConfigureAwait(true);
 
         CloseSweepOverlays(saw);
         return problem;
     }
 
-    private sealed record SweepBaseline(HashSet<string> ToolWindows, HashSet<ShellDocument> Documents, int Running, string? StartupProject, string? UserSettings)
+    private sealed record SweepBaseline(HashSet<string> ToolWindows, HashSet<ShellDocument> Documents, int Running, string? StartupProject, string? UserSettings,
+        bool MultipleStartup, IReadOnlyList<Workbench.Build.StartupEntry> StartupEntries)
     {
         public static SweepBaseline Capture(ShellHost shell, Window window) =>
             new([.. shell.Layout.OpenToolWindows.Select(t => t.Id)], [.. shell.Layout.Documents], shell.Runs.Running.Count, shell.Runs.StartupProject,
-                File.Exists(shell.Paths.SettingsFile) ? File.ReadAllText(shell.Paths.SettingsFile) : null);
+                File.Exists(shell.Paths.SettingsFile) ? File.ReadAllText(shell.Paths.SettingsFile) : null, shell.Runs.MultipleStartup, shell.Runs.StartupEntries);
     }
 
     /// <summary>Puts back the user settings a command changed (a toggle, a theme): the next commands run with the sweep's.</summary>
