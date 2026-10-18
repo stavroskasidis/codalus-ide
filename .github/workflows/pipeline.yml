@@ -537,13 +537,16 @@ jobs:
           git add PKGBUILD .SRCINFO
           git diff --cached --quiet || { git commit -q -m "Update to $VERSION"; git push -q origin HEAD:master; }
 
-  # Last: develop moves past the release (and takes in a hotfix), once everything is out. The workflow token's push
-  # starts no run, so it makes no nightly.
+  # Last: develop moves past the release (and takes in a hotfix), once everything is out. The "protect" ruleset lets
+  # develop change only through a pull request, so the job opens one and merges it (it needs no approval, and the
+  # repository lets GitHub Actions create pull requests). The workflow token's pull request and merge start no run,
+  # so they make no CI run and no nightly; master's content already passed this release's gates.
   finish:
     needs: [plan, aur]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -551,6 +554,9 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Move develop past the release (and take in a hotfix)
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASED: ${{ needs.plan.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -565,8 +571,24 @@ jobs:
               echo "::error::Merging master into develop conflicts beyond VERSION; merge it by hand." && exit 1
             fi
           fi
-          next="$(dotnet run --project eng/Codalus.Release -- bump --after "${{ needs.plan.outputs.version }}")"
+          next="$(dotnet run --project eng/Codalus.Release -- bump --after "$RELEASED")"
           if ! git diff --quiet VERSION; then
-            git commit -m "Start $next after the ${{ needs.plan.outputs.version }} release" VERSION
+            git commit -m "Start $next after the $RELEASED release" VERSION
           fi
-          git push origin HEAD:develop
+          if [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/develop)" ]]; then
+            echo "develop already contains the release and its VERSION is past it." && exit 0
+          fi
+          # A re-run replaces the branch and reuses its pull request.
+          branch="release/develop-after-$RELEASED"
+          git push --force origin "HEAD:refs/heads/$branch"
+          if [[ -z "$(gh pr list --head "$branch" --base develop --state open --json number --jq '.[].number')" ]]; then
+            gh pr create --head "$branch" --base develop --title "Start $next after the $RELEASED release" \
+              --body "Merges \`master\` into \`develop\` after the $RELEASED release and moves \`VERSION\` to $next. Opened and merged by the release run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          fi
+          # GitHub may still be working out whether the new pull request merges.
+          for attempt in 1 2 3 4 5; do
+            gh pr merge "$branch" --merge --match-head-commit "$(git rev-parse HEAD)" && break
+            [[ $attempt == 5 ]] && echo "::error::Couldn't merge $branch into develop; merge its pull request by hand." && exit 1
+            sleep 15
+          done
+          git push origin --delete "$branch" || true
