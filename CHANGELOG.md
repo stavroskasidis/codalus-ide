@@ -2,6 +2,11 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.4.0
+
+In progress on `develop`; nightlies show these notes.
+- **External agents in AI Chat** (M48, [user guide](docs/user-guide/ai.md#external-agents-acp)): AI Chat can run coding agents that are programs of their own, such as pi, Claude, Codex, Gemini CLI, GitHub Copilot, OpenCode or Goose, over the Agent Client Protocol, next to the built-in assistant. Add them to your user settings (`ai.agents`; a workspace can't), turn on AI assistance, open a trusted folder and pick one in AI Chat's toolbar. Their answers, thinking, plans and steps show in the chat (a step's files open at the line; a command's output shows live), with their modes and slash commands. What they ask of the IDE goes through its checks: files read from the editor, only inside the folder and never the excluded ones, redacted; every write through the preview into the editor; every permission and command with Reject the default; each request in the AI log. Each agent gets the IDE's tools through `codalus mcp`. An external agent uses its own provider and data policy, and AI Chat says so whenever one is chosen ([ADR 0079](docs/adr/0079-external-agents-over-the-agent-client-protocol.md)).
+
 ## 0.3.0
 
 In progress on `develop`; nightlies show these notes.
