@@ -168,11 +168,12 @@ public sealed class PluginManager : IAsyncDisposable
     public event EventHandler? PluginsChanged;
 
     /// <summary>
-    /// A plugin host wasn't started because the .NET runtime it needs isn't installed (M49). Raised once per host group
-    /// (until <see cref="RetryFailedHostsAsync"/>); the shell shows one notification that offers the runtime. Without a
-    /// handler, the host's failure is shown as an error.
+    /// A plugin host wasn't started because the .NET runtime it needs isn't installed (M49). Called once per host group
+    /// (until <see cref="RetryFailedHostsAsync"/>), on any thread; it returns whether it told the user (the shell's one
+    /// notification that offers the runtime). When it didn't, or there's no handler, the host's failure is shown as an
+    /// error.
     /// </summary>
-    public event EventHandler<HostRuntimeMissingException>? HostRuntimeMissing;
+    public Func<HostRuntimeMissingException, bool>? HostRuntimeMissing { get; set; }
 
     /// <summary>The shell's prompt UI; without it, plugin prompts are cancelled.</summary>
     public IPluginPrompts? Prompts { get; set; }
@@ -678,6 +679,7 @@ public sealed class PluginManager : IAsyncDisposable
         plugin.State = PluginState.Failed;
         plugin.Error = error.Message;
         plugin.FailedWithItsHost = true;
+        plugin.ActivationFailedWithItsHost = true; // its activation was asked for: a retry activates it again
         PluginLog.AppendLine($"[{plugin.Id}] failed: its plugin host couldn't start: {error.Message}");
         ReportHostStartFailure(plugin.HostGroup, error);
         PluginsChanged?.Invoke(this, EventArgs.Empty);
@@ -691,9 +693,8 @@ public sealed class PluginManager : IAsyncDisposable
             return;
         }
 
-        if (error is HostRuntimeMissingException missing && HostRuntimeMissing is { } handler)
+        if (error is HostRuntimeMissingException missing && HostRuntimeMissing is { } handler && handler(missing))
         {
-            handler(this, missing);
             return;
         }
 
@@ -701,28 +702,32 @@ public sealed class PluginManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Activates again the plugins that failed because their host couldn't start (M49), once what was missing is there
-    /// (the .NET runtime was installed): their hosts start again with the IDE's environment as it is now.
+    /// Makes the plugins that failed because their host couldn't start (M49) usable again, once what was missing is
+    /// there (the .NET runtime was installed), and activates again those whose activation was asked for: their hosts
+    /// start again with the IDE's environment as it is now. The others (failed with their host's crash while their own
+    /// activation events hadn't fired) wait for their events.
     /// </summary>
     public async Task RetryFailedHostsAsync(CancellationToken cancellationToken)
     {
         _hostStartReported.Clear();
-        var retry = Plugins.Where(p => p is { State: PluginState.Failed, FailedWithItsHost: true }).ToList();
-        if (retry.Count == 0)
+        var failed = Plugins.Where(p => p is { State: PluginState.Failed, FailedWithItsHost: true }).ToList();
+        if (failed.Count == 0)
         {
             return;
         }
 
-        foreach (var plugin in retry)
+        var activate = failed.Where(p => p.ActivationFailedWithItsHost).ToList();
+        foreach (var plugin in failed)
         {
             plugin.State = PluginState.Ready;
             plugin.Error = null;
             plugin.FailedWithItsHost = false;
+            plugin.ActivationFailedWithItsHost = false;
         }
 
-        PluginLog.AppendLine($"Starting the plugin hosts again for {string.Join(", ", retry.Select(p => p.Id))}");
+        PluginLog.AppendLine($"Starting the plugin hosts again for {string.Join(", ", activate.Select(p => p.Id))}; ready again: {string.Join(", ", failed.Except(activate).Select(p => p.Id))}");
         PluginsChanged?.Invoke(this, EventArgs.Empty);
-        await Task.WhenAll(retry.Select(p => ActivateAsync(p, "retry", cancellationToken))).ConfigureAwait(false);
+        await Task.WhenAll(activate.Select(p => ActivateAsync(p, "retry", cancellationToken))).ConfigureAwait(false);
     }
 
     private bool Fail(PluginDescription plugin, string error)

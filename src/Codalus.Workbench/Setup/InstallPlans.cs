@@ -55,11 +55,17 @@ public static class InstallPlans
         version is { } v && v.Split('.') is [var major, var minor, ..] ? $"{major}.{minor}" : fallback ?? HostChannel;
 
     /// <summary>
-    /// winget's package of a channel's SDK: <c>Microsoft.DotNet.SDK.11</c>; the preview package for the IDE's own
-    /// channel while the IDE runs on a release candidate (M30b), which winget lists only as the preview SDK.
+    /// winget's package of a channel's SDK: <c>Microsoft.DotNet.SDK.11</c>; the preview package when the version wanted
+    /// in that channel is a preview or a release candidate (M30b, M49), which winget lists only as the preview SDK.
     /// </summary>
-    public static string WingetSdk(string channel, string hostsRuntime) =>
-        channel == HostChannel && hostsRuntime.Contains('-', StringComparison.Ordinal) ? "Microsoft.DotNet.SDK.Preview" : $"Microsoft.DotNet.SDK.{channel.Split('.')[0]}";
+    /// <param name="version">
+    /// The version wanted: the runtime an update or the IDE's hosts need (M49), else the one the IDE runs on. A release
+    /// (11.0.0) needs the channel's package even while the IDE runs on a release candidate.
+    /// </param>
+    public static string WingetSdk(string channel, string version) =>
+        version.Contains('-', StringComparison.Ordinal) && Channel(version, fallback: string.Empty) == channel
+            ? "Microsoft.DotNet.SDK.Preview"
+            : $"Microsoft.DotNet.SDK.{channel.Split('.')[0]}";
 
     /// <summary>
     /// The plan for <paramref name="tool"/>, or null when there's nothing to install it with here.
@@ -96,7 +102,7 @@ public static class InstallPlans
         if (platform == PlatformKind.Windows)
         {
             return hasWinget
-                ? Winget(tool.Id, WingetSdk(channel, EnvironmentCheck.DefaultHostsRuntime()), pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})")
+                ? Winget(tool.Id, WingetSdk(channel, tool.Id == "dotnet-runtime" && tool.WantedVersion is { } wanted ? wanted : pinned ?? EnvironmentCheck.DefaultHostsRuntime()), pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})")
                 : new(tool.Id, InstallKind.OpenPage, "The .NET download page (winget isn't available)", DotnetDownloadPage);
         }
 

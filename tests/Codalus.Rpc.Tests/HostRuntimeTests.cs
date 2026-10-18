@@ -12,6 +12,19 @@ public sealed class HostRuntimeTests : IDisposable
 
     private readonly string _dir = Directory.CreateTempSubdirectory("codalus-runtime-").FullName;
 
+    /// <summary>
+    /// This machine's environment without the variables that change the check's answer: a developer's own
+    /// <c>CODALUS_SKIP_RUNTIME_CHECK</c> or <c>DOTNET_ROLL_FORWARD</c> mustn't change what these tests see.
+    /// </summary>
+    internal static readonly DotnetRootResolver CleanRoots = new()
+    {
+        ProcessEnvironment = name => name is HostRuntimeCheck.SkipVariable or RuntimeConfig.RollForwardVariable or RuntimeConfig.RollForwardToPrereleaseVariable or "DOTNET_DISABLE_RUNTIME_VERSIONS"
+            ? null
+            : Environment.GetEnvironmentVariable(name),
+    };
+
+    internal static readonly LocalProcessLauncher CleanLauncher = new() { Roots = CleanRoots };
+
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
     private static FrameworkVersion V(string text) => FrameworkVersion.Parse(text);
@@ -112,7 +125,7 @@ public sealed class HostRuntimeTests : IDisposable
         Assert.Equal((RollForwardPolicy.Major, false), (reference.RollForward, reference.PreferRelease));
         foreach (var root in new[] { systemRoot, userRoot })
         {
-            var result = HostRuntimeCheck.Check("codalus-pluginhost", RuntimeConfig.Read(config, _ => null)!, root);
+            var result = HostRuntimeCheck.Check("codalus-pluginhost", RuntimeConfig.Read(config, _ => null)!, root, _ => null);
             Assert.False(result.IsSatisfied);
             Assert.Contains($"needs the .NET runtime Microsoft.NETCore.App {Rc2} (rollForward Major), which isn't installed in {root}", result.Describe(), StringComparison.Ordinal);
         }
@@ -120,7 +133,7 @@ public sealed class HostRuntimeTests : IDisposable
         // Installing rc.2 (or 11.0.0) under the user root fixes it.
         Directory.CreateDirectory(Path.Combine(userRoot, "shared", FrameworkReference.NetCoreApp, Rc2));
         File.WriteAllText(Path.Combine(userRoot, "shared", FrameworkReference.NetCoreApp, Rc2, FrameworkReference.NetCoreApp + ".deps.json"), "{}");
-        Assert.Equal(Rc2, HostRuntimeCheck.Check("codalus-pluginhost", RuntimeConfig.Read(config, _ => null)!, userRoot).Frameworks[0].Resolved?.Text);
+        Assert.Equal(Rc2, HostRuntimeCheck.Check("codalus-pluginhost", RuntimeConfig.Read(config, _ => null)!, userRoot, _ => null).Frameworks[0].Resolved?.Text);
     }
 
     [Fact]
@@ -181,12 +194,51 @@ public sealed class HostRuntimeTests : IDisposable
             Architecture = System.Runtime.InteropServices.Architecture.Arm64,
             ReadFirstLine = path => path == "/etc/dotnet/install_location" ? "/usr/lib/dotnet" : null,
         };
-        Assert.Equal("/a", resolver.ForAppHost(n => n switch { "DOTNET_ROOT_ARM64" => "/a", "DOTNET_ROOT" => "/b", _ => null }));
-        Assert.Equal("/b", resolver.ForAppHost(n => n == "DOTNET_ROOT" ? "/b" : null));
+        var existing = new DotnetRootResolver
+        {
+            OS = "linux",
+            Architecture = System.Runtime.InteropServices.Architecture.Arm64,
+            ReadFirstLine = resolver.ReadFirstLine,
+            DirectoryExists = path => path is "/a" or "/b",
+        };
+        Assert.Equal("DOTNET_ROOT_ARM64", existing.ArchVariable);
+        Assert.Equal("/a", existing.ForAppHost(n => n switch { "DOTNET_ROOT_ARM64" => "/a", "DOTNET_ROOT" => "/b", _ => null }));
+        Assert.Equal("/b", existing.ForAppHost(n => n == "DOTNET_ROOT" ? "/b" : null));
+        // A variable whose folder is gone is passed over, as hostfxr does: the next one, then the registered location.
+        Assert.Equal("/b", existing.ForAppHost(n => n switch { "DOTNET_ROOT_ARM64" => "/opt/old-dotnet", "DOTNET_ROOT" => "/b", _ => null }));
+        Assert.Equal("/usr/lib/dotnet", existing.ForAppHost(n => n is "DOTNET_ROOT_ARM64" or "DOTNET_ROOT" ? "/opt/old-dotnet" : null));
         Assert.Equal("/usr/lib/dotnet", resolver.ForAppHost(_ => null));
         Assert.Equal("/usr/share/dotnet", new DotnetRootResolver { OS = "linux", ReadFirstLine = _ => null }.ForAppHost(_ => null));
         Assert.Equal("/usr/local/share/dotnet", new DotnetRootResolver { OS = "macos", Architecture = System.Runtime.InteropServices.Architecture.Arm64, ReadFirstLine = _ => null }.ForAppHost(_ => null));
         Assert.Equal("/opt/dotnet", new DotnetRootResolver { OS = "macos", ReadFirstLine = p => p == "/etc/dotnet/install_location_arm64" ? "/opt/dotnet" : null, Architecture = System.Runtime.InteropServices.Architecture.Arm64 }.ForAppHost(_ => null));
+
+        // Windows: the registered location, else Program Files; an x64 process on Arm64 (the win-x64 build on Windows on
+        // Arm) looks in its x64 folder, where the x64 .NET installs there.
+        var windows = new DotnetRootResolver
+        {
+            OS = "windows",
+            Architecture = System.Runtime.InteropServices.Architecture.X64,
+            OSArchitecture = System.Runtime.InteropServices.Architecture.X64,
+            WindowsRegisteredLocation = _ => null,
+            ProcessEnvironment = n => n == "ProgramFiles" ? @"C:\Program Files" : null,
+        };
+        Assert.Equal(Path.Combine(@"C:\Program Files", "dotnet"), windows.ForAppHost(_ => null));
+        var emulated = new DotnetRootResolver
+        {
+            OS = "windows",
+            Architecture = System.Runtime.InteropServices.Architecture.X64,
+            OSArchitecture = System.Runtime.InteropServices.Architecture.Arm64,
+            WindowsRegisteredLocation = _ => null,
+            ProcessEnvironment = windows.ProcessEnvironment,
+        };
+        Assert.Equal(Path.Combine(@"C:\Program Files", "dotnet", "x64"), emulated.ForAppHost(_ => null));
+        Assert.Equal(@"D:\dotnet\x64", new DotnetRootResolver
+        {
+            OS = "windows",
+            Architecture = System.Runtime.InteropServices.Architecture.X64,
+            OSArchitecture = System.Runtime.InteropServices.Architecture.Arm64,
+            WindowsRegisteredLocation = arch => arch == "x64" ? @"D:\dotnet\x64" : null,
+        }.ForAppHost(_ => null));
 
         // The muxer: the dotnet on PATH, its links resolved.
         var bin = Path.Combine(_dir, "bin");
@@ -195,6 +247,7 @@ public sealed class HostRuntimeTests : IDisposable
         Directory.CreateDirectory(real);
         var exe = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
         File.WriteAllText(Path.Combine(real, exe), string.Empty);
+        Directory.CreateDirectory(Path.Combine(real, "host", "fxr"));
         var muxer = new DotnetRootResolver
         {
             ProcessEnvironment = n => n == "PATH" ? bin : null,
@@ -204,6 +257,22 @@ public sealed class HostRuntimeTests : IDisposable
         Assert.Equal(real, muxer.ForMuxer("dotnet"));
         Assert.Equal(real, muxer.ForMuxer(Path.Combine(real, exe)));
         Assert.Null(new DotnetRootResolver { ProcessEnvironment = _ => null }.ForMuxer("dotnet"));
+
+        // A wrapper or launcher (Homebrew's script in its Cellar, snap's /usr/bin/snap) isn't a .NET root: no host/fxr
+        // there, so the real muxer is elsewhere and the check stands aside.
+        var cellar = Path.Combine(_dir, "Cellar", "dotnet", "10.0.300", "bin");
+        Directory.CreateDirectory(cellar);
+        File.WriteAllText(Path.Combine(cellar, exe), "#!/bin/bash\nexec /opt/homebrew/Cellar/dotnet/10.0.300/libexec/dotnet \"$@\"\n");
+        var wrapper = new DotnetRootResolver
+        {
+            ProcessEnvironment = n => n == "PATH" ? bin : null,
+            FileExists = p => p == Path.Combine(bin, exe) || File.Exists(p),
+            RealPath = p => p == Path.Combine(bin, exe) ? Path.Combine(cellar, exe) : p,
+        };
+        Assert.Null(wrapper.ForMuxer("dotnet"));
+        var dll = Path.Combine(_dir, "fsac", "fsautocomplete.dll");
+        WriteConfig(Path.GetDirectoryName(dll)!, "fsautocomplete", "10.0.0", "Major");
+        Assert.Null(HostRuntimeCheck.Check(new ProcessLaunchInfo("dotnet", [dll]), wrapper));
     }
 
     [Fact]
@@ -219,12 +288,12 @@ public sealed class HostRuntimeTests : IDisposable
         var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToUpperInvariant();
         var launch = new ProcessLaunchInfo(exe, []) { Environment = new Dictionary<string, string> { ["DOTNET_ROOT"] = root, ["DOTNET_ROOT_" + arch] = root } };
 
-        var check = HostRuntimeCheck.Check(launch)!;
+        var check = HostRuntimeCheck.Check(launch, CleanRoots)!;
         Assert.False(check.IsSatisfied);
         Assert.Equal(root, check.DotnetRoot);
 
         var logs = new List<string>();
-        await using var process = new SupervisedProcess("plugin host", launch);
+        await using var process = new SupervisedProcess("plugin host", launch with { Launcher = CleanLauncher });
         process.Log += (_, line) => logs.Add(line);
         var error = await Assert.ThrowsAsync<HostRuntimeMissingException>(() => process.StartAsync(TestContext.Current.CancellationToken));
         Assert.Contains($"needs the .NET runtime Microsoft.NETCore.App {Rc2} (rollForward Major), which isn't installed in {root} (found: 8.0.20, 9.0.9, 10.0.0–10.0.9)", error.Message, StringComparison.Ordinal);
@@ -238,7 +307,7 @@ public sealed class HostRuntimeTests : IDisposable
         var installed = Path.Combine(root, "shared", FrameworkReference.NetCoreApp, "11.0.0");
         Directory.CreateDirectory(installed);
         File.WriteAllText(Path.Combine(installed, FrameworkReference.NetCoreApp + ".deps.json"), "{}");
-        Assert.True(HostRuntimeCheck.Check(launch)!.IsSatisfied);
+        Assert.True(HostRuntimeCheck.Check(launch, CleanRoots)!.IsSatisfied);
         // Turned off, or not asked for: no check.
         Assert.Null(HostRuntimeCheck.Check(launch, new DotnetRootResolver { ProcessEnvironment = n => n == HostRuntimeCheck.SkipVariable ? "1" : Environment.GetEnvironmentVariable(n) }));
     }
@@ -249,18 +318,19 @@ public sealed class HostRuntimeTests : IDisposable
         var root = FakeRoot("muxer", "10.0.9");
         var exe = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
         File.WriteAllText(Path.Combine(root, exe), string.Empty);
+        Directory.CreateDirectory(Path.Combine(root, "host", "fxr"));
         var dll = Path.Combine(_dir, "app", "codalus-t4host.dll");
         WriteConfig(Path.GetDirectoryName(dll)!, "codalus-t4host", Rc2, "Major");
         var muxer = Path.Combine(root, exe);
 
-        Assert.False(HostRuntimeCheck.Check(ProcessLaunchInfo.FromPath(dll) with { FileName = muxer })!.IsSatisfied);
+        Assert.False(HostRuntimeCheck.Check(ProcessLaunchInfo.FromPath(dll) with { FileName = muxer }, CleanRoots)!.IsSatisfied);
         // dotnet exec --runtimeconfig <other> app.dll: the named runtimeconfig.
         var other = WriteConfig(Path.Combine(_dir, "other"), "app", "10.0.0", "Minor");
-        Assert.True(HostRuntimeCheck.Check(new ProcessLaunchInfo(muxer, ["exec", "--runtimeconfig", other, dll]))!.IsSatisfied);
+        Assert.True(HostRuntimeCheck.Check(new ProcessLaunchInfo(muxer, ["exec", "--runtimeconfig", other, dll]), CleanRoots)!.IsSatisfied);
         // --roll-forward Disable from the command line wins: 10.0.0 isn't there exactly.
-        Assert.False(HostRuntimeCheck.Check(new ProcessLaunchInfo(muxer, ["exec", "--runtimeconfig", other, "--roll-forward", "Disable", dll]))!.IsSatisfied);
-        Assert.Null(HostRuntimeCheck.Check(new ProcessLaunchInfo(muxer, ["build", "x.csproj"])));
-        Assert.Null(HostRuntimeCheck.Check(new ProcessLaunchInfo(muxer, ["exec", "--unknown-option", "x", dll])));
+        Assert.False(HostRuntimeCheck.Check(new ProcessLaunchInfo(muxer, ["exec", "--runtimeconfig", other, "--roll-forward", "Disable", dll]), CleanRoots)!.IsSatisfied);
+        Assert.Null(HostRuntimeCheck.Check(new ProcessLaunchInfo(muxer, ["build", "x.csproj"]), CleanRoots));
+        Assert.Null(HostRuntimeCheck.Check(new ProcessLaunchInfo(muxer, ["exec", "--unknown-option", "x", dll]), CleanRoots));
     }
 
     [Fact]
@@ -314,8 +384,80 @@ public sealed class HostRuntimeTests : IDisposable
         };
         process.Crashed += (_, _) => Interlocked.Increment(ref crashes);
         await Assert.ThrowsAsync<HostExitedException>(() => process.StartAsync(TestContext.Current.CancellationToken));
-        await WaitUntilAsync(() => process.GaveUp);
-        Assert.Equal(3, Volatile.Read(ref crashes)); // the start and two restarts
+        // The count, not GaveUp: the supervisor gives up before it raises the last Crashed.
+        await WaitUntilAsync(() => Volatile.Read(ref crashes) == 3 && process.GaveUp);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.Equal(3, Volatile.Read(ref crashes)); // the start and two restarts, and no more
+    }
+
+    [Fact]
+    public async Task A_host_whose_handshake_failed_but_kept_running_is_restarted_when_it_crashes_later()
+    {
+        // Initialize refuses (a request the host answered with an error, a cancelled start) while the process runs on:
+        // startup is over, so its crash later is a crash, not "exited during startup".
+        var launch = OperatingSystem.IsWindows()
+            ? new ProcessLaunchInfo("cmd.exe", ["/c", "ping -n 120 127.0.0.1 > nul"])
+            : new ProcessLaunchInfo("/bin/sh", ["-c", "sleep 120"]);
+        var calls = 0;
+        var crashes = new List<ProcessCrashedEventArgs>();
+        var restarted = new TaskCompletionSource();
+        await using var process = new SupervisedProcess("refusing host", launch, new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(10), ShutdownRequest = null, ExitNotification = null })
+        {
+            Initialize = (_, _, _) => Interlocked.Increment(ref calls) == 1 ? Task.FromException(new InvalidOperationException("refused")) : Task.CompletedTask,
+        };
+        process.Crashed += (_, e) => { lock (crashes) { crashes.Add(e); } };
+        process.Restarted += (_, _) => restarted.TrySetResult();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => process.StartAsync(TestContext.Current.CancellationToken));
+        Assert.True(process.IsRunning); // it kept running
+        using (var running = System.Diagnostics.Process.GetProcessById(process.ProcessId!.Value))
+        {
+            running.Kill(entireProcessTree: true);
+        }
+
+        await restarted.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        var crash = Assert.Single(crashes);
+        Assert.Equal((true, false), (crash.WillRestart, crash.DuringStartup));
+        Assert.False(process.GaveUp);
+        Assert.Equal(2, Volatile.Read(ref calls));
+    }
+
+    [Fact]
+    public async Task A_host_that_crashes_after_startup_quotes_its_last_lines_not_its_startup_log()
+    {
+        // A host that logs to standard error (the C# host does), then crashes: the error quotes the crash, not the log.
+        var launch = OperatingSystem.IsWindows()
+            ? new ProcessLaunchInfo("cmd.exe", ["/c", "(for /l %i in (1,1,60) do @echo log line %i 1>&2) & ping -n 4 127.0.0.1 > nul & echo Unhandled exception. System.InvalidOperationException: boom 1>&2 & exit /b 134"])
+            : new ProcessLaunchInfo("/bin/sh", ["-c", "i=1; while [ $i -le 60 ]; do echo \"log line $i\" >&2; i=$((i+1)); done; sleep 3; echo 'Unhandled exception. System.InvalidOperationException: boom' >&2; exit 134"]);
+        var crashed = new TaskCompletionSource<ProcessCrashedEventArgs>();
+        await using var process = new SupervisedProcess("logging host", launch, new SupervisionPolicy { MaxRestarts = 0, ShutdownRequest = null, ExitNotification = null });
+        process.Crashed += (_, e) => crashed.TrySetResult(e);
+        await process.StartAsync(TestContext.Current.CancellationToken);
+
+        var crash = await crashed.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        Assert.False(crash.DuringStartup); // past the startup window, with no handshake
+        var exited = Assert.IsType<HostExitedException>(crash.Error);
+        Assert.Contains("logging host exited with exit code 134", exited.Message, StringComparison.Ordinal);
+        Assert.Contains("Unhandled exception. System.InvalidOperationException: boom", exited.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("log line 1 ", exited.Message + " ", StringComparison.Ordinal);
+        Assert.Equal(SupervisedProcess.ErrorTailKept, exited.ErrorOutput.Count);
+        Assert.Equal("Unhandled exception. System.InvalidOperationException: boom", exited.ErrorOutput[^1]);
+    }
+
+    [Fact]
+    public void Standard_error_keeps_its_first_lines_and_a_ring_of_its_last_ones()
+    {
+        var buffer = new ErrorOutputBuffer(headLines: 5, tailLines: 3);
+        buffer.Add("   ");
+        for (var i = 1; i <= 12; i++)
+        {
+            buffer.Add($"line {i}");
+        }
+
+        buffer.Add(new string('x', ErrorOutputBuffer.MaxLineLength + 10));
+        Assert.Equal(13, buffer.Count);
+        Assert.Equal(["line 1", "line 2", "line 3", "line 4", "line 5"], buffer.Head());
+        Assert.Equal(["line 11", "line 12", new string('x', ErrorOutputBuffer.MaxLineLength) + "…"], buffer.Tail());
     }
 
     private string FakeRoot(string name, params string[] versions)

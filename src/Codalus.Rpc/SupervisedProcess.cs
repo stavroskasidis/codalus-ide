@@ -74,6 +74,12 @@ public sealed class ProcessCrashedEventArgs(int? exitCode, bool willRestart, Exc
 
     /// <summary>The process ended during startup (M49): it isn't restarted unless the policy says so.</summary>
     public bool DuringStartup { get; }
+
+    /// <summary>
+    /// The start that ended was a restart (M49). An exit during the first start is reported to the caller of
+    /// <see cref="SupervisedProcess.StartAsync"/>, which handles it; one during a restart has no caller but this event.
+    /// </summary>
+    public bool IsRestart { get; init; }
 }
 
 /// <summary>
@@ -82,16 +88,20 @@ public sealed class ProcessCrashedEventArgs(int? exitCode, bool willRestart, Exc
 /// <see cref="SupervisionPolicy.Window"/>. A service failure never propagates beyond failed in-flight requests
 /// (<see cref="JsonRpcConnectionLostException"/>) and the <see cref="Crashed"/> event.
 /// <para>
-/// M49: a process that ends says why. Its first lines of standard error and its exit code become the error requests
-/// fail with (<see cref="HostExitedException"/>) and a <see cref="Log"/> line; one that ends during startup isn't
+/// M49: a process that ends says why. Its standard error (the first lines for a failed start, the last ones for a
+/// crash) and its exit code become the error requests fail with (<see cref="HostExitedException"/>) and a
+/// <see cref="Log"/> line; one that ends during startup isn't
 /// restarted (<see cref="SupervisionPolicy.RestartAfterStartupExit"/>); and a framework-dependent host whose .NET
 /// runtime is missing isn't started at all (<see cref="HostRuntimeMissingException"/>).
 /// </para>
 /// </summary>
 public sealed class SupervisedProcess : IAsyncDisposable
 {
-    /// <summary>The lines of standard error kept from each start for the error (the first ones say why it failed).</summary>
+    /// <summary>The first lines of standard error kept from each start: why a start failed.</summary>
     public const int ErrorLinesKept = 50;
+
+    /// <summary>The last lines of standard error kept from each start: why a running host crashed.</summary>
+    public const int ErrorTailKept = 20;
 
     /// <summary>The lines of standard error the error's message quotes.</summary>
     public const int ErrorLinesQuoted = 6;
@@ -178,7 +188,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
             throw;
         }
 
-        var run = new Run(process);
+        var run = new Run(process, isRestart);
         process.ErrorLine += line =>
         {
             run.Add(line);
@@ -199,44 +209,60 @@ public sealed class SupervisedProcess : IAsyncDisposable
         }
 
         connection.Start();
-        if (Initialize is { } initialize)
+        try
         {
-            await initialize(connection, isRestart, cancellationToken).ConfigureAwait(false);
-        }
+            if (Initialize is { } initialize)
+            {
+                await initialize(connection, isRestart, cancellationToken).ConfigureAwait(false);
+            }
 
-        run.Ready = true;
-        LastFailure = null;
+            LastFailure = null;
+        }
+        finally
+        {
+            // Startup ends here, however Initialize ended: a host that failed its handshake but kept running (a request
+            // it refused, a cancelled start) is a running host whose later crash restarts as usual.
+            run.StartupOver = true;
+        }
     }
 
-    /// <summary>Whether the process is still starting: before its handshake finished (or its first message, without one).</summary>
+    /// <summary>Whether the process is still starting: before its handshake ended (or its first message, without one).</summary>
     private bool InStartup(Run run, JsonRpcConnection connection, int? exitCode) =>
         Initialize is not null
-            ? !run.Ready
-            : exitCode is not (null or 0) && run.Lines().Count > 0 && !connection.HasReceived && System.Diagnostics.Stopwatch.GetElapsedTime(run.Started) < _policy.StartupWindow;
+            ? !run.StartupOver
+            : exitCode is not (null or 0) && run.HasErrorOutput && !connection.HasReceived && System.Diagnostics.Stopwatch.GetElapsedTime(run.Started) < _policy.StartupWindow;
 
     /// <summary>
-    /// The error for a lost connection: when the process ended, its exit code and first lines of standard error. It waits
+    /// The error for a lost connection: when the process ended, its exit code and its standard error's lines. It waits
     /// a little for the process to end and its standard error to be read (it closed its output, so it is ending).
     /// </summary>
+    /// <remarks>
+    /// Whether the exit was during startup is decided here, once: this runs before the pending requests fail (the
+    /// read loop waits for it, and so does a write that found the peer gone), so Initialize can't have ended yet when
+    /// its own failure is the cause. <see cref="OnDisconnected"/> reuses the decision.
+    /// </remarks>
     private async Task<JsonRpcConnectionLostException?> ExplainAsync(Run run, JsonRpcConnection connection)
     {
         var process = run.Process;
         await ((Task)process.Exited).WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         if (!process.Exited.IsCompletedSuccessfully || _disposed)
         {
+            run.DecideStartup(InStartup(run, connection, null));
             return null;
         }
 
         await process.ErrorCompleted.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         var code = process.Exited.Result;
-        var lines = run.Lines();
+        var startup = run.DecideStartup(InStartup(run, connection, code));
+
+        // A failed start says why in its first lines; a running host that crashed, in its last ones.
+        var lines = startup ? run.Head() : run.Tail();
         if (lines.Count == 0 && code is 0 or null)
         {
             return null; // a clean exit says nothing more than "lost"
         }
 
-        var startup = InStartup(run, connection, code);
-        var quoted = string.Join(" ", lines.Take(ErrorLinesQuoted));
+        var quoted = string.Join(" ", startup ? lines.Take(ErrorLinesQuoted) : lines.TakeLast(ErrorLinesQuoted));
         if (quoted.Length > 1500)
         {
             quoted = quoted[..1500] + "…";
@@ -253,6 +279,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
         int? exitCode = null;
         bool restart;
         bool startup;
+        bool isRestart;
         Exception? reason;
         lock (_gate)
         {
@@ -266,8 +293,9 @@ public sealed class SupervisedProcess : IAsyncDisposable
                 exitCode = process.Exited.Result;
             }
 
-            startup = InStartup(run, lost, exitCode);
+            startup = run.StartupExit ?? InStartup(run, lost, exitCode);
             reason = run.Exit ?? error;
+            isRestart = run.IsRestart;
             LastFailure = run.Exit ?? new JsonRpcConnectionLostException($"{Name} stopped{(exitCode is { } code ? $" with exit code {code}" : string.Empty)}.", error);
             _connection = null;
             var now = DateTime.UtcNow;
@@ -294,7 +322,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
             Log?.Invoke(this, $"[{Name}] {exited.Message}{(startup && !restart ? " It isn't started again: it would end the same way." : string.Empty)}");
         }
 
-        Crashed?.Invoke(this, new ProcessCrashedEventArgs(exitCode, restart, reason, startup));
+        Crashed?.Invoke(this, new ProcessCrashedEventArgs(exitCode, restart, reason, startup) { IsRestart = isRestart });
         if (restart)
         {
             _ = RestartAsync(_restarts.Count);
@@ -396,36 +424,101 @@ public sealed class SupervisedProcess : IAsyncDisposable
         _startLock.Dispose();
     }
 
-    /// <summary>One start of the process: its standard error's first lines, and whether it got past startup.</summary>
-    private sealed class Run(IHostProcess process)
+    /// <summary>One start of the process: its standard error, whether its startup is over, and how it ended.</summary>
+    private sealed class Run(IHostProcess process, bool isRestart)
     {
-        private readonly List<string> _lines = [];
+        private readonly ErrorOutputBuffer _errors = new(ErrorLinesKept, ErrorTailKept);
+        private int _startupExit = -1; // -1 undecided, 0 no, 1 yes
 
         public IHostProcess Process { get; } = process;
 
+        public bool IsRestart { get; } = isRestart;
+
         public long Started { get; } = System.Diagnostics.Stopwatch.GetTimestamp();
 
-        public volatile bool Ready;
+        /// <summary>Initialize ended, however it ended: later exits are crashes of a running host.</summary>
+        public volatile bool StartupOver;
 
         public HostExitedException? Exit { get; set; }
 
-        public void Add(string line)
+        /// <summary>Whether the exit was during startup, once decided (<see cref="ExplainAsync"/>).</summary>
+        public bool? StartupExit => Volatile.Read(ref _startupExit) is var value and >= 0 ? value == 1 : null;
+
+        public bool HasErrorOutput => _errors.Count > 0;
+
+        /// <summary>Records the decision the first time; returns the decision that stands.</summary>
+        public bool DecideStartup(bool startup)
         {
-            lock (_lines)
-            {
-                if (_lines.Count < ErrorLinesKept && line.Trim() is { Length: > 0 } text)
-                {
-                    _lines.Add(text);
-                }
-            }
+            Interlocked.CompareExchange(ref _startupExit, startup ? 1 : 0, -1);
+            return Volatile.Read(ref _startupExit) == 1;
         }
 
-        public IReadOnlyList<string> Lines()
+        public void Add(string line) => _errors.Add(line);
+
+        public IReadOnlyList<string> Head() => _errors.Head();
+
+        public IReadOnlyList<string> Tail() => _errors.Tail();
+    }
+}
+
+/// <summary>
+/// A process's standard error as the supervisor keeps it (M49): the first lines, which say why a start failed, and a
+/// ring of the last ones, which say why a running process crashed (a host that logs to standard error fills the first
+/// ones with its startup). Blank lines aren't kept, and a line is cut at <see cref="MaxLineLength"/> characters.
+/// </summary>
+internal sealed class ErrorOutputBuffer(int headLines, int tailLines)
+{
+    public const int MaxLineLength = 2000;
+
+    private readonly List<string> _head = [];
+    private readonly Queue<string> _tail = new();
+    private readonly Lock _gate = new();
+    private int _count;
+
+    /// <summary>The lines seen, kept or not.</summary>
+    public int Count => Volatile.Read(ref _count);
+
+    public void Add(string line)
+    {
+        if (line.Trim() is not { Length: > 0 } text)
         {
-            lock (_lines)
+            return;
+        }
+
+        if (text.Length > MaxLineLength)
+        {
+            text = text[..MaxLineLength] + "…";
+        }
+
+        lock (_gate)
+        {
+            _count++;
+            if (_head.Count < headLines)
             {
-                return [.. _lines];
+                _head.Add(text);
             }
+
+            _tail.Enqueue(text);
+            if (_tail.Count > tailLines)
+            {
+                _tail.Dequeue();
+            }
+        }
+    }
+
+    public IReadOnlyList<string> Head()
+    {
+        lock (_gate)
+        {
+            return [.. _head];
+        }
+    }
+
+    public IReadOnlyList<string> Tail()
+    {
+        lock (_gate)
+        {
+            return [.. _tail];
         }
     }
 }

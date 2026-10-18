@@ -153,6 +153,9 @@ public sealed class DotnetRootResolver
 
     public Architecture Architecture { get; init; } = RuntimeInformation.ProcessArchitecture;
 
+    /// <summary>The OS's architecture: an x64 process on Arm64 (emulated) looks in the default location's <c>x64</c> folder.</summary>
+    public Architecture OSArchitecture { get; init; } = RuntimeInformation.OSArchitecture;
+
     /// <summary>This process's environment: where the launching process looks for <c>dotnet</c> on <c>PATH</c>.</summary>
     public Func<string, string?> ProcessEnvironment { get; init; } = Environment.GetEnvironmentVariable;
 
@@ -188,6 +191,11 @@ public sealed class DotnetRootResolver
         }
     };
 
+    /// <summary>The variable an app host of this architecture reads before <c>DOTNET_ROOT</c>: <c>DOTNET_ROOT_ARM64</c>.</summary>
+    public string ArchVariable => "DOTNET_ROOT_" + ArchName.ToUpperInvariant();
+
+    private bool EmulatedX64 => Architecture == Architecture.X64 && OSArchitecture == Architecture.Arm64;
+
     private string ArchName => Architecture switch
     {
         Architecture.X64 => "x64",
@@ -197,20 +205,23 @@ public sealed class DotnetRootResolver
         _ => Architecture.ToString().ToLowerInvariant(),
     };
 
-    /// <summary>The root an app host uses, given the environment it starts with.</summary>
+    /// <summary>
+    /// The root an app host uses, given the environment it starts with. A variable whose folder doesn't exist is passed
+    /// over, as hostfxr does (it takes a variable's full path only when it resolves).
+    /// </summary>
     public string? ForAppHost(Func<string, string?> environment)
     {
-        if (environment("DOTNET_ROOT_" + ArchName.ToUpperInvariant()) is { Length: > 0 } byArch)
+        if (environment(ArchVariable) is { Length: > 0 } byArch && DirectoryExists(byArch))
         {
             return byArch;
         }
 
-        if (OS == "windows" && Architecture == Architecture.X86 && environment("DOTNET_ROOT(x86)") is { Length: > 0 } x86)
+        if (OS == "windows" && Architecture == Architecture.X86 && environment("DOTNET_ROOT(x86)") is { Length: > 0 } x86 && DirectoryExists(x86))
         {
             return x86;
         }
 
-        if (environment("DOTNET_ROOT") is { Length: > 0 } root)
+        if (environment("DOTNET_ROOT") is { Length: > 0 } root && DirectoryExists(root))
         {
             return root;
         }
@@ -222,8 +233,7 @@ public sealed class DotnetRootResolver
                 return registered;
             }
 
-            var programFiles = (Architecture == Architecture.X86 ? ProcessEnvironment("ProgramFiles(x86)") : null) ?? ProcessEnvironment("ProgramFiles") ?? @"C:\Program Files";
-            return Path.Combine(programFiles, "dotnet");
+            return DefaultLocation;
         }
 
         if ((ReadFirstLine("/etc/dotnet/install_location_" + ArchName) ?? ReadFirstLine("/etc/dotnet/install_location")) is { Length: > 0 } location)
@@ -231,12 +241,32 @@ public sealed class DotnetRootResolver
             return location;
         }
 
-        return OS == "macos"
-            ? Architecture == Architecture.X64 && RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "/usr/local/share/dotnet/x64" : "/usr/local/share/dotnet"
-            : "/usr/share/dotnet";
+        return DefaultLocation;
     }
 
-    /// <summary>The root of the muxer that <paramref name="fileName"/> (<c>dotnet</c> or a path to it) starts; null when it isn't found.</summary>
+    /// <summary>
+    /// Where .NET's installer puts this architecture's .NET: <c>%ProgramFiles%\dotnet</c>, <c>/usr/local/share/dotnet</c>
+    /// or <c>/usr/share/dotnet</c>; its <c>x64</c> folder for an x64 process on Arm64 (Windows and macOS).
+    /// </summary>
+    public string DefaultLocation
+    {
+        get
+        {
+            if (OS == "windows")
+            {
+                var programFiles = (Architecture == Architecture.X86 ? ProcessEnvironment("ProgramFiles(x86)") : null) ?? ProcessEnvironment("ProgramFiles") ?? @"C:\Program Files";
+                return EmulatedX64 ? Path.Combine(programFiles, "dotnet", "x64") : Path.Combine(programFiles, "dotnet");
+            }
+
+            return OS == "macos" ? EmulatedX64 ? "/usr/local/share/dotnet/x64" : "/usr/local/share/dotnet" : "/usr/share/dotnet";
+        }
+    }
+
+    /// <summary>
+    /// The root of the muxer that <paramref name="fileName"/> (<c>dotnet</c> or a path to it) starts; null when it isn't
+    /// found, or when its folder isn't a .NET root (no <c>host/fxr</c>, which the muxer needs): Homebrew's wrapper script
+    /// and snap's launcher run the real muxer from elsewhere, which can't be told from here.
+    /// </summary>
     public string? ForMuxer(string fileName)
     {
         var path = fileName;
@@ -247,7 +277,9 @@ public sealed class DotnetRootResolver
                 .Select(folder => Path.Combine(folder.Trim('"'), exe)).FirstOrDefault(FileExists) ?? string.Empty;
         }
 
-        return path.Length > 0 && FileExists(path) ? Path.GetDirectoryName(RealPath(path)) : null;
+        return path.Length > 0 && FileExists(path) && Path.GetDirectoryName(RealPath(path)) is { } folder && DirectoryExists(Path.Combine(folder, "host", "fxr"))
+            ? folder
+            : null;
     }
 
     private static string? RegisteredLocation(string arch)
@@ -440,14 +472,15 @@ public sealed class HostRuntimeMissingException(HostRuntimeCheckResult result) :
 }
 
 /// <summary>
-/// A host process that ended (M49): its exit code and the first lines it wrote to standard error, which say why
+/// A host process that ended (M49): its exit code and the lines it wrote to standard error (the first ones when it
+/// ended during startup, the last ones otherwise), which say why
 /// ("You must install or update .NET…"), in place of "The connection was lost".
 /// </summary>
 public sealed class HostExitedException(string message, int? exitCode, IReadOnlyList<string> errorOutput, bool duringStartup) : JsonRpcConnectionLostException(message, null)
 {
     public int? ExitCode { get; } = exitCode;
 
-    /// <summary>The first lines of the host's standard error.</summary>
+    /// <summary>The host's standard error: its first lines for an exit during startup, its last ones for a crash.</summary>
     public IReadOnlyList<string> ErrorOutput { get; } = errorOutput;
 
     /// <summary>It ended before it was ready (before its handshake finished): starting it again would end the same way.</summary>

@@ -43,6 +43,12 @@ public sealed record ToolStatus(string Id, string Title, bool Required, ToolStat
     public bool NeedsAttention => State != ToolState.Found;
 }
 
+/// <summary>
+/// The .NET root the IDE's processes use (M37, M49; <see cref="EnvironmentCheck.ChooseDotnetRoot"/>): whether it goes
+/// first on <c>PATH</c>, the variables to set, and a line for the log when something changes.
+/// </summary>
+public sealed record DotnetRootChoice(string Root, bool AddToPath, IReadOnlyList<KeyValuePair<string, string>> Variables, string? Log);
+
 /// <summary>Runs a program and gives its exit code and output (tests use a stand-in).</summary>
 public delegate Task<(int ExitCode, string Output)> ProcessRunner(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken cancellationToken);
 
@@ -74,6 +80,9 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     /// <summary>How the .NET host picks the root of the IDE's app hosts (tests describe a machine).</summary>
     public DotnetRootResolver? Roots { get; init; }
 
+    /// <summary>Whether a folder exists (a <c>DOTNET_ROOT</c> whose folder is gone is passed over; tests describe a machine).</summary>
+    public Func<string, bool> DirectoryExists { get; init; } = Directory.Exists;
+
     private IReadOnlyList<FrameworkReference> Frameworks => HostFrameworks is { Count: > 0 } frameworks
         ? frameworks
         : [FrameworkReference.Create(FrameworkReference.NetCoreApp, FrameworkVersion.TryParse(HostsRuntime, out var version) ? version : FrameworkVersion.Parse($"{Environment.Version.Major}.0.0"), RollForwardPolicy.Major)];
@@ -82,7 +91,63 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     {
         OS = platform switch { PlatformKind.Windows => "windows", PlatformKind.MacOS => "macos", _ => "linux" },
         ProcessEnvironment = environment,
+        FileExists = _exists,
+        DirectoryExists = DirectoryExists,
     };
+
+    private static bool SameRoot(string a, string b) =>
+        string.Equals(System.IO.Path.TrimEndingDirectorySeparator(a), System.IO.Path.TrimEndingDirectorySeparator(b), OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// What the IDE's processes should use (M37, M49): the root <see cref="FindSdkRoot"/> picks, whether it goes on
+    /// <c>PATH</c>, and the variables that point the app hosts at it. Null when no folder has an SDK.
+    /// <list type="bullet">
+    /// <item>A root that isn't the <c>DOTNET_ROOT</c> or <c>PATH</c> one in use (an SDK only in <c>~/.dotnet</c>, a
+    /// Finder launch) becomes <c>DOTNET_ROOT</c> and goes first on <c>PATH</c>, as since M37.</item>
+    /// <item>When it is, the app hosts (which don't look on <c>PATH</c>) are pointed at it only when that helps: when it
+    /// has the hosts' runtime, or the root they'd use otherwise doesn't. A runtime-only install in the default or the
+    /// registered location (a distribution's <c>dotnet-runtime-11.0</c>, Microsoft's runtime package) keeps its hosts.</item>
+    /// </list>
+    /// </summary>
+    public DotnetRootChoice? ChooseDotnetRoot()
+    {
+        if (FindSdkRoot() is not { } root)
+        {
+            return null;
+        }
+
+        var exe = platform == PlatformKind.Windows ? "dotnet.exe" : "dotnet";
+        // A root that is already in use as it is: DOTNET_ROOT, or a real dotnet with SDKs first on the PATH.
+        var current = environment("DOTNET_ROOT") is { Length: > 0 } set ? set
+            : FindOnPath("dotnet") is { } onPath ? System.IO.Path.GetDirectoryName(onPath) : null;
+        if (current is null || !SameRoot(current, root) && !SameRoot(System.IO.Path.GetDirectoryName(RealPath(System.IO.Path.Combine(current, exe))) ?? string.Empty, root))
+        {
+            return new DotnetRootChoice(root, AddToPath: true, PointHostsAt(root), $"Using the .NET SDK in {root} (DOTNET_ROOT).");
+        }
+
+        var hostsRoot = HostsRoot();
+        if ((hostsRoot is null || !SameRoot(hostsRoot, root)) && (HasHostRuntime(root) || hostsRoot is null || !HasHostRuntime(hostsRoot)))
+        {
+            return new DotnetRootChoice(root, AddToPath: false, PointHostsAt(root), $"The helper processes use the .NET in {root} (DOTNET_ROOT).");
+        }
+
+        return new DotnetRootChoice(root, AddToPath: false, [], null);
+    }
+
+    /// <summary>
+    /// The variables that make the app hosts use <paramref name="root"/>: <c>DOTNET_ROOT</c>, and the architecture's
+    /// own <c>DOTNET_ROOT_ARM64</c> (or <c>_X64</c>) when it is set elsewhere, since the host reads that one first.
+    /// </summary>
+    public IReadOnlyList<KeyValuePair<string, string>> PointHostsAt(string root)
+    {
+        var variables = new List<KeyValuePair<string, string>> { new("DOTNET_ROOT", root) };
+        if (environment(Resolver.ArchVariable) is { Length: > 0 } byArch && !SameRoot(byArch, root))
+        {
+            variables.Add(new(Resolver.ArchVariable, root));
+        }
+
+        return variables;
+    }
 
     /// <summary>Whether every framework the IDE's hosts need resolves under <paramref name="root"/>.</summary>
     public bool HasHostRuntime(string root) => Frameworks.All(f => FrameworkResolver.Resolve(f, InstalledFrameworks(root, f.Name)) is not null);
@@ -97,10 +162,21 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     public ToolStatus HostRuntimeStatus() => RuntimeStatus(Frameworks, anyRoot: false);
 
     /// <summary>
-    /// Whether another set of frameworks (M49: an update's hosts, from its signed feed) would run here: under the hosts'
-    /// root or any installers' folder, since the updated IDE prefers a root that has its runtime (<see cref="FindSdkRoot"/>).
+    /// Whether another set of frameworks (M49: an update's hosts, from its signed feed) would run here, under a root
+    /// the updated IDE can give its hosts (<see cref="ChooseDotnetRoot"/>): the hosts' own root (kept when it has the
+    /// runtime), the <c>DOTNET_ROOT</c> or <c>PATH</c> root with SDKs, or an installers' folder with SDKs. A runtime-only
+    /// folder that isn't the hosts' doesn't count: nothing would point the hosts at it.
     /// </summary>
     public ToolStatus RuntimeStatusFor(IReadOnlyList<FrameworkReference> frameworks) => RuntimeStatus(frameworks, anyRoot: true);
+
+    /// <summary>The roots <see cref="ChooseDotnetRoot"/> could leave the hosts on: theirs, and the ones with SDKs.</summary>
+    private IEnumerable<string> SelectableRoots(string hostsRoot)
+    {
+        var exe = platform == PlatformKind.Windows ? "dotnet.exe" : "dotnet";
+        IEnumerable<string> sdkRoots = InstallerFolders().Where(c => _exists(System.IO.Path.Combine(c, exe)) && HasSdks(c));
+        return new[] { hostsRoot, CurrentSdkRoot() ?? string.Empty }.Concat(sdkRoots).Where(r => r.Length > 0)
+            .Select(r => System.IO.Path.TrimEndingDirectorySeparator(r)).Distinct(StringComparer.Ordinal);
+    }
 
     private ToolStatus RuntimeStatus(IReadOnlyList<FrameworkReference> frameworks, bool anyRoot)
     {
@@ -108,7 +184,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         const string Title = ".NET runtime for Codalus IDE";
         var root = HostsRoot() ?? string.Empty;
         FrameworkVersion? Resolve(FrameworkReference reference, string folder) => folder.Length > 0 ? FrameworkResolver.Resolve(reference, InstalledFrameworks(folder, reference.Name)) : null;
-        var satisfied = frameworks.Count == 0 ? root : (anyRoot ? RuntimeRoots(root) : [root]).FirstOrDefault(r => frameworks.All(f => Resolve(f, r) is not null));
+        var satisfied = frameworks.Count == 0 ? root : (anyRoot ? SelectableRoots(root) : [root]).FirstOrDefault(r => frameworks.All(f => Resolve(f, r) is not null));
         if (satisfied is not null)
         {
             return new("dotnet-runtime", Title, true, ToolState.Found, NeededFor)
@@ -150,7 +226,9 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         var home = environment("HOME") ?? environment("USERPROFILE") ?? string.Empty;
         return platform switch
         {
-            PlatformKind.Windows => [System.IO.Path.Combine(environment("ProgramFiles") ?? @"C:\Program Files", "dotnet"), System.IO.Path.Combine(environment("LOCALAPPDATA") ?? string.Empty, "Microsoft", "dotnet")],
+            // The default location for this process's architecture first: Program Files' x64 folder for the x64 build on
+            // Windows on Arm, where the x64 .NET installs.
+            PlatformKind.Windows => [Resolver.DefaultLocation, System.IO.Path.Combine(environment("ProgramFiles") ?? @"C:\Program Files", "dotnet"), System.IO.Path.Combine(environment("LOCALAPPDATA") ?? string.Empty, "Microsoft", "dotnet")],
             PlatformKind.MacOS => ["/usr/local/share/dotnet", System.IO.Path.Combine(home, ".dotnet")],
             _ => [System.IO.Path.Combine(home, ".dotnet"), "/usr/share/dotnet", "/usr/lib/dotnet", "/usr/lib64/dotnet", "/usr/local/share/dotnet", "/snap/dotnet-sdk/current"],
         };
@@ -321,16 +399,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     public string? FindSdkRoot()
     {
         var exe = platform == PlatformKind.Windows ? "dotnet.exe" : "dotnet";
-        string? current = null;
-        if (environment("DOTNET_ROOT") is { Length: > 0 } root && HasSdks(root))
-        {
-            current = root;
-        }
-        else if (FindOnPath("dotnet") is { } onPath && System.IO.Path.GetDirectoryName(RealPath(onPath)) is { } folder && HasSdks(folder))
-        {
-            current = folder;
-        }
-
+        var current = CurrentSdkRoot();
         if (current is not null && HasHostRuntime(current))
         {
             return current;
@@ -340,6 +409,12 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         var candidates = InstallerFolders().Where(c => _exists(System.IO.Path.Combine(c, exe)) && HasSdks(c)).OrderByDescending(NewestSdk).ToList();
         return candidates.FirstOrDefault(HasHostRuntime) ?? current ?? candidates.FirstOrDefault();
     }
+
+    /// <summary>The root in use when it has SDKs: <c>DOTNET_ROOT</c>, or the real folder of the <c>dotnet</c> on <c>PATH</c>.</summary>
+    private string? CurrentSdkRoot() =>
+        environment("DOTNET_ROOT") is { Length: > 0 } root && HasSdks(root) ? root
+        : FindOnPath("dotnet") is { } onPath && System.IO.Path.GetDirectoryName(RealPath(onPath)) is { } folder && HasSdks(folder) ? folder
+        : null;
 
     /// <summary>Whether a .NET root has at least one SDK (<c>sdk/&lt;version&gt;</c>).</summary>
     public Func<string, IReadOnlyList<string>> SdkVersions { get; init; } = folder =>

@@ -36,9 +36,12 @@ public sealed partial class ShellHost
 
     private OutputChannel RestoreLog => Workbench.Output.GetOrCreate("codalus.restore", "Restore");
 
+    /// <summary>Tests: the build host to start instead of the one <see cref="BuildHostLocator"/> finds.</summary>
+    internal Func<string?>? BuildHostOverride { get; set; }
+
     private void InitializeSolutions()
     {
-        Solutions = new SolutionService(BuildHostLocator.Resolve);
+        Solutions = new SolutionService(() => BuildHostOverride?.Invoke() ?? BuildHostLocator.Resolve());
         Trust = new TrustStore(Path.Combine(Paths.State, "trusted-folders.json"));
         Recent = new RecentSolutions(Path.Combine(Paths.State, "recent-solutions.json"));
         Explorer = new SolutionExplorerViewModel(this);
@@ -63,6 +66,18 @@ public sealed partial class ShellHost
         Solutions.HostCrashed += (_, e) => CrashReporter.Write("host", $"The build host exited unexpectedly (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}); restart: {e.WillRestart}.");
         Solutions.HostCrashed += (_, e) =>
         {
+            if (e is { DuringStartup: true, IsRestart: false })
+            {
+                return; // its first start failed (M49): opening the solution reports that, and it isn't a crash loop
+            }
+
+            if (e is { DuringStartup: true, WillRestart: false } && e.ExitCode != SolutionService.NoSdkExitCode)
+            {
+                // It crashed, and its restart failed during startup (M49): say why, not "crashed repeatedly".
+                Workbench.Notifications.Error(Localizer.Format("msg.solutions.buildHostCouldntStartAgain", "The build host couldn't start again: {0} Reopen the solution to try again.", e.Error?.Message ?? string.Empty));
+                return;
+            }
+
             if (e.ExitCode == SolutionService.NoSdkExitCode)
             {
                 // Not a crash: the build host found no SDK it can use, and says why. Starting it again won't help.
@@ -180,7 +195,11 @@ public sealed partial class ShellHost
             StatusBar.ClearMessage();
             BuildHostLog.AppendLine($"[open] {path}: {ex.Message}");
             _solutionWaitingForRuntime = path;
-            ReportHostRuntimeMissing(ex);
+            if (!ReportHostRuntimeMissing(ex))
+            {
+                // Not the IDE's own build host (CODALUS_BUILDHOST elsewhere), or nothing says it: the open's own error.
+                ReportError($"Could not open {Path.GetFileName(path)}: {ex.Message}");
+            }
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException or System.ComponentModel.Win32Exception)
         {

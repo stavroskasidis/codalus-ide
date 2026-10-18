@@ -186,6 +186,17 @@ public sealed partial class ShellHost : IEditorServices
                 Workbench.Notifications.Error(Localizer.Format("msg.editor.theLanguageServiceKeepsCrashingAnd", "The {0} language service keeps crashing and was stopped. Reopen the solution to try again.", name));
             }
         });
+        Languages.StartFailed += (_, e) => Ui.Post(() =>
+        {
+            // M49: a host that couldn't start says why once; the IDE's missing runtime is the one runtime notification.
+            if (e.Error is Codalus.Rpc.HostRuntimeMissingException missing && ReportHostRuntimeMissing(missing))
+            {
+                return;
+            }
+
+            var name = Workbench.LanguageServers.Get(e.LanguageId)?.DisplayName ?? e.LanguageId;
+            Workbench.Notifications.Error(Localizer.Format("msg.editor.languageServiceCouldntStart", "The {0} language service couldn't start: {1}", name, e.Error.Message));
+        });
         Languages.HostRestarted += (_, _) => Ui.Post(RefreshEditors);
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnLanguageStatus(e.LanguageId, e.Status));
         Solutions.DesignTimeProgressChanged += (_, _) => Ui.Post(UpdateLanguageStatus);

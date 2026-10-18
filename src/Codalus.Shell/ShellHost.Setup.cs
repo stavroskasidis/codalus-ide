@@ -25,11 +25,22 @@ public sealed partial class ShellHost
         HostFrameworks = IdeRuntime.Requirements(AppContext.BaseDirectory, Environment.GetEnvironmentVariable),
     };
 
-    /// <summary>The runtime notification is showing or was answered (M49): one per session, until an install.</summary>
-    private int _runtimeOffered;
+    /// <summary>Tests: an environment check on a described machine.</summary>
+    internal void UseEnvironmentCheck(EnvironmentCheck check) => _environmentCheck = check;
+
+    private readonly Lock _offerGate = new();
+
+    /// <summary>The runtime notification while it shows (M49): reports meanwhile don't add another.</summary>
+    private Workbench.Notifications.Notification? _runtimeNotification;
+
+    /// <summary>The missing-SDK notification while it shows: its install brings the runtime, so it stands for both.</summary>
+    private Workbench.Notifications.Notification? _sdkNotification;
 
     /// <summary>A solution that couldn't open because the build host's runtime is missing: opened again after the install.</summary>
     private string? _solutionWaitingForRuntime;
+
+    /// <summary>Tests: the solution that opens again once the runtime is installed.</summary>
+    internal string? SolutionWaitingForRuntime => _solutionWaitingForRuntime;
 
     /// <summary>The last check's results.</summary>
     public IReadOnlyList<ToolStatus> Tools { get; private set; } = [];
@@ -44,44 +55,50 @@ public sealed partial class ShellHost
     /// system's minimal one) is found where the installers put it: the IDE's processes, the build host's MSBuildLocator
     /// first, get it as <c>DOTNET_ROOT</c> and on <c>PATH</c>.
     /// </summary>
+    /// <remarks>
+    /// M49: <see cref="EnvironmentCheck.ChooseDotnetRoot"/> decides. The app hosts (which don't look on the PATH) are
+    /// pointed at the chosen root only when that helps them find their runtime, and through the architecture's own
+    /// <c>DOTNET_ROOT_ARM64</c> too when that one is set elsewhere. Run again after an install of .NET.
+    /// </remarks>
     private void UseUserDotnet()
     {
-        // A root that is already in use as it is: DOTNET_ROOT, or a real dotnet with SDKs first on the PATH.
-        var current = Environment.GetEnvironmentVariable("DOTNET_ROOT") is { Length: > 0 } set ? set
-            : EnvironmentCheck.FindOnPath("dotnet") is { } onPath ? Path.GetDirectoryName(onPath) : null;
-        if (EnvironmentCheck.FindSdkRoot() is not { } root)
+        if (EnvironmentCheck.ChooseDotnetRoot() is not { } choice)
         {
             Workbench.Log.AppendLine("[setup] No .NET SDK found (DOTNET_ROOT, PATH, or where the installers put it); Help → Check Environment offers to install one.");
             return;
         }
 
-        // A dotnet on the PATH without SDKs (Homebrew's wrapper script, after the Finder launch took the login PATH)
-        // is passed over: the root with SDKs goes first.
-        if (current is null || !string.Equals(Path.TrimEndingDirectorySeparator(current), Path.TrimEndingDirectorySeparator(root), StringComparison.Ordinal)
-            && EnvironmentCheck.RealPath(Path.Combine(current, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")) is var real
-            && !string.Equals(Path.GetDirectoryName(real), Path.TrimEndingDirectorySeparator(root), StringComparison.Ordinal))
+        ApplyDotnetRoot(choice);
+        if (EnvironmentCheck.HostRuntimeStatus() is { NeedsAttention: true, Detail: { } missing })
         {
-            AddDotnetToEnvironment(root);
-        }
-        else if (EnvironmentCheck.HostsRoot() is not { } hostsRoot || !string.Equals(Path.TrimEndingDirectorySeparator(hostsRoot), Path.TrimEndingDirectorySeparator(root), StringComparison.Ordinal))
-        {
-            // M49: the hosts are app hosts, which don't look on the PATH: without DOTNET_ROOT they'd use the default
-            // location (/usr/share/dotnet), not the root with the SDKs that's on the PATH (~/.dotnet).
-            Environment.SetEnvironmentVariable("DOTNET_ROOT", root);
-            Workbench.Log.AppendLine($"[setup] The helper processes use the .NET in {root} (DOTNET_ROOT).");
-        }
-
-        if (!EnvironmentCheck.HasHostRuntime(root))
-        {
-            Workbench.Log.AppendLine($"[setup] {EnvironmentCheck.HostRuntimeStatus().Detail}");
+            Workbench.Log.AppendLine($"[setup] {missing}");
         }
     }
 
-    private void AddDotnetToEnvironment(string folder)
+    private void AddDotnetToEnvironment(string folder) =>
+        ApplyDotnetRoot(new DotnetRootChoice(folder, AddToPath: true, EnvironmentCheck.PointHostsAt(folder), $"Using the .NET SDK in {folder} (DOTNET_ROOT)."));
+
+    private void ApplyDotnetRoot(DotnetRootChoice choice)
     {
-        Environment.SetEnvironmentVariable("DOTNET_ROOT", folder);
-        Environment.SetEnvironmentVariable("PATH", folder + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"));
-        Workbench.Log.AppendLine($"[setup] Using the .NET SDK in {folder} (DOTNET_ROOT).");
+        foreach (var (name, value) in choice.Variables)
+        {
+            if (name != "DOTNET_ROOT")
+            {
+                Workbench.Log.AppendLine($"[setup] {name} was {Environment.GetEnvironmentVariable(name)}: it's {value} now, or the helper processes would still look there first.");
+            }
+
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        if (choice.AddToPath)
+        {
+            Environment.SetEnvironmentVariable("PATH", choice.Root + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"));
+        }
+
+        if (choice.Log is { } line)
+        {
+            Workbench.Log.AppendLine($"[setup] {line}");
+        }
     }
 
     /// <summary>Checks the environment; <paramref name="offer"/> offers to install what the IDE needs and is missing.</summary>
@@ -120,7 +137,13 @@ public sealed partial class ShellHost
     {
         if (tool.Id == "dotnet-runtime")
         {
-            await OfferHostRuntimeAsync(tool).ConfigureAwait(true);
+            OfferHostRuntime(tool);
+            return;
+        }
+
+        if (tool is { Id: "dotnet", State: ToolState.Missing })
+        {
+            OfferSdk(tool);
             return;
         }
 
@@ -147,23 +170,64 @@ public sealed partial class ShellHost
     /// <summary>
     /// The one notification about the IDE's own .NET runtime (M49), however many hosts and plugins couldn't start: what's
     /// needed and what's there, Install .NET (M37's flow: dotnet-install into <c>~/.dotnet</c>, or winget), then the hosts
-    /// start again.
+    /// start again. While it (or the missing-SDK one, whose install brings the runtime) shows, another report adds
+    /// nothing; once it's answered or closed, a new failure (a solution opened later) shows it again. Any thread.
     /// </summary>
-    private async Task OfferHostRuntimeAsync(ToolStatus tool)
+    /// <returns>Whether a notification about it is showing now.</returns>
+    private bool OfferHostRuntime(ToolStatus tool)
     {
-        if (Interlocked.Exchange(ref _runtimeOffered, 1) != 0)
-        {
-            return;
-        }
-
-        Workbench.Log.AppendLine($"[setup] {tool.Detail}");
         var message = Localizer.Format("msg.setup.runtimeMissing", "Codalus IDE needs the .NET {0} runtime, which isn't installed (found: {1}). Without it, plugins, builds, language services and debugging can't start.", tool.WantedVersion, tool.Found ?? "none");
         var install = Localizer.Format("msg.setup.installRuntime", "Install .NET {0}", tool.WantedChannel);
         var details = Localizer.Get("msg.setup.details", "Check Environment");
-        var choice = await Workbench.Notifications.Error(message, install, details).Result.ConfigureAwait(true);
+        Workbench.Notifications.Notification notification;
+        lock (_offerGate)
+        {
+            if (_runtimeNotification is { Result.IsCompleted: false } || _sdkNotification is { Result.IsCompleted: false })
+            {
+                return true;
+            }
+
+            notification = _runtimeNotification = Workbench.Notifications.Error(message, install, details);
+        }
+
+        Workbench.Log.AppendLine($"[setup] {tool.Detail}");
+        _ = notification.Result.ContinueWith(t => Infrastructure.Ui.Post(() => OnInstallChoice(t.Result, tool, install, details)), TaskScheduler.Default);
+        return true;
+    }
+
+    /// <summary>The missing SDK's notification, once while it shows; it replaces a runtime one (its install brings the runtime).</summary>
+    private bool OfferSdk(ToolStatus tool)
+    {
+        var message = Localizer.Get("msg.setup.sdkMissing", "The .NET SDK isn't installed. Codalus IDE needs it to open, build and debug .NET projects.");
+        var install = Localizer.Get("msg.setup.install", "Install…");
+        var details = Localizer.Get("msg.setup.details", "Check Environment");
+        Workbench.Notifications.Notification notification;
+        Workbench.Notifications.Notification? replaced;
+        lock (_offerGate)
+        {
+            if (_sdkNotification is { Result.IsCompleted: false })
+            {
+                return true;
+            }
+
+            replaced = _runtimeNotification is { Result.IsCompleted: false } runtime ? runtime : null;
+            notification = _sdkNotification = Workbench.Notifications.Warning(message, install, details);
+        }
+
+        if (replaced is not null)
+        {
+            Workbench.Notifications.Dismiss(replaced);
+        }
+
+        _ = notification.Result.ContinueWith(t => Infrastructure.Ui.Post(() => OnInstallChoice(t.Result, tool, install, details)), TaskScheduler.Default);
+        return true;
+    }
+
+    private void OnInstallChoice(string? choice, ToolStatus tool, string install, string details)
+    {
         if (choice == install)
         {
-            await InstallToolAsync(tool).ConfigureAwait(true);
+            _ = InstallToolAsync(tool);
         }
         else if (choice == details)
         {
@@ -172,15 +236,23 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// A host of the IDE wasn't started because its runtime is missing (M49): the runtime notification, once. A program
-    /// of the user's whose runtime is missing (a designer on the app's runtime) isn't the IDE's: its caller reports it.
+    /// A host of the IDE wasn't started because its runtime is missing (M49): the runtime notification, once while it
+    /// shows; with no SDK at all, the SDK's (its install brings the runtime). A program that isn't one of the IDE's hosts
+    /// (a designer on the app's runtime) isn't the IDE's runtime: its caller reports it. Any thread.
     /// </summary>
-    public void ReportHostRuntimeMissing(HostRuntimeMissingException error)
+    /// <returns>Whether a notification about it is showing, so the caller needn't show the failure itself.</returns>
+    public bool ReportHostRuntimeMissing(HostRuntimeMissingException error)
     {
         Workbench.Log.AppendLine($"[setup] {error.Message}");
-        if (!IsUnder(error.Result.RuntimeConfigPath, AppContext.BaseDirectory) || error.Result.Missing.FirstOrDefault() is not { } missing)
+        if (!IsIdeHost(error.Result) || error.Result.Missing.FirstOrDefault() is not { } missing)
         {
-            return;
+            return false;
+        }
+
+        if (EnvironmentCheck.FindSdkRoot() is null)
+        {
+            return OfferSdk(Tools.FirstOrDefault(t => t is { Id: "dotnet", State: ToolState.Missing })
+                ?? new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening, building, running and debugging .NET projects; Codalus IDE's own helper processes"));
         }
 
         var status = EnvironmentCheck.HostRuntimeStatus();
@@ -197,8 +269,13 @@ public sealed partial class ShellHost
             };
         }
 
-        _ = OfferHostRuntimeAsync(status);
+        return OfferHostRuntime(status);
     }
+
+    /// <summary>One of the IDE's own hosts (<see cref="IdeRuntime.HostFolders"/>): by its name, wherever it runs from (a development build's or the tests' hosts too), or next to the shell.</summary>
+    private static bool IsIdeHost(HostRuntimeCheckResult result) =>
+        IdeRuntime.HostFolders.Any(folder => string.Equals(Path.GetFileNameWithoutExtension(result.Program), "codalus-" + folder, StringComparison.OrdinalIgnoreCase))
+        || IsUnder(result.RuntimeConfigPath, AppContext.BaseDirectory) && !Path.GetFileNameWithoutExtension(result.Program).Contains("designer", StringComparison.OrdinalIgnoreCase) && !Path.GetFileNameWithoutExtension(result.Program).Contains("previewer", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsUnder(string path, string folder) =>
         Path.GetFullPath(path).StartsWith(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
@@ -211,6 +288,14 @@ public sealed partial class ShellHost
     public async Task RestartHostsAsync()
     {
         Workbench.Log.AppendLine("[setup] Starting the helper processes again.");
+        lock (_offerGate)
+        {
+            if (_runtimeNotification is { Result.IsCompleted: false } stale)
+            {
+                Workbench.Notifications.Dismiss(stale); // the runtime is there now
+            }
+        }
+
         await Plugins.RetryFailedHostsAsync(CancellationToken.None).ConfigureAwait(true);
         await Languages.RetryFailedAsync().ConfigureAwait(true);
         if (Interlocked.Exchange(ref _solutionWaitingForRuntime, null) is { } solution && !Solutions.IsOpen)
@@ -349,17 +434,31 @@ public sealed partial class ShellHost
             AddDotnetToEnvironment(folder);
         }
 
+        if (tool.Id is "dotnet" or "dotnet-runtime")
+        {
+            // M49: the root may have changed (winget installs into Program Files, not where DOTNET_ROOT points; an
+            // architecture's DOTNET_ROOT_ARM64 wins over DOTNET_ROOT): choose again, so the hosts follow the new .NET.
+            UseUserDotnet();
+        }
+
         var after = await CheckEnvironmentAsync(offer: false).ConfigureAwait(true);
+        var ownRuntime = after.FirstOrDefault(t => t.Id == "dotnet-runtime");
+        var hostsStartedAgain = false;
+        if (tool.Id is "dotnet" or "dotnet-runtime" && ownRuntime is { NeedsAttention: false })
+        {
+            // The IDE's own hosts that failed for it start again here and now (M49), whichever notification the install
+            // came from (the runtime's, an update's, the SDK's); a restart isn't needed for them.
+            await RestartHostsAsync().ConfigureAwait(true);
+            hostsStartedAgain = true;
+        }
+
         if (then is not null)
         {
             await then().ConfigureAwait(true);
         }
-        else if (tool.Id == "dotnet-runtime" && after.FirstOrDefault(t => t.Id == tool.Id) is { NeedsAttention: false } runtime)
+        else if (tool.Id == "dotnet-runtime" && hostsStartedAgain)
         {
-            // The hosts start again here and now (M49); a restart isn't needed.
-            Interlocked.Exchange(ref _runtimeOffered, 0);
-            await RestartHostsAsync().ConfigureAwait(true);
-            Workbench.Notifications.Info(Localizer.Format("msg.setup.runtimeInstalled", "The .NET {0} runtime is installed, and Codalus IDE's helper processes started again.", runtime.Version));
+            Workbench.Notifications.Info(Localizer.Format("msg.setup.runtimeInstalled", "The .NET {0} runtime is installed, and Codalus IDE's helper processes started again.", ownRuntime!.Version));
         }
         else if (after.FirstOrDefault(t => t.Id == tool.Id) is { NeedsAttention: false } installed)
         {

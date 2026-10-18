@@ -61,8 +61,17 @@ public sealed class LanguageService : IAsyncDisposable
     /// </summary>
     public Func<Rpc.ProcessLaunchInfo, Rpc.ProcessLaunchInfo?>? Placement { get; set; }
 
-    /// <summary>A language host crashed: (language, whether it restarts).</summary>
+    /// <summary>
+    /// A running language host crashed: (language, whether it restarts). Since M49 a host that exits during its first
+    /// start isn't a crash (<see cref="StartFailed"/>), and one that exits during a restart is reported there too.
+    /// </summary>
     public event EventHandler<(string LanguageId, bool WillRestart)>? HostCrashed;
+
+    /// <summary>
+    /// A language host couldn't start (M49): its .NET runtime is missing (<see cref="HostRuntimeMissingException"/>),
+    /// or it exited during startup (<see cref="HostExitedException"/>, with what it wrote). It isn't started again.
+    /// </summary>
+    public event EventHandler<(string LanguageId, Exception Error)>? StartFailed;
 
     public event EventHandler<string>? HostRestarted;
 
@@ -293,7 +302,17 @@ public sealed class LanguageService : IAsyncDisposable
                 Diagnostics.Clear(languageId);
             }
 
-            HostCrashed?.Invoke(this, (languageId, e.WillRestart));
+            switch (e)
+            {
+                case { DuringStartup: true, IsRestart: false }:
+                    break; // the first start failed: StartAsync below reports it, once
+                case { DuringStartup: true, WillRestart: false }:
+                    StartFailed?.Invoke(this, (languageId, e.Error ?? new JsonRpcConnectionLostException($"The {descriptor.DisplayName} language service exited during startup.", null)));
+                    break;
+                default:
+                    HostCrashed?.Invoke(this, (languageId, e.WillRestart));
+                    break;
+            }
         };
         client.Restarted += (_, _) => HostRestarted?.Invoke(this, languageId);
 
@@ -328,6 +347,11 @@ public sealed class LanguageService : IAsyncDisposable
         {
             Log?.Invoke(this, $"[{languageId}] The language service could not start: {ex.Message}");
             await client.DisposeAsync().ConfigureAwait(false);
+            if (ex is HostRuntimeMissingException or HostExitedException { DuringStartup: true })
+            {
+                StartFailed?.Invoke(this, (languageId, ex));
+            }
+
             return null;
         }
     }

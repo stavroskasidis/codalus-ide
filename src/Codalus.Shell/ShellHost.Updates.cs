@@ -19,7 +19,8 @@ public sealed partial class ShellHost
     public const string UpdateStatusItem = "update.status";
     private const string WhatsNewFile = "whats-new.md";
     private readonly HttpClient _updateHttp = new() { Timeout = TimeSpan.FromMinutes(10) };
-    private string? _notifiedVersion;
+    /// <summary>The release and the state last announced (M49: a release that needed a runtime and is now available is announced again).</summary>
+    private (string Version, UpdateStatus Status)? _notified;
     private bool _restartForUpdate;
 
     public UpdateService SelfUpdate { get; private set; } = null!;
@@ -78,6 +79,8 @@ public sealed partial class ShellHost
     /// <summary>Help → Check for Updates.</summary>
     public async Task CheckForUpdatesAsync()
     {
+        // What was announced before this check: the state change during it announces anything new itself.
+        var notifiedBefore = _notified;
         var state = await SelfUpdate.CheckAsync(userInitiated: true, CancellationToken.None).ConfigureAwait(true);
         switch (state.Status)
         {
@@ -90,8 +93,8 @@ public sealed partial class ShellHost
             case UpdateStatus.Failed:
                 Workbench.Notifications.Warning(Localizer.Format("msg.updates.couldntCheckForUpdates", "Couldn't check for updates: {0}", state.Error));
                 break;
-            case UpdateStatus.NeedsRuntime when state is { Offer: { } offer, Runtime: { } runtime } && _notifiedVersion == offer.Version:
-                _ = OfferUpdateNeedingRuntimeAsync(offer, runtime); // asked for: said again (M49)
+            case UpdateStatus.NeedsRuntime when state is { Offer: { } offer, Runtime: { } runtime } && notifiedBefore == (offer.Version, UpdateStatus.NeedsRuntime):
+                _ = OfferUpdateNeedingRuntimeAsync(offer, runtime); // asked for, and said by an earlier check: said again (M49)
                 break;
         }
     }
@@ -157,12 +160,12 @@ public sealed partial class ShellHost
                     Visible = !busy, // not offered while debugging or building
                 });
                 break;
-            case { Status: UpdateStatus.Available, Offer: { } offer } when _notifiedVersion != offer.Version:
-                _notifiedVersion = offer.Version;
+            case { Status: UpdateStatus.Available, Offer: { } offer } when _notified != (offer.Version, UpdateStatus.Available):
+                _notified = (offer.Version, UpdateStatus.Available);
                 _ = OfferUpdateAsync(offer);
                 break;
-            case { Status: UpdateStatus.NeedsRuntime, Offer: { } offer, Runtime: { } runtime } when _notifiedVersion != offer.Version:
-                _notifiedVersion = offer.Version;
+            case { Status: UpdateStatus.NeedsRuntime, Offer: { } offer, Runtime: { } runtime } when _notified != (offer.Version, UpdateStatus.NeedsRuntime):
+                _notified = (offer.Version, UpdateStatus.NeedsRuntime);
                 Workbench.Log.AppendLine($"[update] {offer.Version} isn't downloaded: {runtime.Detail}");
                 _ = OfferUpdateNeedingRuntimeAsync(offer, runtime);
                 break;
@@ -214,11 +217,7 @@ public sealed partial class ShellHost
         var choice = await Workbench.Notifications.Warning(message, actions).Result.ConfigureAwait(true);
         if (choice == install)
         {
-            await InstallToolAsync(runtime, then: async () =>
-            {
-                _notifiedVersion = null;
-                await SelfUpdate.CheckAsync(userInitiated: true, CancellationToken.None).ConfigureAwait(true);
-            }).ConfigureAwait(true);
+            await InstallToolAsync(runtime, then: () => RecheckAfterRuntimeInstallAsync(offer)).ConfigureAwait(true);
         }
         else if (choice == anyway)
         {
@@ -232,6 +231,19 @@ public sealed partial class ShellHost
         {
             ShellIntegration.OpenUrl(page);
         }
+    }
+
+    /// <summary>
+    /// After the runtime an offer needed was installed (M49): the check that found it, again. An older release the user
+    /// already agreed to switch to (a channel switch to stable) is fetched with the downgrade allowed, as the switch did;
+    /// a plain check would never offer it.
+    /// </summary>
+    internal async Task<UpdateState> RecheckAfterRuntimeInstallAsync(UpdateOffer offer)
+    {
+        _notified = null;
+        return offer.IsDowngrade
+            ? await SelfUpdate.SwitchChannelAsync(offer.Channel, _ => Task.FromResult(true), CancellationToken.None).ConfigureAwait(true)
+            : await SelfUpdate.CheckAsync(userInitiated: true, CancellationToken.None).ConfigureAwait(true);
     }
 
     /// <summary>update.channel changed: the newest release of the new channel, after a confirmation if it is older.</summary>
