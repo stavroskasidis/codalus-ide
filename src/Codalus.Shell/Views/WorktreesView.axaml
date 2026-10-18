@@ -32,9 +32,9 @@
             <StackPanel Grid.Column="1" Spacing="1">
               <!-- The name, its branch, and the states as chips (current, main, locked, missing; M34h). -->
               <WrapPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
                 <controls:Icon Kind="branch" Width="12" Height="12" VerticalAlignment="Center" Margin="0,0,4,0" />
-                <TextBlock Text="{Binding Branch}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock Text="{Binding Branch}" VerticalAlignment="Center" Margin="0,0,6,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Branch}" />
                 <Border Classes="chip" IsVisible="{Binding IsCurrent}" Margin="0,0,4,0"><TextBlock Text="{l:T worktrees.current}" /></Border>
                 <Border Classes="chip" IsVisible="{Binding IsMain}" Margin="0,0,4,0"><TextBlock Text="{l:T worktrees.main}" /></Border>
                 <Border Classes="chip" IsVisible="{Binding IsLocked}" ToolTip.Tip="{Binding LockReason}" Margin="0,0,4,0">

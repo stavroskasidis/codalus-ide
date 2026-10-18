@@ -68,8 +68,8 @@
                   <Ellipse Width="8" Height="8" Margin="2,0,8,0" VerticalAlignment="Center" StrokeThickness="1.5"
                            Classes.running="{Binding IsRunning}" ToolTip.Tip="{Binding StateText}" />
                   <StackPanel Grid.Column="1">
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding Detail}" Classes="muted" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                    <TextBlock Text="{Binding Detail}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
                   </StackPanel>
                 </Grid>
               </DataTemplate>

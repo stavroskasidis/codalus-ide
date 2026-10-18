@@ -104,8 +104,10 @@ public class ControlSetViewsTests
     }
 
     [AvaloniaFact]
-    public void Counters_process_id_box_and_process_list_are_one_editable_combo_box()
+    public async Task Counters_process_id_box_and_process_list_are_one_editable_combo_box()
     {
+        // The shell loads the English catalogue the view's names come from (run first in a process, nothing else had).
+        await using var f = ShellFixture.Create();
         var diagnostics = new DiagnosticsService(() => null);
         var vm = new CountersViewModel(diagnostics, (_, _, _, _) => Task.FromResult<string?>(null));
         vm.Processes.Add(new ProcessRowViewModel(new DotnetProcess(48213, "WebApi", "dotnet WebApi.dll")));
@@ -212,6 +214,31 @@ public class ControlSetViewsTests
         Assert.False(chip.IsVisible);
         Assert.True(makeActive.IsEffectivelyEnabled);
         Assert.Equal(vm.BuildType, configuration.SelectedItem);
+    }
+
+    [AvaloniaFact]
+    public async Task Options_header_trims_a_long_settings_path_inside_the_page()
+    {
+        // Windows' settings path (C:\Users\…\AppData\Roaming\Codalus\settings.json) is longer than Linux's, and a stack
+        // panel around it measured it unconstrained: CI on Windows found its ellipsis cut off. A long user-data folder
+        // stands for it on every OS.
+        var userData = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-shell-" + new string('n', 100) + "-" + Guid.NewGuid().ToString("N"));
+        await using var f = ShellFixture.Create(userData);
+        f.Shell.OpenSettings();
+        var document = f.Shell.Layout.ActiveDocument;
+        ShellFixture.Pump();
+        var window = Show(new ContentControl { Content = document }, 640, 480);
+        try
+        {
+            var view = window.GetVisualDescendants().OfType<SettingsView>().Single();
+            Assert.True(((SettingsViewModel)view.DataContext!).FileLabel.Length > 150);
+            var problems = PolishTests.Clipped(window).ToList();
+            Assert.True(problems.Count == 0, "Text cut off in Options at 640 px:\n" + string.Join('\n', problems));
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]

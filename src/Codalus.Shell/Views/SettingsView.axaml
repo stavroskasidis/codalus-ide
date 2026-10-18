@@ -171,10 +171,11 @@
                   Content="{l:T settings.editInSettingsJson}"
                   Command="{Binding OpenJsonCommand}" />
         </Grid>
-        <StackPanel Orientation="Horizontal" Spacing="6">
-          <controls:Icon Kind="file" Width="12" Height="12" VerticalAlignment="Center" />
+        <!-- A dock, not a horizontal stack: the path gets exactly the width left after the icon and trims there. -->
+        <DockPanel>
+          <controls:Icon DockPanel.Dock="Left" Kind="file" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center" />
           <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding FileLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FileLabel}" VerticalAlignment="Center" />
-        </StackPanel>
+        </DockPanel>
         <TextBlock Classes="warning" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
       </StackPanel>
     </Border>
@@ -206,15 +207,15 @@
       <ScrollViewer Grid.Column="1" BorderThickness="1,0,0,0">
         <StackPanel Margin="24,14,16,16">
           <!-- The page's header (M34h): the category's icon on a tile, its name, its count and how many are changed. -->
-          <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
-            <Border Classes="pageTile">
+          <DockPanel Margin="0,0,0,10">
+            <Border DockPanel.Dock="Left" Classes="pageTile" Margin="0,0,10,0">
               <controls:Icon Kind="{Binding PageIcon}" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
             <StackPanel VerticalAlignment="Center">
-              <TextBlock Classes="heading" Text="{Binding PageTitle}" />
-              <TextBlock Classes="muted small" Text="{Binding PageSummary}" />
+              <TextBlock Classes="heading" Text="{Binding PageTitle}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PageTitle}" />
+              <TextBlock Classes="muted small" Text="{Binding PageSummary}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PageSummary}" />
             </StackPanel>
-          </StackPanel>
+          </DockPanel>
           <TextBlock Classes="muted" Text="{l:T settings.noSettingsFound}" IsVisible="{Binding IsEmpty}" Margin="0,8" />
           <ItemsControl x:Name="Items" ItemsSource="{Binding Items}">
             <ItemsControl.ItemTemplate>

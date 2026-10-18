@@ -70,10 +70,11 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ProjectConfigurationRowViewModel">
               <Grid ColumnDefinitions="*,180,150,60">
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                  <controls:Icon Kind="project" VerticalAlignment="Center" />
+                <!-- A dock, not a horizontal stack, so a long name trims in its column. -->
+                <DockPanel VerticalAlignment="Center" Margin="0,0,8,0">
+                  <controls:Icon DockPanel.Dock="Left" Kind="project" Margin="0,0,6,0" VerticalAlignment="Center" />
                   <TextBlock VerticalAlignment="Center" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
-                </StackPanel>
+                </DockPanel>
                 <ComboBox Grid.Column="1" Margin="0,0,8,0" HorizontalAlignment="Stretch" MinHeight="{DynamicResource Shell.Size.Input}" Height="{DynamicResource Shell.Size.Input}" Padding="6,0"
                           ItemsSource="{Binding Configurations}" SelectedItem="{Binding Configuration}" AutomationProperties.Name="{Binding Name, StringFormat='{}{0} configuration'}" />
                 <ComboBox Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Stretch" MinHeight="{DynamicResource Shell.Size.Input}" Height="{DynamicResource Shell.Size.Input}" Padding="6,0"
