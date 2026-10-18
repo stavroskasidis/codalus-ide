@@ -197,8 +197,10 @@ public sealed partial class ShellHost
             {
                 Input = options.NameLabel is null ? null : options.Name ?? string.Empty,
                 Validate = options.NameLabel is null ? null : name => IsIdentifier(name) ? null : "Not a valid C# identifier.",
-                Choices = [.. options.Items.Select(i => new DialogChoice(i.Id, i.Label, i.Checked, i.Detail))],
+                Choices = [.. options.Items.Select(i => new DialogChoice(i.Id, i.Label, i.Checked, i.Detail) { Icon = MemberIcon(i.Detail) })],
                 Reorderable = options.Reorderable,
+                Icon = "tools",
+                Context = ActiveEditor?.Model is { } active ? System.IO.Path.GetFileName(active.Path) : null,
             }).ConfigureAwait(true);
             if (answer.Button != "OK")
             {
@@ -217,6 +219,16 @@ public sealed partial class ShellHost
 
         await PreviewAndApplyAsync(picked.Title, edit).ConfigureAwait(true);
     }
+
+    /// <summary>A checklist row's icon from the member kind the language server names (M34h's checklist dialog).</summary>
+    private static string? MemberIcon(string? detail) => detail?.ToLowerInvariant() switch
+    {
+        { } d when d.Contains("property", StringComparison.Ordinal) => "tools",
+        { } d when d.Contains("method", StringComparison.Ordinal) => "method",
+        { } d when d.Contains("field", StringComparison.Ordinal) => "column",
+        { } d when d.Contains("parameter", StringComparison.Ordinal) => "braces",
+        _ => null,
+    };
 
     // ------------------------------------------------------------------ formatting
 

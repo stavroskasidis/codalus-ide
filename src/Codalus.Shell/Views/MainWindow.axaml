@@ -127,7 +127,8 @@
         <views:FindReplaceView x:Name="FindReplace" DataContext="{Binding FindReplace}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,36,28,0" />
       </Panel>
 
-      <Panel x:Name="DialogLayer" Background="#60000000" IsVisible="{Binding Dialogs.IsOpen}" ZIndex="2">
+      <!-- The window behind an in-window dialog is dimmed by Shell.Dialog.Scrim (M34h). -->
+      <Panel x:Name="DialogLayer" Background="{DynamicResource Shell.Dialog.Scrim}" IsVisible="{Binding Dialogs.IsOpen}" ZIndex="2">
         <views:DialogView DataContext="{Binding Dialogs}" HorizontalAlignment="Center" VerticalAlignment="Center" />
       </Panel>
 

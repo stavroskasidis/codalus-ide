@@ -2,6 +2,7 @@
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.DialogView"
              x:DataType="vm:DialogViewModel">
   <UserControl.Styles>
@@ -15,6 +16,7 @@
     <Style Selector="TextBlock.header">
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
+    <!-- A preview's lines (M34h's gallery fixes): each added or removed line marked in the diff's color at its left edge as well as in its text. -->
     <Style Selector="Border.line">
       <Setter Property="BorderThickness" Value="3,0,0,0" />
       <Setter Property="BorderBrush" Value="Transparent" />
@@ -29,44 +31,135 @@
     <Style Selector="Border.line.header">
       <Setter Property="Margin" Value="0,6,0,2" />
     </Style>
+    <!-- The header's icon tile (M34h): a tint of the icon's color; outlined in High contrast (Shell.Chip.BorderThickness). -->
+    <Style Selector="Border.iconTile">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Foreground}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Info}" />
+    </Style>
+    <Style Selector="Border.iconTile.warning">
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Warning}" />
+    </Style>
+    <Style Selector="Border.iconTile.success">
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Success}" />
+    </Style>
+    <Style Selector="Border.iconTile.error">
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Error}" />
+    </Style>
+    <!-- The checklist: a bordered box with a header row (Select all, the count) and rows of 30 px. -->
+    <Style Selector="ListBox.checklist ListBoxItem">
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="TextBlock.message.label">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
   </UserControl.Styles>
-  <!--
-    M34h: a preview of changes takes most of the window (DialogView.PreviewSize: three quarters of it, at least 640 × 400
-    where the window has room), the changes filling what the title, the message and the buttons leave; other forms size
-    to their content, up to 560 px wide (960 with notes).
-  -->
-  <Border x:Name="Frame" Classes="overlay" Padding="20,16" MinWidth="420" KeyboardNavigation.TabNavigation="Cycle"
+  <Border x:Name="Frame" Classes="overlay" CornerRadius="8" Padding="0" ClipToBounds="True"
+          KeyboardNavigation.TabNavigation="Cycle"
           AutomationProperties.Name="{Binding Title}">
     <DockPanel>
-      <StackPanel DockPanel.Dock="Top" Spacing="10">
-        <TextBlock Classes="heading" Text="{Binding Title}" TextWrapping="Wrap" />
-        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-        <TextBox x:Name="Input"
+      <!-- Header: the icon tile in the command's color, the title (14 px), what it acts on, and a close button (Esc). -->
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="20,16,12,4">
+        <Border Classes="iconTile" Classes.warning="{Binding IsWarningTone}" Classes.success="{Binding IsSuccessTone}" Classes.error="{Binding IsErrorTone}"
+                IsVisible="{Binding HasIcon}" Margin="0,0,10,0" VerticalAlignment="Top">
+          <controls:Icon Kind="{Binding Icon}" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="0">
+          <TextBlock Classes="subheading" Text="{Binding Title}" TextWrapping="Wrap" />
+          <TextBlock Classes="muted small" Text="{Binding Context}" IsVisible="{Binding HasContext}" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{Binding Context}" />
+        </StackPanel>
+        <Button x:Name="CloseButton" Grid.Column="2" Classes="subtle icon compact" VerticalAlignment="Top" Margin="8,0,0,0" IsTabStop="False"
+                Command="{Binding CancelCommand}" ToolTip.Tip="{l:T dialog.closeTip}" AutomationProperties.Name="{l:T dialog.close}">
+          <controls:Icon Kind="close" Width="16" Height="16" Foreground="{DynamicResource Shell.Foreground}" />
+        </Button>
+      </Grid>
+
+      <!-- Footer: Shell.Dialog.Footer with a separator, a keyboard hint on the left, the buttons on the right in the OS's order. -->
+      <Border DockPanel.Dock="Bottom" Classes="dialogFooter">
+        <DockPanel>
+          <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding Buttons}" Margin="12,0,0,0">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="8" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DialogButtonViewModel">
+                <Button Classes="dialog" Content="{Binding Label}" Command="{Binding Command}" Classes.accent="{Binding IsDefault}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <WrapPanel VerticalAlignment="Center" IsVisible="{Binding HasChoices}" TextElement.FontSize="{DynamicResource Shell.FontSize.Small}">
+            <Border Classes="kbd" Margin="0,0,4,0"><TextBlock Text="{l:T dialog.keySpace}" /></Border>
+            <TextBlock Classes="muted small" Text="{l:T dialog.hintChecks}" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <Border Classes="kbd" Margin="0,0,4,0" IsVisible="{Binding ShowsMoveHint}"><TextBlock Text="{l:T dialog.keyAltUp}" /></Border>
+            <Border Classes="kbd" Margin="0,0,4,0" IsVisible="{Binding ShowsMoveHint}"><TextBlock Text="{l:T dialog.keyAltDown}" /></Border>
+            <TextBlock Classes="muted small" Text="{l:T dialog.hintMove}" VerticalAlignment="Center" IsVisible="{Binding ShowsMoveHint}" />
+          </WrapPanel>
+        </DockPanel>
+      </Border>
+
+      <!-- Body: 20 px at the sides. A preview of changes takes the height that is left and scrolls. -->
+      <DockPanel Margin="20,12,20,18" ClipToBounds="True">
+        <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" Classes="message" Classes.label="{Binding HasChoices}" Text="{Binding Message}" TextWrapping="Wrap"
+                   IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBox x:Name="Input" DockPanel.Dock="Top" Margin="0,0,0,8"
                  Text="{Binding InputText}"
                  IsVisible="{Binding HasInput}"
                  PasswordChar="{Binding PasswordChar}"
+                 Classes.invalid="{Binding HasError}"
                  AutomationProperties.Name="{Binding Title}" />
-        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasChoices}">
-          <Border BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="320">
-            <ListBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" Background="Transparent" AutomationProperties.Name="{l:T dialog.choices}">
-              <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:DialogChoiceViewModel">
-                  <StackPanel Orientation="Horizontal" Spacing="6">
-                    <CheckBox IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Label}" />
-                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" />
-                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
-                  </StackPanel>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
+        <!-- The error says what to do, under the box, with the error icon. -->
+        <DockPanel IsVisible="{Binding HasError}" DockPanel.Dock="Top" Margin="0,-4,0,8">
+          <controls:Icon Kind="error" Classes="error" Width="12" Height="12" Margin="0,2,4,0" VerticalAlignment="Top" DockPanel.Dock="Left" />
+          <TextBlock Classes="error small" Text="{Binding Error}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+        </DockPanel>
+        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasChoices}" DockPanel.Dock="Top">
+          <Border BorderBrush="{DynamicResource Shell.Input.Border}" BorderThickness="1" CornerRadius="{DynamicResource Shell.Control.CornerRadius}"
+                  Background="{DynamicResource Shell.Input}" ClipToBounds="True">
+            <DockPanel>
+              <Border DockPanel.Dock="Top" Background="{DynamicResource Shell.Grid.Header}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,0,0,1"
+                      MinHeight="30" Padding="10,0">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Classes="muted small" Text="{Binding CheckedSummary}" VerticalAlignment="Center" />
+                  <CheckBox IsThreeState="False" IsChecked="{Binding AllChecked}" Content="{l:T dialog.selectAll}" />
+                </DockPanel>
+              </Border>
+              <ListBox x:Name="Checklist" Classes="checklist" ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" Background="Transparent"
+                       MaxHeight="300" AutomationProperties.Name="{l:T dialog.choices}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DialogChoiceViewModel">
+                    <DockPanel>
+                      <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Label}" Margin="0,0,8,0" />
+                      <controls:Icon DockPanel.Dock="Left" Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center" />
+                      <TextBlock DockPanel.Dock="Right" Classes="muted small" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                      <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
+                    </DockPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </DockPanel>
           </Border>
-          <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0" IsVisible="{Binding Reorderable}">
-            <Button Content="{l:T dialog.up}" Command="{Binding MoveUpCommand}" MinWidth="64" AutomationProperties.Name="{l:T dialog.moveUp}" />
-            <Button Content="{l:T dialog.down}" Command="{Binding MoveDownCommand}" MinWidth="64" AutomationProperties.Name="{l:T dialog.moveDown}" />
+          <!-- Reordering: icon buttons beside the list. -->
+          <StackPanel Grid.Column="1" Spacing="4" Margin="8,0,0,0" IsVisible="{Binding Reorderable}">
+            <Button Classes="icon compact" controls:ButtonIcon.Kind="arrow-up" Command="{Binding MoveUpCommand}"
+                    ToolTip.Tip="{l:T dialog.moveUpTip}" AutomationProperties.Name="{l:T dialog.moveUp}" />
+            <Button Classes="icon compact" controls:ButtonIcon.Kind="arrow-down" Command="{Binding MoveDownCommand}"
+                    ToolTip.Tip="{l:T dialog.moveDownTip}" AutomationProperties.Name="{l:T dialog.moveDown}" />
           </StackPanel>
         </Grid>
         <!-- Notes about the changes (Convert to SDK-Style's, M43a) wrap above them (M34g on M43: they ran off sideways in the monospace box). -->
-        <ScrollViewer IsVisible="{Binding HasNotes}" MaxHeight="160" HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T dialog.notesAboutTheChanges}">
+        <ScrollViewer IsVisible="{Binding HasNotes}" DockPanel.Dock="Top" Margin="0,0,0,8" MaxHeight="160" HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T dialog.notesAboutTheChanges}">
           <ItemsControl ItemsSource="{Binding Notes}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:DetailLine">
@@ -75,40 +168,23 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </ScrollViewer>
-      </StackPanel>
-      <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,10,0,0">
-        <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
-                   AutomationProperties.LiveSetting="Assertive" />
-        <ItemsControl ItemsSource="{Binding Buttons}" HorizontalAlignment="Right" Margin="0,6,0,0">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <StackPanel Orientation="Horizontal" Spacing="8" />
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:DialogButtonViewModel">
-              <Button Content="{Binding Label}" Command="{Binding Command}" MinWidth="84" HorizontalContentAlignment="Center"
-                      Classes.accent="{Binding IsDefault}" />
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </StackPanel>
-      <!-- The changes: each added or removed line marked in the diff's color at its left edge as well as in its text. -->
-      <Border x:Name="ChangesBox" Margin="0,10,0,0" IsVisible="{Binding HasChanges}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1"
-              Background="{DynamicResource Shell.Editor.Background}">
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="{l:T dialog.preview}">
-          <ItemsControl ItemsSource="{Binding Changes}" Margin="0,4">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:DetailLine">
-                <Border Classes="line" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}">
-                  <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
-                             Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" />
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
-      </Border>
+        <!-- The changes, on the editor's background: they fill what the header, the message and the footer leave of the frame. -->
+        <Border x:Name="ChangesBox" IsVisible="{Binding HasChanges}" BorderBrush="{DynamicResource Shell.Input.Border}" BorderThickness="1" CornerRadius="{DynamicResource Shell.Control.CornerRadius}"
+                Background="{DynamicResource Shell.Editor.Background}" MaxHeight="420">
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="{l:T dialog.preview}">
+            <ItemsControl ItemsSource="{Binding Changes}" Margin="0,4" TextElement.Foreground="{DynamicResource Shell.Editor.Foreground}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DetailLine">
+                  <Border Classes="line" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}">
+                    <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+                               Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" />
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Border>
+      </DockPanel>
     </DockPanel>
   </Border>
 </UserControl>

@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tool window toolbars: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:24px 28px 32px;display:flex;flex-direction:column;gap:16px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);padding:14px 18px 16px;display:flex;flex-direction:column;gap:10px}
+.card h2{font-size:14px;line-height:20px;margin:0;font-weight:600;color:var(--strong);display:flex;align-items:center;gap:8px}
+.card h2 .src{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--muted);margin-left:auto}
+.quote{color:var(--muted);font-style:italic}
+.tag{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.tag .chip{text-transform:none;letter-spacing:0}
+/* "Now": the current look, Fluent's default buttons. */
+.now{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px;border:1px dashed var(--border);background:var(--panel)}
+.fl{height:24px;padding:0 8px;border-radius:3px;border:0;background:rgba(0,0,0,.18);color:var(--fg);font:inherit;display:inline-flex;align-items:center}
+.kind-dark .fl{background:rgba(255,255,255,.16)}
+.kind-hc .fl{background:#000;border:1px solid #FFF}
+.fl.flat{background:transparent}
+.flf{height:24px;min-width:140px;padding:0 8px;border:1px solid var(--input-border);border-radius:3px;display:inline-flex;align-items:center;color:var(--muted);background:var(--input)}
+.legend{font-size:11px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 10px;align-items:center}
+.legend b{color:var(--fg);font-weight:600}
+.legend .l{display:inline-flex;align-items:center;gap:4px}
+.legend svg.i{width:14px;height:14px}
+.tw{border-radius:2px}
+.panes{display:flex;min-height:0}
+.pane{flex:1;min-width:0;display:flex;flex-direction:column}
+.pane+.pane{border-left:1px solid var(--soft-border)}
+.state{width:8px;height:8px;border-radius:50%;flex:none}
+.state.up{background:var(--ok)}
+.state.off{border:1.5px solid var(--muted)}
+.two{display:flex;flex-direction:column;min-width:0;line-height:15px}
+.two .b{font-weight:600}
+.logs{font-family:var(--mono);font-size:11.5px;line-height:17px;padding:6px 10px;background:var(--editor);color:var(--editor-fg);flex:1}
+.cellr{text-align:right;font-variant-numeric:tabular-nums}
+.gridrow{display:grid;align-items:center;column-gap:10px;height:24px;padding:0 10px}
+.gridrow.h{color:var(--muted);font-weight:600;background:var(--header);border-bottom:1px solid var(--soft-border);height:24px}
+.form{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:center;gap:8px 12px;max-width:820px}
+.form .lab{color:var(--muted)}
+.row2{display:flex;gap:6px;align-items:center}
+.attach{display:inline-flex}
+.attach .field{border-top-right-radius:0;border-bottom-right-radius:0}
+.attach .btn{border-radius:0;margin-left:-1px}
+.attach .btn:last-child{border-top-right-radius:var(--radius);border-bottom-right-radius:var(--radius)}
+.ref{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:var(--radius)}
+.ref.sel{background:var(--sel);color:var(--sel-fg)}
+.ref.sel .muted{color:inherit}
+.empty-mini{display:flex;align-items:center;gap:12px;padding:12px 14px;color:var(--muted)}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}; min-height: 100vh">
+<main class="sheet">
+<header>
+  <h1>Tool window toolbars, now and proposed</h1>
+  <div class="muted">The windows the M34 gallery found with default buttons: each toolbar becomes the control set's 24 px icon buttons, with a label only for the window's main command. Names show as tooltips with their shortcuts, and every button keeps its accessible name. {{t.name}}.</div>
+  <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
+</header>
+
+<!-- Containers -->
+<section class="card">
+  <h2><svg class="i c-blue" aria-hidden="true"><use href="#i-container"></use></svg>Containers<span class="src">ContainersView.axaml</span></h2>
+  <div class="quote">"Generic/default buttons and dropdowns with no icons" (data and empty)</div>
+  <div><div class="tag">Now</div>
+    <div class="now" data-nocheck><button class="fl">Refresh</button><button class="fl">Start</button><button class="fl">Stop</button><button class="fl">Restart</button><button class="fl">Remove</button><button class="fl">Open in Browser</button><button class="fl">Open Terminal</button><button class="fl">Attach Debugger</button><button class="fl">Open in Remote Window</button></div>
+  </div>
+  <div><div class="tag">Proposed</div>
+    <div class="tw">
+      <div class="tw-cap active"><span class="title">Containers</span></div>
+      <div class="toolbar" role="toolbar" aria-label="Containers">
+        <button class="tb" aria-label="Refresh the containers and images" title="Refresh (F5)"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+        <span class="tb-sep"></span>
+        <button class="tb" aria-label="Start the selected container" title="Start"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg></button>
+        <button class="tb" aria-label="Stop the selected container" title="Stop"><svg class="i c-red" aria-hidden="true"><use href="#i-stop"></use></svg></button>
+        <button class="tb" aria-label="Restart the selected container" title="Restart"><svg class="i c-blue" aria-hidden="true"><use href="#i-restart"></use></svg></button>
+        <button class="tb" aria-label="Remove the selected container" title="Remove (Delete)"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg></button>
+        <span class="tb-sep"></span>
+        <button class="tb" aria-label="Open the selected container's first published port in the browser" title="Open in Browser"><svg class="i c-blue" aria-hidden="true"><use href="#i-globe"></use></svg></button>
+        <button class="tb" aria-label="Open a terminal in the selected container" title="Open Terminal"><svg class="i c-blue" aria-hidden="true"><use href="#i-terminal"></use></svg></button>
+        <button class="tb" aria-label="Attach the debugger to a process in the selected container" title="Attach Debugger"><svg class="i c-orange" aria-hidden="true"><use href="#i-bug"></use></svg></button>
+        <button class="tb" aria-label="Open the selected container in a remote window" title="Open in Remote Window"><svg class="i c-blue" aria-hidden="true"><use href="#i-window-remote"></use></svg></button>
+        <span class="grow"></span>
+        <span class="small muted" role="status">Docker · Linux</span>
+      </div>
+      <div class="panes" style="height:148px;border-top:1px solid var(--soft-border)">
+        <div class="pane" style="flex:0 0 46%">
+          <div class="tabs" role="tablist"><button class="tab sel" role="tab" aria-selected="true">Containers<span class="badge">2</span></button><button class="tab" role="tab" aria-selected="false">Images<span class="badge">3</span></button></div>
+          <div class="row sel" style="height:40px" aria-selected="true"><span class="state up" role="img" aria-label="Running"></span><span class="two"><span class="b">containers-web-1</span><span class="small trim">codalus-sample-web · Up 3 minutes · 0.0.0.0:8080→8080/tcp</span></span></div>
+          <div class="row" style="height:40px"><span class="state off" role="img" aria-label="Exited"></span><span class="two"><span class="b">aspire-dashboard</span><span class="small muted trim">mcr.microsoft.com/dotnet/aspire-dashboard:9.0 · Exited (0) 2 hours ago</span></span></div>
+        </div>
+        <div class="pane">
+          <div class="tabs" role="tablist"><button class="tab sel" role="tab" aria-selected="true">Logs</button><button class="tab" role="tab" aria-selected="false">Environment</button><button class="tab" role="tab" aria-selected="false">Ports</button><button class="tab" role="tab" aria-selected="false">Labels</button><button class="tab" role="tab" aria-selected="false">Files</button></div>
+          <div class="logs">info: Microsoft.Hosting.Lifetime[14]<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Now listening on: http://[::]:8080<br>info: Microsoft.Hosting.Lifetime[0]<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Application started. Press Ctrl+C to shut down.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="legend"><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg>Refresh</span><span class="l"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>Start</span><span class="l"><svg class="i c-red" aria-hidden="true"><use href="#i-stop"></use></svg>Stop</span><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-restart"></use></svg>Restart</span><span class="l"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg>Remove</span><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-globe"></use></svg>Open in Browser</span><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-terminal"></use></svg>Open Terminal</span><span class="l"><svg class="i c-orange" aria-hidden="true"><use href="#i-bug"></use></svg>Attach Debugger</span><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-window-remote"></use></svg>Open in Remote Window</span><span>· state is a dot and a word, the image's Remove Image moves into the Images tab's toolbar</span></div>
+  <div><div class="tag">Proposed, empty</div>
+    <div class="tw"><div class="empty-mini"><svg class="i c-blue" style="width:24px;height:24px" aria-hidden="true"><use href="#i-container"></use></svg><span class="grow">No containers (Docker, Linux). Run a project with a Dockerfile (Ctrl+F5) or <span class="mono">docker compose up</span>, then refresh.</span><button class="btn sm has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg>Refresh</button></div></div>
+  </div>
+</section>
+
+<!-- Exception Settings -->
+<section class="card">
+  <h2><svg class="i c-red" aria-hidden="true"><use href="#i-breakpoint"></use></svg>Exception Settings<span class="src">ExceptionSettingsView.axaml</span></h2>
+  <div class="quote">"Generic/default buttons and dropdowns with no icons"</div>
+  <div><div class="tag">Now</div>
+    <div class="now" data-nocheck><span class="flf" style="min-width:260px">Search exception types</span><button class="fl">Break on All</button><button class="fl">Break on None</button><button class="fl">Restore Defaults</button><span class="grow"></span><span class="flf" style="min-width:300px">Add a type by its full name, e.g. MyApp.ValidationException (Enter)</span><button class="fl">Add</button></div>
+  </div>
+  <div><div class="tag">Proposed</div>
+    <div class="tw">
+      <div class="tw-cap"><span class="title">Exception Settings</span></div>
+      <div class="toolbar" role="toolbar" aria-label="Exception Settings">
+        <button class="tb" aria-label="Break on all exceptions" title="Break on All: break when any exception is thrown"><svg class="i c-red" aria-hidden="true"><use href="#i-breakpoint"></use></svg></button>
+        <button class="tb" aria-label="Break on no thrown exceptions" title="Break on None: break only on user-unhandled exceptions"><svg class="i c-red" aria-hidden="true"><use href="#i-breakpoint-outline"></use></svg></button>
+        <button class="tb" aria-label="Restore the default exception settings" title="Restore Defaults"><svg class="i c-blue" aria-hidden="true"><use href="#i-reset"></use></svg></button>
+        <span class="tb-sep"></span>
+        <span class="field sm grow"><svg class="i lead" aria-hidden="true"><use href="#i-search"></use></svg><input aria-label="Search exception types" placeholder="Search exception types"></span>
+      </div>
+      <div style="padding:2px 10px 6px" class="small muted">Checked types break when they are thrown, even if they are caught. User-unhandled exceptions always break.</div>
+      <div class="gridrow" style="grid-template-columns:minmax(0,1fr) 240px"><span class="chk"><span class="box"></span>All other exception types (not in this list)</span></div>
+      <div class="gridrow h" style="grid-template-columns:minmax(0,1fr) 240px"><span>Break when thrown</span><span>Only in modules</span></div>
+      <div class="gridrow" style="grid-template-columns:minmax(0,1fr) 240px;height:30px"><span class="chk on"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>System.ArgumentNullException</span><span class="field sm"><span class="ph">All modules</span></span></div>
+      <div class="gridrow" style="grid-template-columns:minmax(0,1fr) 240px;height:30px;background:var(--row-hover)"><span class="chk"><span class="box"></span>System.ArgumentOutOfRangeException</span><span class="field sm"><span class="value">CalculatorService.dll</span></span></div>
+      <div class="gridrow" style="grid-template-columns:minmax(0,1fr) auto;height:36px;border-top:1px solid var(--soft-border)"><span class="field sm"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg><input aria-label="New exception type" placeholder="Add a type by its full name, e.g. MyApp.ValidationException (Enter)"></span><button class="btn sm has-icon"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg>Add</button></div>
+    </div>
+  </div>
+  <div class="legend"><span class="l"><svg class="i c-red" aria-hidden="true"><use href="#i-breakpoint"></use></svg>Break on All</span><span class="l"><svg class="i c-red" aria-hidden="true"><use href="#i-breakpoint-outline"></use></svg>Break on None</span><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-reset"></use></svg>Restore Defaults</span><span>· the search box takes the rest of the row</span></div>
+</section>
+
+<!-- Benchmarks -->
+<section class="card">
+  <h2><svg class="i c-blue" aria-hidden="true"><use href="#i-clock"></use></svg>Diagnostics: Benchmarks<span class="src">BenchmarksView.axaml</span></h2>
+  <div class="quote">"Generic/default buttons and dropdowns with no icons"</div>
+  <div><div class="tag">Now</div>
+    <div class="now" data-nocheck><button class="fl">Run All</button><button class="fl">Run Selected</button><button class="fl">Stop</button><span>Job</span><span class="flf" style="min-width:100px">Short</span><span class="chk"><span class="box"></span>In process</span></div>
+  </div>
+  <div><div class="tag">Proposed</div>
+    <div class="tw">
+      <div class="tw-cap"><span class="title">Benchmarks</span></div>
+      <div class="toolbar" role="toolbar" aria-label="Benchmarks">
+        <button class="tb text" title="Run All"><svg class="i c-green" aria-hidden="true"><use href="#i-run-all"></use></svg>Run All</button>
+        <button class="tb" aria-label="Run Selected" title="Run Selected"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg></button>
+        <button class="tb is-disabled" aria-disabled="true" aria-label="Stop" title="Stop"><svg class="i c-red" aria-hidden="true"><use href="#i-stop"></use></svg></button>
+        <span class="tb-sep"></span>
+        <span class="field sm combo" style="width:130px" role="combobox" aria-label="BenchmarkDotNet job" title="BenchmarkDotNet job"><span class="muted">Job</span><span class="value">Short</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+        <button class="tb text is-checked" aria-pressed="true" title="Run in the benchmark project's own process: faster, no generated project to build"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>In process</button>
+        <span class="grow"></span>
+        <span class="small muted" role="status">Last run 14:20 · Short job · 4 benchmarks</span>
+      </div>
+      <div class="panes" style="border-top:1px solid var(--soft-border)">
+        <div class="pane" style="flex:0 0 26%">
+          <div class="gridrow h" style="grid-template-columns:1fr"><span>Benchmarks</span></div>
+          <div class="row sel" aria-selected="true" style="height:24px"><svg class="i c-purple" aria-hidden="true"><use href="#i-method"></use></svg>StringBenchmarks</div>
+          <div class="row" style="height:24px"><svg class="i c-purple" aria-hidden="true"><use href="#i-method"></use></svg><span class="muted">Join (category)</span></div>
+        </div>
+        <div class="pane">
+          <div class="gridrow h" style="grid-template-columns:minmax(0,1fr) 90px 70px 70px 80px 56px"><span>Method</span><span class="cellr">Mean</span><span class="cellr">Error</span><span class="cellr">StdDev</span><span class="cellr">Allocated</span><span class="cellr">Ratio</span></div>
+          <div class="gridrow" style="grid-template-columns:minmax(0,1fr) 90px 70px 70px 80px 56px"><span>Builder <span class="chip plain">baseline</span></span><span class="cellr strong">412.6 ns</span><span class="cellr muted">3.2 ns</span><span class="cellr muted">2.9 ns</span><span class="cellr">1.02 KB</span><span class="cellr muted">1.00</span></div>
+          <div class="gridrow" style="grid-template-columns:minmax(0,1fr) 90px 70px 70px 80px 56px"><span>Concat</span><span class="cellr strong">1,872.4 ns</span><span class="cellr muted">18.1 ns</span><span class="cellr muted">16.9 ns</span><span class="cellr">9.38 KB</span><span class="cellr error-text">4.54</span></div>
+          <div class="gridrow" style="grid-template-columns:minmax(0,1fr) 90px 70px 70px 80px 56px"><span>Join</span><span class="cellr strong">286.9 ns</span><span class="cellr muted">2.1 ns</span><span class="cellr muted">1.9 ns</span><span class="cellr">0.62 KB</span><span class="cellr ok-text">0.70</span></div>
+        </div>
+        <div class="pane" style="flex:0 0 20%">
+          <div class="gridrow h" style="grid-template-columns:1fr"><span>History</span></div>
+          <div class="row" style="height:24px"><b>412.6 ns</b><span class="small ok-text">−6.1 %</span><span class="grow"></span><span class="small muted">14:20</span></div>
+          <div class="row" style="height:24px"><b>439.4 ns</b><span class="small muted">first run</span><span class="grow"></span><span class="small muted">Yesterday</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="legend"><span class="l"><svg class="i c-green" aria-hidden="true"><use href="#i-run-all"></use></svg>Run All (the window's main command keeps its label)</span><span class="l"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>Run Selected</span><span class="l"><svg class="i c-red" aria-hidden="true"><use href="#i-stop"></use></svg>Stop</span><span>· the job's label goes inside its combo box; In process is a toolbar toggle, not a check box</span></div>
+</section>
+
+<!-- Counters -->
+<section class="card">
+  <h2><svg class="i c-blue" aria-hidden="true"><use href="#i-clock"></use></svg>Diagnostics: Counters<span class="src">CountersView.axaml</span></h2>
+  <div class="quote">"Generic/default buttons and dropdowns with no icons"</div>
+  <div><div class="tag">Now</div>
+    <div class="now" data-nocheck><span class="flf" style="min-width:180px">Process id or name</span><span class="flf" style="min-width:220px">Running .NET processes</span><button class="fl">Refresh</button><button class="fl">Start</button><button class="fl">Stop</button><button class="fl">Export CSV</button><button class="fl">Export JSON</button></div>
+  </div>
+  <div><div class="tag">Proposed</div>
+    <div class="tw">
+      <div class="tw-cap"><span class="title">Counters</span></div>
+      <div class="toolbar" role="toolbar" aria-label="Counters">
+        <span class="field sm combo" style="width:260px" role="combobox" aria-label="Running .NET processes" title="Process id or name, or pick a running .NET process"><svg class="i c-blue" aria-hidden="true"><use href="#i-terminal"></use></svg><span class="value">WebApi (48213)</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+        <button class="tb" aria-label="Refresh the processes" title="Refresh"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+        <span class="tb-sep"></span>
+        <button class="tb text is-disabled" aria-disabled="true" title="Start"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>Start</button>
+        <button class="tb" aria-label="Stop" title="Stop"><svg class="i c-red" aria-hidden="true"><use href="#i-stop"></use></svg></button>
+        <span class="tb-sep"></span>
+        <span class="split"><button class="tb" aria-label="Export CSV" title="Export CSV"><svg class="i c-blue" aria-hidden="true"><use href="#i-export"></use></svg></button><button class="tb" aria-label="More export formats" title="Export JSON…"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></span>
+        <span class="grow"></span>
+        <span class="small muted" role="status"><span class="state up" style="display:inline-block;margin-right:4px"></span>Watching every 1 s</span>
+      </div>
+      <div class="row2" style="padding:0 10px 6px"><span class="field sm grow"><span class="value">System.Runtime, Microsoft.AspNetCore.Hosting</span></span><span class="field sm grow"><span class="ph">Meters: System.Net.Http, MyApp[orders.placed]</span></span><span class="field sm" style="width:84px" title="Interval in seconds"><span class="muted">Every</span><span class="value">1 s</span></span></div>
+      <div class="gridrow h" style="grid-template-columns:240px minmax(0,1fr) 110px 60px"><span>Provider</span><span>Counter</span><span class="cellr">Value</span><span>Unit</span></div>
+      <div class="gridrow" style="grid-template-columns:240px minmax(0,1fr) 110px 60px"><span class="muted">System.Runtime</span><span>CPU Usage</span><span class="cellr strong">3.2</span><span class="muted">%</span></div>
+      <div class="gridrow" style="grid-template-columns:240px minmax(0,1fr) 110px 60px"><span class="muted">Microsoft.AspNetCore.Hosting</span><span>Request Rate</span><span class="cellr strong">42</span><span class="muted">/ s</span></div>
+    </div>
+  </div>
+  <div class="legend"><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg>Refresh</span><span class="l"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>Start</span><span class="l"><svg class="i c-red" aria-hidden="true"><use href="#i-stop"></use></svg>Stop</span><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-export"></use></svg>Export CSV, its menu Export JSON</span><span>· the id box and the process list become one editable combo box</span></div>
+</section>
+
+<!-- Configuration Manager -->
+<section class="card">
+  <h2><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>Configuration Manager<span class="src">ConfigurationManagerView.axaml</span></h2>
+  <div class="quote">"Generic/default buttons and dropdowns with no icons"</div>
+  <div><div class="tag">Now</div>
+    <div class="now" data-nocheck><span>Solution configuration:</span><span class="flf">Debug</span><button class="fl">New…</button><button class="fl">Remove</button><span style="margin-left:10px">Platform:</span><span class="flf" style="min-width:120px">Any CPU</span><button class="fl">New…</button><button class="fl">Remove</button><button class="fl" style="margin-left:10px">Make Active</button></div>
+  </div>
+  <div><div class="tag">Proposed</div>
+    <div class="tw" style="padding:12px 14px;gap:10px">
+      <div class="row2" style="gap:16px;flex-wrap:wrap">
+        <label class="row2"><span class="muted">Solution configuration</span>
+          <span class="attach"><span class="field combo" style="width:150px" role="combobox" aria-label="Solution configuration"><span class="value">Debug</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><button class="btn icon" aria-label="New solution configuration…" title="New…"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg></button><button class="btn icon" aria-label="Remove Debug" title="Remove"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg></button></span>
+        </label>
+        <label class="row2"><span class="muted">Platform</span>
+          <span class="attach"><span class="field combo" style="width:130px" role="combobox" aria-label="Solution platform"><span class="value">Any CPU</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><button class="btn icon" aria-label="New solution platform…" title="New…"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg></button><button class="btn icon is-disabled" aria-disabled="true" aria-label="Remove Any CPU" title="Remove"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg></button></span>
+        </label>
+        <span class="grow"></span>
+        <span class="chip ok"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Active</span>
+        <button class="btn has-icon is-disabled" aria-disabled="true"><svg class="i c-green" aria-hidden="true"><use href="#i-check-circle"></use></svg>Make Active</button>
+      </div>
+      <div style="border:1px solid var(--soft-border);border-radius:var(--radius);overflow:hidden">
+        <div class="gridrow h" style="grid-template-columns:minmax(0,1fr) 180px 150px 60px"><span>Project</span><span>Configuration</span><span>Platform</span><span>Build</span></div>
+        <div class="gridrow" style="grid-template-columns:minmax(0,1fr) 180px 150px 60px;height:30px"><span class="row2"><svg class="i c-green" aria-hidden="true"><use href="#i-cube"></use></svg>CalculatorClient</span><span class="field sm combo"><span class="value">Debug</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="field sm combo"><span class="value">Any CPU</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="chk on"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span><span class="vh">Build CalculatorClient</span></span></div>
+        <div class="gridrow" style="grid-template-columns:minmax(0,1fr) 180px 150px 60px;height:30px"><span class="row2"><svg class="i c-green" aria-hidden="true"><use href="#i-cube"></use></svg>CalculatorService</span><span class="field sm combo"><span class="value">Release</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="field sm combo"><span class="value">Any CPU</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="chk"><span class="box"></span><span class="vh">Build CalculatorService</span></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="legend"><span class="l"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg>New…</span><span class="l"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg>Remove (attached to the combo box they act on)</span><span class="l"><svg class="i c-green" aria-hidden="true"><use href="#i-check-circle"></use></svg>Make Active, disabled while the chosen pair is the active one, which a chip says</span></div>
+</section>
+
+<!-- Service References -->
+<section class="card">
+  <h2><svg class="i c-blue" aria-hidden="true"><use href="#i-plug"></use></svg>Service References, WCF page<span class="src">ServiceReferencesView.axaml</span></h2>
+  <div class="quote">"UI looks default, like its missing its style (buttons, inputs, dropdowns)"</div>
+  <div><div class="tag">Now</div>
+    <div class="now" data-nocheck><button class="fl">Reload</button><button class="fl">Save</button><button class="fl">Refresh</button><button class="fl">Open Document</button><button class="fl">Remove</button><button class="fl">Test Client</button><span style="margin-left:10px">Kind</span><span class="flf" style="min-width:110px">WCF</span><span class="flf" style="min-width:220px">contracts/CalculatorService.wsdl</span><button class="fl">Browse…</button><button class="fl">Discover</button><button class="fl">Install</button><button class="fl" style="background:var(--accent);color:var(--accent-fg)">Add Reference</button></div>
+  </div>
+  <div><div class="tag">Proposed</div>
+    <div class="tw" style="padding:12px 14px;gap:12px">
+      <div class="row2"><b class="strong">References</b><span class="badge">1</span><span class="grow"></span><button class="tb" aria-label="Reload the references" title="Reload"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button></div>
+      <div class="ref sel" aria-selected="true">
+        <svg class="i c-blue" aria-hidden="true"><use href="#i-plug"></use></svg>
+        <div class="grow"><div><b>CalculatorService</b> <span class="muted">WCF</span></div><div class="small muted">Namespace CalculatorClient.Calculator · Connected Services/CalculatorService</div><div class="small muted">http://localhost:5280/CalculatorService.svc?wsdl</div></div>
+        <div class="row2">
+          <button class="btn sm has-icon" title="Open the service in the WCF Test Client"><svg class="i c-blue" aria-hidden="true"><use href="#i-plug"></use></svg>Test Client</button>
+          <button class="btn sm icon" aria-label="Download the document again from its URL" title="Update from Source"><svg class="i c-blue" aria-hidden="true"><use href="#i-cloud-download"></use></svg></button>
+          <button class="btn sm icon" aria-label="Open Document" title="Open Document"><svg class="i c-blue" aria-hidden="true"><use href="#i-link-external"></use></svg></button>
+          <button class="btn sm icon" aria-label="Remove the reference" title="Remove"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg></button>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <b class="strong">Add a service reference</b>
+      <div class="form">
+        <span class="lab">Kind</span><div><div class="seg" role="group" aria-label="Reference kind"><button aria-pressed="false">OpenAPI</button><button aria-pressed="false">gRPC</button><button class="on" aria-pressed="true">WCF</button></div></div>
+        <span class="lab">Document</span><div class="row2"><span class="field grow"><svg class="i c-outline" aria-hidden="true"><use href="#i-file"></use></svg><span class="value">contracts/CalculatorService.wsdl</span></span><button class="btn icon" aria-label="Browse…" title="Browse…"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg></button><button class="btn has-icon" title="Find the metadata of the CoreWCF services you run"><svg class="i c-blue" aria-hidden="true"><use href="#i-radar"></use></svg>Running Services<svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></div>
+        <span class="lab">Name</span><span class="field" style="width:320px"><span class="value">CalculatorService</span></span>
+        <span class="lab">Collection type</span><span class="field combo" style="width:320px"><span class="value">System.Collections.Generic.List`1</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+        <span class="lab"></span><div class="row2" style="gap:16px"><span class="chk on"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Reuse types in referenced assemblies</span><span class="chk"><span class="box"></span>Synchronous operations too</span><span class="chk"><span class="box"></span>Internal</span></div>
+        <span class="lab"></span><div class="row2"><svg class="i sm c-yellow" aria-hidden="true"><use href="#i-warning"></use></svg><span class="warn-text grow">dotnet-svcutil isn't available. Install adds it as a local tool of this solution.</span><button class="btn has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-download"></use></svg>Install</button></div>
+        <span class="lab"></span><div class="row2"><button class="btn primary has-icon"><svg class="i" aria-hidden="true"><use href="#i-add"></use></svg>Add Reference</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="legend"><span>Kind becomes a segmented control; Browse is an icon on its field; Discover becomes the drop-down Running Services (as in the WCF Test Client); per-reference commands sit on the selected reference; one primary button, Add Reference.</span></div>
+</section>
+
+<!-- Git Worktrees -->
+<section class="card">
+  <h2><svg class="i c-orange" aria-hidden="true"><use href="#i-worktree"></use></svg>Git Worktrees<span class="src">WorktreesView.axaml</span></h2>
+  <div class="quote">"This window menu buttons does not match the rest of the app"</div>
+  <div><div class="tag">Now</div>
+    <div class="now" data-nocheck><button class="fl flat">Add…</button><button class="fl flat">Open</button><button class="fl flat">Open in New Window</button><button class="fl flat">Lock</button><button class="fl flat">Remove</button><button class="fl flat">Prune</button><button class="fl flat">⟳</button></div>
+  </div>
+  <div><div class="tag">Proposed</div>
+    <div class="tw">
+      <div class="tw-cap"><span class="title">Git Worktrees</span></div>
+      <div class="toolbar" role="toolbar" aria-label="Git Worktrees">
+        <button class="tb text" title="Add a worktree for a new or existing branch"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg>Add…</button>
+        <span class="tb-sep"></span>
+        <button class="tb" aria-label="Open the worktree's solution in this window" title="Open"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg></button>
+        <button class="tb" aria-label="Open in New Window" title="Open in New Window"><svg class="i c-blue" aria-hidden="true"><use href="#i-window-new"></use></svg></button>
+        <button class="tb" aria-label="Lock" title="Lock (keep git worktree prune from removing it)"><svg class="i c-yellow" aria-hidden="true"><use href="#i-lock"></use></svg></button>
+        <button class="tb" aria-label="Remove" title="Remove"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg></button>
+        <span class="tb-sep"></span>
+        <button class="tb" aria-label="Prune: forget worktrees whose folders are gone" title="Prune: forget worktrees whose folders are gone"><svg class="i c-blue" aria-hidden="true"><use href="#i-broom"></use></svg></button>
+        <button class="tb" aria-label="Refresh Worktrees" title="Refresh"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+      </div>
+      <div class="row" style="height:42px"><svg class="i c-orange" aria-hidden="true"><use href="#i-worktree"></use></svg><span class="two"><span><b>calculator</b> <span class="muted">·</span> <svg class="i sm c-orange" style="display:inline;vertical-align:-1px" aria-hidden="true"><use href="#i-branch"></use></svg> main <span class="chip plain">current</span></span><span class="small muted">~/src/calculator</span></span></div>
+      <div class="row sel" aria-selected="true" style="height:42px"><svg class="i c-orange" aria-hidden="true"><use href="#i-worktree"></use></svg><span class="two"><span><b>fault-contracts</b> · <svg class="i sm" style="display:inline;vertical-align:-1px" aria-hidden="true"><use href="#i-branch"></use></svg> feature/fault-contracts <span class="chip plain"><svg class="i" aria-hidden="true"><use href="#i-lock"></use></svg>locked</span></span><span class="small">~/src/calculator.worktrees/fault-contracts</span></span></div>
+    </div>
+  </div>
+  <div class="legend"><span class="l"><svg class="i c-green" aria-hidden="true"><use href="#i-add"></use></svg>Add… (main command, labelled)</span><span class="l"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg>Open</span><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-window-new"></use></svg>Open in New Window</span><span class="l"><svg class="i c-yellow" aria-hidden="true"><use href="#i-lock"></use></svg>Lock / Unlock</span><span class="l"><svg class="i c-red" aria-hidden="true"><use href="#i-trash"></use></svg>Remove</span><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-broom"></use></svg>Prune</span><span class="l"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg>Refresh</span></div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":3400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+    return { t, themes };
+  }
+}
+</script>
+</body>
+</html>
