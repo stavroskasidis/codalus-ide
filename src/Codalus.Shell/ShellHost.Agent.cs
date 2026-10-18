@@ -195,7 +195,7 @@ public sealed partial class ShellHost
     // ------------------------------------------------------------------ the MCP server's tools
 
     /// <summary>A call from <c>codalus mcp</c> (on the UI thread); what it returns passes the AI boundary.</summary>
-    private async Task<string> McpToolAsync(string tool, JsonElement args, CancellationToken cancellationToken)
+    private async Task<string> McpToolAsync(string tool, JsonElement args, CancellationToken cancellationToken, string? agent = null)
     {
         var root = Solutions.Solution?.Directory;
         async Task<bool> Excluded(string path) => await Ai.Exclusions.IsExcludedAsync(path, root, cancellationToken).ConfigureAwait(true);
@@ -271,7 +271,7 @@ public sealed partial class ShellHost
                 throw new McpException($"There is no tool '{tool}'.");
         }
 
-        Workbench.Output.GetOrCreate(AiService.OutputChannelId, "AI").AppendLine(string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} MCP server: {tool}"));
+        Workbench.Output.GetOrCreate(AiService.OutputChannelId, "AI").AppendLine(string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} MCP server{(agent is null ? "" : " (external agent " + agent + ")")}: {tool}"));
         return SecretRedactor.Redact(text).Text;
     }
 }

@@ -7,9 +7,13 @@
              x:DataType="vm:AiChatViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
- <ToggleButton Classes="toolbar" IsChecked="{Binding IsAgent}" IsVisible="{Binding IsOn}" Content="{l:T aiChat.agent}" ToolTip.Tip="{l:T aiChat.agentModeTheAiMayRead}" AutomationProperties.Name="{l:T aiChat.agentMode}" />
-      <Button x:Name="Provider" Content="{Binding ProviderLabel}" IsVisible="{Binding IsOn}" ToolTip.Tip="{l:T aiChat.chooseTheProviderAndModel}" AutomationProperties.Name="{l:T aiChat.chooseTheProviderAndModel}" />
-      <Button x:Name="Configure" Content="{l:T aiChat.configure}" IsVisible="{Binding IsOn}" ToolTip.Tip="{l:T aiChat.enterTheProviderSKeyOr}" AutomationProperties.Name="{l:T aiChat.configureTheProvider}" />
+      <ComboBox x:Name="AgentPicker" Classes="toolbar" ItemsSource="{Binding AgentChoices}" SelectedIndex="{Binding SelectedAgentIndex}" IsVisible="{Binding HasAgents}" MinWidth="100"
+                ToolTip.Tip="{l:T aiChat.whoAnswersTheBuiltIn}" AutomationProperties.Name="{l:T aiChat.agentPicker}" />
+      <ComboBox x:Name="ModePicker" Classes="toolbar" ItemsSource="{Binding ModeNames}" SelectedIndex="{Binding SelectedModeIndex}" IsVisible="{Binding HasModes}" MinWidth="80"
+                ToolTip.Tip="{l:T aiChat.theAgentSMode}" AutomationProperties.Name="{l:T aiChat.theAgentSMode}" />
+      <ToggleButton Classes="toolbar" IsChecked="{Binding IsAgent}" IsVisible="{Binding ShowBuiltInControls}" Content="{l:T aiChat.agent}" ToolTip.Tip="{l:T aiChat.agentModeTheAiMayRead}" AutomationProperties.Name="{l:T aiChat.agentMode}" />
+      <Button x:Name="Provider" Content="{Binding ProviderLabel}" IsVisible="{Binding ShowBuiltInControls}" ToolTip.Tip="{l:T aiChat.chooseTheProviderAndModel}" AutomationProperties.Name="{l:T aiChat.chooseTheProviderAndModel}" />
+      <Button x:Name="Configure" Content="{l:T aiChat.configure}" IsVisible="{Binding ShowBuiltInControls}" ToolTip.Tip="{l:T aiChat.enterTheProviderSKeyOr}" AutomationProperties.Name="{l:T aiChat.configureTheProvider}" />
       <Button x:Name="NewChat" Content="{l:T aiChat.newChat}" IsVisible="{Binding HasTurns}" AutomationProperties.Name="{l:T aiChat.startANewChat}" />
       <Button x:Name="StopButton" Content="{l:T aiChat.stop}" IsVisible="{Binding IsBusy}" AutomationProperties.Name="{l:T aiChat.stopTheAnswer}" />
       <Button x:Name="Log" Content="{l:T aiChat.requestLog}" ToolTip.Tip="{l:T aiChat.whatWasSentAndWhenIn}" AutomationProperties.Name="{l:T aiChat.showTheRequestLog}" />
@@ -18,6 +22,14 @@
       <TextBlock Text="{Binding OffMessage}" TextWrapping="Wrap" />
       <Button x:Name="TurnOn" Content="{l:T aiChat.turnOnAiAssistance}" AutomationProperties.Name="{l:T aiChat.turnOnAiAssistance}" HorizontalAlignment="Left" />
     </StackPanel>
+    <!-- An external agent (M48, ADR 0079): the label, whenever one is chosen, and why it can't run here. -->
+    <Border x:Name="ExternalAgentBanner" DockPanel.Dock="Top" Margin="8,8,8,0" Padding="8,6" CornerRadius="4" BorderThickness="1"
+            BorderBrush="{DynamicResource Shell.Info}" IsVisible="{Binding IsExternal}">
+      <StackPanel Spacing="4">
+        <TextBlock x:Name="ExternalAgentLabel" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+        <TextBlock x:Name="AgentBlocked" Text="{Binding AgentBlockedMessage}" IsVisible="{Binding IsAgentBlocked}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Warning.Foreground}" />
+      </StackPanel>
+    </Border>
     <StackPanel DockPanel.Dock="Bottom" Margin="8" Spacing="6" IsVisible="{Binding IsOn}">
       <WrapPanel>
         <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeSelection}" Content="{l:T aiChat.selection}" AutomationProperties.Name="{l:T aiChat.sendTheSelection}" />
@@ -28,6 +40,13 @@
         <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeSolution}" Content="{l:T aiChat.solution}" AutomationProperties.Name="{l:T aiChat.sendTheSolutionSProjects}" />
       </WrapPanel>
       <TextBlock Classes="muted" Text="{Binding ContextPreview}" TextWrapping="Wrap" />
+      <ListBox x:Name="CommandList" ItemsSource="{Binding CommandSuggestions}" IsVisible="{Binding HasCommandSuggestions}" MaxHeight="140" AutomationProperties.Name="{l:T aiChat.theAgentSCommands}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:AiCommandSuggestion">
+            <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Text}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
       <Grid ColumnDefinitions="*,Auto">
         <TextBox x:Name="InputBox" Text="{Binding Input}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160" PlaceholderText="{l:T aiChat.askAboutYourCodeEnterSends}" AutomationProperties.Name="{l:T aiChat.question}" />
         <Button Grid.Column="1" x:Name="Send" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="{l:T aiChat.send}" IsEnabled="{Binding CanSend}" AutomationProperties.Name="{l:T aiChat.sendTheQuestion}" />

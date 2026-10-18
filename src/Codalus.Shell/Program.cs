@@ -74,10 +74,16 @@ internal static partial class Program
         {
             AttachToParentConsole();
             var paths = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
-            var pipe = Codalus.Workbench.Ai.Mcp.McpBridge.PipeName(Infrastructure.SingleInstance.PipeName(paths.State));
+            var instance = Infrastructure.SingleInstance.PipeName(paths.State);
+
+            // An external agent's session (M48): its own pipe, open only while that AI Chat session lives.
+            var pipe = options.AgentSession is { Length: > 0 } session
+                ? Codalus.Workbench.Ai.Mcp.McpBridge.SessionPipeName(instance, session)
+                : Codalus.Workbench.Ai.Mcp.McpBridge.PipeName(instance);
+            var notListening = options.AgentSession is { Length: > 0 } ? "The AI Chat session of Codalus IDE that started this agent has ended." : null;
             var input = new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false));
             var output = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false)) { AutoFlush = true };
-            var server = new Codalus.Workbench.Ai.Mcp.McpStdioServer(input, output, (tool, arguments, ct) => Codalus.Workbench.Ai.Mcp.McpBridge.CallAsync(pipe, tool, arguments, ct));
+            var server = new Codalus.Workbench.Ai.Mcp.McpStdioServer(input, output, (tool, arguments, ct) => Codalus.Workbench.Ai.Mcp.McpBridge.CallAsync(pipe, tool, arguments, notListening, ct));
             server.RunAsync(CancellationToken.None).GetAwaiter().GetResult();
             return 0;
         }

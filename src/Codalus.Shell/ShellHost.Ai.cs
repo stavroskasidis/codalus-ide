@@ -46,6 +46,7 @@ public sealed partial class ShellHost : IAiChatHost
         Workbench.Settings.Register(AiSettings.Descriptors(ContributionSource.Shell));
         LanguageModels = new LanguageModelService(Plugins);
         Ai = new AiService(Workbench.Settings, LanguageModels, Workbench.Output, () => Solutions.Solution?.Directory, () => Solutions.Solution?.Trusted ?? true);
+        InitializeExternalAgents();
         AiChat = new AiChatViewModel(this);
         AiCompletions = new AiCompletions(Ai, Workbench.Settings);
         AiNextEdit = new AiNextEdit(Ai, Workbench.Settings);

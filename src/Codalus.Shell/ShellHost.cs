@@ -982,6 +982,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         _instance?.Dispose();
         _mcpBridge?.Dispose();
         await McpServers.DisposeAsync().ConfigureAwait(false);
+        await ExternalAgents.DisposeAsync().ConfigureAwait(false);
         Askpass?.Dispose();
         Terminals?.Dispose();
         if (Interactive is not null)
