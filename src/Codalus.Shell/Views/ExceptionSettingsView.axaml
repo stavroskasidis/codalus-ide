@@ -6,23 +6,39 @@
              x:Class="Codalus.Shell.Views.ExceptionSettingsView"
              x:DataType="vm:ExceptionSettingsViewModel">
   <DockPanel>
-    <controls:ToolbarPanel DockPanel.Dock="Top" Spacing="4">
-      <TextBox x:Name="Search" Text="{Binding Filter}" PlaceholderText="{l:T exceptionSettings.searchExceptionTypes}" AutomationProperties.Name="{l:T exceptionSettings.searchExceptionTypes}" />
-      <Button x:Name="CheckAll" Content="{l:T exceptionSettings.breakOnAll}" ToolTip.Tip="{l:T exceptionSettings.breakWhenAnyExceptionIsThrown}" AutomationProperties.Name="{l:T exceptionSettings.breakOnAllExceptions}" />
-      <Button x:Name="UncheckAll" Content="{l:T exceptionSettings.breakOnNone}" ToolTip.Tip="{l:T exceptionSettings.breakOnlyOnUserUnhandledExceptions}" AutomationProperties.Name="{l:T exceptionSettings.breakOnNoThrownExceptions}" />
-      <Button x:Name="Reset" Content="{l:T exceptionSettings.restoreDefaults}" AutomationProperties.Name="{l:T exceptionSettings.restoreTheDefaultExceptionSettings}" />
+    <!-- The control set's toolbar (M34h): Break on All, Break on None and Restore Defaults as icons; the search box takes the row. -->
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button x:Name="CheckAll" Classes="toolbar icon" controls:ButtonIcon.Kind="breakpoint" ToolTip.Tip="{l:T exceptionSettings.breakOnAllBreakWhenAnyException}" AutomationProperties.Name="{l:T exceptionSettings.breakOnAllExceptions}" />
+      <Button x:Name="UncheckAll" Classes="toolbar icon" controls:ButtonIcon.Kind="breakpoint-outline" ToolTip.Tip="{l:T exceptionSettings.breakOnNoneBreakOnlyOnUser}" AutomationProperties.Name="{l:T exceptionSettings.breakOnNoThrownExceptions}" />
+      <Button x:Name="Reset" Classes="toolbar icon" controls:ButtonIcon.Kind="reset" ToolTip.Tip="{l:T exceptionSettings.restoreDefaults}" AutomationProperties.Name="{l:T exceptionSettings.restoreTheDefaultExceptionSettings}" />
+      <Border Classes="toolbarSeparator" />
+      <TextBox x:Name="Search" Classes="search" Text="{Binding Filter}" PlaceholderText="{l:T exceptionSettings.searchExceptionTypes}" AutomationProperties.Name="{l:T exceptionSettings.searchExceptionTypes}" />
     </controls:ToolbarPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="10,2,10,4" TextWrapping="Wrap"
+    <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="10,2,10,6" TextWrapping="Wrap"
                Text="{l:T exceptionSettings.checkedTypesBreakWhenTheyAre}" />
-    <CheckBox DockPanel.Dock="Top" Margin="10,2" IsChecked="{Binding BreakOnOthers}" Content="{l:T exceptionSettings.allOtherExceptionTypesNotIn}" AutomationProperties.Name="{l:T exceptionSettings.breakOnAllOtherExceptionTypes}" />
-    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="6,4">
-      <TextBox x:Name="NewType" Text="{Binding NewType}" PlaceholderText="{l:T exceptionSettings.addATypeByItsFull}" AutomationProperties.Name="{l:T exceptionSettings.newExceptionType}" />
-      <Button x:Name="Add" Grid.Column="1" Margin="6,0,0,0" Content="{l:T exceptionSettings.add}" AutomationProperties.Name="{l:T exceptionSettings.addExceptionType}" />
-    </Grid>
+    <CheckBox DockPanel.Dock="Top" Margin="10,0,10,4" IsChecked="{Binding BreakOnOthers}" Content="{l:T exceptionSettings.allOtherExceptionTypesNotIn}" AutomationProperties.Name="{l:T exceptionSettings.breakOnAllOtherExceptionTypes}" />
+    <!-- Add a type: the field with the add icon, and Add with it (M34h). -->
+    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Grid.Rule}" BorderThickness="0,1,0,0" Padding="8,6">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBox x:Name="NewType" Text="{Binding NewType}" PlaceholderText="{l:T exceptionSettings.addATypeByItsFull}" AutomationProperties.Name="{l:T exceptionSettings.newExceptionType}"
+                 MinHeight="{DynamicResource Shell.Size.Input}" Padding="6,3" VerticalContentAlignment="Center">
+          <TextBox.InnerLeftContent>
+            <controls:Icon Kind="add" Width="14" Height="14" Margin="8,0,0,0" VerticalAlignment="Center" />
+          </TextBox.InnerLeftContent>
+        </TextBox>
+        <Button x:Name="Add" Grid.Column="1" Margin="6,0,0,0" Classes="iconText compact" controls:ButtonIcon.Kind="add" Content="{l:T exceptionSettings.add}" AutomationProperties.Name="{l:T exceptionSettings.addExceptionType}" />
+      </Grid>
+    </Border>
+    <Border DockPanel.Dock="Top" Classes="gridHeader">
+      <Grid ColumnDefinitions="*,220">
+        <TextBlock Text="{l:T exceptionSettings.breakWhenThrown}" />
+        <TextBlock Grid.Column="1" Margin="6,0,0,0" Text="{l:T exceptionSettings.onlyInModules}" />
+      </Grid>
+    </Border>
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T exceptionSettings.exceptionTypes}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ExceptionTypeRow">
-          <Setter Property="Padding" Value="2" />
+          <Setter Property="Padding" Value="8,3" />
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
         </Style>
       </ListBox.Styles>
@@ -30,7 +46,9 @@
         <DataTemplate x:DataType="vm:ExceptionTypeRow">
           <Grid ColumnDefinitions="*,220">
             <CheckBox IsChecked="{Binding BreakWhenThrown}" Content="{Binding Type}" AutomationProperties.Name="{Binding Type}" />
-            <TextBox Grid.Column="1" Text="{Binding Condition, UpdateSourceTrigger=LostFocus}" PlaceholderText="{l:T exceptionSettings.allModules}" MinHeight="22" Padding="4,1"
+            <!-- The module condition as a compact field (M34h). -->
+            <TextBox Grid.Column="1" Margin="6,0,0,0" Text="{Binding Condition, UpdateSourceTrigger=LostFocus}" PlaceholderText="{l:T exceptionSettings.allModules}"
+                     MinHeight="{DynamicResource Shell.Size.Input}" Padding="6,2" VerticalContentAlignment="Center"
                      ToolTip.Tip="{l:T exceptionSettings.breakOnlyWhenThrownInThese}"
                      AutomationProperties.Name="{Binding Type, StringFormat=Module condition for {0}}" />
           </Grid>

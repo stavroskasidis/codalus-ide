@@ -5,23 +5,55 @@
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.ContainersView"
              x:DataType="vm:ContainersViewModel">
+  <UserControl.Styles>
+    <Style Selector="Ellipse">
+      <Setter Property="Stroke" Value="{DynamicResource Shell.MutedForeground}" />
+    </Style>
+    <Style Selector="Ellipse.running">
+      <Setter Property="Fill" Value="{DynamicResource Shell.Icon.Green}" />
+      <Setter Property="Stroke" Value="{DynamicResource Shell.Icon.Green}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
+    <!-- The control set's toolbar (M34h, docs/design/controls/ToolWindowToolbars.dc.html): icons in three groups. -->
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button x:Name="Refresh" Content="{l:T containers.refresh}" AutomationProperties.Name="{l:T containers.refreshTheContainersAndImages}" />
-      <Button x:Name="Start" Content="{l:T containers.start}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.startTheSelectedContainer}" />
-      <Button x:Name="Stop" Content="{l:T containers.stop}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.stopTheSelectedContainer}" />
-      <Button x:Name="Restart" Content="{l:T containers.restart}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.restartTheSelectedContainer}" />
-      <Button x:Name="Remove" Content="{l:T containers.remove}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.removeTheSelectedContainer}" />
-      <Button x:Name="Browse" Content="{l:T containers.openInBrowser}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.openTheSelectedContainerSFirst}" />
-      <Button x:Name="Terminal" Content="{l:T containers.openTerminal}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.openATerminalInTheSelected}" />
-      <Button x:Name="Attach" Content="{l:T containers.attachDebugger}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.attachTheDebuggerToAProcess}" />
-      <Button x:Name="RemoteWindow" Content="{l:T containers.openInRemoteWindow}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.openTheSelectedContainerInA}" />
-      <TextBlock Classes="muted" VerticalAlignment="Center" Text="{l:T containers.working}" IsVisible="{Binding IsBusy}" />
+      <Button x:Name="Refresh" Classes="toolbar icon" controls:ButtonIcon.Kind="refresh" ToolTip.Tip="{l:T containers.refresh}" AutomationProperties.Name="{l:T containers.refreshTheContainersAndImages}" />
+      <Border Classes="toolbarSeparator" />
+      <Button x:Name="Start" Classes="toolbar icon" controls:ButtonIcon.Kind="play" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.start}" AutomationProperties.Name="{l:T containers.startTheSelectedContainer}" />
+      <Button x:Name="Stop" Classes="toolbar icon" controls:ButtonIcon.Kind="stop" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.stop}" AutomationProperties.Name="{l:T containers.stopTheSelectedContainer}" />
+      <Button x:Name="Restart" Classes="toolbar icon" controls:ButtonIcon.Kind="restart" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.restart}" AutomationProperties.Name="{l:T containers.restartTheSelectedContainer}" />
+      <Button x:Name="Remove" Classes="toolbar icon" controls:ButtonIcon.Kind="trash" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.remove}" AutomationProperties.Name="{l:T containers.removeTheSelectedContainer}" />
+      <Border Classes="toolbarSeparator" />
+      <Button x:Name="Browse" Classes="toolbar icon" controls:ButtonIcon.Kind="globe" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.openInBrowser}" AutomationProperties.Name="{l:T containers.openTheSelectedContainerSFirst}" />
+      <Button x:Name="Terminal" Classes="toolbar icon" controls:ButtonIcon.Kind="terminal" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.openTerminal}" AutomationProperties.Name="{l:T containers.openATerminalInTheSelected}" />
+      <Button x:Name="Attach" Classes="toolbar icon" controls:ButtonIcon.Kind="debug" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.attachDebugger}" AutomationProperties.Name="{l:T containers.attachTheDebuggerToAProcess}" />
+      <Button x:Name="RemoteWindow" Classes="toolbar icon" controls:ButtonIcon.Kind="window-remote" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.openInRemoteWindow}" AutomationProperties.Name="{l:T containers.openTheSelectedContainerInA}" />
+      <TextBlock Classes="muted small" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,4,0" Text="{l:T containers.working}" IsVisible="{Binding IsBusy}" />
+      <TextBlock Classes="muted small" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,4,0" Text="{Binding ServerLabel}" IsVisible="{Binding !IsBusy}" AutomationProperties.LiveSetting="Polite" />
     </controls:ToolbarPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
-    <Grid ColumnDefinitions="2*,4,3*">
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" TextWrapping="Wrap">
+      <TextBlock.IsVisible>
+        <MultiBinding Converter="{x:Static BoolConverters.And}">
+          <Binding Path="HasStatus" />
+          <Binding Path="!IsEmpty" />
+        </MultiBinding>
+      </TextBlock.IsVisible>
+    </TextBlock>
+    <!-- Empty (or the engine doesn't answer): an icon, the status with its next step, and Refresh (M34h). -->
+    <StackPanel x:Name="EmptyState" DockPanel.Dock="Top" Classes="emptyState" IsVisible="{Binding IsEmpty}">
+      <controls:Icon Kind="container" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="420" Classes="muted" />
+      <Button x:Name="EmptyRefresh" Classes="iconText" controls:ButtonIcon.Kind="refresh" HorizontalAlignment="Center" Content="{l:T containers.refresh}" AutomationProperties.Name="{l:T containers.refreshTheContainersAndImages}" />
+    </StackPanel>
+    <Grid ColumnDefinitions="2*,4,3*" IsVisible="{Binding !IsEmpty}">
       <TabControl Grid.Column="0" Padding="0">
-        <TabItem Header="{l:T containers.containers}">
+        <TabItem>
+          <TabItem.Header>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{l:T containers.containers}" VerticalAlignment="Center" />
+              <Border Classes="badge"><TextBlock Text="{Binding ContainerCount}" /></Border>
+            </StackPanel>
+          </TabItem.Header>
           <ListBox x:Name="ContainerList" ItemsSource="{Binding Containers}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T containers.containers}">
             <ListBox.Styles>
               <Style Selector="ListBoxItem" x:DataType="vm:ContainerRow">
@@ -32,7 +64,9 @@
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ContainerRow">
                 <Grid ColumnDefinitions="Auto,*">
-                  <TextBlock Text="{Binding StateGlyph}" Classes="accent" Margin="0,0,6,0" />
+                  <!-- The state as a dot (filled while it runs) and a word, its status in the detail line (M34h). -->
+                  <Ellipse Width="8" Height="8" Margin="2,0,8,0" VerticalAlignment="Center" StrokeThickness="1.5"
+                           Classes.running="{Binding IsRunning}" ToolTip.Tip="{Binding StateText}" />
                   <StackPanel Grid.Column="1">
                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding Detail}" Classes="muted" TextTrimming="CharacterEllipsis" />
@@ -42,11 +76,17 @@
             </ListBox.ItemTemplate>
           </ListBox>
         </TabItem>
-        <TabItem Header="{l:T containers.images}">
-          <DockPanel>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4">
-              <Button x:Name="RemoveImage" Content="{l:T containers.removeImage}" AutomationProperties.Name="{l:T containers.removeTheSelectedImage}" />
+        <TabItem>
+          <TabItem.Header>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{l:T containers.images}" VerticalAlignment="Center" />
+              <Border Classes="badge"><TextBlock Text="{Binding ImageCount}" /></Border>
             </StackPanel>
+          </TabItem.Header>
+          <DockPanel>
+            <controls:ToolbarPanel DockPanel.Dock="Top">
+              <Button x:Name="RemoveImage" Classes="toolbar icon" controls:ButtonIcon.Kind="trash" ToolTip.Tip="{l:T containers.removeImage}" AutomationProperties.Name="{l:T containers.removeTheSelectedImage}" />
+            </controls:ToolbarPanel>
             <ListBox ItemsSource="{Binding Images}" SelectedItem="{Binding SelectedImage}" Background="Transparent" AutomationProperties.Name="{l:T containers.images}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:ImageRow">

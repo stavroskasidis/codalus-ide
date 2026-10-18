@@ -6,34 +6,60 @@
              x:Class="Codalus.Shell.Views.CountersView"
              x:DataType="vm:CountersViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Margin="6,4" Spacing="4">
-      <controls:ToolbarPanel>
-        <TextBox x:Name="TargetBox" Text="{Binding Target}" Width="180" PlaceholderText="{l:T counters.processIdOrName}" AutomationProperties.Name="{l:T counters.processIdOrName}" />
-        <ComboBox ItemsSource="{Binding Processes}" SelectedItem="{Binding SelectedProcess}" MinWidth="220" PlaceholderText="{l:T counters.runningNetProcesses}" AutomationProperties.Name="{l:T counters.runningNetProcesses}">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:ProcessRowViewModel">
-              <TextBlock Text="{Binding Text}" />
-            </DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
-        <Button Content="{l:T counters.refresh}" Command="{Binding RefreshCommand}" />
-        <Button Content="{l:T counters.start}" Command="{Binding StartCommand}" />
-        <Button Content="{l:T counters.stop}" Command="{Binding StopCommand}" />
-        <Button Content="{l:T counters.exportCsv}" Command="{Binding ExportCsvCommand}" />
-        <Button Content="{l:T counters.exportJson}" Command="{Binding ExportJsonCommand}" />
-      </controls:ToolbarPanel>
-      <Grid ColumnDefinitions="*,*,Auto,70">
-        <TextBox Text="{Binding EventSources}" Margin="0,0,6,0" PlaceholderText="{l:T counters.eventsourcesSystemRuntimeMycompanyMylibraryRequests}" AutomationProperties.Name="{l:T counters.eventsourcesWhoseCountersToWatchComma}" ToolTip.Tip="{l:T counters.eventsourcesWhoseCountersToWatchComma2}" />
-        <TextBox Grid.Column="1" Text="{Binding Meters}" Margin="0,0,6,0" PlaceholderText="{l:T counters.metersSystemNetHttpMyappOrders}" AutomationProperties.Name="{l:T counters.systemDiagnosticsMetricsMetersToWatch}" ToolTip.Tip="{l:T counters.systemDiagnosticsMetricsMetersToWatch2}" />
-        <TextBlock Grid.Column="2" Text="{l:T counters.everyS}" VerticalAlignment="Center" Margin="0,0,6,0" />
-        <TextBox Grid.Column="3" Text="{Binding Interval}" AutomationProperties.Name="{l:T counters.intervalInSeconds}" />
+    <!--
+      The control set's toolbar (M34h): the process id box and the list of running .NET processes are one editable combo
+      box (type an id or a name, or pick one; it lists them when it opens), Start keeps its label, Export is a split
+      button (CSV, its menu JSON).
+    -->
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <ComboBox x:Name="TargetBox" IsEditable="True" Text="{Binding Target}" ItemsSource="{Binding Processes}" SelectedItem="{Binding SelectedProcess}" Width="200"
+                PlaceholderText="{l:T counters.processIdOrNameOrPick}" ToolTip.Tip="{l:T counters.processIdOrNameOrPick}" AutomationProperties.Name="{l:T counters.runningNetProcesses}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="refresh" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T counters.refresh}" AutomationProperties.Name="{l:T counters.refreshTheProcesses}" />
+      <Border Classes="toolbarSeparator" />
+      <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="play" Content="{l:T counters.start}" Command="{Binding StartCommand}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="stop" Command="{Binding StopCommand}" ToolTip.Tip="{l:T counters.stop}" AutomationProperties.Name="{l:T counters.stop}" />
+      <Border Classes="toolbarSeparator" />
+      <SplitButton x:Name="ExportButton" Classes="toolbar" Command="{Binding ExportCsvCommand}" ToolTip.Tip="{l:T counters.exportCsv}" AutomationProperties.Name="{l:T counters.exportCsv}">
+        <controls:Icon Kind="export" />
+        <SplitButton.Flyout>
+          <MenuFlyout Placement="BottomEdgeAlignedLeft">
+            <MenuItem Header="{l:T counters.exportCsv}" Command="{Binding ExportCsvCommand}" />
+            <MenuItem Header="{l:T counters.exportJson}" Command="{Binding ExportJsonCommand}" />
+          </MenuFlyout>
+        </SplitButton.Flyout>
+      </SplitButton>
+    </controls:ToolbarPanel>
+    <StackPanel DockPanel.Dock="Top" Margin="8,2,8,6" Spacing="4">
+      <Grid ColumnDefinitions="*,*,96">
+        <TextBox Text="{Binding EventSources}" Margin="0,0,6,0" MinHeight="{DynamicResource Shell.Size.Input}" Padding="6,3" VerticalContentAlignment="Center"
+                 PlaceholderText="{l:T counters.eventsourcesSystemRuntimeMycompanyMylibraryRequests}" AutomationProperties.Name="{l:T counters.eventsourcesWhoseCountersToWatchComma}" ToolTip.Tip="{l:T counters.eventsourcesWhoseCountersToWatchComma2}" />
+        <TextBox Grid.Column="1" Text="{Binding Meters}" Margin="0,0,6,0" MinHeight="{DynamicResource Shell.Size.Input}" Padding="6,3" VerticalContentAlignment="Center"
+                 PlaceholderText="{l:T counters.metersSystemNetHttpMyappOrders}" AutomationProperties.Name="{l:T counters.systemDiagnosticsMetricsMetersToWatch}" ToolTip.Tip="{l:T counters.systemDiagnosticsMetricsMetersToWatch2}" />
+        <!-- The interval's label is a muted prefix inside its box (M34h). -->
+        <TextBox Grid.Column="2" Text="{Binding Interval}" MinHeight="{DynamicResource Shell.Size.Input}" Padding="4,3" VerticalContentAlignment="Center"
+                 AutomationProperties.Name="{l:T counters.intervalInSeconds}" ToolTip.Tip="{l:T counters.intervalInSeconds}">
+          <TextBox.InnerLeftContent>
+            <TextBlock Classes="muted" Text="{l:T counters.every}" Margin="8,0,0,0" VerticalAlignment="Center" />
+          </TextBox.InnerLeftContent>
+          <TextBox.InnerRightContent>
+            <TextBlock Classes="muted" Text="{l:T counters.seconds}" Margin="0,0,8,0" VerticalAlignment="Center" />
+          </TextBox.InnerRightContent>
+        </TextBox>
       </Grid>
-      <TextBlock Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+      <TextBlock Classes="muted small" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
     </StackPanel>
+    <Border DockPanel.Dock="Top" Classes="gridHeader">
+      <Grid ColumnDefinitions="220,*,120,48">
+        <TextBlock Text="{l:T counters.provider}" />
+        <TextBlock Grid.Column="1" Text="{l:T counters.counter}" />
+        <TextBlock Grid.Column="2" Text="{l:T counters.value}" TextAlignment="Right" />
+        <TextBlock Grid.Column="3" Text="{l:T counters.unit}" Margin="6,0,0,0" />
+      </Grid>
+    </Border>
     <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T counters.countersAndTheirLatestValues}">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:CounterRowViewModel">
-          <Grid ColumnDefinitions="220,*,120,Auto" AutomationProperties.Name="{Binding AccessibleName}">
+          <Grid ColumnDefinitions="220,*,120,48" AutomationProperties.Name="{Binding AccessibleName}">
             <TextBlock Text="{Binding Provider}" Classes="muted" TextTrimming="CharacterEllipsis" />
             <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
             <TextBlock Grid.Column="2" Text="{Binding Value}" TextAlignment="Right" FontWeight="SemiBold" />

@@ -22,6 +22,9 @@ public sealed record ProcessRowViewModel(DotnetProcess Process)
 
     public string AccessibleName => $"{Process.Name}, process {Process.Id.ToString(CultureInfo.InvariantCulture)}";
 
+    /// <summary>The text an editable combo box shows for the row (Counters' process box, M34h).</summary>
+    public override string ToString() => Text;
+
     /// <summary>Whether the row matches a filter: a process id, or part of its name or command line.</summary>
     public bool Matches(string filter) =>
         filter.Length == 0
@@ -1608,7 +1611,7 @@ public sealed class CountersViewModel : ObservableObject, IDisposable
     private string _eventSources = DiagnosticToolsViewModel.Runtime;
     private string _meters = string.Empty;
     private string _interval = "1";
-    private string? _status = "Choose a process (its id or name) and Start.";
+    private string? _status = "Choose a process (type its id or name, or pick a running one) and Start.";
     private ProcessRowViewModel? _selectedProcess;
     private bool _dirty;
 
@@ -1639,7 +1642,10 @@ public sealed class CountersViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<CounterRowViewModel> Rows { get; } = [];
 
-    /// <summary>A process id or (part of) a name.</summary>
+    /// <summary>
+    /// The process box's text (M34h: the id box and the process list are one editable combo box): a process id, (part
+    /// of) a name, or a running process picked from the list ("WebApi (48213)").
+    /// </summary>
     public string Target
     {
         get => _target;
@@ -1653,7 +1659,7 @@ public sealed class CountersViewModel : ObservableObject, IDisposable
         {
             if (SetField(ref _selectedProcess, value) && value is not null)
             {
-                Target = value.Id.ToString(CultureInfo.InvariantCulture);
+                Target = value.Text;
             }
         }
     }
@@ -1688,6 +1694,22 @@ public sealed class CountersViewModel : ObservableObject, IDisposable
 
     /// <summary>The monitor (tests).</summary>
     internal CounterMonitor? Monitor => _monitor;
+
+    /// <summary>The process id the box names: a number, or a picked process's "Name (id)".</summary>
+    internal static int? ProcessIdOf(string target)
+    {
+        var text = target.Trim();
+        if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
+        {
+            return id;
+        }
+
+        var open = text.LastIndexOf('(');
+        return open > 0 && text.EndsWith(')') && int.TryParse(text[(open + 1)..^1], NumberStyles.Integer, CultureInfo.InvariantCulture, out id) ? id : null;
+    }
+
+    /// <summary>Lists the running processes when the box opens with none listed yet (M34h).</summary>
+    public Task EnsureProcessesAsync() => _all.Count == 0 ? RefreshAsync() : Task.CompletedTask;
 
     public async Task RefreshAsync()
     {
@@ -1732,7 +1754,7 @@ public sealed class CountersViewModel : ObservableObject, IDisposable
             return;
         }
 
-        int? processId = int.TryParse(_target.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) ? id : null;
+        var processId = ProcessIdOf(_target);
         if (processId is null)
         {
             if (_all.Count == 0)

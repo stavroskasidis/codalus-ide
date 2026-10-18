@@ -341,6 +341,27 @@ public static class IconSet
         ["sparkle"] = "sparkle_16_regular",
         ["phone"] = "phone_16_regular",
 
+        // The control set's views (M34h): tool window toolbars and command rows as icon buttons.
+        ["add"] = "add_16_regular",
+        ["subtract"] = "subtract_16_regular",
+        ["export"] = "arrow_export_ltr_16_regular",
+        ["import"] = "arrow_import_16_regular",
+        ["window-new"] = "window_new_16_regular",
+        ["window-remote"] = "desktop_arrow_right_16_regular",
+        ["cloud-download"] = "cloud_arrow_down_16_regular",
+        ["radar"] = "radar_20_regular",
+        ["reset"] = "arrow_reset_20_regular",
+        ["arrow-sort"] = "arrow_sort_16_regular",
+        ["unlock"] = "lock_open_16_regular",
+        ["snapshot"] = "camera_16_regular",
+        ["plug"] = "plug_connected_16_regular",
+        ["detach"] = "plug_disconnected_16_regular",
+        ["database-update"] = "database_arrow_up_16_regular",
+        ["dump"] = "document_arrow_down_16_regular",
+        ["cube"] = "cube_16_regular",
+        ["mention"] = "number_symbol_16_regular",
+        ["events"] = "flash_16_regular",
+
         // The Windows Forms Toolbox's controls and components, one each (M34h; the stroke drawings below draw the
         // combo box, the progress bar and the group box, which Fluent has no picture of).
         ["control-pointer"] = "cursor_16_regular",

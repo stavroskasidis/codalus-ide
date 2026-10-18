@@ -52,7 +52,7 @@
           <TextBlock Text="{Binding DetailsMeta}" Classes="muted" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Classes="accent" Content="{l:T pullRequests.checkOut}" Command="{Binding CheckOutCommand}" ToolTip.Tip="{l:T pullRequests.fetchThePullRequestSBranch}" />
-            <Button Content="{l:T pullRequests.openInBrowser}" Command="{Binding OpenInBrowserCommand}" />
+            <Button Classes="iconText" controls:ButtonIcon.Kind="globe" Content="{l:T pullRequests.openInBrowser}" Command="{Binding OpenInBrowserCommand}" />
           </StackPanel>
           <Border BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0">
             <ContentControl x:Name="DescriptionHost" />

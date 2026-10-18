@@ -7,13 +7,13 @@
              x:DataType="vm:BreakpointsViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top" Spacing="4">
-      <Button x:Name="NewFunction" Content="{l:T breakpoints.newFunction}" ToolTip.Tip="{l:T breakpoints.newFunctionBreakpoint}" AutomationProperties.Name="{l:T breakpoints.newFunctionBreakpoint2}" />
-      <Button x:Name="EnableAll" Content="{l:T breakpoints.enableAll}" ToolTip.Tip="{l:T breakpoints.enableTheBreakpointsShown}" AutomationProperties.Name="{l:T breakpoints.enableAllBreakpoints}" />
-      <Button x:Name="DisableAll" Content="{l:T breakpoints.disableAll}" ToolTip.Tip="{l:T breakpoints.disableTheBreakpointsShown}" AutomationProperties.Name="{l:T breakpoints.disableAllBreakpoints}" />
-      <Button x:Name="Export" Content="{l:T breakpoints.export}" AutomationProperties.Name="{l:T breakpoints.exportBreakpoints}" />
-      <Button x:Name="Import" Content="{l:T breakpoints.import}" AutomationProperties.Name="{l:T breakpoints.importBreakpoints}" />
-      <Button x:Name="DeleteAll" Content="{l:T breakpoints.deleteAll}" AutomationProperties.Name="{l:T breakpoints.deleteAllBreakpoints}" />
-      <TextBox x:Name="Search" Text="{Binding Filter}" PlaceholderText="{l:T breakpoints.searchLocationConditionLabel}" AutomationProperties.Name="{l:T breakpoints.searchBreakpoints}" />
+      <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="add" x:Name="NewFunction" Content="{l:T breakpoints.newFunction}" ToolTip.Tip="{l:T breakpoints.newFunctionBreakpoint}" AutomationProperties.Name="{l:T breakpoints.newFunctionBreakpoint2}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="breakpoint" x:Name="EnableAll" ToolTip.Tip="{l:T breakpoints.enableTheBreakpointsShown}" AutomationProperties.Name="{l:T breakpoints.enableAllBreakpoints}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="breakpoint-outline" x:Name="DisableAll" ToolTip.Tip="{l:T breakpoints.disableTheBreakpointsShown}" AutomationProperties.Name="{l:T breakpoints.disableAllBreakpoints}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="export" x:Name="Export" AutomationProperties.Name="{l:T breakpoints.exportBreakpoints}" ToolTip.Tip="{l:T breakpoints.export}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="import" x:Name="Import" AutomationProperties.Name="{l:T breakpoints.importBreakpoints}" ToolTip.Tip="{l:T breakpoints.import}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="close-all" x:Name="DeleteAll" AutomationProperties.Name="{l:T breakpoints.deleteAllBreakpoints}" ToolTip.Tip="{l:T breakpoints.deleteAll}" />
+      <TextBox x:Name="Search" Classes="search" Text="{Binding Filter}" PlaceholderText="{l:T breakpoints.searchLocationConditionLabel}" AutomationProperties.Name="{l:T breakpoints.searchBreakpoints}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T breakpoints.noBreakpointsPressF9InAn}" IsVisible="{Binding IsEmpty}" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T breakpoints.breakpoints}">

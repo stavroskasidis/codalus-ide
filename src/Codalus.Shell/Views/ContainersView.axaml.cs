@@ -14,6 +14,7 @@ public sealed partial class ContainersView : UserControl, IPaneView
         Controls.FollowTail.Attach(LogText); // the logs follow new lines (M34a)
         ContainersViewModel? Vm() => DataContext as ContainersViewModel;
         Refresh.Click += (_, _) => _ = Vm()?.RefreshAsync();
+        EmptyRefresh.Click += (_, _) => _ = Vm()?.RefreshAsync();
         Start.Click += (_, _) => _ = Vm()?.StartAsync();
         Stop.Click += (_, _) => _ = Vm()?.StopAsync();
         Restart.Click += (_, _) => _ = Vm()?.RestartAsync();

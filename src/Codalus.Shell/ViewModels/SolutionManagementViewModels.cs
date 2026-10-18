@@ -3,6 +3,7 @@ using System.Windows.Input;
 using Codalus.Projects.Protocol;
 using Codalus.Shell.Docking;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Notifications;
 using Codalus.Workbench.Projects;
 
@@ -354,25 +355,52 @@ public sealed class ConfigurationManagerViewModel : ObservableObject, ILoadable
     private string? _platform;
     private string? _error;
     private SolutionConfigurationsResult? _data;
+    private SolutionConfigurationInfo? _active;
 
     public ConfigurationManagerViewModel(ProjectManagementService management, DialogViewModel dialogs, SolutionConfigurationInfo? active, Func<SolutionConfigurationInfo, Task> activate)
     {
         _management = management;
         _dialogs = dialogs;
         _activate = activate;
+        _active = active;
         _buildType = active?.Configuration;
         _platform = active?.Platform;
         AddBuildTypeCommand = new RelayCommand(() => _ = AddAsync(ConfigurationDimensions.BuildType));
         AddPlatformCommand = new RelayCommand(() => _ = AddAsync(ConfigurationDimensions.Platform));
-        RemoveBuildTypeCommand = new RelayCommand(() => _ = RemoveAsync(ConfigurationDimensions.BuildType, _buildType));
-        RemovePlatformCommand = new RelayCommand(() => _ = RemoveAsync(ConfigurationDimensions.Platform, _platform));
+        RemoveBuildTypeCommand = new RelayCommand(() => _ = RemoveAsync(ConfigurationDimensions.BuildType, _buildType), () => _buildType is not null && BuildTypes.Count > 1);
+        RemovePlatformCommand = new RelayCommand(() => _ = RemoveAsync(ConfigurationDimensions.Platform, _platform), () => _platform is not null && Platforms.Count > 1);
         ActivateCommand = new RelayCommand(() =>
         {
             if (_buildType is not null && _platform is not null)
             {
-                _ = _activate(new SolutionConfigurationInfo(_buildType, _platform));
+                var pair = new SolutionConfigurationInfo(_buildType, _platform);
+                _ = _activate(pair);
+                _active = pair;
+                StateChanged();
             }
-        });
+        }, () => _buildType is not null && _platform is not null && !IsActivePair);
+    }
+
+    /// <summary>
+    /// Whether the chosen configuration and platform are the solution's active pair: a chip says so, and Make Active is
+    /// disabled (M34h).
+    /// </summary>
+    public bool IsActivePair => _active is { } active && active.Configuration == _buildType && active.Platform == _platform;
+
+    /// <summary>The Remove buttons' names, with what they remove.</summary>
+    public string RemoveBuildTypeName => Localizer.Format("msg.configurationManager.removeName", "Remove {0}", _buildType ?? string.Empty);
+
+    public string RemovePlatformName => Localizer.Format("msg.configurationManager.removeName", "Remove {0}", _platform ?? string.Empty);
+
+    private void StateChanged()
+    {
+        OnPropertyChanged(nameof(IsActivePair));
+        OnPropertyChanged(nameof(RemoveBuildTypeName));
+        OnPropertyChanged(nameof(RemovePlatformName));
+        foreach (var command in new[] { RemoveBuildTypeCommand, RemovePlatformCommand, ActivateCommand })
+        {
+            ((RelayCommand)command).RaiseCanExecuteChanged();
+        }
     }
 
     public ObservableCollection<string> BuildTypes { get; } = [];
@@ -399,6 +427,7 @@ public sealed class ConfigurationManagerViewModel : ObservableObject, ILoadable
             if (value is not null && SetField(ref _buildType, value))
             {
                 BuildRows();
+                StateChanged();
             }
         }
     }
@@ -411,6 +440,7 @@ public sealed class ConfigurationManagerViewModel : ObservableObject, ILoadable
             if (value is not null && SetField(ref _platform, value))
             {
                 BuildRows();
+                StateChanged();
             }
         }
     }
@@ -441,6 +471,7 @@ public sealed class ConfigurationManagerViewModel : ObservableObject, ILoadable
             OnPropertyChanged(nameof(BuildType));
             OnPropertyChanged(nameof(Platform));
             BuildRows();
+            StateChanged();
             Error = null;
         }
         catch (Exception ex) when (PackageManagerViewModel.IsExpected(ex))

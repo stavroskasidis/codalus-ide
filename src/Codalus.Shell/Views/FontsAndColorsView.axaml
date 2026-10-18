@@ -11,10 +11,10 @@
       <TextBlock Classes="muted" TextWrapping="Wrap"
                  Text="{l:T fontsAndColors.colorsOverTheThemeSFor}" />
       <controls:ToolbarPanel>
-        <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="{l:T fontsAndColors.searchColors}" MinWidth="120" AutomationProperties.Name="{l:T fontsAndColors.searchColors}" />
-        <CheckBox IsChecked="{Binding ForAllThemes}" Content="{l:T fontsAndColors.forEveryTheme}" AutomationProperties.Name="{l:T fontsAndColors.forEveryTheme}"
+        <TextBox x:Name="FilterBox" Classes="search" Text="{Binding Filter}" PlaceholderText="{l:T fontsAndColors.searchColors}" MinWidth="120" AutomationProperties.Name="{l:T fontsAndColors.searchColors}" />
+        <ToggleButton Classes="toolbar iconText" controls:ButtonIcon.Kind="color" IsChecked="{Binding ForAllThemes}" Content="{l:T fontsAndColors.forEveryTheme}" AutomationProperties.Name="{l:T fontsAndColors.forEveryTheme}"
                   ToolTip.Tip="{l:T fontsAndColors.offColorsSetHereApplyTo}" />
-        <Button Content="{l:T fontsAndColors.fonts}" Command="{Binding OpenFontSettingsCommand}" ToolTip.Tip="{l:T fontsAndColors.theEditorSFontFamilyAnd}" />
+        <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="gear" Content="{l:T fontsAndColors.fonts}" Command="{Binding OpenFontSettingsCommand}" ToolTip.Tip="{l:T fontsAndColors.theEditorSFontFamilyAnd}" />
       </controls:ToolbarPanel>
       <TextBlock Classes="muted">
         <Run Text="{l:T fontsAndColors.theme}" /> <Run Text="{Binding ThemeTitle}" />
