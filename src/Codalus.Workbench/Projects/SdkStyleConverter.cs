@@ -124,7 +124,7 @@ public static partial class SdkStyleConverter
             if (Imports().Any(i => IsVisualStudioImport(i.Project) && !IsExistsCondition(i.Condition)))
             {
                 throw new SdkConversionException(
-                    $"{_name} imports Visual Studio's own targets ($(VSToolsPath)): an SDK-style project of its kind (an ASP.NET web application, for one) needs an SDK of its own, so it isn't converted. Convert it by hand.");
+                    $"{_name} imports proprietary MSBuild targets ($(VSToolsPath)): an SDK-style project of its kind (an ASP.NET web application, for one) needs an SDK of its own, so it isn't converted. Convert it by hand.");
             }
 
             var version = properties.GetValueOrDefault("TargetFrameworkVersion");
@@ -467,7 +467,7 @@ public static partial class SdkStyleConverter
 
             if (IsVisualStudioImport(project))
             {
-                _notes.Add($"The import of Visual Studio's {project[(project.LastIndexOf('\\') + 1)..]} was left out (it was imported only where it exists).");
+                _notes.Add($"The import of {project[(project.LastIndexOf('\\') + 1)..]} from the proprietary MSBuild targets ($(VSToolsPath)) was left out (it was imported only where it exists).");
                 return;
             }
 
