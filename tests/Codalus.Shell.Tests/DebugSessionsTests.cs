@@ -158,7 +158,7 @@ public sealed class DebugSessionsTests
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped
                 || f.Shell.Workbench.Notifications.Items.Any(n => n.Message.StartsWith("Could not start debugging", StringComparison.Ordinal)), seconds: 400);
         }
-        catch (Xunit.Sdk.TrueException)
+        catch (Xunit.Sdk.FailException)
         {
             Assert.Fail($"The generator didn't stop. State {f.Shell.Debugger.State}; build: {f.Shell.Builds.LastBuild?.Result}\nDebug Console:\n{f.Shell.DebugLog.GetText()}");
         }
@@ -223,7 +223,7 @@ public sealed class DebugSessionsTests
         {
             await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("crashed and wrote a dump", StringComparison.Ordinal)), seconds: 120);
         }
-        catch (Xunit.Sdk.TrueException)
+        catch (Xunit.Sdk.FailException)
         {
             Assert.Fail($"No crash notification. Notifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}\nLog:\n{f.Shell.Workbench.Log.GetText()}");
         }
