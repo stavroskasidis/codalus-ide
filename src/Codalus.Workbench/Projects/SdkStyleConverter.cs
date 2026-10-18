@@ -467,7 +467,7 @@ public static partial class SdkStyleConverter
 
             if (IsVisualStudioImport(project))
             {
-                _notes.Add($"The import of {project[(project.LastIndexOf('\\') + 1)..]} from the proprietary MSBuild targets ($(VSToolsPath)) was left out (it was imported only where it exists).");
+                _notes.Add($"The import of {project[(project.LastIndexOf('\\') + 1)..]} was left out: it's one of the proprietary MSBuild targets ($(VSToolsPath)), imported only where it exists.");
                 return;
             }
 
