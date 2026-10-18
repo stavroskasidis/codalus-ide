@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A stand-in Agent Client Protocol agent (M48) that plays scripted sessions (tests/Shared/StandInAcpAgent.cs), started by the tests like a real agent. -->
+  <PropertyGroup>
+    <IsTestProject>false</IsTestProject>
+    <AssemblyName>codalus-fake-acp-agent</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Remove="xunit.v3.mtp-v2" />
+    <PackageReference Remove="Microsoft.Testing.Extensions.HangDump" />
+    <Using Remove="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\StandInAcpAgent.cs" Link="Shared\StandInAcpAgent.cs" />
+  </ItemGroup>
+</Project>

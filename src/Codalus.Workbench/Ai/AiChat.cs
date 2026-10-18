@@ -95,10 +95,168 @@ public sealed class AiChatTurn
             }
         }
     }
+
+    // ------------------------------------------------------------------ external agents (M48, ADR 0079)
+
+    private readonly StringBuilder _thought = new();
+    private IReadOnlyList<AiPlanEntry> _plan = [];
+    private readonly List<(string Key, AiTurnNotice Notice)> _notices = [];
+
+    /// <summary>The external agent that answers (its <c>ai.agents</c> name), or null for the built-in assistant.</summary>
+    public string? ExternalAgent { get; init; }
+
+    /// <summary>The agent's thinking, shown collapsed.</summary>
+    public string Thought
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _thought.ToString();
+            }
+        }
+    }
+
+    /// <summary>The agent's plan, as it last reported it.</summary>
+    public IReadOnlyList<AiPlanEntry> Plan
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _plan;
+            }
+        }
+    }
+
+    /// <summary>Notices of the turn: the agent's own, and its context compactions.</summary>
+    public IReadOnlyList<AiTurnNotice> Notices
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _notices.Select(n => n.Notice)];
+            }
+        }
+    }
+
+    internal void AppendThought(string text)
+    {
+        lock (_gate)
+        {
+            _thought.Append(text);
+        }
+    }
+
+    internal void SetPlan(IReadOnlyList<AiPlanEntry> plan)
+    {
+        lock (_gate)
+        {
+            _plan = plan;
+        }
+    }
+
+    /// <summary>Adds a notice, or replaces the one with the same <paramref name="key"/> (a compaction's progress).</summary>
+    internal void SetNotice(string? key, AiTurnNotice notice)
+    {
+        lock (_gate)
+        {
+            var at = key is null ? -1 : _notices.FindIndex(n => n.Key == key);
+            if (at >= 0)
+            {
+                _notices[at] = (key!, notice);
+            }
+            else
+            {
+                _notices.Add((key ?? "", notice));
+            }
+        }
+    }
+
+    /// <summary>The step with this tool call id, or null.</summary>
+    internal AiAgentStep? FindStep(string id)
+    {
+        lock (_gate)
+        {
+            return _steps.Find(s => s.Id == id);
+        }
+    }
+
+    /// <summary>Changes the step with this tool call id; false when there's none.</summary>
+    internal bool UpdateStep(string id, Func<AiAgentStep, AiAgentStep> update)
+    {
+        lock (_gate)
+        {
+            var at = _steps.FindIndex(s => s.Id == id);
+            if (at < 0)
+            {
+                return false;
+            }
+
+            _steps[at] = update(_steps[at]);
+            return true;
+        }
+    }
+
+    /// <summary>Changes every step that matches.</summary>
+    internal void UpdateSteps(Func<AiAgentStep, bool> match, Func<AiAgentStep, AiAgentStep> update)
+    {
+        lock (_gate)
+        {
+            for (var i = 0; i < _steps.Count; i++)
+            {
+                if (match(_steps[i]))
+                {
+                    _steps[i] = update(_steps[i]);
+                }
+            }
+        }
+    }
 }
 
-/// <summary>A tool call of agent mode: the tool, what it worked on, and how it ended (null while it runs).</summary>
-public sealed record AiAgentStep(string Tool, string Target, string? Outcome, bool IsError = false);
+/// <summary>
+/// A tool call of agent mode: the tool, what it worked on, and how it ended (null while it runs). An external agent's
+/// tool call (M48) also has its id, kind, status, locations, diffs and output.
+/// </summary>
+public sealed record AiAgentStep(string Tool, string Target, string? Outcome, bool IsError = false)
+{
+    /// <summary>The external agent's tool call id; null for the built-in agent's steps.</summary>
+    public string? Id { get; init; }
+
+    /// <summary>The ACP tool kind: read, edit, delete, move, search, execute, think, fetch, switch_mode, other.</summary>
+    public string? Kind { get; init; }
+
+    /// <summary>pending, in_progress, completed, failed, or cancelled (when the turn was).</summary>
+    public string? Status { get; init; }
+
+    /// <summary>The files (and lines) it works on; clicking one opens it.</summary>
+    public IReadOnlyList<AiStepLocation> Locations { get; init; } = [];
+
+    /// <summary>The changes it reports, shown read-only.</summary>
+    public IReadOnlyList<AiStepDiff> Diffs { get; init; } = [];
+
+    /// <summary>Its text output, or its terminal's (redacted).</summary>
+    public string? Output { get; init; }
+
+    /// <summary>The terminal whose output it shows live.</summary>
+    public string? TerminalId { get; init; }
+}
+
+/// <summary>A file a step works on; <paramref name="Line"/> is 1-based.</summary>
+public sealed record AiStepLocation(string Path, int? Line);
+
+/// <summary>
+/// A change a step reports. <paramref name="Reviewed"/>: it went through the preview (<c>fs/write_text_file</c>); otherwise
+/// the agent wrote it itself.
+/// </summary>
+public sealed record AiStepDiff(string Path, string? OldText, string NewText, bool Reviewed);
+
+/// <summary>A plan entry: its text and status (pending, in_progress, completed).</summary>
+public sealed record AiPlanEntry(string Content, string Status);
+
+/// <summary>A notice in a turn: info, warning or error, and its text.</summary>
+public sealed record AiTurnNotice(string Severity, string Text);
 
 /// <summary>
 /// A chat conversation (ADR 0062): each question goes with the context the user left on, through
@@ -294,6 +452,60 @@ public sealed class AiChat(AiService ai)
         }
         finally
         {
+            turn.IsStreaming = false;
+            TurnChanged?.Invoke(this, turn);
+        }
+
+        return turn;
+    }
+
+    /// <summary>
+    /// Asks an external agent (M48, ADR 0079): the context goes through the boundary (<see cref="AiService.PrepareAsync"/>),
+    /// the agent's session is started or reused (AI on, a trusted workspace), and the turn streams its messages, thoughts,
+    /// plan and tool calls. Why it can't run, or why it stopped, is the turn's error.
+    /// </summary>
+    public async Task<AiChatTurn> SendExternalAsync(string question, IEnumerable<AiContextItem> items, Acp.AcpAgents agents, string agent, Acp.IAcpHost host, CancellationToken cancellationToken, object? tag = null)
+    {
+        var context = await Ai.PrepareAsync(items.ToList(), cancellationToken).ConfigureAwait(false);
+        var selection = context.Included.FirstOrDefault(i => i.Kind == AiContextKind.Selection);
+        var turn = new AiChatTurn(question, context, selection) { IsStreaming = true, Tag = tag, IsAgent = true, ExternalAgent = agent };
+        lock (_gate)
+        {
+            _turns.Add(turn);
+        }
+
+        TurnChanged?.Invoke(this, turn);
+        Ai.BeginRequest();
+        try
+        {
+            var session = await agents.GetOrStartAsync(agent, host, cancellationToken).ConfigureAwait(false);
+            var text = AiService.ComposeUserMessage(question, context);
+            Ai.LogExternalPrompt(agent, text.Length, context);
+            var stop = await session.PromptAsync(text, turn, () => TurnChanged?.Invoke(this, turn), cancellationToken).ConfigureAwait(false);
+            turn.FinishReason = stop switch
+            {
+                "end_turn" => "stop",
+                "max_tokens" => "length",
+                "refusal" => "refused",
+                "cancelled" => "stopped",
+                _ => stop,
+            };
+            if (stop == "refusal" && turn.Answer.Length == 0)
+            {
+                turn.Error = "The agent declined to answer.";
+            }
+        }
+        catch (Acp.AcpException ex)
+        {
+            turn.Error = ex.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            turn.FinishReason = "stopped";
+        }
+        finally
+        {
+            Ai.EndRequest();
             turn.IsStreaming = false;
             TurnChanged?.Invoke(this, turn);
         }

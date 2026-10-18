@@ -75,6 +75,9 @@ public sealed class SupervisedProcess : IAsyncDisposable
 
     public string Name { get; }
 
+    /// <summary>How the process delimits its messages: <c>Content-Length</c> headers (the default), or one per line (M48).</summary>
+    public JsonRpcFraming Framing { get; init; }
+
     /// <summary>Registers incoming handlers on every new connection, before it starts reading.</summary>
     public Action<JsonRpcConnection>? ConfigureConnection { get; set; }
 
@@ -124,7 +127,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
         process.ErrorLine += line => Log?.Invoke(this, line);
         process.BeginErrorRead();
 
-        var connection = new JsonRpcConnection(process.Output, process.Input);
+        var connection = new JsonRpcConnection(process.Output, process.Input, Framing);
         ConfigureConnection?.Invoke(connection);
         connection.Disconnected += OnDisconnected;
         connection.HandlerFailed += (_, ex) => Log?.Invoke(this, $"[{Name}] handler failed: {ex.Message}");

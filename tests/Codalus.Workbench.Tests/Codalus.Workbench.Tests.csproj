@@ -9,6 +9,7 @@
     <!-- Built so the tests can launch it; not referenced as an assembly. -->
     <ProjectReference Include="..\..\src\Codalus.Interactive.Host\Codalus.Interactive.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Codalus.LspConformance.Server\Codalus.LspConformance.Server.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Codalus.AcpAgent.Fake\Codalus.AcpAgent.Fake.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Codalus.Markup.Host\Codalus.Markup.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Codalus.Remote.Server\Codalus.Remote.Server.csproj" ReferenceOutputAssembly="false" />
     <!-- Launched by the tests, and referenced for its plan parsers (internals visible to these tests). -->
