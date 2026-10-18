@@ -13,6 +13,8 @@
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://codalus/Theming/Tokens.axaml" />
+        <!-- The control set's control themes (M34h): app resources come before Fluent's, so these replace its own. -->
+        <ResourceInclude Source="avares://codalus/Theming/Controls.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

@@ -30,6 +30,7 @@ internal sealed partial class SmokeTest
     {
         await GalleryToolWindowsAsync("empty").ConfigureAwait(true);
         await GalleryNewViewsEmptyAsync().ConfigureAwait(true);
+        await GalleryControlSetAsync().ConfigureAwait(true); // M34h
         WriteGalleryIndex();
     }
 
@@ -119,7 +120,21 @@ internal sealed partial class SmokeTest
             shell.Layout.CloseDocument(document);
         }
 
-        // The in-window dialog (M34's final pass): a preview of changes and a checklist, over the window.
+        // The in-window dialog (M34's final pass; M34h's frame): a preview of changes, the checklist of
+        // docs/design/controls/ChecklistDialog.dc.html, a name with an error, a dangerous confirmation, over the window.
+        var checklist = new DialogRequest("Generate Constructor", "Members to initialize:", ["OK", "Cancel"])
+        {
+            Icon = "tools",
+            Context = "Person · ICalculatorService.cs",
+            Choices =
+            [
+                new DialogChoice("name", "string Name", true, "property") { Icon = "tools" },
+                new DialogChoice("age", "int Age", true, "property") { Icon = "tools" },
+                new DialogChoice("mood", "Mood Mood", false, "property") { Icon = "tools" },
+                new DialogChoice("tags", "List<string> Tags", false, "property") { Icon = "tools" },
+            ],
+            Reorderable = true,
+        };
         var dialogs = new List<(string Name, DialogRequest Request)>
         {
             ("dialog-preview", new DialogRequest("Preview Changes: Rename", "4 changes in 2 files.", ["Apply", "Cancel"])
@@ -148,12 +163,9 @@ internal sealed partial class SmokeTest
                     new DetailLine("+ Console.WriteLine(Welcomer.Default.Greet());", "added"),
                 ],
             }),
-            ("dialog-checklist", new DialogRequest("Generate Constructor", "Members to initialize:", ["OK", "Cancel"])
-            {
-                Choices = [new DialogChoice("name", "string Name", true), new DialogChoice("age", "int Age", false, "a property")],
-                Reorderable = true,
-            }),
-            ("dialog-input", new DialogRequest("Rename", "The new name of the class and its file:", ["Rename", "Cancel"]) { Input = "Gr", Validate = text => text.Length < 3 ? "The name is too short." : null }),
+            ("dialog-checklist", checklist),
+            ("dialog-input", new DialogRequest("Rename", "The new name of the class and its file:", ["Rename", "Cancel"]) { Input = "Gr", Validate = text => text.Length < 3 ? "The name is too short." : null, Icon = "rename", Context = "Greeter · Greeter.cs" }),
+            ("dialog-confirm", new DialogRequest("Remove Worktree", "Remove the worktree and its folder? Its uncommitted changes are lost.", ["Remove", "Cancel"]) { IsDanger = true }),
         };
         foreach (var (name, request) in dialogs)
         {
@@ -166,6 +178,8 @@ internal sealed partial class SmokeTest
             shell.Dialogs.Cancel();
             await shown.ConfigureAwait(true);
         }
+
+        await GalleryDialogOnMacAsync(checklist).ConfigureAwait(true); // M34h: the buttons in macOS's order
 
         // Error states: a compile error in the Error List, the failed build's output, a failed test's details.
         if (sources.FirstOrDefault() is { } broken && await shell.OpenFileAsync(broken, preview: false).ConfigureAwait(true) is { } editorDocument)

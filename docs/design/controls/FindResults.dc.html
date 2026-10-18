@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Find Results: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.canvas{width:1280px;height:540px;padding:6px;display:flex;flex-direction:column}
+.fam-classic .canvas{padding:4px}
+.tw{flex:1}
+.query{display:flex;align-items:center;gap:8px;height:28px;padding:0 10px;border-top:1px solid var(--soft-border);border-bottom:1px solid var(--soft-border);background:var(--header)}
+.query .term{color:var(--strong);font-weight:600}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 220px 60px 52px;align-items:center}
+.cols.head{height:24px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--soft-border);background:var(--panel)}
+.cols.head>span{padding:0 8px;display:flex;align-items:center;gap:4px}
+.cols.head>span.num{justify-content:flex-end}
+.results{flex:1;min-height:0;overflow:hidden;background:var(--editor);color:var(--editor-fg)}
+.fr{height:22px;white-space:nowrap}
+.fr>span{padding:0 8px;overflow:hidden;text-overflow:ellipsis}
+.fr .num{text-align:right;font-family:var(--mono);color:var(--muted)}
+.fr.sel .num,.fr.sel-i .num{color:inherit}
+.fr .lbl{display:flex;align-items:center;gap:6px;min-width:0}
+.fr .lbl .chev{width:12px;height:12px;color:var(--muted);flex:none}
+.fr.sel .lbl .chev{color:inherit}
+.fr .src{white-space:pre;font-family:var(--mono);font-size:12px;background:transparent;overflow:hidden;text-overflow:ellipsis}
+.fr.group .name{font-weight:600;color:var(--strong)}
+.fr.group.folder .name{font-weight:500;color:var(--editor-fg)}
+.fr.sel .name{color:inherit}
+.fr .file{color:var(--muted)}
+.fr.sel .file{color:inherit}
+.fr.line{cursor:default}
+.fr.line:hover,.fr.hover{background:var(--row-hover)}
+.fr.sel{background:var(--sel);color:var(--sel-fg)}
+.fr.sel .src span{color:inherit}
+.fr.sel .hl{background:transparent;color:inherit;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:2px}
+.kind-hc .fr.sel .hl{outline:0}
+.summary{display:flex;align-items:center;gap:16px;height:24px;padding:0 10px;color:var(--muted);border-top:1px solid var(--soft-border);background:var(--panel)}
+.summary b{color:var(--fg);font-weight:600}
+.legend{margin-left:auto;display:flex;gap:6px;align-items:center}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}">
+<div class="canvas">
+<section class="tw" aria-label="Find Results">
+  <div class="tw-cap active">
+    <span class="title">Find Results</span>
+    <span class="cb" title="Window Position"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+    <span class="cb" title="Auto Hide"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-pin"></use></svg></span>
+    <span class="cb" title="Close"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span>
+  </div>
+  <div class="tabs" role="tablist" aria-label="Find Results pages">
+    <button class="tab" role="tab" aria-selected="false">Find Results 1<span class="badge">2</span><span class="x" title="Close these results"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></button>
+    <button class="tab sel" role="tab" aria-selected="true">Find Results 2<span class="badge">13</span><span class="x" title="Close these results"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></button>
+  </div>
+  <div class="toolbar" role="toolbar" aria-label="Find Results">
+    <button class="tb" aria-label="Go to Previous Location (Shift+F8)" title="Go to Previous Location (Shift+F8)"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-up"></use></svg></button>
+    <button class="tb" aria-label="Go to Next Location (F8)" title="Go to Next Location (F8)"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-down"></use></svg></button>
+    <span class="tb-sep"></span>
+    <button class="tb" aria-label="Clear All" title="Clear All"><svg class="i c-red" aria-hidden="true"><use href="#i-clear-all"></use></svg></button>
+    <button class="tb is-disabled" aria-disabled="true" aria-label="Stop Searching" title="Stop Searching"><svg class="i c-red" aria-hidden="true"><use href="#i-stop"></use></svg></button>
+    <span class="tb-sep"></span>
+    <button class="tb is-checked" aria-pressed="true" aria-label="Keep Results" title="Keep Results: the next search opens a new Find Results page"><svg class="i c-blue" aria-hidden="true"><use href="#i-pin"></use></svg></button>
+    <div class="seg" role="group" aria-label="View" style="margin:0 2px"><button class="on" aria-pressed="true" title="Grouped by path and file"><svg class="i" aria-hidden="true"><use href="#i-tree"></use></svg>Tree</button><button aria-pressed="false" title="List View: the results in one list, with their full paths"><svg class="i c-blue" aria-hidden="true"><use href="#i-list"></use></svg>List</button></div>
+    <span class="field sm combo" style="width:150px" role="combobox" aria-label="Group by" title="Group by"><span class="value">Path and file</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+    <span class="tb-sep"></span>
+    <button class="tb text" title="Show Find and Replace with this search (Ctrl+Shift+F)"><svg class="i c-blue" aria-hidden="true"><use href="#i-edit"></use></svg>Modify Find</button>
+    <span class="grow"></span>
+    <span class="field sm" style="width:300px"><svg class="i lead" aria-hidden="true"><use href="#i-filter"></use></svg><input aria-label="Search Find Results" placeholder="Search Find Results"></span>
+  </div>
+  <div class="query">
+    <svg class="i c-blue" aria-hidden="true"><use href="#i-search"></use></svg>
+    <span>Find all <span class="term">"Person"</span><span class="muted">, Match case, Whole word, Entire solution, "*.cs"</span></span>
+  </div>
+  <div class="cols head" role="row"><span>Code</span><span>File<svg class="i sm" aria-hidden="true"><use href="#i-chevron-up"></use></svg></span><span class="num">Line</span><span class="num">Col</span></div>
+  <div class="results" role="tree" aria-label="Find results">
+    <sc-for list="{{rows}}" as="r">
+      <div class="fr cols {{r.cls}}" role="treeitem" aria-level="{{r.level}}" aria-expanded="{{r.expanded}}" aria-selected="{{r.selected}}">
+        <span class="lbl" style="padding-left: {{r.indent}}px">
+          <sc-if value="{{r.group}}"><svg class="chev" aria-hidden="true"><use href="#i-{{r.chev}}"></use></svg><svg class="i {{r.ic}}" aria-hidden="true"><use href="#i-{{r.icon}}"></use></svg><span class="name trim">{{r.name}}</span><span class="badge">{{r.count}}</span></sc-if>
+          <sc-if value="{{r.line}}"><span class="src"><sc-for list="{{r.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span></sc-if>
+        </span>
+        <span class="file trim">{{r.file}}</span>
+        <span class="num">{{r.ln}}</span>
+        <span class="num">{{r.col}}</span>
+      </div>
+    </sc-for>
+  </div>
+  <div class="summary" role="status" aria-live="polite">
+    <span>Matching lines: <b>13</b></span><span>Matching files: <b>4</b></span><span>Total files searched: <b>5</b></span>
+    <span class="legend small">Enter or double-click opens · F8 next · Shift+F8 previous</span>
+  </div>
+  <div class="tw-tabs" role="tablist" aria-label="Bottom tool windows"><span>Error List</span><span>Output</span><span class="on">Find Results</span><span>Terminal</span></div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":540}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const folder = (name, count, open) => ({ group: true, cls: 'group folder', name, count, icon: open ? 'folder-open' : 'folder', ic: 'c-folder', chev: open ? 'chevron-down' : 'chevron-right', indent: 8, level: 1, expanded: String(open) });
+    const file = (name, count) => ({ group: true, cls: 'group', name, count, icon: 'cs-file', ic: '', chev: 'chevron-down', indent: 26, level: 2, expanded: 'true' });
+    const line = (src, f, ln, col, state) => ({ line: true, cls: 'line ' + (state ?? ''), toks: C.csharp(src, 'Person'), file: f, ln, col, indent: 62, level: 3, selected: String(state === 'sel') });
+    const rows = [
+      folder('samples/Wcf/CalculatorService', 6, true),
+      file('ICalculatorService.cs', 3),
+      line('string Greet(Person person);', 'ICalculatorService.cs', 19, 18),
+      line('Person[] FindPeople(string prefix, int max);', 'ICalculatorService.cs', 22, 5, 'hover'),
+      line('public sealed class Person', 'ICalculatorService.cs', 31, 21, 'sel'),
+      file('CalculatorService.cs', 3),
+      line('private static readonly Person[] s_people =', 'CalculatorService.cs', 7, 29),
+      line('public string Greet(Person person) =>', 'CalculatorService.cs', 21, 25),
+      line('public Person[] FindPeople(string prefix, int max) =>', 'CalculatorService.cs', 24, 12),
+      folder('samples/Wcf/CalculatorClient', 1, true),
+      file('Program.cs', 1),
+      line('Console.WriteLine(await client.GreetAsync(new Person { Name = "Ada", Age = 36, Mood = Mood.Happy, Tags = ["math"] }));', 'Program.cs', 9, 51),
+      folder('samples/Wcf/CalculatorClient/Connected Services/CalculatorService', 6, false)
+    ];
+    return { t, rows };
+  }
+}
+</script>
+</body>
+</html>
