@@ -13,6 +13,8 @@
 #                              full .nupkg): Velopack then also builds a delta package
 #   CODALUS_RELEASE_NOTES     a Markdown file with the release notes, shown by the update feed
 #   CODALUS_FEED_KEY          the feed signing key (PEM; the FEED_SIGNING_KEY secret): signs releases.<channel>.json
+#   CODALUS_PACKAGES_KEY      the package key (armored; the PACKAGES_GPG_PRIVATE_KEY secret): signs the .rpm, which
+#                              the dnf repository serves from the release (eng/linux-repos.sh)
 # Output: artifacts/packages/ (the Velopack feed and packages in artifacts/packages/velopack/), with SHA256SUMS-<rid>.txt;
 #         CODALUS_PACKAGES_OUT names another folder (eng/test-update.sh builds into its own)
 # Prerequisites: the .NET SDK (Native AOT toolchain), zip; vswhere on PATH on Windows; mksquashfs on Linux; rpmbuild
@@ -184,6 +186,18 @@ case "$rid" in
         "$repo/eng/packaging/linux/codalus.spec" > "$rpmtop/SPECS/codalus.spec"
       rpmbuild --quiet -bb --target "$rpmarch" --define "_topdir $rpmtop" "$rpmtop/SPECS/codalus.spec"
       mv "$rpmtop/RPMS/$rpmarch/"codalus-*.rpm "$out/$name.rpm"
+      # The dnf repository serves this very file from the release (eng/linux-repos.sh), with gpgcheck on.
+      if [ -n "${CODALUS_PACKAGES_KEY:-}" ]; then
+        echo "== Linux: sign the rpm"
+        gnupg="$(mktemp -d)"
+        printf '%s\n' "$CODALUS_PACKAGES_KEY" | GNUPGHOME="$gnupg" gpg --batch --quiet --import
+        fingerprint="$(GNUPGHOME="$gnupg" gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')"
+        # rpm's default gpg is gpg2, which Debian and Ubuntu don't have.
+        rpmsign --addsign --define "_gpg_name $fingerprint" --define "_gpg_path $gnupg" --define "__gpg $(command -v gpg)" \
+          --define "_gpg_sign_cmd_extra_args --batch --pinentry-mode loopback --passphrase ''" "$out/$name.rpm" > /dev/null
+        GNUPGHOME="$gnupg" gpgconf --kill gpg-agent 2> /dev/null || true
+        rm -rf "$gnupg"
+      fi
     else
       echo "No rpmbuild on this machine: no .rpm." >&2
     fi

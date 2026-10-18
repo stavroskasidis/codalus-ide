@@ -97,6 +97,7 @@ Each host variable takes the path of the host's apphost or its `.dll` (run with 
 | Variable | What it does |
 |---|---|
 | `CODALUS_FEED_KEY` | The update feed's signing key (ECDSA P-256, PEM). `eng/package.sh` signs each `releases.<channel>.json` with it (`.sig`); without it the feed is unsigned and installed builds refuse it. The pipeline passes the `FEED_SIGNING_KEY` secret; `eng/test-update.sh` uses a throwaway key. `eng/package.sh` |
+| `CODALUS_PACKAGES_KEY` | The Linux package key (armored OpenPGP private key). `eng/package.sh` signs the `.rpm` with it, since the dnf repository serves that file from the release with `gpgcheck` on (`eng/linux-repos.sh` refuses an unsigned one). The pipeline passes the `PACKAGES_GPG_PRIVATE_KEY` secret; without it the `.rpm` is unsigned. `eng/package.sh` |
 | `CODALUS_PREVIOUS_RELEASE` | A folder with the previous release of the channel (its `releases.<channel>.json` and full `.nupkg`), so Velopack also builds a delta package. `eng/package.sh` |
 | `CODALUS_RELEASE_NOTES` | A Markdown file with the release notes that the update feed shows. `eng/package.sh` |
 | `CODALUS_PACKAGES_OUT` | The output folder instead of `artifacts/packages`. `eng/test-update.sh` builds into its own. `eng/package.sh` |
