@@ -24,6 +24,7 @@ public sealed class CodeViewer : UserControl
     private readonly IEditorServices _services;
     private readonly RangeHighlight _highlight = new();
     private AvaloniaEdit.TextMate.TextMate.Installation? _textMate;
+    private GrammarColorizer? _grammarColors;
     private string? _scope;
 
     public CodeViewer(IEditorServices services, EditorFont font)
@@ -50,6 +51,16 @@ public sealed class CodeViewer : UserControl
 
     public TextEditor Editor { get; }
 
+    /// <summary>
+    /// Colors C# and Visual Basic in the editor theme's colors, the editor's, from their grammar's scopes
+    /// (<see cref="GrammarColorizer"/>), instead of the TextMate theme of a view without a language service (M34h: Add
+    /// New Item's preview). Other languages keep their TextMate colors, which are the editor's for them too.
+    /// </summary>
+    public bool EditorColors { get; init; }
+
+    /// <summary>The colorizer of <see cref="EditorColors"/>, or null when the language is colored by TextMate (tests).</summary>
+    public GrammarColorizer? GrammarColors => _grammarColors;
+
     /// <summary>Shows <paramref name="text"/> with <paramref name="highlight"/> marked and scrolled into view.</summary>
     public void Show(string text, string? languageId, LanguageServices.Protocol.Range? highlight)
     {
@@ -62,8 +73,13 @@ public sealed class CodeViewer : UserControl
         }
 
         var scope = _services.TextMate.GrammarScopeFor(languageId);
-        if (scope != _scope)
+        if (EditorColors && languageId is "csharp" or "vb")
         {
+            ShowWithEditorColors(languageId);
+        }
+        else if (scope != _scope || _grammarColors is not null)
+        {
+            RemoveGrammarColors();
             _scope = scope;
             _textMate?.Dispose();
             _textMate = null;
@@ -107,7 +123,46 @@ public sealed class CodeViewer : UserControl
         Editor.TextArea.TextView.Redraw();
     }
 
-    private void OnThemeChanged(object? sender, EventArgs e) => _textMate?.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
+    private void ShowWithEditorColors(string languageId)
+    {
+        _textMate?.Dispose();
+        _textMate = null;
+        _scope = null;
+        if (_grammarColors is null)
+        {
+            _grammarColors = new GrammarColorizer();
+            Editor.TextArea.TextView.LineTransformers.Add(_grammarColors);
+        }
+
+        _grammarColors.Theme = _services.Theme;
+        if (_services.TextMate.GrammarFor(languageId) is { } grammar)
+        {
+            _grammarColors.Tokenize(Editor.Document, grammar);
+        }
+        else
+        {
+            _grammarColors.Clear();
+        }
+    }
+
+    private void RemoveGrammarColors()
+    {
+        if (_grammarColors is not null)
+        {
+            Editor.TextArea.TextView.LineTransformers.Remove(_grammarColors);
+            _grammarColors = null;
+        }
+    }
+
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        _textMate?.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
+        if (_grammarColors is not null)
+        {
+            _grammarColors.Theme = _services.Theme;
+            Editor.TextArea.TextView.Redraw();
+        }
+    }
 
     /// <summary>Stops following the theme and releases the grammar (the view closed).</summary>
     public void Release()

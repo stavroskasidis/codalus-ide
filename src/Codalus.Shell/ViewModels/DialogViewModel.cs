@@ -413,10 +413,3 @@ public sealed class DialogViewModel : ObservableObject
         return result.Button == "OK" ? result.Input : null;
     }
 }
-
-/// <summary>Dialogs with details (previews) are wider; the others grow with their content up to 720 px (Shell.Size.Dialog.MaxWidth, M34h).</summary>
-public static class DialogWidth
-{
-    public static Avalonia.Data.Converters.IValueConverter Converter { get; } =
-        new Avalonia.Data.Converters.FuncValueConverter<bool, double>(details => details ? 960 : 720);
-}

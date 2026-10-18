@@ -22,12 +22,13 @@ internal sealed partial class SmokeTest
     private static readonly string[] s_classicThemes = ["blue", "light", "dark", "highContrast"];
 
     /// <summary>
-    /// The gallery's themes: Classic's four, or with <c>CODALUS_GALLERY_THEMES=all</c> also the theme families' twelve
-    /// variants (M45), for the maintainer's review: four times the pictures, more than the smoke test's time on CI.
+    /// The gallery's themes (M34h, the maintainer's decision): Classic's four and Harbor's three (Light, Dark and High
+    /// contrast; Harbor is the family new installs start with, ADR 0077). With <c>CODALUS_GALLERY_THEMES=all</c> also
+    /// the other families' nine variants, for a review of every family: more than the smoke test's time on CI.
     /// </summary>
     private static readonly string[] s_galleryThemes = Environment.GetEnvironmentVariable("CODALUS_GALLERY_THEMES") == "all"
         ? [.. ThemeService.Themes.Select(t => t.Id)]
-        : s_classicThemes;
+        : [.. s_classicThemes, "harbor.light", "harbor.dark", "harbor.highContrast"];
 
     private async Task UxPassStepsAsync()
     {

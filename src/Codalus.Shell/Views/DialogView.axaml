@@ -15,6 +15,20 @@
     </Style>
     <Style Selector="TextBlock.header">
       <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- A preview's lines (M34h's gallery fixes): each added or removed line marked in the diff's color at its left edge as well as in its text. -->
+    <Style Selector="Border.line">
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Padding" Value="6,0,8,0" />
+    </Style>
+    <Style Selector="Border.line.added">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Diff.Added}" />
+    </Style>
+    <Style Selector="Border.line.removed">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Diff.Removed}" />
+    </Style>
+    <Style Selector="Border.line.header">
       <Setter Property="Margin" Value="0,6,0,2" />
     </Style>
     <!-- The header's icon tile (M34h): a tint of the icon's color; outlined in High contrast (Shell.Chip.BorderThickness). -->
@@ -49,7 +63,7 @@
     </Style>
   </UserControl.Styles>
   <Border x:Name="Frame" Classes="overlay" CornerRadius="8" Padding="0" ClipToBounds="True"
-          MaxWidth="{Binding HasDetails, Converter={x:Static vm:DialogWidth.Converter}}" KeyboardNavigation.TabNavigation="Cycle"
+          KeyboardNavigation.TabNavigation="Cycle"
           AutomationProperties.Name="{Binding Title}">
     <DockPanel>
       <!-- Header: the icon tile in the command's color, the title (14 px), what it acts on, and a close button (Esc). -->
@@ -154,14 +168,17 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </ScrollViewer>
-        <Border IsVisible="{Binding HasChanges}" BorderBrush="{DynamicResource Shell.Input.Border}" BorderThickness="1" CornerRadius="{DynamicResource Shell.Control.CornerRadius}"
+        <!-- The changes, on the editor's background: they fill what the header, the message and the footer leave of the frame. -->
+        <Border x:Name="ChangesBox" IsVisible="{Binding HasChanges}" BorderBrush="{DynamicResource Shell.Input.Border}" BorderThickness="1" CornerRadius="{DynamicResource Shell.Control.CornerRadius}"
                 Background="{DynamicResource Shell.Editor.Background}" MaxHeight="420">
           <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="{l:T dialog.preview}">
-            <ItemsControl ItemsSource="{Binding Changes}" Margin="8,6" TextElement.Foreground="{DynamicResource Shell.Editor.Foreground}">
+            <ItemsControl ItemsSource="{Binding Changes}" Margin="0,4" TextElement.Foreground="{DynamicResource Shell.Editor.Foreground}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:DetailLine">
-                  <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
-                             Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" />
+                  <Border Classes="line" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}">
+                    <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+                               Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" />
+                  </Border>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>

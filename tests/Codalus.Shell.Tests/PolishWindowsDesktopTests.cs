@@ -510,7 +510,7 @@ public partial class PolishTests
         {
             var content = text.Text ?? text.Inlines?.Text;
             if (!text.IsEffectivelyVisible || string.IsNullOrWhiteSpace(content) || text.Bounds.Width < 1 || text.Bounds.Height < 1
-                || text.FindAncestorOfType<TextBox>() is not null || InOverflow(text) || text.TranslatePoint(default, root) is not { } origin)
+                || text.FindAncestorOfType<TextBox>() is not null || InOverflow(text) || InThemePreview(text) || text.TranslatePoint(default, root) is not { } origin)
             {
                 continue;
             }
@@ -578,12 +578,14 @@ public partial class PolishTests
     /// </summary>
     internal static IEnumerable<string> LowContrast(Visual root, ThemeVariant variant)
     {
-        var aaa = ThemeService.IsHighContrast(variant) && variant != ThemeService.HighContrast;
         foreach (var text in root.GetVisualDescendants().OfType<TextBlock>())
         {
+            // The text's own variant: a theme's preview (M34h) draws in its variant inside a window in another.
+            var textVariant = text.ActualThemeVariant ?? variant;
+            var aaa = ThemeService.IsHighContrast(textVariant) && textVariant != ThemeService.HighContrast;
             var content = text.Text ?? text.Inlines?.Text;
             if (!text.IsEffectivelyVisible || !text.IsEffectivelyEnabled || string.IsNullOrWhiteSpace(content) || text.Bounds.Width < 1 || text.Bounds.Height < 1
-                || text.FindAncestorOfType<TextBox>() is not null || text.Foreground is not ISolidColorBrush foreground)
+                || text.FindAncestorOfType<TextBox>() is not null || InThemePreview(text) || text.Foreground is not ISolidColorBrush foreground)
             {
                 continue;
             }
