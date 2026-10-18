@@ -11,16 +11,22 @@ namespace Codalus.Workbench.Tests;
 /// runtime and goes on once netcoredbg reports it; a program that ended first starts again, a bounded number of times,
 /// without the session ending in between; so does a later program of several startup projects, in its place. The
 /// adapter is the scripted one (<c>Codalus.LspConformance.Server --dap</c>), told to fail its first starts and what the
-/// program does next (<c>runtimeAfter</c>).
+/// program does next (<c>runtimeAfter</c>). A program started in the terminal is attached to after
+/// <c>configurationDone</c>, so there it's the <c>attach</c> that netcoredbg fails, and the same holds.
 /// </summary>
 public sealed class DebugStartAgainTests : IDisposable
 {
     private readonly string _starts = Path.Combine(Path.GetTempPath(), "codalus-debug-starts-" + Guid.NewGuid().ToString("N"));
 
+    private readonly List<string> _scratch = [];
+
     private static string Metadata(string key) =>
         typeof(DebugStartAgainTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
 
     private static string ScriptedAdapter => Path.Combine(Metadata("CodalusRepoRoot"), "tests", "Codalus.LspConformance.Server", "bin", Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-lsp-conformance.dll");
+
+    /// <summary>The scripted adapter's own executable, which netcoredbg's arguments make a stand-in for netcoredbg.</summary>
+    private static string NetcoredbgStandIn => Path.ChangeExtension(ScriptedAdapter, OperatingSystem.IsWindows() ? ".exe" : null);
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token).Token;
@@ -35,6 +41,133 @@ public sealed class DebugStartAgainTests : IDisposable
 
         File.Delete(_starts);
         File.Delete(_starts + ".programs");
+        foreach (var path in _scratch)
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            else
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The integrated terminal as a program held by the startup hook leaves it: each launch starts a "program" (the
+    /// scripted adapter's, listed next to the starts file), scripts what it does when netcoredbg's attach times out
+    /// (the next of <paramref name="runtimeAfter"/>, see <c>ScriptedDap.AttachScript</c>) and writes its id where the
+    /// hook would.
+    /// </summary>
+    private sealed class HeldTerminal(DebugStartAgainTests test, params string[] runtimeAfter) : ITerminalLauncher
+    {
+        private int _launches;
+
+        public Task<int?> LaunchAsync(TerminalLaunch launch, CancellationToken cancellationToken)
+        {
+            var start = new System.Diagnostics.ProcessStartInfo("dotnet", [ScriptedAdapter, "--program"]) { UseShellExecute = false, RedirectStandardInput = true };
+            using var program = System.Diagnostics.Process.Start(start)!;
+            var id = program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            File.AppendAllText(test._starts + ".programs", id + "\n");
+            var script = Path.Combine(Path.GetTempPath(), "codalus-scripted-attach-" + id);
+            var folder = launch.Environment[HeldLaunch.WaitVariable]!;
+            lock (test._scratch)
+            {
+                test._scratch.Add(script);
+                test._scratch.Add(folder);
+            }
+
+            File.WriteAllText(script, runtimeAfter[Math.Min(_launches++, runtimeAfter.Length - 1)]);
+
+            // The program reaches the hook a moment later, as one does after its runtime started: by then the session
+            // sent configurationDone (netcoredbg's initialized event came with its answer to initialize).
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(500, CancellationToken.None);
+                File.WriteAllText(Path.Combine(folder, "pid.tmp"), id);
+                File.Move(Path.Combine(folder, "pid.tmp"), Path.Combine(folder, "pid"));
+            }, CancellationToken.None);
+            return Task.FromResult<int?>(program.Id);
+        }
+    }
+
+    /// <summary>A session whose program starts in <paramref name="terminal"/>, debugged by the netcoredbg stand-in; its Debug Console goes to <paramref name="output"/>.</summary>
+    private static async Task<(DebugService Debug, Task<int?> Ended)> LaunchInTerminalAsync(HeldTerminal terminal, System.Text.StringBuilder output)
+    {
+        var debug = new DebugService(() => NetcoredbgStandIn) { Terminal = terminal, StartupHook = "Codalus.Debugging.StartupHook.dll" };
+        var ended = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
+        debug.Ended += (_, code) => ended.TrySetResult(code);
+        var plan = new Codalus.Workbench.Build.LaunchPlan("dotnet", string.Empty, AppContext.BaseDirectory, new Dictionary<string, string>(), null) { ArgumentList = ["exec", "program.dll"] };
+        await debug.LaunchAsync([new DebugLaunch("Program", plan) { Console = DebugConsoleKind.Terminal }], Timeout());
+        return (debug, ended.Task);
+    }
+
+    private static async Task<int?> EndedAsync(Task<int?> ended, System.Text.StringBuilder output)
+    {
+        try
+        {
+            return await ended.WaitAsync(Timeout());
+        }
+        catch (OperationCanceledException)
+        {
+            lock (output)
+            {
+                Assert.Fail($"The session didn't end. Debug Console:\n{output}");
+            }
+
+            throw;
+        }
+    }
+
+    [Fact]
+    public async Task A_program_in_the_terminal_whose_attach_timed_out_waits_for_its_runtime_while_it_runs()
+    {
+        // PR #35's Windows CI: netcoredbg failed the attach to the program held in the terminal with 0x80004005 (its
+        // 5 seconds), and the launch failed, where a launch with the Debug Console would have waited for the runtime.
+        var output = new System.Text.StringBuilder();
+        var (debug, ended) = await LaunchInTerminalAsync(new HeldTerminal(this, "1500"), output);
+        await using (debug)
+        {
+            var program = Assert.Single(ProgramIds());
+            Assert.Equal(program, debug.Processes.Single().Id);
+            Assert.Equal(DebugProcess.Terminal, debug.Processes.Single().Kind);
+            Assert.Equal(7, await EndedAsync(ended, output));
+        }
+
+        string text;
+        lock (output)
+        {
+            text = output.ToString();
+        }
+
+        Assert.Contains("The debugger didn't see the program's runtime start within its 5 seconds; waiting for it", text, StringComparison.Ordinal);
+        Assert.Contains("The debugger saw the program's runtime start ", text, StringComparison.Ordinal);
+        Assert.Contains("Hello from the scripted program", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("starting again", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_program_in_the_terminal_that_ended_before_its_attach_completed_starts_again()
+    {
+        // The first program ends before its runtime reports (empty script), the second one's reports.
+        var output = new System.Text.StringBuilder();
+        var (debug, ended) = await LaunchInTerminalAsync(new HeldTerminal(this, string.Empty, "500"), output);
+        await using (debug)
+        {
+            Assert.Equal(7, await EndedAsync(ended, output));
+            var ids = ProgramIds();
+            Assert.Equal(2, ids.Length);
+            Assert.Equal(ids[1], debug.Processes.Single().Id);
+        }
+
+        lock (output)
+        {
+            Assert.Contains("The debugger didn't see the program's runtime start; starting again (2 of 3).", output.ToString(), StringComparison.Ordinal);
+        }
+
+        Assert.True(LeftPrograms().Running.Count == 0);
     }
 
     /// <summary>The ids of the "programs" the timed-out starts left (the scripted adapter lists them), with those still running.</summary>
@@ -396,5 +529,9 @@ public sealed class DebugStartAgainTests : IDisposable
         Assert.True(DebugService.IsStartupTimeout(new DapException("configurationDone", "Failed command 'configurationDone' : 0x80004005")));
         Assert.False(DebugService.IsStartupTimeout(new DapException("configurationDone", "Failed command 'configurationDone' : 0x80070057")));
         Assert.False(DebugService.IsStartupTimeout(new DapException("launch", "Failed command 'launch' : 0x80004005")));
+
+        // An attach after configurationDone (a program started in the terminal) carries the start, and the timeout.
+        Assert.True(DebugService.IsStartupTimeout(new DapException("attach", "Failed command 'attach' : 0x80004005")));
+        Assert.False(DebugService.IsStartupTimeout(new DapException("attach", "Failed command 'attach' : 0x80070057")));
     }
 }

@@ -9,7 +9,9 @@ namespace Codalus.LspConformance.Server;
 /// <c>initialize</c>, <c>launch</c> (echoing the launch configuration to the Debug Console), <c>configurationDone</c>
 /// (after which the "program" prints and exits) and <c>disconnect</c>, as any DAP adapter would.
 /// A launch configuration with <c>threads</c> (see <see cref="Threads"/>) is a program that keeps running until a
-/// <c>pause</c>, which stops it on the thread named, as netcoredbg does (Break All tests).
+/// <c>pause</c>, which stops it on the thread named, as netcoredbg does (Break All tests). Started with netcoredbg's
+/// arguments (<c>--interpreter=vscode</c>), it stands in for netcoredbg: <c>configurationDone</c> without a launch, then
+/// an attach (a program started in the terminal, see <see cref="AttachScript"/>).
 /// </summary>
 internal static class ScriptedDap
 {
@@ -21,6 +23,8 @@ internal static class ScriptedDap
     public static async Task RunAsync(Stream input, Stream output)
     {
         JsonElement? launch = null;
+        var configured = false;
+        var evaluations = 0;
         while (await ReadAsync(input) is { } message)
         {
             if (message.GetProperty("type").GetString() != "request")
@@ -41,6 +45,32 @@ internal static class ScriptedDap
                     continue;
                 case "launch":
                     launch = message.TryGetProperty("arguments", out var arguments) ? arguments.Clone() : null;
+                    break;
+                case "configurationDone" when launch is null:
+                    // An attach comes next: a program started in the terminal.
+                    configured = true;
+                    break;
+                case "attach" when configured && AttachScript(message) is { } attach:
+                    {
+                        // An attach after configurationDone carries netcoredbg's start, and its 5-second wait for the
+                        // runtime: it fails as netcoredbg's does, and the program goes on as the script says.
+                        await FailAsync(output, requestSeq, command, "Failed command 'attach' : 0x80004005");
+                        _ = AfterTimeoutAsync(output, attach.ProcessId, attach.RuntimeAfter, $"{{\"attach\":{attach.ProcessId}}}");
+                        continue;
+                    }
+
+                case "evaluate" when launch is { } evaluating && Option(evaluating, "evaluateTimesOut") is { } timesOut
+                                     && ++evaluations <= int.Parse(timesOut, System.Globalization.CultureInfo.InvariantCulture):
+                    // As netcoredbg answers a request that runs past its fixed 15 seconds.
+                    await FailAsync(output, requestSeq, command, "Command execution timed out.");
+                    continue;
+                case "evaluate":
+                    body = new JsonObject
+                    {
+                        ["result"] = $"{message.GetProperty("arguments").GetProperty("expression").GetString()} (request {evaluations})",
+                        ["type"] = "string",
+                        ["variablesReference"] = 0,
+                    };
                     break;
                 case "configurationDone" when FailsToStart(launch):
                     {
@@ -129,6 +159,24 @@ internal static class ScriptedDap
     /// </summary>
     private static JsonElement[]? Threads(JsonElement? launch) =>
         launch is { ValueKind: JsonValueKind.Object } arguments && arguments.TryGetProperty("threads", out var threads) ? [.. threads.EnumerateArray()] : null;
+
+    /// <summary>
+    /// What an attached process does when netcoredbg's attach times out, as its script says: the file
+    /// <c>codalus-scripted-attach-&lt;process id&gt;</c> in the temp folder holds <see cref="AfterTimeoutAsync"/>'s
+    /// <c>runtimeAfter</c> (empty: the program ends before its runtime starts). Without one, the attach works.
+    /// </summary>
+    private static (int ProcessId, string? RuntimeAfter)? AttachScript(JsonElement request)
+    {
+        var processId = request.GetProperty("arguments").GetProperty("processId").GetInt32();
+        var script = Path.Combine(Path.GetTempPath(), "codalus-scripted-attach-" + processId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (!File.Exists(script))
+        {
+            return null;
+        }
+
+        var runtimeAfter = File.ReadAllText(script).Trim();
+        return (processId, runtimeAfter.Length == 0 ? null : runtimeAfter);
+    }
 
     /// <summary>
     /// A launch configuration with <c>failStarts</c> (a count) and <c>startsFile</c> (a file the adapters share) fails

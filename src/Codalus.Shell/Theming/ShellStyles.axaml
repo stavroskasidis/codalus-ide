@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:Codalus.Shell.Controls"
         xmlns:core="using:Dock.Model.Core"
-        xmlns:docking="using:Codalus.Shell.Docking">
+        xmlns:docking="using:Codalus.Shell.Docking"
+        xmlns:editing="using:AvaloniaEdit.Editing">
   <Styles.Resources>
     <!-- Dock's document tab strip takes its panel from this resource (a style can't replace it): ours fits (M34e). -->
     <ItemsPanelTemplate x:Key="DockDocumentTabStripHorizontalItemsPanel">
@@ -698,5 +699,29 @@
   </Style>
   <Style Selector="Border#StatusBarHost.debugging Ellipse.statusDot">
     <Setter Property="Fill" Value="{DynamicResource Shell.StatusBar.Debugging.Foreground}" />
+  </Style>
+
+  <!--
+    AvaloniaEdit's text area template without its watermark (no editor has one). The watermark's visibility was bound to
+    the document's Text, which builds the whole document as a string on every change and keeps the last one: 6 MB per
+    keystroke in a 100k-line file, and per append in the Output window. The rest is AvaloniaEdit 12's template.
+  -->
+  <Style Selector="editing|TextArea">
+    <Setter Property="Template">
+      <ControlTemplate TargetType="editing:TextArea">
+        <DockPanel Focusable="False" Background="{TemplateBinding Background}">
+          <ItemsControl DockPanel.Dock="Left" Focusable="False" ItemsSource="{TemplateBinding LeftMargins}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+          </ItemsControl>
+          <Panel>
+            <ContentPresenter Name="PART_CP" Cursor="IBeam" Focusable="False" Background="{TemplateBinding Background}" />
+          </Panel>
+        </DockPanel>
+      </ControlTemplate>
+    </Setter>
   </Style>
 </Styles>

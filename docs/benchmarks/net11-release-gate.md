@@ -9,6 +9,7 @@
 - Latency and memory fail only against at least 3 earlier runs on the same runner CPU model. With fewer, an increase is a warning, with latency divided by VS Code's startup in the same run. Size stays strict, and one run (or an accepted value) is enough. VS Code's own numbers never fail.
 - Each result records the runner's L3 cache next to its CPU, and the summary shows it.
 - *2026-10-18:* the same decision applied to the 0.3.0 release's content (M40–M47, M34g), after the release run failed on size on every OS: ClrDebug no longer ships off Windows, and the rest is accepted ([The 0.3.0 release's content](#the-030-releases-content-2026-10-18)).
+- *2026-10-18, later:* the next release run failed only on the Mac's `editor-100k` `memory_file_ws_mb` (+15% over the .NET 10 runs on its CPU). Linux doesn't reproduce a rise: there the release's content lowered it. The open's leftovers (a 64 MB escaping buffer for `didOpen`, the normalizer's copies of each large response, a watermark binding that copies the document at every change) are gone, 12–14% off the metric on Linux; the Mac is still to be measured ([The Mac's `memory_file_ws_mb`](#the-macs-memory_file_ws_mb-2026-10-18)).
 
 Replayed against the results of this note's runs (the first measurement, then the confirmation run as the gate would): the 0.3.0 run passes on every OS against the baseline it had (0.2.1). The language host 6% over its accepted value still fails. Against the baseline the new selection finds (five Linux and macOS runs, two Windows), Linux and Windows pass with warnings, but the Mac's `file_highlight_ms` fails against its three earlier runs on the same CPU, confirmation included (`editor-100k` 6037 ms, then 4200, against a 3610 ms median; `self-driven` 3302, then 3496, against 2120). That metric rose on Linux on the same CPU too ([Latency on Linux](#latency-on-linux)). Investigated on 2026-10-17: a regression of the editor since 0.2.1, fixed ([file_highlight_ms](#file_highlight_ms)).
 
@@ -262,3 +263,65 @@ Replayed with `codalus-bench compare` (this branch's Linux result, the release r
 - **Linux `shell_mb` counts the shell's native symbols:** `codalus.dbg` is 169 of its 377 MB. The harness leaves out only `*.pdb`. The packages publish with `DebugType=none`, so no package has the symbols, and `shell_mb` is not what users download. Leaving them out of the measurement (and the Mac's, if its publish has them) changes the metric, so it is the maintainer's call. `TODO(issue)`.
 - **The markup, data and REPL hosts carry the whole language protocol**, the Windows Forms designer's model included, which only the C# host and the designer use. Moving the designer's types to an assembly of their own would save about 0.4 MB per host. `TODO(issue)`.
 - [Recommendation 5](#recommendation) would have caught ClrDebug at M43b: the debug host gained 16 MB in that milestone, and no size was measured until the release.
+
+## The Mac's `memory_file_ws_mb` (2026-10-18)
+
+The second 0.3.0 release run ([39088453951](https://github.com/stavroskasidis/codalus-ide/actions/runs/39088453951), `66eea9bd`, `develop` at `fc33b476`) failed only on the Mac: `editor-100k`'s `memory_file_ws_mb` p50 was 1070 MB, and 1060 in the confirmation run, against a limit of 1024 (+10% over 931, the median of the three earlier runs on the same Apple M1 runner). Linux and Windows passed.
+
+### What the runs show
+
+`memory_file_ws_mb` per run (MB, p50 of 3; the confirmation run after the slash). Only working sets are measured on the Mac, for the whole tree; private bytes are 0 there.
+
+| Run | .NET | macOS, Apple M1 | Linux | Windows |
+|---|---|---|---|---|
+| `5192ccdb`, `27a95f79` (0.2.x) | 10 | 982, 911 | | |
+| `c28a56c8` (0.2.1) | 10 | 931 | 1022 (EPYC 9V45) | 930 (EPYC 7763) |
+| `f72b78e8` (0.3.0's first run) | 11 | 1008 / 992 | 1033 / 1030 (EPYC 9V74) | 1054 / 1057 (Xeon 6973P-C) |
+| `01015eed` (M40–M47, M34g) | 11 | 1077 (M2 Pro; earlier M2 Pro runs 914, 1000) | 1037 (EPYC 9V74) | 1027 (Xeon 8573C) |
+| `66eea9bd` (and `cfea4a79`, the trim) | 11 | 1070 / 1060 | 1001 (EPYC 7763) | 942 (EPYC 9V45) |
+
+- **Half of the Mac's +15% is older than this release's content.** `f72b78e8` (.NET 11, M35's Visual Basic) was already 7–8% over the .NET 10 runs, but its benchmarks job failed on size, so it never entered the baseline. The release's content added about 6% more (the six samples of each: 942–1046 against 984–1098).
+- **Linux on the same CPU didn't move:** 1033 before the release's content, 1037 with it (EPYC 9V74). Windows ran on a different CPU each time, so it can't say.
+
+### On Linux the release lowered the memory
+
+Measured here (the 4-vCPU Xeon VM above, Xvfb), the published AOT shells, opening a copy of `Large.cs` as `editor-100k` does and sampling at highlight + 10 s; working set as the harness reads it (Rss summed over the tree). Builds alternate round by round; medians of 5–6 rounds, MB:
+
+| Build | Tree | Shell | Language host | Tree, concurrent GC | Shell, concurrent GC |
+|---|---|---|---|---|---|
+| `f72b78e8` | 1011 | 538 | 421 | 1029 | 552 |
+| `01015eed` | 914 (two of five runs 1013–1040) | 455 | 416 | | |
+| `fc33b476` | 908–911 (893–1020) | 445 | 416 | 915 (862–1057) | 453 |
+| this change | **785** (781–814) | **326** | 410 | **804** (773–811) | **343** |
+
+The plugin host is 47 MB in every build. The harness itself agrees (`editor-100k`, the three builds alternating, 6 runs each, medians):
+
+| Build | `memory_file_ws_mb` | `memory_file_private_mb` | `memory_file_shell_private_mb` | `file_highlight_ms` |
+|---|---|---|---|---|
+| `f72b78e8` | 1025 (1022–1041) | 938 | 548 | 3842 |
+| `fc33b476` | 923 (900–957) | 837 | 450 | 3505 |
+| this change | **790** (788–833) | **704** | **325** | 3437 |
+
+- **The shell runs blocking collections on Linux** (`GCLatencyMode.Batch`, since `58f9de14`, against a font-stream crash) and concurrent ones on macOS and Windows. The concurrent columns are builds with that line switched off, to measure the Macs' and Windows' mode here: the release lowers the memory in both.
+- **Nothing in the release is specific to the Mac:** no `OperatingSystem.IsMacOS` code, no package, runtime or GC setting changed between `f72b78e8` and `fc33b476`. What grew there isn't found from Linux. `TODO(issue)`: the scenario on a Mac, per process (the Mac session or a dispatch of `pipeline.yml` with `benchmarks`), before and after this change.
+
+### Where the memory goes: the open's leftovers
+
+The shell's resident memory splits into native memory, about 66 MB in every run, and the GC heap, from about 220 to 370 MB between runs of the same build. The swing is the garbage of the open: whether a collection runs after its last large allocation before the sample. A heap dump of the shell (the JIT build, at the same moment) found 225 MB in 20 objects over 4 MB, all but three of them dead, and an allocation trace of the open (`AllocationTick`, objects over 1 MB) 36 large allocations, 265 MB, for a 3 MB file:
+
+- **`didOpen`:** the text as a string (5.8 MB), then `Utf8JsonWriter`'s escaping buffer, which is six times the string's length rounded up to a power of two: a 64 MB `char[]` from the shared array pool, which keeps it. The message's `ArrayBufferWriter` doubled up to 10 MB.
+- **Each large response** (the document symbols are 4.8 MB of JSON): the framing reader's buffer doubled to 8 MB and stayed that size for the connection's life, then a copy of the message, `JsonDocument`'s parse and clone in `JsonRpcConnection`, and then `LspNormalizer`'s round trip, which turned the whole result into a 9.6 MB string, parsed it into nodes, wrote them to another 9.6 MB string and parsed that: about 100 MB for one 4.8 MB response. Our own servers send document symbols in the narrowed shape, so the round trip changed nothing.
+- **AvaloniaEdit 12's text area template** binds its watermark's visibility to the document's `Text`. `TextDocument` raises `Text` changed on every change, so each one built the whole document as a string (5.8 MB here) and the binding kept the last one: also once per keystroke when typing in the file, and once per append in the Output window. No Codalus editor has a watermark.
+
+### The change
+
+- `LspNormalizer` checks document symbols and inlay hints in place, as it does completion lists, and returns a result already in the narrowed shape without the round trip.
+- The protocol writes a document's whole text (`TextDocumentItem.Text`, a full-text change's `Text`) in segments of 16K characters (`DocumentTextConverter`, `Utf8JsonWriter.WriteStringValueSegment`): the same JSON, without the large escaping buffer.
+- `FramedMessageReader` reads a message larger than its buffer into an array of its own, instead of growing the buffer.
+- The shell's style for `TextArea` is AvaloniaEdit's template without the watermark.
+
+The open's large allocations went from 36 (265 MB) to 18 (86 MB), and the shell's memory at the sample from 445 to 326 MB, with no run in the high mode (table above). Tests: `LspBridgeTests` (narrowed symbols and hints pass unchanged, the other shapes are still normalized), `DocumentTextConverterTests` (the same JSON as one string, a surrogate pair split by a segment boundary, and the bytes allocated: 27 MB for 1.8 MB of JSON without the converter, under 2 MB with it), `FramingTests` (a 1 MB message between small ones, read with the buffer unchanged; 64 KB, against 1 MB before) and `EditorTests` (no text area has the watermark, and the text view is still presented).
+
+**For the gate:** nothing in `benchmarks/accepted.json` or the thresholds changes. On Linux this change takes 12–14% off `memory_file_ws_mb` in either GC mode (the harness: 923 → 790 MB), more than the Mac's rise over `f72b78e8`, but whether the Mac comes back under its limit is known only from a run there.
+
+**Left:** `JsonRpcConnection` still parses each response into a `JsonDocument` and clones the result (16, 10 and 8 MB for the symbols), and `didOpen` still builds the text as a string. `TODO(issue)`.

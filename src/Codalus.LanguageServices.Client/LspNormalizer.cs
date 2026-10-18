@@ -36,6 +36,14 @@ public static partial class LspNormalizer
             return result;
         }
 
+        // A file's document symbols (every open, every edit) and the viewport's inlay hints (every scroll), likewise: our
+        // own servers send both narrowed, and a 100k-line file's symbols are 4.8 MB of JSON, which the round trip turned
+        // into about 100 MB of strings, nodes and copies.
+        if ((method == Methods.DocumentSymbol && IsNarrowedDocumentSymbols(result)) || (method == Methods.InlayHint && IsNarrowedInlayHints(result)))
+        {
+            return result;
+        }
+
         JsonNode? node = method switch
         {
             Methods.Initialize => InitializeResult(JsonNode.Parse(result.GetRawText())),
@@ -200,6 +208,52 @@ public static partial class LspNormalizer
             if (item.TryGetProperty("textEdit", out var edit) && edit.ValueKind == JsonValueKind.Object
                 && (!edit.TryGetProperty("range", out var range) || range.ValueKind == JsonValueKind.Null)
                 && edit.TryGetProperty("replace", out var replace) && replace.ValueKind != JsonValueKind.Null)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Whether <see cref="DocumentSymbols(JsonNode?)"/> would leave the result as it is: anything but an array, or an array
+    /// of <c>DocumentSymbol</c>s (no element has a <c>location</c>, which only <c>SymbolInformation</c> has).
+    /// </summary>
+    private static bool IsNarrowedDocumentSymbols(JsonElement result)
+    {
+        if (result.ValueKind != JsonValueKind.Array)
+        {
+            return true;
+        }
+
+        foreach (var symbol in result.EnumerateArray())
+        {
+            if (symbol.ValueKind == JsonValueKind.Object && symbol.TryGetProperty("location", out var location) && location.ValueKind != JsonValueKind.Null)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Whether <see cref="InlayHints(JsonNode?)"/> would leave the result as it is: no hint's label is an array of parts and
+    /// no hint's tooltip is a plain string.
+    /// </summary>
+    private static bool IsNarrowedInlayHints(JsonElement result)
+    {
+        if (result.ValueKind != JsonValueKind.Array)
+        {
+            return true;
+        }
+
+        foreach (var hint in result.EnumerateArray())
+        {
+            if (hint.ValueKind == JsonValueKind.Object
+                && ((hint.TryGetProperty("label", out var label) && label.ValueKind == JsonValueKind.Array)
+                    || (hint.TryGetProperty("tooltip", out var tooltip) && tooltip.ValueKind == JsonValueKind.String)))
             {
                 return false;
             }
