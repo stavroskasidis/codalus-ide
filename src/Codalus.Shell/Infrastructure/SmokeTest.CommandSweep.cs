@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -39,6 +41,9 @@ namespace Codalus.Shell.Infrastructure;
 /// </summary>
 internal sealed partial class SmokeTest
 {
+    /// <summary>A regular expression: the sweep runs only the commands whose ids match it (to bisect a failure).</summary>
+    private const string SweepOnlyVariable = "CODALUS_SWEEP_ONLY";
+
     private static readonly TimeSpan s_sweepStallLimit = TimeSpan.FromMilliseconds(500);
 
     /// <summary>Commands the sweep never runs, and why: they leave the machine or the app (the report's skips).</summary>
@@ -93,6 +98,7 @@ internal sealed partial class SmokeTest
     private static readonly Dictionary<string, (string Text, string Why)> s_sweepExpectedErrors = new(StringComparer.Ordinal)
     {
         ["git.continue"] = ("Resolve the conflicts first", "the GitMerge context leaves its conflict unresolved on purpose"),
+        ["containers.attach"] = ("isn't installed or isn't on the PATH", "no Docker or Podman on this machine, and the command says so"),
     };
 
     /// <summary>
@@ -224,6 +230,14 @@ internal sealed partial class SmokeTest
                 .OrderBy(d => Array.IndexOf(s_sweepLast, d.Id))
                 .ThenBy(d => d.Id, StringComparer.Ordinal)
                 .ToList();
+            if (Environment.GetEnvironmentVariable(SweepOnlyVariable) is { Length: > 0 } only)
+            {
+                // To bisect a failure: only the matching commands run (each context is still set up).
+                var filter = new Regex(only, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+                commands.RemoveAll(d => !filter.IsMatch(d.Id));
+                Console.Out.WriteLine($"  [sweep] {SweepOnlyVariable}: {commands.Count.ToString(CultureInfo.InvariantCulture)} commands match '{only}'");
+            }
+
             foreach (var api in shell.Workbench.Commands.Descriptors.Where(d => s_sweepApiCommands.Contains(d.Id)))
             {
                 Sweep(api.Id, "*", "skip", "an API command (plugins, CodeLens, the start page): it takes arguments, and no menu, key or palette entry runs it");
@@ -472,6 +486,13 @@ internal sealed partial class SmokeTest
                     {
                         Console.Out.WriteLine("  [sweep] no netcoredbg: the debug scenario is skipped");
                         return false;
+                    }
+
+                    if (shell.Debugger.State == DebugState.Stopped)
+                    {
+                        // Still stopped after a command: Start Debugging now would be F5's Continue, and the program would end.
+                        await FocusSweepEditorAsync(select: false).ConfigureAwait(true);
+                        return true;
                     }
 
                     if (await StartSweepDebuggingAsync().ConfigureAwait(true) is { } problem)
