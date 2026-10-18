@@ -223,7 +223,7 @@ public sealed partial class ShellHost
     /// <summary>A checklist row's icon from the member kind the language server names (M34h's checklist dialog).</summary>
     private static string? MemberIcon(string? detail) => detail?.ToLowerInvariant() switch
     {
-        { } d when d.Contains("property", StringComparison.Ordinal) => "properties",
+        { } d when d.Contains("property", StringComparison.Ordinal) => "tools",
         { } d when d.Contains("method", StringComparison.Ordinal) => "method",
         { } d when d.Contains("field", StringComparison.Ordinal) => "column",
         { } d when d.Contains("parameter", StringComparison.Ordinal) => "braces",

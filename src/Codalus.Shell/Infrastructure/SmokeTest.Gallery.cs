@@ -117,10 +117,10 @@ internal sealed partial class SmokeTest
             Context = "Person · ICalculatorService.cs",
             Choices =
             [
-                new DialogChoice("name", "string Name", true, "property") { Icon = "properties" },
-                new DialogChoice("age", "int Age", true, "property") { Icon = "properties" },
-                new DialogChoice("mood", "Mood Mood", false, "property") { Icon = "properties" },
-                new DialogChoice("tags", "List<string> Tags", false, "property") { Icon = "properties" },
+                new DialogChoice("name", "string Name", true, "property") { Icon = "tools" },
+                new DialogChoice("age", "int Age", true, "property") { Icon = "tools" },
+                new DialogChoice("mood", "Mood Mood", false, "property") { Icon = "tools" },
+                new DialogChoice("tags", "List<string> Tags", false, "property") { Icon = "tools" },
             ],
             Reorderable = true,
         };

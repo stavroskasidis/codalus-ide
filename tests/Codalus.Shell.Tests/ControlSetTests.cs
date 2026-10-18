@@ -97,6 +97,40 @@ public class ControlSetTests
     }
 
     [AvaloniaFact]
+    public void The_keyboards_focus_ring_is_2_px_in_Shell_Focus_1_px_outside_the_button()
+    {
+        var variant = ThemeService.HarborLight;
+        var before = new TextBox();
+        var button = new Button { Content = "Browse…", Margin = new Thickness(20) };
+        var window = Show(new StackPanel { Children = { before, button } }, variant);
+        try
+        {
+            before.Focus();
+            window.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+            for (var i = 0; i < 3; i++)
+            {
+                ShellFixture.Pump();
+            }
+
+            Assert.True(button.IsFocused);
+            // The adorner layer holds the ring: a 2 px border in Shell.Focus, 3 px past each edge (1 px gap, 2 px ring).
+            var layer = Avalonia.Controls.Primitives.AdornerLayer.GetAdornerLayer(button);
+            Assert.NotNull(layer);
+            var ring = layer.GetVisualDescendants().OfType<Border>().FirstOrDefault(b => BrushColor(b.BorderBrush) == Token("Shell.Focus", variant));
+            Assert.NotNull(ring);
+            Assert.Equal(new Thickness(2), ring.BorderThickness);
+            var origin = ring.TranslatePoint(default, button)!.Value;
+            Assert.Equal(new Point(-3, -3), origin);
+            Assert.Equal(button.Bounds.Width + 6, ring.Bounds.Width);
+            Assert.Equal(button.Bounds.Height + 6, ring.Bounds.Height);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
     public void Icon_buttons_draw_their_icon_and_icon_and_text_buttons_keep_their_text_as_the_name()
     {
         var icon = new Button { Classes = { "icon" } };

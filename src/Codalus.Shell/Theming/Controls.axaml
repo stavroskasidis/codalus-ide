@@ -9,12 +9,17 @@
     templates, and holds the classes a view picks from (docs/ui-guidelines.md, "The control set").
   -->
 
-  <!-- The focus ring: 2 px in Shell.Focus, 1 px outside the control, so it reads on any fill. -->
+  <!--
+    The focus ring: 2 px in Shell.Focus, 1 px outside the control, so it reads on any fill. The adorner layer gives the
+    adorner the control's size, so the ring is a child that its negative margin grows past it.
+  -->
   <FocusAdornerTemplate x:Key="Shell.FocusRing">
-    <Border BorderThickness="{DynamicResource Shell.Focus.Thickness}"
-            BorderBrush="{DynamicResource Shell.Focus}"
-            Margin="{DynamicResource Shell.Focus.Margin}"
-            CornerRadius="{DynamicResource Shell.Focus.CornerRadius}" />
+    <Panel>
+      <Border BorderThickness="{DynamicResource Shell.Focus.Thickness}"
+              BorderBrush="{DynamicResource Shell.Focus}"
+              Margin="{DynamicResource Shell.Focus.Margin}"
+              CornerRadius="{DynamicResource Shell.Focus.CornerRadius}" />
+    </Panel>
   </FocusAdornerTemplate>
 
   <!-- A button's content with controls:ButtonIcon.Kind: the icon alone (class icon), or the icon and the text (iconText). -->
