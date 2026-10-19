@@ -211,8 +211,11 @@ internal sealed partial class SmokeTest
 
         await GalleryDialogOnMacAsync(checklist).ConfigureAwait(true); // M34h: the buttons in macOS's order
 
-        // Error states: a compile error in the Error List, the failed build's output, a failed test's details.
-        if (sources.FirstOrDefault() is { } broken && await shell.OpenFileAsync(broken, preview: false).ConfigureAwait(true) is { } editorDocument)
+        // Error states: a compile error in the Error List, the failed build's output, a failed test's details. The error goes
+        // in a project of the smoke solution (the first of the sources above can be in one it leaves out, depending on the
+        // file system's order: then the build was up to date, not failed).
+        var broken = Path.Combine(_testing, "src", "Calculator", "Calculator.cs");
+        if (await shell.OpenFileAsync(broken, preview: false).ConfigureAwait(true) is { } editorDocument)
         {
             await WaitAsync(() => editorDocument.Controller is not null, "the editor for the error state opens").ConfigureAwait(true);
             var controller = editorDocument.Controller!;
@@ -224,7 +227,13 @@ internal sealed partial class SmokeTest
                 await WaitAsync(() => shell.ErrorList.Rows.Count > 0, "the Error List shows the error", 120).ConfigureAwait(true);
                 var built = shell.Builds.LastBuild;
                 shell.Run("build.buildSolution");
-                await WaitAsync(() => shell.Builds.LastBuild is { } b && b != built, "the failing build finishes", 300).ConfigureAwait(true);
+                await WaitAsync(
+                    () => shell.Builds.LastBuild is { } b && b != built,
+                    () => $"the failing build finishes (building: {shell.Builds.Current?.ToString() ?? "no"}; buildRunning: {shell.Workbench.Context.GetValue("buildRunning") ?? "unset"}; "
+                          + $"last build: {shell.Builds.LastBuild?.ToString() ?? "none"}, before it: {built?.ToString() ?? "none"}; "
+                          + $"the build host's last message: {shell.Solutions.LastHostMessage ?? "none"}). The Build output:\n{Tail(shell.Builds.Channel.GetText(), 1500)}",
+                    300).ConfigureAwait(true);
+                Check(shell.Builds.LastBuild is { Result: { Succeeded: false, Errors: > 0 } }, $"the build fails ({shell.Builds.LastBuild?.Result}):\n{Tail(shell.Builds.Channel.GetText(), 1500)}");
                 await GalleryThemesAsync(async theme =>
                 {
                     // The failed build's output, its errors in the error color (M34h). The Output window and the Error
