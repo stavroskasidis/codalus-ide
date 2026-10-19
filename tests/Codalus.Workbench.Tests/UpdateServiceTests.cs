@@ -153,6 +153,66 @@ public sealed class UpdateServiceTests
         Assert.Equal(-expected, Math.Sign(ReleaseVersions.Compare(b, a)));
     }
 
+    [Theory]
+    [InlineData(InstallKind.SelfUpdating, UpdateMode.Auto)]
+    [InlineData(InstallKind.SelfUpdating, UpdateMode.Notify)]
+    [InlineData(InstallKind.Portable, UpdateMode.Auto)]
+    public async Task A_release_whose_runtime_isnt_installed_isnt_downloaded_until_it_is_or_the_user_says_so(InstallKind kind, UpdateMode mode)
+    {
+        // M49 (ADR 0080): the signed feed names the release's runtime; the shell says whether it's installed.
+        var requires = Codalus.Rpc.FrameworkReference.Create(Codalus.Rpc.FrameworkReference.NetCoreApp, Codalus.Rpc.FrameworkVersion.Parse("12.0.0"), Codalus.Rpc.RollForwardPolicy.Major);
+        var backend = new FakeBackend { Offer = s_next with { Requires = [requires] } };
+        var installed = false;
+        var asked = new List<string>();
+        await using var service = new UpdateService(new InstallInfo("0.2.0", kind), backend, () => mode, () => "stable")
+        {
+            RuntimeCheck = offer =>
+            {
+                asked.Add(offer.Version);
+                return new Codalus.Workbench.Setup.ToolStatus("dotnet-runtime", ".NET runtime for Codalus IDE", true, installed ? Codalus.Workbench.Setup.ToolState.Found : Codalus.Workbench.Setup.ToolState.Missing, "helpers")
+                {
+                    WantedVersion = "12.0.0",
+                    WantedChannel = "12.0",
+                    Found = "11.0.0 in /usr/local/share/dotnet",
+                    Detail = "Codalus IDE's helper processes need Microsoft.NETCore.App 12.0.0 (rollForward Major), which isn't installed.",
+                };
+            },
+        };
+
+        var state = await service.CheckAsync(userInitiated: false, TestContext.Current.CancellationToken);
+        Assert.Equal(UpdateStatus.NeedsRuntime, state.Status);
+        Assert.Equal(("0.3.0", "12.0", "11.0.0 in /usr/local/share/dotnet"), (state.Offer?.Version, state.Runtime?.WantedChannel, state.Runtime?.Found));
+        Assert.Contains("12.0.0", state.Error, StringComparison.Ordinal);
+        Assert.Equal(0, backend.Downloads);
+        Assert.Equal(["0.3.0"], asked);
+
+        // Installed now: the next check goes on as usual.
+        installed = true;
+        var after = await service.CheckAsync(userInitiated: true, TestContext.Current.CancellationToken);
+        Assert.Equal(kind == InstallKind.SelfUpdating && mode == UpdateMode.Auto ? UpdateStatus.Ready : UpdateStatus.Available, after.Status);
+
+        // A release whose feed names no runtime (from before M49) isn't asked about.
+        asked.Clear();
+        backend.Offer = s_next;
+        await using var older = new UpdateService(new InstallInfo("0.2.0", kind), backend, () => mode, () => "stable") { RuntimeCheck = _ => throw new InvalidOperationException("not asked") };
+        Assert.NotEqual(UpdateStatus.NeedsRuntime, (await older.CheckAsync(userInitiated: true, TestContext.Current.CancellationToken)).Status);
+    }
+
+    [Fact]
+    public async Task Update_anyway_downloads_a_release_whose_runtime_isnt_installed()
+    {
+        var requires = Codalus.Rpc.FrameworkReference.Create(Codalus.Rpc.FrameworkReference.NetCoreApp, Codalus.Rpc.FrameworkVersion.Parse("12.0.0"), Codalus.Rpc.RollForwardPolicy.Major);
+        var backend = new FakeBackend { Offer = s_next with { Requires = [requires] } };
+        await using var service = new UpdateService(new InstallInfo("0.2.0", InstallKind.SelfUpdating), backend, () => UpdateMode.Auto, () => "stable")
+        {
+            RuntimeCheck = _ => new Codalus.Workbench.Setup.ToolStatus("dotnet-runtime", "runtime", true, Codalus.Workbench.Setup.ToolState.Missing, "helpers"),
+        };
+        var state = await service.CheckAsync(userInitiated: false, TestContext.Current.CancellationToken);
+        Assert.Equal(UpdateStatus.NeedsRuntime, state.Status);
+        Assert.Equal(UpdateStatus.Ready, (await service.DownloadAsync(state.Offer!, TestContext.Current.CancellationToken)).Status);
+        Assert.Equal(1, backend.Downloads);
+    }
+
     private static UpdateService Service(InstallKind kind, FakeBackend backend, UpdateMode mode = UpdateMode.Auto, string version = "0.2.0") =>
         new(new InstallInfo(version, kind), backend, () => mode, () => "stable");
 

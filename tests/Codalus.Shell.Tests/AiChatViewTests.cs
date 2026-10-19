@@ -296,6 +296,99 @@ public sealed class AiChatViewTests
     }
 
     [AvaloniaFact]
+    public async Task Enter_or_Send_while_an_agent_step_runs_starts_no_second_turn_and_Stop_still_stops_the_first()
+    {
+        await using var server = MockModelServers.Script(request =>
+        {
+            using var body = JsonDocument.Parse(request.Body);
+            var last = body.RootElement.GetProperty("messages").EnumerateArray().Last();
+            return last.GetProperty("role").GetString() == "tool" ? new MockTurn("Built.") : new MockTurn("Building first.", "build", "{}");
+        });
+        await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.OpenAI"));
+        await EnableAsync(f, server);
+        var folder = Path.Combine(f.UserData, "Workspace");
+        Directory.CreateDirectory(folder);
+        var tools = new BlockingBuildHost();
+        var host = new AgentChatHost(f.Shell, folder, tools);
+        using var chat = new AiChatViewModel(host) { IsAgent = true };
+        host.Chat = chat;
+        chat.IncludeCurrentFile = chat.IncludeSelection = chat.IncludeErrors = chat.IncludeSolution = false;
+        var window = Show(chat, 556, 700);
+        var view = (AiChatView)window.Content!;
+        var input = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
+        var send = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "Send");
+        var stop = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StopButton");
+
+        input.Focus();
+        window.KeyTextInput("Build it");
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+
+        // The build step runs: no request is in flight (AI isn't busy), but the turn is still being answered.
+        await ShellFixture.PumpUntil(() => tools.Building.Task.IsCompleted && !chat.IsBusy && chat.IsAnswering && stop.IsEffectivelyVisible);
+        Assert.False(chat.CanSend);
+
+        // Enter in the input box, Send and SendAsync all leave the running turn alone and keep the next question.
+        window.KeyTextInput("And again");
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Pump(4);
+        Assert.Equal("And again", chat.Input);
+        send.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        await chat.SendAsync();
+        Pump(4);
+        Assert.Equal(1, host.Runs);
+        Assert.Single(chat.Turns);
+        Assert.Single(chat.Chat.Turns);
+        Assert.Equal("And again", chat.Input);
+
+        // Stop still reaches the agent's turn: the build is cancelled and the turn says it stopped.
+        stop.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        await ShellFixture.PumpUntil(() => !chat.IsAnswering && send.IsEffectivelyVisible);
+        Assert.True(tools.Cancelled);
+        Assert.Equal("stopped", chat.Turns[^1].Turn.FinishReason);
+        Assert.True(chat.CanSend);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task Clicking_Send_leaves_the_focus_in_the_input_box_when_Send_becomes_Stop()
+    {
+        using var gate = new ManualResetEventSlim();
+        await using var server = MockModelServers.Script(_ =>
+        {
+            gate.Wait(TimeSpan.FromSeconds(30));
+            return new MockTurn("Late.");
+        });
+        await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.OpenAI"));
+        await EnableAsync(f, server);
+        var chat = f.Shell.AiChat;
+        chat.IncludeCurrentFile = chat.IncludeSelection = chat.IncludeErrors = chat.IncludeSolution = false;
+        var window = Show(chat, 556, 700);
+        var view = (AiChatView)window.Content!;
+        var input = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
+        var send = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "Send");
+        var stop = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StopButton");
+        chat.Input = "A question";
+        Pump(2);
+
+        // A real click: the press focuses Send, which then hides as Stop takes its place.
+        var center = send.TranslatePoint(new Point(send.Bounds.Width / 2, send.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(center, MouseButton.Left);
+        window.MouseUp(center, MouseButton.Left);
+        await ShellFixture.PumpUntil(() => chat.IsAnswering && stop.IsEffectivelyVisible && !send.IsEffectivelyVisible);
+        Pump(2);
+        Assert.Same(input, window.FocusManager?.GetFocusedElement());
+
+        // The next question can be typed while the answer runs (Enter doesn't send it yet).
+        window.KeyTextInput("Next");
+        Pump(2);
+        Assert.Equal("Next", chat.Input);
+        chat.Stop();
+        await ShellFixture.PumpUntil(() => !chat.IsAnswering);
+        gate.Set();
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task Each_empty_state_has_an_icon_a_sentence_and_the_next_step_and_AI_stays_off_until_turned_on()
     {
         await using var server = MockModelServers.OpenAI("Hi.");
@@ -749,6 +842,88 @@ public sealed class AiChatViewTests
 
     private static ContentPresenter Presenter(ToggleButton button) =>
         button.GetVisualDescendants().OfType<ContentPresenter>().First(p => p.Name == "PART_ContentPresenter");
+
+    /// <summary>An agent host whose build runs until it is cancelled (a tool step that takes a while).</summary>
+    private sealed class BlockingBuildHost : IAgentHost
+    {
+        public TaskCompletionSource Building { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool Cancelled { get; private set; }
+
+        public async Task<string> BuildAsync(CancellationToken cancellationToken)
+        {
+            Building.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Cancelled = true;
+                throw;
+            }
+
+            return string.Empty;
+        }
+
+        public Task<string?> ReadTextAsync(string path, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
+        public Task<bool> ProposeChangeAsync(string path, string? oldText, string newText, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<bool> ApproveAsync(string title, string message, IReadOnlyList<string> details, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<string> DiagnosticsAsync(string? path, CancellationToken cancellationToken) => Task.FromResult(string.Empty);
+
+        public Task<string> BuildOutputAsync(CancellationToken cancellationToken) => Task.FromResult(string.Empty);
+    }
+
+    /// <summary>The shell as AI Chat's host, but agent mode runs the loop with <paramref name="tools"/> (no solution or trust checks).</summary>
+    private sealed class AgentChatHost(ShellHost shell, string folder, IAgentHost tools) : IAiChatHost
+    {
+        private int _runs;
+
+        public AiChatViewModel? Chat { get; set; }
+
+        public int Runs => Volatile.Read(ref _runs);
+
+        public AiService Ai => shell.Ai;
+
+        public IEditorServices EditorServices => shell;
+
+        public Infrastructure.EditorFont EditorFont => shell.EditorFont;
+
+        public async Task RunAgentAsync(string question, IReadOnlyList<AiContextItem> items, AiSelectionAnchor? anchor, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _runs);
+            await Chat!.Chat.SendAgentAsync(question, items, new AgentTools(shell.Ai, tools, folder), 5, cancellationToken, anchor).ConfigureAwait(true);
+        }
+
+        public (IReadOnlyList<AiContextItem> Items, AiSelectionAnchor? Anchor) GatherAiContext(AiContextChoice choice) => ([], null);
+
+        public Task ApplyAiCodeAsync(AiChatTurn turn, AiCodeBlock block, bool insertOnly) => Task.CompletedTask;
+
+        public Task CopyTextAsync(string text) => Task.CompletedTask;
+
+        public Task ChooseAiProviderAsync() => Task.CompletedTask;
+
+        public Task TurnOnAiAsync() => Task.CompletedTask;
+
+        public Task ConfigureAiProviderAsync() => Task.CompletedTask;
+
+        public void ShowAiLog()
+        {
+        }
+
+        public void ShowAiChatWindow()
+        {
+        }
+
+        public void OpenLink(string target)
+        {
+        }
+
+        public Task OpenAiLocationAsync(string path, int? line) => Task.CompletedTask;
+    }
 
     /// <summary>The agent's view of the files, from the disk.</summary>
     private sealed class FileHost : IAgentHost

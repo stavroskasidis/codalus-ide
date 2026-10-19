@@ -86,6 +86,10 @@ public sealed class LoginShellPathTests
         {
             RealPath = path => N(path) == "/opt/homebrew/bin/dotnet" ? "/opt/homebrew/Cellar/dotnet/10.0.300/bin/dotnet" : path,
             SdkVersions = folder => sdks.GetValueOrDefault(N(folder).TrimEnd('/')) ?? [],
+            // No root has the hosts' runtime on this described machine (M49), whatever this machine's own folders hold.
+            HostsRuntime = "11.0.0-rc.2.26504.105",
+            InstalledFrameworks = (_, _) => [],
+            DirectoryExists = _ => false,
         };
 
         Assert.Equal("/Users/ada/.dotnet", N(check.FindSdkRoot()!));
