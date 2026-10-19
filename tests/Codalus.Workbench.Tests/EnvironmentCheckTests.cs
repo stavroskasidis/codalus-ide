@@ -143,4 +143,39 @@ public sealed class EnvironmentCheckTests : IDisposable
         Assert.Equal("ubuntu debian", InstallPlans.LinuxDistribution(file));
         Assert.Null(InstallPlans.LinuxDistribution(Path.Combine(_dir, "none")));
     }
+
+    [Fact]
+    public async Task A_program_whose_child_keeps_its_output_open_still_returns_once_it_has_ended()
+    {
+        // A stand-in that prints, then leaves a process holding its standard output, as a tool that forks a daemon
+        // (adb's server) can: the end of the output never comes until that process ends. The run must not wait for it.
+        var started = DateTime.Now;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var (program, arguments) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", new[] { "/d", "/c", "echo hello& start /b ping -n 300 127.0.0.1" })
+            : ("/bin/sh", ["-c", "echo hello; sleep 300 & echo \"held by $!\""]);
+        var (code, output) = (-2, "");
+        try
+        {
+            (code, output) = await EnvironmentCheck.RunProcessAsync(program, arguments, _dir, TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(30), $"Returned after {clock.Elapsed}: it waited for the process holding the output.");
+            Assert.Equal(0, code);
+            Assert.Contains("hello", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            // The test removes the process it left behind.
+            if (OperatingSystem.IsWindows())
+            {
+                foreach (var ping in System.Diagnostics.Process.GetProcessesByName("PING").Where(p => p.StartTime >= started))
+                {
+                    ping.Kill();
+                }
+            }
+            else if (System.Text.RegularExpressions.Regex.Match(output, @"held by (\d+)") is { Success: true } held)
+            {
+                System.Diagnostics.Process.GetProcessById(int.Parse(held.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)).Kill();
+            }
+        }
+    }
 }

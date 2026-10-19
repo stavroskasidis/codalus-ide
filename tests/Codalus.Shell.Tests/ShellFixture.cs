@@ -161,6 +161,78 @@ internal sealed class ShellFixture : IAsyncDisposable
     }
 
     /// <summary>
+    /// Asks <paramref name="attempt"/> again, <paramref name="delayMilliseconds"/> apart, until <paramref name="done"/>
+    /// holds, all within <paramref name="seconds"/>. Each attempt gets at most <paramref name="attemptSeconds"/>, and never
+    /// more than the time left, so a server that never answers fails the test in minutes instead of attempts × timeout
+    /// (60 × 62 s outlasted a CI job's 50 minutes). On the deadline, the failure says what it waited for and the last reply.
+    /// </summary>
+    /// <param name="describe">The last reply, for the failure.</param>
+    /// <param name="retryOn">Exceptions that mean "ask again" (a server starting again); any other fails the test at once.</param>
+    public static async Task<T?> RetryUntil<T>(
+        string waitingFor,
+        Func<CancellationToken, Task<T?>> attempt,
+        Func<T?, bool> done,
+        Func<T?, string> describe,
+        int seconds = 240,
+        int attemptSeconds = 60,
+        int delayMilliseconds = 2000,
+        Func<Exception, bool>? retryOn = null)
+    {
+        var test = TestContext.Current.CancellationToken;
+        var deadline = TimeSpan.FromSeconds(seconds);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var last = "none (no attempt finished)";
+        var attempts = 0;
+        while (true)
+        {
+            var left = deadline - started.Elapsed;
+            if (left <= TimeSpan.Zero)
+            {
+                Assert.Fail($"Timed out after {seconds} s and {attempts} attempts waiting for {waitingFor}. The last reply: {last}.");
+            }
+
+            attempts++;
+            var limit = left < TimeSpan.FromSeconds(attemptSeconds) ? left : TimeSpan.FromSeconds(attemptSeconds);
+            using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(test))
+            {
+                timeout.CancelAfter(limit);
+                try
+                {
+                    // WaitAsync: an attempt that doesn't watch its token is left behind at its limit all the same.
+                    var reply = await attempt(timeout.Token).WaitAsync(timeout.Token);
+                    if (done(reply))
+                    {
+                        return reply;
+                    }
+
+                    last = describe(reply);
+                }
+                catch (OperationCanceledException) when (!test.IsCancellationRequested)
+                {
+                    last = $"no answer within {limit.TotalSeconds:0} s";
+                }
+                catch (Exception ex) when (retryOn?.Invoke(ex) == true)
+                {
+                    last = $"{ex.GetType().Name}: {ex.Message}";
+                }
+            }
+
+            left = deadline - started.Elapsed;
+            if (left > TimeSpan.Zero)
+            {
+                var pause = TimeSpan.FromMilliseconds(delayMilliseconds);
+                await Task.Delay(pause < left ? pause : left, test);
+            }
+        }
+    }
+
+    /// <summary>A completion list for a <see cref="RetryUntil"/> failure: how many items, and the first labels.</summary>
+    public static string Describe(Codalus.LanguageServices.Protocol.CompletionList? completion) =>
+        completion is null
+            ? "no completion list (no language client yet, or the server returned none)"
+            : $"{completion.Items.Length} items ({string.Join(", ", completion.Items.Take(15).Select(i => i.Label))}{(completion.Items.Length > 15 ? ", …" : "")})";
+
+    /// <summary>
     /// A token for one language request: canceled after <paramref name="seconds"/>, so a server that never answers
     /// fails the test instead of hanging it (a blocked UI thread never reaches PumpUntil's own timeout).
     /// </summary>
