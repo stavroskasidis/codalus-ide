@@ -311,15 +311,42 @@ public sealed class AcpAgentTests : IAsyncDisposable
             var status = await terminal.Exited.WaitAsync(TimeSpan.FromSeconds(30), Ct);
             Assert.Equal((null, "SIGKILL"), (status.ExitCode, status.Signal));
             Assert.Contains("stopped the command after 1 seconds", terminal.Output.Text, StringComparison.Ordinal);
+        }
 
+        // The cut, on terminals with the default timeout: the 1 s one above also stopped `dotnet --help`, which a cold
+        // start on a slow Windows runner didn't finish writing 64 bytes in (#68's CI).
+        await using (var untimed = new AcpTerminals())
+        {
             var (_, many) = AcpTerminals.CommandLine(Dotnet, ["--help"], _root, null);
-            var cut = await terminals.StartAsync("dotnet --help", many, 64, Ct);
-            await cut.Exited.WaitAsync(TimeSpan.FromSeconds(60), Ct);
-            Assert.True(cut.Output.Truncated);
+            var cut = await untimed.StartAsync("dotnet --help", many, 64, Ct);
+            var status = await cut.Exited.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+            Assert.True(cut.Output.Truncated, $"exit {status.ExitCode} {status.Signal}, output: {cut.Output.Text}");
             Assert.True(System.Text.Encoding.UTF8.GetByteCount(cut.Output.Text) <= 64);
         }
 
         Assert.Equal(("dotnet \"two words\"", "dotnet"), (AcpTerminals.CommandLine("dotnet", ["two words"], _root, null).Display, AcpTerminals.CommandLine("dotnet", ["two words"], _root, null).Launch.FileName));
+    }
+
+    [Fact]
+    public async Task A_commands_output_is_complete_when_it_exits_its_standard_error_too()
+    {
+        // The process's exit and the end of its output are separate events: standard error is read line by line on its
+        // own, and its last lines can come after the exit. An agent reads the output once the exit is reported.
+        var script = OperatingSystem.IsWindows()
+            ? "(for /l %i in (1,1,3000) do @echo err line %i 1>&2) & echo out done & echo err last 1>&2"
+            : "i=1; while [ $i -le 3000 ]; do echo \"err line $i\" >&2; i=$((i+1)); done; echo 'out done'; echo 'err last' >&2";
+        await using var terminals = new AcpTerminals();
+        for (var run = 0; run < 5; run++)
+        {
+            var (display, launch) = AcpTerminals.CommandLine(script, [], _root, null);
+            var terminal = await terminals.StartAsync(display, launch, null, Ct);
+            var status = await terminal.Exited.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+            var text = terminal.Output.Text;
+            Assert.Equal(0, status.ExitCode);
+            Assert.Contains("out done", text, StringComparison.Ordinal);
+            Assert.True(text.Contains("err last", StringComparison.Ordinal), $"run {run}: the last line of standard error is missing; the output ends: {text[^Math.Min(200, text.Length)..]}");
+            await terminals.ReleaseAsync(terminal.Id);
+        }
     }
 
     [Fact]

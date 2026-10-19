@@ -274,8 +274,10 @@ public sealed class AcpTerminal : IAsyncDisposable
             code = _process.Exited.IsCompleted ? await _process.Exited.ConfigureAwait(false) : null;
         }
 
-        // The output's end, briefly: a grandchild holding the pipe mustn't hold the exit.
-        await _reading.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        // The output's end, standard output and standard error both, briefly: a grandchild holding a pipe mustn't hold the
+        // exit. Standard error is read line by line on its own, and its last lines can come after the exit: without
+        // waiting for its end, an agent that read the output once the exit was reported could miss them.
+        await Task.WhenAll(_reading, _process.ErrorCompleted).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         if (_killedBy is { } reason)
         {
             Append(reason switch
