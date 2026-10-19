@@ -43,28 +43,36 @@ The maintainer asked for four things:
   - **`--fx-version`** asks for that exact version.
   - **What counts as installed:** a version folder needs its `Microsoft.NETCore.App.deps.json`, and `DOTNET_DISABLE_RUNTIME_VERSIONS` removes versions.
 - **The root is the one the host itself would use** (`DotnetRootResolver`):
-  - For `dotnet app.dll`: the folder of the `dotnet` on the `PATH`, with its links resolved.
-  - For an app host: `DOTNET_ROOT_<ARCH>`, `DOTNET_ROOT`, then the registered location (`/etc/dotnet/install_location[_<arch>]`, or Windows' registry), then the default one (`/usr/local/share/dotnet`, `/usr/share/dotnet`, `%ProgramFiles%\dotnet`).
+  - For `dotnet app.dll`: the folder of the `dotnet` on the `PATH`, with its links resolved, when that folder has `host/fxr`. Homebrew's wrapper script and snap's launcher run the real muxer from elsewhere, so the check stands aside for them.
+  - For an app host: `DOTNET_ROOT_<ARCH>`, `DOTNET_ROOT`, then the registered location (`/etc/dotnet/install_location[_<arch>]`, or Windows' registry), then the default one (`/usr/local/share/dotnet`, `/usr/share/dotnet`, `%ProgramFiles%\dotnet`; its `x64` folder for an x64 process on Arm64, which is the win-x64 build on Windows on Arm). A variable whose folder doesn't exist is passed over, as hostfxr does.
 - **It is conservative.** Some programs aren't checked: one without a `runtimeconfig.json`, a self-contained app, a root that doesn't exist, and a setting the host itself would refuse. For them, starting the program tells, and item 3 makes that readable.
 
 ### 2. One notification, Install .NET, and the hosts again
 
 - **The IDE's own requirement** is what its hosts' `runtimeconfig.json` files ask for (`IdeRuntime`). It has its own row in Check Environment: ".NET runtime for Codalus IDE", resolved under the hosts' root, with what each .NET folder has when it's missing. The SDK row is about SDKs again.
-- **The root.** `FindSdkRoot` prefers a root that has both SDKs and that runtime. A `~/.dotnet` with rc.2 beats a `/usr/local/share/dotnet` with only .NET 10, even when the latter is on the `PATH`. `UseUserDotnet` sets `DOTNET_ROOT` whenever the app hosts would otherwise use another root than the one chosen: app hosts don't look on the `PATH`.
-- **One notification**, whatever reports the problem: the startup check, a solution that can't open, plugin hosts (`PluginManager.HostRuntimeMissing`, once per host group, with no per-plugin errors).
+- **The root.** `FindSdkRoot` prefers a root that has both SDKs and that runtime. A `~/.dotnet` with rc.2 beats a `/usr/local/share/dotnet` with only .NET 10, even when the latter is on the `PATH`.
+  - `EnvironmentCheck.ChooseDotnetRoot` decides what `UseUserDotnet` sets. A root that isn't the one in use becomes `DOTNET_ROOT` and goes on the `PATH`, as since M37.
+  - When the chosen root is already in use, the app hosts (which don't look on the `PATH`) are pointed at it only when that helps: it has their runtime, or the root they'd use otherwise doesn't. A runtime-only install where the hosts look (a distribution's `dotnet-runtime-11.0` in `/usr/lib/dotnet`, Microsoft's runtime package in `/usr/local/share/dotnet`) keeps its hosts.
+  - Pointing the hosts sets `DOTNET_ROOT`, and also `DOTNET_ROOT_<ARCH>` when that one is set elsewhere, since the host reads it first.
+  - After an install of .NET, the root is chosen again: winget installs into Program Files, not where `DOTNET_ROOT` points.
+- **One notification**, whatever reports the problem: the startup check, a solution that can't open, plugin hosts (`PluginManager.HostRuntimeMissing`, once per host group, with no per-plugin errors), a language host (`LanguageService.StartFailed`).
+  - It shows once while it shows. Once it is answered or closed, a new failure (a solution opened later) shows it again, rather than nothing.
+  - With no SDK at all, the missing SDK's notification stands for it, since its install brings the runtime.
+  - A report that nothing shows (not one of the IDE's hosts) falls back to its caller's own error.
   - The text: "Codalus IDE needs the .NET 11.0.0-rc.2.26504.105 runtime, which isn't installed (found: 8.0.20, 9.0.9, 10.0.0–10.0.9 in /usr/local/share/dotnet; 10.0.12, 11.0.0-rc.1… in ~/.dotnet)".
   - Its actions: **Install .NET 11.0** and **Check Environment**.
-  - A program of the user's whose runtime is missing (a designer on the app's runtime) isn't the IDE's: its own caller reports it.
+  - A program that isn't one of the IDE's hosts (a designer on the app's runtime) isn't the IDE's runtime: its own caller reports it. The IDE's hosts are known by their names (`codalus-pluginhost`…), wherever they run from.
 - **Install .NET** is M37's flow: the plan is shown first, then the SDK of the runtime's channel is installed (it brings the runtime) with `dotnet-install` into `~/.dotnet`, with no password, or with winget on Windows. The new root becomes `DOTNET_ROOT`.
-- **Then `RestartHostsAsync` starts again what failed:** the plugins that failed with their host (`RetryFailedHostsAsync`), the language services that couldn't start (`RetryFailedAsync`), and the solution that couldn't open. The IDE doesn't restart.
+- **Then `RestartHostsAsync` starts again what failed:** the plugins whose activation failed with their host (`RetryFailedHostsAsync`; the others of the group are just usable again), the language services that couldn't start (`RetryFailedAsync`), and the solution that couldn't open. The IDE doesn't restart. An install from an update's warning does this too, then checks the update again.
 
 ### 3. A host that exits says why, and isn't restarted in a loop
 
-- **What it wrote.** `SupervisedProcess` keeps the first 50 lines of each start's standard error.
-  - When the connection drops and the process has ended, pending and later requests fail with `HostExitedException`. It carries the exit code, those lines, and whether the host was still starting. Its message quotes the first lines: "plugin host 'builtin' exited during startup with exit code 150: You must install or update .NET…".
+- **What it wrote.** `SupervisedProcess` keeps the first 50 lines of each start's standard error, and a ring of the last 20.
+  - When the connection drops and the process has ended, pending and later requests fail with `HostExitedException`. It carries the exit code, the lines, and whether the host was still starting.
+  - A failed start quotes its first lines: "plugin host 'builtin' exited during startup with exit code 150: You must install or update .NET…". A crash of a running host quotes its last ones: the hosts log to standard error, so the first lines are its startup log.
   - The hook is `JsonRpcConnection.ExplainLoss`. It runs once, when reading stops or a write finds the peer gone, and waits briefly for the exit and the end of standard error.
   - The lines also go to the host's Output channel, as before, followed by a summary line.
-- **No restart after an exit during startup**, which lasts until `Initialize` finishes. Without `Initialize`, an exit counts as one during startup only if it has a failure code and standard error output, comes before the first message, and comes within two seconds.
+- **No restart after an exit during startup**, which lasts until `Initialize` ends, however it ends: a host whose handshake failed but kept running is a running host. Without `Initialize`, an exit counts as one during startup only if it has a failure code and standard error output, comes before the first message, and comes within two seconds. The decision is made once, before the pending requests fail, so the end of `Initialize` can't change it.
   - Starting such a host again would fail the same way. `SupervisionPolicy.RestartAfterStartupExit` brings back the old behaviour.
   - The plugin manager reports such a host once per group.
 - **Unchanged:** crashes after startup restart as before, and `FinalExitCodes` stays.
@@ -73,7 +81,8 @@ The maintainer asked for four things:
 
 **Chosen: option A, the runtime requirement in the signed feed.**
 - `eng/package.sh` runs `codalus-release feed-runtime` before it signs `releases.<channel>.json`. That adds `CodalusFrameworks` (name, version, rollForward, from the hosts' `runtimeconfig.json` files) to the release's entries. The signature covers it, and Velopack ignores the property.
-- The IDE reads it into `UpdateOffer.Requires` and checks it with `EnvironmentCheck.RuntimeStatusFor` under any of the .NET roots, since the updated IDE will prefer the one that has it.
+- The IDE reads it into `UpdateOffer.Requires` and checks it with `EnvironmentCheck.RuntimeStatusFor` under the roots the updated IDE could give its hosts: their own root, and the roots with SDKs. A runtime-only folder that isn't the hosts' doesn't count, since nothing would point the hosts at it.
+- On Windows, Install .NET installs the winget package of the runtime wanted: the GA SDK for 11.0.0 even on a release candidate, and the preview package for a preview.
 - When the runtime is missing, the state is `NeedsRuntime` and nothing is downloaded. A warning names the runtime, with **Install .NET 11.0** (which then checks again) and **Update Anyway**. The same applies to a channel switch, and to portable and system-package installs, which only notify.
 
 **Rejected: option B, self-contained hosts.**
