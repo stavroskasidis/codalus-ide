@@ -280,7 +280,8 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
             Assert.NotEmpty(_debug.Frames);
             Assert.Equal("Waiter", _debug.Threads.Single(t => t.Id == _debug.SelectedThreadId).Name);
             Assert.Equal(_debug.SelectedThreadId, stop.ThreadId);
-            Assert.Contains(_debug.Frames, f => f.Source?.Path == debuggee.Program && f.Line == Line("waiter"));
+            // The waiter's loop: its Thread.Sleep, or (under load) its File.Exists condition.
+            Assert.Contains(_debug.Frames, f => f.Source?.Path == debuggee.Program && (f.Line == Line("waiter") || f.Line == Line("waiter-check")));
             Assert.Equal(debuggee.Program, _debug.SelectedFrame?.Source?.Path);
 
             await _debug.DetachAsync();
