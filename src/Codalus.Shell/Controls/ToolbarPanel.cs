@@ -74,7 +74,7 @@ public sealed class ToolbarPanel : Panel
 
     private static bool Stretches(Control child) => child is TextBox || child is AutoCompleteBox;
 
-    private static bool CanOverflow(Control child) => child is Button or ToggleButton or ComboBox or SplitButton or Separator || child.Classes.Contains("toolbarSeparator");
+    private static bool CanOverflow(Control child) => child is Button or ToggleButton or ComboBox or SplitButton or SegmentedControl or Separator || child.Classes.Contains("toolbarSeparator");
 
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -220,7 +220,8 @@ public sealed class ToolbarPanel : Panel
             return new Separator();
         }
 
-        var name = AutomationProperties.GetName(child) ?? (ToolTip.GetTip(child) as string) ?? child.Name ?? string.Empty;
+        // A button's own label before its tooltip (the control set's icon-and-text buttons: Modify Find, not its explanation).
+        var name = AutomationProperties.GetName(child) ?? (child as ContentControl)?.Content as string ?? (ToolTip.GetTip(child) as string) ?? child.Name ?? string.Empty;
         switch (child)
         {
             case ToggleButton toggle:
@@ -273,7 +274,8 @@ public sealed class ToolbarPanel : Panel
                 return more;
             }
 
-            case ComboBox combo:
+            // A combo box, or a segmented control (M34h): a submenu of its choices.
+            case SelectingItemsControl combo:
             {
                 var item = new MenuItem { Header = name, IsEnabled = combo.IsEffectivelyEnabled };
                 var index = 0;

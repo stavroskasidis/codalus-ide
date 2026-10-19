@@ -341,7 +341,8 @@ public static class IconSet
         ["sparkle"] = "sparkle_16_regular",
         ["phone"] = "phone_16_regular",
 
-        // The control set's views (M34h): tool window toolbars and command rows as icon buttons.
+        // The control set's views (M34h): tool window toolbars and command rows as icon buttons; the WCF Test Client's
+        // Add an item, the HTTP Response's time and Word Wrap.
         ["add"] = "add_16_regular",
         ["export"] = "arrow_export_ltr_16_regular",
         ["import"] = "arrow_import_16_regular",
@@ -362,6 +363,8 @@ public static class IconSet
         ["events"] = "flash_16_regular",
         ["breakpoint-solid"] = "circle_16_filled",
         ["breakpoint-hollow"] = "circle_16_regular",
+        ["clock"] = "clock_16_regular",
+        ["word-wrap"] = "text_wrap_16_regular",
 
         // The Windows Forms Toolbox's controls and components, one each (M34h; the stroke drawings below draw the
         // combo box, the progress bar and the group box, which Fluent has no picture of).

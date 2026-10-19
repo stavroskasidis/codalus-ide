@@ -54,6 +54,7 @@ checkmark_circle_16_regular
 circle_16_filled
 circle_16_regular
 clipboard_paste_16_regular
+clock_16_regular
 cloud_16_regular
 cloud_arrow_down_16_regular
 cloud_arrow_up_16_regular

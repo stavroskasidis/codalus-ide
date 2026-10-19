@@ -247,6 +247,8 @@ Where the build differs from the pictures: Avalonia's borders draw no dashes, so
 
 As built (M34h, [checkpoint](../checkpoints/m34h.md#the-views-toolbars-and-options)): the views of `ToolWindowToolbars.dc.html` and Options, and the sweep of the other views' text buttons; the differences from the pictures are listed there.
 
+As built (M34h): Find Results, the HTTP Response and the WCF Test Client follow their mockups; [the checkpoint](../checkpoints/m34h.md#the-control-sets-views-find-results-http-response-and-the-wcf-test-client) lists where they differ.
+
 Find Results follows Visual Studio's Find Results window (grouped by file, a header row per file with its count, line and column, the match highlighted, an icon toolbar), as the finding asks; nothing in the UI says "Visual Studio".
 
 ## Contrast
