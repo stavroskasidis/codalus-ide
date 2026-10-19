@@ -365,6 +365,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 
 ## Changelog
 
+### Command sweep fixes (no API version change)
+
+The activation event `onSolutionOpened`, documented since 1.0, now fires when a solution opens; before, a plugin activating only on it never started. A manifest's menu on `documentTab/context` is no longer reported as an unknown location, and a `when` or `enablement` clause that doesn't parse is a warning (it was silently always true). `PublicAPI.txt` now writes out each parameter's `out`/`in`/`ref`, nullable reference types and generic constraints: the same API, recorded more fully. The API didn't change.
+
 ### M47 (no API version change)
 
 Code Search ([ADR 0078](adr/0078-code-search-and-its-persistent-index.md)): `workbench.action.gotoAll` and `workbench.action.featureSearch` keep their ids and open Code Search's window on its Code Search and Feature Search tabs, and `workbench.action.gotoFile`, `gotoType`, `gotoMember` and `gotoText` open it on a filter. A language server a plugin contributes through the LSP bridge appears in Code Search when it answers `workspace/symbol`, and a plugin's commands and settings in Feature Search. The API didn't change.
