@@ -64,19 +64,11 @@ public sealed class MobileShellTests
 
         // Its binding paths complete from x:DataType (the smoke step maui.devices does the same in the shipped app).
         var position = page.Model.PositionAt(page.Model.Text.Text.IndexOf("Text=\"{Binding NewTitle}\"", StringComparison.Ordinal) + "Text=\"{Binding ".Length);
-        var completed = false;
-        for (var attempt = 0; attempt < 60 && !completed; attempt++)
-        {
-            var client = await f.Shell.Languages.ClientAsync(ShellHost.XamlLanguageId);
-            var completion = client is null ? null : await client.CompletionAsync(page.Model.Uri, position, null, ShellFixture.RequestTimeout(60));
-            completed = completion?.Items.Any(i => i.Label == "AddCommand") == true;
-            if (!completed)
-            {
-                await Task.Delay(2000, TestContext.Current.CancellationToken);
-            }
-        }
-
-        Assert.True(completed, "The binding path completes the view model's members.");
+        await ShellFixture.RetryUntil(
+            "the binding path {Binding NewTitle} in TodoPage.xaml to complete the view model's AddCommand",
+            async token => await f.Shell.Languages.ClientAsync(ShellHost.XamlLanguageId) is { } client ? await client.CompletionAsync(page.Model.Uri, position, null, token) : null,
+            completion => completion?.Items.Any(i => i.Label == "AddCommand") == true,
+            ShellFixture.Describe);
 
         // Check Environment: the workload, the Android SDK and the JDK, each with a fix.
         var tools = await f.Shell.CheckEnvironmentAsync(offer: false);
