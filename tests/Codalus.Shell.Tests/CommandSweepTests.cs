@@ -52,6 +52,7 @@ public sealed partial class CommandSweepTests
         "meta+\\: workbench.splitEditorRight < terminal.split",
         "shift+f7: xaml.showPreview < winforms.viewDesigner",
         "shift+alt+f10: run.applyCodeChanges < winforms.smartTag",
+        "f5: debug.start < wcf.invoke", // the WCF Test Client focused: F5 invokes the operation, as in the classic tool
     };
 
     /// <summary>
