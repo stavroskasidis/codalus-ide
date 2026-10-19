@@ -520,10 +520,23 @@ public sealed class LanguageService : IAsyncDisposable
     /// <summary>How long design-time build results gather before they go to the language host together (M34b).</summary>
     internal static readonly TimeSpan BatchDelay = TimeSpan.FromMilliseconds(150);
 
-    private readonly ConcurrentDictionary<string, CompilerInputsInfo> _pendingInputs = new(SolutionService.PathComparer);
+    private readonly ConcurrentDictionary<string, PendingInputs> _pendingInputs = new(SolutionService.PathComparer);
     private readonly SemaphoreSlim _flushGate = new(1, 1);
     private int _flushScheduled;
     private bool? _sentLoading;
+
+    /// <summary>Changes when another solution opens or the solution closes: inputs gathered before belong to the one before.</summary>
+    private int _solutionEpoch;
+    private string? _solutionPath;
+
+    /// <summary>The solution changed: the next flush drops the projects it no longer has.</summary>
+    private int _removeProjects;
+
+    /// <summary>A design-time build's result waiting for the next flush, and the solution it came from.</summary>
+    private readonly record struct PendingInputs(CompilerInputsInfo Inputs, int Epoch);
+
+    /// <summary>Flushes and removals run while holding it, one at a time (tests hold it to delay them, as a busy machine does).</summary>
+    internal SemaphoreSlim FlushGate => _flushGate;
 
     /// <summary>
     /// Whether the solution is still loading: projects are being evaluated, design-time builds are running, or their
@@ -541,7 +554,7 @@ public sealed class LanguageService : IAsyncDisposable
             return;
         }
 
-        _pendingInputs[inputs.Path] = inputs;
+        _pendingInputs[inputs.Path] = new PendingInputs(inputs, Volatile.Read(ref _solutionEpoch));
         ScheduleFlush();
     }
 
@@ -594,14 +607,36 @@ public sealed class LanguageService : IAsyncDisposable
     /// Sends what gathered. Flushes run one at a time and the pending set keeps each project's newest inputs, so a host
     /// that starts slowly never gets a design-time build from before a restore after the one from after it.
     /// </summary>
+    /// <remarks>
+    /// The projects a solution change removed go out here too, before the updates and in the same order as them: a
+    /// removal sent on its own could pass an update of the same project still on its way, and the host kept it. Inputs
+    /// gathered for a solution that has closed since are dropped: flushed after the next solution opened, they loaded the
+    /// closed folder's projects next to its projects for good (the smoke test's EF step after the folder step, on macOS:
+    /// the C# host "ready" with 2 or 3 projects instead of 1).
+    /// </remarks>
     private async Task FlushAsync()
     {
+        // Removals first, then the batch: a solution change from here on leaves its removals to the next flush.
+        var gone = new List<ProjectData>();
+        if (Interlocked.Exchange(ref _removeProjects, 0) == 1)
+        {
+            var current = _solutions.Solution?.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer) ?? [];
+            foreach (var path in _projects.Keys.Where(p => !current.Contains(p)).ToList())
+            {
+                if (_projects.TryRemove(path, out var project))
+                {
+                    gone.Add(project);
+                }
+            }
+        }
+
+        var epoch = Volatile.Read(ref _solutionEpoch);
         var batch = new List<CompilerInputsInfo>();
         foreach (var path in _pendingInputs.Keys)
         {
-            if (_pendingInputs.TryRemove(path, out var inputs))
+            if (_pendingInputs.TryRemove(path, out var pending) && pending.Epoch == epoch)
             {
-                batch.Add(inputs);
+                batch.Add(pending.Inputs);
             }
         }
 
@@ -610,7 +645,7 @@ public sealed class LanguageService : IAsyncDisposable
         foreach (var descriptor in _registry.All.Where(d => d.ProjectLanguage is not null))
         {
             var updated = new List<ProjectData>();
-            var removed = new List<string>();
+            var removed = gone.Where(p => descriptor.TakesProjects(p.Language)).Select(p => p.Path).ToList();
             foreach (var inputs in batch.Where(i => descriptor.TakesProjects(i.Language)))
             {
                 if (inputs.State != CompilerInputStates.Ok)
@@ -655,36 +690,20 @@ public sealed class LanguageService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The solution opened, closed or changed: the next flush removes the projects it no longer has, in order with the
+    /// updates, and drops what was gathered for another solution.
+    /// </summary>
     private void OnSolutionChanged(object? sender, EventArgs e)
     {
-        var current = _solutions.Solution?.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer) ?? [];
-        var removed = _projects.Keys.Where(p => !current.Contains(p)).ToList();
-        if (removed.Count == 0)
+        var path = _solutions.Solution?.Path;
+        if (!string.Equals(Interlocked.Exchange(ref _solutionPath, path), path, StringComparison.Ordinal))
         {
-            return;
+            Interlocked.Increment(ref _solutionEpoch);
         }
 
-        foreach (var path in removed)
-        {
-            _projects.TryRemove(path, out _);
-        }
-
-        _ = Task.Run(async () =>
-        {
-            foreach (var lazy in _clients.Values.Where(l => l.IsValueCreated))
-            {
-                try
-                {
-                    if (await lazy.Value.ConfigureAwait(false) is { } client)
-                    {
-                        await client.RemoveProjectsAsync(removed, _lifetime.Token).ConfigureAwait(false);
-                    }
-                }
-                catch (Exception ex) when (ex is JsonRpcConnectionLostException or OperationCanceledException or InvalidOperationException)
-                {
-                }
-            }
-        });
+        Volatile.Write(ref _removeProjects, 1);
+        ScheduleFlush();
     }
 
     public async ValueTask DisposeAsync()
