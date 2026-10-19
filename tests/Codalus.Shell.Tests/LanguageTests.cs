@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Codalus.Shell.Editor;
@@ -135,6 +136,64 @@ public sealed class LanguageTests
         row.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(row, new Avalonia.Input.Pointer(1, Avalonia.Input.PointerType.Mouse, true), row, default, 0,
             new Avalonia.Input.PointerPointProperties(Avalonia.Input.RawInputModifiers.LeftMouseButton, Avalonia.Input.PointerUpdateKind.LeftButtonPressed), Avalonia.Input.KeyModifiers.None));
         Assert.Equal(1, editor.Editor.TextArea.Caret.Line);
+    }
+
+    [AvaloniaFact]
+    public async Task Sticky_scroll_stays_under_the_quick_pick_and_the_find_widget()
+    {
+        // The maintainer's report: the pinned lines drew over the branch picker (a quick pick), hiding "Create New
+        // Branch" and the first branches. They were in the window's adorner layer, above all of its content.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var body = string.Concat(Enumerable.Range(0, 80).Select(i => $"\t\tprint({i})\n"));
+        var editor = await OpenAsync(f, "greeter.py", "class Greeter:\n\tdef greet(self, name):\n" + body + "\t\treturn name\n");
+        var sticky = editor.Editor.FindAncestorOfType<CodeEditorView>()!.StickyScroll;
+        await ShellFixture.PumpUntil(() => editor.Folding.AllFoldings.Any(), seconds: 20);
+        await ShellFixture.PumpUntil(
+            () =>
+            {
+                editor.Editor.ScrollToLine(50);
+                return sticky.Shown.SequenceEqual([1, 2]);
+            },
+            seconds: 20);
+        ShellFixture.Pump();
+
+        Rect BoundsInWindow(Visual visual) => new(visual.TranslatePoint(default, f.Window)!.Value, visual.Bounds.Size);
+        Visual? HitAt(Point point) => f.Window.InputHitTest(point) as Visual;
+        bool Within<T>(Visual? hit)
+            where T : Visual => hit is T || hit?.FindAncestorOfType<T>() is not null;
+
+        // The band is the editor's: in its text area, over the code.
+        Assert.Same(editor.Editor.TextArea, sticky.GetVisualParent());
+        var band = BoundsInWindow(sticky);
+        Assert.True(band.Height > 0);
+        var overCode = new Point(band.X + 20, band.Y + (band.Height / 2));
+        Assert.True(Within<StickyScroll>(HitAt(overCode)), $"over the code at {overCode}: {HitAt(overCode)}");
+
+        // The find widget, opened over the band, takes the pointer where they overlap.
+        editor.Search.Open();
+        ShellFixture.Pump();
+        var widget = BoundsInWindow(editor.Search.GetVisualDescendants().OfType<Border>().First(b => b.IsEffectivelyVisible && b.Bounds.Height > 0)).Intersect(band);
+        Assert.True(widget.Width > 0 && widget.Height > 0, $"the find widget {editor.Search.Bounds} doesn't overlap the band {band}");
+        Assert.True(Within<AvaloniaEdit.Search.SearchPanel>(HitAt(widget.Center)), $"the find widget at {widget.Center}: {HitAt(widget.Center)}");
+        editor.Search.Close();
+        ShellFixture.Pump();
+
+        // A quick pick (the branch picker, the command palette) over the band: its rows take the pointer, not the band.
+        var picking = f.Shell.Palette.ShowAsync([.. Enumerable.Range(0, 12).Select(i => new ViewModels.QuickPickItem($"branch-{i}"))], "Switch to a branch");
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.QuickPickView>().Any(v => v.IsEffectivelyVisible && v.Bounds.Height > 0));
+        ShellFixture.Pump();
+        var picker = f.Window.GetVisualDescendants().OfType<Views.QuickPickView>().First(v => v.IsEffectivelyVisible);
+        var overlap = BoundsInWindow(picker).Intersect(band);
+        Assert.True(overlap.Width > 0 && overlap.Height > 0, $"the quick pick {BoundsInWindow(picker)} doesn't overlap the band {band}");
+        var hit = HitAt(overlap.Center);
+        Assert.True(Within<Views.QuickPickView>(hit) && !Within<StickyScroll>(hit), $"the quick pick at {overlap.Center}: {hit}");
+        var firstRow = picker.GetVisualDescendants().OfType<ListBoxItem>().First();
+        var rowPoint = BoundsInWindow(firstRow).Center;
+        Assert.True(Within<ListBoxItem>(HitAt(rowPoint)), $"the first row at {rowPoint}: {HitAt(rowPoint)}");
+        f.Shell.Palette.Cancel();
+        Assert.Null(await picking);
     }
 
     [AvaloniaFact]
