@@ -4,7 +4,7 @@ How Codalus IDE's surfaces look and behave: the checklist every panel, window an
 
 ## The checklist
 
-Review a surface against each line, in every theme family (Harbor, Graphite, Daylight and Ember, M45) and Classic, in Light, Dark and High contrast, at its narrowest and widest, before calling it done. Every milestone's definition of done includes this review of its own panels ([roadmap](roadmap.md#m34--ui-polish)).
+Review a surface against each line, in Classic and every theme family (Harbor, Graphite, Daylight and Ember, M45), in Light, Dark and High contrast, at its narrowest and widest, before calling it done. Every milestone's definition of done includes this review of its own panels ([roadmap](roadmap.md#m34--ui-polish)).
 
 - **Layout**
   - Spacing comes from the 4 px grid (`Shell.Space.*`, `Shell.Padding.*`); no one-off margins.

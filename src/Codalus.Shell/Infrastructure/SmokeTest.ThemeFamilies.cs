@@ -8,8 +8,8 @@ namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
 /// M45's smoke step: the theme families in the shipped app. Each of the twelve variants applies live over the open
-/// solution, with its own tokens (not Classic's under it) and its editor colors; Harbor follows the system; Options shows
-/// the family picker. The pictures (<c>smoke-test-theme-&lt;family&gt;.&lt;variant&gt;.png</c>) are the website's and the
+/// solution, with its own tokens (not Classic's under it) and its editor colors; Harbor follows the system, and without
+/// the setting Classic, the default (D36), does; Options shows the family picker. The pictures (<c>smoke-test-theme-&lt;family&gt;.&lt;variant&gt;.png</c>) are the website's and the
 /// gallery's.
 /// </summary>
 internal sealed partial class SmokeTest
@@ -21,7 +21,7 @@ internal sealed partial class SmokeTest
 
     private async Task ThemeFamiliesStepAsync()
     {
-        var before = shell.Theme.Setting;
+        var before = shell.Workbench.Settings.GetLayerValue(ThemeService.SettingKey, SettingScope.User);
         try
         {
             var program = await OpenAsync(Program).ConfigureAwait(true);
@@ -49,9 +49,13 @@ internal sealed partial class SmokeTest
                 Screenshot($"smoke-test-theme-{theme}.png");
             }
 
-            // Harbor, the default, follows the system: the variant is the OS's light, dark or high contrast.
+            // A family's plain id follows the system: the variant is the OS's light, dark or high contrast.
             await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, ThemeService.Harbor, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
             await WaitAsync(() => shell.Theme.ActiveTheme.StartsWith("harbor.", StringComparison.Ordinal), "Harbor follows the system").ConfigureAwait(true);
+
+            // Without the setting: Classic, the default (D36), following the system.
+            await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => shell.Theme.ActiveFamily == ThemeService.Classic && shell.Theme.ActiveTheme is "light" or "dark" or "highContrast", "the default, Classic, follows the system").ConfigureAwait(true);
 
             // Options: the families as cards, in Harbor Light.
             await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, "harbor.light", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
