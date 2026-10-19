@@ -107,11 +107,6 @@ internal sealed partial class SmokeTest
     /// </summary>
     private static readonly Dictionary<string, string> s_sweepKnown = new(StringComparer.Ordinal)
     {
-        // TODO(issue): Ctrl+Alt+B toggles Blame in the editor (documented), so the Breakpoints window's key is lost there.
-        ["workbench.view.debug.breakpoints|key"] = "Ctrl+Alt+B runs Toggle Blame in a Git repository's editor (Windows, Linux)",
-
-        // TODO(issue): Split Right's Ctrl+\ runs at once in a text file, before the Error List's Ctrl+\ Ctrl+E.
-        ["workbench.view.errorList|key"] = "Ctrl+\\ splits the editor before Ctrl+\\ Ctrl+E can be typed",
     };
 
     private sealed record SweepRow(string Command, string Entry, string Outcome, string? Reason)

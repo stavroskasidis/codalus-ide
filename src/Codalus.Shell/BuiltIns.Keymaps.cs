@@ -10,7 +10,7 @@ internal static partial class BuiltIns
     public const string SchemeKeybindings = """
         [
           { "key": "ctrl+shift+r", "command": "editor.action.quickFix", "when": "editorTextFocus && keyboardScheme == resharper" },
-          { "key": "alt+f7", "command": "editor.action.referenceSearch", "when": "editorTextFocus && keyboardScheme == resharper" },
+          { "key": "alt+f7", "linux": "shift+alt+f12", "command": "editor.action.referenceSearch", "when": "editorTextFocus && keyboardScheme == resharper" },
           { "key": "ctrl+alt+enter", "command": "editor.action.formatDocument", "when": "editorTextFocus && keyboardScheme == resharper" },
           { "key": "ctrl+e ctrl+c", "command": "editor.action.codeCleanup", "when": "editorTextFocus && keyboardScheme == resharper" },
           { "key": "ctrl+e ctrl+f", "command": "editor.action.codeCleanup", "when": "editorTextFocus && keyboardScheme == resharper" },

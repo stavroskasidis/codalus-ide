@@ -52,24 +52,16 @@ public sealed partial class CommandSweepTests
         "meta+\\: workbench.splitEditorRight < terminal.split",
         "shift+f7: xaml.showPreview < winforms.viewDesigner",
         "shift+alt+f10: run.applyCodeChanges < winforms.smartTag",
-
-        // TODO(issue): documented (user guide, Git: Blame in the editor), but the Breakpoints window's Ctrl+Alt+B is lost
-        // in the editor on Windows and Linux, most of the time while debugging. The command sweep's report proposes a fix.
-        "ctrl+alt+b: workbench.view.debug.breakpoints < git.toggleBlame",
     };
 
     /// <summary>
     /// A single chord that starts another binding's sequence where both apply, on purpose: in a focused terminal ⌘\
-    /// splits it (VS Code's key on macOS), so the Error List's ⌘\ ⌘E works from everywhere else.
+    /// splits it (VS Code's key on macOS), so the Error List's ⌘\ ⌘E works from everywhere else. (Split Editor Right's
+    /// Ctrl+\ is the VS Code scheme's, where the Error List has no chord.)
     /// </summary>
     private static readonly HashSet<string> s_intendedPrefixes = new(StringComparer.Ordinal)
     {
         "meta+\\ terminal.split / meta+\\ meta+e workbench.view.errorList",
-
-        // TODO(issue): Split Right's documented Ctrl+\ runs at once in a text file, so the Error List's Ctrl+\ Ctrl+E (a
-        // classic IDE's) can't be typed there. Which one gives way is open; the command sweep's report proposes both ways.
-        "ctrl+\\ workbench.splitEditorRight / ctrl+\\ ctrl+e workbench.view.errorList",
-        "meta+\\ workbench.splitEditorRight / meta+\\ meta+e workbench.view.errorList",
     };
 
     [AvaloniaFact]
