@@ -92,62 +92,140 @@ public class MarkdownRendererTests
 public class CodeDocumentDiskTests
 {
     /// <summary>
-    /// A save started at a low dispatcher priority (the smoke test runs at Background) while the UI thread is busy: the
-    /// watcher's check of the written file, posted at Default, ran before the save's continuation remembered the file's
-    /// new time, and reported the document's own save as "changed on disk, and you have unsaved changes".
+    /// The watcher's check of the file a save is writing runs before the save remembers the file's new time (the smoke
+    /// test saves at Background priority, so its continuation waited behind the check at Default): it reported the
+    /// document's own save as "changed on disk, and you have unsaved changes". The write is held open here, so the check
+    /// runs during it on every OS (a local write can finish at once, as on Windows, leaving no window to test).
     /// </summary>
     [Avalonia.Headless.XUnit.AvaloniaFact]
     public async Task Its_own_save_is_not_a_change_on_disk_when_the_watcher_check_runs_first()
     {
-        var folder = Directory.CreateTempSubdirectory("codalus-save-").FullName;
-        try
+        var files = new HeldWrites();
+        var root = Path.Combine(Path.GetTempPath(), "codalus-held-" + Guid.NewGuid().ToString("N"));
+        using var mount = Workbench.FileSystem.FileSystems.Mount(root, files);
+        var path = Path.Combine(root, "File.cs");
+        using var document = await CodeDocument.OpenAsync(path, CancellationToken.None);
+        await PumpAsync(TimeSpan.FromMilliseconds(300));
+        var conflicts = 0;
+        document.ConflictDetected += (_, _) => conflicts++;
+
+        document.Text.Insert(0, "// edited\n");
+        Assert.True(document.IsModified);
+        var save = document.SaveAsync(CancellationToken.None);
+        Assert.False(save.IsCompleted, "the save waits for its write");
+
+        // The file has its new time; the watcher's check of it runs while the save still writes.
+        var stats = files.Stats;
+        files.Notify(path);
+        await PumpAsync(TimeSpan.FromSeconds(10), () => files.Stats > stats);
+        await PumpAsync(TimeSpan.FromMilliseconds(300));
+        Assert.Equal(0, conflicts);
+
+        files.Release.SetResult();
+        await save;
+        await PumpAsync(TimeSpan.FromMilliseconds(600));
+        Assert.Equal(0, conflicts);
+        Assert.False(document.IsModified);
+        Assert.Equal("// edited\nclass A { }\n", files.Text);
+
+        // A change from outside while the document has unsaved changes is still one.
+        document.Text.Insert(0, "// mine\n");
+        files.Write("class B { }\n");
+        files.Notify(path);
+        await PumpAsync(TimeSpan.FromSeconds(10), () => conflicts > 0);
+        Assert.Equal(1, conflicts);
+    }
+
+    private static async Task PumpAsync(TimeSpan limit, Func<bool>? until = null)
+    {
+        var elapsed = Stopwatch.StartNew();
+        while (elapsed.Elapsed < limit && until?.Invoke() != true)
         {
-            var path = Path.Combine(folder, "File.cs");
-            await File.WriteAllTextAsync(path, "class A { }\n");
-            using var document = await CodeDocument.OpenAsync(path, CancellationToken.None);
-            var conflicts = 0;
-            document.ConflictDetected += (_, _) => conflicts++;
-
-            // Big enough that the file is written on the thread pool, so the save awaits it.
-            var edit = string.Concat(Enumerable.Repeat("// edited\n", 500_000));
-            document.Text.Insert(0, edit);
-            Assert.True(document.IsModified);
-            var length = Encoding.UTF8.GetByteCount(document.Text.Text);
-
-            var save = Dispatcher.UIThread.InvokeAsync(() => document.SaveAsync(CancellationToken.None), DispatcherPriority.Background);
-            Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
-            Assert.False(save.IsCompleted, "the save awaits the write");
-
-            // The UI thread stays busy while the file is written and the watcher's check (at Default) is queued ahead of
-            // the save's continuation (at Background).
-            var writing = Stopwatch.StartNew();
-            while (new FileInfo(path).Length != length && writing.Elapsed < TimeSpan.FromSeconds(10))
-            {
-                Thread.Sleep(10);
-            }
-
-            Thread.Sleep(800);
             Dispatcher.UIThread.RunJobs();
-            await save;
-            Dispatcher.UIThread.RunJobs();
-            Assert.Equal(0, conflicts);
-            Assert.False(document.IsModified);
-
-            // A change from outside while the document has unsaved changes is still one.
-            document.Text.Insert(0, "// mine\n");
-            await File.WriteAllTextAsync(path, "class B { }\n");
-            var changing = Stopwatch.StartNew();
-            while (conflicts == 0 && changing.Elapsed < TimeSpan.FromSeconds(10))
-            {
-                Dispatcher.UIThread.RunJobs();
-                await Task.Delay(15);
-            }
-
-            Assert.Equal(1, conflicts);
+            await Task.Delay(15);
         }
-        finally
+
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>A remote file system whose writes land at once but finish only when <see cref="Release"/> is set.</summary>
+    private sealed class HeldWrites : Workbench.FileSystem.IFileSystemProvider
+    {
+        private readonly Lock _gate = new();
+        private byte[] _content = Encoding.UTF8.GetBytes("class A { }\n");
+        private DateTime _modified = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        private Action<IReadOnlyList<Workbench.FileSystem.FileChangeEvent>>? _changed;
+        private int _stats;
+
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Stats => Volatile.Read(ref _stats);
+
+        public string Text
         {
-            Directory.Delete(folder, recursive: true);
+            get
+            {
+                lock (_gate)
+                {
+                    return Encoding.UTF8.GetString(_content);
+                }
+            }
+        }
+
+        public bool IsRemote => true;
+
+        public void Write(string text) => Store(Encoding.UTF8.GetBytes(text));
+
+        public void Notify(string path) => _changed?.Invoke([new(path, "changed")]);
+
+        public Task<Workbench.FileSystem.FileEntryInfo> StatAsync(string path, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _stats);
+            lock (_gate)
+            {
+                return Task.FromResult(new Workbench.FileSystem.FileEntryInfo(true, false, _content.Length, _modified));
+            }
+        }
+
+        public Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken)
+        {
+            lock (_gate)
+            {
+                return Task.FromResult(_content);
+            }
+        }
+
+        public async Task WriteAllBytesAsync(string path, byte[] content, CancellationToken cancellationToken)
+        {
+            Store(content);
+            await Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public IDisposable Watch(string path, bool recursive, Action<IReadOnlyList<Workbench.FileSystem.FileChangeEvent>> changed)
+        {
+            _changed = changed;
+            return new Unwatch(this);
+        }
+
+        public Task<IReadOnlyList<Workbench.FileSystem.FileSystemEntry>> ReadDirectoryAsync(string path, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task CreateDirectoryAsync(string path, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task DeleteAsync(string path, bool recursive, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task RenameAsync(string source, string target, bool overwrite, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        private void Store(byte[] content)
+        {
+            lock (_gate)
+            {
+                (_content, _modified) = (content, _modified.AddSeconds(1));
+            }
+        }
+
+        private sealed class Unwatch(HeldWrites files) : IDisposable
+        {
+            public void Dispose() => files._changed = null;
         }
     }
 }
