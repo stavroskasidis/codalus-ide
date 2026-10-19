@@ -14,7 +14,7 @@
 Codalus IDE uses Roslyn, with your projects' analyzers and source generators:
 
 - **Highlighting**, by meaning: types, members, locals, parameters, and more.
-- **Completion** (`Ctrl+Space`, and while you type). It can add the `using` an item needs.
+- **Completion** (`Ctrl+Space`, and while you type). It can add the `using` an item needs. See [IntelliSense](#intellisense).
 - **Parameter info** (`Ctrl+Shift+Space`) and **Quick Info** on hover (`Ctrl+K Ctrl+I`).
 - **Live diagnostics**: squiggles as you type, and the **Error List** (View → Error List). The Error List filters by severity, by source (Build, IntelliSense or both) and by document; double-click an entry to go to it.
   - **Group By** groups the entries by project, file, severity, code or source. Click a group's header (or press Enter on it) to collapse or expand it. The choice is the `errorList.groupBy` setting.
@@ -22,6 +22,27 @@ Codalus IDE uses Roslyn, with your projects' analyzers and source generators:
 - **Quick actions** (`Ctrl+.` or the lightbulb): code fixes and refactorings, each previewed before it applies. Those that rename or delete files (Rename File to Match Type, Move Type to File) do it through the project, so its items follow; an open file is saved and reopened under its new name.
 - **Rename** (`F2`): previewed across the solution.
 - **Format Document** (`Ctrl+K Ctrl+D`) and **Format Selection**, following `.editorconfig`, and formatting as you type (`;`, `}`).
+
+## IntelliSense
+
+The completion list, parameter info and Quick Info show code in the editor's own colors: types, keywords, methods and parameters look as they do in your code, in every theme. Generic types show the types you use (`LayoutBuilderBase<PageModel, PageBuilder<PageModel>>.AddTab(…)`, not `LayoutBuilderBase<TModel, TBuilder>`).
+
+- **The completion list** opens below the line you're typing on (above it at the bottom of the screen):
+  - Each item has an icon for its kind: class, structure, interface, enum, delegate, method, extension method, property, field, event, constant, namespace, keyword, snippet, local or parameter.
+  - The characters you typed are bold, and the best match is selected. `↑` `↓`, `Page Up` `Page Down`, `Home` and `End` move; `Enter` or `Tab` inserts; `Esc` closes.
+  - To the right of the selected item, its description: its declaration with "(+ 1 overload)" where it has more, and its summary.
+  - **Filters** at the bottom show only some kinds. Click one, or press its key: `Alt+C` classes, `Alt+S` structures, `Alt+I` interfaces, `Alt+E` enums, `Alt+D` delegates, `Alt+N` namespaces, `Alt+M` methods, `Alt+X` extension methods, `Alt+P` properties, `Alt+F` fields, `Alt+V` events, `Alt+O` constants, `Alt+L` locals and parameters, `Alt+K` keywords, `Alt+T` snippets. Several can be on at once; with none on, everything shows. With the Emacs keyboard scheme, `Alt+F`, `Alt+V` and `Alt+X` keep their Emacs meaning. You can rebind them in Keyboard Shortcuts ("Completion List: Toggle Classes"…).
+- **Parameter info** opens after `(` and `,` (or `Ctrl+Shift+Space`), above the line, so it never covers the completion list:
+  - The signature, with the parameter you're typing in bold.
+  - Then the method's summary and that parameter's description.
+  - With overloads, `˄ 1 of 2 ˅` at its left: click the chevrons, or press `↑` `↓` while the completion list is closed.
+- **Quick Info** (hover, or `Ctrl+K Ctrl+I`) is one tooltip:
+  - The symbol's icon and declaration, wrapped to fit, never cut off.
+  - Its summary, then "Returns:", exceptions and remarks.
+  - Under a line, each error or warning there: its code links to its documentation.
+  - **Fix** (`Alt+.`) applies the top fix. **Other Fixes** (`Alt+Enter`) opens the quick actions there. **Add to Chat** asks AI Chat about the error, with the code around it; it shows only while AI assistance is on.
+  - It doesn't open while the completion list or parameter info is open.
+- The C# Interactive window has the same completion list and parameter info. Other languages' servers get them too, with plain-text signatures.
 
 ## Other languages
 

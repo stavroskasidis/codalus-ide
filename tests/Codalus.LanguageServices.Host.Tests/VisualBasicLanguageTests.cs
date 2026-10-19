@@ -131,7 +131,8 @@ public sealed class VisualBasicLanguageTests(VisualBasicLanguageFixture vb) : IC
         await vb.EditAsync(Inventory, "_products.Add(product)", "_products.Add(product)\n        _products.Insert(");
         var signature = await vb.Client.SignatureHelpAsync(Uri(Inventory), vb.At(Inventory, "_products.Insert(", "_products.Insert(".Length), new SignatureHelpContext(2, "(", false), Ct);
         Assert.NotNull(signature);
-        Assert.Contains(signature!.Signatures, s => s.Label == "Sub List(Of T).Insert(index As Integer, item As T)");
+        // The list's type argument is the call site's: List(Of Product), not List(Of T).
+        Assert.Contains(signature!.Signatures, s => s.Label == "Sub List(Of Product).Insert(index As Integer, item As Product)");
         await FreshAsync(Inventory);
     }
 

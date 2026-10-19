@@ -377,6 +377,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("navigation.codeSearch", "M47", "Code Search: the index saved next to the solution, a type found with its container and project, the editable preview on its file, prefixes, Enter, and Feature Search", CodeSearchStepAsync, "language.ready").ConfigureAwait(true);
 
+        await StepAsync("editor.intelliSense", "0.5.0", "IntelliSense: signature help in the editor's colors with the overloads' chevrons, completion below it with kind icons, filters and the description, and Quick Info with a diagnostic's link and Fix", IntelliSenseStepAsync, "language.ready").ConfigureAwait(true);
+
         await StepAsync("editor.insights", "M12", "Inlay hints, CodeLens, Peek Definition, the Document Outline and the navigation bar", async () =>
         {
             var program = await OpenAsync(Program).ConfigureAwait(true);

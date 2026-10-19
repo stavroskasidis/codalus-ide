@@ -100,7 +100,7 @@ public class EditorTests
         MoveCaret(program, "Geometry.Scale(circle, 3)", "Geometry.Scale(circle,".Length);
         program.ShowSignatureHelp();
         await ShellFixture.PumpUntil(() => program.SignatureWindow is not null);
-        Assert.Equal(2, program.SignatureWindow!.Provider!.Count);
+        Assert.Equal(2, program.SignatureWindow!.Count);
 
         // F12 on Circle opens Shapes.cs at the class; Navigate Backward returns.
         MoveCaret(program, "new Circle", "new C".Length);

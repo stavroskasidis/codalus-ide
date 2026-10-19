@@ -472,6 +472,21 @@ public static class IconSet
     public const string ClassicPrefix = "cl:";
 
     /// <summary>
+    /// The code symbol icons of IntelliSense (the completion list, Quick Info, signature help): Icons/Symbols, drawn by
+    /// eng/icons/symbol-icons.py, each colored by its kind (<see cref="CommandIcons"/>).
+    /// </summary>
+    private static readonly HashSet<string> s_symbols = new(StringComparer.Ordinal)
+    {
+        "symbol-class", "symbol-struct", "symbol-interface", "symbol-enum", "symbol-enum-member", "symbol-delegate",
+        "symbol-method", "symbol-extension-method", "symbol-property", "symbol-field", "symbol-event", "symbol-constant",
+        "symbol-local", "symbol-parameter", "symbol-namespace", "symbol-keyword", "symbol-snippet", "symbol-type-parameter",
+        "symbol-operator", "symbol-module", "symbol-label", "symbol-text",
+    };
+
+    /// <summary>The code symbol icons' names (tests).</summary>
+    public static IReadOnlyCollection<string> SymbolNames => s_symbols;
+
+    /// <summary>
     /// A compiled icon, or null when <paramref name="name"/> is a stroke icon or unknown: one of our Fluent names, or
     /// <c>mi:</c> and a Material Icon Theme file name, or <c>cl:</c> and a classic icon's name.
     /// </summary>
@@ -493,6 +508,10 @@ public static class IconSet
         else if (name is not null && file is null && name.StartsWith(ClassicPrefix, StringComparison.Ordinal))
         {
             file = "classic-" + name[ClassicPrefix.Length..];
+        }
+        else if (name is not null && file is null && s_symbols.Contains(name))
+        {
+            file = name;
         }
 
         if (name is null || file is null)
@@ -533,6 +552,7 @@ public static class IconSet
         ["close"] = "M4,4 L12,12 M12,4 L4,12",
         ["chevron-right"] = "M6,3.5 L10.5,8 L6,12.5",
         ["chevron-down"] = "M3.5,6 L8,10.5 L12.5,6",
+        ["chevron-up"] = "M3.5,10 L8,5.5 L12.5,10",
         ["zoom-in"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14 M4.75,6.75 H8.75 M6.75,4.75 V8.75",
         ["zoom-out"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14 M4.75,6.75 H8.75",
         ["fit"] = "M2,5.5 V2 H5.5 M10.5,2 H14 V5.5 M14,10.5 V14 H10.5 M5.5,14 H2 V10.5",
@@ -637,7 +657,7 @@ public static class IconSet
     private static string Bell => "M3.5,11.5 V7 C3.5,4.5 5.5,2.5 8,2.5 C10.5,2.5 12.5,4.5 12.5,7 V11.5 L13.5,12.5 H2.5 Z M6.5,14.25 H9.5 ";
 
     /// <summary>Every icon name, Fluent and stroke.</summary>
-    public static IReadOnlyCollection<string> Names => [.. s_paths.Keys.Union(s_fluent.Keys, StringComparer.Ordinal)];
+    public static IReadOnlyCollection<string> Names => [.. s_paths.Keys.Union(s_fluent.Keys, StringComparer.Ordinal).Union(s_symbols, StringComparer.Ordinal)];
 
     public static Geometry? Get(string? name)
     {

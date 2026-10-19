@@ -1,5 +1,6 @@
 using System.Globalization;
 using Codalus.Shell.Editor;
+using Codalus.Shell.Editor.IntelliSense;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Context;
@@ -50,6 +51,22 @@ internal static partial class BuiltIns
           { "key": "primary+r primary+r", "command": "editor.action.rename", "when": "editorTextFocus" },
           { "key": "primary+.", "command": "editor.action.quickFix", "when": "editorTextFocus" },
           { "key": "alt+enter", "command": "editor.action.quickFix", "when": "editorTextFocus" },
+          { "key": "alt+.", "command": "editor.action.applyTopFix", "when": "editorTextFocus" },
+          { "key": "alt+n", "command": "editor.action.completionFilter.namespaces", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+c", "command": "editor.action.completionFilter.classes", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+s", "command": "editor.action.completionFilter.structures", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+i", "command": "editor.action.completionFilter.interfaces", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+e", "command": "editor.action.completionFilter.enums", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+d", "command": "editor.action.completionFilter.delegates", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+o", "command": "editor.action.completionFilter.constants", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+f", "command": "editor.action.completionFilter.fields", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+v", "command": "editor.action.completionFilter.events", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+p", "command": "editor.action.completionFilter.properties", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+m", "command": "editor.action.completionFilter.methods", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+x", "command": "editor.action.completionFilter.extensionMethods", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+l", "command": "editor.action.completionFilter.locals", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+k", "command": "editor.action.completionFilter.keywords", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+t", "command": "editor.action.completionFilter.snippets", "when": "editorTextFocus && suggestWidgetVisible" },
           { "key": "primary+k primary+d", "command": "editor.action.formatDocument", "when": "editorTextFocus" },
           { "key": "primary+k primary+c", "command": "editor.action.addCommentLine", "when": "editorTextFocus" },
           { "key": "primary+k v", "command": "markdown.showPreviewToSide", "when": "activeDocumentKind == textFile" },
@@ -212,6 +229,24 @@ internal static partial class BuiltIns
         Add("editor.action.triggerSuggest", "Trigger Suggest", "Editor", OnEditor(c => c.ShowCompletion()), Editor);
         Add("editor.action.triggerParameterHints", "Parameter Info", "Editor", OnEditor(c => c.ShowSignatureHelp()), Editor);
         Add("editor.action.showHover", "Quick Info", "Editor", OnEditor(c => c.ShowQuickInfoAtCaret()), Editor);
+        Add("editor.action.applyTopFix", "Apply Top Fix", "Editor", Ui(shell.ApplyTopFixAtCaretAsync), Editor);
+
+        // The completion list's filters: Alt and a letter while the list is open, as a classic IDE binds them.
+        Add(SymbolKinds.FilterCommandPrefix + "namespaces", "Completion List: Toggle Namespaces", "Editor", OnEditor(c => c.ToggleCompletionFilter("namespaces")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "classes", "Completion List: Toggle Classes", "Editor", OnEditor(c => c.ToggleCompletionFilter("classes")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "structures", "Completion List: Toggle Structures", "Editor", OnEditor(c => c.ToggleCompletionFilter("structures")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "interfaces", "Completion List: Toggle Interfaces", "Editor", OnEditor(c => c.ToggleCompletionFilter("interfaces")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "enums", "Completion List: Toggle Enums", "Editor", OnEditor(c => c.ToggleCompletionFilter("enums")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "delegates", "Completion List: Toggle Delegates", "Editor", OnEditor(c => c.ToggleCompletionFilter("delegates")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "constants", "Completion List: Toggle Constants", "Editor", OnEditor(c => c.ToggleCompletionFilter("constants")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "fields", "Completion List: Toggle Fields", "Editor", OnEditor(c => c.ToggleCompletionFilter("fields")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "events", "Completion List: Toggle Events", "Editor", OnEditor(c => c.ToggleCompletionFilter("events")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "properties", "Completion List: Toggle Properties", "Editor", OnEditor(c => c.ToggleCompletionFilter("properties")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "methods", "Completion List: Toggle Methods", "Editor", OnEditor(c => c.ToggleCompletionFilter("methods")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "extensionMethods", "Completion List: Toggle Extension Methods", "Editor", OnEditor(c => c.ToggleCompletionFilter("extensionMethods")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "locals", "Completion List: Toggle Locals and Parameters", "Editor", OnEditor(c => c.ToggleCompletionFilter("locals")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "keywords", "Completion List: Toggle Keywords", "Editor", OnEditor(c => c.ToggleCompletionFilter("keywords")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + "snippets", "Completion List: Toggle Snippets", "Editor", OnEditor(c => c.ToggleCompletionFilter("snippets")), "suggestWidgetVisible", palette: false);
         Add("editor.action.revealDefinition", "Go to Definition", "Editor", OnEditorAsync(c => c.GoToDefinitionAsync()), Editor);
         Add("editor.action.goToImplementation", "Go to Implementation", "Editor", OnEditorAsync(c => c.GoToImplementationAsync()), Editor);
         Add("editor.action.goToDerived", "Go to Derived Types", "Editor", OnEditorAsync(c => c.GoToImplementationAsync()), Editor);

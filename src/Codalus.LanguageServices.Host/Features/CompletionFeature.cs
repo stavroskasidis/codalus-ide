@@ -99,6 +99,7 @@ internal sealed class CompletionFeature
             items[i] = new LspCompletionItem(label)
             {
                 Kind = Kind(item.Tags),
+                Glyph = ClassifiedText.Glyph(item.Tags),
                 Detail = string.IsNullOrEmpty(item.InlineDescription) ? null : item.InlineDescription,
                 SortText = item.SortText == label ? null : item.SortText,
                 FilterText = item.FilterText == label ? null : item.FilterText,
@@ -151,11 +152,13 @@ internal sealed class CompletionFeature
 
         var additional = changes.Where(c => c != main).Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), c.NewText ?? string.Empty)).ToArray();
         var documentation = description is null || description.TaggedParts.IsEmpty ? null : MarkupContent.Markdown(Markdown.FromDescription(description.TaggedParts, Markdown.Fence(document)));
+        var classified = description is null || description.TaggedParts.IsEmpty ? null : Describe(description.TaggedParts, ClassifiedText.Glyph(roslynItem.Tags));
         if (cached.MapRange is { } map)
         {
             return item with
             {
                 Documentation = documentation,
+                Description = classified,
                 TextEdit = map(Positions.ToRange(text, main.Span)) is { } range ? new Protocol.TextEdit(range, main.NewText ?? string.Empty) : item.TextEdit,
                 AdditionalTextEdits = null,
             };
@@ -164,9 +167,81 @@ internal sealed class CompletionFeature
         return item with
         {
             Documentation = documentation,
+            Description = classified,
             TextEdit = new Protocol.TextEdit(Positions.ToRange(text, main.Span), main.NewText ?? string.Empty),
             AdditionalTextEdits = additional.Length == 0 ? null : additional,
         };
+    }
+
+    /// <summary>
+    /// A completion description (the signature and its overload count on the first line, then the documentation's
+    /// paragraphs, some under a heading such as "Exceptions:") as classified text.
+    /// </summary>
+    internal static SymbolDescription Describe(ImmutableArray<TaggedText> parts, string? glyph)
+    {
+        var lines = ClassifiedText.Lines(ClassifiedText.Runs(parts));
+        var (signature, overloads) = ClassifiedText.SplitOverloads(ClassifiedText.Trim(lines[0]));
+        var sections = new List<DescriptionSection>();
+        var paragraph = new List<List<ClassifiedRun>>();
+        void Flush()
+        {
+            if (paragraph.Count == 0)
+            {
+                return;
+            }
+
+            var kind = sections.Count == 0 ? DescriptionSectionKinds.Summary : DescriptionSectionKinds.Other;
+            var heading = string.Concat(paragraph[0].Select(r => r.Text)).Trim();
+            if (paragraph.Count > 1 && paragraph[0].All(r => r.Kind == ClassifiedRun.PlainText) && heading.EndsWith(':'))
+            {
+                kind = heading switch
+                {
+                    "Returns:" => DescriptionSectionKinds.Returns,
+                    "Value:" => DescriptionSectionKinds.Value,
+                    "Exceptions:" => DescriptionSectionKinds.Exceptions,
+                    "Remarks:" => DescriptionSectionKinds.Remarks,
+                    "Usage:" => DescriptionSectionKinds.Usage,
+                    _ => DescriptionSectionKinds.Other,
+                };
+                if (kind != DescriptionSectionKinds.Other)
+                {
+                    paragraph.RemoveAt(0);
+                }
+            }
+
+            var runs = new List<ClassifiedRun>();
+            foreach (var line in paragraph)
+            {
+                if (runs.Count > 0)
+                {
+                    runs.Add(new ClassifiedRun("\n", ClassifiedRun.LineBreak));
+                }
+
+                runs.AddRange(line.Select((r, i) => i == 0 && r.Kind == ClassifiedRun.PlainText ? r with { Text = r.Text.TrimStart() } : r));
+            }
+
+            if (ClassifiedText.Trim(runs) is { Length: > 0 } body)
+            {
+                sections.Add(new DescriptionSection(kind, body));
+            }
+
+            paragraph.Clear();
+        }
+
+        foreach (var line in lines.Skip(1))
+        {
+            if (line.All(r => string.IsNullOrWhiteSpace(r.Text)))
+            {
+                Flush();
+            }
+            else
+            {
+                paragraph.Add(line);
+            }
+        }
+
+        Flush();
+        return new SymbolDescription(signature, [.. sections]) { Glyph = glyph, Overloads = overloads };
     }
 
     private static int Kind(ImmutableArray<string> tags)

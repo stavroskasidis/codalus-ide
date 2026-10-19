@@ -2561,7 +2561,7 @@ The "Codalus" column uses these terms:
 |---|---|
 | Tabs, preview tab, split views, multi-caret, folding, minimap, find and replace | M3 |
 | Pinned and vertical tabs, tab colouring, Ctrl+Tab window switcher | M34d (done: pinned tabs, tabs colored by project); vertical tabs and the Ctrl+Tab switcher deferred at M12b (`TODO(issue)`) |
-| Semantic highlighting, completion, signature help, Quick Info | M3 |
+| Semantic highlighting, completion, signature help, Quick Info | M3; Visual Studio's look and behavior (kind icons and filters, the description beside the selection, colorized signatures with the call site's types, Quick Info's fixes) in 0.5.0 ([ADR 0081](adr/0081-intellisense-popups.md)) |
 | IntelliCode (AI-ranked completion, whole-line completion) | Trap; an open equivalent is M28 |
 | Code snippets, Surround With, Code Snippets Manager | M12 (done); the Code Snippets Manager deferred at M12b ([deferred](#deferred-work)) |
 | Code Cleanup profiles, format on save | M12 |
