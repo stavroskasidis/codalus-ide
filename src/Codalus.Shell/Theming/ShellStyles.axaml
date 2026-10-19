@@ -1221,6 +1221,22 @@
   <Style Selector="ListBox.completion ListBoxItem:selected TextBlock.muted">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
   </Style>
+  <!-- A soft selection (suggestion mode, or nothing typed yet: a commit character doesn't commit it) is an outline. -->
+  <Style Selector="ListBox.completion.soft ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.completion.soft ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="ListBox.completion.soft ListBoxItem:selected Border.completionAccent">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ListBox.completion.soft ListBoxItem:selected TextBlock.highlighted">
+    <Setter Property="controls:HighlightedText.MatchForeground" Value="{DynamicResource Shell.Match}" />
+  </Style>
+  <Style Selector="ListBox.completion.soft ListBoxItem:selected TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
   <Style Selector="Border.completionFilters">
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
     <Setter Property="BorderThickness" Value="0,1,0,0" />

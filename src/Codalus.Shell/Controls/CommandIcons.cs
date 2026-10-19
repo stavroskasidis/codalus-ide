@@ -65,6 +65,7 @@ public static class CommandIcons
         ["symbol-module"] = Orange,
         ["symbol-label"] = Blue,
         ["symbol-text"] = Blue,
+        ["symbol-target-type"] = Blue,
 
         // The control set's views (M34h).
         ["add"] = Green,

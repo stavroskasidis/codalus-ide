@@ -30,6 +30,9 @@ public sealed class IntelliSenseList
     private readonly Func<string, string?> _keyLabel;
     private List<CompletionData> _current = [];
     private string? _query;
+    private bool _refreshing;
+    private bool _soft;
+    private string? _softQuery;
 
     public IntelliSenseList(Func<string, string?> keyLabel)
     {
@@ -43,7 +46,16 @@ public sealed class IntelliSenseList
             ItemTemplate = new FuncDataTemplate<CompletionData>((_, _) => new CompletionRow(this), supportsRecycling: true),
         };
         ScrollViewer.SetHorizontalScrollBarVisibility(ListBox, Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled);
-        ListBox.SelectionChanged += (_, _) => SelectionChanged?.Invoke(this, EventArgs.Empty);
+        ListBox.SelectionChanged += (_, _) =>
+        {
+            // Picked with the arrows or the mouse: a hard selection, which typing a commit character commits.
+            if (!_refreshing)
+            {
+                IsSoftSelection = false;
+            }
+
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        };
         ListBox.DoubleTapped += (_, e) =>
         {
             e.Handled = true;
@@ -74,6 +86,22 @@ public sealed class IntelliSenseList
 
     /// <summary>The filters that are on: while any is, only their kinds show.</summary>
     public IReadOnlySet<string> ActiveFilters => _filters;
+
+    /// <summary>
+    /// Whether the selection is soft (drawn as an outline, as a classic IDE draws it): typing a commit character doesn't
+    /// commit it, though Enter and Tab do. It's soft in suggestion mode (a lambda's parameter, a new name), while nothing
+    /// is typed (unless the server hard-preselects an item: the type after <c>new</c>), and while only punctuation is;
+    /// picking an item with the arrows or the mouse makes it hard.
+    /// </summary>
+    public bool IsSoftSelection
+    {
+        get => _soft;
+        private set
+        {
+            _soft = value;
+            ListBox.Classes.Set("soft", value);
+        }
+    }
 
     /// <summary>The text typed so far.</summary>
     public string Query => _query ?? string.Empty;
@@ -107,6 +135,11 @@ public sealed class IntelliSenseList
         _filterButtons.Children.Clear();
         _toggles.Clear();
         var present = _items.Select(i => i.Filter).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        if (_items.Any(i => i.MatchesTargetType))
+        {
+            present.Add(SymbolKinds.TargetTypeFilter);
+        }
+
         foreach (var filter in SymbolKinds.Filters.Where(f => present.Contains(f.Id)))
         {
             var key = _keyLabel(filter.Command);
@@ -169,7 +202,7 @@ public sealed class IntelliSenseList
         double bestPriority = 0;
         foreach (var item in _items)
         {
-            if (_filters.Count > 0 && (item.Filter is not { } filter || !_filters.Contains(filter)))
+            if (_filters.Count > 0 && !PassesFilters(item))
             {
                 continue;
             }
@@ -198,9 +231,41 @@ public sealed class IntelliSenseList
         }
 
         _current = shown;
-        ListBox.ItemsSource = shown;
-        SelectedItem = best;
+        _refreshing = true;
+        try
+        {
+            ListBox.ItemsSource = shown;
+            SelectedItem = best;
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+
+        // Typing decides afresh; toggling a filter keeps an item picked with the arrows hard.
+        IsSoftSelection = best is not null && (best == suggested && query == _softQuery ? IsSoftSelection : IsSoft(best, query));
+        _softQuery = query;
         Filtered?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The filters on show an item of one of their kinds, or one matching the target type while that filter is on.</summary>
+    private bool PassesFilters(CompletionData item) =>
+        (item.Filter is { } filter && _filters.Contains(filter)) || (item.MatchesTargetType && _filters.Contains(SymbolKinds.TargetTypeFilter));
+
+    /// <summary>Whether the best match is selected softly (<see cref="IsSoftSelection"/>; Roslyn's rules for hard selection).</summary>
+    private static bool IsSoft(CompletionData item, string query)
+    {
+        if (item.Item.CommitCharacters is { Length: 0 })
+        {
+            return true; // suggestion mode
+        }
+
+        if (query.Length == 0)
+        {
+            return item.Item.Preselect != true || item.Item.SoftSelection == true;
+        }
+
+        return query.All(c => !char.IsLetterOrDigit(c) && c != '_') && !string.Equals(query, item.Label, StringComparison.Ordinal);
     }
 
     /// <summary>The list's keys: the arrows, Page Up and Down, Home and End move the selection; Enter and Tab commit.</summary>
@@ -401,6 +466,45 @@ public sealed class CompletionPopup : IntelliSensePopup
         item.Complete(new AnchorSegment(TextArea.Document, StartOffset, Math.Max(0, EndOffset - StartOffset)));
     }
 
+    /// <summary>
+    /// Whether typing <paramref name="typed"/> commits the selected item (Roslyn's rules, as a classic IDE applies them):
+    /// it's one of the item's commit characters, the selection is hard (<see cref="IntelliSenseList.IsSoftSelection"/>),
+    /// and it doesn't continue the item's name (then it filters: the "." of a namespace's name).
+    /// </summary>
+    public bool CommitsOn(char typed)
+    {
+        if (CompletionList.SelectedItem is not { } item || CompletionList.IsSoftSelection || !item.CommitCharacters.Contains(typed))
+        {
+            return false;
+        }
+
+        return !item.Text.StartsWith(CompletionList.Query + typed, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    /// <summary>
+    /// Commits the selected item for a typed commit character (the server may change the edit for it); true when the
+    /// edit already typed the character.
+    /// </summary>
+    public bool CommitWith(char typed)
+    {
+        if (CompletionList.SelectedItem is not { } item)
+        {
+            return false;
+        }
+
+        item.CommitCharacter = typed;
+        item.IncludedCommitCharacter = false;
+        try
+        {
+            Commit();
+            return item.IncludedCommitCharacter;
+        }
+        finally
+        {
+            item.CommitCharacter = null;
+        }
+    }
+
     private void OnDocumentChanging(object? sender, DocumentChangeEventArgs e)
     {
         // As AvaloniaEdit's completion window: deleting right before the start (Backspace after ".") closes the list.
@@ -483,10 +587,18 @@ public sealed class CompletionPopup : IntelliSensePopup
                 return;
             }
 
-            if (CompletionList.ListBox.ContainerFromItem(item) is not Control row)
+            // Beside a row of the list as it shows now: a tip open on another root (the list's earlier popup window)
+            // closes first, as Avalonia's popup host can't be placed against a control under another root.
+            if (CompletionList.ListBox.ContainerFromItem(item) is not Control row || TopLevel.GetTopLevel(row) is not { } root
+                || root != TopLevel.GetTopLevel(CompletionList.ListBox))
             {
                 _tip.IsOpen = false;
                 return;
+            }
+
+            if (_tip.IsOpen && _tip.PlacementTarget is { } shown && TopLevel.GetTopLevel(shown) != root)
+            {
+                _tip.IsOpen = false;
             }
 
             _tip.PlacementTarget = row;

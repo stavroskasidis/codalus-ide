@@ -307,6 +307,228 @@ public class IntelliSensePopupTests
         }
     }
 
+    private static readonly HashSet<char> s_commitCharacters = [' ', '(', ')', '.', ',', ';', '<', '='];
+
+    /// <summary>A completion list of the given items, each committed by <see cref="s_commitCharacters"/> unless it names its own.</summary>
+    private static CompletionPopup CommittingCompletionOf(TextEditor editor, int start, IEnumerable<CompletionItem> items)
+    {
+        var popup = new CompletionPopup(editor.TextArea, () => EditorTheme.Dark, id => id == SymbolKinds.FilterCommandPrefix + SymbolKinds.TargetTypeFilter ? "Alt+J" : null)
+        {
+            StartOffset = start,
+            EndOffset = editor.CaretOffset,
+        };
+        foreach (var item in items)
+        {
+            popup.CompletionList.CompletionData.Add(new CompletionData(item, Task.FromResult, (_, _) => { })
+            {
+                CommitCharacters = item.CommitCharacters is { } own ? [.. own.Select(c => c[0])] : s_commitCharacters,
+            });
+        }
+
+        popup.CompletionList.BuildFilters();
+        popup.CompletionList.Refresh();
+        popup.Show();
+        IntelliSenseLayout.Arrange(editor.TextArea, popup, null);
+        ShellFixture.Pump();
+        return popup;
+    }
+
+    [AvaloniaFact]
+    public void Commit_characters_commit_a_hard_selection_only_and_not_while_they_continue_the_name()
+    {
+        var (window, editor) = ShowEditor("");
+        var popup = CommittingCompletionOf(editor, 0, [Item("WriteLine", SymbolGlyphs.Method), Item("Write", SymbolGlyphs.Method), Item("System.Text", SymbolGlyphs.Namespace)]);
+        try
+        {
+            // Nothing typed: the first item is selected softly (an outline, no accent bar), and "(" doesn't commit it.
+            Assert.True(popup.CompletionList.IsSoftSelection);
+            Assert.Contains("soft", popup.CompletionList.ListBox.Classes);
+            Assert.False(popup.CommitsOn('('));
+            var selected = popup.CompletionList.ListBox.ContainerFromItem(popup.CompletionList.SelectedItem!)!;
+            Assert.True(selected.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("completionAccent")).Background is null or ISolidColorBrush { Color.A: 0 });
+
+            // Picked with the arrows, it's hard: "(" commits it.
+            popup.CompletionList.HandleKey(Key.Down);
+            Assert.False(popup.CompletionList.IsSoftSelection);
+            Assert.DoesNotContain("soft", popup.CompletionList.ListBox.Classes);
+            Assert.True(popup.CommitsOn('('));
+
+            // Typed text makes the best match hard; a character that isn't the item's commit character doesn't commit.
+            popup.CompletionList.SelectItem("WriteL");
+            Assert.Equal("WriteLine", popup.CompletionList.SelectedItem?.Label);
+            Assert.False(popup.CompletionList.IsSoftSelection);
+            Assert.True(popup.CommitsOn('('));
+            Assert.True(popup.CommitsOn(';'));
+            Assert.False(popup.CommitsOn('x'));
+
+            // A commit character that continues the item's name filters instead: the "." of "System.Text".
+            popup.CompletionList.SelectItem("System");
+            Assert.Equal("System.Text", popup.CompletionList.SelectedItem?.Label);
+            Assert.False(popup.CommitsOn('.'));
+            Assert.True(popup.CommitsOn(';'));
+
+            // Only punctuation typed: soft again.
+            popup.CompletionList.SelectItem(".");
+            Assert.True(popup.CompletionList.SelectedItem is null || popup.CompletionList.IsSoftSelection);
+        }
+        finally
+        {
+            popup.Hide();
+            window.Close();
+        }
+
+        // Suggestion mode (the server sends no commit characters): soft whatever is typed, and nothing commits.
+        (window, editor) = ShowEditor("pa");
+        popup = CommittingCompletionOf(editor, 0, [Item("page", SymbolGlyphs.Local) with { CommitCharacters = [] }, Item("pages", SymbolGlyphs.Local) with { CommitCharacters = [] }]);
+        try
+        {
+            popup.CompletionList.SelectItem("pa");
+            Assert.Equal("page", popup.CompletionList.SelectedItem?.Label);
+            Assert.True(popup.CompletionList.IsSoftSelection);
+            Assert.False(popup.CommitsOn(' '));
+            Assert.False(popup.CommitsOn('('));
+        }
+        finally
+        {
+            popup.Hide();
+            window.Close();
+        }
+
+        // A server's preselected item is hard with nothing typed (the type after "new"), unless it asks to be soft.
+        (window, editor) = ShowEditor("");
+        popup = CommittingCompletionOf(editor, 0, [Item("Alpha", SymbolGlyphs.Class), Item("List<int>", SymbolGlyphs.Class) with { Preselect = true, FilterText = "List" }]);
+        try
+        {
+            Assert.Equal("List<int>", popup.CompletionList.SelectedItem?.Label);
+            Assert.False(popup.CompletionList.IsSoftSelection);
+            Assert.True(popup.CommitsOn('('));
+        }
+        finally
+        {
+            popup.Hide();
+            window.Close();
+        }
+
+        (window, editor) = ShowEditor("");
+        popup = CommittingCompletionOf(editor, 0, [Item("Alpha", SymbolGlyphs.Class), Item("Red", SymbolGlyphs.EnumMember) with { Preselect = true, SoftSelection = true }]);
+        try
+        {
+            Assert.Equal("Red", popup.CompletionList.SelectedItem?.Label);
+            Assert.True(popup.CompletionList.IsSoftSelection);
+        }
+        finally
+        {
+            popup.Hide();
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void Popups_close_when_their_editor_leaves_its_window_and_never_place_against_another_one()
+    {
+        // The sweep on macOS: "Target control is not in the same tree as the popup parent" once the editor's view was
+        // under another root than the window the popups opened on (a document opened over it, another window).
+        var (window, editor) = ShowEditor("Wri");
+        var completion = CompletionOf(editor, 0, [Item("WriteLine", SymbolGlyphs.Method), Item("Write", SymbolGlyphs.Method)]);
+        var signature = new SignatureHelpPopup(editor.TextArea, BuilderHelp(), () => EditorTheme.Dark);
+        signature.Show();
+        IntelliSenseLayout.Arrange(editor.TextArea, completion, signature);
+        ShellFixture.Pump();
+        var other = new Window { Width = 600, Height = 400 };
+        try
+        {
+            Assert.True(completion.IsOpen);
+            Assert.True(signature.IsOpen);
+
+            // The editor moves to another window: both close, and placing them again neither throws nor reopens them.
+            window.Content = null;
+            ShellFixture.Pump();
+            other.Content = editor;
+            other.Show();
+            ShellFixture.Pump();
+            Assert.False(completion.IsOpen);
+            Assert.False(signature.IsOpen);
+            IntelliSenseLayout.Arrange(editor.TextArea, completion, signature);
+            completion.Place(new Rect(0, 0, 100, 16), 10, PopupSide.Below, allowFlip: true);
+            ShellFixture.Pump();
+            Assert.False(completion.IsOpen);
+
+            // Shown again, they open on the editor's new window, and stay open while placed there.
+            var again = CompletionOf(editor, 0, [Item("WriteLine", SymbolGlyphs.Method)]);
+            Assert.True(again.IsOpen);
+            Assert.Same(other, TopLevel.GetTopLevel(editor.TextArea));
+            Assert.True(again.StillOnItsWindow());
+            again.Hide();
+
+            // While the editor isn't showing (another document over it), a popup asked for opens nothing.
+            editor.IsVisible = false;
+            ShellFixture.Pump();
+            var hidden = new SignatureHelpPopup(editor.TextArea, BuilderHelp(), () => EditorTheme.Dark);
+            Assert.False(hidden.Show());
+            Assert.False(hidden.IsOpen);
+            editor.IsVisible = true;
+        }
+        finally
+        {
+            completion.Hide();
+            signature.Hide();
+            other.Close();
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void Items_of_the_target_type_are_preselected_and_have_a_filter_of_their_own()
+    {
+        var (window, editor) = ShowEditor("");
+        var popup = CommittingCompletionOf(editor, 0,
+        [
+            Item("Console", SymbolGlyphs.Class), Item("context", SymbolGlyphs.Local), Item("Count", SymbolGlyphs.Property) with { MatchesTargetType = true },
+            Item("count", SymbolGlyphs.Local) with { MatchesTargetType = true }, Item("Parse", SymbolGlyphs.Method),
+        ]);
+        try
+        {
+            // The best match: a local of the expected type before a member of it (selected softly, as nothing is typed).
+            Assert.Equal("count", popup.CompletionList.SelectedItem?.Label);
+            Assert.True(popup.CompletionList.IsSoftSelection);
+
+            // Typing keeps preferring it among equal matches.
+            popup.CompletionList.SelectItem("co");
+            Assert.Equal("count", popup.CompletionList.SelectedItem?.Label);
+
+            // The target type filter: its toggle (the target icon, Alt+J) shows only the matching items, of any kind.
+            popup.CompletionList.SelectItem("");
+            var toggle = popup.CompletionList.FilterToggles[SymbolKinds.TargetTypeFilter];
+            Assert.Equal("symbol-target-type", ((Icon)toggle.Content!).Kind);
+            Assert.Equal("Target type matches (Alt+J)", ToolTip.GetTip(toggle));
+            Assert.Same(popup.CompletionList.FilterToggles.Values.Last(), toggle); // at the end of the bar
+            Assert.True(popup.CompletionList.ToggleFilter(SymbolKinds.TargetTypeFilter));
+            Assert.Equal(["Count", "count"], popup.CompletionList.CurrentList.Select(d => d.Label).Order(StringComparer.Ordinal));
+
+            // With a kind's filter too, the list shows either.
+            popup.CompletionList.ToggleFilter("classes");
+            Assert.Equal(["Console", "Count", "count"], popup.CompletionList.CurrentList.Select(d => d.Label).Order(StringComparer.Ordinal));
+        }
+        finally
+        {
+            popup.Hide();
+            window.Close();
+        }
+
+        // Without target type matches, there's no such filter.
+        (window, editor) = ShowEditor("");
+        popup = CommittingCompletionOf(editor, 0, [Item("Console", SymbolGlyphs.Class), Item("context", SymbolGlyphs.Local)]);
+        try
+        {
+            Assert.DoesNotContain(SymbolKinds.TargetTypeFilter, popup.CompletionList.FilterToggles.Keys);
+        }
+        finally
+        {
+            popup.Hide();
+            window.Close();
+        }
+    }
+
     [AvaloniaFact]
     public void Filter_shortcuts_reach_the_list_in_every_key_scheme_on_every_platform()
     {
@@ -496,6 +718,8 @@ public class IntelliSensePopupTests
         Assert.Null(quickInfo.FixButton); // no language service to fix it
         f.Press(Key.Escape);
         Assert.False(editor.IsQuickInfoOpen);
+        Assert.Null(editor.HoverPopup.Child); // let go of when closed: nothing in it (a link's tooltip) opens later
+        Assert.False(quickInfo.IsAttachedToVisualTree());
 
         // With the completion list open, Quick Info doesn't open; Escape closes the list, and it opens again.
         editor.Editor.CaretOffset = editor.Model.Text.TextLength;
@@ -733,5 +957,133 @@ public class IntelliSensePopupTests
         Assert.EndsWith("(+ 1 overload)", DescriptionView.TextOf(hover.SignatureBlock!), StringComparison.Ordinal);
         Assert.Equal(["Returns:"], hover.Children.OfType<TextBlock>().Where(t => t.Classes.Contains("sectionHeading")).Select(t => t.Text));
         Assert.StartsWith("The builder, for ", DescriptionView.TextOf(hover.SectionBlocks.Single(s => s.Kind == DescriptionSectionKinds.Returns).Block), StringComparison.Ordinal);
+    }
+
+    private const string Commits = """
+
+
+        public static class Commits
+        {
+            public static void Take(int amount, string text) { }
+
+            public static void Run(int total, string title, System.Action<int> report)
+            {
+                var ratio = 1.5;
+                Take(/*arg*/);
+                /*lambda*/
+                /*semi*/
+                /*space*/
+                /*nospace*/
+                /*dot*/
+            }
+        }
+        """;
+
+    [AvaloniaFact]
+    public async Task With_the_csharp_service_commit_characters_commit_and_the_target_type_is_preselected()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var document = await f.Shell.OpenFileAsync(Path.Combine(folder, "src", "App", "Program.cs"));
+        Assert.NotNull(document);
+        await ShellFixture.PumpUntil(() => document.Controller is not null);
+        var editor = document.Controller!;
+        editor.Model.Text.Insert(editor.Model.Text.TextLength, Commits);
+
+        // Format on type would move each ";"-ended statement to a line of its own, away from its marker.
+        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.FormatOnTypeKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+        string Line(string marker)
+        {
+            var text = editor.Model.Text.Text;
+            var at = text.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+            var end = text.IndexOf('\n', at);
+            return text[at..end].TrimEnd();
+        }
+
+        void CaretAfter(string marker, string insert = "")
+        {
+            var at = editor.Model.Text.Text.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+            editor.Model.Text.Insert(at, insert);
+            editor.Editor.CaretOffset = at + insert.Length;
+            editor.Editor.TextArea.Focus();
+            ShellFixture.Pump();
+        }
+
+        // Types a name a character at a time (each asks for completion, as typing does) and waits for the list to pick it.
+        async Task<CompletionPopup> TypeUntilSelected(string typed, Func<CompletionPopup, bool> ready)
+        {
+            foreach (var c in typed)
+            {
+                f.Type(c.ToString());
+            }
+
+            var deadline = DateTime.UtcNow.AddSeconds(120);
+            while (true)
+            {
+                try
+                {
+                    await ShellFixture.PumpUntil(() => editor.CompletionWindow is { IsOpen: true } w && ready(w), seconds: 15);
+                    return editor.CompletionWindow!;
+                }
+                catch (Exception) when (DateTime.UtcNow < deadline)
+                {
+                    editor.ShowCompletion(); // asked again until the edit's analysis is in
+                }
+            }
+        }
+
+        // An argument: the item of the parameter's type (int amount) is preselected, softly as nothing is typed, and the
+        // target type filter shows only such items.
+        CaretAfter("        Take(");
+        editor.ShowCompletion();
+        var argument = await TypeUntilSelected("", w => w.CompletionList.CompletionData.Any(d => d.MatchesTargetType));
+        await ShellFixture.PumpUntil(() => argument.CompletionList.SelectedItem?.Label == "total");
+        Assert.True(argument.CompletionList.IsSoftSelection);
+        Assert.Contains(SymbolKinds.TargetTypeFilter, argument.CompletionList.FilterToggles.Keys);
+        Assert.True(editor.ToggleCompletionFilter(SymbolKinds.TargetTypeFilter));
+        Assert.All(argument.CompletionList.CurrentList, d => Assert.True(d.MatchesTargetType, d.Label));
+        Assert.DoesNotContain(argument.CompletionList.CurrentList, d => d.Label is "title" or "ratio");
+        f.Press(Key.Escape);
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow is null);
+
+        // Suggestion mode (a lambda's parameter is a new name): Space commits nothing.
+        CaretAfter("/*lambda*/", "report = ");
+        var lambda = await TypeUntilSelected("v", w => w.CompletionList.SelectedItem is not null);
+        Assert.True(lambda.CompletionList.IsSoftSelection);
+        f.Type(" ");
+        Assert.Equal("report = v", Line("/*lambda*/"));
+        f.Type(";"); // a complete statement before the next line
+
+        // ";" commits the selected item, then is typed.
+        CaretAfter("/*semi*/", "var name = ");
+        await TypeUntilSelected("tit", w => w.CompletionList.SelectedItem?.Label == "title" && !w.CompletionList.IsSoftSelection);
+        f.Type(";");
+        Assert.Equal("var name = title;", Line("/*semi*/"));
+        Assert.Null(editor.CompletionWindow);
+
+        // Space commits too, by default (a classic IDE's), and not once the setting is off.
+        CaretAfter("/*space*/", "var other = ");
+        await TypeUntilSelected("tit", w => w.CompletionList.SelectedItem?.Label == "title" && !w.CompletionList.IsSoftSelection);
+        f.Type(" ");
+        Assert.Equal("var other = title", Line("/*space*/"));
+        f.Type(";"); // a complete statement before the next line
+        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CommitOnSpaceKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => !f.Shell.EditorOptions.For(editor.Model.LanguageId).CommitOnSpace);
+        CaretAfter("/*nospace*/", "var third = ");
+        await TypeUntilSelected("tit", w => w.CompletionList.SelectedItem?.Label == "title" && !w.CompletionList.IsSoftSelection);
+        f.Type(" ");
+        Assert.Equal("var third = tit", Line("/*nospace*/"));
+        f.Type(";"); // a complete statement before the next line
+        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CommitOnSpaceKey, true, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+
+        // "." after a type gives "Type."; "(" after a method gives "Name(" (its closing parenthesis added after it).
+        CaretAfter("/*dot*/");
+        await TypeUntilSelected("Consol", w => w.CompletionList.SelectedItem?.Label == "Console" && !w.CompletionList.IsSoftSelection);
+        f.Type(".");
+        Assert.Equal("Console.", Line("/*dot*/"));
+        await TypeUntilSelected("WriteLi", w => w.CompletionList.SelectedItem?.Label == "WriteLine" && !w.CompletionList.IsSoftSelection);
+        f.Type("(");
+        Assert.StartsWith("Console.WriteLine(", Line("/*dot*/"), StringComparison.Ordinal);
+        Assert.Equal("Console.WriteLine(".Length, editor.Editor.CaretOffset - (editor.Model.Text.Text.IndexOf("/*dot*/", StringComparison.Ordinal) + "/*dot*/".Length));
     }
 }

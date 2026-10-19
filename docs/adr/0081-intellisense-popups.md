@@ -40,6 +40,28 @@ What existed:
 - **Icons:** the kind icons are our own pixel drawings (`eng/icons/symbol-icons.py`), compiled at build time like every icon, each in its kind's palette color.
 - **The C# Interactive window** uses the same popups.
 
+**Commit characters**, as Visual Studio applies Roslyn's rules:
+- A typed commit character commits the selected item, then is typed, unless the edit already contains it. The characters are the item's `commitCharacters`, else the server's `allCommitCharacters`. The C# service computes an item's set from Roslyn's `CommitCharacterRules` (the first rule naming a character decides, as in Roslyn's commit manager) and sends it only when it differs from the defaults. In suggestion mode it sends none.
+- The editor resolves the item again with the character (`codalusCommitCharacter`), so Roslyn's `GetChangeAsync(…, commitCharacter)` can change the edit, and it says whether the edit already includes the character (`codalusIncludesCommitCharacter`).
+- **No commit on a soft selection** (drawn as an outline). Following Roslyn's hard-selection rules, the selection is soft:
+  - in suggestion mode;
+  - while nothing is typed, unless the server preselects an item with a hard selection (`codalusSoftSelection` marks a preselected item that asks to be soft);
+  - while only punctuation is typed.
+  Picking an item with the arrows or the mouse makes it hard.
+- A character that continues the item's filter text filters instead of committing (Roslyn's filter characters).
+- **Space** commits, as in Visual Studio's default completion mode ("Automatic"; its other mode, "Tab-only", is the one that doesn't). The `editor.completion.commitOnSpace` setting turns Space off.
+- **Enter** follows the item's `EnterKeyRule` (`codalusEnterKeyRule`): never in C#, and always in Visual Basic. These are Roslyn's defaults per language; `afterFullyTypedWord` applies only when the whole name was typed.
+- Enter and Tab still commit a soft selection.
+
+**Target type matches** (C#):
+- Roslyn's `CompletionItemFlags.MatchesTargetType` and its type inference service are internal, so the C# service infers the expected type with the public semantic model (`TargetTyping`):
+  - an argument: the active overload's parameter, chosen the way signature help chooses it, plus the element type of a `params` array;
+  - a simple assignment's left side, or a declaration's, property's or parameter's type before its initializer (not `var`; the variable being declared or assigned is excluded);
+  - a `return` value or an expression body (unwrapping `Task<T>` and `ValueTask<T>` in async methods);
+  - an operand of `==` or `!=`.
+- Items are found by name where they're completed (after `x.`, among the members of x's type). An item matches when its type (a variable's or member's type, or a method's return type) converts implicitly to an expected type. `object` matches nothing. The result is `codalusMatchesTargetType`.
+- The list prefers a matching item among equal matches: a local or parameter first, then a member. The filter bar has a target type filter, Alt+J (Roslyn's access key), with our own target icon. It shows the matching items of every kind, alongside any kind filters that are on.
+
 **Classified text** (`docs/protocol.md`, "Classified text"):
 - `codalusParts` on signature help.
 - `codalusDescription` on hover and resolved completion items. Section headings are left to the client, so "Returns:" shows once.
@@ -52,4 +74,6 @@ What existed:
 - Other language servers get the same popups. Their signatures are plain text with the active parameter bold, and their LSP kinds map onto the icons.
 - Hover's Markdown and signature help's labels change for every client: type arguments are substituted, and headings appear once. The Visual Basic signature test now expects `List(Of Product)`.
 - AvaloniaEdit's completion window is still used by snippets' choices.
-- `TODO(issue)`: commit characters (Visual Studio commits on `(`, `.`, `;`); Visual Studio's "target-typed" filter and the expander that adds unimported types.
+- Commit characters commit only in code editors. The C# Interactive window's list commits with Enter and Tab only.
+- Target typing is C# only. Visual Basic's lists have no target type filter.
+- `TODO(issue)`: the expander that adds types from unimported namespaces. Roslyn computes those items only when its completion options ask for them (`ShowItemsFromUnimportedNamespaces`, `ExpandedCompletionBehavior`). Those options are internal: the public `GetCompletionsAsync` overloads take no completion options (the `OptionSet` overload is obsolete and ignored). Indexing every reference's types ourselves would duplicate Roslyn's import completion and its cache.

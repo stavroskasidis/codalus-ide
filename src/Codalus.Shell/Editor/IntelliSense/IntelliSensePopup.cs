@@ -133,15 +133,47 @@ public abstract class IntelliSensePopup : Popup
     /// <summary>How far left of its anchor it starts (the completion list's icon column, so the names line up with the typed text).</summary>
     public virtual double AnchorInset => 0;
 
-    /// <summary>Opens it (styled by the editor's window: its theme and resources).</summary>
-    public void Show()
+    /// <summary>The window it opened on: its placement target's, which Avalonia's popup host keeps for good.</summary>
+    private TopLevel? _openedOn;
+
+    /// <summary>
+    /// Opens it (styled by the editor's window: its theme and resources), on the window its editor's text view is in;
+    /// not while the view isn't in one or isn't showing.
+    /// </summary>
+    public bool Show()
     {
-        if (((ILogical)this).LogicalParent is null && TopLevel.GetTopLevel(TextArea) is { } topLevel)
+        if (TextArea.TextView is not { IsEffectivelyVisible: true } view || TopLevel.GetTopLevel(view) is not { } topLevel)
+        {
+            return false;
+        }
+
+        if (((ILogical)this).LogicalParent is { } parent && parent != topLevel)
+        {
+            ((ISetLogicalParent)this).SetParent(null);
+        }
+
+        if (((ILogical)this).LogicalParent is null)
         {
             ((ISetLogicalParent)this).SetParent(topLevel);
         }
 
+        _openedOn = topLevel;
         IsOpen = true;
+        return IsOpen;
+    }
+
+    /// <summary>
+    /// Whether it's open on the window its editor is in now. A popup placed again against a view under another root
+    /// throws ("Target control is not in the same tree as the popup parent"), so one that isn't closes instead.
+    /// </summary>
+    internal bool StillOnItsWindow()
+    {
+        if (IsOpen && TopLevel.GetTopLevel(TextArea.TextView) != _openedOn)
+        {
+            Hide();
+        }
+
+        return IsOpen;
     }
 
     /// <summary>Closes it.</summary>
@@ -154,6 +186,11 @@ public abstract class IntelliSensePopup : Popup
     /// </summary>
     public void Place(Rect line, double x, PopupSide side, bool allowFlip)
     {
+        if (IsOpen && !StillOnItsWindow())
+        {
+            return;
+        }
+
         Side = side;
         var changed = PlacementAnchor != Anchor(side) || PlacementGravity != Gravity(side)
             || HorizontalOffset != x - AnchorInset || VerticalOffset != line.Top;

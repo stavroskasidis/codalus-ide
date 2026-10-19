@@ -97,6 +97,9 @@ public sealed partial class CodeEditorController : IDisposable
         _dockable = dockable;
         _services = services;
         _hoverPopup = hoverPopup;
+
+        // Closed, Quick Info lets go of its content: nothing in it (a link's tooltip) opens against a closed popup.
+        _hoverPopup.Closed += OnHoverClosed;
         var document = Model.Text;
         _markers = new DiagnosticMarkers(document);
         _highlights = new HighlightRenderer(document);
@@ -836,6 +839,15 @@ public sealed partial class CodeEditorController : IDisposable
             return;
         }
 
+        // A commit character ("(", ".", ";", Space…) commits the completion list's selected item, then is typed, unless
+        // the item's edit typed it already.
+        if (_completion is { } completion && e.Text is { Length: 1 } committing && !e.Handled && Editor.SelectionLength == 0
+            && (committing[0] != ' ' || Options.CommitOnSpace) && completion.CommitsOn(committing[0]) && completion.CommitWith(committing[0]))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Typing the closing character of an auto-closed pair moves over it.
         if (e.Text is { Length: 1 } typed && Options.AutoClosingBrackets && Editor.SelectionLength == 0
             && Editor.CaretOffset < Model.Text.TextLength && Model.Text.GetCharAt(Editor.CaretOffset) == typed[0]
@@ -1221,9 +1233,18 @@ public sealed partial class CodeEditorController : IDisposable
                     : embedded is not null && embeddedItems.Contains(item)
                         ? embedded.Client.ResolveCompletionAsync(item, CancellationToken.None)
                         : client.ResolveCompletionAsync(item, CancellationToken.None);
+            // Commit characters: the item's, else the server's for every item (LSP); none for our snippets, nor for the
+            // embedded HTML server's items unless they name theirs.
+            var allCommitCharacters = CommitCharacterSet(client.Capabilities?.CompletionProvider?.AllCommitCharacters);
             foreach (var item in list.Items.OrderBy(i => i.SortText ?? i.Label, StringComparer.Ordinal).Concat(SnippetItems(triggerCharacter)))
             {
-                window.CompletionList.CompletionData.Add(new CompletionData(item, Resolve, Commit));
+                var ours = item.Data is null && item.Kind == CompletionItemKind.Snippet && item.InsertTextFormat == InsertTextFormat.Snippet;
+                var fromEmbedded = embedded is not null && embeddedItems.Contains(item);
+                window.CompletionList.CompletionData.Add(new CompletionData(item, Resolve, Commit)
+                {
+                    CommitCharacters = ours ? new HashSet<char>() : item.CommitCharacters is { } own ? CommitCharacterSet(own) : fromEmbedded ? new HashSet<char>() : allCommitCharacters,
+                    ResolveForCommit = ours || fromEmbedded || item.Data is null ? null : i => client.ResolveCompletionAsync(i, CancellationToken.None),
+                });
             }
 
             OpenCompletion(window);
@@ -1314,9 +1335,13 @@ public sealed partial class CodeEditorController : IDisposable
     private Func<string, string?> SnippetVariables(Workbench.Languages.LanguageConfiguration? configuration) =>
         SnippetEngine.Variables(Model.Path, Editor.TextArea, configuration?.LineComment, configuration?.BlockComment is { } block ? (block.Start, block.End) : null);
 
+    /// <summary>A server's commit characters (single characters only) as a set.</summary>
+    private static HashSet<char> CommitCharacterSet(string[]? characters) => [.. (characters ?? []).Where(c => c.Length == 1).Select(c => c[0])];
+
     private void Commit(CompletionData data, ISegment segment)
     {
         var resolved = data.ResolvedWithin(TimeSpan.FromMilliseconds(300));
+        data.IncludedCommitCharacter = data.CommitCharacter is not null && resolved?.IncludesCommitCharacter == true;
         if ((resolved ?? data.Item) is { InsertTextFormat: InsertTextFormat.Snippet } snippet)
         {
             // A snippet (ours, or a server's): its text goes through the snippet engine, with tab stops (M12b).
@@ -1533,6 +1558,11 @@ public sealed partial class CodeEditorController : IDisposable
                 // A symbol's classified description (the C# service), else the server's Markdown, then the diagnostics.
                 var markdown = hover?.Description is null && hover?.Contents.Value is { Length: > 0 } text ? MarkdownRenderer.Render(text, _services.OpenLink) : null;
                 content = QuickInfo(hover?.Description, markdown, diagnostics);
+            }
+
+            if (!CanShowPopups)
+            {
+                return; // a document opened over the editor while Quick Info was asked for
             }
 
             _hoverPopup.Child = new Border
@@ -1803,6 +1833,8 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
+    private void OnHoverClosed(object? sender, EventArgs e) => _hoverPopup.Child = null;
+
     // ------------------------------------------------------------------ navigation
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -1902,6 +1934,7 @@ public sealed partial class CodeEditorController : IDisposable
 
         _disposed = true;
         CloseIntelliSense();
+        _hoverPopup.Closed -= OnHoverClosed;
         _textMate?.Dispose();
         _insights.Dispose();
         _inline.Dispose();

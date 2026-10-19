@@ -24,6 +24,12 @@ public sealed partial class CodeEditorController
     /// <summary>The last Quick Info shown (tests).</summary>
     internal QuickInfoView? LastQuickInfo { get; private set; }
 
+    /// <summary>
+    /// Whether a popup can open against the editor: its text view is in a window and showing. A request answered after
+    /// a document opened over the editor (the command sweep's next command) opens nothing.
+    /// </summary>
+    private bool CanShowPopups => Editor.TextArea.TextView is { IsEffectivelyVisible: true } view && TopLevel.GetTopLevel(view) is not null;
+
     /// <summary>Quick Info's popup (the smoke test's screenshot).</summary>
     internal Avalonia.Controls.Primitives.Popup HoverPopup => _hoverPopup;
 
@@ -48,7 +54,12 @@ public sealed partial class CodeEditorController
         window.CompletionList.Refresh();
         _completion = window;
         _hoverPopup.IsOpen = false;
-        window.Show();
+        if (!window.Show())
+        {
+            _completion = null; // the editor isn't showing in a window (a document opened over it meanwhile)
+            return;
+        }
+
         OnPopupsChanged();
     }
 
@@ -64,7 +75,12 @@ public sealed partial class CodeEditorController
         };
         _signature = window;
         _hoverPopup.IsOpen = false;
-        window.Show();
+        if (!window.Show())
+        {
+            _signature = null;
+            return;
+        }
+
         OnPopupsChanged();
     }
 
@@ -158,6 +174,19 @@ public sealed partial class CodeEditorController
             {
                 completion.Hide();
                 return true;
+            }
+
+            // Enter commits; the item's rule says whether it also starts a new line (Visual Basic's keywords, say).
+            if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && completion.CompletionList.SelectedItem is { } selected)
+            {
+                var newLine = selected.Item.EnterKeyRule switch
+                {
+                    EnterKeyRules.Always => true,
+                    EnterKeyRules.AfterFullyTypedWord => string.Equals(completion.CompletionList.Query, selected.Label, StringComparison.Ordinal),
+                    _ => false,
+                };
+                completion.CompletionList.RequestInsertion(EventArgs.Empty);
+                return !newLine;
             }
 
             return e.KeyModifiers == KeyModifiers.None && completion.CompletionList.HandleKey(e.Key);

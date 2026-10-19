@@ -325,7 +325,12 @@ public sealed partial class InteractiveView : UserControl, IPaneView
             window.CompletionList.BuildFilters();
             window.CompletionList.Refresh();
             _completion = window;
-            window.Show();
+            if (!window.Show())
+            {
+                _completion = null; // the window isn't showing
+                return;
+            }
+
             ArrangePopups();
             if (InputEditor.CaretOffset > result.Start)
             {
@@ -384,7 +389,12 @@ public sealed partial class InteractiveView : UserControl, IPaneView
                 }
             };
             _signature = window;
-            window.Show();
+            if (!window.Show())
+            {
+                _signature = null;
+                return;
+            }
+
             ArrangePopups();
         }
         catch (Exception ex) when (IsTransient(ex))

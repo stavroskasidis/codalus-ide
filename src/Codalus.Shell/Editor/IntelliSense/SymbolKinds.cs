@@ -26,6 +26,7 @@ public sealed record CompletionFilter(string Id, string Glyph, string Command)
         "extensionMethods" => Localizer.Get("editor.completion.filter.extensionMethods", "Extension methods"),
         "locals" => Localizer.Get("editor.completion.filter.locals", "Locals and parameters"),
         "keywords" => Localizer.Get("editor.completion.filter.keywords", "Keywords"),
+        SymbolKinds.TargetTypeFilter => Localizer.Get("editor.completion.filter.targetType", "Target type matches"),
         _ => Localizer.Get("editor.completion.filter.snippets", "Snippets"),
     };
 }
@@ -37,6 +38,12 @@ public sealed record CompletionFilter(string Id, string Glyph, string Command)
 public static class SymbolKinds
 {
     public const string FilterCommandPrefix = "editor.action.completionFilter.";
+
+    /// <summary>
+    /// The target type filter: the items whose type matches the one expected at the caret (<c>codalusMatchesTargetType</c>),
+    /// whatever their kind. Its glyph names only its icon.
+    /// </summary>
+    public const string TargetTypeFilter = "targetType";
 
     /// <summary>The filters in the order the filter bar shows them, with the letters a classic IDE binds to Alt.</summary>
     public static IReadOnlyList<CompletionFilter> Filters { get; } =
@@ -56,6 +63,7 @@ public static class SymbolKinds
         new("locals", SymbolGlyphs.Local, FilterCommandPrefix + "locals"),
         new("keywords", SymbolGlyphs.Keyword, FilterCommandPrefix + "keywords"),
         new("snippets", SymbolGlyphs.Snippet, FilterCommandPrefix + "snippets"),
+        new(TargetTypeFilter, TargetTypeFilter, FilterCommandPrefix + TargetTypeFilter),
     ];
 
     /// <summary>The filter key bindings (Alt and the filter's letter, while the completion list is open).</summary>
@@ -76,6 +84,7 @@ public static class SymbolKinds
         ["locals"] = 'l',
         ["keywords"] = 'k',
         ["snippets"] = 't',
+        [TargetTypeFilter] = 'j',
     };
 
     /// <summary>A completion item's glyph: the server's, or its LSP kind's.</summary>
@@ -129,6 +138,7 @@ public static class SymbolKinds
         SymbolGlyphs.Snippet => "symbol-snippet",
         SymbolGlyphs.Operator => "symbol-operator",
         SymbolGlyphs.Label => "symbol-label",
+        TargetTypeFilter => "symbol-target-type",
         _ => "symbol-text",
     };
 

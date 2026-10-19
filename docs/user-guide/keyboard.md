@@ -14,7 +14,7 @@ Some shortcuts belong to the operating system or the desktop, which takes them b
 | Completion list filters (while the list is open) | Alt+C, Alt+I, Alt+E… | Alt+C, Alt+I, Alt+E… | ⌥C, ⌥I, ⌥E… |
 | Apply Top Fix (Quick Info's Fix) | Alt+. | Alt+. | ⌥. |
 
-- **The completion list's filters** take Alt and a letter only while the list is open, so the menus' Alt keys and, on macOS, ⌥ characters work as usual otherwise ([the letters](editing.md#intellisense)). With the Emacs scheme, Alt+F, Alt+V and Alt+X stay Emacs's.
+- **The completion list's filters** take Alt and a letter only while the list is open, so the menus' Alt keys and, on macOS, ⌥ characters work as usual otherwise ([the letters](editing.md#intellisense)). With the Emacs scheme, Alt+F, Alt+V and Alt+X stay Emacs's. Alt+J is the target type matches filter.
 
 - **macOS:** ⌘Space is Spotlight. ⌃Space (the Control key, as in Xcode and VS Code) works only with one input source: with two or more, macOS's "Select the previous input source" takes it first (System Settings → Keyboard → Keyboard Shortcuts → Input Sources; on by default), and the app never sees it (seen on the maintainer's Mac: U.S. → Greek). So the menus show ⌥⎋, which always reaches the app; ⌃Space and ⌃J work too where macOS leaves them alone, or turn the input-source shortcut off. ⌘⌥Space is Finder search, so Complete Word is ⌃. there.
 - **Linux:** IBus and Fcitx switch input methods with Ctrl+Space (older setups) or Super+Space. If Ctrl+Space doesn't reach the editor, use Ctrl+J, or change the input method's trigger (`ibus-setup` → General → Next input method).

@@ -480,7 +480,7 @@ public static class IconSet
         "symbol-class", "symbol-struct", "symbol-interface", "symbol-enum", "symbol-enum-member", "symbol-delegate",
         "symbol-method", "symbol-extension-method", "symbol-property", "symbol-field", "symbol-event", "symbol-constant",
         "symbol-local", "symbol-parameter", "symbol-namespace", "symbol-keyword", "symbol-snippet", "symbol-type-parameter",
-        "symbol-operator", "symbol-module", "symbol-label", "symbol-text",
+        "symbol-operator", "symbol-module", "symbol-label", "symbol-text", "symbol-target-type",
     };
 
     /// <summary>The code symbol icons' names (tests).</summary>

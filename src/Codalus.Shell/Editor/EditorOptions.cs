@@ -22,6 +22,7 @@ public sealed class EditorOptions : ObservableObject
     public const string RulersKey = "editor.rulers";
     public const string HighlightCurrentLineKey = "editor.highlightCurrentLine";
     public const string FormatOnTypeKey = "editor.formatOnType";
+    public const string CommitOnSpaceKey = "editor.completion.commitOnSpace";
     public const string AutoClosingBracketsKey = "editor.autoClosingBrackets";
     public const string InlayParameterNamesKey = "editor.inlayHints.parameterNames";
     public const string InlayTypesKey = "editor.inlayHints.types";
@@ -115,6 +116,9 @@ public sealed class EditorOptions : ObservableObject
 
     public bool FormatOnType { get; private set; }
 
+    /// <summary>Space commits the completion list's selected item, as the other commit characters do (a classic IDE's default).</summary>
+    public bool CommitOnSpace { get; private set; } = true;
+
     /// <summary>Insert the closing bracket or quote of the language's pairs (ADR 0016).</summary>
     public bool AutoClosingBrackets { get; private set; }
 
@@ -172,6 +176,7 @@ public sealed class EditorOptions : ObservableObject
         RenderWhitespace = settings.GetString(RenderWhitespaceKey, "none") == "all";
         HighlightCurrentLine = settings.GetBoolean(HighlightCurrentLineKey, true);
         FormatOnType = settings.GetBoolean(FormatOnTypeKey, true);
+        CommitOnSpace = settings.GetBoolean(CommitOnSpaceKey, true);
         AutoClosingBrackets = settings.GetBoolean(AutoClosingBracketsKey, true);
         Rulers = [.. settings.GetStrings(RulersKey).Select(r => int.TryParse(r, NumberStyles.Integer, CultureInfo.InvariantCulture, out var column) ? column : 0).Where(c => c > 0)];
     }

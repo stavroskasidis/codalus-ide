@@ -90,12 +90,16 @@ internal sealed class CompletionFeature
             _last = new Cached(resultId, document, list);
         }
 
+        // Suggestion mode (a lambda's parameter, a new name): nothing typed commits an item.
         var suggestionMode = list.SuggestionModeItem is not null;
+        var targetMatches = await TargetTypeMatchesAsync(document, list, cancellationToken).ConfigureAwait(false);
+        var defaultEnterRule = DefaultEnterKeyRule(document);
         var items = new LspCompletionItem[list.ItemsList.Count];
         for (var i = 0; i < items.Length; i++)
         {
             var item = list.ItemsList[i];
             var label = item.DisplayTextPrefix + item.DisplayText + item.DisplayTextSuffix;
+            var preselect = item.Rules.MatchPriority == MatchPriority.Preselect;
             items[i] = new LspCompletionItem(label)
             {
                 Kind = Kind(item.Tags),
@@ -103,8 +107,11 @@ internal sealed class CompletionFeature
                 Detail = string.IsNullOrEmpty(item.InlineDescription) ? null : item.InlineDescription,
                 SortText = item.SortText == label ? null : item.SortText,
                 FilterText = item.FilterText == label ? null : item.FilterText,
-                Preselect = item.Rules.MatchPriority == MatchPriority.Preselect ? true : null,
-                CommitCharacters = suggestionMode ? [] : null,
+                Preselect = preselect ? true : null,
+                SoftSelection = preselect && item.Rules.SelectionBehavior != CompletionItemSelectionBehavior.HardSelection ? true : null,
+                CommitCharacters = suggestionMode ? [] : CommitCharacters(item.Rules),
+                EnterKeyRule = EnterKeyRuleName(item.Rules.EnterKeyRule == EnterKeyRule.Default ? defaultEnterRule : item.Rules.EnterKeyRule),
+                MatchesTargetType = targetMatches?[i] == true ? true : null,
                 Data = JsonSerializer.SerializeToElement(new ItemData(resultId, i), HostJsonContext.Default.ItemData),
             };
         }
@@ -113,6 +120,69 @@ internal sealed class CompletionFeature
         {
             ItemDefaults = new CompletionItemDefaults(Positions.ToRange(text, list.Span)),
         };
+    }
+
+    /// <summary>
+    /// An item's commit characters when its rules change the defaults (Roslyn's <c>CommitCharacterRules</c>: a keyword
+    /// that isn't committed by "(", say), evaluated as the editor does: the first rule naming a character decides; null
+    /// when they're the defaults (<see cref="CompletionOptions.AllCommitCharacters"/>).
+    /// </summary>
+    internal static string[]? CommitCharacters(CompletionItemRules rules)
+    {
+        if (rules.CommitCharacterRules.IsDefaultOrEmpty)
+        {
+            return null;
+        }
+
+        var candidates = s_commitCharacters.Select(c => c[0]).Concat(rules.CommitCharacterRules.SelectMany(r => r.Characters)).Distinct();
+        var commit = candidates.Where(c => IsCommitCharacter(rules, c)).Select(c => c.ToString()).ToArray();
+        return commit.SequenceEqual(s_commitCharacters) ? null : commit;
+
+        static bool IsCommitCharacter(CompletionItemRules rules, char c)
+        {
+            foreach (var rule in rules.CommitCharacterRules)
+            {
+                switch (rule.Kind)
+                {
+                    case CharacterSetModificationKind.Add when rule.Characters.Contains(c):
+                        return true;
+                    case CharacterSetModificationKind.Remove when rule.Characters.Contains(c):
+                        return false;
+                    case CharacterSetModificationKind.Replace:
+                        return rule.Characters.Contains(c);
+                }
+            }
+
+            return s_commitCharacters.Contains(c.ToString());
+        }
+    }
+
+    /// <summary>
+    /// What Enter does after committing an item whose rule is the default: in C# it never adds a line, in Visual Basic
+    /// it always does (Roslyn's services, keeping each language's previous behavior).
+    /// </summary>
+    private static EnterKeyRule DefaultEnterKeyRule(Document document) =>
+        document.Project.Language == LanguageNames.VisualBasic ? EnterKeyRule.Always : EnterKeyRule.Never;
+
+    private static string? EnterKeyRuleName(EnterKeyRule rule) => rule switch
+    {
+        EnterKeyRule.Always => EnterKeyRules.Always,
+        EnterKeyRule.AfterFullyTypedWord => EnterKeyRules.AfterFullyTypedWord,
+        _ => null,
+    };
+
+    /// <summary>The items matching the type expected where they go (<see cref="TargetTyping"/>), or null.</summary>
+    private static async Task<bool[]?> TargetTypeMatchesAsync(Document document, RoslynCompletionList list, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await TargetTyping.MatchAsync(document, list.Span.Start, list.ItemsList, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A refinement of the list: code the semantic model can't answer for (it shouldn't throw) still completes.
+            return null;
+        }
     }
 
     /// <summary>Fills the description and the edits. Items from an older list are returned unchanged.</summary>
@@ -139,8 +209,11 @@ internal sealed class CompletionFeature
         var service = CompletionService.GetService(document)!;
         var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
 
-        var description = await service.GetDescriptionAsync(document, roslynItem, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var change = await service.GetChangeAsync(document, roslynItem, commitCharacter: null, cancellationToken).ConfigureAwait(false);
+        // Committed by a typed character: Roslyn may change the edit for it, and it needs no description.
+        char? commitCharacter = item.CommitCharacter is [var typed] ? typed : null;
+        var description = commitCharacter is null ? await service.GetDescriptionAsync(document, roslynItem, cancellationToken: cancellationToken).ConfigureAwait(false) : null;
+        var change = await service.GetChangeAsync(document, roslynItem, commitCharacter, cancellationToken).ConfigureAwait(false);
+        var includesCommitCharacter = commitCharacter is not null && change.IncludesCommitCharacter ? true : (bool?)null;
 
         // The main edit is the one at the completed span; others (an added using) are additional edits.
         var changes = change.TextChanges.IsDefaultOrEmpty ? ImmutableArray.Create(change.TextChange) : change.TextChanges;
@@ -161,6 +234,7 @@ internal sealed class CompletionFeature
                 Description = classified,
                 TextEdit = map(Positions.ToRange(text, main.Span)) is { } range ? new Protocol.TextEdit(range, main.NewText ?? string.Empty) : item.TextEdit,
                 AdditionalTextEdits = null,
+                IncludesCommitCharacter = includesCommitCharacter,
             };
         }
 
@@ -170,6 +244,7 @@ internal sealed class CompletionFeature
             Description = classified,
             TextEdit = new Protocol.TextEdit(Positions.ToRange(text, main.Span), main.NewText ?? string.Empty),
             AdditionalTextEdits = additional.Length == 0 ? null : additional,
+            IncludesCommitCharacter = includesCommitCharacter,
         };
     }
 

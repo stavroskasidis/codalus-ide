@@ -67,6 +67,7 @@ internal static partial class BuiltIns
           { "key": "alt+l", "command": "editor.action.completionFilter.locals", "when": "editorTextFocus && suggestWidgetVisible" },
           { "key": "alt+k", "command": "editor.action.completionFilter.keywords", "when": "editorTextFocus && suggestWidgetVisible" },
           { "key": "alt+t", "command": "editor.action.completionFilter.snippets", "when": "editorTextFocus && suggestWidgetVisible" },
+          { "key": "alt+j", "command": "editor.action.completionFilter.targetType", "when": "editorTextFocus && suggestWidgetVisible" },
           { "key": "primary+k primary+d", "command": "editor.action.formatDocument", "when": "editorTextFocus" },
           { "key": "primary+k primary+c", "command": "editor.action.addCommentLine", "when": "editorTextFocus" },
           { "key": "primary+k v", "command": "markdown.showPreviewToSide", "when": "activeDocumentKind == textFile" },
@@ -119,6 +120,7 @@ internal static partial class BuiltIns
             Setting(EditorOptions.RulersKey, "[]", SettingType.StringArray, "Rulers", "Columns at which to draw vertical rulers, e.g. 120.", 9),
             Setting(EditorOptions.HighlightCurrentLineKey, "true", SettingType.Boolean, "Highlight Current Line", "Highlight the line with the caret.", 10),
             Setting(EditorOptions.FormatOnTypeKey, "true", SettingType.Boolean, "Format on Type", "Format the statement or block after typing ; or }.", 11),
+            Setting(EditorOptions.CommitOnSpaceKey, "true", SettingType.Boolean, "Completion: Commit on Space", "Typing a space commits the completion list's selected item, as ( . ; and the other commit characters do. Off: Space just types a space.", 11),
             SettingDescriptor.Create(ShellHost.XmlSchemasSetting, "{}", SettingType.Object, ContributionSource.Shell) with
             {
                 Title = "XML Schemas",
@@ -247,6 +249,7 @@ internal static partial class BuiltIns
         Add(SymbolKinds.FilterCommandPrefix + "locals", "Completion List: Toggle Locals and Parameters", "Editor", OnEditor(c => c.ToggleCompletionFilter("locals")), "suggestWidgetVisible", palette: false);
         Add(SymbolKinds.FilterCommandPrefix + "keywords", "Completion List: Toggle Keywords", "Editor", OnEditor(c => c.ToggleCompletionFilter("keywords")), "suggestWidgetVisible", palette: false);
         Add(SymbolKinds.FilterCommandPrefix + "snippets", "Completion List: Toggle Snippets", "Editor", OnEditor(c => c.ToggleCompletionFilter("snippets")), "suggestWidgetVisible", palette: false);
+        Add(SymbolKinds.FilterCommandPrefix + SymbolKinds.TargetTypeFilter, "Completion List: Toggle Target Type Matches", "Editor", OnEditor(c => c.ToggleCompletionFilter(SymbolKinds.TargetTypeFilter)), "suggestWidgetVisible", palette: false);
         Add("editor.action.revealDefinition", "Go to Definition", "Editor", OnEditorAsync(c => c.GoToDefinitionAsync()), Editor);
         Add("editor.action.goToImplementation", "Go to Implementation", "Editor", OnEditorAsync(c => c.GoToImplementationAsync()), Editor);
         Add("editor.action.goToDerived", "Go to Derived Types", "Editor", OnEditorAsync(c => c.GoToImplementationAsync()), Editor);

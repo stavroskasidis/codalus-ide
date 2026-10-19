@@ -37,6 +37,30 @@ internal static class SignatureHelpFeature
             return null;
         }
 
+        if (FindCall(root, model, position, cancellationToken) is not { } call)
+        {
+            return null;
+        }
+
+        var signatures = call.Candidates.Select(c => Signature(c, model, position, call.ParameterIndex(c))).ToArray();
+        return new SignatureHelp(signatures, call.Active, signatures[call.Active].ActiveParameter ?? 0);
+    }
+
+    /// <summary>
+    /// The call whose argument list holds a position: its overloads, the active one (as signature help picks it: the one
+    /// the call binds to, else the first with enough parameters), and the argument's index and name.
+    /// </summary>
+    internal sealed record ActiveCall(List<IMethodSymbol> Candidates, int Active, int ArgumentIndex, string? Name)
+    {
+        public IMethodSymbol Method => Candidates[Active];
+
+        /// <summary>The parameter of <paramref name="method"/> the argument goes to (the params array for extra arguments).</summary>
+        public int ParameterIndex(IMethodSymbol method) => SignatureHelpFeature.ParameterIndex(method, ArgumentIndex, Name);
+    }
+
+    /// <summary>The innermost call whose argument list holds <paramref name="position"/>, or null (none, or no overloads).</summary>
+    internal static ActiveCall? FindCall(SyntaxNode root, SemanticModel model, int position, CancellationToken cancellationToken)
+    {
         var token = root.FindToken(Math.Max(0, position - 1));
         foreach (var node in token.Parent?.AncestorsAndSelf() ?? [])
         {
@@ -66,8 +90,7 @@ internal static class SignatureHelpFeature
                 active = Math.Max(0, candidates.FindIndex(c => c.Parameters.Length >= argumentCount || c.Parameters.LastOrDefault()?.IsParams == true));
             }
 
-            var signatures = candidates.Select(c => Signature(c, model, position, ParameterIndex(c, argumentIndex, name))).ToArray();
-            return new SignatureHelp(signatures, active, signatures[active].ActiveParameter ?? 0);
+            return new ActiveCall(candidates, active, argumentIndex, name);
         }
 
         return null;

@@ -241,6 +241,48 @@ public sealed record CompletionItem(string Label)
     /// </summary>
     [JsonPropertyName("codalusDescription")]
     public SymbolDescription? Description { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusMatchesTargetType</c>): the item's type converts to the type expected where it goes (an
+    /// argument, an assignment, a return value). Sent in the list; the list preselects such an item and filters by it.
+    /// </summary>
+    [JsonPropertyName("codalusMatchesTargetType")]
+    public bool? MatchesTargetType { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusSoftSelection</c>): while nothing is typed, this preselected item is selected softly (a
+    /// commit character doesn't commit it). Sent in the list.
+    /// </summary>
+    [JsonPropertyName("codalusSoftSelection")]
+    public bool? SoftSelection { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusEnterKeyRule</c>): whether Enter, after committing the item, also starts a new line:
+    /// <c>always</c>, or <c>afterFullyTypedWord</c> (when the whole name was typed); absent for never. Sent in the list.
+    /// </summary>
+    [JsonPropertyName("codalusEnterKeyRule")]
+    public string? EnterKeyRule { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusCommitCharacter</c>): on a <c>completionItem/resolve</c> request, the character typed to
+    /// commit the item (the server may change the edit for it: <c>List</c> rather than <c>List&lt;&gt;</c> before <c>&lt;</c>).
+    /// </summary>
+    [JsonPropertyName("codalusCommitCharacter")]
+    public string? CommitCharacter { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusIncludesCommitCharacter</c>): in a resolved item, the edit already inserts the commit
+    /// character, so the editor doesn't type it again.
+    /// </summary>
+    [JsonPropertyName("codalusIncludesCommitCharacter")]
+    public bool? IncludesCommitCharacter { get; init; }
+}
+
+/// <summary>Values of <see cref="CompletionItem.EnterKeyRule"/>.</summary>
+public static class EnterKeyRules
+{
+    public const string Always = "always";
+    public const string AfterFullyTypedWord = "afterFullyTypedWord";
 }
 
 public static class InsertTextFormat

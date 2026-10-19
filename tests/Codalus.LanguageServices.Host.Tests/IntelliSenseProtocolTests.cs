@@ -133,6 +133,8 @@ public sealed partial class LanguageServiceTests
             var list = await fixture.Client.CompletionAsync(Uri(path), fixture.At(path, "builder.\n", "builder.".Length), new CompletionContext(CompletionTriggerKind.TriggerCharacter, "."), Ct);
             var addTab = list.Items.Single(i => i.Label == "AddTab");
             Assert.Equal(SymbolGlyphs.Method, addTab.Glyph);
+            Assert.Null(addTab.EnterKeyRule); // C#: Enter never adds a line after committing
+            Assert.Null(addTab.CommitCharacters); // the defaults (allCommitCharacters)
             Assert.Contains(list.Items, i => i.Label == "GetHashCode" && i.Glyph == SymbolGlyphs.Method);
 
             var resolved = await fixture.Client.ResolveCompletionAsync(addTab, Ct);
@@ -153,6 +155,78 @@ public sealed partial class LanguageServiceTests
         finally
         {
             await WithoutBuildersAsync(path);
+        }
+    }
+
+    [Fact]
+    public async Task Committing_with_a_character_resolves_for_it_and_suggestion_mode_commits_on_nothing()
+    {
+        var path = await WithBuildersAsync();
+        try
+        {
+            // "(" after a method: Roslyn's edit for that character, which leaves the "(" to be typed.
+            var list = await fixture.Client.CompletionAsync(Uri(path), fixture.At(path, "builder.\n", "builder.".Length), new CompletionContext(CompletionTriggerKind.TriggerCharacter, "."), Ct);
+            var addTab = list.Items.Single(i => i.Label == "AddTab");
+            var committed = await fixture.Client.ResolveCompletionAsync(addTab with { CommitCharacter = "(" }, Ct);
+            Assert.Equal("AddTab", committed.TextEdit?.NewText);
+            Assert.Null(committed.IncludesCommitCharacter);
+            Assert.Null(committed.Description); // committing needs no description
+
+            // A lambda's parameter is a new name: suggestion mode, so no item has commit characters.
+            var lambda = await fixture.Client.CompletionAsync(Uri(path), fixture.At(path, "AddTab(1, page", "AddTab(1, ".Length), new CompletionContext(CompletionTriggerKind.Invoked, null), Ct);
+            Assert.NotEmpty(lambda.Items);
+            Assert.All(lambda.Items, i => Assert.Equal(0, i.CommitCharacters?.Length));
+        }
+        finally
+        {
+            await WithoutBuildersAsync(path);
+        }
+    }
+
+    private const string Targets = """
+
+
+        public static class Targets
+        {
+            public static void Take(int value, string text) { }
+
+            public static int Count() => 0;
+
+            public static void Use(int total, string name)
+            {
+                var ratio = 1.5;
+                Take(/*arg*/);
+                string label = /*init*/;
+            }
+        }
+        """;
+
+    [Fact]
+    public async Task Completion_marks_the_items_of_the_type_expected_where_they_go()
+    {
+        var path = fixture.File("src", "Lib", "Square.Part.cs");
+        await fixture.OpenAsync(path);
+        await fixture.EditAsync(path, "public double Side { get; }\n}", "public double Side { get; }\n}" + Targets);
+        try
+        {
+            // An argument: the active overload's parameter (int value).
+            var argument = await fixture.Client.CompletionAsync(Uri(path), fixture.At(path, "Take(/*arg*/", "Take(".Length), new CompletionContext(CompletionTriggerKind.Invoked, null), Ct);
+            Assert.True(argument.Items.Single(i => i.Label == "total").MatchesTargetType);
+            Assert.True(argument.Items.Single(i => i.Label == "Count").MatchesTargetType);
+            Assert.Null(argument.Items.Single(i => i.Label == "name").MatchesTargetType);
+            Assert.Null(argument.Items.Single(i => i.Label == "ratio").MatchesTargetType); // double doesn't convert to int
+            Assert.DoesNotContain(argument.Items, i => i.Glyph == SymbolGlyphs.Class && i.MatchesTargetType == true);
+
+            // An initializer: the declared type, but not the variable being declared.
+            var initializer = await fixture.Client.CompletionAsync(Uri(path), fixture.At(path, "label = /*init*/", "label = ".Length), new CompletionContext(CompletionTriggerKind.Invoked, null), Ct);
+            Assert.True(initializer.Items.Single(i => i.Label == "name").MatchesTargetType);
+            Assert.Null(initializer.Items.Single(i => i.Label == "total").MatchesTargetType);
+            Assert.Null(initializer.Items.Single(i => i.Label == "label").MatchesTargetType);
+        }
+        finally
+        {
+            await fixture.EditAsync(path, Targets, string.Empty);
+            await fixture.Languages.CloseAsync(path);
         }
     }
 }
