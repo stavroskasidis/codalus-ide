@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Ai;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.Views;
 
@@ -33,7 +34,11 @@ public sealed partial class AiChatView : UserControl, IPaneView
         TurnsList.ItemTemplate = new FuncDataTemplate<AiChatTurnItem?>((item, _) => item is null ? null : new AiChatTurnView(item, this), supportsRecycling: false);
         _follow = new AiChatFollower(Scroller);
         Provider.Click += (_, _) => _ = _vm?.ChooseProviderAsync();
-        AgentPicker.Flyout = Choices(() => _vm?.AgentChoices ?? [], () => _vm?.SelectedAgentIndex ?? 0, i => { if (_vm is { } vm) { vm.SelectedAgentIndex = i; } });
+        AgentPicker.Flyout = Choices(
+            () => _vm?.AgentChoices ?? [],
+            () => _vm?.SelectedAgentIndex ?? 0,
+            i => { if (_vm is { } vm) { vm.SelectedAgentIndex = i; } },
+            (Localizer.Get("msg.acp.addAgent", "Add agent…"), () => _ = _vm?.AddAgentAsync()));
         ModePicker.Flyout = Choices(() => _vm?.ModeNames ?? [], () => _vm?.SelectedModeIndex ?? -1, i => { if (_vm is { } vm) { vm.SelectedModeIndex = i; } });
         CommandList.SelectionChanged += (_, _) =>
         {
@@ -82,9 +87,9 @@ public sealed partial class AiChatView : UserControl, IPaneView
 
     /// <summary>
     /// A picker's menu (M48: who answers, and the agent's mode): one radio item per choice, the current one checked,
-    /// built as it opens so it shows the choices of now.
+    /// built as it opens so it shows the choices of now, and an action after a separator ("Add agent…").
     /// </summary>
-    private static MenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose)
+    private static MenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose, (string Label, Action Run)? last = null)
     {
         var flyout = new MenuFlyout();
         flyout.Opening += (_, _) =>
@@ -98,6 +103,15 @@ public sealed partial class AiChatView : UserControl, IPaneView
                 var item = new MenuItem { Header = names[i], ToggleType = MenuItemToggleType.Radio, IsChecked = i == current };
                 Avalonia.Automation.AutomationProperties.SetName(item, names[i]);
                 item.Click += (_, _) => choose(index);
+                flyout.Items.Add(item);
+            }
+
+            if (last is { } action)
+            {
+                flyout.Items.Add(new Separator());
+                var item = new MenuItem { Header = action.Label, Icon = new Icon { Kind = "new", Width = 16, Height = 16 } };
+                Avalonia.Automation.AutomationProperties.SetName(item, action.Label);
+                item.Click += (_, _) => action.Run();
                 flyout.Items.Add(item);
             }
         };

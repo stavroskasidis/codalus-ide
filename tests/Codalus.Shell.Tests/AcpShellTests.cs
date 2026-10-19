@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Ai;
@@ -100,8 +101,9 @@ public sealed class AcpShellTests
         Assert.False(Visible<Border>(view, "ExternalAgentBanner").IsEffectivelyVisible);
         var menu = (MenuFlyout)picker.Flyout!;
         menu.ShowAt(picker);
-        await ShellFixture.PumpUntil(() => menu.Items.Count == 2);
-        Assert.Equal([true, false], menu.Items.OfType<MenuItem>().Select(i => i.IsChecked));
+        await ShellFixture.PumpUntil(() => menu.Items.Count == 4);
+        Assert.Equal(["Built-in", "stand-in", "Add agent…"], menu.Items.OfType<MenuItem>().Select(i => i.Header as string));
+        Assert.Equal([true, false, false], menu.Items.OfType<MenuItem>().Select(i => i.IsChecked));
         menu.Items.OfType<MenuItem>().Single(i => (i.Header as string) == "stand-in").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         menu.Hide();
         await ShellFixture.PumpUntil(() => chat.IsExternal);
@@ -212,6 +214,120 @@ public sealed class AcpShellTests
         await ShellFixture.PumpUntil(() => f.Shell.ExternalAgents.Current is null && f.Shell.OpenAgentMcpPipes == 0, 30);
         Assert.False(session.IsAlive);
         Assert.Equal("Agent", AutomationProperties.GetName(Visible<DropDownButton>(ChatView(f), "AgentPicker")));
+    }
+
+    /// <summary>Opens "Add agent…" from the agent picker's menu, as a click does, and waits for the list.</summary>
+    private static async Task OpenAddAgentAsync(ShellFixture f)
+    {
+        var picker = Visible<DropDownButton>(ChatView(f), "AgentPicker");
+        await ShellFixture.PumpUntil(() => picker.IsEffectivelyVisible);
+        var menu = (MenuFlyout)picker.Flyout!;
+        menu.ShowAt(picker);
+        await ShellFixture.PumpUntil(() => menu.Items.OfType<MenuItem>().Any(i => (i.Header as string) == "Add agent…"));
+        var add = menu.Items.OfType<MenuItem>().Last();
+        Assert.Equal("Add agent…", add.Header as string);
+        add.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        menu.Hide();
+        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen && f.Shell.Palette.Rows.Count == AcpAgentCatalog.Agents.Count);
+    }
+
+    /// <summary>A folder with a stand-in for an agent's CLI (it fails if run; nothing runs it), for the list's PATH.</summary>
+    private static string StandInCli(ShellFixture f, string name)
+    {
+        var bin = Path.Combine(f.UserData, "bin");
+        Directory.CreateDirectory(bin);
+        var file = Path.Combine(bin, OperatingSystem.IsWindows() ? name + ".cmd" : name);
+        File.WriteAllText(file, OperatingSystem.IsWindows() ? "@exit /b 1\r\n" : "#!/bin/sh\nexit 1\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        return bin;
+    }
+
+    [AvaloniaFact]
+    public async Task Add_agent_lists_the_known_agents_asks_first_and_writes_the_user_settings_only()
+    {
+        await using var f = ShellFixture.Create();
+        await SetUpAsync(f);
+        var chat = f.Shell.AiChat;
+        var settings = f.Shell.Workbench.Settings;
+        f.Shell.AgentSearchPath = StandInCli(f, "gemini");
+
+        // The list: each known agent with what it is, the exact command and its pinned version; Gemini's CLI is on the PATH.
+        await OpenAddAgentAsync(f);
+        var rows = f.Shell.Palette.Rows;
+        Assert.Equal(["pi", "Claude", "Codex", "Gemini CLI", "GitHub Copilot", "OpenCode", "goose"], rows.Select(r => r.Label));
+        Assert.Equal("0.64.0 · installed", rows.Single(r => r.Label == "Gemini CLI").KeyLabel);
+        var claudeRow = rows.Single(r => r.Label == "Claude");
+        Assert.Equal("0.93.0", claudeRow.KeyLabel);
+        Assert.Equal("ACP wrapper for Anthropic's Claude · npx -y @agentclientprotocol/claude-agent-acp@0.93.0", claudeRow.Detail);
+        Assert.Equal("goose acp", rows.Single(r => r.Label == "goose").Detail!.Split(" · ")[^1]);
+
+        // Choosing one asks first, in the dialog frame: what runs, that npx downloads it, and the label. Cancel writes nothing.
+        f.Shell.Palette.Accept(claudeRow);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Assert.Equal("Add Claude?", f.Shell.Dialogs.Title);
+        Assert.Contains("Codalus will run npx -y @agentclientprotocol/claude-agent-acp@0.93.0 when you choose it. npx downloads that package from npm and runs it with your account's access to this folder.", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        Assert.Contains(Label, f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        Assert.Equal(("sparkle", "claude in your user settings (ai.agents)"), (f.Shell.Dialogs.Icon, f.Shell.Dialogs.Context));
+        string[] buttons = ["Add", "Cancel"];
+        Assert.Equal(f.Shell.Dialogs.PrimaryLast ? buttons.AsEnumerable().Reverse() : buttons, f.Shell.Dialogs.Buttons.Select(b => b.Label));
+        f.Shell.Dialogs.Cancel();
+        await ShellFixture.PumpUntil(() => !f.Shell.Dialogs.IsOpen);
+        Assert.Equal(["stand-in"], settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.EnumerateObject().Select(p => p.Name));
+        Assert.Null(chat.SelectedAgent);
+
+        // Add writes exactly that entry to the user's settings (the workspace's untouched) and picks it; nothing starts.
+        await OpenAddAgentAsync(f);
+        f.Shell.Palette.Accept(f.Shell.Palette.Rows.Single(r => r.Label == "Claude"));
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        f.Shell.Dialogs.Accept();
+        await ShellFixture.PumpUntil(() => chat.SelectedAgent == "claude");
+        var user = settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value;
+        Assert.Equal(["stand-in", "claude"], user.EnumerateObject().Select(p => p.Name));
+        Assert.Equal("npx", AcpAgents.Parse(user)["claude"].Command);
+        Assert.Equal(["-y", "@agentclientprotocol/claude-agent-acp@0.93.0"], AcpAgents.Parse(user)["claude"].Args);
+        Assert.Null(settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.Workspace));
+        Assert.Null(f.Shell.ExternalAgents.Current);
+        Assert.Equal(["Built-in", "claude", "stand-in"], chat.AgentChoices);
+        await ShellFixture.PumpUntil(() => (Visible<DropDownButton>(ChatView(f), "AgentPicker").Content as TextBlock)?.Text == "claude");
+
+        // Added already: marked so, and choosing it picks it without asking or adding it twice.
+        chat.SelectedAgentIndex = 0;
+        await OpenAddAgentAsync(f);
+        var added = f.Shell.Palette.Rows.Single(r => r.Label == "Claude");
+        Assert.Equal("0.93.0 · added", added.KeyLabel);
+        f.Shell.Palette.Accept(added);
+        await ShellFixture.PumpUntil(() => chat.SelectedAgent == "claude");
+        Assert.False(f.Shell.Dialogs.IsOpen);
+        Assert.Equal(2, settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.EnumerateObject().Count());
+        Assert.Null(f.Shell.ExternalAgents.Current);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("harbor.light")]
+    [InlineData("ember.dark")]
+    public async Task The_add_agent_list_names_its_rows_and_cuts_no_text(string theme)
+    {
+        await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == ThemeService.Resolve(theme, null));
+        await SetUpAsync(f);
+        f.Shell.AgentSearchPath = StandInCli(f, "goose");
+        await OpenAddAgentAsync(f);
+        var list = f.Window.GetVisualDescendants().OfType<QuickPickView>().Single(v => v.IsEffectivelyVisible);
+        await ShellFixture.PumpUntil(() => list.GetVisualDescendants().OfType<ListBoxItem>().Count() == AcpAgentCatalog.Agents.Count);
+        foreach (var row in f.Shell.Palette.Rows)
+        {
+            Assert.Contains(row.Label, row.AccessibleName, StringComparison.Ordinal);
+            Assert.Contains(row.KeyLabel!, row.AccessibleName, StringComparison.Ordinal);
+        }
+
+        Assert.Contains(f.Shell.Palette.Rows, r => r.KeyLabel == "1.55.0 · installed");
+        Assert.Empty(PolishTests.Clipped(list));
+        f.Shell.Palette.Cancel();
     }
 
     [AvaloniaFact]

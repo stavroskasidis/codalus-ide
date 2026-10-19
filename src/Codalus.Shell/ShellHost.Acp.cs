@@ -52,6 +52,62 @@ public sealed partial class ShellHost
         });
     }
 
+    /// <summary>The PATH "Add agent…" looks for the agents' CLIs on; null: this process's (tests set a folder of stand-ins).</summary>
+    public string? AgentSearchPath { get; set; }
+
+    /// <summary>
+    /// "Add agent…" (M48): the known ACP agents (<see cref="AcpAgentCatalog"/>) in the palette, each with its description,
+    /// the exact command it would run and its pinned version, marked installed when its CLI is on the PATH and added when
+    /// <c>ai.agents</c> has it. Choosing one asks first (what runs, and that npx downloads it), then writes its entry to
+    /// the user's settings only. Nothing is downloaded or run here: the agent starts when a chat with it does. Returns the
+    /// agent to choose (one already added, or the one just added), or null.
+    /// </summary>
+    public async Task<string?> AddExternalAgentAsync()
+    {
+        var catalog = AcpAgentCatalog.Agents;
+        var installed = await AcpAgentCatalog.FindInstalledAsync(catalog, AgentSearchPath, TimeSpan.FromSeconds(3), CancellationToken.None).ConfigureAwait(true);
+        var configured = ExternalAgents.Configured;
+        var items = catalog.Select(agent => new QuickPickItem(agent.Name)
+        {
+            Detail = agent.Description + " · " + agent.CommandLine,
+            KeyLabel = configured.ContainsKey(agent.Id)
+                ? Localizer.Format("msg.acp.catalogAdded", "{0} · added", agent.Version)
+                : installed.Contains(agent.Id) ? Localizer.Format("msg.acp.catalogInstalled", "{0} · installed", agent.Version) : agent.Version,
+            Icon = "sparkle",
+            Tag = agent,
+        }).ToList();
+        if (await Palette.ShowAsync(items, Localizer.Get("msg.acp.whichAgent", "Which agent? Nothing is downloaded or run until you start a chat with it.")).ConfigureAwait(true) is not { Tag: AcpKnownAgent chosen })
+        {
+            return null;
+        }
+
+        if (configured.ContainsKey(chosen.Id))
+        {
+            return chosen.Id; // already there: chosen, not added again
+        }
+
+        var add = Localizer.Get("msg.acp.add", "Add");
+        var message = chosen.UsesNpx
+            ? Localizer.Format("msg.acp.addNpx", "Codalus will run {0} when you choose it. npx downloads that package from npm and runs it with your account's access to this folder.", chosen.CommandLine)
+            : Localizer.Format("msg.acp.addInstalled", "Codalus will run {0} when you choose it. {1} must be installed and on your PATH (Codalus doesn't download it); it runs with your account's access to this folder.", chosen.CommandLine, chosen.Cli);
+        var answer = await Dialogs.ShowAsync(new DialogRequest(
+            Localizer.Format("msg.acp.addTitle", "Add {0}?", chosen.Name),
+            message + "\n\n" + Localizer.Get("aiChat.externalAgentUsesItsOwn", AcpAgents.Label),
+            [add, Localizer.Get("msg.acp.cancel", "Cancel")])
+        {
+            DefaultButton = add,
+            Icon = "sparkle",
+            Context = Localizer.Format("msg.acp.addContext", "{0} in your user settings (ai.agents)", chosen.Id),
+        }).ConfigureAwait(true);
+        if (answer.Button != add)
+        {
+            return null;
+        }
+
+        await AcpAgentCatalog.AddAsync(Workbench.Settings, chosen, CancellationToken.None).ConfigureAwait(true);
+        return chosen.Id;
+    }
+
     /// <summary>Shows a dialog that closes (as cancelled) when <paramref name="cancellationToken"/> is cancelled: the turn was stopped.</summary>
     private async Task<DialogResult> ShowCancellableAsync(DialogRequest request, CancellationToken cancellationToken)
     {

@@ -114,21 +114,33 @@ AI Chat can also run a coding agent that is a program of its own, such as pi, Cl
 
 ### Setting one up
 
-1. Install the agent yourself, and sign in the way it says (Codalus doesn't install or ship any agent).
-2. Add it to your user settings (**Tools > Options > AI: External Agents**, or `settings.json`). A workspace's settings can't add one. Each entry is the command that starts the agent in ACP mode, with its arguments and environment:
+**In one step.** In AI Chat, open the agent picker (after the provider in the toolbar) and choose **Add agent…**. It lists the agents Codalus knows, each with what it is, the exact command it would run and its pinned version; **installed** means the agent's own program is on your PATH, and **added** that it's in your settings already (choosing it just picks it). Choose one, read what will run, and choose **Add**: Codalus writes its entry to your user settings (never the workspace's) and picks it, which starts a new chat. Nothing is downloaded or run until you ask that chat something.
 
-   ```json
-   "ai.agents": {
-     "pi": { "command": "npx", "args": ["-y", "pi-acp@0.0.34"] },
-     "claude": { "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp@0.93.0"] },
-     "codex": { "command": "npx", "args": ["-y", "@agentclientprotocol/codex-acp@2.2.2"] },
-     "gemini": { "command": "npx", "args": ["-y", "@google/gemini-cli@0.64.0", "--acp"] }
-   }
-   ```
+| Agent | What runs | Pinned |
+|---|---|---|
+| pi | `npx -y pi-acp@0.0.34` | 0.0.34 |
+| Claude | `npx -y @agentclientprotocol/claude-agent-acp@0.93.0` | 0.93.0 |
+| Codex | `npx -y @agentclientprotocol/codex-acp@2.2.2` | 2.2.2 |
+| Gemini CLI | `npx -y @google/gemini-cli@0.64.0 --acp` | 0.64.0 |
+| GitHub Copilot | `npx -y @github/copilot@1.0.98 --acp` | 1.0.98 |
+| OpenCode | `opencode acp` (install OpenCode first) | 1.19.3 |
+| goose | `goose acp` (install goose first) | 1.55.0 |
 
-   These are examples pinned to the versions in the [ACP registry](https://agentclientprotocol.com/get-started/registry) on 2026-10-18; pin the version you've checked. `env` passes variables (`"env": { "ANTHROPIC_API_KEY": "…" }`), but a key there is in a file: prefer the agent's own sign-in, which keeps it in the agent's store. On Windows, `npx` is `npx.cmd`, which Codalus runs through `cmd.exe` for you.
-3. Turn on AI assistance and open a trusted solution or folder.
-4. In AI Chat, choose the agent in the agent picker, after the provider in the toolbar (**Built-in** is the built-in assistant). Choosing another agent starts a new chat.
+The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-10-19 and committed with Codalus: it doesn't fetch the list. `npx` downloads the package from npm the first time the agent starts and runs it with your account's access to the folder. The registry ships OpenCode and goose as programs to download, which Codalus doesn't do: install them yourself, and their entries run your installed copy. Sign in the way the agent says: Codalus doesn't see or keep its credentials. On Windows, `npx` is `npx.cmd`, which Codalus runs through `cmd.exe` for you.
+
+**By hand.** Add an entry to your user settings (**Tools > Options > AI: External Agents**, or `settings.json`); a workspace's settings can't add one. Each entry is the command that starts the agent in ACP mode, with its arguments and environment:
+
+```json
+"ai.agents": {
+  "pi": { "command": "npx", "args": ["-y", "pi-acp@0.0.34"] },
+  "claude": { "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp@0.93.0"] },
+  "my-agent": { "command": "/opt/my-agent/bin/my-agent", "args": ["--acp"] }
+}
+```
+
+Pin the version you've checked. `env` passes variables (`"env": { "ANTHROPIC_API_KEY": "…" }`), but a key there is in a file: prefer the agent's own sign-in, which keeps it in the agent's store.
+
+**Then**, turn on AI assistance, open a trusted solution or folder, and choose the agent in the picker (**Built-in** is the built-in assistant). Choosing another agent starts a new chat.
 
 While an external agent is chosen, the label shows above the question box. If AI assistance is off, no folder is open, or the folder isn't trusted, the chat says why under the label, and the agent doesn't start.
 

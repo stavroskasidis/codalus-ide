@@ -63,6 +63,9 @@ public interface IAiChatHost
 
     /// <summary>The IDE's side of an external agent's requests.</summary>
     IAcpHost AcpHost { get; }
+
+    /// <summary>"Add agent…": a known ACP agent added to the user's settings after asking; the agent to choose, or null.</summary>
+    Task<string?> AddExternalAgentAsync();
 }
 
 /// <summary>A turn as AI Chat shows it (M34h): the turn, who answered (the model then) and when it was asked.</summary>
@@ -296,8 +299,8 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     /// <summary>The mode picker's label: the agent's current mode.</summary>
     public string SelectedModeLabel => Session is { } session && session.Modes.FirstOrDefault(m => m.Id == session.CurrentModeId) is { } mode ? mode.Name : string.Empty;
 
-    /// <summary>The picker shows once an agent is configured.</summary>
-    public bool HasAgents => IsOn && _agentNames.Count > 0;
+    /// <summary>The picker shows while AI is on: Built-in, the agents, and "Add agent…" to set up a known one.</summary>
+    public bool HasAgents => IsOn;
 
     /// <summary>The provider, model and Agent switch are the built-in assistant's.</summary>
     public bool ShowBuiltInControls => IsOn && !IsExternal;
@@ -377,6 +380,24 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     {
         Input = "/" + suggestion.Name + " ";
         CommandSuggestions = [];
+    }
+
+    /// <summary>
+    /// "Add agent…" (M48): picks a known ACP agent, adds it to the user's settings after asking, and chooses it (a new
+    /// chat, as any other choice). One already added is chosen, not added again.
+    /// </summary>
+    public async Task AddAgentAsync()
+    {
+        if (await _host.AddExternalAgentAsync().ConfigureAwait(true) is not { } name)
+        {
+            return;
+        }
+
+        RefreshAgentState();
+        if (_agentNames.IndexOf(name) is var at and >= 0)
+        {
+            SelectedAgentIndex = at + 1;
+        }
     }
 
     /// <summary>The settings or the running session changed: the picker, the label, the modes and the commands follow.</summary>
