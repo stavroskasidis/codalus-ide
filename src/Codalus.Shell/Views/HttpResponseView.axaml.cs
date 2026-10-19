@@ -18,6 +18,9 @@ public sealed partial class HttpResponseView : UserControl, IPaneView
     private HttpResponseViewModel? _vm;
     private CodeViewer? _body;
 
+    /// <summary>The user dragged the splitter: the history keeps that width (narrowed only to leave the response room).</summary>
+    private bool _historySized;
+
     public HttpResponseView()
     {
         InitializeComponent();
@@ -36,21 +39,31 @@ public sealed partial class HttpResponseView : UserControl, IPaneView
             }
         };
         Root.SizeChanged += (_, e) => FitHistory(e.NewSize.Width);
+        HistorySplitter.DragCompleted += (_, _) => _historySized = true;
     }
 
     /// <summary>The body as shown (tests).</summary>
     public string BodyText => _body?.Editor.Document.Text ?? string.Empty;
 
-    /// <summary>The history keeps 360 px, or two fifths of a narrower window.</summary>
+    /// <summary>
+    /// The history starts at 360 px, or two fifths of a narrower window; once the user drags the splitter it keeps their
+    /// width, narrowed only so the response keeps a fifth of the window.
+    /// </summary>
     private void FitHistory(double width)
     {
-        if (Root.ColumnDefinitions.Count == 3)
-        {
-            Root.ColumnDefinitions[2].Width = new GridLength(Math.Min(HistoryWidth, Math.Max(0, Math.Floor(width * 0.4))));
-        }
+        var column = Root.ColumnDefinitions[2];
+        var fitted = _historySized ? Math.Min(column.ActualWidth, Math.Floor(width * 0.8)) : Math.Min(HistoryWidth, Math.Floor(width * 0.4));
+        column.Width = new GridLength(Math.Max(0, fitted));
+    }
 
-        // The body's view switch shows where there is room for it beside the tabs.
-        BodyToolsHost.IsVisible = width - Root.ColumnDefinitions[2].Width.Value >= 440;
+    /// <summary>The history's width (tests).</summary>
+    internal double HistoryColumnWidth => Root.ColumnDefinitions[2].Width.Value;
+
+    /// <summary>As if the user dragged the splitter to <paramref name="width"/> (tests).</summary>
+    internal void DragHistoryTo(double width)
+    {
+        Root.ColumnDefinitions[2].Width = new GridLength(width);
+        HistorySplitter.RaiseEvent(new Avalonia.Input.VectorEventArgs { RoutedEvent = Avalonia.Controls.Primitives.Thumb.DragCompletedEvent, Source = HistorySplitter });
     }
 
     protected override void OnDataContextChanged(EventArgs e)

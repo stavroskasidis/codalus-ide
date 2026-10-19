@@ -40,7 +40,7 @@ public sealed partial class ShellHost
         HttpResponse = new HttpResponseViewModel(Http, EditorFont, this)
         {
             // M34h: Send Again, the link to the request, and saving or opening the body.
-            SendAgain = exchange => SendHttpRequestAsync(exchange.File, OpenTextOf(exchange.File) ?? (File.Exists(exchange.File) ? File.ReadAllText(exchange.File) : string.Empty), exchange.Line),
+            SendAgain = SendHttpRequestAgainAsync,
             OpenRequest = (file, line) => OpenFileAsync(file, preview: false, new LanguageServices.Protocol.Position(Math.Max(0, line - 1), 0)),
             SaveBody = SaveHttpBodyAsync,
             OpenBody = OpenHttpBodyAsync,
@@ -181,6 +181,26 @@ public sealed partial class ShellHost
     }
 
     Task IEditorServices.SendHttpRequestAsync(string path, string text, int line) => SendHttpRequestAsync(path, text, line);
+
+    /// <summary>Send Again: the request from its .http file (the editor's text when it is open, else read off the UI thread).</summary>
+    private async Task SendHttpRequestAgainAsync(HttpExchange exchange)
+    {
+        var text = OpenTextOf(exchange.File);
+        if (text is null)
+        {
+            try
+            {
+                text = await File.ReadAllTextAsync(exchange.File).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ShowMessage(Localizer.Format("msg.web.httpFileUnreadable", "The request's file can't be read: {0}", ex.Message));
+                return;
+            }
+        }
+
+        await SendHttpRequestAsync(exchange.File, text, exchange.Line).ConfigureAwait(true);
+    }
 
     /// <summary>Save Response Body…: the body to a file the user picks.</summary>
     private async Task SaveHttpBodyAsync(string name, string text)

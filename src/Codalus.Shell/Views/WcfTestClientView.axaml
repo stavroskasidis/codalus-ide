@@ -55,9 +55,6 @@
       <Setter Property="IsExpanded" Value="True" />
       <Setter Property="MinHeight" Value="22" />
     </Style>
-    <Style Selector="TreeViewItem:selected TextBlock.xmlNode">
-      <Setter Property="controls:XmlNodeText.IsPlain" Value="True" />
-    </Style>
   </UserControl.Styles>
 
   <DockPanel Margin="16,14,16,16">
@@ -98,7 +95,7 @@
 
     <Grid Margin="0,12,0,0">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="2*" MinWidth="170" MaxWidth="320" />
+        <ColumnDefinition Width="2*" MinWidth="170" />
         <ColumnDefinition Width="12" />
         <ColumnDefinition Width="5*" MinWidth="300" />
       </Grid.ColumnDefinitions>
@@ -147,6 +144,8 @@
         </DockPanel>
       </Border>
 
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" AutomationProperties.Name="{l:T wcfTestClient.resizeTheOperations}" />
+
       <!-- The request, then the response. -->
       <Border Grid.Column="2" Classes="wcfCard">
         <Grid RowDefinitions="Auto,3*,Auto,2*">
@@ -180,7 +179,7 @@
                       <Grid ColumnDefinitions="1.25*,0.8*,2*,56,48" ColumnSpacing="10" MinHeight="32">
                         <DockPanel Margin="{Binding Indent}" ToolTip.Tip="{Binding ToolTip}">
                           <Button DockPanel.Dock="Left" Classes="subtle" Width="16" Height="16" MinWidth="16" MinHeight="16" Padding="0" Margin="0,0,4,0" VerticalAlignment="Center"
-                                  IsVisible="{Binding HasChevron}" Command="{Binding ToggleCommand}" AutomationProperties.Name="{Binding Label}">
+                                  IsVisible="{Binding HasChevron}" Command="{Binding ToggleCommand}" ToolTip.Tip="{Binding ToggleName}" AutomationProperties.Name="{Binding ToggleName}">
                             <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" Foreground="{DynamicResource Shell.MutedForeground}" />
                           </Button>
                           <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -216,14 +215,15 @@
                 <Button Classes="subtle iconText" controls:ButtonIcon.Kind="undo" Content="{l:T wcfTestClient.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T wcfTestClient.clearTheFormAndTheXml}" />
               </StackPanel>
               <DockPanel DockPanel.Dock="Right" IsVisible="{Binding HasResponse}" Margin="12,0,0,0" ToolTip.Tip="{Binding ResponseSummary}">
-                <Border DockPanel.Dock="Left" Classes="chip" Classes.success="{Binding IsResponseOk}" Classes.error="{Binding IsResponseError}" AutomationProperties.LiveSetting="Polite">
+                <Border DockPanel.Dock="Left" Classes="chip" Classes.success="{Binding IsResponseOk}" Classes.error="{Binding IsResponseError}">
                   <StackPanel Orientation="Horizontal" Spacing="4">
                     <controls:Icon Kind="error" IsVisible="{Binding IsFault}" VerticalAlignment="Center" />
-                    <TextBlock x:Name="ResponseChipText" Text="{Binding ResponseChip}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="ResponseChipText" Text="{Binding ResponseChip}" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
                   </StackPanel>
                 </Border>
                 <TextBlock DockPanel.Dock="Right" Classes="muted" Text="{Binding ResponseMeta}" VerticalAlignment="Center" Margin="8,0,0,0" />
-                <TextBlock Text="{Binding ResponseReason}" IsVisible="{Binding HasResponseReason}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ResponseReasonText" Text="{Binding ResponseReason}" IsVisible="{Binding HasResponseReason}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"
+                           AutomationProperties.LiveSetting="Polite" />
               </DockPanel>
               <TextBlock Classes="muted small" Text="{l:T wcfTestClient.f5InvokesEscCancels}" VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis"
                          ToolTip.Tip="{l:T wcfTestClient.f5InvokesEscCancels}" />
@@ -247,7 +247,7 @@
                   <TreeView x:Name="ResponseTreeView" ItemsSource="{Binding ResponseTree}" IsVisible="{Binding IsResponseTree}" Background="Transparent" AutomationProperties.Name="{l:T wcfTestClient.responseTree}">
                     <TreeView.ItemTemplate>
                       <TreeDataTemplate x:DataType="wcf:XmlTreeNode" ItemsSource="{Binding Children}">
-                        <controls:XmlNodeText NodeName="{Binding Name}" NodeValue="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+                        <controls:XmlNodeText NodeName="{Binding Name}" NodeValue="{Binding Value}" IsPlain="{Binding $parent[TreeViewItem].IsSelected}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
                                               VerticalAlignment="Center" ToolTip.Tip="{Binding Label}" />
                       </TreeDataTemplate>
                     </TreeView.ItemTemplate>

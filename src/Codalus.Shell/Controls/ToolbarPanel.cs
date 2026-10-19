@@ -188,7 +188,8 @@ public sealed class ToolbarPanel : Panel
             return new Separator();
         }
 
-        var name = AutomationProperties.GetName(child) ?? (ToolTip.GetTip(child) as string) ?? child.Name ?? string.Empty;
+        // A button's own label before its tooltip (the control set's icon-and-text buttons: Modify Find, not its explanation).
+        var name = AutomationProperties.GetName(child) ?? (child as ContentControl)?.Content as string ?? (ToolTip.GetTip(child) as string) ?? child.Name ?? string.Empty;
         switch (child)
         {
             case ToggleButton toggle:

@@ -55,7 +55,7 @@ public sealed partial class WcfTestClientView : UserControl, IPaneView
 
         flyout.Items.Clear();
         flyout.Items.Add(new MenuItem { Header = Localizer.Get("msg.wcf.discovering", "Looking for running CoreWCF services…"), IsEnabled = false });
-        await vm.DiscoverAsync().ConfigureAwait(true);
+        await vm.DiscoverAsync(selectFirst: false).ConfigureAwait(true); // only list them: the service shown and its form stay
         flyout.Items.Clear();
         if (vm.Discovered.Count == 0)
         {
@@ -66,7 +66,7 @@ public sealed partial class WcfTestClientView : UserControl, IPaneView
         foreach (var service in vm.Discovered)
         {
             var item = new MenuItem { Header = service.Label, Icon = new Icon { Kind = "attach" } };
-            item.Click += (_, _) => vm.SelectedDiscovered = service;
+            item.Click += (_, _) => _ = vm.LoadDiscoveredAsync(service);
             flyout.Items.Add(item);
         }
     }

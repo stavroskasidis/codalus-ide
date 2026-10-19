@@ -10,9 +10,10 @@ namespace Codalus.Shell.Controls;
 /// <summary>
 /// A node of an XML tree as code (M34h, the WCF Test Client's response): the element's name in the editor's type color,
 /// then <c> = </c> and its value in the string color, from the editor theme of the theme it is shown in. On a selected
-/// row (<see cref="IsPlain"/>, from ShellStyles) it takes the row's text color.
+/// row (<see cref="IsPlain"/>, bound to its own item's selection) it takes the row's text color. Its text can be
+/// selected and copied.
 /// </summary>
-public sealed class XmlNodeText : TextBlock
+public sealed class XmlNodeText : SelectableTextBlock
 {
     public static readonly StyledProperty<string?> NodeNameProperty = AvaloniaProperty.Register<XmlNodeText, string?>(nameof(NodeName));
 
@@ -31,7 +32,7 @@ public sealed class XmlNodeText : TextBlock
         ActualThemeVariantChanged += (_, _) => Rebuild();
     }
 
-    protected override Type StyleKeyOverride => typeof(TextBlock);
+    protected override Type StyleKeyOverride => typeof(SelectableTextBlock); // selectable, to copy a value (as before M34h)
 
     public string? NodeName
     {

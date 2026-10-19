@@ -101,7 +101,8 @@ public sealed class ControlSetViewsTests
             await ShellFixture.PumpUntil(() => Visible<CodeLine>(view) is not null);
 
             // The query line and the counts.
-            Assert.NotNull(Visible<TextBlock>(view, t => t.Text == "\"Person\"" && t.FontWeight == FontWeight.SemiBold));
+            var query = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "QueryText");
+            Assert.Contains(query.Inlines!.OfType<Run>(), r => r.Text == "\"Person\"" && r.FontWeight == FontWeight.SemiBold);
             var counts = Visible<CountsText>(view)!;
             Assert.Contains(counts.Inlines!.OfType<Run>(), r => r.Text == "3" && r.FontWeight == FontWeight.SemiBold);
 

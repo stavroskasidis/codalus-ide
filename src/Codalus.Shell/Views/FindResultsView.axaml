@@ -127,9 +127,10 @@
       <Border DockPanel.Dock="Top" Classes="findQuery" IsVisible="{Binding HasTitle}">
         <DockPanel VerticalAlignment="Center">
           <controls:Icon DockPanel.Dock="Left" Kind="search" Margin="0,0,8,0" />
-          <TextBlock DockPanel.Dock="Left" Text="{Binding TitleVerb}" />
-          <TextBlock DockPanel.Dock="Left" Text="{Binding TitleTerm}" FontWeight="SemiBold" />
-          <TextBlock Classes="muted" Text="{Binding TitleRest}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+          <!-- One text, trimmed as a whole (a long term too), the whole search in its tooltip. -->
+          <TextBlock x:Name="QueryText" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}">
+            <Run Text="{Binding TitleVerb}" /><Run Text="{Binding TitleTerm}" FontWeight="SemiBold" /><Run Classes="muted" Text="{Binding TitleRest}" />
+          </TextBlock>
         </DockPanel>
       </Border>
       <!-- The counts, and how to walk the results. -->

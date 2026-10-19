@@ -80,7 +80,7 @@
     </Style>
   </UserControl.Styles>
 
-  <Grid x:Name="Root" ColumnDefinitions="*,Auto,360">
+  <Grid x:Name="Root" ColumnDefinitions="*,5,360">
     <!-- The selected exchange. -->
     <DockPanel MinWidth="0">
       <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="12,10,12,8" IsVisible="{Binding HasExchange}">
@@ -93,8 +93,8 @@
             <Button Classes="toolbar icon" controls:ButtonIcon.Kind="link-external" Command="{Binding OpenBodyCommand}" ToolTip.Tip="{l:T httpResponse.openInEditor}" AutomationProperties.Name="{l:T httpResponse.openInEditor}" />
           </controls:ToolbarPanel>
           <Border DockPanel.Dock="Left" Classes="chip large" Classes.success="{Binding IsStatusSuccess}" Classes.warning="{Binding IsStatusRedirect}"
-                  Classes.error="{Binding IsStatusError}" Classes.info="{Binding IsStatusInfo}" Margin="0,0,10,0" AutomationProperties.LiveSetting="Polite">
-            <TextBlock x:Name="StatusChip" Text="{Binding StatusText}" />
+                  Classes.error="{Binding IsStatusError}" Classes.info="{Binding IsStatusInfo}" Margin="0,0,10,0">
+            <TextBlock x:Name="StatusChip" Text="{Binding StatusText}" AutomationProperties.LiveSetting="Polite" />
           </Border>
           <WrapPanel VerticalAlignment="Center" IsVisible="{Binding HasResponse}">
             <TextBlock Classes="meta" Text="{Binding Version}" />
@@ -123,10 +123,10 @@
       </StackPanel>
       <!-- Body, Headers and Request; the body's view switch on the right. -->
       <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.Grid.Rule}" Padding="6,0" IsVisible="{Binding HasExchange}">
-        <Grid ColumnDefinitions="Auto,*,Auto">
-          <TabStrip x:Name="Tabs" SelectedIndex="{Binding TabIndex}" AutomationProperties.Name="{l:T httpResponse.response}">
+        <DockPanel>
+          <TabStrip x:Name="Tabs" DockPanel.Dock="Left" SelectedIndex="{Binding TabIndex}" AutomationProperties.Name="{l:T httpResponse.response}">
             <TabStripItem Content="{l:T httpResponse.body}" />
-            <TabStripItem>
+            <TabStripItem AutomationProperties.Name="{l:T httpResponse.headers}">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <TextBlock Text="{l:T httpResponse.headers}" VerticalAlignment="Center" />
                 <Border Classes="badge" IsVisible="{Binding HasHeaders}">
@@ -136,18 +136,17 @@
             </TabStripItem>
             <TabStripItem Content="{l:T httpResponse.request}" />
           </TabStrip>
-          <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding ContentType}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="12,0,8,0"
-                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ContentType}" IsVisible="{Binding IsBodyTab}" />
-          <Panel x:Name="BodyToolsHost" Grid.Column="2">
-          <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding IsBodyTab}">
-            <controls:SegmentedControl SelectedIndex="{Binding BodyViewIndex}" AutomationProperties.Name="{l:T httpResponse.bodyView}">
+          <!-- Pretty or Raw and Word Wrap: a narrow window moves them into the toolbar's overflow menu. -->
+          <controls:ToolbarPanel x:Name="BodyTools" DockPanel.Dock="Right" Margin="0" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="4" IsVisible="{Binding IsBodyTab}">
+            <controls:SegmentedControl x:Name="BodyView" SelectedIndex="{Binding BodyViewIndex}" AutomationProperties.Name="{l:T httpResponse.bodyView}">
               <controls:SegmentedControlItem Content="{l:T httpResponse.pretty}" ToolTip.Tip="{l:T httpResponse.theBodyFormattedByItsContent}" />
               <controls:SegmentedControlItem Content="{l:T httpResponse.raw}" ToolTip.Tip="{l:T httpResponse.theBodyAsReceived}" />
             </controls:SegmentedControl>
             <ToggleButton x:Name="WrapToggle" Classes="toolbar icon" controls:ButtonIcon.Kind="word-wrap" ToolTip.Tip="{l:T httpResponse.wordWrap}" AutomationProperties.Name="{l:T httpResponse.wordWrap}" />
-          </StackPanel>
-          </Panel>
-        </Grid>
+          </controls:ToolbarPanel>
+          <TextBlock Classes="muted small" Text="{Binding ContentType}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="12,0,8,0"
+                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ContentType}" IsVisible="{Binding IsBodyTab}" />
+        </DockPanel>
       </Border>
       <Panel>
         <Border x:Name="BodyHost" IsVisible="{Binding IsBodyTab}" />
@@ -174,7 +173,16 @@
       </Panel>
     </DockPanel>
 
-    <Border Grid.Column="1" Width="1" Background="{DynamicResource Shell.Border}" />
+    <!-- The history's width: dragged, it stays as the user leaves it. -->
+    <GridSplitter x:Name="HistorySplitter" Grid.Column="1" ResizeDirection="Columns" Background="Transparent" AutomationProperties.Name="{l:T httpResponse.resizeTheHistory}">
+      <GridSplitter.Template>
+        <ControlTemplate>
+          <Border Background="Transparent">
+            <Border Width="1" HorizontalAlignment="Center" Background="{DynamicResource Shell.Border}" />
+          </Border>
+        </ControlTemplate>
+      </GridSplitter.Template>
+    </GridSplitter>
 
     <!-- The history. -->
     <DockPanel x:Name="HistoryPane" Grid.Column="2">

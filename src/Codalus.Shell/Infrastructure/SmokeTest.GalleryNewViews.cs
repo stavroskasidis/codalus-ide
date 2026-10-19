@@ -203,6 +203,24 @@ internal sealed partial class SmokeTest
         shell.HttpResponse.Selected = shell.HttpResponse.History.FirstOrDefault();
     }
 
+    /// <summary>Removes the gallery's sample requests and Find Results pages (and the HTTP Response, if it wasn't open).</summary>
+    private void ClearGallerySampleResults(bool httpWasOpen)
+    {
+        shell.Http.ClearHistory();
+        if (!httpWasOpen)
+        {
+            shell.Layout.CloseToolWindow(HttpResponseViewModel.ToolWindowId);
+        }
+
+        var results = shell.FindResults;
+        foreach (var page in results.Pages.ToList())
+        {
+            results.Close(page);
+        }
+
+        Check(shell.Http.History.Count == 0 && results.Pages.Count == 1 && results.Rows.Count == 0, "the gallery's sample requests and searches are cleared");
+    }
+
     /// <summary>Greet's form as the design shows it: Ada, 36, Happy, and the tags math and engines.</summary>
     private static void FillGreet(WcfTestClientViewModel client)
     {

@@ -39,8 +39,18 @@ internal sealed partial class SmokeTest
     {
         // The Output window shows the build's output, its lines colored by what they report (M34h).
         shell.Output.Selected = shell.Builds.Channel;
-        await GallerySampleResultsAsync().ConfigureAwait(true); // M34h: Find Results and the HTTP Response as the designs show them
-        await GalleryToolWindowsAsync("data").ConfigureAwait(true);
+        // M34h: Find Results and the HTTP Response as the designs show them, cleared after their pictures, so the later
+        // steps (web.http's screenshot, the website's) don't show the sample requests and searches.
+        var httpOpen = shell.Layout.IsVisible(HttpResponseViewModel.ToolWindowId);
+        try
+        {
+            await GallerySampleResultsAsync().ConfigureAwait(true);
+            await GalleryToolWindowsAsync("data").ConfigureAwait(true);
+        }
+        finally
+        {
+            ClearGallerySampleResults(httpOpen);
+        }
 
         // Documents and the window's chrome: tabs pinned, previewed and colored by project, a tool window focused so the
         // selected document tab is the one of a pane without the focus.

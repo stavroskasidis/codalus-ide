@@ -95,7 +95,10 @@ public sealed class SoapFieldRow : ObservableObject
     public string Placeholder => Field.Truncated ? Localizer.Get("msg.wcf.nestedTooDeep", "(nested too deep: edit the XML)") : Field.BuiltIn ?? string.Empty;
 
     /// <summary>The field's name and type, for its trimmed name (M34g).</summary>
-    public string ToolTip => IsRequired ? $"{Label}: {Type} (required)" : $"{Label}: {Type}";
+    public string ToolTip => IsRequired ? Localizer.Format("msg.wcf.requiredField", "{0}: {1} (required)", Label, Type) : $"{Label}: {Type}";
+
+    /// <summary>The chevron's name and tooltip: what it does to the group (<c>Collapse Tags</c>, <c>Expand Tags</c>).</summary>
+    public string ToggleName => IsExpanded ? Localizer.Format("msg.wcf.collapseField", "Collapse {0}", Label) : Localizer.Format("msg.wcf.expandField", "Expand {0}", Label);
 
     /// <summary>The value box's and the nil box's names for screen readers.</summary>
     public string ValueName => Index >= 0 ? $"{Name} {Label}" : Label;
@@ -754,9 +757,14 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Looks for running CoreWCF services that publish metadata (Running Services); the first is loaded.</summary>
-    public async Task DiscoverAsync()
+    /// <summary>
+    /// Looks for running CoreWCF services that publish metadata. With <paramref name="selectFirst"/> (the command) the
+    /// first is loaded; without it (the Running Services menu, M34h) they are only listed, and the service loaded and
+    /// its form stay until one is chosen (<see cref="LoadDiscoveredAsync"/>).
+    /// </summary>
+    public async Task DiscoverAsync(bool selectFirst = true)
     {
+        var status = _status;
         Error = null;
         IsBusy = true;
         Status = Localizer.Get("msg.wcf.discovering", "Looking for running CoreWCF services…");
@@ -770,8 +778,9 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
             }
 
             OnPropertyChanged(nameof(HasDiscovered));
-            Status = found.Count == 0 ? Localizer.Get("msg.wcf.noneRunning", "No running CoreWCF service publishes metadata. Run the service (Ctrl+F5), with ServiceMetadataBehavior.HttpGetEnabled.") : null;
-            if (found.Count > 0)
+            Status = found.Count == 0 ? Localizer.Get("msg.wcf.noneRunning", "No running CoreWCF service publishes metadata. Run the service (Ctrl+F5), with ServiceMetadataBehavior.HttpGetEnabled.")
+                : selectFirst ? null : status;
+            if (found.Count > 0 && selectFirst)
             {
                 SelectedDiscovered = found[0];
             }
@@ -780,6 +789,15 @@ public sealed class WcfTestClientViewModel : ObservableObject, IDisposable
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>A service chosen from Running Services: its metadata is loaded (again, when it is the one shown).</summary>
+    public Task LoadDiscoveredAsync(DiscoveredService service)
+    {
+        _discovered = service;
+        OnPropertyChanged(nameof(SelectedDiscovered));
+        Address = service.MetadataUrl;
+        return LoadAsync();
     }
 
     private async Task BrowseAsync()
