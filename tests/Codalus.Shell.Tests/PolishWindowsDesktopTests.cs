@@ -542,8 +542,10 @@ public partial class PolishTests
         {
             for (var j = i + 1; j < inks.Count; j++)
             {
+                // A link inside a paragraph (an inline container, rendered Markdown) is laid out by the text around it.
+                var inline = inks[i].Text.IsVisualAncestorOf(inks[j].Text) || inks[j].Text.IsVisualAncestorOf(inks[i].Text);
                 var overlap = inks[i].Ink.Intersect(inks[j].Ink);
-                if (overlap.Width > 1 && overlap.Height > 2)
+                if (!inline && overlap.Width > 1 && overlap.Height > 2)
                 {
                     static string Label(string s) => s.Length > 30 ? s[..30] + "…" : s;
                     yield return $"\"{Label(inks[i].Content)}\" and \"{Label(inks[j].Content)}\" are drawn over each other ({overlap.Width:0} × {overlap.Height:0} px; {Describe(inks[j].Text, root)})";

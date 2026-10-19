@@ -450,6 +450,23 @@
     .warning or .info (none: neutral), .square for a method; badges are counts (Border.badge). Color never carries the
     meaning alone; High contrast outlines both.
   -->
+  <!--
+    A table's column header row (the control set's views, M34h): 24 px on Shell.Grid.Header with a Shell.Grid.Rule under
+    it, its labels muted and semibold.
+  -->
+  <Style Selector="Border.gridHeader">
+    <Setter Property="Background" Value="{DynamicResource Shell.Grid.Header}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="MinHeight" Value="24" />
+    <Setter Property="Padding" Value="8,0" />
+  </Style>
+  <Style Selector="Border.gridHeader TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
   <Style Selector="Border.chip">
     <Setter Property="Height" Value="20" />
     <Setter Property="Padding" Value="7,0" />
@@ -509,6 +526,43 @@
     <Setter Property="HorizontalAlignment" Value="Center" />
   </Style>
 
+  <!-- Inline code in rendered Markdown (MarkdownRenderer): the code font on a badge's quiet fill. -->
+  <Style Selector="Run.code">
+    <Setter Property="Background" Value="{DynamicResource Shell.Badge}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Badge.Foreground}" />
+  </Style>
+
+  <!--
+    A composer (Border.composer, M34h, AI Chat): one field that holds a multi-line text box and a row of its own
+    actions under the text (a hint, Send). It draws the text box's look around both: Shell.Input with its border,
+    darker under the pointer, and the 2 px focus edge while anything in it has the focus; the text box inside is bare.
+  -->
+  <Style Selector="Border.composer">
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
+    <Setter Property="Padding" Value="10,8,8,6" />
+  </Style>
+  <Style Selector="Border.composer:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border.Hover}" />
+  </Style>
+  <Style Selector="Border.composer:focus-within">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
+    <Setter Property="BorderThickness" Value="2" />
+    <Setter Property="Padding" Value="9,7,7,5" />
+  </Style>
+  <Style Selector="Border.composer TextBox">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="36" />
+  </Style>
+  <Style Selector="Border.composer TextBox /template/ Border#PART_BorderElement, Border.composer TextBox:pointerover /template/ Border#PART_BorderElement, Border.composer TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
   <!--
     An empty or error state (StackPanel.emptyState): an icon (32 px), one sentence, and the next step as a button or a
     link, centered.
@@ -566,6 +620,13 @@
     <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Input}" />
     <Setter Property="Height" Value="{DynamicResource Shell.Size.Input}" />
     <Setter Property="Padding" Value="6,0" />
+  </Style>
+  <!-- An editable combo box in a toolbar (Counters' process box, M34h): its text box fits the 24 px field. -->
+  <Style Selector="controls|ToolbarPanel > ComboBox /template/ TextBox#PART_EditableTextBox">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
   <Style Selector="controls|ToolbarPanel > Button:not(.toolbar)">
     <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
@@ -1162,5 +1223,25 @@
         </DockPanel>
       </ControlTemplate>
     </Setter>
+  </Style>
+
+  <!--
+    Buttons attached to the field they act on (the control set's views, M34h: Configuration Manager's New… and Remove on
+    their combo box): one shape with the control set's corners, its inner joints square.
+    <Border Classes="attached"><StackPanel Orientation="Horizontal"><ComboBox …/><Button Classes="icon" …/></StackPanel></Border>
+  -->
+  <Style Selector="Border.attached">
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="ClipToBounds" Value="True" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Border.attached > StackPanel > ComboBox, Border.attached > StackPanel > TextBox, Border.attached > StackPanel > Button">
+    <Setter Property="CornerRadius" Value="0" />
+  </Style>
+  <Style Selector="Border.attached > StackPanel > Button">
+    <Setter Property="Margin" Value="-1,0,0,0" />
+    <!-- The shape clips: the ring would be cut to it. -->
+    <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing.Unclipped}" />
   </Style>
 </Styles>

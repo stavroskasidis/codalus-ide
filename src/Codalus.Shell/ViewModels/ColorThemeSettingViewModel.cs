@@ -150,11 +150,11 @@ public sealed class ThemeFamilyOption : ObservableObject
     /// <summary>The card's line, translated (M34g; the setup's cards were, Options' weren't).</summary>
     public string Description => Family.Id switch
     {
+        ThemeService.Classic => Localizer.Get("msg.colorTheme.classic", "The classic IDE's familiar look, in Blue, Light, Dark and High Contrast: the themes from before 0.3."),
         ThemeService.Harbor => Localizer.Get("msg.colorTheme.harbor", "The closest to the classic IDE: a deep navy title bar, docked tool windows with gutters, a cobalt accent."),
         ThemeService.Graphite => Localizer.Get("msg.colorTheme.graphite", "Compact and dense, for more code on the screen: hairlines instead of gutters, a teal accent."),
         ThemeService.Daylight => Localizer.Get("msg.colorTheme.daylight", "Flat and airy: rounded tabs, the Start button filled with a violet accent."),
         ThemeService.Ember => Localizer.Get("msg.colorTheme.ember", "Warm, with floating panels: rounded cards on the window's background, a copper accent."),
-        ThemeService.Classic => Localizer.Get("msg.colorTheme.classic", "The themes from before 0.3: Blue, Light, Dark and High Contrast."),
         _ => Family.Description,
     };
 

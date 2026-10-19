@@ -13,12 +13,12 @@
         <Button Grid.Column="1" Classes="link" Content="{l:T dotnetTools.openManifest}" Command="{Binding OpenManifestCommand}" IsVisible="{Binding HasManifest}" />
       </Grid>
       <controls:ToolbarPanel>
-        <Button Content="{l:T dotnetTools.installLocalTool}" Command="{Binding InstallLocalCommand}" />
-        <Button Content="{l:T dotnetTools.installGlobalTool}" Command="{Binding InstallGlobalCommand}" />
-        <Button Content="{l:T dotnetTools.update}" Command="{Binding UpdateCommand}" />
-        <Button Content="{l:T dotnetTools.uninstall}" Command="{Binding UninstallCommand}" />
-        <Button Content="{l:T dotnetTools.restoreLocalTools}" Command="{Binding RestoreCommand}" />
-        <Button Content="{l:T dotnetTools.createManifest}" Command="{Binding CreateManifestCommand}" />
+        <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="add" Content="{l:T dotnetTools.installLocalTool}" Command="{Binding InstallLocalCommand}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="globe" Command="{Binding InstallGlobalCommand}" ToolTip.Tip="{l:T dotnetTools.installGlobalTool}" AutomationProperties.Name="{l:T dotnetTools.installGlobalTool}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="update" Command="{Binding UpdateCommand}" ToolTip.Tip="{l:T dotnetTools.update}" AutomationProperties.Name="{l:T dotnetTools.update}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="trash" Command="{Binding UninstallCommand}" ToolTip.Tip="{l:T dotnetTools.uninstall}" AutomationProperties.Name="{l:T dotnetTools.uninstall}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="download" Command="{Binding RestoreCommand}" ToolTip.Tip="{l:T dotnetTools.restoreLocalTools}" AutomationProperties.Name="{l:T dotnetTools.restoreLocalTools}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="file-add" Command="{Binding CreateManifestCommand}" ToolTip.Tip="{l:T dotnetTools.createManifest}" AutomationProperties.Name="{l:T dotnetTools.createManifest}" />
         <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T dotnetTools.refresh}" AutomationProperties.Name="{l:T dotnetTools.refresh}">
           <controls:Icon Kind="refresh" />
         </Button>

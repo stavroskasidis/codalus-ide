@@ -35,8 +35,8 @@
 
     <section class="section themes" aria-labelledby="themes">
         <div class="head-row">
-            <h2 class="heading" id="themes">Four theme families.</h2>
-            <p class="muted small">Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast, following your system or not. A classic layout in each: the menu and search in the title bar, the Solution Explorer on the right, and a status bar colored by state. The Blue, Light, Dark and High Contrast themes stay, as Classic.</p>
+            <h2 class="heading" id="themes">Classic, and four theme families.</h2>
+            <p class="muted small">Classic, the default, in Blue, Light, Dark and High Contrast, and Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast, following your system or not. A classic layout in each: the menu and search in the title bar, the Solution Explorer on the right, and a status bar colored by state.</p>
         </div>
         <div class="grid grid-wide">
             @foreach (var (family, variant, line) in s_families)
@@ -72,7 +72,7 @@
                     <li>Code Search: files, types, members and text in one window, with filter chips, a live, editable preview, and an index kept with the solution so it finds everything right after a restart</li>
                     <li>Feature Search for commands, settings and Options pages, from the search box</li>
                     <li>Peek Definition, Call and Type Hierarchy, Class View and the Object Browser</li>
-                    <li>Find and Replace in Files: a floating window, results with every match highlighted, filtered, grouped and kept</li>
+                    <li>Find and Replace in Files: a floating window, and results in the editor's colors with every match highlighted, grouped by folder and file as a tree or listed, filtered and kept</li>
                     <li>Inlay hints, CodeLens, an inheritance margin and sticky scroll</li>
                     <li>Library code from Source Link before decompiling</li>
                 </ul>
@@ -130,7 +130,7 @@
                 <h3>Web</h3>
                 <ul>
                     <li>Razor and Blazor, with C# features inside the markup and components, HTML and directives each in their own color</li>
-                    <li>.http files, the HTTP Response window and an Endpoints Explorer</li>
+                    <li>.http files, the HTTP Response window (the status as a chip, the body pretty or raw, the headers, a history of requests) and an Endpoints Explorer</li>
                     <li>HTML, CSS, JavaScript and TypeScript language servers</li>
                     <li>ESLint, Prettier, npm scripts and the Task Runner Explorer</li>
                     <li>Hot Reload through dotnet watch</li>
@@ -152,7 +152,7 @@
                 <h3>Make it yours</h3>
                 <ul>
                     <li>A first-run setup: the theme family and mode, previewed live, the keyboard scheme, your settings from VS Code, a .vssettings file or settings sync, and a check of the .NET SDK and git, before the start window</li>
-                    <li>Four theme families, Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, chosen from pictures in Options; Classic's Blue, Light, Dark and High Contrast</li>
+                    <li>Classic's Blue, Light, Dark and High Contrast, the default, and four theme families, Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, chosen from pictures in Options</li>
                     <li>Fonts and Colors over any theme, for code, the editor and the window</li>
                     <li>Default, VS Code, ReSharper and Emacs keyboard schemes</li>
                     <li>Import from VS Code or a .vssettings file; export to one file</li>
@@ -165,11 +165,11 @@
                 <ul>
                     <li>Off until you turn it on, with no telemetry; nothing is sent until you choose a provider</li>
                     <li>OpenAI-compatible servers, Ollama on your machine, Anthropic, or a provider plugin; your key in the OS credential store</li>
-                    <li>AI Chat with the context you choose: the selection, files, errors, build output and the solution's projects</li>
-                    <li>Code from answers applied over the selection or the file after a preview</li>
+                    <li>AI Chat with the context you choose as chips: the selection, files, errors, build output and the solution's projects, shown with each question</li>
+                    <li>Answers in rendered Markdown, with code blocks in your editor's colors: copy them, insert them at the cursor, or apply them over the selection or the file after a preview</li>
                     <li>Inline suggestions and next edit suggestions, each with its own switch</li>
                     <li>Commit messages, pull request descriptions, Ask AI on an exception or a failing test, Fix with AI, tests for the selection, and profile summaries</li>
-                    <li>Agent mode: it reads, searches, builds, edits and runs commands, every change in a preview and every command after you allow it</li>
+                    <li>Agent mode, one switch: it reads, searches, builds, edits and runs commands, each step shown in the chat, every change in a preview and every command after you allow it</li>
                     <li>MCP: your MCP servers' tools in agent mode, and <code>codalus mcp</code> for agents outside the IDE</li>
                     <li>External agents in AI Chat over the Agent Client Protocol (pi, Claude, Codex, Gemini CLI and others, your own CLIs): Codalus serves their file, terminal and permission requests with its own checks, and gives each one the IDE's tools</li>
                     <li>Files .gitignore or a .codalusignore excludes, and secrets, are never sent; a request log of what was</li>
@@ -251,7 +251,7 @@
                     <li>Namespace, collection types, synchronous operations, type reuse and access; Update and Remove</li>
                     <li>References kept as Visual Studio keeps them: Connected Services and ConnectedService.json</li>
                     <li>CoreWCF services from CoreWCF's templates in New Project</li>
-                    <li>A WCF Test Client: operations from the metadata, a form per operation or raw XML, responses as a tree; BasicHttpBinding and WSHttpBinding</li>
+                    <li>A WCF Test Client: operations with their signatures, a typed form per operation or raw XML, responses as a tree and faults as chips; BasicHttpBinding and WSHttpBinding</li>
                     <li>system.serviceModel completion, hover and checks in app.config and web.config</li>
                 </ul>
             </div>
@@ -285,7 +285,7 @@
     /// <summary>The theme families (M45), each in the variant its screenshot shows.</summary>
     private static readonly (string Family, string Variant, string Line)[] s_families =
     [
-        ("Harbor", "Light", "the default, closest to a classic IDE"),
+        ("Harbor", "Light", "closest to a classic IDE, with a navy title bar"),
         ("Graphite", "Dark", "compact, hairlines instead of gutters"),
         ("Daylight", "Light", "flat, with rounded tabs"),
         ("Ember", "Dark", "warm, with floating panels"),
@@ -298,7 +298,7 @@
             "Roslyn-powered C# with inlay hints, the minimap, Find All References and the Solution Explorer."),
         new("find", "Find in Files", "find-in-files.png",
             "The Find and Replace window floating over the editor, with Find Results below",
-            "Find and Replace in Files from a floating window: scopes, file types and regular expressions, with every match listed in Find Results, which filters, groups by path or file and keeps earlier results on their own pages."),
+            "Find and Replace in Files from a floating window: scopes, file types and regular expressions, with every match listed in Find Results in the editor's colors, which filters, groups by folder and file as a tree or a list, and keeps earlier results on their own pages."),
         new("code-search", "Code Search", "code-search.png",
             "The Code Search window over the editor: filter chips, two-line results for Greet with Greeter selected, and Greeter.cs in the preview below",
             "Go To All is Code Search: files, types, members and text with filter chips, results that say where each one is, and the selected one in a live preview you can edit and save."),
@@ -310,10 +310,10 @@
             "A hosted Blazor app: the server and its WebAssembly page debugged as one session, paused inside a .razor file."),
         new("web", "Web APIs", "web-http.png",
             "A .http file with run buttons, the HTTP Response window and the Endpoints Explorer",
-            "Send requests from a .http file, read the response, and browse every route in the Endpoints Explorer."),
+            "Send requests from a .http file, read the response with its status, headers and history, and browse every route in the Endpoints Explorer."),
         new("wcf", "WCF", "wcf-test-client.png",
             "The WCF Test Client with a CoreWCF service's operations, the request form of Greet and its response as a tree",
-            "Call a WCF or CoreWCF service from its metadata: a form per operation, the SOAP envelope, and the response as a tree."),
+            "Call a WCF or CoreWCF service from its metadata: a typed form per operation, the SOAP envelope, and the response as a tree, a fault as a chip."),
         new("profiling", "Profiling", "profiler.png",
             "A CPU profiling report: the sample timeline above a flame graph of the program's hot methods",
             "Record a CPU trace, scrub the timeline, and find the hot path in the flame graph, with hot lines marked in the editor."),
@@ -324,7 +324,7 @@
             "An Avalonia .axaml file in the editor with the XAML Previewer rendering it beside the code",
             "Edit Avalonia XAML with completion and bindings, and watch the previewer follow every change."),
         new("setup", "First start", "setup.png",
-            "The first-run setup's appearance step: Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, and the mode",
+            "The first-run setup's appearance step: Classic, chosen, then Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, and the mode",
             "The first start sets it up your way: a theme family and its mode, previewed as you click, then the keyboard scheme, your settings from elsewhere and a tools check."),
     ];
 }

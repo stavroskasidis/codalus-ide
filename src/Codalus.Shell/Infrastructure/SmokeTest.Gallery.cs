@@ -39,7 +39,37 @@ internal sealed partial class SmokeTest
     {
         // The Output window shows the build's output, its lines colored by what they report (M34h).
         shell.Output.Selected = shell.Builds.Channel;
-        await GalleryToolWindowsAsync("data").ConfigureAwait(true);
+        // AI Chat with the ai.chat step's conversation (M34h), as it looks with AI on: the composer under it. Nothing is
+        // asked, so nothing is sent; AI goes back off after the pictures.
+        var aiOn = shell.AiChat.HasTurns && shell.Ai.State == Workbench.Ai.AiState.Off;
+        if (aiOn)
+        {
+            await shell.Workbench.Settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await shell.Workbench.Settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, "openai", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => shell.AiChat.IsOn, "AI is on for AI Chat's picture").ConfigureAwait(true);
+        }
+
+        // M34h: Find Results and the HTTP Response as the designs show them, cleared after their pictures, so the later
+        // steps (web.http's screenshot, the website's) don't show the sample requests and searches.
+        var httpOpen = shell.Layout.IsVisible(HttpResponseViewModel.ToolWindowId);
+        try
+        {
+            await GallerySampleResultsAsync().ConfigureAwait(true);
+            await GalleryToolWindowsAsync("data").ConfigureAwait(true);
+            if (aiOn)
+            {
+                await GalleryAiChatAsync().ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            ClearGallerySampleResults(httpOpen);
+            if (aiOn)
+            {
+                await shell.Workbench.Settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                await shell.Workbench.Settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            }
+        }
 
         // Documents and the window's chrome: tabs pinned, previewed and colored by project, a tool window focused so the
         // selected document tab is the one of a pane without the focus.
@@ -259,6 +289,30 @@ internal sealed partial class SmokeTest
         }
 
         WriteGalleryIndex();
+    }
+
+    /// <summary>
+    /// AI Chat at its design's size (M34h, docs/design/controls/AiChat.dc.html, 556 × 800) in a window of its own, beside
+    /// its docked pane's picture, so the two can be compared.
+    /// </summary>
+    private async Task GalleryAiChatAsync()
+    {
+        var panel = new Border { Child = new Views.AiChatView { DataContext = shell.AiChat } };
+        panel.Bind(Border.BackgroundProperty, panel.GetResourceObservable("Shell.Panel"));
+        var host = new Window { Width = 556, Height = 800, Content = panel, ShowInTaskbar = false, Title = shell.Workbench.ToolWindows.All.FirstOrDefault(d => d.Id == AiChatViewModel.ToolWindowId)?.Title ?? AiChatViewModel.ToolWindowId };
+        host.Show();
+        try
+        {
+            await GalleryThemesAsync(async theme =>
+            {
+                await SettleAsync().ConfigureAwait(true);
+                GalleryShot("aichat-design", "data", theme, null, host);
+            }).ConfigureAwait(true);
+        }
+        finally
+        {
+            host.Close();
+        }
     }
 
     /// <summary>Runs <paramref name="body"/> in each gallery theme and restores the user's theme.</summary>

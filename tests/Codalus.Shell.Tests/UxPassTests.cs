@@ -615,7 +615,7 @@ public class UxPassTests
     /// The controls under <paramref name="root"/> that Tab, from the first one, never reaches (a list or tree counts as
     /// reached when its item is); a toolbar's items in its overflow menu are left out (the menu reaches them).
     /// </summary>
-    private static IEnumerable<string> Unreached(Visual root)
+    internal static IEnumerable<string> Unreached(Visual root)
     {
         static bool Overflowed(Control c) => c.FindAncestorOfType<ToolbarPanel>() is { } toolbar && toolbar.Overflowed.Any(o => o == c);
         static bool Interactive(Control c) => c is Button or Avalonia.Controls.Primitives.ToggleButton or ComboBox or TextBox or ListBox or TreeView or Slider

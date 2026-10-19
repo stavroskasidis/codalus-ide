@@ -1,6 +1,7 @@
 <local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
                    xmlns:vm="using:Codalus.Shell.ViewModels"
                    xmlns:local="using:Codalus.Shell.Views"
                    x:Class="Codalus.Shell.Views.BatchBuildView"
@@ -10,9 +11,9 @@
       <TextBlock Classes="heading" Text="{l:T batchBuild.batchBuild}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T batchBuild.checkTheProjectConfigurationsToBuild}" />
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <Button x:Name="BuildButton" Content="{l:T batchBuild.build}" Command="{Binding BuildCommand}" AutomationProperties.Name="{l:T batchBuild.buildCheckedProjectConfigurations}" />
-        <Button Content="{l:T batchBuild.rebuild}" Command="{Binding RebuildCommand}" AutomationProperties.Name="{l:T batchBuild.rebuildCheckedProjectConfigurations}" />
-        <Button Content="{l:T batchBuild.clean}" Command="{Binding CleanCommand}" AutomationProperties.Name="{l:T batchBuild.cleanCheckedProjectConfigurations}" />
+        <Button Classes="iconText" controls:ButtonIcon.Kind="build" x:Name="BuildButton" Content="{l:T batchBuild.build}" Command="{Binding BuildCommand}" AutomationProperties.Name="{l:T batchBuild.buildCheckedProjectConfigurations}" />
+        <Button Classes="icon" controls:ButtonIcon.Kind="refresh" Command="{Binding RebuildCommand}" AutomationProperties.Name="{l:T batchBuild.rebuildCheckedProjectConfigurations}" ToolTip.Tip="{l:T batchBuild.rebuild}" />
+        <Button Classes="icon" controls:ButtonIcon.Kind="broom" Command="{Binding CleanCommand}" AutomationProperties.Name="{l:T batchBuild.cleanCheckedProjectConfigurations}" ToolTip.Tip="{l:T batchBuild.clean}" />
         <Button Content="{l:T batchBuild.selectAll}" Command="{Binding SelectAllCommand}" />
         <Button Content="{l:T batchBuild.deselectAll}" Command="{Binding DeselectAllCommand}" />
         <ProgressBar IsIndeterminate="True" Width="80" Height="2" MinHeight="2" VerticalAlignment="Center" IsVisible="{Binding IsBusy}" />

@@ -1,6 +1,7 @@
 <local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
                    xmlns:vm="using:Codalus.Shell.ViewModels"
                    xmlns:local="using:Codalus.Shell.Views"
                    x:Class="Codalus.Shell.Views.PublishView"
@@ -11,8 +12,8 @@
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T publish.publishProfilesAreSavedInProperties}" />
       <StackPanel Orientation="Horizontal" Spacing="8">
         <ComboBox x:Name="ProfileBox" MinWidth="240" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedName}" AutomationProperties.Name="{l:T publish.publishProfile}" />
-        <Button Content="{l:T publish.newProfile}" Command="{Binding NewCommand}" AutomationProperties.Name="{l:T publish.addAPublishProfile}" />
-        <Button Content="{l:T publish.save}" Command="{Binding SaveCommand}" AutomationProperties.Name="{l:T publish.saveThePublishProfile}" />
+        <Button Classes="iconText" controls:ButtonIcon.Kind="add" Content="{l:T publish.newProfile}" Command="{Binding NewCommand}" AutomationProperties.Name="{l:T publish.addAPublishProfile}" />
+        <Button Classes="icon" controls:ButtonIcon.Kind="save" Command="{Binding SaveCommand}" AutomationProperties.Name="{l:T publish.saveThePublishProfile}" ToolTip.Tip="{l:T publish.save}" />
       </StackPanel>
       <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,8,0,0">
         <TextBlock Text="{l:T publish.target}" VerticalAlignment="Center" />

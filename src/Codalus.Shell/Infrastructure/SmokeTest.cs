@@ -2090,7 +2090,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                   && shell.Solutions.Projects.TryGetValue(legacy, out var info) && info.References.Any(r => r.Kind == Codalus.Projects.Protocol.ReferenceKinds.Package && r.Resolved),
             "the NetFramework solution is open, LegacyApp's packages.config package restored", 600).ConfigureAwait(true);
         Check(shell.Solutions.Projects[legacy].IsNonSdkStyle, "LegacyApp is a non-SDK-style project");
-        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("Visual Studio's own MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
+        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("imports proprietary MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
         shell.Explorer.Reveal("p:" + legacy);
         await Task.Delay(1000).ConfigureAwait(true);
         Screenshot("netfx-projects.png");
@@ -3155,7 +3155,18 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task AiChatStepAsync()
     {
         const string Reply = "This adds two numbers. A shorter version:\n\n```csharp\nstatic int Add(int a, int b) => a + b;\n```\n\nThe expression body returns the same value.";
-        await using var server = Tests.MockModelServers.OpenAI(Reply);
+        const string AgentQuestion = "Does Greeter handle an empty name?";
+        const string AgentReply = "### Empty names\n\n`Greeter.Greet` formats whatever it gets, so an empty name gives `Hello, !`. Check it first:\n\n```csharp\npublic static string Greet(string name) =>\n    string.IsNullOrWhiteSpace(name) ? \"Hello!\" : $\"Hello, {name}!\";\n```\n\n- The callers in `Program.cs` keep working.\n- Add a test for the empty name.";
+
+        // M34h: a second question in agent mode reads a file, so AI Chat shows a step (and the gallery photographs it).
+        await using var server = Tests.MockModelServers.Script(request =>
+        {
+            using var body = JsonDocument.Parse(request.Body);
+            var last = body.RootElement.GetProperty("messages").EnumerateArray().Last();
+            return last.GetProperty("role").GetString() == "tool" ? new Tests.MockTurn(AgentReply)
+                : last.GetProperty("content").GetString()?.EndsWith(AgentQuestion, StringComparison.Ordinal) == true ? new Tests.MockTurn("Reading Greeter first.", "read_file", """{"path":"src/Greetings/Greeter.cs"}""")
+                : new Tests.MockTurn(Reply);
+        });
         var settings = shell.Workbench.Settings;
         Check(shell.Ai.State == Workbench.Ai.AiState.Off, "AI assistance is off by default");
         Check(shell.Plugins.Plugins.Any(p => p.Id == "codalus.openai" && p.State == PluginState.Ready), "the OpenAI-compatible plugin is installed and not loaded");
@@ -3193,6 +3204,28 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await applying.ConfigureAwait(true);
             Check(editor.Model.Text.Text.Contains("    static int Add(int a, int b) => a + b;\n}", StringComparison.Ordinal), "Apply replaced the selection");
             Check(!shell.Workbench.Output.GetOrCreate(Workbench.Ai.AiService.OutputChannelId).GetText().Contains("return a + b", StringComparison.Ordinal), "the request log has no content");
+
+            // Agent mode in the trusted solution (projects.open): a step that read a file, as the step template shows it.
+            if (shell.Solutions.Solution is { Trusted: true } && File.Exists(Greeter))
+            {
+                shell.AiChat.IsAgent = true;
+                shell.AiChat.Input = AgentQuestion;
+                try
+                {
+                    await shell.AiChat.SendAsync().ConfigureAwait(true);
+                }
+                finally
+                {
+                    shell.AiChat.IsAgent = false;
+                }
+
+                var agentTurn = shell.AiChat.Chat.Turns[^1];
+                await WaitAsync(() => !agentTurn.IsStreaming, "the agent's answer streams in", 60).ConfigureAwait(true);
+                Check(agentTurn.IsAgent && agentTurn.Error is null && agentTurn.Steps is [{ Tool: "read_file", Outcome: not null, IsError: false }], $"the agent read Greeter.cs ({agentTurn.Error ?? string.Join(", ", agentTurn.Steps)})");
+                await WaitAsync(() => window.GetVisualDescendants().OfType<AiStepView>().Any(s => s.DataContext is AiStepItem { Title: "read_file", Status: AiStepStatus.Completed }), "AI Chat shows the agent's step").ConfigureAwait(true);
+                await RenderedAsync().ConfigureAwait(true);
+                Screenshot("ai-chat-agent.png");
+            }
         }
         finally
         {

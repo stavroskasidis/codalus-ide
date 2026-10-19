@@ -49,14 +49,37 @@ public interface IAiChatHost
 
     void OpenLink(string target);
 
+    /// <summary>Opens a file a step of an agent worked on (relative to the workspace), at a line (1-based) when given.</summary>
+    Task OpenAiLocationAsync(string path, int? line);
+
+    /// <summary>The editor's services, for code blocks in the editor's colors (M34h).</summary>
+    Editor.IEditorServices EditorServices { get; }
+
+    /// <summary>The editor's font, for code blocks.</summary>
+    EditorFont EditorFont { get; }
+
     /// <summary>The external agents (M48, ADR 0079) and the session that runs.</summary>
     AcpAgents ExternalAgents { get; }
 
     /// <summary>The IDE's side of an external agent's requests.</summary>
     IAcpHost AcpHost { get; }
+}
 
-    /// <summary>Opens a step's file at a 1-based line.</summary>
-    void OpenAgentLocation(string path, int? line);
+/// <summary>A turn as AI Chat shows it (M34h): the turn, who answered (the model then) and when it was asked.</summary>
+public sealed class AiChatTurnItem(AiChatTurn turn, string? model, DateTime asked)
+{
+    public AiChatTurn Turn { get; } = turn;
+
+    /// <summary>The model that answered, as the provider names it.</summary>
+    public string? Model { get; } = model;
+
+    public DateTime Asked { get; } = asked;
+
+    /// <summary>Who answers: the assistant, or the external agent by its name (M48).</summary>
+    public string Author { get; init; } = Localizer.Get("msg.ai.assistant", "Assistant");
+
+    /// <summary>The line beside the author: the model and the time (<c>gpt-4o · 14:32</c>).</summary>
+    public string Byline => string.Join(" · ", new[] { Model, Asked.ToString("t", System.Globalization.CultureInfo.CurrentCulture) }.Where(s => !string.IsNullOrEmpty(s)));
 }
 
 /// <summary>
@@ -78,6 +101,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private bool _solution = true;
     private string _contextPreview = string.Empty;
     private bool _agent;
+    private readonly HashSet<AiChatTurn> _known = [];
     private int _agentIndex;
     private List<string> _agentNames;
     private IReadOnlyList<AiCommandSuggestion> _suggestions = [];
@@ -90,13 +114,26 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         Chat = new AiChat(host.Ai);
         Chat.TurnChanged += (_, turn) => Ui.Post(() =>
         {
+            // A late change of a turn that New Chat cleared away doesn't bring it back.
+            if (!_known.Contains(turn) && Chat.Turns.Contains(turn))
+            {
+                _known.Add(turn);
+                // An external agent's turn names the agent; its model is its own business (ADR 0079).
+                Turns.Add(turn.ExternalAgent is { } agent
+                    ? new AiChatTurnItem(turn, null, DateTime.Now) { Author = agent }
+                    : new AiChatTurnItem(turn, Ai.ModelId ?? Ai.Provider?.Label, DateTime.Now));
+                OnTurnsChanged();
+            }
+
             TurnChanged?.Invoke(this, turn);
-            OnPropertyChanged(nameof(HasTurns));
+            OnPropertyChanged(nameof(IsAnswering));
         });
         Chat.Cleared += (_, _) => Ui.Post(() =>
         {
+            _known.Clear();
+            Turns.Clear();
+            OnTurnsChanged();
             Cleared?.Invoke(this, EventArgs.Empty);
-            OnPropertyChanged(nameof(HasTurns));
         });
         host.Ai.Changed += (_, _) => Ui.Post(Refresh);
         host.Ai.BusyChanged += (_, _) => Ui.Post(() =>
@@ -110,19 +147,42 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     public AiService Ai => _host.Ai;
 
+    /// <summary>The editor's services and font, for the answers' code blocks.</summary>
+    public Editor.IEditorServices EditorServices => _host.EditorServices;
+
+    public EditorFont EditorFont => _host.EditorFont;
+
     /// <summary>A turn was added or its answer changed (UI thread).</summary>
     public event EventHandler<AiChatTurn>? TurnChanged;
 
     /// <summary>The conversation was cleared (UI thread).</summary>
     public event EventHandler? Cleared;
 
-    public bool HasTurns => Chat.Turns.Count > 0;
+    /// <summary>The conversation, in order (UI thread; the view virtualizes it, M34h).</summary>
+    public System.Collections.ObjectModel.ObservableCollection<AiChatTurnItem> Turns { get; } = [];
+
+    public bool HasTurns => Turns.Count > 0;
+
+    /// <summary>The last turn is being answered: the composer offers Stop instead of Send.</summary>
+    public bool IsAnswering => Turns.Count > 0 && Turns[^1].Turn.IsStreaming;
 
     public bool IsOff => Ai.State == AiState.Off;
 
     public bool IsOn => !IsOff;
 
     public bool NeedsProvider => Ai.State == AiState.NoProvider;
+
+    /// <summary>The empty state while AI is off: what it is, and Turn On.</summary>
+    public bool ShowOffState => IsOff && !HasTurns;
+
+    /// <summary>The empty state while no provider is chosen: Choose Provider… (an external agent brings its own, M48).</summary>
+    public bool ShowProviderState => NeedsProvider && !IsExternal && !HasTurns;
+
+    /// <summary>The empty state with AI ready: what to ask, and what goes with it.</summary>
+    public bool ShowReadyState => IsOn && (!NeedsProvider || IsExternal) && !HasTurns;
+
+    /// <summary>AI was turned off with a conversation on screen: the conversation stays, Turn On replaces the composer.</summary>
+    public bool ShowOffBar => IsOff && HasTurns;
 
     public bool IsBusy => Ai.IsBusy;
 
@@ -230,6 +290,12 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     public bool IsExternal => SelectedAgent is not null;
 
+    /// <summary>The picker's label: the chosen agent, or Built-in.</summary>
+    public string SelectedAgentLabel => AgentChoices[Math.Clamp(_agentIndex, 0, _agentNames.Count)];
+
+    /// <summary>The mode picker's label: the agent's current mode.</summary>
+    public string SelectedModeLabel => Session is { } session && session.Modes.FirstOrDefault(m => m.Id == session.CurrentModeId) is { } mode ? mode.Name : string.Empty;
+
     /// <summary>The picker shows once an agent is configured.</summary>
     public bool HasAgents => IsOn && _agentNames.Count > 0;
 
@@ -273,6 +339,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         }
 
         OnPropertyChanged(nameof(SelectedModeIndex));
+        OnPropertyChanged(nameof(SelectedModeLabel));
     }
 
     /// <summary>The agent's slash commands matching what's typed after <c>/</c>.</summary>
@@ -333,6 +400,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         }
 
         OnPropertyChanged(nameof(SelectedAgent));
+        OnPropertyChanged(nameof(SelectedAgentLabel));
         OnPropertyChanged(nameof(IsExternal));
         OnPropertyChanged(nameof(HasAgents));
         OnPropertyChanged(nameof(ShowBuiltInControls));
@@ -341,20 +409,45 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ModeNames));
         OnPropertyChanged(nameof(HasModes));
         OnPropertyChanged(nameof(SelectedModeIndex));
+        OnPropertyChanged(nameof(SelectedModeLabel));
         OnPropertyChanged(nameof(CanSend));
+        OnStatesChanged();
         UpdateSuggestions();
     }
 
     public void Refresh()
     {
         RefreshAgentState();
+        if (IsOff && IsAnswering)
+        {
+            // AI was turned off (the setting, or for the workspace) while a turn ran: it stops, as Stop does, and the
+            // turn says so. The composer and its Stop are gone while AI is off.
+            Stop();
+        }
+
         OnPropertyChanged(nameof(IsOff));
         OnPropertyChanged(nameof(IsOn));
         OnPropertyChanged(nameof(NeedsProvider));
         OnPropertyChanged(nameof(OffMessage));
         OnPropertyChanged(nameof(ProviderLabel));
         OnPropertyChanged(nameof(CanSend));
+        OnStatesChanged();
         UpdateContextPreview();
+    }
+
+    private void OnTurnsChanged()
+    {
+        OnPropertyChanged(nameof(HasTurns));
+        OnPropertyChanged(nameof(IsAnswering));
+        OnStatesChanged();
+    }
+
+    private void OnStatesChanged()
+    {
+        OnPropertyChanged(nameof(ShowOffState));
+        OnPropertyChanged(nameof(ShowProviderState));
+        OnPropertyChanged(nameof(ShowReadyState));
+        OnPropertyChanged(nameof(ShowOffBar));
     }
 
     /// <summary>Sends the input with the chosen context.</summary>
@@ -422,15 +515,13 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         _cts?.Dispose();
     }
 
-    /// <summary>Starts over: the conversation is cleared, and an external agent's process stops (its session with it).</summary>
+    /// <summary>Starts over: the conversation is cleared, and an external agent's process stops (its session and pipe with it).</summary>
     public void NewChat()
     {
         Stop();
         Chat.Clear();
         _ = _host.ExternalAgents.StopAsync();
     }
-
-    public void OpenAgentLocation(string path, int? line) => _host.OpenAgentLocation(path, line);
 
     public async Task TurnOnAsync()
     {
@@ -455,6 +546,9 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     public Task InsertAsync(AiChatTurn turn, AiCodeBlock block) => _host.ApplyAiCodeAsync(turn, block, insertOnly: true);
 
     public void OpenLink(string target) => _host.OpenLink(target);
+
+    /// <summary>Opens a file a step worked on.</summary>
+    public void OpenLocation(AiStepLocation location) => _ = _host.OpenAiLocationAsync(location.Path, location.Line);
 
     /// <summary>What went with a turn, and what didn't, in a line.</summary>
     public static string ContextSummary(AiChatTurn turn)

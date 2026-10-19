@@ -1,6 +1,7 @@
 <local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
                    xmlns:vm="using:Codalus.Shell.ViewModels"
                    xmlns:local="using:Codalus.Shell.Views"
                    x:Class="Codalus.Shell.Views.ReferenceManagerView"
@@ -27,9 +28,9 @@
       <TabItem Header="{l:T referenceManager.assembliesAndAnalyzers}">
         <DockPanel Margin="0,8,0,0">
           <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
-            <Button Content="{l:T referenceManager.addAssembly}" Command="{Binding AddAssemblyCommand}" />
-            <Button Content="{l:T referenceManager.addAnalyzer}" Command="{Binding AddAnalyzerCommand}" />
-            <Button Content="{l:T referenceManager.remove}" Command="{Binding RemoveFileCommand}" />
+            <Button Classes="iconText" controls:ButtonIcon.Kind="add" Content="{l:T referenceManager.addAssembly}" Command="{Binding AddAssemblyCommand}" />
+            <Button Classes="iconText" controls:ButtonIcon.Kind="lightbulb" Content="{l:T referenceManager.addAnalyzer}" Command="{Binding AddAnalyzerCommand}" />
+            <Button Classes="icon" controls:ButtonIcon.Kind="trash" Command="{Binding RemoveFileCommand}" ToolTip.Tip="{l:T referenceManager.remove}" AutomationProperties.Name="{l:T referenceManager.remove}" />
           </StackPanel>
           <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile}" AutomationProperties.Name="{l:T referenceManager.assemblyAndAnalyzerReferences}">
             <ListBox.ItemTemplate>

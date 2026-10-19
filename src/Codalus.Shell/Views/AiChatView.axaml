@@ -5,70 +5,201 @@
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.AiChatView"
              x:DataType="vm:AiChatViewModel">
-  <DockPanel>
-    <controls:ToolbarPanel DockPanel.Dock="Top">
-      <ComboBox x:Name="AgentPicker" Classes="toolbar" ItemsSource="{Binding AgentChoices}" SelectedIndex="{Binding SelectedAgentIndex}" IsVisible="{Binding HasAgents}" MinWidth="100"
-                ToolTip.Tip="{l:T aiChat.whoAnswersTheBuiltIn}" AutomationProperties.Name="{l:T aiChat.agentPicker}" />
-      <ComboBox x:Name="ModePicker" Classes="toolbar" ItemsSource="{Binding ModeNames}" SelectedIndex="{Binding SelectedModeIndex}" IsVisible="{Binding HasModes}" MinWidth="80"
-                ToolTip.Tip="{l:T aiChat.theAgentSMode}" AutomationProperties.Name="{l:T aiChat.theAgentSMode}" />
-      <ToggleButton Classes="toolbar" IsChecked="{Binding IsAgent}" IsVisible="{Binding ShowBuiltInControls}" Content="{l:T aiChat.agent}" ToolTip.Tip="{l:T aiChat.agentModeTheAiMayRead}" AutomationProperties.Name="{l:T aiChat.agentMode}" />
-      <Button x:Name="Provider" Content="{Binding ProviderLabel}" IsVisible="{Binding ShowBuiltInControls}" ToolTip.Tip="{l:T aiChat.chooseTheProviderAndModel}" AutomationProperties.Name="{l:T aiChat.chooseTheProviderAndModel}" />
-      <Button x:Name="Configure" Content="{l:T aiChat.configure}" IsVisible="{Binding ShowBuiltInControls}" ToolTip.Tip="{l:T aiChat.enterTheProviderSKeyOr}" AutomationProperties.Name="{l:T aiChat.configureTheProvider}" />
-      <Button x:Name="NewChat" Content="{l:T aiChat.newChat}" IsVisible="{Binding HasTurns}" AutomationProperties.Name="{l:T aiChat.startANewChat}" />
-      <Button x:Name="StopButton" Content="{l:T aiChat.stop}" IsVisible="{Binding IsBusy}" AutomationProperties.Name="{l:T aiChat.stopTheAnswer}" />
-      <Button x:Name="Log" Content="{l:T aiChat.requestLog}" ToolTip.Tip="{l:T aiChat.whatWasSentAndWhenIn}" AutomationProperties.Name="{l:T aiChat.showTheRequestLog}" />
+  <!--
+    AI Chat (M28a; redesigned in M34h, docs/design/controls/AiChat.dc.html): the toolbar (New Chat, the provider and
+    model, who answers (the built-in assistant or an external agent, M48) and its mode, Agent mode, the request log,
+    Configure), the conversation (your messages as bubbles with what went with them,
+    the assistant's turns with an avatar, its steps, Markdown and code blocks in the editor's colors), and the composer
+    (what goes with the next question, the question, Send or Stop). The turns are built in code (AiChatTurnView) and
+    virtualized.
+  -->
+  <UserControl.Styles>
+    <!-- Your message: a bubble on Shell.Chat.User, outlined in High contrast (Shell.Chip.BorderThickness). -->
+    <Style Selector="Border.userBubble">
+      <Setter Property="Background" Value="{DynamicResource Shell.Chat.User}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Chat.User.Foreground}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
+      <Setter Property="CornerRadius" Value="12,12,4,12" />
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+    <Style Selector="Border.userBubble SelectableTextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Chat.User.Foreground}" />
+      <Setter Property="LineHeight" Value="18" />
+    </Style>
+    <!-- The assistant's avatar: its sparkle on the information tint (outlined in High contrast). -->
+    <Style Selector="Border.avatar">
+      <Setter Property="Width" Value="26" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="CornerRadius" Value="13" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Info}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Foreground}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
+    <!-- A code block: a card with its header row (the language, Copy, Insert at Cursor, Apply…) over the code. -->
+    <Style Selector="Border.codeBlock">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.codeBlockHeader">
+      <Setter Property="Background" Value="{DynamicResource Shell.CodeBlock.Header}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="10,0,4,0" />
+    </Style>
+    <!-- The steps of an agent's turn: a rail at their left, their text small and muted. -->
+    <Style Selector="Border.steps">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="2,0,0,0" />
+      <Setter Property="Padding" Value="10,2,0,2" />
+      <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    </Style>
+    <Style Selector="Border.composerArea">
+      <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="0,1,0,0" />
+      <Setter Property="Padding" Value="12,8,12,12" />
+    </Style>
+  </UserControl.Styles>
+  <!-- Rows in reading order (the Tab order too): the toolbar, the conversation, then the composer or Turn On. -->
+  <Grid RowDefinitions="Auto,*,Auto,Auto">
+    <controls:ToolbarPanel x:Name="Toolbar">
+      <Button x:Name="NewChat" Classes="toolbar icon" controls:ButtonIcon.Kind="chat-add" IsEnabled="{Binding HasTurns}"
+              ToolTip.Tip="{l:T aiChat.startANewChat}" AutomationProperties.Name="{l:T aiChat.startANewChat}" />
+      <Border Classes="toolbarSeparator" Height="16" />
+      <DropDownButton x:Name="Provider" Classes="toolbar" IsVisible="{Binding ShowBuiltInControls}"
+                      ToolTip.Tip="{Binding ProviderLabel}" AutomationProperties.Name="{l:T aiChat.chooseTheProviderAndModel}">
+        <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Shell.Space.ButtonIcon}">
+          <controls:Icon Kind="sparkle" Width="16" Height="16" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding ProviderLabel}" TextTrimming="CharacterEllipsis" MaxWidth="200" VerticalAlignment="Center" />
+        </StackPanel>
+      </DropDownButton>
+      <!-- Who answers (M48, ADR 0079): Built-in, then each external agent of ai.agents; shown once one is configured. -->
+      <DropDownButton x:Name="AgentPicker" Classes="toolbar" IsVisible="{Binding HasAgents}"
+                      ToolTip.Tip="{l:T aiChat.whoAnswersTheBuiltIn}" AutomationProperties.Name="{l:T aiChat.agentPicker}">
+        <TextBlock Text="{Binding SelectedAgentLabel}" TextTrimming="CharacterEllipsis" MaxWidth="160" VerticalAlignment="Center" />
+      </DropDownButton>
+      <DropDownButton x:Name="ModePicker" Classes="toolbar" IsVisible="{Binding HasModes}"
+                      ToolTip.Tip="{l:T aiChat.theAgentSMode}" AutomationProperties.Name="{l:T aiChat.theAgentSMode}">
+        <TextBlock Text="{Binding SelectedModeLabel}" TextTrimming="CharacterEllipsis" MaxWidth="120" VerticalAlignment="Center" />
+      </DropDownButton>
+      <Border Classes="toolbarSpacer" />
+      <ToggleSwitch x:Name="AgentSwitch" IsChecked="{Binding IsAgent}" IsVisible="{Binding ShowBuiltInControls}" Content="{l:T aiChat.agent}" Margin="4,0"
+                    ToolTip.Tip="{l:T aiChat.agentModeTheAiMayRead}" AutomationProperties.Name="{l:T aiChat.agentMode}" />
+      <Border Classes="toolbarSeparator" Height="16" />
+      <Button x:Name="Log" Classes="toolbar icon" controls:ButtonIcon.Kind="history"
+              ToolTip.Tip="{l:T aiChat.whatWasSentAndWhenIn}" AutomationProperties.Name="{l:T aiChat.showTheRequestLog}" />
+      <Button x:Name="Configure" Classes="toolbar icon" controls:ButtonIcon.Kind="gear" IsVisible="{Binding ShowBuiltInControls}"
+              ToolTip.Tip="{l:T aiChat.enterTheProviderSKeyOr}" AutomationProperties.Name="{l:T aiChat.configureTheProvider}" />
     </controls:ToolbarPanel>
-    <StackPanel DockPanel.Dock="Top" Margin="12" Spacing="8" IsVisible="{Binding IsOff}">
-      <TextBlock Text="{Binding OffMessage}" TextWrapping="Wrap" />
-      <Button x:Name="TurnOn" Content="{l:T aiChat.turnOnAiAssistance}" AutomationProperties.Name="{l:T aiChat.turnOnAiAssistance}" HorizontalAlignment="Left" />
-    </StackPanel>
-    <!--
-      An external agent (M48, ADR 0079): the label as an info notice whenever one is chosen, and why it can't run here as
-      a warning notice; the control set's status tints (Shell.Status.*), outlined in High contrast like its chips.
-    -->
-    <StackPanel DockPanel.Dock="Top" Margin="8,8,8,0" Spacing="6" IsVisible="{Binding IsExternal}">
-      <Border x:Name="ExternalAgentBanner" Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}"
-              Background="{DynamicResource Shell.Status.Info}" BorderBrush="{DynamicResource Shell.Status.Info.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
-        <DockPanel>
-          <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,1,8,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
-          <TextBlock x:Name="ExternalAgentLabel" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Status.Info.Foreground}" AutomationProperties.LiveSetting="Polite" />
-        </DockPanel>
-      </Border>
-      <Border Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding IsAgentBlocked}"
-              Background="{DynamicResource Shell.Status.Warning}" BorderBrush="{DynamicResource Shell.Status.Warning.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
-        <DockPanel>
-          <controls:Icon DockPanel.Dock="Left" Kind="warning" Margin="0,1,8,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Warning.Foreground}" />
-          <TextBlock x:Name="AgentBlocked" Text="{Binding AgentBlockedMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Status.Warning.Foreground}" AutomationProperties.LiveSetting="Polite" />
-        </DockPanel>
-      </Border>
-    </StackPanel>
-    <StackPanel DockPanel.Dock="Bottom" Margin="8" Spacing="6" IsVisible="{Binding IsOn}">
-      <WrapPanel>
-        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeSelection}" Content="{l:T aiChat.selection}" AutomationProperties.Name="{l:T aiChat.sendTheSelection}" />
-        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeCurrentFile}" Content="{l:T aiChat.currentFile}" AutomationProperties.Name="{l:T aiChat.sendTheCurrentFile}" />
-        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeOpenFiles}" Content="{l:T aiChat.openFiles}" AutomationProperties.Name="{l:T aiChat.sendTheOtherOpenFiles}" />
-        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeErrors}" Content="{l:T aiChat.errors}" AutomationProperties.Name="{l:T aiChat.sendTheErrorsAndWarnings}" />
-        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeBuildOutput}" Content="{l:T aiChat.buildOutput}" AutomationProperties.Name="{l:T aiChat.sendTheLastBuildSOutput}" />
-        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeSolution}" Content="{l:T aiChat.solution}" AutomationProperties.Name="{l:T aiChat.sendTheSolutionSProjects}" />
-      </WrapPanel>
-      <TextBlock Classes="muted" Text="{Binding ContextPreview}" TextWrapping="Wrap" />
-      <ListBox x:Name="CommandList" ItemsSource="{Binding CommandSuggestions}" IsVisible="{Binding HasCommandSuggestions}" MaxHeight="140" AutomationProperties.Name="{l:T aiChat.theAgentSCommands}">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:AiCommandSuggestion">
-            <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Text}" />
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBox x:Name="InputBox" Text="{Binding Input}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160" PlaceholderText="{l:T aiChat.askAboutYourCodeEnterSends}" AutomationProperties.Name="{l:T aiChat.question}" />
-        <Button Grid.Column="1" x:Name="Send" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="{l:T aiChat.send}" IsEnabled="{Binding CanSend}" AutomationProperties.Name="{l:T aiChat.sendTheQuestion}" />
-      </Grid>
-    </StackPanel>
-    <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Disabled">
-      <StackPanel Margin="8" Spacing="12">
-        <TextBlock Classes="muted" TextWrapping="Wrap" Margin="4" IsVisible="{Binding !HasTurns}" Text="{l:T aiChat.askAQuestionAboutYourSolution}" />
-        <StackPanel x:Name="TurnsPanel" Spacing="12" />
+
+    <Panel Grid.Row="1" x:Name="ConversationHost">
+      <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasTurns}">
+        <ItemsControl x:Name="TurnsList" ItemsSource="{Binding Turns}" Margin="14,14,14,8" AutomationProperties.Name="{l:T aiChat.conversation}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <VirtualizingStackPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <!-- Empty states: an icon, one sentence and the next step. -->
+      <StackPanel Classes="emptyState" IsVisible="{Binding ShowOffState}">
+        <controls:Icon Kind="sparkle" />
+        <TextBlock Text="{Binding OffMessage}" />
+        <Button x:Name="TurnOn" Classes="accent" Content="{l:T aiChat.turnOnAiAssistance}" AutomationProperties.Name="{l:T aiChat.turnOnAiAssistance}" />
       </StackPanel>
-    </ScrollViewer>
-  </DockPanel>
+      <StackPanel Classes="emptyState" IsVisible="{Binding ShowProviderState}">
+        <controls:Icon Kind="sparkle" />
+        <TextBlock Text="{l:T aiChat.chooseAProviderAndAModel}" />
+        <Button x:Name="ChooseProvider" Classes="iconText" controls:ButtonIcon.Kind="sparkle" Content="{l:T aiChat.chooseProvider}" />
+      </StackPanel>
+      <StackPanel Classes="emptyState" IsVisible="{Binding ShowReadyState}">
+        <controls:Icon Kind="comment" />
+        <TextBlock Text="{l:T aiChat.askAQuestionAboutYourSolution}" />
+        <TextBlock Classes="small" Text="{l:T aiChat.turnOnAgentToLetIt}" />
+      </StackPanel>
+    </Panel>
+
+    <!-- AI turned off with a conversation on screen: the conversation stays; Turn On takes the composer's place. -->
+    <Border Grid.Row="2" Classes="composerArea" IsVisible="{Binding ShowOffBar}">
+      <DockPanel>
+        <Button x:Name="TurnOnBar" DockPanel.Dock="Right" Classes="accent" Margin="12,0,0,0" VerticalAlignment="Top"
+                Content="{l:T aiChat.turnOnAiAssistance}" AutomationProperties.Name="{l:T aiChat.turnOnAiAssistance}" />
+        <!-- A turn still finishing after AI was turned off (it was told to stop) can be stopped here too. -->
+        <Button x:Name="StopOffBar" DockPanel.Dock="Right" Classes="icon" controls:ButtonIcon.Kind="stop" Margin="8,0,0,0" VerticalAlignment="Top"
+                IsVisible="{Binding IsAnswering}" ToolTip.Tip="{l:T aiChat.stop}" AutomationProperties.Name="{l:T aiChat.stopTheAnswer}" />
+        <TextBlock Classes="muted" Text="{Binding OffMessage}" TextWrapping="Wrap" />
+      </DockPanel>
+    </Border>
+
+    <!-- The composer: what goes with the next question, the question, and Send (Stop while a turn runs). -->
+    <Border Grid.Row="3" Classes="composerArea" IsVisible="{Binding IsOn}">
+      <StackPanel Spacing="8">
+        <WrapPanel x:Name="ContextChips" ItemSpacing="3" LineSpacing="3" AutomationProperties.Name="{l:T aiChat.whatGoesWithYourQuestion}">
+          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="select-expand" IsChecked="{Binding IncludeSelection}" Content="{l:T aiChat.selection}"
+                        ToolTip.Tip="{l:T aiChat.sendTheSelection}" AutomationProperties.Name="{l:T aiChat.sendTheSelection}" />
+          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="document-text" IsChecked="{Binding IncludeCurrentFile}" Content="{l:T aiChat.currentFile}"
+                        ToolTip.Tip="{l:T aiChat.sendTheCurrentFile}" AutomationProperties.Name="{l:T aiChat.sendTheCurrentFile}" />
+          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="files" IsChecked="{Binding IncludeOpenFiles}" Content="{l:T aiChat.openFiles}"
+                        ToolTip.Tip="{l:T aiChat.sendTheOtherOpenFiles}" AutomationProperties.Name="{l:T aiChat.sendTheOtherOpenFiles}" />
+          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="clear-all" IsChecked="{Binding IncludeErrors}" Content="{l:T aiChat.errors}"
+                        ToolTip.Tip="{l:T aiChat.sendTheErrorsAndWarnings}" AutomationProperties.Name="{l:T aiChat.sendTheErrorsAndWarnings}" />
+          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="build" IsChecked="{Binding IncludeBuildOutput}" Content="{l:T aiChat.buildOutput}"
+                        ToolTip.Tip="{l:T aiChat.sendTheLastBuildSOutput}" AutomationProperties.Name="{l:T aiChat.sendTheLastBuildSOutput}" />
+          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="solution" IsChecked="{Binding IncludeSolution}" Content="{l:T aiChat.solution}"
+                        ToolTip.Tip="{l:T aiChat.sendTheSolutionSProjects}" AutomationProperties.Name="{l:T aiChat.sendTheSolutionSProjects}" />
+        </WrapPanel>
+        <TextBlock Classes="muted small" Text="{Binding ContextPreview}" TextWrapping="Wrap" />
+        <!--
+          An external agent (M48, ADR 0079): the label whenever one is chosen, and why it can't run here, as notices on
+          the control set's status tints (outlined in High contrast, like its chips).
+        -->
+        <Border x:Name="ExternalAgentBanner" Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding IsExternal}"
+                Background="{DynamicResource Shell.Status.Info}" BorderBrush="{DynamicResource Shell.Status.Info.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
+          <DockPanel>
+            <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,1,8,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
+            <TextBlock x:Name="ExternalAgentLabel" Classes="small" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Status.Info.Foreground}" AutomationProperties.LiveSetting="Polite" />
+          </DockPanel>
+        </Border>
+        <Border Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding IsAgentBlocked}"
+                Background="{DynamicResource Shell.Status.Warning}" BorderBrush="{DynamicResource Shell.Status.Warning.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
+          <DockPanel>
+            <controls:Icon DockPanel.Dock="Left" Kind="warning" Margin="0,1,8,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Warning.Foreground}" />
+            <TextBlock x:Name="AgentBlocked" Classes="small" Text="{Binding AgentBlockedMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Status.Warning.Foreground}" AutomationProperties.LiveSetting="Polite" />
+          </DockPanel>
+        </Border>
+        <!-- An external agent's slash commands matching what's typed after / (Tab or a click takes one). -->
+        <ListBox x:Name="CommandList" Classes="rows" ItemsSource="{Binding CommandSuggestions}" IsVisible="{Binding HasCommandSuggestions}" MaxHeight="140" AutomationProperties.Name="{l:T aiChat.theAgentSCommands}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:AiCommandSuggestion">
+              <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Text}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <Border Classes="composer">
+          <StackPanel Spacing="6">
+            <TextBox x:Name="InputBox" Text="{Binding Input}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160"
+                     PlaceholderText="{l:T aiChat.askAboutYourCode}" AutomationProperties.Name="{l:T aiChat.question}" />
+            <DockPanel>
+              <Panel DockPanel.Dock="Right">
+                <Button x:Name="Send" Classes="accent icon" controls:ButtonIcon.Kind="send" IsEnabled="{Binding CanSend}" IsVisible="{Binding !IsAnswering}"
+                        ToolTip.Tip="{l:T aiChat.sendEnter}" AutomationProperties.Name="{l:T aiChat.sendTheQuestion}" />
+                <Button x:Name="StopButton" Classes="icon" controls:ButtonIcon.Kind="stop" IsVisible="{Binding IsAnswering}"
+                        ToolTip.Tip="{l:T aiChat.stop}" AutomationProperties.Name="{l:T aiChat.stopTheAnswer}" />
+              </Panel>
+              <TextBlock Classes="muted small" Text="{l:T aiChat.enterSendsShiftEnterNewLine}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,8,0" />
+            </DockPanel>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </Border>
+
+  </Grid>
 </UserControl>

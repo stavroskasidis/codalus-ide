@@ -54,19 +54,11 @@ public sealed class WinUIShellTests
         await ShellFixture.PumpUntil(() => editor?.Controller is not null);
         Assert.Equal(ShellHost.XamlLanguageId, editor!.Model.LanguageId);
         var position = editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("{x:Bind ViewModel.NewTitle,", StringComparison.Ordinal) + "{x:Bind ViewModel.".Length);
-        var completed = false;
-        for (var attempt = 0; attempt < 60 && !completed; attempt++)
-        {
-            var client = await f.Shell.Languages.ClientAsync(ShellHost.XamlLanguageId);
-            var completion = client is null ? null : await client.CompletionAsync(editor.Model.Uri, position, null, ShellFixture.RequestTimeout(60));
-            completed = completion?.Items.Any(i => i.Label == "IsTyping") == true;
-            if (!completed)
-            {
-                await Task.Delay(2000, TestContext.Current.CancellationToken);
-            }
-        }
-
-        Assert.True(completed, "The x:Bind path completes the view model's members.");
+        await ShellFixture.RetryUntil(
+            "the x:Bind path {x:Bind ViewModel.} in MainPage.xaml to complete the view model's IsTyping",
+            async token => await f.Shell.Languages.ClientAsync(ShellHost.XamlLanguageId) is { } client ? await client.CompletionAsync(editor.Model.Uri, position, null, token) : null,
+            completion => completion?.Items.Any(i => i.Label == "IsTyping") == true,
+            ShellFixture.Describe);
 
         // Off Windows, Start, Start Without Debugging and Build say it's Windows only, and build nothing.
         f.Shell.SetStartupProject(project);
@@ -286,7 +278,7 @@ public sealed class WinUIShellTests
         {
             await ShellFixture.PumpUntil(condition, seconds);
         }
-        catch (Xunit.Sdk.TrueException)
+        catch (Xunit.Sdk.FailException)
         {
         }
     }

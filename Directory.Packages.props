@@ -87,7 +87,9 @@
   </ItemGroup>
   <ItemGroup Label="Tests">
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
-    <!-- CI's hang dumps: they name the tests still running when a test process hangs. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.0.2" />
+    <!-- CI's hang dumps: they name the tests still running when a test process hangs. 2.1.0 or later: before it the
+         extension turned itself off under dotnet test (the SDK starts the test app with server mode, testfx#6968), so
+         a hang printed nothing. It brings Microsoft.Testing.Platform 2.4.1 over xunit's 2.0.2. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.4.1" />
   </ItemGroup>
 </Project>

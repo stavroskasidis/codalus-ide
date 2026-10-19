@@ -231,7 +231,7 @@ public sealed record AiAgentStep(string Tool, string Target, string? Outcome, bo
     public string? Status { get; init; }
 
     /// <summary>The files (and lines) it works on; clicking one opens it.</summary>
-    public IReadOnlyList<AiStepLocation> Locations { get; init; } = [];
+    public IReadOnlyList<AiAgentLocation> Locations { get; init; } = [];
 
     /// <summary>The changes it reports, shown read-only.</summary>
     public IReadOnlyList<AiStepDiff> Diffs { get; init; } = [];
@@ -244,7 +244,7 @@ public sealed record AiAgentStep(string Tool, string Target, string? Outcome, bo
 }
 
 /// <summary>A file a step works on; <paramref name="Line"/> is 1-based.</summary>
-public sealed record AiStepLocation(string Path, int? Line);
+public sealed record AiAgentLocation(string Path, int? Line);
 
 /// <summary>
 /// A change a step reports. <paramref name="Reviewed"/>: it went through the preview (<c>fs/write_text_file</c>); otherwise

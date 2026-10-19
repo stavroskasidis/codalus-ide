@@ -22,8 +22,8 @@ internal sealed partial class SmokeTest
     private static readonly string[] s_classicThemes = ["blue", "light", "dark", "highContrast"];
 
     /// <summary>
-    /// The gallery's themes (M34h, the maintainer's decision): Classic's four and Harbor's three (Light, Dark and High
-    /// contrast; Harbor is the family new installs start with, ADR 0077). With <c>CODALUS_GALLERY_THEMES=all</c> also
+    /// The gallery's themes (M34h, the maintainer's decision): Classic's four (Classic is the default, D36) and Harbor's
+    /// three (Light, Dark and High contrast; the default when that was decided). With <c>CODALUS_GALLERY_THEMES=all</c> also
     /// the other families' nine variants, for a review of every family: more than the smoke test's time on CI.
     /// </summary>
     private static readonly string[] s_galleryThemes = Environment.GetEnvironmentVariable("CODALUS_GALLERY_THEMES") == "all"

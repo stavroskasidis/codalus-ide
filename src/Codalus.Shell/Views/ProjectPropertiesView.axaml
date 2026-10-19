@@ -1,6 +1,7 @@
 <UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.ProjectPropertiesView"
              x:DataType="vm:ProjectPropertiesViewModel">
@@ -136,9 +137,9 @@
         <Grid ColumnDefinitions="220,*">
           <DockPanel>
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
-              <Button Content="{l:T projectProperties.new}" Command="{Binding AddCommand}" />
-              <Button Content="{l:T projectProperties.rename}" Command="{Binding RenameCommand}" />
-              <Button Content="{l:T projectProperties.delete}" Command="{Binding RemoveCommand}" />
+              <Button Classes="iconText compact" controls:ButtonIcon.Kind="add" Content="{l:T projectProperties.new}" Command="{Binding AddCommand}" />
+              <Button Classes="icon compact" controls:ButtonIcon.Kind="rename" Command="{Binding RenameCommand}" ToolTip.Tip="{l:T projectProperties.rename}" AutomationProperties.Name="{l:T projectProperties.rename}" />
+              <Button Classes="icon compact" controls:ButtonIcon.Kind="trash" Command="{Binding RemoveCommand}" ToolTip.Tip="{l:T projectProperties.delete}" AutomationProperties.Name="{l:T projectProperties.delete}" />
             </StackPanel>
             <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T projectProperties.launchProfiles}">
               <ListBox.ItemTemplate>

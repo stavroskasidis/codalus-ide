@@ -13,6 +13,12 @@ public sealed record ContainerRow(ContainerSummary Container, bool IsOurs)
 
     public string StateGlyph => Container.IsRunning ? "●" : "○";
 
+    /// <summary>Whether it runs: the row's dot is filled (M34h); the word is its status in <see cref="Detail"/>.</summary>
+    public bool IsRunning => Container.IsRunning;
+
+    /// <summary>The state in a word, the dot's tooltip.</summary>
+    public string StateText => Container.IsRunning ? "Running" : Container.State is { Length: > 0 } state ? char.ToUpperInvariant(state[0]) + state[1..] : "Stopped";
+
     public string AccessibleName => $"{Container.Name}, {(Container.IsRunning ? "running" : Container.State)}, {Container.Image}";
 }
 
@@ -57,6 +63,7 @@ public sealed class ContainersViewModel(
     private bool _isBusy;
     private int _refreshes;
     private int _detailLoads;
+    private string? _serverLabel;
 
     public ObservableCollection<ContainerRow> Containers { get; } = [];
 
@@ -144,6 +151,27 @@ public sealed class ContainersViewModel(
     /// <summary>The engine's name in the window's caption, once known.</summary>
     public string EngineName => engine().Name;
 
+    /// <summary>The engine and its server's OS at the toolbar's end once a refresh reached it ("Docker · Linux", M34h).</summary>
+    public string? ServerLabel
+    {
+        get => _serverLabel;
+        private set => SetField(ref _serverLabel, value);
+    }
+
+    /// <summary>Nothing to list, neither containers nor images: the window shows its empty state, the status and Refresh (M34h).</summary>
+    public bool IsEmpty => Containers.Count == 0 && Images.Count == 0;
+
+    public int ContainerCount => Containers.Count;
+
+    public int ImageCount => Images.Count;
+
+    internal void CountsChanged()
+    {
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(ContainerCount));
+        OnPropertyChanged(nameof(ImageCount));
+    }
+
     /// <summary>Lists the containers and images again, keeping the selection.</summary>
     public async Task RefreshAsync()
     {
@@ -162,6 +190,8 @@ public sealed class ContainersViewModel(
             {
                 Containers.Clear();
                 Images.Clear();
+                CountsChanged();
+                ServerLabel = null;
                 Status = $"{current.Name} doesn't answer: {error} Start Docker or Podman (or 'podman machine start'), or choose the engine in the '{ContainerEngine.ToolSetting}' setting.";
                 return;
             }
@@ -187,7 +217,9 @@ public sealed class ContainersViewModel(
                 Images.Add(new ImageRow(image));
             }
 
-            Status = containers.Count == 0 ? $"No containers ({current.Name}, {os})." : null;
+            CountsChanged();
+            ServerLabel = $"{current.Name} · {char.ToUpperInvariant(os[0])}{os[1..]}";
+            Status = containers.Count == 0 ? $"No containers ({current.Name}, {os}). Run a project with a Dockerfile (Ctrl+F5) or docker compose up, then refresh." : null;
             var again = Containers.FirstOrDefault(c => c.Container.Name == selected);
             if (again is not null)
             {

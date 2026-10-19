@@ -341,6 +341,38 @@ public static class IconSet
         ["sparkle"] = "sparkle_16_regular",
         ["phone"] = "phone_16_regular",
 
+        // AI Chat (M34h, docs/design/controls/AiChat.dc.html): a new chat, sending a question, and a code block's Insert
+        // at Cursor and Apply….
+        ["chat-add"] = "chat_add_16_regular",
+        ["send"] = "send_16_regular",
+        ["insert"] = "arrow_import_16_regular",
+        ["document-check"] = "document_checkmark_16_regular",
+
+        // The control set's views (M34h): tool window toolbars and command rows as icon buttons; the WCF Test Client's
+        // Add an item, the HTTP Response's time and Word Wrap.
+        ["add"] = "add_16_regular",
+        ["export"] = "arrow_export_ltr_16_regular",
+        ["import"] = "arrow_import_16_regular",
+        ["window-new"] = "window_new_16_regular",
+        ["window-remote"] = "desktop_arrow_right_16_regular",
+        ["cloud-download"] = "cloud_arrow_down_16_regular",
+        ["radar"] = "radar_20_regular",
+        ["reset"] = "arrow_reset_20_regular",
+        ["arrow-sort"] = "arrow_sort_16_regular",
+        ["unlock"] = "lock_open_16_regular",
+        ["snapshot"] = "camera_16_regular",
+        ["plug"] = "plug_connected_16_regular",
+        ["detach"] = "plug_disconnected_16_regular",
+        ["database-update"] = "database_arrow_up_16_regular",
+        ["dump"] = "document_arrow_down_16_regular",
+        ["cube"] = "cube_16_regular",
+        ["mention"] = "number_symbol_16_regular",
+        ["events"] = "flash_16_regular",
+        ["breakpoint-solid"] = "circle_16_filled",
+        ["breakpoint-hollow"] = "circle_16_regular",
+        ["clock"] = "clock_16_regular",
+        ["word-wrap"] = "text_wrap_16_regular",
+
         // The Windows Forms Toolbox's controls and components, one each (M34h; the stroke drawings below draw the
         // combo box, the progress bar and the group box, which Fluent has no picture of).
         ["control-pointer"] = "cursor_16_regular",
@@ -527,6 +559,7 @@ public static class IconSet
         ["dot"] = Circle(8, 8, 2),
         ["more"] = Dot(3, 8) + Dot(8, 8) + Dot(13, 8),
         ["arrow-up-down"] = "M5,13.5 V2.5 M2.5,5 L5,2.5 L7.5,5 M11,2.5 V13.5 M8.5,11 L11,13.5 L13.5,11",
+        ["subtract"] = "M3.5,8 H12.5",
         ["pin"] = "M5.5,2 H10.5 M6.5,2 V6.5 L4,9.5 H12 L9.5,6.5 V2 M8,9.5 V14.5",
 
         // Toolbox controls Fluent has no picture of (M34h): a combo box (a box with its drop-down button), a progress

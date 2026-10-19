@@ -14,7 +14,7 @@
       <Button Classes="toolbar" Command="{Binding ZoomOutCommand}" ToolTip.Tip="{l:T xamlPreview.zoomOut}" AutomationProperties.Name="{l:T xamlPreview.zoomOut}">
         <controls:Icon Kind="zoom-out" />
       </Button>
-      <Button Classes="toolbar" Content="{Binding ZoomText}" Command="{Binding ZoomResetCommand}" MinWidth="44" ToolTip.Tip="{l:T xamlPreview.theZoomClickForActualSize}" AutomationProperties.Name="{l:T xamlPreview.zoomActualSize}" />
+      <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="fit" Content="{Binding ZoomText}" Command="{Binding ZoomResetCommand}" MinWidth="44" ToolTip.Tip="{l:T xamlPreview.theZoomClickForActualSize}" AutomationProperties.Name="{l:T xamlPreview.zoomActualSize}" />
       <Button Classes="toolbar" Command="{Binding ZoomInCommand}" ToolTip.Tip="{l:T xamlPreview.zoomIn}" AutomationProperties.Name="{l:T xamlPreview.zoomIn}">
         <controls:Icon Kind="zoom-in" />
       </Button>

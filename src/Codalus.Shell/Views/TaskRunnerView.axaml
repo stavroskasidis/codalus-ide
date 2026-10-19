@@ -1,15 +1,16 @@
 <UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.TaskRunnerView"
              x:DataType="vm:TaskRunnerViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
-      <Button x:Name="Run" Content="{l:T taskRunner.run}" AutomationProperties.Name="{l:T taskRunner.runTheSelectedScript}" />
-      <Button x:Name="Restore" Content="{l:T taskRunner.restorePackages}" AutomationProperties.Name="{l:T taskRunner.restoreTheSelectedPackageJsonS}" />
-      <Button x:Name="Refresh" Content="{l:T taskRunner.refresh}" AutomationProperties.Name="{l:T taskRunner.refreshTheNpmScripts}" />
-    </StackPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="play" x:Name="Run" Content="{l:T taskRunner.run}" AutomationProperties.Name="{l:T taskRunner.runTheSelectedScript}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="download" x:Name="Restore" AutomationProperties.Name="{l:T taskRunner.restoreTheSelectedPackageJsonS}" ToolTip.Tip="{l:T taskRunner.restorePackages}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="refresh" x:Name="Refresh" AutomationProperties.Name="{l:T taskRunner.refreshTheNpmScripts}" ToolTip.Tip="{l:T taskRunner.refresh}" />
+    </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Status}" IsVisible="{Binding HasStatus}" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T taskRunner.npmScripts}">
       <ListBox.Styles>

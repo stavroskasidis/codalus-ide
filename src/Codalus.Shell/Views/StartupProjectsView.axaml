@@ -1,6 +1,7 @@
 <local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
                    xmlns:vm="using:Codalus.Shell.ViewModels"
                    xmlns:local="using:Codalus.Shell.Views"
                    xmlns:protocol="using:Codalus.Projects.Protocol"
@@ -46,8 +47,8 @@
         </ListBox>
       </Grid>
       <StackPanel Grid.Column="1" Spacing="4" Margin="8,24,0,0">
-        <Button Content="{l:T startupProjects.moveUp}" Command="{Binding MoveUpCommand}" MinWidth="84" AutomationProperties.Name="{l:T startupProjects.moveUp2}" />
-        <Button Content="{l:T startupProjects.moveDown}" Command="{Binding MoveDownCommand}" MinWidth="84" AutomationProperties.Name="{l:T startupProjects.moveDown2}" />
+        <Button Classes="icon" controls:ButtonIcon.Kind="arrow-up" Command="{Binding MoveUpCommand}" AutomationProperties.Name="{l:T startupProjects.moveUp2}" ToolTip.Tip="{l:T startupProjects.moveUp}" />
+        <Button Classes="icon" controls:ButtonIcon.Kind="arrow-down" Command="{Binding MoveDownCommand}" AutomationProperties.Name="{l:T startupProjects.moveDown2}" ToolTip.Tip="{l:T startupProjects.moveDown}" />
       </StackPanel>
     </Grid>
   </DockPanel>

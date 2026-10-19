@@ -52,17 +52,6 @@ public sealed partial class ShellHost
         });
     }
 
-    /// <summary>Opens a step's location: a path inside the workspace (relative or absolute), at a 1-based line.</summary>
-    public void OpenAgentLocation(string path, int? line)
-    {
-        var root = ExternalAgents.Current?.WorkspaceRoot ?? Solutions.Solution?.Directory;
-        var full = Path.IsPathRooted(path) || root is null ? path : Path.GetFullPath(Path.Combine(root, path));
-        if (File.Exists(full))
-        {
-            _ = OpenFileAsync(full, at: line is { } l ? new Position(Math.Max(0, l - 1), 0) : null);
-        }
-    }
-
     /// <summary>Shows a dialog that closes (as cancelled) when <paramref name="cancellationToken"/> is cancelled: the turn was stopped.</summary>
     private async Task<DialogResult> ShowCancellableAsync(DialogRequest request, CancellationToken cancellationToken)
     {

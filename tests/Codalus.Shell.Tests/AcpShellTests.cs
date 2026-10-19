@@ -77,6 +77,10 @@ public sealed class AcpShellTests
         return f.Window.GetVisualDescendants().OfType<AiChatView>().LastOrDefault(v => v.IsEffectivelyVisible) ?? new AiChatView();
     }
 
+    /// <summary>The step view whose step matches, in the chat the window shows (null: none yet).</summary>
+    private static AiStepView? Step(ShellFixture f, Func<AiStepItem, bool> match) =>
+        ChatView(f).GetVisualDescendants().OfType<AiStepView>().FirstOrDefault(v => v.DataContext is AiStepItem step && match(step));
+
     private static string Describe(ShellFixture f, AiChatTurn turn) =>
         $"thought '{turn.Thought}', answer '{turn.Answer}', streaming {turn.IsStreaming}, {f.Window.GetVisualDescendants().OfType<AiChatView>().Count()} chat view(s), tool windows [{string.Join(", ", f.Shell.Layout.OpenToolWindows.Select(t => t.Id + (t.Owner is Dock.Model.Core.IDock d && d.ActiveDockable == t ? "*" : "")))}]";
 
@@ -87,14 +91,22 @@ public sealed class AcpShellTests
         var (view, log) = await SetUpAsync(f);
         var chat = f.Shell.AiChat;
 
-        // The picker: Built-in, then the configured agent. Choosing it shows the label and hides the provider.
-        var picker = Visible<ComboBox>(view, "AgentPicker");
+        // The picker, after the provider: Built-in, then the configured agent. Choosing it from its menu shows the label
+        // in the composer and hides the provider.
+        var picker = Visible<DropDownButton>(view, "AgentPicker");
         await ShellFixture.PumpUntil(() => picker.IsEffectivelyVisible);
         Assert.Equal(["Built-in", "stand-in"], chat.AgentChoices);
+        Assert.Equal("Built-in", (picker.Content as TextBlock)?.Text);
         Assert.False(Visible<Border>(view, "ExternalAgentBanner").IsEffectivelyVisible);
-        picker.SelectedIndex = 1;
+        var menu = (MenuFlyout)picker.Flyout!;
+        menu.ShowAt(picker);
+        await ShellFixture.PumpUntil(() => menu.Items.Count == 2);
+        Assert.Equal([true, false], menu.Items.OfType<MenuItem>().Select(i => i.IsChecked));
+        menu.Items.OfType<MenuItem>().Single(i => (i.Header as string) == "stand-in").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        menu.Hide();
         await ShellFixture.PumpUntil(() => chat.IsExternal);
         Assert.Equal("stand-in", chat.SelectedAgent);
+        await ShellFixture.PumpUntil(() => (picker.Content as TextBlock)?.Text == "stand-in");
         await ShellFixture.PumpUntil(() => Visible<Border>(view, "ExternalAgentBanner").IsEffectivelyVisible);
         Assert.Equal(Label, Visible<TextBlock>(view, "ExternalAgentLabel").Text);
         Assert.False(Visible<Button>(view, "Provider").IsEffectivelyVisible);
@@ -118,7 +130,10 @@ public sealed class AcpShellTests
         view = ChatView(f);
         Assert.False(view.GetVisualDescendants().OfType<Expander>().Single(e => (e.Header as string) == "Thinking").IsExpanded);
         Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "☑ Say hello");
-        Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "stand-in · external agent");
+        // The agent answers under its own name, with a chip that says it is an external agent.
+        Assert.Equal("stand-in", f.Shell.AiChat.Turns[^1].Author);
+        Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "stand-in" && t.FontWeight == Avalonia.Media.FontWeight.SemiBold);
+        Assert.Contains(view.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("chip") && b.Child is TextBlock { Text: "External agent" });
 
         // The session got the workspace and codalus mcp by its absolute path, with this session's pipe.
         var created = File.ReadAllLines(log).Select(l => JsonElement.Parse(l)).Single(m => m.TryGetProperty("method", out var method) && method.GetString() == "session/new").GetProperty("params");
@@ -144,9 +159,10 @@ public sealed class AcpShellTests
         // A read step with its location: clicking it opens the file at the line.
         turn = await AskAsync(f, "read src/Greetings/Greeter.cs");
         await ShellFixture.PumpUntil(() => !turn.IsStreaming);
-        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<DockPanel>().Any(p => p.Children.OfType<Border>().Any(b => b.Classes.Contains("chip") && b.Classes.Contains("success") && b.Child is TextBlock { Text: "Done" }) && p.Children.OfType<TextBlock>().Any(t => t.Text == "read: Read src/Greetings/Greeter.cs")), describe: () => Describe(f, turn));
-        view = ChatView(f);
-        var link = view.GetVisualDescendants().OfType<Button>().Single(b => (b.Content as string) == "src/Greetings/Greeter.cs:2");
+        await ShellFixture.PumpUntil(() => Step(f, s => s is { Kind: "read", Title: "Read src/Greetings/Greeter.cs", Status: AiStepStatus.Completed }) is not null, describe: () => Describe(f, turn));
+        var link = Step(f, s => s.Title == "Read src/Greetings/Greeter.cs")!.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Classes.Contains("link") && AutomationProperties.GetName(b) == "src/Greetings/Greeter.cs");
+        Assert.Equal("Greeter.cs:2", (link.Content as TextBlock)?.Text);
         link.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         var greeter = Path.Combine(folder, "src", "Greetings", "Greeter.cs");
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == greeter, 30);
@@ -188,14 +204,14 @@ public sealed class AcpShellTests
         Assert.Equal("written by the agent\n", model.Text.Text);
         Assert.True(model.IsModified);
         Assert.Equal(before, File.ReadAllText(greeter));
-        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<Expander>().Any(e => (e.Header as string)?.EndsWith("(reviewed in the preview)", StringComparison.Ordinal) == true), describe: () => Describe(f, turn));
+        await ShellFixture.PumpUntil(() => Step(f, s => s.Details?.Contains("(reviewed in the preview)", StringComparison.Ordinal) == true) is not null, describe: () => Describe(f, turn));
 
         // New Chat stops the agent and closes its pipe.
         var session = f.Shell.ExternalAgents.Current!;
         chat.NewChat();
         await ShellFixture.PumpUntil(() => f.Shell.ExternalAgents.Current is null && f.Shell.OpenAgentMcpPipes == 0, 30);
         Assert.False(session.IsAlive);
-        Assert.Equal("Agent", AutomationProperties.GetName(Visible<ComboBox>(ChatView(f), "AgentPicker")));
+        Assert.Equal("Agent", AutomationProperties.GetName(Visible<DropDownButton>(ChatView(f), "AgentPicker")));
     }
 
     [AvaloniaFact]
@@ -213,11 +229,18 @@ public sealed class AcpShellTests
         var turn = await AskAsync(f, "slow");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
         Assert.True(chat.IsBusy);
-        chat.Stop();
+
+        // An external agent's turn turns Send into Stop, as the built-in assistant's does; Stop stops it.
+        Assert.True(chat.IsAnswering);
+        Button? Shown(string name) => ChatView(f).GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Name == name);
+        await ShellFixture.PumpUntil(() => Shown("StopButton") is { IsEffectivelyVisible: true } && Shown("Send") is { IsEffectivelyVisible: false });
+        Shown("StopButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         await ShellFixture.PumpUntil(() => !turn.IsStreaming, 30);
         Assert.False(f.Shell.Dialogs.IsOpen);
+        Assert.False(chat.IsAnswering);
         Assert.Equal(("stopped", "Permission: cancelled"), (turn.FinishReason, turn.Answer));
         Assert.Equal("cancelled", turn.Steps.Single().Status);
+        await ShellFixture.PumpUntil(() => Step(f, s => s.Status == AiStepStatus.Cancelled) is not null);
         Assert.Contains(File.ReadAllLines(log), l => l.Contains("\"session/cancel\"", StringComparison.Ordinal));
     }
 }

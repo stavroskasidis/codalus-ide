@@ -13,23 +13,56 @@
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T serviceReferences.openapiReferencesGenerateAClientWith}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T serviceReferences.wcfReferencesAreGeneratedByDotnet}" />
 
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBlock FontWeight="SemiBold" Text="{l:T serviceReferences.references}" VerticalAlignment="Center" />
-        <Button Grid.Column="1" Content="{l:T serviceReferences.reload}" Command="{Binding ReloadCommand}" />
-      </Grid>
+      <!-- The control set (M34h, docs/design/controls/ToolWindowToolbars.dc.html): the count as a badge, Reload as an icon. -->
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Classes="toolbar icon" controls:ButtonIcon.Kind="refresh" Command="{Binding ReloadCommand}" ToolTip.Tip="{l:T serviceReferences.reload}" AutomationProperties.Name="{l:T serviceReferences.reloadTheReferences}" />
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <TextBlock FontWeight="SemiBold" Text="{l:T serviceReferences.references}" VerticalAlignment="Center" />
+          <Border Classes="badge"><TextBlock Text="{Binding ReferenceCount}" /></Border>
+        </StackPanel>
+      </DockPanel>
       <TextBlock Classes="muted" Text="{l:T serviceReferences.thisProjectHasNoServiceReferences}" IsVisible="{Binding IsEmpty}" />
-      <ListBox x:Name="ReferenceList" ItemsSource="{Binding References}" SelectedItem="{Binding Selected}" MaxHeight="220" IsVisible="{Binding !IsEmpty}" AutomationProperties.Name="{l:T serviceReferences.serviceReferences}">
+      <!--
+        The selected reference's commands sit on its row: Tab continues into them (a list is one Tab stop otherwise), the
+        context menu has them too, and Enter opens the document, Delete removes the reference (M34h).
+      -->
+      <ListBox x:Name="ReferenceList" ItemsSource="{Binding References}" SelectedItem="{Binding Selected}" MaxHeight="220" IsVisible="{Binding !IsEmpty}"
+               KeyboardNavigation.TabNavigation="Continue" AutomationProperties.Name="{l:T serviceReferences.serviceReferences}">
+        <ListBox.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="{l:T serviceReferences.testClient}" Command="{Binding TestCommand}" IsVisible="{Binding SelectedIsWcf}" />
+            <MenuItem Header="{l:T serviceReferences.updateFromSource}" Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" />
+            <MenuItem Header="{l:T serviceReferences.openDocument}" Command="{Binding OpenCommand}" InputGesture="Enter" />
+            <MenuItem Header="{l:T serviceReferences.remove}" Command="{Binding RemoveCommand}" InputGesture="Delete" IsEnabled="{Binding !IsBusy}" />
+          </ContextMenu>
+        </ListBox.ContextMenu>
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ServiceReferenceRow">
-            <Grid ColumnDefinitions="Auto,*" Margin="0,2" AutomationProperties.Name="{Binding Name}">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="2,4" AutomationProperties.Name="{Binding Name}">
               <controls:Icon Kind="{Binding Icon}" Margin="0,0,8,0" VerticalAlignment="Top" />
+              <!-- The selected reference's commands sit on it (M34h). -->
+              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="8,0,0,0" VerticalAlignment="Top" IsVisible="{Binding $parent[ListBoxItem].IsSelected}">
+                <Button Classes="iconText compact" controls:ButtonIcon.Kind="plug" Content="{l:T serviceReferences.testClient}" IsVisible="{Binding IsWcf}"
+                        Command="{Binding $parent[UserControl].((vm:ServiceReferencesViewModel)DataContext).TestCommand}" ToolTip.Tip="{l:T serviceReferences.openTheServiceInTheWcf}" />
+                <Button Classes="icon compact" controls:ButtonIcon.Kind="cloud-download"
+                        Command="{Binding $parent[UserControl].((vm:ServiceReferencesViewModel)DataContext).RefreshCommand}"
+                        IsEnabled="{Binding $parent[UserControl].((vm:ServiceReferencesViewModel)DataContext).CanRefresh}"
+                        ToolTip.Tip="{l:T serviceReferences.updateFromSource}" AutomationProperties.Name="{l:T serviceReferences.downloadTheDocumentAgainFromIts}" />
+                <Button Classes="icon compact" controls:ButtonIcon.Kind="link-external"
+                        Command="{Binding $parent[UserControl].((vm:ServiceReferencesViewModel)DataContext).OpenCommand}"
+                        ToolTip.Tip="{l:T serviceReferences.openDocument}" AutomationProperties.Name="{l:T serviceReferences.openDocument}" />
+                <Button Classes="icon compact" controls:ButtonIcon.Kind="trash"
+                        Command="{Binding $parent[UserControl].((vm:ServiceReferencesViewModel)DataContext).RemoveCommand}"
+                        IsEnabled="{Binding !$parent[UserControl].((vm:ServiceReferencesViewModel)DataContext).IsBusy}"
+                        ToolTip.Tip="{l:T serviceReferences.remove}" AutomationProperties.Name="{l:T serviceReferences.removeTheReference}" />
+              </StackPanel>
               <StackPanel Grid.Column="1">
                 <TextBlock>
                   <Run Text="{Binding Name}" FontWeight="SemiBold" />
                   <Run Text="{Binding Kind}" Classes="muted" />
                 </TextBlock>
                 <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" />
-                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Source}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Source}" />
               </StackPanel>
             </Grid>
           </DataTemplate>
@@ -37,7 +70,7 @@
       </ListBox>
       <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Packages}" TextWrapping="Wrap" />
 
-      <Border Padding="10" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}" IsVisible="{Binding HasSelection}">
+      <Border Padding="10" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding HasSelection}">
         <StackPanel Spacing="6">
           <Grid RowDefinitions="Auto,Auto,Auto">
             <Grid.ColumnDefinitions>
@@ -70,13 +103,7 @@
             <TextBlock Text="{l:T serviceReferences.generate}" Classes="muted" VerticalAlignment="Center" />
             <ComboBox ItemsSource="{Binding ServiceKinds}" SelectedItem="{Binding EditServices}" MinWidth="120" AutomationProperties.Name="{l:T serviceReferences.referenceServices}" />
           </StackPanel>
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Button Content="{l:T serviceReferences.save}" Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}" />
-            <Button Content="{l:T serviceReferences.refresh}" Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" ToolTip.Tip="{l:T serviceReferences.downloadTheDocumentAgainFromIts}" />
-            <Button Content="{l:T serviceReferences.openDocument}" Command="{Binding OpenCommand}" />
-            <Button Content="{l:T serviceReferences.remove}" Command="{Binding RemoveCommand}" IsEnabled="{Binding !IsBusy}" />
-            <Button Content="{l:T serviceReferences.testClient}" Command="{Binding TestCommand}" IsVisible="{Binding SelectedIsWcf}" ToolTip.Tip="{l:T serviceReferences.openTheServiceInTheWcf}" />
-          </StackPanel>
+          <Button Content="{l:T serviceReferences.save}" Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T serviceReferences.saveTheReferenceSOptions}" />
         </StackPanel>
       </Border>
 
@@ -88,10 +115,47 @@
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <TextBlock Text="{l:T serviceReferences.kind}" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
-        <ComboBox x:Name="KindBox" Grid.Column="1" ItemsSource="{Binding Kinds}" SelectedItem="{Binding KindLabel}" MinWidth="160" AutomationProperties.Name="{l:T serviceReferences.referenceKind}" />
+        <controls:SegmentedControl x:Name="KindBox" Grid.Column="1" HorizontalAlignment="Left" ItemsSource="{Binding Kinds}" SelectedItem="{Binding KindLabel}" AutomationProperties.Name="{l:T serviceReferences.referenceKind}" />
         <TextBlock Grid.Row="1" Text="{l:T serviceReferences.document}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
-        <TextBox Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Source}" PlaceholderText="{Binding SourcePlaceholder}" AutomationProperties.Name="{l:T serviceReferences.documentFileOrUrl}" />
-        <Button Grid.Row="1" Grid.Column="2" Margin="6,6,0,0" Content="{l:T serviceReferences.browse}" Command="{Binding BrowseCommand}" />
+        <TextBox Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Source}" PlaceholderText="{Binding SourcePlaceholder}" AutomationProperties.Name="{l:T serviceReferences.documentFileOrUrl}">
+          <TextBox.InnerLeftContent>
+            <controls:Icon Kind="file" Width="14" Height="14" Margin="8,0,0,0" VerticalAlignment="Center" />
+          </TextBox.InnerLeftContent>
+        </TextBox>
+        <!-- Browse is an icon on its field; Discover is the drop-down Running Services, as in the WCF Test Client (M34h). -->
+        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="6,6,0,0">
+          <Button Classes="icon" controls:ButtonIcon.Kind="folder-open" Command="{Binding BrowseCommand}" ToolTip.Tip="{l:T serviceReferences.browse}" AutomationProperties.Name="{l:T serviceReferences.browse}" />
+          <DropDownButton x:Name="RunningServices" Classes="iconText" controls:ButtonIcon.Kind="radar" Content="{l:T serviceReferences.runningServices2}" IsVisible="{Binding IsWcf}"
+                          ToolTip.Tip="{l:T serviceReferences.findTheMetadataOfTheCorewcf}">
+            <DropDownButton.Flyout>
+              <Flyout Placement="BottomEdgeAlignedRight">
+                <StackPanel Width="380" Spacing="6">
+                  <DockPanel>
+                    <Button DockPanel.Dock="Right" Classes="icon compact subtle" controls:ButtonIcon.Kind="refresh" Command="{Binding DiscoverCommand}" IsEnabled="{Binding !IsBusy}"
+                            ToolTip.Tip="{l:T serviceReferences.searchAgain}" AutomationProperties.Name="{l:T serviceReferences.searchAgainForRunningServices}" />
+                    <TextBlock Classes="muted small" VerticalAlignment="Center" Text="{l:T serviceReferences.runningCorewcfServicesThatPublishMetadata}" TextWrapping="Wrap" />
+                  </DockPanel>
+                  <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+                  <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T serviceReferences.noneFoundRunTheServiceCtrl}">
+                    <TextBlock.IsVisible>
+                      <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="!HasDiscovered" />
+                        <Binding Path="!IsBusy" />
+                      </MultiBinding>
+                    </TextBlock.IsVisible>
+                  </TextBlock>
+                  <ListBox x:Name="DiscoveredList" Classes="rows" ItemsSource="{Binding Discovered}" SelectedItem="{Binding SelectedDiscovered}" MaxHeight="240" IsVisible="{Binding HasDiscovered}" AutomationProperties.Name="{l:T serviceReferences.runningServices}">
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="wcf:DiscoveredService">
+                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding MetadataUrl}" />
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </StackPanel>
+              </Flyout>
+            </DropDownButton.Flyout>
+          </DropDownButton>
+        </StackPanel>
         <TextBlock Grid.Row="2" Text="{l:T serviceReferences.namespace}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" IsVisible="{Binding HasNamespace}" />
         <TextBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Namespace}" PlaceholderText="{Binding NamespacePlaceholder}" IsVisible="{Binding HasNamespace}" AutomationProperties.Name="{l:T serviceReferences.namespace}" />
         <TextBlock Grid.Row="3" Text="{l:T serviceReferences.className}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" IsVisible="{Binding IsOpenApi}" />
@@ -100,16 +164,6 @@
         <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" ItemsSource="{Binding ServiceKinds}" SelectedItem="{Binding GrpcServices}" MinWidth="160" IsVisible="{Binding IsGrpc}" AutomationProperties.Name="{l:T serviceReferences.servicesToGenerate}" />
       </Grid>
       <StackPanel Spacing="6" IsVisible="{Binding IsWcf}">
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <Button Content="{l:T serviceReferences.discover}" Command="{Binding DiscoverCommand}" IsEnabled="{Binding !IsBusy}" ToolTip.Tip="{l:T serviceReferences.findTheMetadataOfTheCorewcf}" />
-          <ComboBox ItemsSource="{Binding Discovered}" SelectedItem="{Binding SelectedDiscovered}" IsVisible="{Binding HasDiscovered}" MinWidth="320" AutomationProperties.Name="{l:T serviceReferences.runningServices}">
-            <ComboBox.ItemTemplate>
-              <DataTemplate x:DataType="wcf:DiscoveredService">
-                <TextBlock Text="{Binding Label}" />
-              </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
-        </StackPanel>
         <Grid RowDefinitions="Auto,Auto,Auto,Auto">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" SharedSizeGroup="serviceReferenceLabel" />
@@ -127,21 +181,28 @@
             <CheckBox Content="{l:T serviceReferences.internal}" IsChecked="{Binding Internal}" />
           </StackPanel>
         </Grid>
-        <!-- svcutil's state, then Install when it's missing (M34g: the message pushed the button off a 640 px page). -->
-        <DockPanel>
-          <Button DockPanel.Dock="Right" Margin="8,0,0,0" VerticalAlignment="Center" Content="{l:T serviceReferences.install}" Command="{Binding InstallWcfCommand}" IsVisible="{Binding NeedsWcfTool}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T serviceReferences.installDotnetSvcutil}" />
-          <TextBlock Classes="muted" Text="{Binding WcfToolMessage}" TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
+        <!-- svcutil's state, then Install when it's missing (M34g: the message pushed the button off a 640 px page); missing, a warning (M34h). -->
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="serviceReferenceLabel" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+        <DockPanel Grid.Column="1">
+          <Button DockPanel.Dock="Right" Margin="8,0,0,0" VerticalAlignment="Center" Classes="iconText" controls:ButtonIcon.Kind="download" Content="{l:T serviceReferences.install}" Command="{Binding InstallWcfCommand}" IsVisible="{Binding NeedsWcfTool}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T serviceReferences.installDotnetSvcutil}" />
+          <controls:Icon DockPanel.Dock="Left" Kind="warning" Margin="0,0,6,0" VerticalAlignment="Center" IsVisible="{Binding NeedsWcfTool}" />
+          <TextBlock Classes="muted" Classes.warning="{Binding NeedsWcfTool}" Text="{Binding WcfToolMessage}" TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
         </DockPanel>
+        </Grid>
       </StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsOpenApi}">
         <TextBlock Text="{l:T serviceReferences.generator}" Classes="muted" VerticalAlignment="Center" />
         <ComboBox ItemsSource="{Binding CodeGenerators}" SelectedItem="{Binding CodeGenerator}" MinWidth="160" AutomationProperties.Name="{l:T serviceReferences.codeGenerator}" />
       </StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button Classes="accent" Content="{l:T serviceReferences.addReference}" Command="{Binding AddCommand}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T serviceReferences.addServiceReference}" />
+        <Button Classes="accent iconText" controls:ButtonIcon.Kind="add" Content="{l:T serviceReferences.addReference}" Command="{Binding AddCommand}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T serviceReferences.addServiceReference}" />
         <ProgressBar IsIndeterminate="True" Width="120" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
       </StackPanel>
-      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" />
+      <TextBlock Classes="error" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding Result}" IsVisible="{Binding HasResult}" FontWeight="SemiBold" TextWrapping="Wrap" />
     </StackPanel>
   </ScrollViewer>

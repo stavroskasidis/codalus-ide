@@ -427,7 +427,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
     private void OnToolCall(AiChatTurn turn, AcpToolCall call)
     {
-        var locations = call.Locations?.Select(l => new AiStepLocation(l.Path, l.Line is { } line ? Math.Max(1, line) : null)).ToList();
+        var locations = call.Locations?.Select(l => new AiAgentLocation(l.Path, l.Line is { } line ? Math.Max(1, line) : null)).ToList();
         var diffs = call.Content?.Where(c => c.Type == "diff" && c.Path is { Length: > 0 }).Select(c => new AiStepDiff(c.Path!, c.OldText, c.NewText ?? "", IsReviewed(c.Path!, c.NewText ?? ""))).ToList();
         var terminal = call.Content?.FirstOrDefault(c => c.Type == "terminal")?.TerminalId;
         var text = call.Content is { } content ? string.Join("\n", content.Where(c => c.Type == "content").Select(c => Text(c.Content))) : null;

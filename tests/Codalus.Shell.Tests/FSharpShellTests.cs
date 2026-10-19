@@ -111,22 +111,14 @@ public sealed class FSharpShellTests
         var greeter = model.Text.Text.IndexOf("let greeter = Greeter(\"Hello\")", StringComparison.Ordinal);
         model.Text.Replace(greeter, "let greeter = Greeter(\"Hello\")".Length, "let greeter   =   Greeter(\"Hello\")");
         await Task.Delay(500, TestContext.Current.CancellationToken); // the change reaches the server
-        TextEdit[]? edits = null;
-        for (var attempt = 0; attempt < 60 && edits?.Any(e => e.NewText.Contains("let greeter = Greeter(\"Hello\")", StringComparison.Ordinal)) != true; attempt++)
-        {
-            try
-            {
-                var client = await f.Shell.Languages.ClientAsync(ShellHost.FSharpLanguageId);
-                edits = await client!.FormatAsync(uri, null, new FormattingOptions(4, true), TestContext.Current.CancellationToken);
-            }
-            catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or ObjectDisposedException)
-            {
-                // FsAutoComplete starts again once a project it loaded is restored
-            }
-
-            await Task.Delay(edits is null ? 1000 : 0, TestContext.Current.CancellationToken);
-        }
-
+        var edits = await ShellFixture.RetryUntil(
+            "Fantomas (FsAutoComplete) to format \"let greeter   =   Greeter(...)\" back to \"let greeter = Greeter(\"Hello\")\"",
+            async token => await f.Shell.Languages.ClientAsync(ShellHost.FSharpLanguageId) is { } client ? await client.FormatAsync(uri, null, new FormattingOptions(4, true), token) : null,
+            reply => reply?.Any(e => e.NewText.Contains("let greeter = Greeter(\"Hello\")", StringComparison.Ordinal)) == true,
+            reply => reply is null ? "no edits (no F# client yet, or the server returned none)" : $"{reply.Length} edits: {string.Join(" | ", reply.Select(e => e.NewText.Length > 80 ? e.NewText[..80] + "…" : e.NewText))}",
+            delayMilliseconds: 1000,
+            // FsAutoComplete starts again once a project it loaded is restored.
+            retryOn: ex => ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or ObjectDisposedException);
         Assert.Contains(edits ?? [], e => e.NewText.Contains("let greeter = Greeter(\"Hello\")", StringComparison.Ordinal));
         model.Text.Text = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
 

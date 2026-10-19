@@ -185,7 +185,9 @@ public class NavigationDepthTests
         Assert.Contains("References to 'circle'", results.Summary, StringComparison.Ordinal);
         Assert.Equal([ReferenceItemKinds.Declaration, ReferenceItemKinds.Read, ReferenceItemKinds.Read], results.Rows.Where(r => !r.IsHeader).Select(r => r.Kind));
         results.GroupBy = "Project";
-        Assert.Equal("App (3)", results.Rows[0].Text);
+        // M34h: a group's header is its label with its count as a badge (the count stays in its Code and screen readers' name).
+        Assert.Equal(("App", 3), (results.Rows[0].Label, results.Rows[0].Count));
+        Assert.Equal("App (3)", results.Rows[0].Code);
         results.KindFilter = "Read";
         Assert.Equal(2, results.Rows.Count(r => !r.IsHeader));
         results.KindFilter = "All";

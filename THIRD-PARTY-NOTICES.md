@@ -95,7 +95,7 @@ For test hosts of .NET Core 2.0 to .NET 7 (M33, ADR 0030), the plugin also ships
 |---|---|---|
 | xunit.v3.mtp-v2 and its xunit.v3.* / xunit.analyzers dependencies | 3.2.2 / 1.27.0 | Apache-2.0 |
 | Microsoft.Testing.Platform (transitive) | 2.x | MIT |
-| Microsoft.Testing.Extensions.HangDump (CI's hang dumps) and its Microsoft.Diagnostics.NETCore.Client dependency | 2.0.2 / 0.2.x | MIT |
+| Microsoft.Testing.Extensions.HangDump (CI's hang dumps) and its Microsoft.Diagnostics.NETCore.Client dependency | 2.4.1 / 0.2.x | MIT |
 | Microsoft.CodeAnalysis.CSharp, .Common, .Analyzers and their System.* dependencies (the `samples/Debugging/Generator` fixture) | 4.14.0 / 3.11.0 | MIT |
 | NETStandard.Library, Microsoft.NETCore.Platforms (reference packages of the netstandard2.0 startup hook; nothing is shipped from them) | 2.0.3 / 1.1.0 | MIT |
 | dotnet-aspnet-codegenerator (a local tool of the `samples/Scaffolding` fixture), Microsoft.VisualStudio.Web.CodeGeneration.Design and their dependencies | 10.0.2 | MIT |

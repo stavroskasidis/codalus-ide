@@ -189,7 +189,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
         Assert.Equal("Read: {\n    int X() => 1;", turn.Answer);
         var step = Assert.Single(turn.Steps);
         Assert.Equal(("read", "Read src/A.cs", "completed"), (step.Kind, step.Target, step.Status));
-        Assert.Equal(new AiStepLocation("src/A.cs", 2), Assert.Single(step.Locations));
+        Assert.Equal(new AiAgentLocation("src/A.cs", 2), Assert.Single(step.Locations));
 
         Assert.Contains("Read: class A", (await AskAsync("read " + Path.Combine(_root, "src", "A.cs"))).Answer, StringComparison.Ordinal);
         Assert.Contains("outside the workspace", (await AskAsync("read ../outside.txt")).Answer, StringComparison.Ordinal);
