@@ -258,6 +258,11 @@ public sealed partial class CodeSearchTests : IDisposable
 
             var median = times.Order().ElementAt(times.Count / 2);
             Assert.True(median < 100, $"'{text}' took {median:F1} ms of CPU time (median of {Join(times)}; wall clock {Join(walls)})");
+
+            // CPU time leaves out a search that waits (on a lock, the disk, another thread): the wall clock keeps a ceiling
+            // far above any wait for a core.
+            var wall = walls.Order().ElementAt(walls.Count / 2);
+            Assert.True(wall < 1000, $"'{text}' took {wall:F1} ms of wall clock (median of {Join(walls)}; CPU time {Join(times)})");
         }
 
         static string Join(List<double> times) => string.Join(", ", times.Select(t => t.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)));
