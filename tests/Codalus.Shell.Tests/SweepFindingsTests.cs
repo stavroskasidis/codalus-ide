@@ -120,6 +120,59 @@ public sealed class SweepFindingsTests
     }
 
     [AvaloniaFact]
+    public async Task Attach_to_a_process_in_a_container_uses_the_Containers_windows_engine_unless_debug_containerTool_is_set()
+    {
+        // debug.containerTool defaulted to "docker": attaching never used containers.tool, nor Podman where only Podman is
+        // installed. Stand-in CLIs list one container each.
+        Assert.Equal(["podman"], Workbench.Containers.ContainerEngine.Resolve(null, program => program == "podman").Tool);
+        await using var f = ShellFixture.Create();
+        var settings = f.Shell.Workbench.Settings;
+        Assert.Equal(string.Empty, settings.GetString(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting));
+        Assert.Equal(f.Shell.ContainerEngine.Tool, f.Shell.AttachContainerTool);
+
+        async Task<string> StandInAsync(string name, string container)
+        {
+            var path = Path.Combine(f.UserData, OperatingSystem.IsWindows() ? name + ".cmd" : name);
+            await File.WriteAllTextAsync(path, OperatingSystem.IsWindows()
+                ? $"@echo off\r\necho {name}1\t{container}\tdemo:1\r\n"
+                : $"#!/bin/sh\nprintf '{name}1\\t{container}\\tdemo:1\\n'\n", CancellationToken.None);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            return $"\"{path}\"";
+        }
+
+        async Task<string[]> ListedAsync()
+        {
+            f.Shell.Workbench.Notifications.DismissAll();
+            var attach = f.Shell.AttachToRemoteProcessAsync("container");
+            await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen || attach.IsCompleted, describe: () => string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message)));
+            string[] listed = [.. f.Shell.Palette.Rows.Select(r => r.Label)];
+            f.Shell.Palette.Cancel();
+            await attach;
+            Assert.Empty(f.Shell.Workbench.Notifications.Items);
+            return listed;
+        }
+
+        // The Containers window's engine: a machine with only Podman (containers.tool names it here, as detection would).
+        await settings.SetAsync(Workbench.Containers.ContainerEngine.ToolSetting, await StandInAsync("podman", "web-on-podman"), SettingScope.User, CancellationToken.None);
+        Assert.Equal(["web-on-podman"], await ListedAsync());
+
+        // debug.containerTool, when set, is the user's choice for attaching.
+        await settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, await StandInAsync("docker", "web-on-docker"), SettingScope.User, CancellationToken.None);
+        Assert.Equal(["web-on-docker"], await ListedAsync());
+
+        // Without it, no engine names the setting in effect.
+        await settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(Workbench.Containers.ContainerEngine.ToolSetting, $"\"{Path.Combine(f.UserData, "missing", "podman")}\"", SettingScope.User, CancellationToken.None);
+        f.Shell.Workbench.Notifications.DismissAll();
+        await f.Shell.AttachToRemoteProcessAsync("container");
+        Assert.Equal("No container engine is installed: podman isn't on the PATH. Install Docker or Podman, or choose the engine in the 'containers.tool' setting.", Assert.Single(f.Shell.Workbench.Notifications.Items).Message);
+    }
+
+    [AvaloniaFact]
     public async Task Turning_a_plugin_on_or_off_keeps_each_settings_layers_own_list()
     {
         // The merged list was written to the user's settings: a workspace's plugins leaked into them, and Turn On never

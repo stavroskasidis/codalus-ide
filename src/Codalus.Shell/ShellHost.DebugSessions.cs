@@ -337,9 +337,10 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// The container CLI attaching goes through: <c>debug.containerTool</c> when set, else the Containers window's engine
-    /// (<c>containers.tool</c>, or Docker or Podman, whichever is there), not always <c>docker</c>.
+    /// (<c>containers.tool</c>, or Docker or Podman, whichever is there), not always <c>docker</c>. The setting is empty
+    /// unless the user sets it: its default was <c>docker</c>, which made the Containers window's engine unreachable.
     /// </summary>
-    private IReadOnlyList<string> AttachContainerTool =>
+    internal IReadOnlyList<string> AttachContainerTool =>
         Workbench.Settings.GetString(RemoteTargets.ContainerToolSetting) is { Length: > 0 } own ? RemoteTargets.ContainerTool(own) : ContainerEngine.Tool;
 
     private async Task<RemoteTarget?> PickContainerAsync()

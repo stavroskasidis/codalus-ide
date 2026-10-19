@@ -4,7 +4,7 @@ Codalus IDE builds, runs and debugs your apps in containers with **your own Dock
 
 ## The container engine
 
-The engine is the **Containers → Container Engine** setting (`containers.tool`): `docker`, `podman`, or a command line such as `wsl -d Ubuntu --exec podman`. When it is empty, Codalus IDE uses `docker` if it is on your `PATH`, else `podman`. On Windows and macOS, Docker Desktop or a running Podman machine (`podman machine start`) is needed; the containers are Linux containers.
+The engine is the **Containers → Container Engine** setting (`containers.tool`): `docker`, `podman`, or a command line such as `wsl -d Ubuntu --exec podman`. When it is empty, Codalus IDE uses `docker` if it is on your `PATH`, else `podman`. Attach to a Process in a Container uses it too, unless you set `debug.containerTool`. On Windows and macOS, Docker Desktop or a running Podman machine (`podman machine start`) is needed; the containers are Linux containers.
 
 ## Add Docker Support
 
