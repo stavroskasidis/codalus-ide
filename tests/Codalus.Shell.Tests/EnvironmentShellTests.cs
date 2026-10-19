@@ -36,20 +36,61 @@ public sealed class EnvironmentShellTests
         }
 
         InstallPlan? shown = null;
-        await f.Shell.InstallToolAsync(missing, plan => { shown = plan; return Task.FromResult(false); }, Runner);
+        await Within(f, f.Shell.InstallToolAsync(missing, plan => { shown = plan; return Task.FromResult(false); }, Runner), 120, "the declined install");
         Assert.NotNull(shown);
         Assert.Contains(shown!.Command.Split(' ')[0], s_installers);
         Assert.Empty(runs);
 
-        // Agreed: a plan that runs here goes through the runner, then the check runs again.
+        // Agreed: a plan that runs here goes through the runner, then the check runs again. The "install" points this
+        // process's DOTNET_ROOT and PATH at its folder (M37, M49): put back for the tests that run after this one.
         if (shown.Kind == InstallKind.Run)
         {
-            await f.Shell.InstallToolAsync(missing, _ => Task.FromResult(true), Runner);
-            Assert.Single(runs);
-            Assert.Contains("codalus.setup", f.Shell.Workbench.Output.Channels.Select(c => c.Id));
-            await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("is installed", StringComparison.Ordinal)));
+            var saved = s_dotnetVariables.ToDictionary(n => n, Environment.GetEnvironmentVariable);
+            try
+            {
+                await Within(f, f.Shell.InstallToolAsync(missing, _ => Task.FromResult(true), Runner), 180, "the agreed install and the check after it");
+                Assert.Single(runs);
+                Assert.Contains("codalus.setup", f.Shell.Workbench.Output.Channels.Select(c => c.Id));
+                await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("is installed", StringComparison.Ordinal)));
+            }
+            finally
+            {
+                foreach (var (name, value) in saved)
+                {
+                    Environment.SetEnvironmentVariable(name, value);
+                }
+            }
         }
     }
+
+    /// <summary>
+    /// Awaits a shell operation for at most <paramref name="seconds"/>: one that waits on something that never comes (a
+    /// trust dialog nobody answers, a host that never starts) fails the test, saying what, instead of hanging the run.
+    /// </summary>
+    private static async Task Within(ShellFixture f, Task operation, int seconds, string what)
+    {
+        var timeout = Task.Delay(TimeSpan.FromSeconds(seconds), TestContext.Current.CancellationToken);
+        while (!operation.IsCompleted && !timeout.IsCompleted)
+        {
+            ShellFixture.Pump();
+            await Task.WhenAny(operation, timeout, Task.Delay(15, TestContext.Current.CancellationToken));
+        }
+
+        if (!operation.IsCompleted)
+        {
+            Assert.Fail($"Timed out after {seconds} s: {what}." + (f.Shell.Dialogs.Request is { } dialog ? $" A dialog waits for an answer: \"{dialog.Title}\"." : string.Empty)
+                + " Codalus IDE's log:\n" + f.Shell.Workbench.Log.GetText()[^Math.Min(3000, f.Shell.Workbench.Log.GetText().Length)..]);
+        }
+
+        await operation;
+    }
+
+    /// <summary>
+    /// A temporary folder by its real path: OpenSolutionAsync resolves links (macOS's <c>/var</c> is
+    /// <c>/private/var</c>), and the trust store compares spellings, so a folder trusted by its <c>/var</c> spelling
+    /// isn't trusted for the solution, and the open waits on the trust dialog.
+    /// </summary>
+    private static string TempFolder(string prefix) => Codalus.Platform.RealPath.Resolve(Directory.CreateTempSubdirectory(prefix).FullName);
 
     /// <summary>
     /// M49: hosts that aren't started because the IDE's runtime is missing (the Mac's 0.4.0 nightly) make one actionable
@@ -119,7 +160,7 @@ public sealed class EnvironmentShellTests
     public async Task A_solution_waiting_for_the_runtime_opens_again_when_the_hosts_start_again()
     {
         await using var f = ShellFixture.Create();
-        var dir = Directory.CreateTempSubdirectory("codalus-m49-solution-").FullName;
+        var dir = TempFolder("codalus-m49-solution-");
         try
         {
             var folder = Path.Combine(dir, "App");
@@ -148,16 +189,17 @@ public sealed class EnvironmentShellTests
             f.Shell.UseEnvironmentCheck(DescribedMachine(f, root));
             f.Shell.BuildHostOverride = () => host;
             f.Shell.Trust.Trust(dir);
+            Assert.True(f.Shell.Trust.IsTrusted(Path.GetDirectoryName(Codalus.Platform.RealPath.Resolve(solution))!), "the solution's real folder is trusted: no trust dialog");
             bool IsError(Workbench.Notifications.Notification n) => n.Severity == Workbench.Notifications.NotificationSeverity.Error && n.Message.StartsWith("Could not open App.slnx", StringComparison.Ordinal);
 
-            await f.Shell.OpenSolutionAsync(solution);
+            await Within(f, f.Shell.OpenSolutionAsync(solution), 60, "opening the solution whose build host lacks its runtime");
             await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("needs the .NET 99.0.0 runtime", StringComparison.Ordinal)));
             Assert.Equal(solution, f.Shell.SolutionWaitingForRuntime);
             Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, IsError); // the one notification says it
 
             // "Installed": the build host's runtimeconfig now asks for what's there. The hosts start again.
             File.WriteAllText(config, """{ "runtimeOptions": { "rollForward": "Major", "framework": { "name": "Microsoft.NETCore.App", "version": "1.0.0" } } }""");
-            await f.Shell.RestartHostsAsync();
+            await Within(f, f.Shell.RestartHostsAsync(), 120, "starting the hosts again and opening the waiting solution");
             await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(IsError), seconds: 60);
             Assert.Null(f.Shell.SolutionWaitingForRuntime);
             Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("crashed repeatedly", StringComparison.Ordinal));
@@ -184,7 +226,7 @@ public sealed class EnvironmentShellTests
     public async Task No_sdk_on_the_first_open_is_the_check_environment_notification_once()
     {
         await using var f = ShellFixture.Create();
-        var dir = Directory.CreateTempSubdirectory("codalus-m49-nosdk-").FullName;
+        var dir = TempFolder("codalus-m49-nosdk-");
         try
         {
             var solution = Path.Combine(dir, "App.slnx");
@@ -195,8 +237,9 @@ public sealed class EnvironmentShellTests
                 ? new Codalus.Rpc.ProcessLaunchInfo("cmd.exe", ["/c", $"echo {Why} 1>&2 & exit /b 3"])
                 : new Codalus.Rpc.ProcessLaunchInfo("/bin/sh", ["-c", $"echo '{Why}' >&2; exit 3"]);
             f.Shell.Trust.Trust(dir);
+            Assert.True(f.Shell.Trust.IsTrusted(Path.GetDirectoryName(Codalus.Platform.RealPath.Resolve(solution))!), "the solution's real folder is trusted: no trust dialog");
 
-            await f.Shell.OpenSolutionAsync(solution);
+            await Within(f, f.Shell.OpenSolutionAsync(solution), 60, "opening the solution whose build host finds no SDK");
             await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.StartsWith("The solution can't be loaded", StringComparison.Ordinal)), seconds: 30);
             ShellFixture.Pump();
             var notification = Assert.Single(f.Shell.Workbench.Notifications.Items, n => n.Message.StartsWith("The solution can't be loaded", StringComparison.Ordinal));
@@ -291,11 +334,11 @@ public sealed class EnvironmentShellTests
             });
             var runtime = new ToolStatus("dotnet-runtime", ".NET runtime for Codalus IDE", true, ToolState.Missing, "helpers") { WantedVersion = "99.0.0", WantedChannel = "99.0", Found = "none" };
             var then = 0;
-            await f.Shell.InstallToolAsync(runtime, _ => Task.FromResult(true), (_, _, _, _) => Task.FromResult((0, "installed\n")), () =>
+            await Within(f, f.Shell.InstallToolAsync(runtime, _ => Task.FromResult(true), (_, _, _, _) => Task.FromResult((0, "installed\n")), () =>
             {
                 then++;
                 return Task.CompletedTask;
-            });
+            }), 180, "the install, the hosts started again and the update checked");
 
             Assert.Equal(1, then);
             Assert.Contains("[setup] Starting the helper processes again.", f.Shell.Workbench.Log.GetText(), StringComparison.Ordinal);
