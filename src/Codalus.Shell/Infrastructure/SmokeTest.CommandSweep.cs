@@ -461,6 +461,8 @@ internal sealed partial class SmokeTest
             Console.Out.WriteLine($"  [sweep] scenario {scenario}");
         }
 
+        SweepProgress($"(entering {scenario})");
+
         _sweepScenario = scenario;
         try
         {
@@ -834,6 +836,7 @@ internal sealed partial class SmokeTest
         var saw = new List<string>();
         var before = SweepBaseline.Capture(shell, window);
         var status = shell.StatusBar.DisplayMessage;
+        SweepProgress($"{command.Id} [{entry}{(location is null ? string.Empty : " " + location)}] in {_sweepScenario}");
 
         void OnExecuted(object? sender, CommandExecutedEventArgs e)
         {
@@ -1533,6 +1536,22 @@ internal sealed partial class SmokeTest
         if (outcome == "fail")
         {
             Console.Out.WriteLine($"    FAIL {command} [{entry}{(location is null ? string.Empty : " " + location)}]: {reason}{(known ? " (known)" : string.Empty)}");
+        }
+    }
+
+    /// <summary>
+    /// A line in <c>command-sweep-progress.log</c> before each run: appended and closed at once, so after a crash its last
+    /// line names what was running.
+    /// </summary>
+    private void SweepProgress(string what)
+    {
+        try
+        {
+            Directory.CreateDirectory(shell.Paths.Logs);
+            File.AppendAllText(Path.Combine(shell.Paths.Logs, "command-sweep-progress.log"), $"{DateTime.Now:HH:mm:ss.fff} {what}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
         }
     }
 

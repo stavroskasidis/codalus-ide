@@ -105,7 +105,7 @@ test_app() {
     rm -rf "$jsdebug"
   fi
 
-  cp "$userdata"/logs/smoke-test* "$userdata"/logs/command-sweep.json "$results/" 2> /dev/null || true
+  cp "$userdata"/logs/smoke-test* "$userdata"/logs/command-sweep.json "$userdata"/logs/command-sweep-progress.log "$results/" 2> /dev/null || true
   # The UI gallery (M34d): every surface in every theme, with data, empty and in an error state.
   if [ -d "$userdata/logs/gallery" ]; then
     rm -rf "$results/gallery"
