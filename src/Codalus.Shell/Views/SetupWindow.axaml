@@ -171,6 +171,8 @@
             </StackPanel>
             <TextBlock Classes="muted small" MinHeight="18" Margin="0,0,0,18" TextWrapping="Wrap"
                        Text="{l:T setupWindow.followsYourSystem}" IsVisible="{Binding IsMatchSystem}" />
+            <TextBlock Classes="muted small" MinHeight="18" Margin="0,0,0,18" TextWrapping="Wrap"
+                       Text="{l:T setupWindow.classicBlueIsInOptions}" IsVisible="{Binding IsClassicBlue}" />
             <ItemsControl x:Name="FamilyList" ItemsSource="{Binding Families}" AutomationProperties.Name="{l:T setupWindow.theme}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -178,8 +180,9 @@
                 </ItemsPanelTemplate>
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
+                <!-- 148 px: the five cards (Classic first, D36) fit one row at the window's 1120 px. -->
                 <DataTemplate x:DataType="vm:SetupFamilyOption">
-                  <ToggleButton Classes="setupCard" Width="184" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                  <ToggleButton Classes="setupCard" Width="148" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
                                 AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
                     <StackPanel Spacing="10">
                       <Viewbox Stretch="Uniform" HorizontalAlignment="Stretch">

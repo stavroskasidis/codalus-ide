@@ -111,4 +111,84 @@ public sealed class EnvironmentCheckTests : IDisposable
         Assert.Equal("ubuntu debian", InstallPlans.LinuxDistribution(file));
         Assert.Null(InstallPlans.LinuxDistribution(Path.Combine(_dir, "none")));
     }
+
+    [Fact]
+    public async Task A_program_whose_child_keeps_its_output_open_still_returns_once_it_has_ended()
+    {
+        // A stand-in that prints, then leaves a process holding its standard output, as a tool that forks a daemon
+        // (adb's server) can: the end of the output never comes until that process ends. The run must not wait for it.
+        var started = DateTime.Now.AddSeconds(-1);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var (program, arguments) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", new[] { "/d", "/c", "echo hello& start /b ping -n 300 127.0.0.1" })
+            : ("/bin/sh", ["-c", "echo hello; sleep 300 & echo \"held by $!\""]);
+        var (code, output) = (-2, "");
+        try
+        {
+            // Not in the test's folder: the process left behind runs there until it is removed, and on Windows a process's
+            // working folder can't be deleted (Dispose).
+            (code, output) = await EnvironmentCheck.RunProcessAsync(program, arguments, AppContext.BaseDirectory, TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(30), $"Returned after {clock.Elapsed}: it waited for the process holding the output.");
+            Assert.Equal(0, code);
+            Assert.Contains("hello", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            // The test removes the process it left behind, and waits until it has gone.
+            foreach (var held in LeftBehind(output, started))
+            {
+                using (held)
+                {
+                    try
+                    {
+                        held.Kill();
+                        held.WaitForExit(TimeSpan.FromSeconds(10));
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // It has ended already.
+                    }
+                }
+            }
+        }
+
+        // Unix: the shell prints the background process's id. Windows: cmd can't, so the ping started since the test began.
+        static IEnumerable<System.Diagnostics.Process> LeftBehind(string output, DateTime started)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return System.Diagnostics.Process.GetProcessesByName("PING").Where(p => StartedSince(p, started));
+            }
+
+            return System.Text.RegularExpressions.Regex.Match(output, @"held by (\d+)") is { Success: true } held
+                && int.TryParse(held.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture, out var id)
+                && Running(id) is { } process
+                    ? [process]
+                    : [];
+        }
+
+        static bool StartedSince(System.Diagnostics.Process process, DateTime started)
+        {
+            try
+            {
+                return process.StartTime >= started;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return false;
+            }
+        }
+
+        static System.Diagnostics.Process? Running(int id)
+        {
+            try
+            {
+                return System.Diagnostics.Process.GetProcessById(id);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+    }
 }

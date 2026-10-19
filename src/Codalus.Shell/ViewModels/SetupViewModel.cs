@@ -57,7 +57,7 @@ public sealed class SetupFamilyOption : ObservableObject
         Id = id;
         Title = title;
         Description = description;
-        _picture = new ThemePicture(ThemeService.VariantOf(id + ".light"));
+        _picture = new ThemePicture(ThemeService.VariantOf(ThemeService.Resolve(id + ".light", null)));
         SelectCommand = new RelayCommand(() => select(this));
     }
 
@@ -223,17 +223,16 @@ public sealed class SetupToolRowViewModel : ObservableObject
 }
 
 /// <summary>
-/// The first-run setup (M46): Appearance (the four theme families as cards and a mode; the setup window and the IDE behind
-/// it repaint as the user chooses, through <see cref="ThemeService.Preview"/>), Keyboard (the scheme), Your settings
-/// (import from VS Code, a <c>.vssettings</c> file or an export, or settings sync from a folder or a Git repository) and
-/// Tools (M37's check; nothing installs without a yes). Leaving a step with Next or Back saves its choice; Skip setup
-/// keeps what was saved (for a new user data folder, the defaults: Harbor following the system, the default keys).
+/// The first-run setup (M46): Appearance (the theme families as cards, Classic first (D36), and a mode; the setup window
+/// and the IDE behind it repaint as the user chooses, through <see cref="ThemeService.Preview"/>), Keyboard (the scheme),
+/// Your settings (import from VS Code, a <c>.vssettings</c> file or an export, or settings sync from a folder or a Git
+/// repository) and Tools (M37's check; nothing installs without a yes). Leaving a step with Next or Back saves its choice;
+/// Skip setup keeps what was saved (for a new user data folder, the defaults: Classic following the system, the default
+/// keys).
 /// Done and Skip setup record <see cref="ShellHost.SetupCompletedSetting"/>. AI isn't asked about (ADR 0062).
 /// </summary>
 public sealed class SetupViewModel : ObservableObject
 {
-    private static readonly string[] s_families = [ThemeService.Harbor, ThemeService.Graphite, ThemeService.Daylight, ThemeService.Ember];
-
     private readonly ShellHost _shell;
     private SetupStep _current = SetupStep.Appearance;
     private string? _family;
@@ -258,6 +257,7 @@ public sealed class SetupViewModel : ObservableObject
         ];
         Families =
         [
+            new(ThemeService.Classic, "Classic", Localizer.Get("msg.firstRun.classic", "The classic IDE's familiar look: docked tool windows, plain tabs and a blue accent. Its Blue theme is in Options."), SelectFamily),
             new(ThemeService.Harbor, "Harbor", Localizer.Get("msg.firstRun.harbor", "The classic docked layout: a colored title bar, tool window captions and tab groups, closest to the IDE you know."), SelectFamily),
             new(ThemeService.Graphite, "Graphite", Localizer.Get("msg.firstRun.graphite", "Compact and dense: hairline dividers instead of gaps, flat tabs and more room for code and output."), SelectFamily),
             new(ThemeService.Daylight, "Daylight", Localizer.Get("msg.firstRun.daylight", "Flat and airy: soft rounded tabs, and the Start button filled with the accent."), SelectFamily),
@@ -364,13 +364,19 @@ public sealed class SetupViewModel : ObservableObject
 
     public IReadOnlyList<SetupChoice> Modes { get; }
 
-    /// <summary>The chosen family, or null when the theme is none of the four (Classic or a plugin's, from before).</summary>
+    /// <summary>The chosen family, or null when the theme is none of them (a plugin's, from before).</summary>
     public string? SelectedFamily => _family;
 
-    /// <summary>The chosen mode: <c>light</c>, <c>dark</c>, <c>highContrast</c>, or null to match the system.</summary>
+    /// <summary>
+    /// The chosen mode: <c>light</c>, <c>dark</c>, <c>highContrast</c>, or null to match the system; <c>blue</c> when the
+    /// settings say Classic Blue, which only Options offers (no mode is chosen then, and it's kept unless one is).
+    /// </summary>
     public string? SelectedVariant => _variant;
 
     public bool IsMatchSystem => _variant is null;
+
+    /// <summary>Classic Blue, chosen in Options: the mode control shows none, and a note says where Blue is.</summary>
+    public bool IsClassicBlue => _variant == "blue";
 
     /// <summary>The <c>workbench.colorTheme</c> value chosen (<c>harbor</c>, <c>ember.dark</c>), or null when no family is.</summary>
     public string? ThemeSetting => _family is null ? null : ThemeService.SettingFor(_family, _variant);
@@ -378,8 +384,14 @@ public sealed class SetupViewModel : ObservableObject
     private void SelectFamily(SetupFamilyOption family)
     {
         _family = family.Id;
+        // Blue is Classic's only: another family matches the system, as a card in Options does.
+        _variant = VariantFor(family.Id);
         ShowAppearance(preview: true);
     }
+
+    /// <summary>The chosen mode where <paramref name="family"/> has it, or null (matching the system).</summary>
+    private string? VariantFor(string family) =>
+        _variant is { } variant && ThemeService.Families.First(f => f.Id == family).Variants.Contains(variant) ? variant : null;
 
     private void SelectMode(SetupChoice mode)
     {
@@ -394,7 +406,7 @@ public sealed class SetupViewModel : ObservableObject
         foreach (var family in Families)
         {
             family.IsSelected = family.Id == _family;
-            family.Picture = new ThemePicture(ThemeService.VariantOf(ThemeService.Resolve(ThemeService.SettingFor(family.Id, _variant), system)));
+            family.Picture = new ThemePicture(ThemeService.VariantOf(ThemeService.Resolve(ThemeService.SettingFor(family.Id, VariantFor(family.Id)), system)));
         }
 
         foreach (var mode in Modes)
@@ -405,6 +417,7 @@ public sealed class SetupViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedFamily));
         OnPropertyChanged(nameof(SelectedVariant));
         OnPropertyChanged(nameof(IsMatchSystem));
+        OnPropertyChanged(nameof(IsClassicBlue));
         if (preview && ThemeSetting is { } setting)
         {
             _shell.Theme.Preview(setting);
@@ -688,9 +701,10 @@ public sealed class SetupViewModel : ObservableObject
         switch (step)
         {
             case SetupStep.Appearance:
+                // Every built-in family has a card (a value from before M45 shows as Classic); a plugin's theme none.
                 var parsed = ThemeService.Parse(_shell.Theme.Setting);
-                _family = parsed is var (family, _) && s_families.Contains(family) ? family : null;
-                _variant = parsed?.Variant is "light" or "dark" or "highContrast" ? parsed.Value.Variant : null;
+                _family = parsed?.Family;
+                _variant = parsed?.Variant;
                 ShowAppearance(preview: false);
                 break;
             case SetupStep.Keyboard:
@@ -710,14 +724,18 @@ public sealed class SetupViewModel : ObservableObject
         }
     }
 
-    /// <summary>Saves a step's choice when it differs from what's saved; the appearance's preview ends.</summary>
+    /// <summary>
+    /// Saves a step's choice when it differs from what's saved; the appearance's preview ends. The theme is also saved when
+    /// the settings don't have one, so a choice made here stays the user's when the default changes (D36: Harbor became
+    /// Classic, and Harbor chosen here in 0.3.0 hadn't been written).
+    /// </summary>
     private async Task SaveAsync(SetupStep step)
     {
         var settings = _shell.Workbench.Settings;
         switch (step)
         {
             case SetupStep.Appearance:
-                if (ThemeSetting is { } theme && ThemeService.Normalize(_shell.Theme.Setting) != theme)
+                if (ThemeSetting is { } theme && (ThemeService.Normalize(_shell.Theme.Setting) != theme || settings.GetLayerValue(ThemeService.SettingKey, SettingScope.User) is null))
                 {
                     await settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
                 }

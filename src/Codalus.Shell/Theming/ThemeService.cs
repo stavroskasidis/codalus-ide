@@ -24,11 +24,12 @@ public sealed record ThemeFamily(string Id, string Title, string Description)
 }
 
 /// <summary>
-/// Applies <c>workbench.colorTheme</c> (M45, D32, ADR 0077): a theme family (Harbor, Graphite, Daylight, Ember, or Classic,
-/// today's Blue, Light, Dark and High Contrast) and a variant. <c>harbor</c> follows the system's light, dark and
-/// high-contrast settings within the family; <c>harbor.dark</c> pins the variant. The values written before M45
-/// (<c>blue</c>, <c>light</c>, <c>dark</c>, <c>highContrast</c>, <c>followSystem</c>) read as Classic, so a saved setting
-/// keeps its look; a new install gets Harbor following the system. Switching is live, and the picker previews before it
+/// Applies <c>workbench.colorTheme</c> (M45, D32, ADR 0077): a theme family (Classic, the Blue, Light, Dark and High
+/// Contrast from before M45, then Harbor, Graphite, Daylight and Ember) and a variant. <c>classic</c> follows the system's
+/// light, dark and high-contrast settings within the family; <c>harbor.dark</c> pins the variant. The values written
+/// before M45 (<c>blue</c>, <c>light</c>, <c>dark</c>, <c>highContrast</c>, <c>followSystem</c>) read as Classic, so a
+/// saved setting keeps its look; a profile without the setting gets Classic following the system (D36, the maintainer's
+/// choice on 2026-10-19; it was Harbor in 0.3.0). Switching is live, and the picker previews before it
 /// saves. The resolved theme is the <c>theme</c> context key (its kind: <c>light</c>, <c>dark</c> or <c>highContrast</c>;
 /// Classic's Blue stays <c>blue</c>) and its family the <c>themeFamily</c> key.
 /// </summary>
@@ -45,8 +46,8 @@ public sealed class ThemeService
     public const string Daylight = "daylight";
     public const string Ember = "ember";
 
-    /// <summary>The setting's default (D32): Harbor, following the system.</summary>
-    public const string DefaultSetting = Harbor;
+    /// <summary>The setting's default (D36, 2026-10-19; Harbor under D32): Classic, following the system.</summary>
+    public const string DefaultSetting = Classic;
 
     /// <summary>
     /// Classic's High Contrast; anything not overridden for it falls back to Dark. Fluent palettes only support Light and
@@ -71,14 +72,14 @@ public sealed class ThemeService
     public static readonly ThemeVariant EmberDark = new("Ember.Dark", ThemeVariant.Dark);
     public static readonly ThemeVariant EmberHighContrast = new("Ember.HighContrast", HighContrast);
 
-    /// <summary>The families, the default first and Classic last.</summary>
+    /// <summary>The families, the default (Classic) first (D36), in every list that offers them.</summary>
     public static IReadOnlyList<ThemeFamily> Families { get; } =
     [
+        new(Classic, "Classic", "The classic IDE's familiar look, in Blue, Light, Dark and High Contrast: the themes from before 0.3."),
         new(Harbor, "Harbor", "The closest to the classic IDE: a deep navy title bar, docked tool windows with gutters, a cobalt accent."),
         new(Graphite, "Graphite", "Compact and dense, for more code on the screen: hairlines instead of gutters, a teal accent."),
         new(Daylight, "Daylight", "Flat and airy: rounded tabs, the Start button filled with a violet accent."),
         new(Ember, "Ember", "Warm, with floating panels: rounded cards on the window's background, a copper accent."),
-        new(Classic, "Classic", "The themes from before 0.3: Blue, Light, Dark and High Contrast."),
     ];
 
     /// <summary>Every resolved built-in theme with its variant: Classic's four, then each family's three.</summary>

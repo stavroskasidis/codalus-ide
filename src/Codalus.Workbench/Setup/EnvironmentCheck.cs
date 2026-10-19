@@ -585,8 +585,10 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         start.Environment["DOTNET_NOLOGO"] = "1";
         using var process = Process.Start(start) ?? throw new InvalidOperationException($"{program} didn't start.");
-        var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var error = process.StandardError.ReadToEndAsync(cancellationToken);
+        var output = new StringBuilder();
+        var error = new StringBuilder();
+        using var reading = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var reads = Task.WhenAll(ReadAllAsync(process.StandardOutput, output, reading.Token), ReadAllAsync(process.StandardError, error, reading.Token));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(limit);
         try
@@ -596,9 +598,52 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             process.Kill(entireProcessTree: true);
+            await reading.CancelAsync().ConfigureAwait(false);
             return (-1, $"{program} didn't answer within {limit.TotalSeconds:0} seconds.");
         }
 
-        return (process.ExitCode, await output.ConfigureAwait(false) + await error.ConfigureAwait(false));
+        // The program has ended, but a process it started can still hold its output open (a daemon it forks inherits the
+        // pipes, as adb's server can), and then the end of the output never comes. What the program wrote is in within
+        // moments, so the reads get that long, then let go. That process isn't killed: it outlives the program on purpose,
+        // and once the program has ended it is no longer in its tree.
+        if (await Task.WhenAny(reads, Task.Delay(OutputDrainLimit, cancellationToken)).ConfigureAwait(false) != reads)
+        {
+            await reading.CancelAsync().ConfigureAwait(false);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return (process.ExitCode, Text(output) + Text(error));
+
+        static string Text(StringBuilder text)
+        {
+            lock (text)
+            {
+                return text.ToString();
+            }
+        }
+    }
+
+    /// <summary>How long <see cref="RunProcessAsync(string, IReadOnlyList{string}, string?, TimeSpan, CancellationToken)"/> reads output after the program has ended.</summary>
+    internal static TimeSpan OutputDrainLimit { get; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>A reader's text, as it comes, until its end or <paramref name="cancellationToken"/>.</summary>
+    private static async Task ReadAllAsync(StreamReader reader, StringBuilder into, CancellationToken cancellationToken)
+    {
+        var buffer = new char[4096];
+        try
+        {
+            int read;
+            while ((read = await reader.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+            {
+                lock (into)
+                {
+                    into.Append(buffer, 0, read);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+        {
+            // Let go: the program has ended or been stopped, and what it wrote is in.
+        }
     }
 }
