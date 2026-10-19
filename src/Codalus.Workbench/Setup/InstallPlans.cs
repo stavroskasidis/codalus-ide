@@ -55,22 +55,32 @@ public static class InstallPlans
         version is { } v && v.Split('.') is [var major, var minor, ..] ? $"{major}.{minor}" : fallback ?? HostChannel;
 
     /// <summary>
-    /// winget's package of a channel's SDK: <c>Microsoft.DotNet.SDK.11</c>; the preview package for the IDE's own
-    /// channel while the IDE runs on a release candidate (M30b), which winget lists only as the preview SDK.
+    /// winget's package of a channel's SDK: <c>Microsoft.DotNet.SDK.11</c>; the preview package when the version wanted
+    /// in that channel is a preview or a release candidate (M30b, M49), which winget lists only as the preview SDK.
     /// </summary>
-    public static string WingetSdk(string channel, string hostsRuntime) =>
-        channel == HostChannel && hostsRuntime.Contains('-', StringComparison.Ordinal) ? "Microsoft.DotNet.SDK.Preview" : $"Microsoft.DotNet.SDK.{channel.Split('.')[0]}";
+    /// <param name="version">
+    /// The version wanted: the runtime an update or the IDE's hosts need (M49), else the one the IDE runs on. A release
+    /// (11.0.0) needs the channel's package even while the IDE runs on a release candidate.
+    /// </param>
+    public static string WingetSdk(string channel, string version) =>
+        version.Contains('-', StringComparison.Ordinal) && Channel(version, fallback: string.Empty) == channel
+            ? "Microsoft.DotNet.SDK.Preview"
+            : $"Microsoft.DotNet.SDK.{channel.Split('.')[0]}";
 
     /// <summary>
     /// The plan for <paramref name="tool"/>, or null when there's nothing to install it with here.
     /// <paramref name="hasWinget"/> and <paramref name="linuxDistribution"/> (<c>/etc/os-release</c>'s <c>ID</c> and
     /// <c>ID_LIKE</c>) describe the machine.
     /// </summary>
-    public static InstallPlan? For(ToolStatus tool, PlatformKind platform, string home, bool hasWinget, string? linuxDistribution)
+    /// <param name="emulatedX64">
+    /// The IDE is an x64 process on Arm64 (the win-x64 build on Windows on Arm, M49): .NET installs as x64, the only
+    /// .NET its hosts can load.
+    /// </param>
+    public static InstallPlan? For(ToolStatus tool, PlatformKind platform, string home, bool hasWinget, string? linuxDistribution, bool emulatedX64 = false)
     {
         return tool.Id switch
         {
-            "dotnet" => Dotnet(tool, platform, home, hasWinget),
+            "dotnet" or "dotnet-runtime" => Dotnet(tool, platform, home, hasWinget, emulatedX64),
             "git" => Git(platform, hasWinget, linuxDistribution),
             "git-lfs" => platform switch
             {
@@ -89,22 +99,22 @@ public static class InstallPlans
         };
     }
 
-    private static InstallPlan Dotnet(ToolStatus tool, PlatformKind platform, string home, bool hasWinget)
+    private static InstallPlan Dotnet(ToolStatus tool, PlatformKind platform, string home, bool hasWinget, bool emulatedX64)
     {
         var pinned = tool.State == ToolState.Mismatch ? tool.WantedVersion : null;
         var channel = tool.WantedChannel ?? Channel(pinned ?? tool.Version);
         if (platform == PlatformKind.Windows)
         {
             return hasWinget
-                ? Winget("dotnet", WingetSdk(channel, EnvironmentCheck.DefaultHostsRuntime()), pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})")
-                : new("dotnet", InstallKind.OpenPage, "The .NET download page (winget isn't available)", DotnetDownloadPage);
+                ? Winget(tool.Id, WingetSdk(channel, tool.Id == "dotnet-runtime" && tool.WantedVersion is { } wanted ? wanted : pinned ?? EnvironmentCheck.DefaultHostsRuntime()), pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})", emulatedX64 ? ["--architecture", "x64"] : [])
+                : new(tool.Id, InstallKind.OpenPage, "The .NET download page (winget isn't available)", DotnetDownloadPage);
         }
 
         // macOS and Linux: Microsoft's dotnet-install script, into the user's ~/.dotnet: no administrator password.
         var folder = home.TrimEnd('/') + "/.dotnet"; // a Unix path, whatever machine computes the plan
         var version = pinned is null ? $"--channel {channel}" : $"--version {pinned}";
         var command = $"curl -sSL {DotnetInstallScript} | bash -s -- {version} --install-dir \"{folder}\"";
-        return new("dotnet", InstallKind.Run, pinned is null ? $".NET SDK {channel} into {folder}" : $".NET SDK {pinned} into {folder}", command, "bash", ["-c", command])
+        return new(tool.Id, InstallKind.Run, pinned is null ? $".NET SDK {channel}{(tool.Id == "dotnet-runtime" ? ", with the runtime Codalus IDE needs," : string.Empty)} into {folder}" : $".NET SDK {pinned} into {folder}", command, "bash", ["-c", command])
         {
             AddsToPath = folder,
         };
@@ -119,9 +129,9 @@ public static class InstallPlans
         _ => new("git", InstallKind.OpenPage, "Git's download page", GitDownloadPage),
     };
 
-    private static InstallPlan Winget(string tool, string id, string what)
+    private static InstallPlan Winget(string tool, string id, string what, string[]? extra = null)
     {
-        string[] arguments = ["install", "--id", id, "--exact", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements"];
+        string[] arguments = ["install", "--id", id, "--exact", .. extra ?? [], "--source", "winget", "--accept-package-agreements", "--accept-source-agreements"];
         return new(tool, InstallKind.Run, $"{what} with winget", "winget " + string.Join(' ', arguments), "winget", arguments);
     }
 

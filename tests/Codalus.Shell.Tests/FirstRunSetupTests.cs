@@ -207,6 +207,16 @@ public sealed class FirstRunSetupTests
         Assert.All(model.Tools, t => Assert.False(t.CanInstall));
         Snapshot(f, "first-run-setup-tools");
 
+        // M49: SDKs alone are a Found SDK row; the runtime the IDE needs, when it's missing, is a row with its install.
+        var sdk = new ToolStatus("dotnet", ".NET SDK", true, ToolState.Found, "Opening .NET projects") { Version = "10.0.109" };
+        var git = new ToolStatus("git", "Git", true, ToolState.Found, "Source control") { Version = "2.47.1" };
+        var runtime = new ToolStatus("dotnet-runtime", ".NET runtime for Codalus IDE", true, ToolState.Missing, "Codalus IDE's helper processes") { WantedVersion = "11.0.0-rc.2.26504.105", WantedChannel = "11.0", Found = "10.0.9 in /usr/local/share/dotnet" };
+        model.ShowTools([sdk, runtime, git]);
+        Assert.Equal(["dotnet", "dotnet-runtime", "git"], model.Tools.Select(t => t.Tool.Id));
+        Assert.True(model.Tools.Single(t => t.Tool.Id == "dotnet-runtime").CanInstall);
+        model.ShowTools([sdk, runtime with { State = ToolState.Found, Version = "11.0.0-rc.2.26504.105" }, git]);
+        Assert.Equal(["dotnet", "git"], model.Tools.Select(t => t.Tool.Id));
+
         // A missing SDK (a stand-in): Install… shows exactly what runs, and nothing runs without the yes.
         var runs = new List<string>();
         model.InstallRunner = (program, arguments, _, _) =>

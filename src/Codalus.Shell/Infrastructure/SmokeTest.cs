@@ -224,6 +224,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => tree.Roots.Count > 0, "the Start page has items").ConfigureAwait(true);
         }).ConfigureAwait(true);
 
+        // M49: the shipped hosts' runtime requirement, resolved by the check as hostfxr resolves it: the plugin host ran
+        // above, so the check must agree that its runtime is installed (a check that misjudged would block every host).
+        await StepAsync("setup.hostRuntime", "M49", "The IDE's .NET runtime: what the shipped hosts ask for is found under their root, as their start shows", () =>
+        {
+            var requirements = Codalus.Workbench.Setup.IdeRuntime.Requirements(AppContext.BaseDirectory, Environment.GetEnvironmentVariable);
+            Check(requirements.Any(r => r.Name == Codalus.Rpc.FrameworkReference.NetCoreApp), $"the hosts' runtimeconfig.json files name Microsoft.NETCore.App (found: {string.Join(", ", requirements)})");
+            var row = shell.EnvironmentCheck.HostRuntimeStatus();
+            Check(row.State == Codalus.Workbench.Setup.ToolState.Found, $"the runtime row is Found ({row.State}: {row.Detail})");
+            var host = PluginHostLocator.Resolve();
+            Check(host is not null && Codalus.Rpc.HostRuntimeCheck.Check(host) is null or { IsSatisfied: true }, "the plugin host's own check passes");
+            return Task.CompletedTask;
+        }, "plugins.host").ConfigureAwait(true);
+
         // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
         await StepAsync("shell.setup", "M46", "The first-run setup: a theme family previewed live, a keyboard scheme, VS Code's settings imported and the tools checked; Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
 

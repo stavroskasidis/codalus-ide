@@ -631,11 +631,14 @@ public sealed class SetupViewModel : ObservableObject
 
     private void FillTools() => ShowTools(_shell.Tools);
 
-    /// <summary>Shows these tools' rows (the .NET SDK and git; tests pass stand-ins).</summary>
+    /// <summary>
+    /// Shows these tools' rows: the .NET SDK, the .NET runtime Codalus IDE needs when it's missing (M49; the SDK row is
+    /// Found with SDKs alone), and git. Tests pass stand-ins.
+    /// </summary>
     internal void ShowTools(IReadOnlyList<ToolStatus> tools)
     {
         Tools.Clear();
-        foreach (var tool in tools.Where(t => t.Id is "dotnet" or "git"))
+        foreach (var tool in tools.Where(t => t.Id is "dotnet" or "git" || t is { Id: "dotnet-runtime", NeedsAttention: true }))
         {
             // The row showed the plan and the user said yes: the install doesn't ask again.
             Tools.Add(new SetupToolRowViewModel(tool, _shell.PlanFor(tool), t => _shell.InstallToolAsync(t, _ => Task.FromResult(true), InstallRunner)));

@@ -60,6 +60,7 @@ public sealed class NotificationsViewModel : ObservableObject
 {
     private const int MaxToasts = 3;
     private readonly NotificationService _service;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Notification, byte> _leftToasts = new();
     private readonly Func<int> _autoHideSeconds;
 
     public NotificationsViewModel(NotificationService service, Func<int> autoHideSeconds)
@@ -98,8 +99,20 @@ public sealed class NotificationsViewModel : ObservableObject
     /// <summary>When true (the Notifications window is focused), new notifications don't pop up as toasts.</summary>
     public bool SuppressToasts { get; set; }
 
+    /// <summary>
+    /// Whether a notification was a toast and isn't any more, though it's still in the center: hidden with Escape,
+    /// pushed out by newer toasts or hidden after a while. Whoever keeps one notification about a problem shows it again
+    /// (M49). Any thread.
+    /// </summary>
+    public bool HasLeftToasts(Notification notification) => _leftToasts.ContainsKey(notification);
+
     public void HideToasts()
     {
+        foreach (var toast in Toasts)
+        {
+            _leftToasts.TryAdd(toast.Model, 0);
+        }
+
         Toasts.Clear();
         RaiseChanged();
     }
@@ -113,6 +126,7 @@ public sealed class NotificationsViewModel : ObservableObject
             Toasts.Add(vm);
             while (Toasts.Count > MaxToasts)
             {
+                _leftToasts.TryAdd(Toasts[0].Model, 0);
                 Toasts.RemoveAt(0);
             }
 
@@ -129,12 +143,14 @@ public sealed class NotificationsViewModel : ObservableObject
     {
         if (Toasts.Remove(vm))
         {
+            _leftToasts.TryAdd(vm.Model, 0);
             RaiseChanged();
         }
     }
 
     private void OnRemoved(Notification notification)
     {
+        _leftToasts.TryRemove(notification, out _);
         foreach (var list in new[] { Items, Toasts })
         {
             if (list.FirstOrDefault(v => v.Model == notification) is { } vm)
