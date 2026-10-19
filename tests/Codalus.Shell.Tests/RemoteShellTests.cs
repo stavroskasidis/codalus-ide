@@ -130,7 +130,7 @@ public sealed class RemoteShellTests
 
         // Build in the build host there.
         var before = f.Shell.Builds.LastBuild;
-        f.Shell.Run("build.buildSolution");
+        await f.RunAsync("build.buildSolution");
         await ShellFixture.PumpUntil(() => f.Shell.Builds.LastBuild is { } b && b != before, seconds: 300);
         Assert.True(f.Shell.Builds.LastBuild!.Result.Succeeded, f.Shell.Builds.Channel.GetText());
 
@@ -206,7 +206,7 @@ public sealed class RemoteShellTests
         var program = Path.Combine(local, "src", "Hello", "Program.cs");
         var line = Array.FindIndex(File.ReadAllLines(Path.Combine(folder, "src", "Hello", "Program.cs")), l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
         f.Shell.Debugger.Breakpoints.Toggle(program, line);
-        f.Shell.Run("debug.start");
+        await f.RunAsync("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 300);
         try
         {
@@ -220,7 +220,7 @@ public sealed class RemoteShellTests
         await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "args"), seconds: 30);
 
         f.Shell.Debugger.Breakpoints.Clear();
-        f.Shell.Run("debug.continue");
+        await f.RunAsync("debug.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
         Assert.Contains("exited with code", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
     }
@@ -274,7 +274,7 @@ public sealed class RemoteShellTests
             Assert.Contains(completion.Items, i => i.Label == "WriteLine");
 
             var before = f.Shell.Builds.LastBuild;
-            f.Shell.Run("build.buildSolution");
+            await f.RunAsync("build.buildSolution");
             await ShellFixture.PumpUntil(() => f.Shell.Builds.LastBuild is { } b && b != before, seconds: 300);
             Assert.True(f.Shell.Builds.LastBuild!.Result.Succeeded, f.Shell.Builds.Channel.GetText());
 
@@ -292,7 +292,7 @@ public sealed class RemoteShellTests
                 Environment.SetEnvironmentVariable("CODALUS_NETCOREDBG_LINUX_X64", mirror);
                 var line = Array.FindIndex(text.Split('\n'), l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
                 f.Shell.Debugger.Breakpoints.Toggle(program, line);
-                f.Shell.Run("debug.start");
+                await f.RunAsync("debug.start");
                 var answered = false;
                 await ShellFixture.PumpUntil(() =>
                 {
@@ -306,7 +306,7 @@ public sealed class RemoteShellTests
                 }, seconds: 300);
                 await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } e && string.Equals(e.Model.Path, program, StringComparison.OrdinalIgnoreCase) && c.CurrentDebugLine() == line, seconds: 30);
                 f.Shell.Debugger.Breakpoints.Clear();
-                f.Shell.Run("debug.continue");
+                await f.RunAsync("debug.continue");
                 await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
             }
             else

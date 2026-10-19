@@ -43,7 +43,7 @@ public sealed class BuildDepthTests
         var hello = Path.Combine(folder, "src", "Hello", "Hello.csproj");
 
         // Batch Build: every project × configuration; the checked ones build in turn.
-        f.Shell.Run("build.batchBuild");
+        await f.RunAsync("build.batchBuild");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<PageDocument>().Any(d => d.ViewModel is BatchBuildViewModel { Rows.Count: >= 4 }), seconds: 60);
         var batch = Page<BatchBuildViewModel>(f);
         Assert.Contains(batch.Rows, r => r is { Name: "Greetings", Configuration: "Release", Platform: "AnyCPU" });
@@ -67,7 +67,7 @@ public sealed class BuildDepthTests
         Assert.True(verdict!.UpToDate, string.Join("; ", verdict.Projects.Select(p => p.Reason)));
 
         // Build with Binary Log runs MSBuild anyway and opens the log; search reveals a node.
-        f.Shell.Run("build.buildWithBinaryLog");
+        await f.RunAsync("build.buildWithBinaryLog");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<PageDocument>().Any(d => d.ViewModel is BinaryLogViewModel { Roots.Count: 1 } log && log.Roots[0].Children.Count > 1), seconds: 180);
         var binlog = Page<BinaryLogViewModel>(f);
         Assert.StartsWith(f.Shell.BinaryLogsFolder, binlog.Path, StringComparison.Ordinal);
@@ -82,7 +82,7 @@ public sealed class BuildDepthTests
         NavigationDepthTests.Screenshot(f, "m26b-binary-log");
 
         // Build Timings: the projects of that build, on the critical path.
-        f.Shell.Run("build.showTimings");
+        await f.RunAsync("build.showTimings");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<PageDocument>().Any(d => d.ViewModel is BuildTimingsViewModel { Projects.Count: > 0 }), seconds: 60);
         var timings = Page<BuildTimingsViewModel>(f);
         Assert.Contains(timings.Projects, p => p.Name == "Hello");
@@ -150,7 +150,7 @@ public sealed class BuildDepthTests
         var source = editor.Controller.Editor.Document.Text;
         var line = source.IndexOf("namespace Fixture.Items;", StringComparison.Ordinal);
         editor.Controller.Editor.Document.Insert(line, "// regenerated on save\n");
-        f.Shell.Run("file.save");
+        await f.RunAsync("file.save");
         await ShellFixture.PumpUntil(() => ReadWhileWritten(Path.Combine(items, "Greeting.cs")).Contains("// regenerated on save", StringComparison.Ordinal), seconds: 120);
     }
 

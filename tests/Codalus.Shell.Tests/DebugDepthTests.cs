@@ -32,12 +32,12 @@ public sealed class DebugDepthTests
         var depth = Path.Combine(folder, "Debuggee", "Depth.cs");
 
         // Exception settings: break when InvalidOperationException is thrown (the window's row).
-        f.Shell.Run("debug.exceptionSettings");
+        await f.RunAsync("debug.exceptionSettings");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<ExceptionSettingsView>().Any());
         f.Shell.ExceptionSettingsWindow.Rows.Single(r => r.Type == "System.InvalidOperationException").BreakWhenThrown = true;
         Assert.True(f.Shell.Debugger.ExceptionSettings.Breaks("System.InvalidOperationException"));
 
-        f.Shell.Run("debug.start");
+        await f.RunAsync("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger is { State: DebugState.Stopped, CurrentStop.Reason: "exception" }, seconds: 180);
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == Line(depth, "depth-outer"));
 
@@ -130,7 +130,7 @@ public sealed class DebugDepthTests
         f.Shell.ModuleList.Filter = "debuggee";
         Assert.Single(f.Shell.ModuleList.Rows);
 
-        f.Shell.Run("debug.stop");
+        await f.RunAsync("debug.stop");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
 
         // Function breakpoints, labels, export and import.

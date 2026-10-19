@@ -58,7 +58,7 @@ public class FindInFilesTests
             // Ctrl+Shift+F shows the window on Find in Files; the Find Results window has no search box of its own.
             var find = f.Shell.FindReplace;
             var results = f.Shell.FindResults;
-            f.Shell.Run("workbench.action.findInFiles");
+            await f.RunAsync("workbench.action.findInFiles");
             await ShellFixture.PumpUntil(() => find.IsOpen && f.Window.GetVisualDescendants().OfType<FindReplaceView>().Any(v => v.IsEffectivelyVisible));
             Assert.False(find.IsReplace);
 
@@ -100,7 +100,7 @@ public class FindInFilesTests
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is { } c && c.Model.Path == one && c.Caret.Line == 2);
 
             // Replace, one match at a time: whole words, case matched; each line's matches in turn.
-            f.Shell.Run("workbench.action.replaceInFiles");
+            await f.RunAsync("workbench.action.replaceInFiles");
             Assert.True(find.IsReplace);
             NavigationDepthTests.Screenshot(f, "replace-in-files");
             find.MatchCase = true;
@@ -175,7 +175,7 @@ public class FindInFilesTests
         // The maintainer's report: Find what's placeholder, Look in's "Entire solution" and File types' patterns sat at
         // the top of their fields, and hovering Find what drew a box around its chevron only.
         await using var f = ShellFixture.Create();
-        f.Shell.Run("workbench.action.findInFiles");
+        await f.RunAsync("workbench.action.findInFiles");
         await ShellFixture.PumpUntil(() => f.Shell.FindReplace.IsOpen && f.Window.GetVisualDescendants().OfType<FindReplaceView>().Any(v => v.IsEffectivelyVisible));
         ShellFixture.Pump();
         var view = f.Window.GetVisualDescendants().OfType<FindReplaceView>().First();

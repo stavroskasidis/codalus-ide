@@ -25,7 +25,7 @@ public sealed class BuildTests
         var greeter = Path.Combine(folder, "src", "Greetings", "Greeter.cs");
         var original = File.ReadAllText(greeter);
         File.WriteAllText(greeter, original.Replace("$\"Hello from {name}\"", "missing", StringComparison.Ordinal));
-        f.Shell.Run("build.buildSolution");
+        await f.RunAsync("build.buildSolution");
         await ShellFixture.PumpUntil(() => f.Shell.Builds.LastBuild is not null, seconds: 180);
         Assert.False(f.Shell.Builds.LastBuild!.Result.Succeeded, f.Shell.Builds.Channel.GetText());
         // The live (IntelliSense) diagnostic can show first; wait for the build's.
@@ -43,7 +43,7 @@ public sealed class BuildTests
 
         // Fixed, then Ctrl+F5: builds the startup project and runs it with its first launch profile.
         File.WriteAllText(greeter, original);
-        f.Shell.Run("run.startWithoutDebugging");
+        await f.RunAsync("run.startWithoutDebugging");
         await ShellFixture.PumpUntil(
             () => f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Hello")?.GetText().Contains("has exited with code 0", StringComparison.Ordinal) == true,
             seconds: 180);

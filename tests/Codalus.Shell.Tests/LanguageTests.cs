@@ -282,12 +282,12 @@ public sealed class LanguageTests
         Assert.Contains(todo.CompletionWindow!.CompletionList.CompletionData, d => d.Text == "later");
         f.Press(Avalonia.Input.Key.Escape);
 
-        f.Shell.Run("editor.action.formatDocument");
+        await f.RunAsync("editor.action.formatDocument");
         await ShellFixture.PumpUntil(() => todo.Model.Text.Text.Contains("\n- [ ] Messy", StringComparison.Ordinal), seconds: 30);
 
         // The language configuration: '#' comments.
         todo.Editor.Select(0, 0);
-        f.Shell.Run("editor.action.commentLine");
+        await f.RunAsync("editor.action.commentLine");
         Assert.StartsWith("# Week:", todo.Model.Text.Text, StringComparison.Ordinal);
     }
 
@@ -304,7 +304,7 @@ public sealed class LanguageTests
 
         // Markdown: Open Preview to the Side follows edits.
         var readme = await OpenAsync(f, "README.md", "# Title\n\nSome *text*.\n");
-        f.Shell.Run("markdown.showPreviewToSide");
+        await f.RunAsync("markdown.showPreviewToSide");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.MarkdownPreviewView>().Any());
         var preview = f.Window.GetVisualDescendants().OfType<Views.MarkdownPreviewView>().Single();
         Assert.StartsWith("# Title", preview.Rendered, StringComparison.Ordinal);
@@ -322,9 +322,9 @@ public sealed class LanguageTests
         // Line comments (YAML's #), toggled on the selected lines.
         var yaml = await OpenAsync(f, "ci.yml", "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: dotnet build\n");
         yaml.Editor.Select(0, yaml.Model.Text.GetLineByNumber(2).EndOffset);
-        f.Shell.Run("editor.action.commentLine");
+        await f.RunAsync("editor.action.commentLine");
         Assert.StartsWith("# jobs:\n#   build:\n", yaml.Model.Text.Text, StringComparison.Ordinal); // aligned at the smallest indentation
-        f.Shell.Run("editor.action.commentLine");
+        await f.RunAsync("editor.action.commentLine");
         Assert.StartsWith("jobs:\n  build:\n", yaml.Model.Text.Text, StringComparison.Ordinal);
 
         // Folding without a language server: indentation for YAML.
@@ -347,7 +347,7 @@ public sealed class LanguageTests
         var xml = await OpenAsync(f, "Sample.props", "<Project>\n  <PropertyGroup>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>\n");
         await ShellFixture.PumpUntil(() => xml.Folding.AllFoldings.Count() >= 2, seconds: 10);
         xml.Editor.Select(xml.Model.Text.GetLineByNumber(3).Offset, 0);
-        f.Shell.Run("editor.action.commentLine");
+        await f.RunAsync("editor.action.commentLine");
         Assert.Contains("<!-- <Nullable>enable</Nullable> -->", xml.Model.Text.Text, StringComparison.Ordinal);
 
         var json = await OpenAsync(f, "data.json", "\n");

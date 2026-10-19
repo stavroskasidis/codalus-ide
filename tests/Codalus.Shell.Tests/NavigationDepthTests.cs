@@ -149,7 +149,7 @@ public class NavigationDepthTests
                 Assert.Fail($"Peek Definition did not open. Last message: {lastMessage}. Language log: {log[Math.Max(0, log.Length - 4000)..]}");
             }
 
-            f.Shell.Run("editor.action.peekDefinition");
+            await f.RunAsync("editor.action.peekDefinition");
             try
             {
                 await ShellFixture.PumpUntil(() => View()?.Peek?.IsOpen == true, seconds: 10);
@@ -174,7 +174,7 @@ public class NavigationDepthTests
         Uri? help = null;
         f.Shell.OpenHelpUrl = uri => help = uri;
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("Console.WriteLine(json)", StringComparison.Ordinal) + 2;
-        f.Shell.Run("editor.action.showHelp");
+        await f.RunAsync("editor.action.showHelp");
         await ShellFixture.PumpUntil(() => help is not null, seconds: 30);
         Assert.Equal("https://learn.microsoft.com/dotnet/api/system.console", help!.ToString());
 
@@ -202,7 +202,7 @@ public class NavigationDepthTests
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("Reporter.Run();", StringComparison.Ordinal);
         program.Editor.TextArea.PerformTextInput("// edited\n");
         var shapes = await OpenAsync(f, shapesPath);
-        f.Shell.Run("workbench.action.navigateToLastEditLocation");
+        await f.RunAsync("workbench.action.navigateToLastEditLocation");
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model == program.Model && f.Shell.ActiveEditor.Controller is not null);
         program = f.Shell.ActiveEditor!.Controller!;
         Assert.Equal(program.Model.Text.GetLineByOffset(program.Model.Text.Text.IndexOf("Reporter.Run();", StringComparison.Ordinal)).LineNumber, program.Caret.Line);
@@ -228,7 +228,7 @@ public class NavigationDepthTests
 
         // Call Hierarchy: callers of IShape.Area, recursively.
         shapes.Editor.CaretOffset = shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal) + "double ".Length;
-        f.Shell.Run("editor.action.showCallHierarchy");
+        await f.RunAsync("editor.action.showCallHierarchy");
         await ShellFixture.PumpUntil(() => f.Shell.Hierarchy.Roots.Count == 1 && f.Shell.Hierarchy.Roots[0].Children.Count == 2, seconds: 30);
         var callsTo = f.Shell.Hierarchy.Roots[0].Children[0];
         Assert.Equal("Calls To 'Area'", callsTo.Label);
@@ -238,7 +238,7 @@ public class NavigationDepthTests
 
         // Type Hierarchy: derived types of Shape.
         shapes.Editor.CaretOffset = shapes.Model.Text.Text.IndexOf("abstract class Shape", StringComparison.Ordinal) + "abstract class ".Length;
-        f.Shell.Run("editor.action.showTypeHierarchy");
+        await f.RunAsync("editor.action.showTypeHierarchy");
         await ShellFixture.PumpUntil(() => f.Shell.Hierarchy.Title == "Type Hierarchy: Shape" && f.Shell.Hierarchy.Roots[0].Children.Count == 2, seconds: 30);
         var derived = f.Shell.Hierarchy.Roots[0].Children[1];
         await derived.LoadAsync();
@@ -249,7 +249,7 @@ public class NavigationDepthTests
         var reporter = await OpenAsync(f, Path.Combine(folder, "src", "App", "Reporter.cs"));
         await ShellFixture.PumpUntil(() => reporter.Markers.Segments.Any(s => s.Diagnostic.Code == "CA2200"), seconds: 60);
         reporter.Editor.CaretOffset = 0;
-        f.Shell.Run("editor.action.marker.next");
+        await f.RunAsync("editor.action.marker.next");
         var warningLine = f.Shell.Languages.Diagnostics.For(reporter.Model.Path).First(d => d.Code == "CA2200").Range.Start.Line + 1;
         await ShellFixture.PumpUntil(() => reporter.Caret.Line == warningLine);
     }

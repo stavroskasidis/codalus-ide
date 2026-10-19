@@ -42,6 +42,9 @@ public sealed partial class ShellHost : IHostingActions
     private BranchStatusDto? _branchStatus;
     private string? _lfsRoot;
     private bool _lfsUsed;
+
+    /// <summary>When the repository's root <c>.gitattributes</c> was written, as of the last LFS check (null: none).</summary>
+    private DateTime? _lfsAttributes;
     private DateTime _locksRead;
 
     public SecretStorage Secrets { get; private set; } = null!;
@@ -1088,9 +1091,13 @@ public sealed partial class ShellHost : IHostingActions
             return;
         }
 
-        if (_lfsRoot == root && !_lfsUsed)
+        // No LFS in this repository: checked again only once its root .gitattributes changes (git lfs track writes it).
+        // Checked once per repository, a repository that started using LFS after it was opened never showed it (a test
+        // that sets LFS up right after opening the repository saw the first check land before its .gitattributes).
+        var attributes = GitAttributesWritten(root);
+        if (_lfsRoot == root && !_lfsUsed && attributes == _lfsAttributes)
         {
-            return; // no LFS in this repository (checked once per repository)
+            return;
         }
 
         var includeLocks = _lfsRoot != root || DateTime.UtcNow - _locksRead > TimeSpan.FromMinutes(1);
@@ -1113,6 +1120,7 @@ public sealed partial class ShellHost : IHostingActions
 
             _lfsRoot = root;
             _lfsUsed = lfs.IsUsed;
+            _lfsAttributes = attributes;
             GitChanges.Lfs = lfs;
             Workbench.Context.Set("gitLfs", lfs.IsUsed);
         }
@@ -1120,6 +1128,12 @@ public sealed partial class ShellHost : IHostingActions
         {
             GitLog.AppendLine("[lfs] " + ex.Message);
         }
+    }
+
+    private static DateTime? GitAttributesWritten(string root)
+    {
+        var file = Path.Combine(root, ".gitattributes");
+        return File.Exists(file) ? File.GetLastWriteTimeUtc(file) : null;
     }
 
     /// <summary>Git LFS locks: unlock one (force for someone else's).</summary>

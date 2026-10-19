@@ -42,7 +42,7 @@ public sealed class AcpShellTests
         var agents = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["stand-in"] = new { command = "dotnet", args = new[] { StandInAgent }, env = new Dictionary<string, string> { ["ACP_FAKE_LOG"] = log } } });
         await settings.SetAsync(AcpAgents.AgentsSetting, agents, SettingScope.User, CancellationToken.None);
         f.Shell.McpExecutable = (Dotnet, ShellDll);
-        f.Shell.Run("ai.chat.show");
+        await f.RunAsync("ai.chat.show");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<AiChatView>().Any());
         return (f.Window.GetVisualDescendants().OfType<AiChatView>().First(), log);
     }

@@ -103,7 +103,7 @@ public sealed class WinFormsDesignerShellTests
 
         // View Designer (Shift+F7): says so, and the code stays.
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Context.GetValue("editorHasWinFormsDesigner") is true);
-        f.Shell.Run("winforms.viewDesigner");
+        await f.RunAsync("winforms.viewDesigner");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("Windows Forms designer runs on Windows only", StringComparison.Ordinal)));
         Assert.Empty(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>());
         Assert.Same(editor, f.Shell.ActiveEditor);
@@ -217,7 +217,7 @@ public sealed class WinFormsDesignerShellTests
 
         // F7 from the designer shows the code; double-clicking a control with a handler goes to it.
         f.Shell.Layout.OpenDocument(designer, focus: true);
-        f.Shell.Run("winforms.viewCode");
+        await f.RunAsync("winforms.viewCode");
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == form);
         f.Shell.Layout.OpenDocument(designer, focus: true);
         var place = designer.Find("placeOrderButton")!;

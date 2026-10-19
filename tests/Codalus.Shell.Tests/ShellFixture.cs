@@ -164,6 +164,11 @@ internal sealed class ShellFixture : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Pumps the dispatcher until <paramref name="condition"/> holds, then once more: a service's state (set on its own
+    /// thread, which the condition usually reads) reaches the views and the context keys through a job posted to the UI
+    /// thread, and the last delay could end the wait before that job ran (PR #69's Save As Solution Filter).
+    /// </summary>
     /// <param name="describe">What the shell was doing, added to the failure on a timeout.</param>
     public static async Task PumpUntil(Func<bool> condition, int seconds = 30, Func<string>? describe = null)
     {
@@ -179,6 +184,44 @@ internal sealed class ShellFixture : IAsyncDisposable
             Pump();
             await Task.Delay(15);
         }
+
+        Dispatcher.UIThread.RunJobs(); // the jobs only: a frame each time made the shell tests about a tenth slower
+    }
+
+    /// <summary>
+    /// Waits until <paramref name="id"/> is enabled. A command run right after a state change can find the keys its
+    /// enablement reads not set yet: they follow the state a posted job later (a solution's <c>solutionTrusted</c>, a
+    /// repository's <c>gitRepository</c>, the focus), and the command was refused (PR #76's View History). On a timeout,
+    /// the failure names the keys and their values.
+    /// </summary>
+    public async Task WhenEnabledAsync(string id, int seconds = 30)
+    {
+        // Already enabled: nothing is pumped, so a focus a test set just before (as a click would) stays for the command.
+        var commands = Shell.Workbench.Commands;
+        if (!commands.IsEnabled(id))
+        {
+            await PumpUntil(() => commands.IsEnabled(id), seconds, () => $"'{id}' to be enabled ({DescribeEnablement(id)})");
+        }
+    }
+
+    /// <summary>The command's enablement and the context keys it reads, with their values.</summary>
+    public string DescribeEnablement(string id) =>
+        Shell.Workbench.Commands.Descriptors.FirstOrDefault(d => d.Id == id) is { } command
+            ? $"enablement: {command.Enablement.Text}; " + string.Join(", ", Infrastructure.SweepContextWatch.Read(command.Enablement, Shell.Workbench.Context).Select(p => $"{p.Key} = {p.Value ?? "unset"}"))
+            : "no such command is registered";
+
+    /// <summary>Runs <paramref name="id"/> as the UI does (<see cref="ShellHost.Run(string)"/>), once it is enabled.</summary>
+    public async Task RunAsync(string id)
+    {
+        await WhenEnabledAsync(id);
+        Shell.Run(id);
+    }
+
+    /// <summary>Executes <paramref name="id"/> and waits for it, once it is enabled.</summary>
+    public async Task<System.Text.Json.JsonElement?> ExecuteAsync(string id, params System.Text.Json.JsonElement[] args)
+    {
+        await WhenEnabledAsync(id);
+        return await Shell.Workbench.Commands.ExecuteAsync(id, args, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
