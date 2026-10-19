@@ -30,6 +30,30 @@ if [ "$(uname -s)" = Linux ]; then
   export CODALUS_CREDENTIAL_STORE="${CODALUS_CREDENTIAL_STORE:-memory}"
 fi
 
+# Runs "$@" and stops it after $smoke_limit seconds. The app's own watchdog (40 minutes) starts only once it's up: an
+# X server that took the connection and never answered (a hung WSLg) held it before its window, for hours. A loop, not
+# timeout(1): macOS has none, and Git Bash's is Windows' timeout.exe.
+smoke_limit=$((50 * 60))
+run_bounded() {
+  "$@" &
+  local pid=$! waited=0 status=0
+  while kill -0 "$pid" 2> /dev/null; do
+    if ((waited >= smoke_limit)); then
+      echo "error: the smoke test didn't end within $((smoke_limit / 60)) minutes; stopping it" >&2
+      kill -TERM "$pid" 2> /dev/null
+      sleep 10
+      kill -KILL "$pid" 2> /dev/null
+      break
+    fi
+
+    sleep 5
+    waited=$((waited + 5))
+  done
+
+  wait "$pid" || status=$?
+  return "$status"
+}
+
 # Runs one app: --version, then the smoke test. $1: executable; $2: results dir; $3: whether to run the full smoke test.
 test_app() {
   local exe="$1" results="$2" full="${3:-yes}"
@@ -84,9 +108,9 @@ test_app() {
       return 1
     fi
 
-    xvfb-run -a -s "-screen 0 1920x1080x24" "${cmd[@]}" || status=$?
+    run_bounded xvfb-run -a -s "-screen 0 1920x1080x24" "${cmd[@]}" || status=$?
   else
-    "${cmd[@]}" || status=$?
+    run_bounded "${cmd[@]}" || status=$?
   fi
 
   if [[ -n "$cores" && "$status" -gt 128 ]] && compgen -G "$cores/core.*" > /dev/null; then
