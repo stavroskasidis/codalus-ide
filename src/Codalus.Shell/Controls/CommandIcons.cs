@@ -134,6 +134,8 @@ public static class CommandIcons
         ["templates"] = Blue,
         ["terminal"] = Blue,
         ["timer"] = Blue,
+        ["clock"] = Blue,
+        ["word-wrap"] = Blue,
         ["tools"] = Blue,
         ["type-hierarchy"] = Blue,
         ["undo"] = Blue,

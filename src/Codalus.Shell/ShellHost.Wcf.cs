@@ -107,6 +107,10 @@ public sealed partial class ShellHost
         return viewModel;
     }
 
+    /// <summary>F5 in the WCF Test Client (M34h): invokes the selected operation.</summary>
+    public Task InvokeWcfOperationAsync() =>
+        Layout.FindDocument<SolutionManagementDocument>("wcfTestClient") is { ViewModel: WcfTestClientViewModel { IsBusy: false } client } ? client.SendAsync() : Task.CompletedTask;
+
     private async Task<string?> BrowseWsdlAsync() =>
         Window is null ? null : await Window.PickFileAsync(Localizer.Get("msg.wcf.pickWsdl", "Choose a WSDL file"), Localizer.Get("msg.wcf.wsdlDocuments", "WSDL documents"), ["*.wsdl", "*.xml"]).ConfigureAwait(true);
 }
