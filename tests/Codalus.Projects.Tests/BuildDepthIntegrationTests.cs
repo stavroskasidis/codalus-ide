@@ -115,6 +115,26 @@ public sealed class BuildDepthIntegrationTests : IAsyncLifetime
 
     private async Task<UpToDateResult> CheckAsync(string? project = null) => await _depth.CheckUpToDateAsync(project, Timeout());
 
+    /// <summary>
+    /// Two up-to-date builds of the solution report the same result, down to the milliseconds when the check is quick:
+    /// a wait for "a build after this one" compared them as equal and never ended (the smoke test's gallery, on the macOS
+    /// package). Each finished build is a build of its own.
+    /// </summary>
+    [Fact]
+    public async Task Each_finished_build_is_distinct_even_when_up_to_date_builds_report_the_same()
+    {
+        await BuildAsync();
+        Assert.True((await BuildAsync()).UpToDate, _builds.Channel.GetText());
+        var first = _builds.LastBuild!;
+        Assert.True((await BuildAsync()).UpToDate, _builds.Channel.GetText());
+        var second = _builds.LastBuild!;
+
+        Assert.NotSame(first, second);
+        Assert.Equal(first.Request, second.Request);
+        Assert.NotEqual(first, second with { Result = first.Result }); // the same request and result: still another build
+        Assert.True(second.Number > first.Number);
+    }
+
     [Fact]
     public async Task The_fast_up_to_date_check_agrees_with_MSBuild()
     {
