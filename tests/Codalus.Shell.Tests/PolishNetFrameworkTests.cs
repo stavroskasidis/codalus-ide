@@ -90,7 +90,7 @@ public partial class PolishTests
         // The Error List: building the project alone fails with the reason; a solution build leaves it out with a warning.
         var errorList = f.Shell.Layout.ShowToolWindow(ErrorListViewModel.ToolWindowId, focus: false)!;
         Assert.False(await f.Shell.BuildAsync(BuildTargets.Build, web));
-        await ShellFixture.PumpUntil(() => f.Shell.ErrorList.Rows.OfType<ErrorListRow>().Any(r => r.IsError && r.Description.Contains("Visual Studio's own MSBuild targets", StringComparison.Ordinal)), seconds: 60);
+        await ShellFixture.PumpUntil(() => f.Shell.ErrorList.Rows.OfType<ErrorListRow>().Any(r => r.IsError && r.Description.Contains("imports proprietary MSBuild targets", StringComparison.Ordinal)), seconds: 60);
         var cannotBuild = f.Shell.ErrorList.Rows.OfType<ErrorListRow>().First(r => r.IsError);
         Assert.DoesNotContain(" :", cannotBuild.AccessibleName, StringComparison.Ordinal); // no code: none read out
         Check("error-list (can't build)", new ContentControl { Content = errorList }, ToolWindowMinWidth, 420);
