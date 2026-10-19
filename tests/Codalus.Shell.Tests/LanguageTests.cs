@@ -157,23 +157,31 @@ public sealed class LanguageTests
                 return sticky.Shown.SequenceEqual([1, 2]);
             },
             seconds: 20);
-        ShellFixture.Pump();
 
+        // Hit testing reads the last rendered frame: each check below comes after a frame with what it checks.
+        ShellFixture.RenderFrame(f.Window);
         Rect BoundsInWindow(Visual visual) => new(visual.TranslatePoint(default, f.Window)!.Value, visual.Bounds.Size);
         Visual? HitAt(Point point) => f.Window.InputHitTest(point) as Visual;
         bool Within<T>(Visual? hit)
             where T : Visual => hit is T || hit?.FindAncestorOfType<T>() is not null;
 
-        // The band is the editor's: in its text area, over the code.
+        // The band is the editor's: in its text area, over the code and over the margins beside it. The points come from
+        // the layout: the text view's left edge (the margins' widths vary), and a margin's middle.
         Assert.Same(editor.Editor.TextArea, sticky.GetVisualParent());
         var band = BoundsInWindow(sticky);
         Assert.True(band.Height > 0);
-        var overCode = new Point(band.X + 20, band.Y + (band.Height / 2));
-        Assert.True(Within<StickyScroll>(HitAt(overCode)), $"over the code at {overCode}: {HitAt(overCode)}");
+        var text = BoundsInWindow(editor.Editor.TextArea.TextView);
+        var overCode = new Point(text.X + 20, band.Center.Y);
+        Assert.True(band.Contains(overCode) && text.Contains(overCode), $"the band {band} doesn't cover the text view {text}");
+        Assert.True(Within<StickyScroll>(HitAt(overCode)), $"over the code at {overCode} (band {band}, text view {text}): {HitAt(overCode)}");
+        var margin = BoundsInWindow(editor.BreakpointMargin);
+        var overMargin = new Point(margin.Center.X, band.Center.Y);
+        Assert.True(band.Contains(overMargin), $"the band {band} doesn't cover the breakpoint margin {margin}");
+        Assert.True(Within<StickyScroll>(HitAt(overMargin)), $"over the breakpoint margin at {overMargin} (band {band}, margin {margin}): {HitAt(overMargin)}");
 
         // The find widget, opened over the band, takes the pointer where they overlap.
         editor.Search.Open();
-        ShellFixture.Pump();
+        ShellFixture.RenderFrame(f.Window);
         var widget = BoundsInWindow(editor.Search.GetVisualDescendants().OfType<Border>().First(b => b.IsEffectivelyVisible && b.Bounds.Height > 0)).Intersect(band);
         Assert.True(widget.Width > 0 && widget.Height > 0, $"the find widget {editor.Search.Bounds} doesn't overlap the band {band}");
         Assert.True(Within<AvaloniaEdit.Search.SearchPanel>(HitAt(widget.Center)), $"the find widget at {widget.Center}: {HitAt(widget.Center)}");
@@ -183,7 +191,7 @@ public sealed class LanguageTests
         // A quick pick (the branch picker, the command palette) over the band: its rows take the pointer, not the band.
         var picking = f.Shell.Palette.ShowAsync([.. Enumerable.Range(0, 12).Select(i => new ViewModels.QuickPickItem($"branch-{i}"))], "Switch to a branch");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.QuickPickView>().Any(v => v.IsEffectivelyVisible && v.Bounds.Height > 0));
-        ShellFixture.Pump();
+        ShellFixture.RenderFrame(f.Window);
         var picker = f.Window.GetVisualDescendants().OfType<Views.QuickPickView>().First(v => v.IsEffectivelyVisible);
         var overlap = BoundsInWindow(picker).Intersect(band);
         Assert.True(overlap.Width > 0 && overlap.Height > 0, $"the quick pick {BoundsInWindow(picker)} doesn't overlap the band {band}");
