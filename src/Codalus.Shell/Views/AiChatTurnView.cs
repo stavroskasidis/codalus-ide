@@ -28,6 +28,10 @@ internal sealed class AiChatTurnView : StackPanel
     private readonly ObservableCollection<AiStepItem> _steps = [];
     private readonly Border _stepsRail;
     private readonly ContentControl _answer = new();
+    private readonly Expander _thought;
+    private readonly SelectableTextBlock _thoughtText = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly StackPanel _plan = new() { Spacing = 1, IsVisible = false };
+    private readonly StackPanel _notices = new() { Spacing = 2, IsVisible = false };
     private readonly WrapPanel _status = new() { Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 4 };
     private readonly List<AiCodeBlockView> _codeBlocks = [];
     private IReadOnlyList<AiCodeBlock> _blocks = [];
@@ -66,7 +70,16 @@ internal sealed class AiChatTurnView : StackPanel
         byline.Classes.Add("muted");
         byline.Classes.Add("small");
         var who = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 6, LineSpacing = 2, Children = { author, byline } };
-        if (turn.IsAgent)
+        if (turn.ExternalAgent is not null)
+        {
+            // An external agent (M48, ADR 0079): its own program, provider and data policy.
+            var external = new Border { Child = new TextBlock { Text = Localizer.Get("msg.acp.externalAgentChip", "External agent") } };
+            external.Classes.Add("chip");
+            external.Classes.Add("warning");
+            ToolTip.SetTip(external, Localizer.Get("aiChat.externalAgentUsesItsOwn", "External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for."));
+            who.Children.Add(external);
+        }
+        else if (turn.IsAgent)
         {
             var mode = new Border { Child = new TextBlock { Text = Localizer.Get("msg.ai.agentChip", "Agent") } };
             mode.Classes.Add("chip");
@@ -80,7 +93,13 @@ internal sealed class AiChatTurnView : StackPanel
         _stepsRail = new Border { Child = steps, IsVisible = false };
         _stepsRail.Classes.Add("steps");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
-        var body = new StackPanel { Spacing = 8, Children = { who, _stepsRail, _answer, _status } };
+        // An external agent's thinking (collapsed), its plan and its notices (M48).
+        _thoughtText.FontFamily = MarkdownRenderer.Monospace;
+        _thoughtText.Classes.Add("small");
+        _thought = new Expander { Header = Localizer.Get("msg.acp.thinking", "Thinking"), Content = _thoughtText, IsVisible = false, HorizontalAlignment = HorizontalAlignment.Stretch };
+        AutomationProperties.SetName(_thought, Localizer.Get("msg.acp.thinking", "Thinking"));
+        AutomationProperties.SetName(_plan, Localizer.Get("msg.acp.plan", "Plan"));
+        var body = new StackPanel { Spacing = 8, Children = { who, _thought, _plan, _stepsRail, _answer, _notices, _status } };
         Children.Add(new AnswerRow { Children = { avatar, body } });
     }
 
@@ -108,6 +127,7 @@ internal sealed class AiChatTurnView : StackPanel
     {
         var turn = _item.Turn;
         var streaming = turn.IsStreaming;
+        RenderAgentParts(turn);
         RenderSteps(turn, streaming);
 
         var answer = turn.Answer;
@@ -159,14 +179,16 @@ internal sealed class AiChatTurnView : StackPanel
         var steps = turn.Steps;
         for (var i = 0; i < steps.Count; i++)
         {
-            var step = AiStepItem.From(steps[i], streaming, location => _owner.ViewModel?.OpenLocation(location));
+            Action<AiStepLocation> open = location => _owner.ViewModel?.OpenLocation(location);
+            var step = steps[i].Id is not null ? AiStepItem.FromAcp(steps[i], open) : AiStepItem.From(steps[i], streaming, open);
             if (i >= _steps.Count)
             {
                 _steps.Add(step);
             }
             else if (!_steps[i].SameAs(step))
             {
-                step.IsExpanded = _steps[i].IsExpanded;
+                // It keeps the user's choice; a step whose details just appeared opens as it would have (a running command's output).
+                step.IsExpanded = _steps[i].HasDetails ? _steps[i].IsExpanded : step.IsExpanded;
                 _steps[i] = step;
             }
         }
@@ -177,6 +199,52 @@ internal sealed class AiChatTurnView : StackPanel
         }
 
         _stepsRail.IsVisible = _steps.Count > 0;
+    }
+
+    /// <summary>An external agent's thinking, plan and notices (M48); the built-in assistant has none.</summary>
+    private void RenderAgentParts(AiChatTurn turn)
+    {
+        var thought = turn.Thought;
+        _thought.IsVisible = thought.Length > 0;
+        if (_thoughtText.Text != thought)
+        {
+            _thoughtText.Text = thought;
+        }
+
+        _plan.Children.Clear();
+        if (turn.Plan is { Count: > 0 } plan)
+        {
+            var title = new TextBlock { Text = Localizer.Get("msg.acp.plan", "Plan"), FontWeight = FontWeight.SemiBold };
+            title.Classes.Add("small");
+            _plan.Children.Add(title);
+            foreach (var entry in plan)
+            {
+                var line = new TextBlock { Text = (entry.Status == "completed" ? "☑ " : entry.Status == "in_progress" ? "◐ " : "☐ ") + entry.Content, TextWrapping = TextWrapping.Wrap };
+                line.Classes.Add("small");
+                AutomationProperties.SetName(line, entry.Content + " (" + entry.Status.Replace('_', ' ') + ")");
+                if (entry.Status == "completed")
+                {
+                    line.Classes.Add("muted");
+                }
+
+                _plan.Children.Add(line);
+            }
+        }
+
+        _plan.IsVisible = _plan.Children.Count > 0;
+        _notices.Children.Clear();
+        foreach (var notice in turn.Notices)
+        {
+            var icon = new Icon { Kind = notice.Severity is "warning" or "error" ? notice.Severity : "info", Width = 12, Height = 12, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 6, 0) };
+            var text = new TextBlock { Text = notice.Text, TextWrapping = TextWrapping.Wrap };
+            text.Classes.Add("small");
+            text.Classes.Add(notice.Severity == "error" ? "error" : "muted");
+            var line = new DockPanel { Children = { icon, text } };
+            DockPanel.SetDock(icon, Avalonia.Controls.Dock.Left);
+            _notices.Children.Add(line);
+        }
+
+        _notices.IsVisible = _notices.Children.Count > 0;
     }
 
     private AiCodeBlockView ShowCodeBlock(MarkdownCodeBlock block, bool streaming)
@@ -247,6 +315,10 @@ internal sealed class AiChatTurnView : StackPanel
         else if (turn.FinishReason == "length")
         {
             _status.Children.Add(Muted(Localizer.Get("msg.ai.cut", "The answer reached its length limit.")));
+        }
+        else if (turn.FinishReason == "max_turn_requests")
+        {
+            _status.Children.Add(Muted(Localizer.Get("msg.acp.turnLimit", "The agent reached its limit of requests for one turn.")));
         }
 
         _status.IsVisible = _status.Children.Count > 0;

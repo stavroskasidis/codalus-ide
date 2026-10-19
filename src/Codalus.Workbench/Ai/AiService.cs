@@ -402,4 +402,45 @@ public sealed class AiService
     /// <summary>Logs an agent's tool call (the tool and its target, never the content).</summary>
     public void LogToolCall(string tool, string? target, string? outcome) =>
         Log("    tool: " + tool + (target is { Length: > 0 } ? " " + target : "") + (outcome is { Length: > 0 } ? " → " + outcome : ""));
+
+    // ------------------------------------------------------------------ external agents (M48, ADR 0079)
+
+    /// <summary>
+    /// Logs a prompt to an external agent: its size and which context went with it (names, never the content). The agent
+    /// sends it to its own provider; the context passed <see cref="PrepareAsync"/> first.
+    /// </summary>
+    public void LogExternalPrompt(string agent, int characters, AiPreparedContext context)
+    {
+        Log(string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} external agent {agent}: session/prompt, {characters:N0} characters (the agent's own provider)"));
+        foreach (var item in context.Included)
+        {
+            Log("    sent: " + Describe(item));
+        }
+
+        foreach (var item in context.Excluded)
+        {
+            Log($"    not sent: {Describe(item.Item)} ({item.Reason})");
+        }
+
+        if (context.Redactions > 0)
+        {
+            Log(string.Create(CultureInfo.InvariantCulture, $"    redacted: {context.Redactions} secret(s)"));
+        }
+    }
+
+    /// <summary>Logs what an external agent asked of the IDE or did: the method and its path or command, never content.</summary>
+    public void LogAgent(string agent, string line) => Log($"    agent {agent}: {line}");
+
+    /// <summary>An external agent's turn runs: the status bar says working, and Stop shows.</summary>
+    internal void BeginRequest()
+    {
+        Interlocked.Increment(ref _busy);
+        BusyChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal void EndRequest()
+    {
+        Interlocked.Decrement(ref _busy);
+        BusyChanged?.Invoke(this, EventArgs.Empty);
+    }
 }

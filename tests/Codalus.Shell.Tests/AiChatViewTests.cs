@@ -892,6 +892,12 @@ public sealed class AiChatViewTests
 
         public Infrastructure.EditorFont EditorFont => shell.EditorFont;
 
+        public Codalus.Workbench.Ai.Acp.AcpAgents ExternalAgents => ((IAiChatHost)shell).ExternalAgents;
+
+        public Codalus.Workbench.Ai.Acp.IAcpHost AcpHost => ((IAiChatHost)shell).AcpHost;
+
+        public Task<string?> AddExternalAgentAsync() => ((IAiChatHost)shell).AddExternalAgentAsync();
+
         public async Task RunAgentAsync(string question, IReadOnlyList<AiContextItem> items, AiSelectionAnchor? anchor, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _runs);

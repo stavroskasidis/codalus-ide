@@ -41,7 +41,8 @@ public sealed class McpServers : IAsyncDisposable
 
         foreach (var server in root.EnumerateObject())
         {
-            if (server.Value.ValueKind != JsonValueKind.Object || !server.Value.TryGetProperty("command", out var command) || command.GetString() is not { Length: > 0 } commandText)
+            // A mistyped entry (a command that isn't a string, args that aren't an array) is skipped, never a crash.
+            if (server.Value.ValueKind != JsonValueKind.Object || !server.Value.TryGetProperty("command", out var command) || command.ValueKind != JsonValueKind.String || command.GetString() is not { Length: > 0 } commandText)
             {
                 continue;
             }

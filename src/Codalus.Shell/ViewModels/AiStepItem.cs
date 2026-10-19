@@ -35,9 +35,9 @@ public sealed record AiStepLocation(string Path, int? Line = null)
 /// <summary>
 /// A step of an agent's turn as AI Chat shows it (M34h, <c>Views/AiStepView</c>): its kind (an icon), a title, what it
 /// worked on, its status, the files it touched and its details, which open under it. The built-in agent's tool calls
-/// map onto it (<see cref="From(AiAgentStep, bool, Action{AiStepLocation}?)"/>); an external agent's tool calls take
-/// the same shape (the kinds are the Agent Client Protocol's: read, edit, delete, move, search, execute, think, fetch,
-/// other).
+/// map onto it (<see cref="From(AiAgentStep, bool, Action{AiStepLocation}?)"/>), and an external agent's tool calls take
+/// the same shape (<see cref="FromAcp(AiAgentStep, Action{AiStepLocation}?)"/>, M48; the kinds are the Agent Client
+/// Protocol's: read, edit, delete, move, search, execute, think, fetch, other).
 /// </summary>
 public sealed class AiStepItem : ObservableObject
 {
@@ -172,6 +172,46 @@ public sealed class AiStepItem : ObservableObject
             Locations = onFile ? [new AiStepLocation(step.Target)] : [],
             Outcome = outcome,
             Open = open,
+        };
+    }
+
+    /// <summary>
+    /// An external agent's tool call (M48, the Agent Client Protocol's <c>tool_call</c>): its kind, title and status as the
+    /// agent reports them, the files it names as locations, and its details: the changes it reports (whether they went
+    /// through the preview or the agent made them itself, read-only here) and its output. A command's output shows open
+    /// while it runs.
+    /// </summary>
+    public static AiStepItem FromAcp(AiAgentStep step, Action<AiStepLocation>? open = null)
+    {
+        var status = step.Status switch
+        {
+            "completed" => AiStepStatus.Completed,
+            "failed" => AiStepStatus.Failed,
+            "cancelled" => AiStepStatus.Cancelled,
+            "in_progress" => AiStepStatus.Running,
+            _ => AiStepStatus.Pending,
+        };
+        var details = new List<string>();
+        foreach (var diff in step.Diffs)
+        {
+            var title = diff.Reviewed
+                ? Localizer.Format("msg.acp.diffReviewed", "Changes in {0} (reviewed in the preview)", diff.Path)
+                : Localizer.Format("msg.acp.diffByAgent", "Changes in {0} (made by the agent itself, read-only)", diff.Path);
+            details.Add(title + "\n" + string.Join('\n', AiDiffText.Lines(diff.OldText, diff.NewText).Select(l => l.Kind + " " + l.Text)));
+        }
+
+        if (step.Output is { Length: > 0 } output)
+        {
+            details.Add(Localizer.Get("msg.acp.output", "Output") + "\n" + output);
+        }
+
+        var running = step.TerminalId is not null && status is AiStepStatus.Running or AiStepStatus.Pending && step.Output is { Length: > 0 };
+        return new AiStepItem(step.Kind ?? "other", step.Target, status)
+        {
+            Locations = [.. step.Locations.Select(l => new AiStepLocation(l.Path, l.Line))],
+            Details = details.Count == 0 ? null : string.Join("\n\n", details),
+            Open = open,
+            IsExpanded = running,
         };
     }
 

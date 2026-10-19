@@ -112,6 +112,69 @@ public sealed class FramedMessageReader(Stream stream)
     }
 }
 
+/// <summary>How messages are delimited on a connection's streams.</summary>
+public enum JsonRpcFraming
+{
+    /// <summary>A <c>Content-Length</c> header before each message (LSP, the Debug Adapter Protocol, the hosts).</summary>
+    ContentLength,
+
+    /// <summary>One message per line, with no newline inside it (the Agent Client Protocol's stdio transport, M48).</summary>
+    NewlineDelimited,
+}
+
+/// <summary>
+/// Reads newline-delimited messages (M48: the Agent Client Protocol's stdio transport). Blank lines, and lines that
+/// aren't a JSON object (a program that logs to its standard output), are skipped.
+/// </summary>
+public sealed class LineMessageReader(Stream stream)
+{
+    private byte[] _buffer = new byte[64 * 1024];
+    private int _start;
+    private int _end;
+
+    public async Task<byte[]?> ReadMessageAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var newline = _buffer.AsSpan(_start, _end - _start).IndexOf((byte)'\n');
+            if (newline >= 0)
+            {
+                var line = _buffer.AsSpan(_start, newline).Trim(" \t\r"u8);
+                _start += newline + 1;
+                if (line.Length > 0 && line[0] == (byte)'{')
+                {
+                    return line.ToArray();
+                }
+
+                continue;
+            }
+
+            if (_start > 0)
+            {
+                Buffer.BlockCopy(_buffer, _start, _buffer, 0, _end - _start);
+                _end -= _start;
+                _start = 0;
+            }
+
+            if (_end == _buffer.Length)
+            {
+                Array.Resize(ref _buffer, _buffer.Length * 2);
+            }
+
+            var read = await stream.ReadAsync(_buffer.AsMemory(_end), cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+            {
+                // The last line without its newline still counts.
+                var rest = _buffer.AsSpan(_start, _end - _start).Trim(" \t\r"u8);
+                _start = _end = 0;
+                return rest.Length > 0 && rest[0] == (byte)'{' ? rest.ToArray() : null;
+            }
+
+            _end += read;
+        }
+    }
+}
+
 /// <summary>Writes <c>Content-Length</c>-framed messages.</summary>
 public static class FramedMessageWriter
 {
