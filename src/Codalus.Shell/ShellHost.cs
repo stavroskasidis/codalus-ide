@@ -225,6 +225,18 @@ public sealed partial class ShellHost : IAsyncDisposable
         Layout.ActiveDocumentChanged += (_, _) => OnSqlEditorActivated();
         Notifications.Changed += (_, _) => UpdateStatusItems();
         Theme.Changed += (_, _) => UpdateStatusItems();
+        // Any quick pick (the palette is the shared one): Escape closes it before it hides the toasts.
+        Palette.Opened += (_, _) => Workbench.Context.Set("inCommandPalette", true);
+        Infrastructure.SafeClipboard.Busy += OnClipboardBusy;
+
+        // Activation event onSolutionOpened (API 1.0, docs/plugins.md): plugins that start with a solution.
+        Solutions.SolutionChanged += (_, _) =>
+        {
+            if (Solutions.Solution is not null)
+            {
+                _ = Plugins.ActivateByEventAsync("onSolutionOpened", CancellationToken.None);
+            }
+        };
         Palette.Closed += (_, _) => Workbench.Context.Set("inCommandPalette", false);
 
         DiscoverPlugins();
@@ -283,7 +295,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         Directory.CreateDirectory(folder);
-        ShellIntegration.OpenUrl(new Uri(folder + Path.DirectorySeparatorChar));
+        OpenExternalUrl(new Uri(folder + Path.DirectorySeparatorChar));
     }
 
     public ShellOptions Options { get; }
@@ -765,7 +777,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Directory.CreateDirectory(Paths.PluginsDirectory);
         try
         {
-            ShellIntegration.RevealInFileManager(Paths.PluginsDirectory);
+            RevealPath(Paths.PluginsDirectory);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -781,7 +793,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             throw new ArgumentException("workbench.openExternal expects an http(s) URL.");
         }
 
-        ShellIntegration.OpenUrl(url);
+        OpenExternalUrl(url);
     }
 
     /// <summary>
@@ -968,8 +980,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
     }
 
+    /// <summary>Another program held the clipboard through a copy or a paste's retries.</summary>
+    private void OnClipboardBusy() => Ui.Post(() => StatusBar.ShowMessage(
+        Localizer.Get("msg.clipboard.busy", "The clipboard is in use by another program. Try again in a moment."), TimeSpan.FromSeconds(6)));
+
     public async ValueTask DisposeAsync()
     {
+        Infrastructure.SafeClipboard.Busy -= OnClipboardBusy;
         var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
         await FlushSolutionStateAsync().ConfigureAwait(false);

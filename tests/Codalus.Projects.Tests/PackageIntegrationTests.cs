@@ -161,6 +161,37 @@ public sealed class PackageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_folder_with_a_package_that_cant_be_read_still_answers_with_the_others()
+    {
+        // The global packages folder's layout, with one package whose extraction failed (its .nuspec empty): NuGet's
+        // search of the folder threw on it ("Root element is missing."), and the folder's every result was lost.
+        var folder = Path.Combine(Fixture, "v3feed");
+        WriteExtracted(folder, "Codalus.Folder.Good", "1.0.0", """
+            <?xml version="1.0" encoding="utf-8"?>
+            <package><metadata><id>Codalus.Folder.Good</id><version>1.0.0</version><authors>Codalus IDE fixtures</authors><description>A package that reads.</description></metadata></package>
+            """);
+        WriteExtracted(folder, "Codalus.Folder.Broken", "1.0.0", string.Empty);
+        var config = Path.Combine(Fixture, "nuget.config");
+        File.WriteAllText(config, File.ReadAllText(config).Replace("<add key=\"local\" value=\"feed\" />", "<add key=\"local\" value=\"feed\" /><add key=\"folder\" value=\"v3feed\" />", StringComparison.Ordinal));
+        await OpenRestoredAsync();
+
+        var result = await _packages.SearchAsync("Codalus.Folder", prerelease: false, 0, 20, "folder", Timeout());
+        Assert.Equal("Codalus.Folder.Good", Assert.Single(result.Packages).Id);
+        Assert.Contains("Codalus.Folder.Broken", Assert.Single(result.Errors).Message, StringComparison.OrdinalIgnoreCase); // the folder's names are in lower case
+    }
+
+    private static void WriteExtracted(string folder, string id, string version, string nuspec)
+    {
+        var lower = id.ToLowerInvariant();
+        var directory = Path.Combine(folder, lower, version);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, lower + ".nuspec"), nuspec);
+        File.WriteAllText(Path.Combine(directory, $"{lower}.{version}.nupkg.sha512"), "x");
+        File.WriteAllText(Path.Combine(directory, ".nupkg.metadata"), """{ "version": 2, "contentHash": "x", "source": null }""");
+        File.WriteAllBytes(Path.Combine(directory, $"{lower}.{version}.nupkg"), []);
+    }
+
+    [Fact]
     public async Task Details_have_versions_readme_licence_and_dependencies()
     {
         await OpenRestoredAsync();

@@ -235,6 +235,12 @@ public sealed partial class ShellHost
     /// <summary>Opens a help page in the browser (tests replace it).</summary>
     internal Action<Uri> OpenHelpUrl { get; set; } = Codalus.Platform.ShellIntegration.OpenUrl;
 
+    /// <summary>Opens a page or a folder with the operating system's browser or file manager (the command sweep and tests replace it).</summary>
+    internal Action<Uri> OpenExternalUrl { get; set; } = Codalus.Platform.ShellIntegration.OpenUrl;
+
+    /// <summary>Shows a file or folder in the operating system's file manager (the command sweep and tests replace it).</summary>
+    internal Action<string> RevealPath { get; set; } = Codalus.Platform.ShellIntegration.RevealInFileManager;
+
     // ------------------------------------------------------------------ Peek Definition, Code Definition window
 
     /// <summary>The text of a location's document, its title and language: files, decompiled or embedded sources, generated files.</summary>

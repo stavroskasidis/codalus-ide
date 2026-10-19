@@ -80,6 +80,20 @@ public sealed class EnvironmentCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task Podmans_docker_emulation_shows_its_version_line_without_its_notice()
+    {
+        // podman-docker's docker prints podman's version and a notice: Check Environment's row showed both, cut off.
+        const string bin = "/x/bin";
+        var check = new EnvironmentCheck(PlatformKind.Linux, Env(("PATH", bin), ("HOME", "/home/u")), (program, arguments, _, _) => Task.FromResult(
+            Path.GetFileName(program) == "docker" && arguments is ["--version"]
+                ? (0, "podman version 4.9.3\nEmulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.\n")
+                : (1, string.Empty)), path => path == Path.Combine(bin, "docker"));
+
+        var docker = (await check.CheckAsync(null, TestContext.Current.CancellationToken)).Single(t => t.Id == "docker");
+        Assert.Equal((ToolState.Found, "podman version 4.9.3"), (docker.State, docker.Version));
+    }
+
+    [Fact]
     public void Versions_order_as_the_host_rolls_forward_and_winget_has_a_release_candidate_as_the_preview_sdk()
     {
         Assert.True(EnvironmentCheck.CompareVersions("11.0.0-rc.1.26425.128", "11.0.0-rc.2.26504.105") < 0);

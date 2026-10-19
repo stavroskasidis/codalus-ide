@@ -184,7 +184,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -205,7 +205,8 @@ jobs:
         run: dotnet tool install -g dotnet-stack || true
       - name: End-to-end smoke test of the published app
         shell: bash
-        timeout-minutes: 25
+        # The command sweep (shell.commandSweep) takes up to 25 of these.
+        timeout-minutes: 40
         env:
           CODALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
         run: bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test

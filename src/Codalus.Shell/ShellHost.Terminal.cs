@@ -101,7 +101,7 @@ public sealed partial class ShellHost
         {
             if (Uri.TryCreate(link.Target, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
             {
-                ShellIntegration.OpenUrl(uri);
+                OpenExternalUrl(uri);
             }
 
             return;
@@ -184,7 +184,7 @@ public sealed partial class ShellHost
             TerminalWindow.Show(session);
             if (plan.BrowserUrl is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                _ = Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => ShellIntegration.OpenUrl(uri), TaskScheduler.Default);
+                _ = Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => OpenExternalUrl(uri), TaskScheduler.Default);
             }
 
             return true;

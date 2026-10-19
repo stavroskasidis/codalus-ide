@@ -171,7 +171,7 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
     {
         if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
         {
-            _ = Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text);
+            _ = Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, text);
         }
     }
 

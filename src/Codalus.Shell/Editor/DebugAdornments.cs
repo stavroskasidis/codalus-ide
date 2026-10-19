@@ -101,7 +101,7 @@ internal static class ExceptionHelper
         {
             if (TopLevel.GetTopLevel(owner)?.Clipboard is { } clipboard)
             {
-                await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, Describe(type, message, details)).ConfigureAwait(true);
+                await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, Describe(type, message, details)).ConfigureAwait(true);
             }
         };
         var dismiss = new Button { Content = "Close" };

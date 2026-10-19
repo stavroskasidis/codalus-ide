@@ -218,6 +218,12 @@
           </DockPanel>
           <TextBlock Classes="muted" Text="{l:T settings.noSettingsFound}" IsVisible="{Binding IsEmpty}" Margin="0,8" />
           <ItemsControl x:Name="Items" ItemsSource="{Binding Items}">
+            <!-- All Settings is hundreds of editors: only those in view are made (opening it stalled the UI for a second). -->
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <VirtualizingStackPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:SettingItemViewModel">
                 <Border Classes="setting" Classes.modified="{Binding IsModified}">

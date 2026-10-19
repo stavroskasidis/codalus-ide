@@ -43,9 +43,9 @@ internal static partial class BuiltIns
           { "key": "ctrl+shift+tab", "command": "workbench.switchDocumentBack", "when": "activeDocumentKind" },
           { "key": "ctrl+alt+pagedown", "command": "workbench.nextDocument", "when": "activeDocumentKind" },
           { "key": "ctrl+alt+pageup", "command": "workbench.previousDocument", "when": "activeDocumentKind" },
-          { "key": "primary+\\", "command": "workbench.splitEditorRight", "when": "activeDocumentKind == textFile" },
+          { "key": "primary+\\", "command": "workbench.splitEditorRight", "when": "activeDocumentKind == textFile && keyboardScheme == vscode" },
           { "key": "primary+k primary+\\", "command": "workbench.splitEditorDown", "when": "activeDocumentKind == textFile" },
-          { "key": "primary+\\ primary+e", "command": "workbench.view.errorList" },
+          { "key": "primary+\\ primary+e", "command": "workbench.view.errorList", "when": "keyboardScheme != vscode" },
           { "key": "shift+f12", "command": "editor.action.referenceSearch", "when": "editorTextFocus" },
           { "key": "f2", "command": "editor.action.rename", "when": "editorTextFocus" },
           { "key": "primary+r primary+r", "command": "editor.action.rename", "when": "editorTextFocus" },
@@ -314,11 +314,14 @@ internal static partial class BuiltIns
         Add("editor.action.addSelectionToNextFindMatch", "Insert Next Matching Caret", "Edit", OnEditor(c => c.MultiCaret.SelectNextOccurrence()), Editor);
         Add("editor.action.selectHighlights", "Insert Carets at All Matches", "Edit", OnEditor(c => c.MultiCaret.SelectNextOccurrence(all: true)), Editor);
         Add("editor.action.referenceSearch", "Find All References", "Editor", Ui(shell.FindReferencesAsync), Editor);
+
+        // The C# host's references CodeLens runs VS Code's command (InlineInfoFeatures.ReferencesCommand); the caret is already on the member.
+        Add("editor.action.showReferences", "Show References", "Editor", Ui(shell.FindReferencesAsync), Editor, palette: false);
         Add("editor.action.rename", "Rename…", "Editor", Ui(shell.RenameSymbolAsync), Editor);
         Add("editor.action.quickFix", "Quick Actions and Refactorings…", "Editor", Ui(shell.ShowCodeActionsAsync), Editor);
         Add("editor.action.formatDocument", "Format Document", "Editor", Ui(() => shell.FormatAsync(selectionOnly: false)), Editor);
         Add("editor.action.commentLine", "Toggle Line Comment", "Editor", OnEditor(c => c.Comment(CommentAction.Toggle)), Editor);
-        Add("markdown.showPreviewToSide", "Markdown: Open Preview to the Side", "Markdown", Ui(() => shell.ShowMarkdownPreview()), Editor);
+        Add("markdown.showPreviewToSide", "Open Preview to the Side", "Markdown", Ui(() => shell.ShowMarkdownPreview()), Editor);
         Add("editor.action.addCommentLine", "Comment Selection", "Editor", OnEditor(c => c.Comment(CommentAction.Comment)), Editor);
         Add("editor.action.removeCommentLine", "Uncomment Selection", "Editor", OnEditor(c => c.Comment(CommentAction.Uncomment)), Editor);
         Add("editor.action.triggerWordCompletion", "Complete Word", "Editor", OnEditor(c => c.CompleteWords()), Editor);

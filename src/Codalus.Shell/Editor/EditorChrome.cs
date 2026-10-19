@@ -224,7 +224,7 @@ public sealed class StickyScroll : Border
     private IReadOnlyList<int> _shown = [];
     private List<StickyLine> _rendered = [];
 
-    public StickyScroll(TextEditor editor, Func<IReadOnlyList<DocumentSymbol>> symbols, Func<FoldingManager?> foldings)
+    public StickyScroll(CodeTextEditor editor, Func<IReadOnlyList<DocumentSymbol>> symbols, Func<FoldingManager?> foldings)
     {
         _editor = editor;
         _symbols = symbols;
@@ -235,11 +235,17 @@ public sealed class StickyScroll : Border
         Child = _lines;
         IsVisible = false;
         AutomationProperties.SetName(this, "Sticky scroll");
-        // An adorner of the text area (the margins and the text view): the editor draws its text above its own layers
-        // and above sibling controls, so only the adorner layer (over the window's content) covers it.
-        var area = editor.TextArea;
-        area.AttachedToVisualTree += (_, _) => AdornerLayer.SetAdorner(area, this);
-        area.DetachedFromVisualTree += (_, _) => AdornerLayer.SetAdorner(area, null);
+        ClipToBounds = true;
+        Cursor = new Cursor(StandardCursorType.Arrow);
+        // The text area's header: over its margins and text view, in the editor's own layer, so the find widget and
+        // the window's overlays (the quick pick, Find and Replace, dialogs) draw over it. It was an adorner in the
+        // window's adorner layer, above all of them (the maintainer's report: it hid the branch picker's first rows).
+        var area = editor.CodeArea;
+        area.Header = this;
+        // A press, move or release on the band is the band's: the text area would move the caret or select under it.
+        PointerPressed += (_, e) => e.Handled = true;
+        PointerMoved += (_, e) => e.Handled = true;
+        PointerReleased += (_, e) => e.Handled = true;
         area.TextView.ScrollOffsetChanged += (_, _) => Update();
         area.TextView.VisualLinesChanged += (_, _) => Update();
     }

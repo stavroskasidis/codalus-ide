@@ -2,7 +2,7 @@
 
 ## The editor
 
-- **Tabs and splits**: Window → Split Right (`Ctrl+\`) or Split Down opens another editor group. Window → Split shows two views of the same file. `Ctrl+Tab` switches documents: hold `Ctrl`, and each `Tab` (`Shift+Tab` back, or the arrow keys) moves through the open documents in the order you last used them; release `Ctrl` to switch (`Esc` stays). A quick `Ctrl+Tab` goes back to the document you used before. Next Document and Previous Document (`Ctrl+Alt+PageDown`, `Ctrl+Alt+PageUp`) go through them in tab order.
+- **Tabs and splits**: Window → Split Right (`Ctrl+\` in the VS Code scheme; the default scheme's `Ctrl+\`, `Ctrl+E` is the Error List) or Split Down opens another editor group. Window → Split shows two views of the same file. `Ctrl+Tab` switches documents: hold `Ctrl`, and each `Tab` (`Shift+Tab` back, or the arrow keys) moves through the open documents in the order you last used them; release `Ctrl` to switch (`Esc` stays). A quick `Ctrl+Tab` goes back to the document you used before. Next Document and Previous Document (`Ctrl+Alt+PageDown`, `Ctrl+Alt+PageUp`) go through them in tab order.
 - **Multiple carets**: `Ctrl+Alt+Click`, `Ctrl+Alt+Up/Down`, or `Shift+Alt+.` (next occurrence of the selection). `Shift+Alt`+drag selects a box.
 - **Folding**: regions, members, usings and comments fold from the margin, or with `Ctrl+M Ctrl+M`.
 - **The minimap** on the right shows the whole file; click or drag to scroll (setting **Text Editor → Minimap**).
