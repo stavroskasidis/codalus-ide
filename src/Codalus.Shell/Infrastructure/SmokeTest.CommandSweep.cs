@@ -1407,7 +1407,12 @@ internal sealed partial class SmokeTest
                 saw.Add("a program ran");
             }
 
-            shell.StopRunning();
+            // The next command starts with it ended (its tree's end can take seconds, without holding the UI thread).
+            await shell.StopRunningAsync().ConfigureAwait(true);
+            for (var i = 0; i < 100 && shell.Runs.Running.Count > before.Running; i++)
+            {
+                await Task.Delay(50).ConfigureAwait(true);
+            }
         }
 
         if (_sweepScenario != SweepScenario.Debug && shell.Debugger.IsActive)
@@ -1713,7 +1718,7 @@ internal sealed partial class SmokeTest
     }
 
     /// <summary>Measures how long the UI thread takes to answer, every 20 ms, from a background thread: its longest wait is the stall.</summary>
-    private sealed class SweepStallMonitor
+    internal sealed class SweepStallMonitor
     {
         private volatile bool _stopped;
         private long _maxTicks;

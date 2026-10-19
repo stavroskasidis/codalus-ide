@@ -26,6 +26,8 @@
     <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
     <InternalsVisibleTo Include="Codalus.Debugging.Tests" />
     <InternalsVisibleTo Include="Codalus.Plugins.Tests" />
+    <!-- The run tests stand in for a process listing that blocks (RunService.KillTree). -->
+    <InternalsVisibleTo Include="Codalus.Shell.Tests" />
     <!-- The solution switch tests hold LanguageService.FlushGate. -->
     <InternalsVisibleTo Include="Codalus.LanguageServices.Host.Tests" />
   </ItemGroup>
