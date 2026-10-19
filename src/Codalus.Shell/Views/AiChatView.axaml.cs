@@ -40,7 +40,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
         Log.Click += (_, _) => _vm?.ShowLog();
         TurnOn.Click += (_, _) => _ = _vm?.TurnOnAsync();
         TurnOnBar.Click += (_, _) => _ = _vm?.TurnOnAsync();
-        Send.Click += (_, _) => _ = _vm?.SendAsync();
+        Send.Click += (_, _) => OnSendClick();
         InputBox.AddHandler(KeyDownEvent, OnInputKeyDown, RoutingStrategies.Tunnel);
         InputBox.GotFocus += (_, _) => _vm?.UpdateContextPreview();
         DataContextChanged += (_, _) => Attach(DataContext as AiChatViewModel);
@@ -104,12 +104,37 @@ public sealed partial class AiChatView : UserControl, IPaneView
         _follow.Reset();
     }
 
+    /// <summary>
+    /// Enter sends (Shift+Enter is a new line). While a turn is answered it sends nothing and keeps the text, as Send is
+    /// Stop then; the view model refuses it too.
+    /// </summary>
     private void OnInputKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && _vm is { } vm)
         {
             e.Handled = true;
-            _ = vm.SendAsync();
+            if (!vm.IsAnswering)
+            {
+                _ = vm.SendAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Send hides as Stop takes its place, so the focus goes back to the input box rather than being lost: where Enter
+    /// leaves it, where the next question is typed, with Stop the next Tab stop.
+    /// </summary>
+    private void OnSendClick()
+    {
+        if (_vm is not { } vm)
+        {
+            return;
+        }
+
+        _ = vm.SendAsync();
+        if (vm.IsAnswering && InputBox.IsEffectivelyVisible)
+        {
+            InputBox.Focus();
         }
     }
 
