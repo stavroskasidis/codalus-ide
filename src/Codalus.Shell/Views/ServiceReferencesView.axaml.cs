@@ -24,6 +24,27 @@ public sealed partial class ServiceReferencesView : UserControl, IPaneView
             };
         }
 
+        // The selected reference from the keyboard (M34h): Enter opens its document, Delete removes it.
+        ReferenceList.KeyDown += (_, e) =>
+        {
+            if (DataContext is not ServiceReferencesViewModel { HasSelection: true } vm || e.Source is Button)
+            {
+                return;
+            }
+
+            var command = e.Key switch
+            {
+                Key.Enter => vm.OpenCommand,
+                Key.Delete when !vm.IsBusy => vm.RemoveCommand,
+                _ => null,
+            };
+            if (command is not null)
+            {
+                command.Execute(null);
+                e.Handled = true;
+            }
+        };
+
         DiscoveredList.Tapped += (_, _) => RunningServices.Flyout?.Hide();
         DiscoveredList.KeyDown += (_, e) =>
         {

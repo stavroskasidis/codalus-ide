@@ -3,6 +3,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using Codalus.Diagnostics.Protocol;
@@ -141,6 +142,29 @@ public class ControlSetViewsTests
             Assert.Equal(7, CountersViewModel.ProcessIdOf(" 7 "));
             Assert.Null(CountersViewModel.ProcessIdOf("Worker (x)"));
 
+            // Listing the processes again keeps what the box names: the picked process, or the typed text (M34h review).
+            box.SelectedIndex = 0;
+            ShellFixture.Pump();
+            vm.SetProcesses([new DotnetProcess(48213, "WebApi", "dotnet WebApi.dll"), new DotnetProcess(512, "Worker", null)]);
+            ShellFixture.Pump();
+            Assert.Equal("WebApi (48213)", vm.Target);
+            Assert.Equal("WebApi (48213)", box.Text);
+            Assert.Equal(48213, vm.SelectedProcess?.Id);
+            box.Text = "Work";
+            ShellFixture.Pump();
+            vm.SetProcesses([new DotnetProcess(512, "Worker", null)]);
+            ShellFixture.Pump();
+            Assert.Equal("Work", vm.Target);
+            Assert.Equal("Work", box.Text);
+
+            // Large values and long units fit their columns, sized to the widest cell (they were fixed at 72 and 40 px).
+            var counter = new CounterRowViewModel(new Codalus.Workbench.Diagnostics.CounterKey("System.Runtime", "gc-heap-size", null)) { Value = "1,234,567,890.5", Unit = "bytes/sec" };
+            vm.Rows.Add(counter);
+            ShellFixture.Pump();
+            ShellFixture.Pump();
+            var problems = PolishTests.Clipped(window).Concat(PolishTests.Overlapping(window)).ToList();
+            Assert.True(problems.Count == 0, string.Join('\n', problems));
+
             // Export is one split button: CSV, its menu JSON too; Start keeps its label.
             var export = Assert.Single(toolbar.Children.OfType<SplitButton>());
             Assert.Equal(2, Assert.IsType<MenuFlyout>(export.Flyout).Items.Count);
@@ -214,6 +238,25 @@ public class ControlSetViewsTests
         Assert.False(chip.IsVisible);
         Assert.True(makeActive.IsEffectivelyEnabled);
         Assert.Equal(vm.BuildType, configuration.SelectedItem);
+
+        // The toolbar makes that pair active while the document is open: the chip and Make Active follow (M34h review).
+        var other = new Codalus.Projects.Protocol.SolutionConfigurationInfo(vm.BuildType!, vm.Platform!);
+        await f.Shell.Solutions.SetConfigurationAsync(other, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => vm.IsActivePair && chip.IsVisible);
+        Assert.False(makeActive.IsEffectivelyEnabled);
+
+        // Make Active marks the pair active once the solution has switched, not before.
+        var first = vm.BuildTypes.First(b => b != vm.BuildType);
+        vm.BuildType = first;
+        ShellFixture.Pump();
+        Assert.False(vm.IsActivePair);
+        await vm.ActivateAsync();
+        Assert.Equal(first, f.Shell.Solutions.Solution!.Active!.Configuration);
+        await ShellFixture.PumpUntil(() => vm.IsActivePair && chip.IsVisible);
+
+        // The attached buttons' focus ring draws past the shape that clips them.
+        var remove = attached[0].GetVisualDescendants().OfType<Button>().Last();
+        Assert.False(Avalonia.Controls.Primitives.AdornerLayer.GetIsClipEnabled(remove.FocusAdorner!.Build()!));
     }
 
     [AvaloniaFact]
@@ -287,10 +330,105 @@ public class ControlSetViewsTests
         Assert.Contains(row.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("chip") && b.IsEffectivelyVisible);
         await f.Shell.Workbench.Settings.SetAsync(item.Key, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None);
 
-        // User or Workspace is a segmented control (shown while a solution gives a workspace), its index the scope.
+        // Without a solution there is no workspace: the scope's segmented control is hidden.
+        Assert.False(view.GetVisualDescendants().OfType<SegmentedControl>().Single().IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task Options_scope_is_a_segmented_control_that_switches_to_the_workspace()
+    {
+        await using var f = ShellFixture.Create();
+        var solution = f.CopyFixture();
+        f.Shell.Trust.Trust(Path.GetDirectoryName(Path.GetDirectoryName(solution))!);
+        await f.Shell.OpenSolutionAsync(solution);
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.WorkspaceFile is not null, seconds: 120);
+        f.Shell.OpenSettings();
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<SettingsView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<SettingsView>().Single();
+        var vm = (SettingsViewModel)view.DataContext!;
+        await ShellFixture.PumpUntil(() => vm.HasWorkspace);
+        ShellFixture.Pump();
+
+        // User or Workspace is one visible segmented control (not two toggle buttons); choosing a segment is the scope.
         var scope = view.GetVisualDescendants().OfType<SegmentedControl>().Single();
+        Assert.True(scope.IsEffectivelyVisible);
         Assert.Equal(2, scope.ItemCount);
-        Assert.Equal(0, vm.ScopeIndex);
         Assert.DoesNotContain(view.GetVisualDescendants().OfType<ToggleButton>(), t => t.Content is "User" or "Workspace");
+        Assert.Equal(0, scope.SelectedIndex);
+        Assert.Equal(SettingScope.User, vm.Scope);
+        scope.SelectedIndex = 1;
+        ShellFixture.Pump();
+        Assert.Equal(SettingScope.Workspace, vm.Scope);
+        Assert.StartsWith("Workspace settings: ", vm.FileLabel, StringComparison.Ordinal);
+        vm.IsUserScope = true;
+        ShellFixture.Pump();
+        Assert.Equal(0, scope.SelectedIndex);
+    }
+
+    [AvaloniaFact]
+    public async Task Containers_with_images_but_no_containers_keep_their_tabs()
+    {
+        await using var f = ShellFixture.Create();
+        f.Shell.Layout.ShowToolWindow(ContainersViewModel.ToolWindowId, focus: false);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<ContainersView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<ContainersView>().Single();
+        var vm = (ContainersViewModel)view.DataContext!;
+
+        // An engine with an image and no container: the tabs stay, so the Images tab and Remove Image are reachable.
+        vm.Images.Add(new ImageRow(new Codalus.Workbench.Containers.ImageSummary("codalus-sample-web", "latest", "sha256:1234", "220MB", "2 hours ago")));
+        vm.CountsChanged();
+        ShellFixture.Pump();
+        Assert.False(vm.IsEmpty);
+        Assert.False(view.FindControl<StackPanel>("EmptyState")!.IsVisible);
+        var tabs = view.GetVisualDescendants().OfType<TabItem>().ToList();
+        Assert.Contains(tabs, t => t.IsEffectivelyVisible && AutomationProperties.GetName(t) == "Images");
+        // The tabs with a count in their header are named by their titles, not by their panels' types.
+        Assert.Contains(tabs, t => AutomationProperties.GetName(t) == "Containers");
+        Assert.Equal("Images", Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(tabs.First(t => AutomationProperties.GetName(t) == "Images")).GetName());
+
+        vm.Images.Clear();
+        vm.CountsChanged();
+        ShellFixture.Pump();
+        Assert.True(vm.IsEmpty);
+        Assert.True(view.FindControl<StackPanel>("EmptyState")!.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task Service_references_selected_row_commands_are_reachable_from_the_keyboard()
+    {
+        await using var f = ShellFixture.Create();
+        var verbs = new List<string>();
+        var vm = new ServiceReferencesViewModel(Path.Combine(f.UserData, "Client.csproj"), (_, verb) =>
+        {
+            verbs.Add(verb);
+            return Task.CompletedTask;
+        });
+        vm.SetReferences(
+            new Codalus.Projects.Protocol.ServiceReferencesResult([], []),
+            [new Codalus.Projects.Protocol.WcfReferenceInfo("CalculatorService", Path.Combine(f.UserData, "Connected Services", "CalculatorService"), "ConnectedService.json", "Reference.cs", ["http://localhost:5280/CalculatorService.svc?wsdl"], "Client.Calculator", null, null, false, true, false, null)]);
+        var view = new ServiceReferencesView { DataContext = vm };
+        var window = Show(view, 900, 700);
+        try
+        {
+            var list = view.FindControl<ListBox>("ReferenceList")!;
+            Assert.Equal(KeyboardNavigationMode.Continue, KeyboardNavigation.GetTabNavigation(list));
+            var row = list.GetVisualDescendants().OfType<ListBoxItem>().Single();
+            var commands = row.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).ToList();
+            Assert.Equal(["plug", "cloud-download", "link-external", "trash"], commands.Select(b => ButtonIcon.GetKind(b)));
+            Assert.All(commands, b => Assert.True(b.Focusable && KeyboardNavigation.GetIsTabStop(b)));
+
+            // The context menu has them too, and Enter opens the document, Delete removes the reference.
+            var menu = Assert.IsType<ContextMenu>(list.ContextMenu);
+            Assert.Equal(4, menu.Items.Count);
+            list.Focus();
+            list.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter, Source = list });
+            list.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Delete, Source = list });
+            ShellFixture.Pump();
+            Assert.Equal(["open", "remove"], verbs);
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 }

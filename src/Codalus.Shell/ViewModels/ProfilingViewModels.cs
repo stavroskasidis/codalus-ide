@@ -1280,13 +1280,13 @@ public sealed class CounterRowViewModel(CounterKey key) : ObservableObject
     public string Value
     {
         get => _value;
-        private set => SetField(ref _value, value);
+        internal set => SetField(ref _value, value);
     }
 
     public string? Unit
     {
         get => _unit;
-        private set => SetField(ref _unit, value);
+        internal set => SetField(ref _unit, value);
     }
 
     public string AccessibleName => $"{Provider} {Name}: {Value} {Unit}";
@@ -1716,16 +1716,35 @@ public sealed class CountersViewModel : ObservableObject, IDisposable
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            _all = [.. (await _diagnostics.ProcessesAsync(timeout.Token).ConfigureAwait(true)).Select(p => new ProcessRowViewModel(p))];
-            Processes.Clear();
-            foreach (var process in _all)
-            {
-                Processes.Add(process);
-            }
+            SetProcesses(await _diagnostics.ProcessesAsync(timeout.Token).ConfigureAwait(true));
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
         {
             Status = "The processes could not be listed: " + ex.Message;
+        }
+    }
+
+    /// <summary>
+    /// Lists <paramref name="processes"/>, keeping what the box names (M34h): the picked process if it still runs, or
+    /// the typed text. Replacing the list cleared the editable combo box's choice and text.
+    /// </summary>
+    internal void SetProcesses(IEnumerable<DotnetProcess> processes)
+    {
+        var target = _target;
+        var pickedId = _selectedProcess?.Id;
+        _all = [.. processes.Select(p => new ProcessRowViewModel(p))];
+        Processes.Clear();
+        foreach (var process in _all)
+        {
+            Processes.Add(process);
+        }
+
+        _selectedProcess = null;
+        SelectedProcess = pickedId is { } id && target == _all.FirstOrDefault(p => p.Id == id)?.Text ? _all.First(p => p.Id == id) : null;
+        if (_selectedProcess is null)
+        {
+            _target = string.Empty; // so the restored text notifies the box even when it equals what it had
+            Target = target;
         }
     }
 

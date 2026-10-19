@@ -1204,5 +1204,7 @@
   </Style>
   <Style Selector="Border.attached > StackPanel > Button">
     <Setter Property="Margin" Value="-1,0,0,0" />
+    <!-- The shape clips: the ring would be cut to it. -->
+    <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing.Unclipped}" />
   </Style>
 </Styles>

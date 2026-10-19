@@ -158,14 +158,14 @@ public sealed class ContainersViewModel(
         private set => SetField(ref _serverLabel, value);
     }
 
-    /// <summary>No containers to list: the window shows its empty state, the status and Refresh (M34h).</summary>
-    public bool IsEmpty => Containers.Count == 0;
+    /// <summary>Nothing to list, neither containers nor images: the window shows its empty state, the status and Refresh (M34h).</summary>
+    public bool IsEmpty => Containers.Count == 0 && Images.Count == 0;
 
     public int ContainerCount => Containers.Count;
 
     public int ImageCount => Images.Count;
 
-    private void CountsChanged()
+    internal void CountsChanged()
     {
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(ContainerCount));

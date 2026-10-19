@@ -5,7 +5,8 @@
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.CountersView"
              x:DataType="vm:CountersViewModel">
-  <DockPanel>
+  <!-- The value and unit columns size to their widest cell, shared by the header and the rows (M34h). -->
+  <DockPanel Grid.IsSharedSizeScope="True">
     <!--
       The control set's toolbar (M34h): the process id box and the list of running .NET processes are one editable combo
       box (type an id or a name, or pick one; it lists them when it opens), Start keeps its label, Export is a split
@@ -49,7 +50,13 @@
       <TextBlock Classes="muted small" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
     </StackPanel>
     <Border DockPanel.Dock="Top" Classes="gridHeader">
-      <Grid ColumnDefinitions="2*,3*,72,40">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="2*" />
+          <ColumnDefinition Width="3*" />
+          <ColumnDefinition Width="Auto" MinWidth="72" SharedSizeGroup="counterValue" />
+          <ColumnDefinition Width="Auto" MinWidth="40" SharedSizeGroup="counterUnit" />
+        </Grid.ColumnDefinitions>
         <TextBlock Text="{l:T counters.provider}" ToolTip.Tip="{l:T counters.provider}" />
         <TextBlock Grid.Column="1" Text="{l:T counters.counter}" ToolTip.Tip="{l:T counters.counter}" />
         <TextBlock Grid.Column="2" Text="{l:T counters.value}" TextAlignment="Right" ToolTip.Tip="{l:T counters.value}" />
@@ -59,10 +66,16 @@
     <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T counters.countersAndTheirLatestValues}">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:CounterRowViewModel">
-          <Grid ColumnDefinitions="2*,3*,72,40" AutomationProperties.Name="{Binding AccessibleName}">
+          <Grid AutomationProperties.Name="{Binding AccessibleName}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="2*" />
+              <ColumnDefinition Width="3*" />
+              <ColumnDefinition Width="Auto" MinWidth="72" SharedSizeGroup="counterValue" />
+              <ColumnDefinition Width="Auto" MinWidth="40" SharedSizeGroup="counterUnit" />
+            </Grid.ColumnDefinitions>
             <TextBlock Text="{Binding Provider}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Provider}" />
             <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
-            <TextBlock Grid.Column="2" Text="{Binding Value}" TextAlignment="Right" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="2" Text="{Binding Value}" TextAlignment="Right" FontWeight="SemiBold" Margin="6,0,0,0" />
             <TextBlock Grid.Column="3" Text="{Binding Unit}" Classes="muted" Margin="6,0,0,0" />
           </Grid>
         </DataTemplate>

@@ -355,37 +355,53 @@ public sealed class ConfigurationManagerViewModel : ObservableObject, ILoadable
     private string? _platform;
     private string? _error;
     private SolutionConfigurationsResult? _data;
-    private SolutionConfigurationInfo? _active;
+    private readonly Func<SolutionConfigurationInfo?> _active;
 
-    public ConfigurationManagerViewModel(ProjectManagementService management, DialogViewModel dialogs, SolutionConfigurationInfo? active, Func<SolutionConfigurationInfo, Task> activate)
+    /// <param name="active">The solution's active pair, read each time (the toolbar can change it while the document is open).</param>
+    public ConfigurationManagerViewModel(ProjectManagementService management, DialogViewModel dialogs, Func<SolutionConfigurationInfo?> active, Func<SolutionConfigurationInfo, Task> activate)
     {
         _management = management;
         _dialogs = dialogs;
         _activate = activate;
         _active = active;
-        _buildType = active?.Configuration;
-        _platform = active?.Platform;
+        _buildType = active()?.Configuration;
+        _platform = active()?.Platform;
         AddBuildTypeCommand = new RelayCommand(() => _ = AddAsync(ConfigurationDimensions.BuildType));
         AddPlatformCommand = new RelayCommand(() => _ = AddAsync(ConfigurationDimensions.Platform));
         RemoveBuildTypeCommand = new RelayCommand(() => _ = RemoveAsync(ConfigurationDimensions.BuildType, _buildType), () => _buildType is not null && BuildTypes.Count > 1);
         RemovePlatformCommand = new RelayCommand(() => _ = RemoveAsync(ConfigurationDimensions.Platform, _platform), () => _platform is not null && Platforms.Count > 1);
-        ActivateCommand = new RelayCommand(() =>
-        {
-            if (_buildType is not null && _platform is not null)
-            {
-                var pair = new SolutionConfigurationInfo(_buildType, _platform);
-                _ = _activate(pair);
-                _active = pair;
-                StateChanged();
-            }
-        }, () => _buildType is not null && _platform is not null && !IsActivePair);
+        ActivateCommand = new RelayCommand(() => _ = ActivateAsync(), () => _buildType is not null && _platform is not null && !IsActivePair);
     }
+
+    /// <summary>Makes the chosen pair the solution's active one; the chip follows once the solution says it changed.</summary>
+    public async Task ActivateAsync()
+    {
+        if (_buildType is null || _platform is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _activate(new SolutionConfigurationInfo(_buildType, _platform)).ConfigureAwait(true);
+            Error = null;
+        }
+        catch (Exception ex) when (PackageManagerViewModel.IsExpected(ex))
+        {
+            Error = ex.Message;
+        }
+
+        StateChanged();
+    }
+
+    /// <summary>The solution's active pair changed (the toolbar, another window): the chip and Make Active follow.</summary>
+    public void ActiveChanged() => StateChanged();
 
     /// <summary>
     /// Whether the chosen configuration and platform are the solution's active pair: a chip says so, and Make Active is
     /// disabled (M34h).
     /// </summary>
-    public bool IsActivePair => _active is { } active && active.Configuration == _buildType && active.Platform == _platform;
+    public bool IsActivePair => _active() is { } active && active.Configuration == _buildType && active.Platform == _platform;
 
     /// <summary>The Remove buttons' names, with what they remove.</summary>
     public string RemoveBuildTypeName => Localizer.Format("msg.configurationManager.removeName", "Remove {0}", _buildType ?? string.Empty);

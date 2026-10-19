@@ -22,7 +22,20 @@
         </StackPanel>
       </DockPanel>
       <TextBlock Classes="muted" Text="{l:T serviceReferences.thisProjectHasNoServiceReferences}" IsVisible="{Binding IsEmpty}" />
-      <ListBox x:Name="ReferenceList" ItemsSource="{Binding References}" SelectedItem="{Binding Selected}" MaxHeight="220" IsVisible="{Binding !IsEmpty}" AutomationProperties.Name="{l:T serviceReferences.serviceReferences}">
+      <!--
+        The selected reference's commands sit on its row: Tab continues into them (a list is one Tab stop otherwise), the
+        context menu has them too, and Enter opens the document, Delete removes the reference (M34h).
+      -->
+      <ListBox x:Name="ReferenceList" ItemsSource="{Binding References}" SelectedItem="{Binding Selected}" MaxHeight="220" IsVisible="{Binding !IsEmpty}"
+               KeyboardNavigation.TabNavigation="Continue" AutomationProperties.Name="{l:T serviceReferences.serviceReferences}">
+        <ListBox.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="{l:T serviceReferences.testClient}" Command="{Binding TestCommand}" IsVisible="{Binding SelectedIsWcf}" />
+            <MenuItem Header="{l:T serviceReferences.updateFromSource}" Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" />
+            <MenuItem Header="{l:T serviceReferences.openDocument}" Command="{Binding OpenCommand}" InputGesture="Enter" />
+            <MenuItem Header="{l:T serviceReferences.remove}" Command="{Binding RemoveCommand}" InputGesture="Delete" IsEnabled="{Binding !IsBusy}" />
+          </ContextMenu>
+        </ListBox.ContextMenu>
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ServiceReferenceRow">
             <Grid ColumnDefinitions="Auto,*,Auto" Margin="2,4" AutomationProperties.Name="{Binding Name}">
