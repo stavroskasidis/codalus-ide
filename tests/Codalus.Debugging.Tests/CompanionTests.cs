@@ -200,8 +200,9 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
                 $"{mains.Count} threads run <Main>$; the dump's threads: {string.Join(" || ", summary.Threads.Select(t => $"#{t.ManagedId} (OS {t.OsId}): {string.Join(" | ", t.Frames.Select(f => f.Method))}"))}");
             var main = mains[0];
             var frame = main.Frames.First(f => f.Method.Contains("<Main>$", StringComparison.Ordinal));
+            // In the wait loop: its Thread.Sleep, or (under load, as the full suite on Windows) its File.Exists condition.
             Assert.True(
-                (Path.GetFileName(frame.File), frame.Line) == ("Program.cs", DebuggeeFixture.Line(debuggee.Program, "wait")),
+                Path.GetFileName(frame.File) == "Program.cs" && (frame.Line == DebuggeeFixture.Line(debuggee.Program, "wait") || frame.Line == DebuggeeFixture.Line(debuggee.Program, "wait-check")),
                 $"{frame}; all frames: {string.Join(" | ", main.Frames)}");
 
             var heap = dumps.Heap(summary.Id, 50);

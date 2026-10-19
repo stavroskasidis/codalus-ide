@@ -113,7 +113,7 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
     [Fact]
     public async Task Attach_to_a_program_in_WSL()
     {
-        Assert.SkipWhen(RemoteFixture.WslDistribution is null, "No WSL distribution with .NET (Windows; CODALUS_TEST_WSL).");
+        Assert.SkipWhen(RemoteFixture.WslDistribution is null, Codalus.Tests.WslStandIn.SkipReason);
         var distribution = RemoteFixture.WslDistribution!;
         var target = new WslTarget(distribution) { Home = TestHome };
         var signal = "/tmp/codalus-wsl-" + Guid.NewGuid().ToString("N")[..8];
@@ -148,7 +148,7 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
     [Fact]
     public async Task Launch_in_WSL_through_the_WSL_profile()
     {
-        Assert.SkipWhen(RemoteFixture.WslDistribution is null, "No WSL distribution with .NET (Windows; CODALUS_TEST_WSL).");
+        Assert.SkipWhen(RemoteFixture.WslDistribution is null, Codalus.Tests.WslStandIn.SkipReason);
         var distribution = RemoteFixture.WslDistribution!;
         var info = new Codalus.Projects.Protocol.RunInfo(Path.Combine(debuggee.Folder, "Debuggee.csproj"), "net11.0", "Exe", debuggee.Dll, null, null, null, null);
         var profile = new LaunchProfile("WSL", LaunchProfile.Wsl, CommandLineArgs: "--depth", DistributionName: distribution, EnvironmentVariables: new Dictionary<string, string> { ["GREETING"] = "from WSL" });

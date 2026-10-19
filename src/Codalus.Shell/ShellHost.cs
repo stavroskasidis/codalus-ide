@@ -294,7 +294,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         Directory.CreateDirectory(folder);
-        ShellIntegration.OpenUrl(new Uri(folder + Path.DirectorySeparatorChar));
+        OpenExternalUrl(new Uri(folder + Path.DirectorySeparatorChar));
     }
 
     public ShellOptions Options { get; }
@@ -776,7 +776,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Directory.CreateDirectory(Paths.PluginsDirectory);
         try
         {
-            ShellIntegration.RevealInFileManager(Paths.PluginsDirectory);
+            RevealPath(Paths.PluginsDirectory);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -792,7 +792,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             throw new ArgumentException("workbench.openExternal expects an http(s) URL.");
         }
 
-        ShellIntegration.OpenUrl(url);
+        OpenExternalUrl(url);
     }
 
     /// <summary>

@@ -483,7 +483,7 @@ public sealed partial class ShellHost : IHostingActions
     {
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
         {
-            ShellIntegration.OpenUrl(uri);
+            OpenExternalUrl(uri);
         }
     }
 

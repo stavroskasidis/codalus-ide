@@ -234,13 +234,10 @@ public sealed class RemoteShellTests
     [AvaloniaFact]
     public async Task A_remote_window_on_WSL_maps_paths_builds_runs_and_debugs_there()
     {
-        var distribution = Environment.GetEnvironmentVariable("CODALUS_TEST_WSL") is { Length: > 0 } name ? name : "Ubuntu";
         Assert.SkipUnless(OperatingSystem.IsWindows(), "WSL is a Windows stand-in (Linux and macOS run the fake ssh in the workbench tests).");
-        var listed = await RemoteTargets.WslDistributionsAsync(TestContext.Current.CancellationToken);
-        var probe = listed.Contains(distribution, StringComparer.OrdinalIgnoreCase)
-            ? await RemoteShell.RunAsync(new WslTarget(distribution), "PATH=\"$PATH:$HOME/.dotnet\" command -v dotnet; echo \"home $HOME\"", TestContext.Current.CancellationToken)
-            : null;
-        Assert.SkipWhen(probe is null || !probe.Output.Contains("/dotnet", StringComparison.Ordinal), $"No WSL distribution '{distribution}' with .NET (CODALUS_TEST_WSL).");
+        Assert.SkipWhen(Codalus.Tests.WslStandIn.Distribution is null, Codalus.Tests.WslStandIn.SkipReason);
+        var distribution = Codalus.Tests.WslStandIn.Name;
+        var probe = await RemoteShell.RunAsync(new WslTarget(distribution), "echo \"home $HOME\"", TestContext.Current.CancellationToken);
 
         await using var f = ShellFixture.Create();
         var source = f.CopySample("BuildAndRun");

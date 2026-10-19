@@ -53,7 +53,7 @@ public sealed partial class ShellHost
 
     private void InitializeAspire()
     {
-        AspireWindow = new AspireViewModel(ShellIntegration.OpenUrl);
+        AspireWindow = new AspireViewModel(uri => OpenExternalUrl(uri));
         Debugger.Output += (_, output) => OnAspireLine(output.Text, fromDebugger: true);
         Debugger.Ended += (_, _) =>
         {
@@ -187,7 +187,7 @@ public sealed partial class ShellHost
                 AspireLog.AppendLine("The dashboard: " + url);
                 if (run.OpenDashboard && Uri.TryCreate(url, UriKind.Absolute, out var uri))
                 {
-                    ShellIntegration.OpenUrl(uri);
+                    OpenExternalUrl(uri);
                 }
             }
         });

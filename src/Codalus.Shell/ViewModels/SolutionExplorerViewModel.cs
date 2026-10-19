@@ -1131,7 +1131,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             try
             {
-                Codalus.Platform.ShellIntegration.RevealInFileManager(path);
+                _shell.RevealPath(path);
             }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
             {

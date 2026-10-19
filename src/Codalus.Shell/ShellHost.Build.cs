@@ -36,7 +36,7 @@ public sealed partial class ShellHost
     private void InitializeBuild()
     {
         Builds = new BuildService(Solutions, Workbench.Output);
-        Runs = new RunService(Solutions, Workbench.Output, ShellIntegration.OpenUrl);
+        Runs = new RunService(Solutions, Workbench.Output, uri => OpenExternalUrl(uri));
         Builds.Started += (_, request) => Ui.Post(() => OnBuildStarted(request));
         Builds.Finished += (_, completed) => Ui.Post(() => OnBuildFinished(completed));
         Runs.RunningChanged += (_, _) => Ui.Post(UpdateRunState);

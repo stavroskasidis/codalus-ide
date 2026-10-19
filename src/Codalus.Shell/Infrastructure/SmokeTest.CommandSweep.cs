@@ -73,12 +73,6 @@ internal sealed partial class SmokeTest
         ["debug.createDump"] = "writes a full dump of the program (6.7 GB on macOS); the debug.companion step covers dumps",
         ["debug.webPage"] = "starts a browser under the JavaScript debugger (the blazor.* steps cover it)",
         ["debug.webPageFile"] = "starts a browser under the JavaScript debugger (the blazor.* steps cover it)",
-        ["workbench.openExternal"] = "opens the default browser (no stand-in for ShellIntegration.OpenUrl)",
-        ["aspire.openDashboard"] = "opens the default browser on the dashboard",
-        ["help.openCrashReports"] = "opens the operating system's file manager (no stand-in for ShellIntegration)",
-        ["workbench.openPluginsFolder"] = "opens the operating system's file manager",
-        ["workbench.revealDocument"] = "opens the operating system's file manager",
-        ["explorer.reveal"] = "opens the operating system's file manager",
     };
 
     /// <summary>Commands for plugins, CodeLens and the agent: they take arguments, and no menu, key or palette entry runs them.</summary>
@@ -204,6 +198,9 @@ internal sealed partial class SmokeTest
         shell.Window = new SweepWindow(realWindow, shell.Workbench.Log);
         var helpUrl = shell.OpenHelpUrl;
         shell.OpenHelpUrl = uri => shell.Workbench.Log.AppendLine($"[sweep] help page {uri} (not opened)");
+        var (externalUrl, revealPath) = (shell.OpenExternalUrl, shell.RevealPath);
+        shell.OpenExternalUrl = uri => shell.Workbench.Log.AppendLine($"[sweep] the browser or file manager would open {uri}");
+        shell.RevealPath = path => shell.Workbench.Log.AppendLine($"[sweep] the file manager would show {path}");
         var scheme = shell.Workbench.Settings.GetString(BuiltIns.KeyboardSchemeSetting, "default");
         await shell.Workbench.Settings.SetAsync(BuiltIns.KeyboardSchemeSetting, "default", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         Dispatcher.UIThread.UnhandledException += OnSweepUnhandled;
@@ -215,9 +212,9 @@ internal sealed partial class SmokeTest
             shell.Trust.Trust(_sweepFolder);
             await shell.OpenSolutionAsync(_sweepSolution).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the sweep's solution is evaluated", 240).ConfigureAwait(true);
-            // At least its two projects: on macOS the workspace has been seen still counting a project of the step before's
-            // solution (dotnet.older's Core21.App), reported by the sweep's report as a finding.
-            await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: >= 2 }, () => $"the C# workspace is ready ({shell.Languages.Status(ShellHost.CSharpLanguageId)})", 360).ConfigureAwait(true);
+            // Exactly its two projects: a design-time build of the step before's solution (dotnet.older) that ended after the
+            // switch once brought one of its projects back into this workspace (macOS; LanguageService forgets closed ones).
+            await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 2 }, () => $"the C# workspace is ready with the sweep's two projects ({shell.Languages.Status(ShellHost.CSharpLanguageId)})", 360).ConfigureAwait(true);
             await WaitAsync(() => shell.HasRepository && shell.CurrentBranch is not null, "the Git repository is found", 60).ConfigureAwait(true);
 
             var commands = shell.Workbench.Commands.Descriptors
@@ -312,6 +309,7 @@ internal sealed partial class SmokeTest
             TaskScheduler.UnobservedTaskException -= OnSweepUnobserved;
             shell.Window = realWindow;
             shell.OpenHelpUrl = helpUrl;
+            (shell.OpenExternalUrl, shell.RevealPath) = (externalUrl, revealPath);
             await shell.Workbench.Settings.SetAsync(BuiltIns.KeyboardSchemeSetting, scheme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
             WriteSweepReport(started.Elapsed);
         }

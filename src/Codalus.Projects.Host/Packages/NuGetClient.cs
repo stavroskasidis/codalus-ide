@@ -145,6 +145,54 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
 
     // ------------------------------------------------------------------ search
 
+    /// <summary>
+    /// A folder's packages matching <paramref name="query"/>, the newest version of each, read one package at a time: NuGet's
+    /// own search of a folder throws on the first unreadable <c>.nuspec</c> (an extraction that failed), and the folder's
+    /// every result was lost. Broken packages are left out and named in the source's error.
+    /// </summary>
+    private async Task<(List<IPackageSearchMetadata> Results, string? Broken)> SearchLocalAsync(PackageSource source, string query, bool prerelease, int skip, int take, CancellationToken cancellationToken)
+    {
+        var local = await Repository(source).GetResourceAsync<FindLocalPackagesResource>(cancellationToken).ConfigureAwait(false)
+                    ?? throw new InvalidOperationException("The source does not support search.");
+        var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var newest = new Dictionary<string, LocalPackageInfo>(StringComparer.OrdinalIgnoreCase);
+        var broken = new List<string>();
+        foreach (var package in local.GetPackages(_logger, cancellationToken))
+        {
+            if (!prerelease && package.Identity.Version.IsPrerelease
+                || newest.TryGetValue(package.Identity.Id, out var known) && known.Identity.Version >= package.Identity.Version)
+            {
+                continue;
+            }
+
+            NuspecReader nuspec;
+            try
+            {
+                nuspec = package.Nuspec;
+            }
+            catch (Exception ex) when (ex is System.Xml.XmlException or IOException or InvalidDataException or PackagingException)
+            {
+                broken.Add(package.Identity.ToString());
+                continue;
+            }
+
+            string[] text = [package.Identity.Id, nuspec.GetTitle(), nuspec.GetDescription(), nuspec.GetTags()];
+            if (terms.All(term => text.Any(t => t?.Contains(term, StringComparison.OrdinalIgnoreCase) == true)))
+            {
+                newest[package.Identity.Id] = package;
+            }
+        }
+
+        var results = newest.Values
+            .OrderBy(p => p.Identity.Id, StringComparer.OrdinalIgnoreCase)
+            .Skip(skip)
+            .Take(take)
+            .Select(p => (IPackageSearchMetadata)new LocalPackageSearchMetadata(p))
+            .ToList();
+        return (results, broken.Count == 0 ? null
+            : $"Left out {broken.Count} package(s) that can't be read (delete them from the folder to restore them again): {string.Join(", ", broken.Take(5))}{(broken.Count > 5 ? ", …" : string.Empty)}");
+    }
+
     public async Task<PackageSearchResult> SearchAsync(PackageSearchParams parameters, CancellationToken cancellationToken)
     {
         var settings = LoadSettings();
@@ -156,6 +204,12 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
         {
             try
             {
+                if (source.IsLocal)
+                {
+                    var (local, broken) = await SearchLocalAsync(source, parameters.Query, parameters.Prerelease, Math.Max(0, parameters.Skip), take, cancellationToken).ConfigureAwait(false);
+                    return (Source: source, Results: local, Error: broken);
+                }
+
                 var search = await Repository(source).GetResourceAsync<PackageSearchResource>(cancellationToken).ConfigureAwait(false)
                              ?? throw new InvalidOperationException("The source does not support search.");
                 var results = await search.SearchAsync(parameters.Query, filter, Math.Max(0, parameters.Skip), take, _logger, cancellationToken).ConfigureAwait(false);

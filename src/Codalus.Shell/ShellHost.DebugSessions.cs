@@ -589,7 +589,7 @@ public sealed partial class ShellHost
         }
         else if (choice == "Show in Folder")
         {
-            ShellIntegration.RevealInFileManager(dump.Path);
+            RevealPath(dump.Path);
         }
     }
 }

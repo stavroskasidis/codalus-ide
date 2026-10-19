@@ -15,35 +15,8 @@ namespace Codalus.Debugging.Tests;
 /// </summary>
 public static class RemoteFixture
 {
-    private static readonly Lazy<string?> s_wsl = new(FindWsl);
-
-    /// <summary>The WSL distribution with .NET (Windows), or null.</summary>
-    public static string? WslDistribution => s_wsl.Value;
-
-    private static string? FindWsl()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return null;
-        }
-
-        var distribution = Environment.GetEnvironmentVariable("CODALUS_TEST_WSL") is { Length: > 0 } name ? name : "Ubuntu";
-        try
-        {
-            var listed = RemoteTargets.WslDistributionsAsync(CancellationToken.None).GetAwaiter().GetResult();
-            if (!listed.Contains(distribution, StringComparer.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            var dotnet = Run("wsl.exe", ["-d", distribution, "--exec", "sh", "-lc", "command -v dotnet"]);
-            return dotnet.Code == 0 && dotnet.Output.Trim().Length > 0 ? distribution : null;
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            return null;
-        }
-    }
+    /// <summary>The WSL distribution with the tests' .NET (Windows), or null (<see cref="Codalus.Tests.WslStandIn"/>).</summary>
+    public static string? WslDistribution => Codalus.Tests.WslStandIn.Distribution;
 
     private static readonly Lazy<(IReadOnlyList<string> Tool, string DotnetRoot)?> s_containers = new(FindContainers);
 

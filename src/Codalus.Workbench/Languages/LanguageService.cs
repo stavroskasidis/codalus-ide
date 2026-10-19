@@ -536,7 +536,7 @@ public sealed class LanguageService : IAsyncDisposable
 
     private void OnCompilerInputs(object? sender, CompilerInputsInfo inputs)
     {
-        if (_registry.ForProjectLanguage(inputs.Language) is null)
+        if (_registry.ForProjectLanguage(inputs.Language) is null || IsClosed(inputs.Path))
         {
             return;
         }
@@ -611,7 +611,7 @@ public sealed class LanguageService : IAsyncDisposable
         {
             var updated = new List<ProjectData>();
             var removed = new List<string>();
-            foreach (var inputs in batch.Where(i => descriptor.TakesProjects(i.Language)))
+            foreach (var inputs in batch.Where(i => descriptor.TakesProjects(i.Language) && !IsClosed(i.Path)))
             {
                 if (inputs.State != CompilerInputStates.Ok)
                 {
@@ -655,9 +655,33 @@ public sealed class LanguageService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Projects of a solution closed since: a design-time build of theirs that ends after the switch must not bring them
+    /// back into the next solution's workspace (seen on macOS: the C# host still counted the solution before's project).
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _closed = new(SolutionService.PathComparer);
+
+    private bool IsClosed(string path) => _closed.ContainsKey(path);
+
+    /// <summary>The solution's projects when it last changed: those it no longer lists are the closed ones.</summary>
+    private HashSet<string> _listed = new(SolutionService.PathComparer);
+
     private void OnSolutionChanged(object? sender, EventArgs e)
     {
         var current = _solutions.Solution?.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer) ?? [];
+        var gone = _listed.Where(p => !current.Contains(p)).ToList();
+        _listed = current;
+        foreach (var path in current)
+        {
+            _closed.TryRemove(path, out _);
+        }
+
+        foreach (var path in gone)
+        {
+            _closed[path] = 0;
+            _pendingInputs.TryRemove(path, out _);
+        }
+
         var removed = _projects.Keys.Where(p => !current.Contains(p)).ToList();
         if (removed.Count == 0)
         {

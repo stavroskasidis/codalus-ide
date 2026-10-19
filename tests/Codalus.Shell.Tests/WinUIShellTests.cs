@@ -189,6 +189,8 @@ public sealed class WinUIShellTests
     public async Task Windows_registers_starts_and_attaches_to_the_packaged_winui_app()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Packaged (MSIX) apps register and start on Windows only (D31).");
+        // It attaches the debugger: without netcoredbg it failed instead of skipping, as the other debugger tests do.
+        Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
         var (f, project) = await OpenAsync(packaged: true);
         await using var _ = f;
         Assert.SkipUnless(f.Shell.DeveloperModeProbe() == true, "Developer Mode is off on this machine (CI's windows runner may not have it): registering a build's layout needs it. The explanation is A_packaged_app_explains_developer_mode_first_and_has_no_hot_reload.");

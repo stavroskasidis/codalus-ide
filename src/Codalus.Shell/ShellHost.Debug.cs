@@ -156,13 +156,13 @@ public sealed partial class ShellHost
                 {
                     if (_pendingBrowserUrls.TryDequeue(out var next) && Uri.TryCreate(next, UriKind.Absolute, out var nextUri))
                     {
-                        ShellIntegration.OpenUrl(nextUri);
+                        OpenExternalUrl(nextUri);
                     }
                 });
             }
             else if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                ShellIntegration.OpenUrl(uri);
+                OpenExternalUrl(uri);
             }
         }
     }
@@ -183,7 +183,7 @@ public sealed partial class ShellHost
             if (await ServerProbe.WaitUntilListeningAsync(address, TimeSpan.FromMinutes(2), () => Debugger.State != DebugState.Idle && Volatile.Read(ref _pendingBrowserUrl) is not null, CancellationToken.None).ConfigureAwait(false)
                 && Interlocked.Exchange(ref _pendingBrowserUrl, null) is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                Ui.Post(() => ShellIntegration.OpenUrl(uri));
+                Ui.Post(() => OpenExternalUrl(uri));
             }
         });
     }

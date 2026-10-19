@@ -185,7 +185,7 @@ public sealed partial class ShellHost
         }
         else if (choice is Notes or "Download Page" && offer.ReleasePage is { } page)
         {
-            ShellIntegration.OpenUrl(page);
+            OpenExternalUrl(page);
         }
     }
 
@@ -254,7 +254,7 @@ public sealed partial class ShellHost
         {
             if (Uri.TryCreate(link, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
             {
-                ShellIntegration.OpenUrl(uri);
+                OpenExternalUrl(uri);
             }
         })
         { Title = "What's New" };
