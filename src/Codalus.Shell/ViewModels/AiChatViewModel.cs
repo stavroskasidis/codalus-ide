@@ -80,6 +80,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     private readonly IAiChatHost _host;
     private CancellationTokenSource? _cts;
+    private bool _sending;
     private string _input = string.Empty;
     private bool _selection = true;
     private bool _currentFile = true;
@@ -106,7 +107,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
             }
 
             TurnChanged?.Invoke(this, turn);
-            OnPropertyChanged(nameof(IsAnswering));
+            OnAnsweringChanged();
         });
         Chat.Cleared += (_, _) => Ui.Post(() =>
         {
@@ -143,8 +144,11 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     public bool HasTurns => Turns.Count > 0;
 
-    /// <summary>The last turn is being answered: the composer offers Stop instead of Send.</summary>
-    public bool IsAnswering => Turns.Count > 0 && Turns[^1].Turn.IsStreaming;
+    /// <summary>
+    /// A question is being answered, from Send until its turn ends (an agent's turn too, while a tool runs between its
+    /// requests): the composer offers Stop instead of Send, and nothing else is sent meanwhile.
+    /// </summary>
+    public bool IsAnswering => _sending || (Turns.Count > 0 && Turns[^1].Turn.IsStreaming);
 
     public bool IsOff => Ai.State == AiState.Off;
 
@@ -187,7 +191,8 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool CanSend => !IsBusy && !IsOff && Input.Trim().Length > 0;
+    /// <summary>A question can go now: AI is on and idle, no turn is being answered, and there is a question.</summary>
+    public bool CanSend => !IsBusy && !IsAnswering && !IsOff && Input.Trim().Length > 0;
 
     /// <summary>Agent mode (M28c): the model may read, search, build, propose edits and ask to run commands.</summary>
     public bool IsAgent
@@ -262,8 +267,14 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private void OnTurnsChanged()
     {
         OnPropertyChanged(nameof(HasTurns));
-        OnPropertyChanged(nameof(IsAnswering));
+        OnAnsweringChanged();
         OnStatesChanged();
+    }
+
+    private void OnAnsweringChanged()
+    {
+        OnPropertyChanged(nameof(IsAnswering));
+        OnPropertyChanged(nameof(CanSend));
     }
 
     private void OnStatesChanged()
@@ -274,11 +285,14 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShowOffBar));
     }
 
-    /// <summary>Sends the input with the chosen context.</summary>
+    /// <summary>
+    /// Sends the input with the chosen context. Nothing is sent while a turn is answered (Enter included): AI isn't busy
+    /// between an agent's steps, and a second question would take Stop away from the running turn.
+    /// </summary>
     public async Task SendAsync()
     {
         var question = Input.Trim();
-        if (question.Length == 0 || IsBusy || IsOff)
+        if (question.Length == 0 || IsBusy || IsAnswering || IsOff)
         {
             return;
         }
@@ -286,38 +300,56 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         if (NeedsProvider)
         {
             await _host.ChooseAiProviderAsync().ConfigureAwait(true);
-            if (NeedsProvider)
+            if (NeedsProvider || IsAnswering)
             {
                 return;
             }
         }
 
         var (items, anchor) = _host.GatherAiContext(Choice);
+        var agent = IsAgent;
         Input = string.Empty;
-        _cts?.Dispose();
-        _cts = new CancellationTokenSource();
-        if (IsAgent)
-        {
-            await _host.RunAgentAsync(question, items, anchor, _cts.Token).ConfigureAwait(true);
-        }
-        else
-        {
-            await Chat.SendAsync(question, items, _cts.Token, anchor).ConfigureAwait(true);
-        }
+        await AnswerAsync(token => agent
+            ? _host.RunAgentAsync(question, items, anchor, token)
+            : Chat.SendAsync(question, items, token, anchor)).ConfigureAwait(true);
     }
 
     /// <summary>Asks <paramref name="question"/> with <paramref name="items"/> chosen by an action (not the chips), in this chat.</summary>
     public async Task AskAsync(string question, IReadOnlyList<AiContextItem> items, AiSelectionAnchor? anchor = null)
     {
         _host.ShowAiChatWindow();
-        if (IsBusy || IsOff)
+        if (IsBusy || IsAnswering || IsOff)
         {
             return;
         }
 
+        await AnswerAsync(token => Chat.SendAsync(question, items, token, anchor)).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Runs one question with its own cancellation, which Stop reaches until its turn ends. The question counts as being
+    /// answered from now (before its turn exists: the context is prepared and agent mode checks first), so Stop shows at
+    /// once and may stop it before its turn starts.
+    /// </summary>
+    private async Task AnswerAsync(Func<CancellationToken, Task> answer)
+    {
         _cts?.Dispose();
-        _cts = new CancellationTokenSource();
-        await Chat.SendAsync(question, items, _cts.Token, anchor).ConfigureAwait(true);
+        var cts = _cts = new CancellationTokenSource();
+        _sending = true;
+        OnAnsweringChanged();
+        try
+        {
+            await answer(cts.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            // Stopped before its turn started (a started turn ends as stopped instead).
+        }
+        finally
+        {
+            _sending = false;
+            OnAnsweringChanged();
+        }
     }
 
     public void Stop() => _cts?.Cancel();
