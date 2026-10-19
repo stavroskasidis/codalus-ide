@@ -281,9 +281,10 @@
 @code {
     private sealed record Shot(string Key, string Label, string File, string Alt, string Caption);
 
-    /// <summary>The theme families (M45), each in the variant its screenshot shows.</summary>
+    /// <summary>Classic, the default (D36), and the theme families (M45), each in the variant its screenshot shows.</summary>
     private static readonly (string Family, string Variant, string Line)[] s_families =
     [
+        ("Classic", "Light", "the default, with docked tool windows, plain tabs and a blue accent"),
         ("Harbor", "Light", "closest to a classic IDE, with a navy title bar"),
         ("Graphite", "Dark", "compact, hairlines instead of gutters"),
         ("Daylight", "Light", "flat, with rounded tabs"),
@@ -322,6 +323,12 @@
         new("xaml", "Avalonia XAML", "xaml-preview.png",
             "An Avalonia .axaml file in the editor with the XAML Previewer rendering it beside the code",
             "Edit Avalonia XAML with completion and bindings, and watch the previewer follow every change."),
+        new("ai-chat", "AI Chat", "ai-chat.png",
+            "AI Chat beside the editor: a question about the selected method, the files sent with it as chips, and the answer with a code block to copy, insert or apply",
+            "Ask about your code with the context you choose as chips, and get answers with code blocks in your editor's colors, ready to copy, insert or apply after a preview. Off until you choose a provider."),
+        new("ai-agent", "Agent mode", "ai-chat-agent.png",
+            "AI Chat in agent mode: the file it read shown as a step, its explanation, and the edit it proposes as a code block to apply",
+            "Agent mode reads, searches, builds, edits and runs commands, each step shown in the chat, every change in a preview and every command after you allow it."),
         new("setup", "First start", "setup.png",
             "The first-run setup's appearance step: Classic, chosen, then Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, and the mode",
             "The first start sets it up your way: a theme family and its mode, previewed as you click, then the keyboard scheme, your settings from elsewhere and a tools check."),
