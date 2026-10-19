@@ -38,6 +38,8 @@ Compose files are checked against the Compose Specification's schema as you type
 
 Toolbar: Start, Stop, Restart, Remove, Open in Browser (its first published port), **Open Terminal** (a shell in the container, in the integrated terminal), and **Attach Debugger** (to a .NET process in it). Debug → **Attach to a Process in a Container…** does the same from the Debug menu.
 
+When no engine answers (Docker or Podman isn't installed, or its daemon or machine isn't running), the window and **Attach to a Process in a Container…** say so, and how to start or install one.
+
 ## .NET Aspire
 
 Set an Aspire **AppHost** project as the startup project, then:

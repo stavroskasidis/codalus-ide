@@ -1731,6 +1731,8 @@
   "msg.debugSessions.justInTimeDebuggingIsOn": "Just-In-Time debugging is on for programs started from now on.",
   "msg.debugSessions.listingTheProcessesOf": "Listing the processes of {0}…",
   "msg.debugSessions.netIsntInstalledInDotnetIsnt": ".NET isn't installed in {0}: 'dotnet' isn't on its PATH. Install the runtime there to run {1} in WSL.",
+  "msg.debugSessions.noContainerEngineIsInstalled": "No container engine is installed: {0} isn't on the PATH. Install Docker or Podman, or choose the engine in the '{1}' setting.",
+  "msg.debugSessions.noContainerEngineIsRunning": "No container engine is running: {0} doesn't answer. Start Docker or Podman (or 'podman machine start'), or choose the engine in the '{1}' setting.",
   "msg.debugSessions.noContainersAreRunningPs": "No containers are running ({0} ps).",
   "msg.debugSessions.noStartupProjectIsSetTo": "No startup project is set to start. Choose them in Configure Startup Projects.",
   "msg.debugSessions.noWslDistributionsAreInstalled": "No WSL distributions are installed.",

@@ -73,6 +73,53 @@ public sealed class SweepFindingsTests
     }
 
     [AvaloniaFact]
+    public async Task Attach_to_a_process_in_a_container_says_when_no_container_engine_answers()
+    {
+        // With Docker's CLI installed but its daemon not running (GitHub's Windows runners, now and then), 'docker ps' failed
+        // and its raw message was an error notification: no engine is the machine's state, which the Containers window
+        // states. A stand-in CLI plays the engine.
+        await using var f = ShellFixture.Create();
+        var notifications = f.Shell.Workbench.Notifications;
+        var docker = Path.Combine(f.UserData, OperatingSystem.IsWindows() ? "docker.cmd" : "docker");
+        await f.Shell.Workbench.Settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, $"\"{docker}\"", SettingScope.User, CancellationToken.None);
+
+        async Task<Notification> AttachAsync(string windows, string unix)
+        {
+            await File.WriteAllTextAsync(docker, OperatingSystem.IsWindows() ? "@echo off\r\n" + windows.ReplaceLineEndings("\r\n") + "\r\n" : "#!/bin/sh\n" + unix + "\n", CancellationToken.None);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(docker, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            notifications.DismissAll();
+            await f.Shell.AttachToRemoteProcessAsync("container");
+            return Assert.Single(notifications.Items);
+        }
+
+        // The daemon isn't running: 'docker version' and 'docker ps' fail.
+        var stopped = await AttachAsync(
+            "echo failed to connect to the docker API at npipe:////./pipe/docker_engine; check if the path is correct and if the daemon is running 1>&2\nexit /b 1",
+            "echo 'failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running' >&2\nexit 1");
+        Assert.Equal(NotificationSeverity.Info, stopped.Severity);
+        Assert.Equal("No container engine is running: docker doesn't answer. Start Docker or Podman (or 'podman machine start'), or choose the engine in the 'debug.containerTool' setting.", stopped.Message);
+
+        // The engine answers, and 'docker ps' fails all the same: that is an error, with its message.
+        var failed = await AttachAsync(
+            "if \"%1\"==\"version\" (echo linux& exit /b 0)\necho ps went wrong 1>&2\nexit /b 1",
+            "if [ \"$1\" = version ]; then echo linux; exit 0; fi\necho 'ps went wrong' >&2\nexit 1");
+        Assert.Equal(NotificationSeverity.Error, failed.Severity);
+        Assert.Contains("ps went wrong", failed.Message, StringComparison.Ordinal);
+
+        // No CLI at all.
+        await f.Shell.Workbench.Settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, $"\"{Path.Combine(f.UserData, "missing", "podman")}\"", SettingScope.User, CancellationToken.None);
+        notifications.DismissAll();
+        await f.Shell.AttachToRemoteProcessAsync("container");
+        var missing = Assert.Single(notifications.Items);
+        Assert.Equal(NotificationSeverity.Info, missing.Severity);
+        Assert.Equal("No container engine is installed: podman isn't on the PATH. Install Docker or Podman, or choose the engine in the 'debug.containerTool' setting.", missing.Message);
+    }
+
+    [AvaloniaFact]
     public async Task Turning_a_plugin_on_or_off_keeps_each_settings_layers_own_list()
     {
         // The merged list was written to the user's settings: a workspace's plugins leaked into them, and Turn On never
