@@ -756,7 +756,24 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             _ = await shell.OpenMergeEditorAsync(Greeter).ConfigureAwait(true) ?? throw new SmokeFailure("The merge editor didn't open.");
             await WaitAsync(() => window.GetVisualDescendants().OfType<MergeEditorView>().Any(), "the merge editor renders").ConfigureAwait(true);
             var merge = window.GetVisualDescendants().OfType<MergeEditorView>().Single();
-            merge.Accept("incoming");
+            var mergeDocument = shell.Layout.Documents.OfType<MergeEditorDocument>().Single();
+
+            // The redesigned editor (2026-10-19): the file's name as the tab, the branches in the headers, the merge
+            // base's text in the result instead of markers, a check box beside each block, and the count.
+            Check(mergeDocument.Title == "Greeter.cs", "the tab is the file's name");
+            Check(merge.ViewModel.IncomingTitle == "Incoming: smoke/theirs" && merge.ViewModel.CurrentTitle == "Current: smoke/branch", "the headers name the branches");
+            Check(merge.ResultText.Contains("Hello from", StringComparison.Ordinal) && !merge.ResultText.Contains("<<<<<<<", StringComparison.Ordinal), "the result shows the merge base, not git's markers");
+            Check(merge.SummaryText == "1 Conflict (1 Remaining)" && !merge.CanAcceptMerge, "the toolbar counts the conflict");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-merge-editor.png");
+
+            var incomingBox = merge.CheckBoxesFor(MergeSide.Incoming).Single();
+            incomingBox.IsChecked = true;
+            incomingBox.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+            Check(merge.ResultText.Contains("Theirs from", StringComparison.Ordinal) && merge.SummaryText == "1 Conflict (0 Remaining)" && merge.CanAcceptMerge, "the incoming block's check box takes it");
+            Check(mergeDocument.Title == "Greeter.cs*" && merge.HeaderFor(MergeSide.Incoming).IsChecked == true, "the tab shows the change, and the header's box follows");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-merge-editor-resolved.png");
             await merge.AcceptMergeAsync().ConfigureAwait(true);
             await shell.ContinueOperationAsync().ConfigureAwait(true);
             await WaitAsync(() => shell.Git.Status is { Operation: null, Files.Count: 0 }, "the merge is committed").ConfigureAwait(true);

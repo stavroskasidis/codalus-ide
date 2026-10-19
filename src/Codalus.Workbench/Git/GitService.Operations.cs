@@ -85,10 +85,17 @@ public sealed partial class GitService
         return (await Stage(1).ConfigureAwait(false), await Stage(2).ConfigureAwait(false), await Stage(3).ConfigureAwait(false));
     }
 
-    /// <summary>Writes the resolved content and stages it: the file is no longer in conflict.</summary>
-    public async Task ResolveAsync(string path, string content, CancellationToken cancellationToken = default)
+    /// <summary>Writes the resolved content (UTF-8) and stages it: the file is no longer in conflict.</summary>
+    public Task ResolveAsync(string path, string content, CancellationToken cancellationToken = default) =>
+        ResolveAsync(path, content, null, cancellationToken);
+
+    /// <summary>
+    /// Writes the resolved content in <paramref name="encoding"/> (the file's own, its byte order mark included; UTF-8
+    /// without one when null) and stages it: the file is no longer in conflict.
+    /// </summary>
+    public async Task ResolveAsync(string path, string content, Encoding? encoding, CancellationToken cancellationToken = default)
     {
-        await File.WriteAllTextAsync(path, content, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(path, content, encoding ?? new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
         await MutateAsync(["add", "--", Relative(path)], cancellationToken).ConfigureAwait(false);
     }
 

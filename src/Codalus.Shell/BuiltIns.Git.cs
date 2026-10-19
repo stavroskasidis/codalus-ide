@@ -2,6 +2,7 @@ using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Context;
 using Codalus.Workbench.Menus;
+using Codalus.Workbench.Settings;
 using Codalus.Workbench.ToolWindows;
 
 namespace Codalus.Shell;
@@ -13,9 +14,43 @@ internal static partial class BuiltIns
         [
           { "key": "primary+0 primary+g", "command": "workbench.view.git.changes" },
           { "key": "primary+alt+b", "command": "git.toggleBlame", "when": "editorTextFocus && gitRepository" },
-          { "key": "primary+0 primary+h", "command": "git.history", "when": "gitRepository" }
+          { "key": "primary+0 primary+h", "command": "git.history", "when": "gitRepository" },
+          { "key": "f8", "command": "git.mergeEditor.nextConflict", "when": "focusedView == mergeEditor" },
+          { "key": "shift+f8", "command": "git.mergeEditor.previousConflict", "when": "focusedView == mergeEditor" }
         ]
         """;
+
+    /// <summary>The merge editor's panes: the two versions above the result, or three columns.</summary>
+    public const string MergeEditorLayoutSetting = "git.mergeEditor.layout";
+
+    /// <summary>Whether the merge editor shows the incoming version on the left (the default) or the current one.</summary>
+    public const string MergeEditorIncomingOnLeftSetting = "git.mergeEditor.incomingOnLeft";
+
+    public static IReadOnlyList<SettingDescriptor> GitSettings()
+    {
+        var shell = ContributionSource.Shell;
+        return
+        [
+            SettingDescriptor.Create(MergeEditorLayoutSetting, "\"sourcesAbove\"", SettingType.String, shell) with
+            {
+                Title = "Merge Editor Layout",
+                Category = "Source Control",
+                Description = "How the merge editor arranges the incoming and current versions and the result. Its gear menu changes it too.",
+                Enum = [MergeEditorViewModel.LayoutSourcesAbove, MergeEditorViewModel.LayoutThreeColumns],
+                EnumDescriptions = ["The two versions side by side, the result below them", "Three columns, the result in the middle"],
+                Scope = SettingScope.User,
+                Order = 20,
+            },
+            SettingDescriptor.Create(MergeEditorIncomingOnLeftSetting, "true", SettingType.Boolean, shell) with
+            {
+                Title = "Merge Editor: Incoming on the Left",
+                Category = "Source Control",
+                Description = "Show the incoming version on the left and the current one on the right. Off: the current version on the left.",
+                Scope = SettingScope.User,
+                Order = 21,
+            },
+        ];
+    }
 
     public static ToolWindowDescriptor GitToolWindow() =>
         new(GitChangesViewModel.ToolWindowId, "Git Changes", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "branch" };
@@ -63,6 +98,17 @@ internal static partial class BuiltIns
         Add("git.clone", "Clone Repository…", shell.CloneRepositoryAsync, string.Empty);
         Add("git.init", "Create Git Repository", shell.CreateRepositoryAsync, "solutionOpen && !gitRepository");
         Add("explorer.addToGitignore", "Add to .gitignore", shell.AddToGitignoreAsync, "gitRepository && explorerItemKind");
+
+        // The merge editor (M13, redesigned 2026-10-19): its toolbar, check boxes and gear menu, from the keyboard.
+        const string Merge = "activeDocumentKind == mergeEditor";
+        Add("git.mergeEditor.nextConflict", "Next Conflict", () => shell.OnMergeEditorAsync(vm => vm.GoTo(1)), Merge);
+        Add("git.mergeEditor.previousConflict", "Previous Conflict", () => shell.OnMergeEditorAsync(vm => vm.GoTo(-1)), Merge);
+        Add("git.mergeEditor.takeIncoming", "Take Incoming", () => shell.OnMergeEditorAsync(vm => vm.Accept("incoming")), Merge);
+        Add("git.mergeEditor.takeCurrent", "Take Current", () => shell.OnMergeEditorAsync(vm => vm.Accept("current")), Merge);
+        Add("git.mergeEditor.takeBoth", "Take Both", () => shell.OnMergeEditorAsync(vm => vm.Accept("both")), Merge);
+        Add("git.mergeEditor.takeAllIncoming", "Take All Incoming", () => shell.OnMergeEditorAsync(vm => vm.TakeAll(MergeSide.Incoming, true)), Merge);
+        Add("git.mergeEditor.takeAllCurrent", "Take All Current", () => shell.OnMergeEditorAsync(vm => vm.TakeAll(MergeSide.Current, true)), Merge);
+        Add("git.mergeEditor.acceptMerge", "Accept Merge", shell.AcceptActiveMergeAsync, Merge);
 
         // M13b: hosting, worktrees, LFS, several repositories.
         RegisterHostingCommands(shell);

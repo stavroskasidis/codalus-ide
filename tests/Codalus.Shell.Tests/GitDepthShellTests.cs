@@ -128,16 +128,32 @@ public sealed class GitDepthShellTests
         Assert.Equal(1, document.ViewModel.Remaining);
         Assert.Contains("Greetings from", document.ViewModel.Ours, StringComparison.Ordinal);
         Assert.Contains("Howdy from", document.ViewModel.Theirs, StringComparison.Ordinal);
+
+        // The tab is the file's name; the headers name the branches; the result shows the merge base's text, not markers.
+        Assert.Equal("Greeter.cs", document.Title);
+        Assert.Equal(("Current: main", "Incoming: feature", "Result: Greeter.cs"), (document.ViewModel.CurrentTitle, document.ViewModel.IncomingTitle, document.ViewModel.ResultTitle));
+        Assert.Equal("1 Conflict (1 Remaining)", document.ViewModel.Summary);
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<MergeEditorView>().Any());
         var view = f.Window.GetVisualDescendants().OfType<MergeEditorView>().Single();
+        Assert.Contains("Hello from", view.ResultText, StringComparison.Ordinal);
+        Assert.DoesNotContain("<<<<<<<", view.ResultText, StringComparison.Ordinal);
+        Assert.Equal(document.ViewModel.Ours, view.EditorFor(MergeSide.Current).Text);
+        Assert.Equal(document.ViewModel.Theirs, view.EditorFor(MergeSide.Incoming).Text);
 
         view.Accept("incoming");
         Assert.Equal(0, document.ViewModel.Remaining);
+        Assert.Equal("1 Conflict (0 Remaining)", document.ViewModel.Summary);
+        Assert.Equal("Greeter.cs*", document.Title);
         Assert.Contains("Howdy from", view.ResultText, StringComparison.Ordinal);
-        Assert.DoesNotContain("<<<<<<<", view.ResultText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Hello from", view.ResultText, StringComparison.Ordinal);
+
+        // Accept Merge writes the file and stages it.
         await view.AcceptMergeAsync();
         await ShellFixture.PumpUntil(() => !f.Shell.GitChanges.HasConflicts);
         Assert.Contains("Howdy from", File.ReadAllText(greeter), StringComparison.Ordinal);
+        Assert.Equal(string.Empty, Git(folder, "ls-files", "-u").Trim());
+        Assert.Contains("Greeter.cs", Git(folder, "diff", "--cached", "--name-only"), StringComparison.Ordinal);
+        Assert.Empty(f.Shell.Layout.Documents.OfType<MergeEditorDocument>());
 
         f.Shell.Run("git.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Operation: null });
@@ -152,7 +168,9 @@ public sealed class GitDepthShellTests
         var conflict = Assert.Single(MergeEditorViewModel.Parse(text));
         Assert.Equal(("ours\n", "old\n", "theirs\n", "HEAD", "feature"), (conflict.Ours, conflict.Base, conflict.Theirs, conflict.OursLabel, conflict.TheirsLabel));
         Assert.Equal("a\nours\ntheirs\nb\n", text[..conflict.Start] + MergeEditorViewModel.ReplacementFor(conflict, "both") + text[(conflict.Start + conflict.Length)..]);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new MergeEditorViewModel("x", text, null, null, null, _ => Task.CompletedTask).AcceptAsync(text));
+        var viewModel = new MergeEditorViewModel("x", text, null, null, null, _ => Task.CompletedTask);
+        Assert.Equal("a\nold\nb\n", viewModel.Result.Text); // diff3's base section, in place of the markers
+        await Assert.ThrowsAsync<InvalidOperationException>(viewModel.AcceptAsync);
     }
 
     [AvaloniaFact]

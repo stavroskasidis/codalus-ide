@@ -62,6 +62,11 @@ Shell.Editor.Bracket2 Shell.Editor.Background 3
 Shell.Editor.Bracket3 Shell.Editor.Background 3
 Shell.Diff.Added Shell.Editor.Background 3
 Shell.Diff.Removed Shell.Editor.Background 3
+# The merge editor's conflict blocks: the code on the fill, the outlines on the editor and on the fill.
+Shell.Editor.Foreground Shell.Merge.Conflict 4.5
+Shell.Merge.Conflict.Border Shell.Editor.Background 3
+Shell.Merge.Conflict.Border Shell.Merge.Conflict 3
+Shell.Merge.Resolved.Border Shell.Editor.Background 3
 
 # State colors: icons and borders (graphics).
 Shell.Error Shell.Panel 3
