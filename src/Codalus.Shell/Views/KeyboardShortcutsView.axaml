@@ -10,6 +10,7 @@
       <StackPanel Spacing="8">
         <Grid ColumnDefinitions="*,Auto">
           <TextBox x:Name="SearchBox"
+                   Classes="search"
                    Text="{Binding Search}"
                    PlaceholderText="{l:T keyboardShortcuts.searchByCommandIdOrKeys}"
                    AutomationProperties.Name="{l:T keyboardShortcuts.searchKeyboardShortcuts}" />
@@ -21,9 +22,9 @@
                   Command="{Binding OpenJsonCommand}" />
         </Grid>
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <Button Content="{l:T keyboardShortcuts.changeKeyBinding}" Command="{Binding ChangeCommand}" ToolTip.Tip="{l:T keyboardShortcuts.enterOrDoubleClick}" />
-          <Button Content="{l:T keyboardShortcuts.remove}" Command="{Binding RemoveCommand}" ToolTip.Tip="{l:T keyboardShortcuts.delete}" />
-          <Button Content="{l:T keyboardShortcuts.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T keyboardShortcuts.restoreTheDefaultKeyBinding}" />
+          <Button Classes="iconText" controls:ButtonIcon.Kind="keyboard" Content="{l:T keyboardShortcuts.changeKeyBinding}" Command="{Binding ChangeCommand}" ToolTip.Tip="{l:T keyboardShortcuts.enterOrDoubleClick}" />
+          <Button Classes="icon" controls:ButtonIcon.Kind="trash" Command="{Binding RemoveCommand}" ToolTip.Tip="{l:T keyboardShortcuts.delete}" AutomationProperties.Name="{l:T keyboardShortcuts.remove}" />
+          <Button Classes="icon" controls:ButtonIcon.Kind="reset" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T keyboardShortcuts.restoreTheDefaultKeyBinding}" AutomationProperties.Name="{l:T keyboardShortcuts.reset}" />
           <TextBlock Classes="muted" Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
         </StackPanel>
       </StackPanel>

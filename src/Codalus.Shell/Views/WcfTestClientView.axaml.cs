@@ -65,7 +65,7 @@ public sealed partial class WcfTestClientView : UserControl, IPaneView
 
         foreach (var service in vm.Discovered)
         {
-            var item = new MenuItem { Header = service.Label, Icon = new Icon { Kind = "attach" } };
+            var item = new MenuItem { Header = service.Label, Icon = new Icon { Kind = "radar" } };
             item.Click += (_, _) => _ = vm.LoadDiscoveredAsync(service);
             flyout.Items.Add(item);
         }

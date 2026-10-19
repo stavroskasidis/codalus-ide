@@ -11,7 +11,7 @@
       <TextBlock Classes="muted" TextWrapping="Wrap"
                  Text="{l:T environment.theToolsCodalusUsesAs}" />
       <controls:ToolbarPanel>
-        <Button x:Name="CheckButton" Content="{l:T environment.checkAgain}" Command="{Binding CheckCommand}" />
+        <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="refresh" x:Name="CheckButton" Content="{l:T environment.checkAgain}" Command="{Binding CheckCommand}" />
         <TextBlock Classes="muted" Text="{l:T environment.checking}" IsVisible="{Binding IsChecking}" VerticalAlignment="Center" />
       </controls:ToolbarPanel>
     </StackPanel>

@@ -65,7 +65,7 @@
     </StackPanel>
     <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,12,0,0">
       <DockPanel>
-        <DropDownButton x:Name="RunningServices" DockPanel.Dock="Right" Margin="6,0,0,0" Classes="iconText" controls:ButtonIcon.Kind="attach" Content="{l:T wcfTestClient.runningServices}"
+        <DropDownButton x:Name="RunningServices" DockPanel.Dock="Right" Margin="6,0,0,0" Classes="iconText" controls:ButtonIcon.Kind="radar" Content="{l:T wcfTestClient.runningServices}"
                         IsEnabled="{Binding !IsBusy}" ToolTip.Tip="{l:T wcfTestClient.findTheMetadataOfTheCorewcf}">
           <DropDownButton.Flyout>
             <MenuFlyout Placement="BottomEdgeAlignedRight" />
@@ -212,7 +212,7 @@
                 <Button x:Name="SendButton" Classes="accent iconText" controls:ButtonIcon.Kind="play" Content="{l:T wcfTestClient.invoke}" Command="{Binding SendCommand}" IsEnabled="{Binding !IsBusy}"
                         ToolTip.Tip="{l:T wcfTestClient.invokeTheOperationF5}" AutomationProperties.Name="{l:T wcfTestClient.invokeTheOperation}" />
                 <Button Classes="subtle iconText" controls:ButtonIcon.Kind="cancel" Content="{l:T wcfTestClient.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" ToolTip.Tip="{l:T wcfTestClient.cancelTheCallEsc}" />
-                <Button Classes="subtle iconText" controls:ButtonIcon.Kind="undo" Content="{l:T wcfTestClient.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T wcfTestClient.clearTheFormAndTheXml}" />
+                <Button Classes="subtle iconText" controls:ButtonIcon.Kind="reset" Content="{l:T wcfTestClient.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T wcfTestClient.clearTheFormAndTheXml}" />
               </StackPanel>
               <DockPanel DockPanel.Dock="Right" IsVisible="{Binding HasResponse}" Margin="12,0,0,0" ToolTip.Tip="{Binding ResponseSummary}">
                 <Border DockPanel.Dock="Left" Classes="chip" Classes.success="{Binding IsResponseOk}" Classes.error="{Binding IsResponseError}">
