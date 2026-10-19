@@ -2090,7 +2090,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                   && shell.Solutions.Projects.TryGetValue(legacy, out var info) && info.References.Any(r => r.Kind == Codalus.Projects.Protocol.ReferenceKinds.Package && r.Resolved),
             "the NetFramework solution is open, LegacyApp's packages.config package restored", 600).ConfigureAwait(true);
         Check(shell.Solutions.Projects[legacy].IsNonSdkStyle, "LegacyApp is a non-SDK-style project");
-        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("Visual Studio's own MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
+        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("imports proprietary MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
         shell.Explorer.Reveal("p:" + legacy);
         await Task.Delay(1000).ConfigureAwait(true);
         Screenshot("netfx-projects.png");
