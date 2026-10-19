@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -7,6 +8,7 @@ using Avalonia.VisualTree;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Notifications;
+using Codalus.Workbench.Settings;
 
 namespace Codalus.Shell.Tests;
 
@@ -42,6 +44,88 @@ public sealed class SweepFindingsTests
         {
             Infrastructure.SafeClipboard.Busy -= OnBusy;
         }
+    }
+
+    [Fact]
+    public void Reattach_here_never_takes_another_dotnet_by_name()
+    {
+        // Once the process attached to last ended, Reattach took the first process with its name: for a framework-dependent
+        // program, any "dotnet" (an MSBuild node, a language server).
+        Workbench.Debugging.ProcessEntry[] processes = [new(7, "dotnet", null, true), new(9, "Hello", null, true)];
+        Assert.Null(ShellHost.FindAgain(processes, (42, "dotnet")));
+        Assert.Equal(7, ShellHost.FindAgain(processes, (7, "dotnet"))?.Id);
+        Assert.Equal(9, ShellHost.FindAgain(processes, (42, "Hello"))?.Id); // an apphost started again
+    }
+
+    [Fact]
+    public void Create_Dump_dumps_only_programs_on_this_machine()
+    {
+        // In a session over SSH, in a container or in WSL, the program's id is the target's: the local companion dumped
+        // whatever process here has that id, or failed.
+        Workbench.Debugging.DebugProcess[] processes =
+        [
+            new("Hello", 42, Workbench.Debugging.DebugProcess.Attached, "ssh dev@box"),
+            new("Web", 7, Workbench.Debugging.DebugProcess.Launched, null),
+        ];
+        Assert.Equal("ssh dev@box", ShellHost.RunsElsewhere(null, processes, 42));
+        Assert.Null(ShellHost.RunsElsewhere(null, processes, 7));
+        Assert.Equal("WSL: Ubuntu", ShellHost.RunsElsewhere("WSL: Ubuntu", processes, 7));
+    }
+
+    [AvaloniaFact]
+    public async Task Turning_a_plugin_on_or_off_keeps_each_settings_layers_own_list()
+    {
+        // The merged list was written to the user's settings: a workspace's plugins leaked into them, and Turn On never
+        // took a plugin out of the workspace's list.
+        await using var f = ShellFixture.Create();
+        var solution = f.CopyFixture();
+        f.Shell.Trust.Trust(Path.GetDirectoryName(Path.GetDirectoryName(solution))!);
+        await f.Shell.OpenSolutionAsync(solution);
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.WorkspaceFile is not null);
+        var settings = f.Shell.Workbench.Settings;
+        string[] List(SettingScope scope) => settings.GetLayerValue(Workbench.Plugins.PluginManager.DisabledSetting, scope) is { ValueKind: JsonValueKind.Array } ids
+            ? [.. ids.EnumerateArray().Select(i => i.GetString()!)]
+            : [];
+        string[] workspaceList = ["acme.one", "acme.two"];
+        await settings.SetAsync(Workbench.Plugins.PluginManager.DisabledSetting, JsonSerializer.SerializeToElement(workspaceList), SettingScope.Workspace, CancellationToken.None);
+
+        _ = f.Shell.SetPluginTurnedOffAsync("acme.three", off: true); // waits on its Restart Now notification
+        await ShellFixture.PumpUntil(() => List(SettingScope.User).Length > 0);
+        Assert.Equal(["acme.three"], List(SettingScope.User));
+        Assert.Equal(["acme.one", "acme.two"], List(SettingScope.Workspace));
+
+        _ = f.Shell.SetPluginTurnedOffAsync("acme.one", off: false);
+        await ShellFixture.PumpUntil(() => List(SettingScope.Workspace).Length == 1);
+        Assert.Equal(["acme.two"], List(SettingScope.Workspace));
+        Assert.Equal(["acme.three"], List(SettingScope.User));
+    }
+
+    [AvaloniaFact]
+    public async Task A_plugin_activating_on_onSolutionOpened_starts_when_a_solution_opens()
+    {
+        // The activation event was accepted and documented (API 1.0) but never fired: such a plugin never started.
+        var userData = Path.Combine(Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-shell-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(Platform.AppPaths.Resolve(Platform.PlatformInfo.Current, _ => null, userData).PluginsDirectory, "codalus-tests.on-solution");
+        Directory.CreateDirectory(folder);
+        await File.WriteAllTextAsync(Path.Combine(folder, "codalus-plugin.json"), """
+            {
+              "id": "codalus-tests.on-solution",
+              "version": "1.0.0",
+              "publisher": "codalus-tests",
+              "engines": { "codalus": "^1.0.0" },
+              "activationEvents": [ "onSolutionOpened" ],
+              "contributes": { "settings": { "title": "On Solution", "properties": { "onSolution.enabled": { "type": "boolean", "default": true } } } }
+            }
+            """, TestContext.Current.CancellationToken);
+
+        await using var f = ShellFixture.Create(userData);
+        var plugin = f.Shell.Plugins.Plugins.Single(p => p.Id == "codalus-tests.on-solution");
+        Assert.NotEqual(Workbench.Plugins.PluginState.Active, plugin.State);
+
+        var solution = f.CopyFixture();
+        f.Shell.Trust.Trust(Path.GetDirectoryName(Path.GetDirectoryName(solution))!);
+        await f.Shell.OpenSolutionAsync(solution);
+        await ShellFixture.PumpUntil(() => plugin.State == Workbench.Plugins.PluginState.Active, describe: () => $"the plugin is {plugin.State}");
     }
 
     [AvaloniaFact]

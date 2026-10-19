@@ -227,6 +227,15 @@ public sealed partial class ShellHost : IAsyncDisposable
         // Any quick pick (the palette is the shared one): Escape closes it before it hides the toasts.
         Palette.Opened += (_, _) => Workbench.Context.Set("inCommandPalette", true);
         Infrastructure.SafeClipboard.Busy += OnClipboardBusy;
+
+        // Activation event onSolutionOpened (API 1.0, docs/plugins.md): plugins that start with a solution.
+        Solutions.SolutionChanged += (_, _) =>
+        {
+            if (Solutions.Solution is not null)
+            {
+                _ = Plugins.ActivateByEventAsync("onSolutionOpened", CancellationToken.None);
+            }
+        };
         Palette.Closed += (_, _) => Workbench.Context.Set("inCommandPalette", false);
 
         DiscoverPlugins();

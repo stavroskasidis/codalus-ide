@@ -271,7 +271,13 @@ public sealed partial class ShellHost
         }
 
         var processes = await Task.Run(ProcessList.Get).ConfigureAwait(true);
-        var target = processes.FirstOrDefault(p => p.Id == last.Id && p.Name == last.Name) ?? processes.FirstOrDefault(p => p.Name == last.Name);
+        var target = FindAgain(processes, last);
+        if (target is null && IsHostName(last.Name))
+        {
+            await AttachToProcessAsync().ConfigureAwait(true); // which "dotnet" is the program can't be told: ask
+            return;
+        }
+
         if (target is null)
         {
             StatusBar.ShowMessage(Localizer.Format("msg.debugDepth.noProcessNamedIsRunning", "No process named {0} is running.", last.Name), TimeSpan.FromSeconds(5));
@@ -280,6 +286,16 @@ public sealed partial class ShellHost
 
         await AttachToProcessAsync(target.Id.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(true);
     }
+
+    /// <summary>
+    /// Reattach's process: the one attached to last if it still runs, else one by the same name, unless that name is a
+    /// host's (a framework-dependent program is "dotnet", like every other one: by name it could be any of them).
+    /// </summary>
+    internal static ProcessEntry? FindAgain(IReadOnlyList<ProcessEntry> processes, (int Id, string Name) last) =>
+        processes.FirstOrDefault(p => p.Id == last.Id && p.Name == last.Name)
+        ?? (IsHostName(last.Name) ? null : processes.FirstOrDefault(p => p.Name == last.Name));
+
+    private static bool IsHostName(string name) => string.Equals(name, "dotnet", StringComparison.OrdinalIgnoreCase);
 
     private void RememberAttached(int processId)
     {

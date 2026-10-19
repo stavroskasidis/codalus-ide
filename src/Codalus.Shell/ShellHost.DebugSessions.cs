@@ -280,7 +280,7 @@ public sealed partial class ShellHost
             List<QuickPickItem> kinds =
             [
                 new("SSH…") { Tag = "ssh", Detail = "A Linux or macOS machine, through your ssh and its keys" },
-                new("Docker or Podman container…") { Tag = "container", Detail = "A running container, through " + string.Join(' ', RemoteTargets.ContainerTool(Workbench.Settings.GetString(RemoteTargets.ContainerToolSetting))) + " exec" },
+                new("Docker or Podman container…") { Tag = "container", Detail = "A running container, through " + string.Join(' ', AttachContainerTool) + " exec" },
             ];
             if (OperatingSystem.IsWindows())
             {
@@ -334,9 +334,16 @@ public sealed partial class ShellHost
         return target;
     }
 
+    /// <summary>
+    /// The container CLI attaching goes through: <c>debug.containerTool</c> when set, else the Containers window's engine
+    /// (<c>containers.tool</c>, or Docker or Podman, whichever is there), not always <c>docker</c>.
+    /// </summary>
+    private IReadOnlyList<string> AttachContainerTool =>
+        Workbench.Settings.GetString(RemoteTargets.ContainerToolSetting) is { Length: > 0 } own ? RemoteTargets.ContainerTool(own) : ContainerEngine.Tool;
+
     private async Task<RemoteTarget?> PickContainerAsync()
     {
-        var tool = RemoteTargets.ContainerTool(Workbench.Settings.GetString(RemoteTargets.ContainerToolSetting));
+        var tool = AttachContainerTool;
         var containers = await RemoteTargets.ContainersAsync(tool, CancellationToken.None).ConfigureAwait(true);
         if (containers.Count == 0)
         {
