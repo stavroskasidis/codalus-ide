@@ -484,7 +484,9 @@ public sealed class AcpAgentTests : IAsyncDisposable
         await ConfigureAsync();
         Assert.Null((await AskAsync("hello")).Error);
         var started = File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).First(m => m.TryGetProperty("cwd", out _));
-        Assert.Equal(Path.GetFullPath(neutral).TrimEnd(Path.DirectorySeparatorChar), Path.GetFullPath(started.GetProperty("cwd").GetString()!).TrimEnd(Path.DirectorySeparatorChar));
+        // The stand-in reports its working directory with links resolved (macOS: /var is /private/var).
+        static string Real(string path) => Codalus.Platform.RealPath.Resolve(Path.GetFullPath(path)).TrimEnd(Path.DirectorySeparatorChar);
+        Assert.Equal(Real(neutral), Real(started.GetProperty("cwd").GetString()!));
         Assert.Equal(_root, Received("session/new").Single().GetProperty("params").GetProperty("cwd").GetString());
     }
 
