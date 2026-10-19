@@ -143,6 +143,27 @@ internal sealed class ShellFixture : IAsyncDisposable
         Dispatcher.UIThread.RunJobs();
     }
 
+    /// <summary>
+    /// Runs pending dispatcher work and layout, then renders a frame with all of it. Call it before hit testing:
+    /// <c>InputHitTest</c> reads the compositor's last rendered frame, not the layout, and after <see cref="Pump"/> that
+    /// frame can still be the one before the last layout change (its commit waits for the previous one, and the headless
+    /// render timer also ticks on its own clock). The sticky scroll's band, laid out but not yet drawn, let the point over
+    /// it through to the breakpoint margin under it (develop's macOS run of 0.4.0).
+    /// </summary>
+    public static void RenderFrame(Avalonia.Controls.TopLevel top)
+    {
+        Dispatcher.UIThread.RunJobs();
+        top.UpdateLayout();
+        var batch = Avalonia.Rendering.Composition.ElementComposition.GetElementVisual(top)!.Compositor.RequestCompositionBatchCommitAsync();
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        while (!batch.Rendered.IsCompleted)
+        {
+            Assert.True(started.Elapsed < TimeSpan.FromSeconds(10), "No frame was rendered in 10 s.");
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     /// <param name="describe">What the shell was doing, added to the failure on a timeout.</param>
     public static async Task PumpUntil(Func<bool> condition, int seconds = 30, Func<string>? describe = null)
     {
