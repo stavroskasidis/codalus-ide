@@ -203,8 +203,8 @@ public interface IEditorServices
     /// <summary>The key a command is bound to now, as menus show it (<c>Alt+Enter</c>), or null.</summary>
     string? KeyLabel(string commandId) => null;
 
-    /// <summary>Sets a context key that key bindings test (<c>suggestWidgetVisible</c> while the completion list is open).</summary>
-    void SetContextKey(string key, bool value)
+    /// <summary>The context keys key bindings test while the completion list (<c>suggestWidgetVisible</c>) or signature help (<c>parameterHintsVisible</c>) is open.</summary>
+    void SetIntelliSenseContext(bool completionOpen, bool signatureHelpOpen)
     {
     }
 

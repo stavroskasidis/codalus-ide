@@ -16,7 +16,11 @@ public sealed partial class ShellHost
 {
     string? IEditorServices.KeyLabel(string commandId) => KeyLabelOf(commandId);
 
-    void IEditorServices.SetContextKey(string key, bool value) => Workbench.Context.Set(key, value);
+    void IEditorServices.SetIntelliSenseContext(bool completionOpen, bool signatureHelpOpen)
+    {
+        Workbench.Context.Set("suggestWidgetVisible", completionOpen);
+        Workbench.Context.Set("parameterHintsVisible", signatureHelpOpen);
+    }
 
     /// <summary>
     /// The key a command is bound to in the current scheme, as menus show it: the highest-precedence rule whose when-clause

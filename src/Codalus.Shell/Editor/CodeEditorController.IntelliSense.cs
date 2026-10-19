@@ -71,8 +71,7 @@ public sealed partial class CodeEditorController
     /// <summary>A popup opened or closed: the context keys, the events that move or close them, and their places.</summary>
     private void OnPopupsChanged()
     {
-        _services.SetContextKey("suggestWidgetVisible", _completion is not null);
-        _services.SetContextKey("parameterHintsVisible", _signature is not null);
+        _services.SetIntelliSenseContext(_completion is not null, _signature is not null);
         if (IsIntelliSenseOpen && !_popupEventsAttached)
         {
             _popupEventsAttached = true;
