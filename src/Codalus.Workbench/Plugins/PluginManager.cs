@@ -138,6 +138,9 @@ public sealed class PluginManager : IAsyncDisposable
     private WorkspacePlacement? _workspacePlacement;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _activationLocks = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _markdown = new(StringComparer.Ordinal);
+
+    // Host groups whose failure to start was reported (M49): once each, not once per plugin, until a retry.
+    private readonly ConcurrentDictionary<string, byte> _hostStartReported = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
     private IProposedApiHost? _proposedApi;
 
@@ -163,6 +166,14 @@ public sealed class PluginManager : IAsyncDisposable
     }
 
     public event EventHandler? PluginsChanged;
+
+    /// <summary>
+    /// A plugin host wasn't started because the .NET runtime it needs isn't installed (M49). Called once per host group
+    /// (until <see cref="RetryFailedHostsAsync"/>), on any thread; it returns whether it told the user (the shell's one
+    /// notification that offers the runtime). When it didn't, or there's no handler, the host's failure is shown as an
+    /// error.
+    /// </summary>
+    public Func<HostRuntimeMissingException, bool>? HostRuntimeMissing { get; set; }
 
     /// <summary>The shell's prompt UI; without it, plugin prompts are cancelled.</summary>
     public IPluginPrompts? Prompts { get; set; }
@@ -644,6 +655,10 @@ public sealed class PluginManager : IAsyncDisposable
 
             return true;
         }
+        catch (JsonRpcConnectionLostException ex) when (ex is HostRuntimeMissingException or HostExitedException { DuringStartup: true })
+        {
+            return FailWithHost(plugin, ex);
+        }
         catch (Exception ex) when (ex is JsonRpcConnectionLostException or JsonRpcRemoteException or InvalidOperationException
                                        or System.ComponentModel.Win32Exception or IOException)
         {
@@ -653,6 +668,66 @@ public sealed class PluginManager : IAsyncDisposable
         {
             gate.Release();
         }
+    }
+
+    /// <summary>
+    /// The plugin's host couldn't start (M49): the plugin fails with the host's reason, and the host's failure is reported
+    /// once for its group rather than once per plugin.
+    /// </summary>
+    private bool FailWithHost(PluginDescription plugin, JsonRpcConnectionLostException error)
+    {
+        plugin.State = PluginState.Failed;
+        plugin.Error = error.Message;
+        plugin.FailedWithItsHost = true;
+        plugin.ActivationFailedWithItsHost = true; // its activation was asked for: a retry activates it again
+        PluginLog.AppendLine($"[{plugin.Id}] failed: its plugin host couldn't start: {error.Message}");
+        ReportHostStartFailure(plugin.HostGroup, error);
+        PluginsChanged?.Invoke(this, EventArgs.Empty);
+        return false;
+    }
+
+    private void ReportHostStartFailure(string group, JsonRpcConnectionLostException error)
+    {
+        if (!_hostStartReported.TryAdd(group, 0))
+        {
+            return;
+        }
+
+        if (error is HostRuntimeMissingException missing && HostRuntimeMissing is { } handler && handler(missing))
+        {
+            return;
+        }
+
+        _ = ShowAndHandleAsync(_workbench.Notifications.Error(Localizer.Format("msg.pluginManager.pluginHostCouldntStart", "Plugin host '{0}' couldn't start: {1}", group, error.Message), "Show Log"));
+    }
+
+    /// <summary>
+    /// Makes the plugins that failed because their host couldn't start (M49) usable again, once what was missing is
+    /// there (the .NET runtime was installed), and activates again those whose activation was asked for: their hosts
+    /// start again with the IDE's environment as it is now. The others (failed with their host's crash while their own
+    /// activation events hadn't fired) wait for their events.
+    /// </summary>
+    public async Task RetryFailedHostsAsync(CancellationToken cancellationToken)
+    {
+        _hostStartReported.Clear();
+        var failed = Plugins.Where(p => p is { State: PluginState.Failed, FailedWithItsHost: true }).ToList();
+        if (failed.Count == 0)
+        {
+            return;
+        }
+
+        var activate = failed.Where(p => p.ActivationFailedWithItsHost).ToList();
+        foreach (var plugin in failed)
+        {
+            plugin.State = PluginState.Ready;
+            plugin.Error = null;
+            plugin.FailedWithItsHost = false;
+            plugin.ActivationFailedWithItsHost = false;
+        }
+
+        PluginLog.AppendLine($"Starting the plugin hosts again for {string.Join(", ", activate.Select(p => p.Id))}; ready again: {string.Join(", ", failed.Except(activate).Select(p => p.Id))}");
+        PluginsChanged?.Invoke(this, EventArgs.Empty);
+        await Task.WhenAll(activate.Select(p => ActivateAsync(p, "retry", cancellationToken))).ConfigureAwait(false);
     }
 
     private bool Fail(PluginDescription plugin, string error)
@@ -1238,7 +1313,20 @@ public sealed class PluginManager : IAsyncDisposable
         {
             ReleaseContributions();
             var exit = e.ExitCode is { } code ? $" (exit code {code})" : string.Empty;
-            if (e.WillRestart)
+            if (e is { DuringStartup: true, WillRestart: false })
+            {
+                // It couldn't start (M49): its plugins fail with its reason, reported once for the group.
+                var error = e.Error as JsonRpcConnectionLostException ?? new JsonRpcConnectionLostException($"Plugin host '{_group}' exited during startup{exit}.", e.Error);
+                foreach (var plugin in Members.Where(p => p.IsUsable))
+                {
+                    plugin.State = PluginState.Failed;
+                    plugin.Error = error.Message;
+                    plugin.FailedWithItsHost = true;
+                }
+
+                _manager.ReportHostStartFailure(_group, error);
+            }
+            else if (e.WillRestart)
             {
                 _manager._workbench.Notifications.Warning(Localizer.Format("msg.pluginManager.pluginHostStoppedUnexpectedlyRestarting", "Plugin host '{0}' stopped unexpectedly{1}. Restarting…", _group, exit));
             }

@@ -166,7 +166,10 @@ internal static class Updates
 
             log($"[update] {version} on {channel}{(info.IsDowngrade ? " (an older version)" : string.Empty)} from {source.LastFeed?.Tag}");
             var notes = Notes(source.LastFeed?.Json, manager.CurrentVersion?.ToString(), version);
-            return new UpdateOffer(version, channel, info.IsDowngrade, notes, source.LastFeed?.ReleasePage);
+            return new UpdateOffer(version, channel, info.IsDowngrade, notes, source.LastFeed?.ReleasePage)
+            {
+                Requires = UpdateRuntime.Requirements(source.LastFeed?.Json, version, Environment.GetEnvironmentVariable), // M49
+            };
         }
 
         public Task DownloadAsync(UpdateOffer offer, IProgress<int> progress, CancellationToken cancellationToken) =>
@@ -208,7 +211,10 @@ internal static class Updates
                 return null;
             }
 
-            return new UpdateOffer(newest, channel, !ReleaseVersions.IsNewer(newest, current), Notes(feed.Json, current, newest), feed.ReleasePage);
+            return new UpdateOffer(newest, channel, !ReleaseVersions.IsNewer(newest, current), Notes(feed.Json, current, newest), feed.ReleasePage)
+            {
+                Requires = UpdateRuntime.Requirements(feed.Json, newest, Environment.GetEnvironmentVariable), // M49
+            };
         }
 
         public Task DownloadAsync(UpdateOffer offer, IProgress<int> progress, CancellationToken cancellationToken) =>
