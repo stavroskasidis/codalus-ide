@@ -336,7 +336,8 @@
   <Style Selector="ComboBox:focus-visible /template/ Border#HighlightBackground">
     <Setter Property="IsVisible" Value="False" />
   </Style>
-  <Style Selector="ComboBox:focus-visible /template/ Border#Background, ComboBox:dropdownopen /template/ Border#Background">
+  <!-- An editable one takes the focus edge whenever its text box has the focus, as a text box does. -->
+  <Style Selector="ComboBox:focus-visible /template/ Border#Background, ComboBox:dropdownopen /template/ Border#Background, ComboBox[IsEditable=True]:focus-within /template/ Border#Background">
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
     <Setter Property="BorderThickness" Value="2" />
   </Style>
@@ -353,6 +354,30 @@
   </Style>
   <Style Selector="ComboBox:disabled /template/ ContentControl#ContentPresenter, ComboBox:disabled /template/ TextBlock#PlaceholderTextBlock, ComboBox:disabled /template/ PathIcon#DropDownGlyph">
     <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
+  </Style>
+  <!--
+    An editable combo box (Find and Replace's Find what, Look in and File types): its text box is part of the field, not a
+    text box of its own. The combo's border draws the hover and focus edges around the text and the chevron as one, as a
+    text box's do; the text box draws no fill or border over it (the text boxes' hover fill hid the combo's border along
+    the text, their focus edge stopped at the chevron). The text box fills the field's height and draws its text and
+    placeholder in the middle of it, not at its top.
+  -->
+  <Style Selector="ComboBox[IsEditable=True] /template/ TextBox#PART_EditableTextBox">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="ComboBox /template/ TextBox#PART_EditableTextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="ComboBox /template/ TextBox#PART_EditableTextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="ComboBox /template/ TextBox#PART_EditableTextBox:disabled /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
   </Style>
   <Style Selector="ComboBox /template/ Border#PopupBorder">
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />

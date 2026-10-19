@@ -214,7 +214,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
     private EditorParts CreateEditor(bool primary)
     {
-        var editor = new TextEditor
+        var editor = new CodeTextEditor
         {
             Padding = new Thickness(4, 2, 0, 0),
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
