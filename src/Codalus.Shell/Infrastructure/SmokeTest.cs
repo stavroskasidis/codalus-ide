@@ -1083,7 +1083,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
         else
         {
-            Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, "No stand-in: on Windows a WSL distribution with .NET; elsewhere sh.");
+            Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, $"No stand-in: on Windows a WSL distribution with the .NET {Environment.Version.Major} runtime; elsewhere sh.");
         }
         // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
         await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
@@ -1580,8 +1580,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             foreach (var distribution in await RemoteTargets.WslDistributionsAsync(CancellationToken.None).ConfigureAwait(true))
             {
                 var target = new WslTarget(distribution) { Home = home };
+                // With the .NET the debuggee targets: a distribution with an older .NET only timed the step out.
                 if (!distribution.StartsWith("docker-", StringComparison.OrdinalIgnoreCase) && !distribution.StartsWith("podman-", StringComparison.OrdinalIgnoreCase)
-                    && (await RemoteShell.RunAsync(target, "exec sh -lc 'command -v dotnet'", CancellationToken.None).ConfigureAwait(true)).Output.Trim().StartsWith('/'))
+                    && (await RemoteShell.RunAsync(target, "exec sh -lc 'dotnet --list-runtimes'", CancellationToken.None).ConfigureAwait(true)).Output
+                        .Contains($"Microsoft.NETCore.App {Environment.Version.Major}.", StringComparison.Ordinal))
                 {
                     return target;
                 }
