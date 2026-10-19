@@ -8,11 +8,20 @@ namespace Codalus.Workbench.Projects;
 /// a solution is evaluated only if its folder or a parent folder is trusted. Kept in the user's state, never in
 /// the repository.
 /// </summary>
+/// <remarks>
+/// Folders are saved and looked up by their real path (<see cref="Codalus.Platform.RealPath"/>, symbolic links
+/// resolved), the spelling the shell opens solutions and folders under: trusting <c>/var/folders/…</c> on macOS covers
+/// <c>/private/var/folders/…</c>, and a folder trusted through a link is trusted through its target and the other way
+/// round. Entries saved before under a link's spelling are kept as they are and match by their spelling or by where
+/// they lead now. Paths compare with the platform's case rules (<see cref="SolutionService.PathComparer"/>: ignoring
+/// case on Windows and macOS). On Windows <see cref="Codalus.Platform.RealPath"/> leaves links as they are.
+/// </remarks>
 public sealed class TrustStore(string file)
 {
     private readonly Lock _gate = new();
     private List<string>? _folders;
 
+    /// <summary>The trusted folders, as saved.</summary>
     public IReadOnlyList<string> Folders
     {
         get
@@ -24,29 +33,39 @@ public sealed class TrustStore(string file)
         }
     }
 
+    /// <summary>
+    /// Whether <paramref name="path"/> is in a trusted folder, judged by its real path: where it leads is what runs, so a
+    /// link inside a trusted folder that leads out of it isn't trusted.
+    /// </summary>
     public bool IsTrusted(string path)
     {
-        var full = Path.GetFullPath(path);
+        var real = Real(path);
         lock (_gate)
         {
-            return Load().Any(folder => IsSameOrUnder(full, folder));
+            var folders = Load();
+
+            // The saved spellings first: the saved folders are resolved (reading the disk) only when none matches.
+            return folders.Any(folder => IsSameOrUnder(real, folder))
+                || folders.Any(folder => IsSameOrUnder(real, Real(folder)));
         }
     }
 
     public void Trust(string folder) => Update(list =>
     {
-        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
-        if (!list.Any(f => IsSameOrUnder(full, f)))
+        var real = Real(folder);
+        if (!list.Any(f => IsSameOrUnder(real, f) || IsSameOrUnder(real, Real(f))))
         {
-            list.RemoveAll(f => IsSameOrUnder(f, full));
-            list.Add(full);
+            list.RemoveAll(f => IsSameOrUnder(f, real) || IsSameOrUnder(Real(f), real));
+            list.Add(real);
         }
     });
 
+    /// <summary>Stops trusting <paramref name="folder"/>, whichever spelling it was trusted under.</summary>
     public void Revoke(string folder) => Update(list =>
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
-        list.RemoveAll(f => SolutionService.PathComparer.Equals(f, full));
+        var real = Real(full);
+        list.RemoveAll(f => SolutionService.PathComparer.Equals(f, full) || SolutionService.PathComparer.Equals(f, real) || SolutionService.PathComparer.Equals(Real(f), real));
     });
 
     private void Update(Action<List<string>> change)
@@ -60,6 +79,9 @@ public sealed class TrustStore(string file)
     }
 
     private List<string> Load() => _folders ??= [.. StateFile.Read(file, StateJsonContext.Default.TrustState)?.Folders ?? []];
+
+    /// <summary>The folder's real path (links resolved), without a trailing separator.</summary>
+    private static string Real(string path) => Path.TrimEndingDirectorySeparator(Codalus.Platform.RealPath.Resolve(path));
 
     private static bool IsSameOrUnder(string path, string folder)
     {
