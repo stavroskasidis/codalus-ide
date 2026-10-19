@@ -18,6 +18,7 @@ Review a surface against each line, in every theme family (Harbor, Graphite, Day
   - A `Border.toolbarSpacer` takes what is left of the row instead, down to nothing, so the items after it sit at the right end (AI Chat's Agent switch, Request Log and Configure, M34h).
   - Every icon-only button has a tooltip with its name and, when it has one, its shortcut (the menus' format: `Run All Tests (Ctrl+R, A)`), and an `AutomationProperties.Name`.
   - Group with `Border.toolbarSeparator`; labels between toolbar items are tooltips instead (labels can't overflow).
+  - A status at the toolbar's end ("Docker · Linux") is a `TextBlock.muted.small` with `HorizontalAlignment="Right"`: it sits at the right end when there is room and is the first thing to go when there isn't (it never moves into the overflow menu; M34h).
   - Each icon takes its command family's color (below), so a toolbar's icons aren't all one color (M34h, the maintainer's
     review of Solution Explorer's): a refresh or sync is green, navigation blue, a folder's files tan, the solution's
     tree purple, Git's commands the Git family's orange, as in the menus. Where an icon's kind would give the wrong family in
@@ -124,7 +125,7 @@ The design's layout differences between the families, as values each theme sets 
 
 ### Classes
 
-`ShellStyles.axaml` applies the tokens through classes, which views use instead of setting the values themselves: `Button.toolbar`, `ToggleButton.toolbar`, `ComboBox.toolbar`, `controls:ToolbarPanel`, `Border.toolbarSeparator`, `Border.toolbarSpacer`, `TextBlock.muted`, `Run.muted`, `Run.code` (inline code in rendered Markdown), `TextBlock.small`, `TextBlock.heading`, `TextBlock.subheading`, `TextBlock.emptyState`, `TextBlock.error`, `TextBlock.warning`, `Button.link`, `Border.overlay`, the control set's classes ([below](#the-control-set)), and the icon classes below.
+`ShellStyles.axaml` applies the tokens through classes, which views use instead of setting the values themselves: `Button.toolbar`, `ToggleButton.toolbar`, `ComboBox.toolbar`, `controls:ToolbarPanel`, `Border.toolbarSeparator`, `Border.toolbarSpacer`, `TextBlock.muted`, `Run.muted`, `Run.code` (inline code in rendered Markdown), `TextBlock.small`, `TextBlock.heading`, `TextBlock.subheading`, `TextBlock.emptyState`, `TextBlock.error`, `TextBlock.warning`, `Button.link`, `Border.overlay`, `Border.gridHeader`, `Border.attached`, the control set's classes ([below](#the-control-set)), and the icon classes below.
 
 ## The control set
 
@@ -146,6 +147,15 @@ One look for every button, field, choice, tab and row (M34h, D33): the design an
 | Toolbar | 24 px flat buttons in a tool window's toolbar. | `Classes="toolbar icon"` or `"toolbar iconText"`; `ToggleButton.toolbar` stays checked as a tint with an accent edge (Keep Results, In process, the Error List's filters); `SplitButton.toolbar`, `DropDownButton.toolbar` |
 
 Never: an icon-only button in a dialog's button row, two primaries in view, a check box in a toolbar (it becomes a `ToggleButton.toolbar`), a label between toolbar items (it becomes the tooltip, or a muted prefix inside the combo box it names).
+
+Patterns the views use (M34h):
+
+- **A muted prefix inside a combo box** (Benchmarks' `Job Short`): its `SelectionBoxItemTemplate` draws the label muted before the value. **Inside a text box** (Counters' `Every 1 s`): muted `TextBlock`s as its `InnerLeftContent` and `InnerRightContent`.
+- **Buttons attached to their field** (Configuration Manager's New… and Remove on their combo box): `<Border Classes="attached"><StackPanel Orientation="Horizontal"><ComboBox …/><Button Classes="icon" …/></StackPanel></Border>`, one shape with the set's corners and square joints.
+- **A table's column headers**: `Border.gridHeader` (24 px on `Shell.Grid.Header`, a `Shell.Grid.Rule` under it, the labels muted and semibold).
+- **Commands on the selected row** (Service References' Test Client, Update from Source, Open Document, Remove): compact icon buttons at the row's end, shown while it is selected (`IsVisible="{Binding $parent[ListBoxItem].IsSelected}"`), instead of a row of text buttons under the list.
+- **A state in a word on a row**: a chip (`locked` with its lock icon, `current`, `missing (prunable)` as a warning), or a dot and the word (a container's filled dot while it runs, its status in the detail line), never color alone.
+- **A tree view's title commands** from `toolWindow/title` are icon buttons when the command has an icon in `CommandIcons` (the built-in plugins' are mapped there); a third-party command without one keeps its title.
 
 `controls:ButtonIcon.Kind` works on `Button`, `ToggleButton` and `DropDownButton`; the icon takes its kind's palette color like any icon (the accent's text on a primary button, the checked text in High contrast).
 

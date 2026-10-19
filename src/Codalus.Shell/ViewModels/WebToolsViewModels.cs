@@ -475,6 +475,9 @@ public sealed class ServiceReferencesViewModel : ObservableObject
 
     public bool IsEmpty => References.Count == 0;
 
+    /// <summary>The references' count, a badge beside the list's title (M34h).</summary>
+    public int ReferenceCount => References.Count;
+
     public ServiceReferenceRow? Selected
     {
         get => _selected;
@@ -833,6 +836,7 @@ public sealed class ServiceReferencesViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(ReferenceCount));
     }
 
     public ServiceReferenceRequest Request() =>

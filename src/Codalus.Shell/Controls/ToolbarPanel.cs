@@ -12,7 +12,9 @@ namespace Codalus.Shell.Controls;
 /// (a search or filter box) takes the width that is left, down to <see cref="MinStretchWidth"/>. When the pane is too
 /// narrow, the items that don't fit move into the overflow menu at the right end (»): buttons become entries with
 /// their names, toggle buttons checkable entries, combo boxes submenus of their choices. Text boxes and labels never
-/// overflow. A spacer (a control with the <c>toolbarSpacer</c> class, M34h) takes the width that is left instead, down to
+/// overflow. Items at the row's end with <c>HorizontalAlignment="Right"</c> (a status such as "Docker · Linux", M34h)
+/// sit at its right end when there is room and no stretching box.
+/// A spacer (a control with the <c>toolbarSpacer</c> class, M34h) takes the width that is left instead, down to
 /// nothing, so the items after it sit at the right end (AI Chat's Agent switch and its Request Log and Configure).
 /// </summary>
 public sealed class ToolbarPanel : Panel
@@ -76,7 +78,7 @@ public sealed class ToolbarPanel : Panel
 
     private static bool IsSpacer(Control child) => child.Classes.Contains("toolbarSpacer");
 
-    private static bool CanOverflow(Control child) => child is Button or ToggleButton or ComboBox or Separator || child.Classes.Contains("toolbarSeparator");
+    private static bool CanOverflow(Control child) => child is Button or ToggleButton or ComboBox or SplitButton or SegmentedControl or Separator || child.Classes.Contains("toolbarSeparator");
 
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -105,6 +107,16 @@ public sealed class ToolbarPanel : Panel
         var widths = items.Select(c => IsSpacer(c) ? 0 : Stretches(c) ? Math.Max(MinStretch, Math.Min(c.DesiredSize.Width, 200)) : c.DesiredSize.Width).ToList();
         var total = widths.Sum() + Spacing * Math.Max(0, items.Count - 1);
 
+        // A trailing status (right-aligned text at the row's end, M34h) is the first to go when the row is too narrow; it
+        // never moves into the overflow menu.
+        var dropped = new HashSet<Control>();
+        for (var i = items.Count - 1; i >= 0 && total > finalSize.Width + 0.5
+             && items[i].HorizontalAlignment == HorizontalAlignment.Right && !CanOverflow(items[i]) && !Stretches(items[i]); i--)
+        {
+            dropped.Add(items[i]);
+            total -= widths[i] + Spacing;
+        }
+
         // Hide overflowable items from the right until the rest fits next to the overflow button.
         _hidden.Clear();
         if (total > finalSize.Width + 0.5)
@@ -112,7 +124,7 @@ public sealed class ToolbarPanel : Panel
             var available = finalSize.Width - _overflow.DesiredSize.Width - Spacing;
             for (var i = items.Count - 1; i >= 0 && total > available + 0.5; i--)
             {
-                if (CanOverflow(items[i]))
+                if (CanOverflow(items[i]) && !dropped.Contains(items[i]))
                 {
                     _hidden.Add(items[i]);
                     total -= widths[i] + Spacing;
@@ -121,7 +133,7 @@ public sealed class ToolbarPanel : Panel
         }
 
         // Separators next to the overflow or to another hidden item would be stray lines.
-        var shown = items.Where(c => !_hidden.Contains(c)).ToList();
+        var shown = items.Where(c => !_hidden.Contains(c) && !dropped.Contains(c)).ToList();
         while (shown.Count > 0 && IsSeparator(shown[^1]))
         {
             _hidden.Add(shown[^1]);
@@ -130,9 +142,24 @@ public sealed class ToolbarPanel : Panel
 
         var reserved = _hidden.Count > 0 ? _overflow.DesiredSize.Width + Spacing : 0;
         var used = shown.Where(c => c != stretch).Sum(c => c.DesiredSize.Width) + Spacing * Math.Max(0, shown.Count - 1);
+
+        // The trailing items (right-aligned, at the end of the row: a status, M34h) take the room left before them.
+        var trailing = new HashSet<Control>();
+        for (var i = shown.Count - 1; i >= 0 && shown[i].HorizontalAlignment == HorizontalAlignment.Right; i--)
+        {
+            trailing.Add(shown[i]);
+        }
+
+        var free = stretch is null || !shown.Contains(stretch) ? Math.Max(0, finalSize.Width - reserved - used) : 0;
         var x = 0.0;
         foreach (var child in items)
         {
+            if (dropped.Contains(child))
+            {
+                child.Arrange(new Rect(finalSize.Width + 10000, 0, child.DesiredSize.Width, child.DesiredSize.Height));
+                continue;
+            }
+
             if (_hidden.Contains(child))
             {
                 // Outside the panel, which clips: not drawn, not hit, and its minimum size can't overlap the others.
@@ -149,6 +176,12 @@ public sealed class ToolbarPanel : Panel
             if (_untabbed.Remove(child))
             {
                 child.ClearValue(Avalonia.Input.KeyboardNavigation.IsTabStopProperty);
+            }
+
+            if (trailing.Contains(child) && free > 0)
+            {
+                x += free;
+                free = 0;
             }
 
             var w = child == stretch ? Math.Max(0, finalSize.Width - reserved - used) : child.DesiredSize.Width;
@@ -191,7 +224,8 @@ public sealed class ToolbarPanel : Panel
             return new Separator();
         }
 
-        var name = AutomationProperties.GetName(child) ?? (ToolTip.GetTip(child) as string) ?? child.Name ?? string.Empty;
+        // A button's own label before its tooltip (the control set's icon-and-text buttons: Modify Find, not its explanation).
+        var name = AutomationProperties.GetName(child) ?? (child as ContentControl)?.Content as string ?? (ToolTip.GetTip(child) as string) ?? child.Name ?? string.Empty;
         switch (child)
         {
             case ToggleButton toggle:
@@ -225,7 +259,27 @@ public sealed class ToolbarPanel : Panel
                 return item;
             }
 
-            case ComboBox combo:
+            case SplitButton split:
+            {
+                // Its command, then its menu's other choices (Export CSV, then Export JSON…).
+                var item = new MenuItem { Header = name, IsEnabled = split.IsEffectivelyEnabled, Icon = IconOf(split), Command = split.Command, CommandParameter = split.CommandParameter };
+                if (split.Flyout is not MenuFlyout flyout)
+                {
+                    return item;
+                }
+
+                var more = new MenuItem { Header = name, IsEnabled = split.IsEffectivelyEnabled, Icon = IconOf(split) };
+                more.Items.Add(new MenuItem { Header = name, Command = split.Command, CommandParameter = split.CommandParameter });
+                foreach (var choice in flyout.Items.OfType<MenuItem>())
+                {
+                    more.Items.Add(new MenuItem { Header = choice.Header, Command = choice.Command, CommandParameter = choice.CommandParameter, IsEnabled = choice.IsEffectivelyEnabled });
+                }
+
+                return more;
+            }
+
+            // A combo box, or a segmented control (M34h): a submenu of its choices.
+            case SelectingItemsControl combo:
             {
                 var item = new MenuItem { Header = name, IsEnabled = combo.IsEffectivelyEnabled };
                 var index = 0;
@@ -247,7 +301,7 @@ public sealed class ToolbarPanel : Panel
     }
 
     private static Icon? IconOf(ContentControl control) =>
-        control.Content switch
+        ButtonIcon.GetKind(control) is { } kind ? new Icon { Kind = kind } : control.Content switch
         {
             Icon icon => Copy(icon),
             Panel panel when panel.Children.OfType<Icon>().FirstOrDefault() is { } icon => Copy(icon),

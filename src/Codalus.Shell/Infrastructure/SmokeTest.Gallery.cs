@@ -39,7 +39,6 @@ internal sealed partial class SmokeTest
     {
         // The Output window shows the build's output, its lines colored by what they report (M34h).
         shell.Output.Selected = shell.Builds.Channel;
-
         // AI Chat with the ai.chat step's conversation (M34h), as it looks with AI on: the composer under it. Nothing is
         // asked, so nothing is sent; AI goes back off after the pictures.
         var aiOn = shell.AiChat.HasTurns && shell.Ai.State == Workbench.Ai.AiState.Off;
@@ -50,8 +49,12 @@ internal sealed partial class SmokeTest
             await WaitAsync(() => shell.AiChat.IsOn, "AI is on for AI Chat's picture").ConfigureAwait(true);
         }
 
+        // M34h: Find Results and the HTTP Response as the designs show them, cleared after their pictures, so the later
+        // steps (web.http's screenshot, the website's) don't show the sample requests and searches.
+        var httpOpen = shell.Layout.IsVisible(HttpResponseViewModel.ToolWindowId);
         try
         {
+            await GallerySampleResultsAsync().ConfigureAwait(true);
             await GalleryToolWindowsAsync("data").ConfigureAwait(true);
             if (aiOn)
             {
@@ -60,6 +63,7 @@ internal sealed partial class SmokeTest
         }
         finally
         {
+            ClearGallerySampleResults(httpOpen);
             if (aiOn)
             {
                 await shell.Workbench.Settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);

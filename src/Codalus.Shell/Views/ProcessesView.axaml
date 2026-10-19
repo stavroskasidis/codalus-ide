@@ -7,10 +7,10 @@
              x:DataType="vm:ProcessesViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button Content="{l:T processes.attachToProcess}" Click="OnAttach" AutomationProperties.Name="{l:T processes.attachToProcess2}" />
-      <Button Content="{l:T processes.detachAll}" Click="OnDetach" IsEnabled="{Binding CanDetach}" AutomationProperties.Name="{l:T processes.detachAll}"
+      <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="attach" Content="{l:T processes.attachToProcess}" Click="OnAttach" AutomationProperties.Name="{l:T processes.attachToProcess2}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="detach" Click="OnDetach" IsEnabled="{Binding CanDetach}" AutomationProperties.Name="{l:T processes.detachAll}"
               ToolTip.Tip="{l:T processes.detachFromAnAttachedProgramAnd}" />
-      <Button Content="{l:T processes.terminateAll}" Click="OnTerminate" IsEnabled="{Binding !IsEmpty}" AutomationProperties.Name="{l:T processes.terminateAll}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="stop" Click="OnTerminate" IsEnabled="{Binding !IsEmpty}" AutomationProperties.Name="{l:T processes.terminateAll}" ToolTip.Tip="{l:T processes.terminateAll}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T processes.noProcessIsBeingDebugged}" IsVisible="{Binding IsEmpty}" />
     <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->

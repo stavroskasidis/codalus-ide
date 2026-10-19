@@ -1,6 +1,7 @@
 <UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              xmlns:ae="using:AvaloniaEdit"
              x:Class="Codalus.Shell.Views.InteractiveView"
@@ -9,8 +10,8 @@
     <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.Border}" Padding="4,2">
       <DockPanel>
         <StackPanel Orientation="Horizontal" Spacing="4">
-          <Button Content="{l:T interactive.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T interactive.discardTheStateAndStartOver}" AutomationProperties.Name="{l:T interactive.reset}" />
-          <Button Content="{l:T interactive.clear}" Command="{Binding ClearCommand}" ToolTip.Tip="{l:T interactive.clearTheWindow}" AutomationProperties.Name="{l:T interactive.clear}" />
+          <Button Classes="toolbar icon" controls:ButtonIcon.Kind="restart" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T interactive.discardTheStateAndStartOver}" AutomationProperties.Name="{l:T interactive.reset}" />
+          <Button Classes="toolbar icon" controls:ButtonIcon.Kind="clear-all" Command="{Binding ClearCommand}" ToolTip.Tip="{l:T interactive.clearTheWindow}" AutomationProperties.Name="{l:T interactive.clear}" />
         </StackPanel>
         <TextBlock Text="{Binding Status}" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.75" Margin="8,0" />
       </DockPanel>

@@ -36,7 +36,7 @@
   <Grid>
     <StackPanel Margin="{DynamicResource Shell.Padding.EmptyState}" Spacing="10" IsVisible="{Binding !HasSolution}">
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T solutionExplorer.noSolutionIsOpen}" />
-      <Button Content="{l:T solutionExplorer.openSolution}" HorizontalAlignment="Left" Command="{Binding OpenSolutionCommand}" />
+      <Button Classes="iconText" controls:ButtonIcon.Kind="folder-open" Content="{l:T solutionExplorer.openSolution}" HorizontalAlignment="Left" Command="{Binding OpenSolutionCommand}" />
     </StackPanel>
     <ListBox x:Name="List"
              ItemsSource="{Binding Rows}"

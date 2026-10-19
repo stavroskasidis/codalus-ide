@@ -450,6 +450,23 @@
     .warning or .info (none: neutral), .square for a method; badges are counts (Border.badge). Color never carries the
     meaning alone; High contrast outlines both.
   -->
+  <!--
+    A table's column header row (the control set's views, M34h): 24 px on Shell.Grid.Header with a Shell.Grid.Rule under
+    it, its labels muted and semibold.
+  -->
+  <Style Selector="Border.gridHeader">
+    <Setter Property="Background" Value="{DynamicResource Shell.Grid.Header}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="MinHeight" Value="24" />
+    <Setter Property="Padding" Value="8,0" />
+  </Style>
+  <Style Selector="Border.gridHeader TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
   <Style Selector="Border.chip">
     <Setter Property="Height" Value="20" />
     <Setter Property="Padding" Value="7,0" />
@@ -603,6 +620,13 @@
     <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Input}" />
     <Setter Property="Height" Value="{DynamicResource Shell.Size.Input}" />
     <Setter Property="Padding" Value="6,0" />
+  </Style>
+  <!-- An editable combo box in a toolbar (Counters' process box, M34h): its text box fits the 24 px field. -->
+  <Style Selector="controls|ToolbarPanel > ComboBox /template/ TextBox#PART_EditableTextBox">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
   <Style Selector="controls|ToolbarPanel > Button:not(.toolbar)">
     <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
@@ -1199,5 +1223,25 @@
         </DockPanel>
       </ControlTemplate>
     </Setter>
+  </Style>
+
+  <!--
+    Buttons attached to the field they act on (the control set's views, M34h: Configuration Manager's New… and Remove on
+    their combo box): one shape with the control set's corners, its inner joints square.
+    <Border Classes="attached"><StackPanel Orientation="Horizontal"><ComboBox …/><Button Classes="icon" …/></StackPanel></Border>
+  -->
+  <Style Selector="Border.attached">
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="ClipToBounds" Value="True" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Border.attached > StackPanel > ComboBox, Border.attached > StackPanel > TextBox, Border.attached > StackPanel > Button">
+    <Setter Property="CornerRadius" Value="0" />
+  </Style>
+  <Style Selector="Border.attached > StackPanel > Button">
+    <Setter Property="Margin" Value="-1,0,0,0" />
+    <!-- The shape clips: the ring would be cut to it. -->
+    <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing.Unclipped}" />
   </Style>
 </Styles>

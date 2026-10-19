@@ -61,11 +61,11 @@ When the session recorded allocations, contention or exceptions, **Stacks of** a
 ## The .NET Counters window
 
 **View → Other Windows → .NET Counters** watches the counters of any .NET process, like `dotnet-counters`:
-1. Enter the process id or (part of) its name, or pick it from the list (**Refresh** updates it).
+1. Choose the process in the box at the toolbar's start: type its id or (part of) its name, or open the box and pick one of the running .NET processes, which shows as its name and id (`WebApi (48213)`). The box lists them the first time it opens; the refresh button next to it lists them again.
 2. Name the **EventSources** whose counters to watch (`System.Runtime` by default), and any **meters** (`System.Diagnostics.Metrics`), comma-separated. `Name[a;b]` watches only the counters or instruments `a` and `b`, as in `System.Runtime[cpu-usage;working-set], MyApp[orders.placed]`.
-3. Set the interval in seconds and **Start**.
+3. Set the interval in seconds (the **Every … s** box) and **Start**; the stop button ends it.
 
-Meters show counters as their change per interval, gauges as their value, and histograms as their 50th, 95th and 99th percentiles. **Export CSV** writes one row per value (seconds, provider, counter, tags, unit, kind, value); **Export JSON** writes each counter's values.
+Meters show counters as their change per interval, gauges as their value, and histograms as their 50th, 95th and 99th percentiles. The export button writes **CSV**, one row per value (seconds, provider, counter, tags, unit, kind, value); its arrow offers **Export JSON** too, each counter's values.
 
 ## Good to know
 

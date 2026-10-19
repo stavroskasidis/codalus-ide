@@ -30,7 +30,7 @@
                                  AutomationProperties.Name="{l:T profilingReport.cpuSamplesOverTimeDragTo}" />
         <WrapPanel Orientation="Horizontal">
           <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" Text="{Binding RangeText}" />
-          <Button Content="{l:T profilingReport.clearRange}" Command="{Binding ClearRangeCommand}" IsVisible="{Binding HasRange}" Margin="0,0,12,0" />
+          <Button Classes="iconText compact" controls:ButtonIcon.Kind="close" Content="{l:T profilingReport.clearRange}" Command="{Binding ClearRangeCommand}" IsVisible="{Binding HasRange}" Margin="0,0,12,0" />
           <ComboBox ItemsSource="{Binding Threads}" SelectedItem="{Binding SelectedThread}" MinWidth="220" Margin="0,0,12,0" AutomationProperties.Name="{l:T profilingReport.thread}">
             <ComboBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ThreadChoice">
@@ -47,7 +47,7 @@
           </ComboBox>
           <CheckBox Content="{l:T profilingReport.includeNativeCodeAndWaiting}" IsChecked="{Binding IncludeExternal}" Margin="0,0,12,0" ToolTip.Tip="{l:T profilingReport.eventpipeSamplesEveryManagedThreadSamples}" />
           <CheckBox Content="{l:T profilingReport.showHotLinesInTheEditor}" IsChecked="{Binding ShowHotLines}" Margin="0,0,12,0" />
-          <Button Content="{l:T profilingReport.summarizeWithAi}" Command="{Binding SummarizeWithAiCommand}" IsVisible="{Binding IsEnabled, Source={x:Static l:AiUi.Current}}" AutomationProperties.Name="{l:T profilingReport.summarizeTheProfileInAiChat}" />
+          <Button Classes="iconText" controls:ButtonIcon.Kind="sparkle" Content="{l:T profilingReport.summarizeWithAi}" Command="{Binding SummarizeWithAiCommand}" IsVisible="{Binding IsEnabled, Source={x:Static l:AiUi.Current}}" AutomationProperties.Name="{l:T profilingReport.summarizeTheProfileInAiChat}" />
         </WrapPanel>
         <TextBlock Classes="muted" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
       </StackPanel>
@@ -107,7 +107,7 @@
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Classes="muted" Text="{Binding CurrentFunction.Inclusive, StringFormat='Total {0}', FallbackValue=''}" />
                 <TextBlock Classes="muted" Text="{Binding CurrentFunction.Exclusive, StringFormat='Self {0}', FallbackValue=''}" />
-                <Button Content="{l:T profilingReport.goToSource}" Command="{Binding GoToSourceCommand}" Padding="8,2" />
+                <Button Classes="iconText compact" controls:ButtonIcon.Kind="go-to" Content="{l:T profilingReport.goToSource}" Command="{Binding GoToSourceCommand}" Padding="8,2" />
               </StackPanel>
             </StackPanel>
             <Grid RowDefinitions="Auto,*,Auto,*" Margin="0,6,0,0">
@@ -141,8 +141,8 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,6">
             <StackPanel Orientation="Horizontal" Spacing="6">
-              <Button Content="{l:T profilingReport.back}" Command="{Binding ZoomOutCommand}" ToolTip.Tip="{l:T profilingReport.thePreviousZoomBackspace}" />
-              <Button Content="{l:T profilingReport.allSamples}" Command="{Binding ResetZoomCommand}" />
+              <Button Classes="icon compact" controls:ButtonIcon.Kind="arrow-left" Command="{Binding ZoomOutCommand}" ToolTip.Tip="{l:T profilingReport.thePreviousZoomBackspace}" AutomationProperties.Name="{l:T profilingReport.back}" />
+              <Button Classes="iconText compact" controls:ButtonIcon.Kind="fit" Content="{l:T profilingReport.allSamples}" Command="{Binding ResetZoomCommand}" />
               <TextBlock VerticalAlignment="Center" Text="{Binding FlamePath}" TextTrimming="CharacterEllipsis" />
             </StackPanel>
             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding SelectedFlameText}" AutomationProperties.LiveSetting="Polite" />
@@ -223,7 +223,7 @@
               </ComboBox>
               <TextBox Text="{Binding HeapSearch}" PlaceholderText="{l:T profilingReport.searchTypes}" MinWidth="180" Margin="0,0,6,0" AutomationProperties.Name="{l:T profilingReport.searchTypes}" />
               <Button Content="{l:T profilingReport.search}" Command="{Binding SearchHeapCommand}" Margin="0,0,12,0" />
-              <Button Content="{l:T profilingReport.inspectObjectsInTheFullDump}" Command="{Binding InspectDumpCommand}" IsVisible="{Binding HasDump}" />
+              <Button Classes="iconText" controls:ButtonIcon.Kind="search" Content="{l:T profilingReport.inspectObjectsInTheFullDump}" Command="{Binding InspectDumpCommand}" IsVisible="{Binding HasDump}" />
             </WrapPanel>
             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding HeapSummary}" AutomationProperties.LiveSetting="Polite" />
           </StackPanel>
@@ -437,10 +437,10 @@
                 <TextBox Text="{Binding EventProvider}" PlaceholderText="{l:T profilingReport.providers}" MinWidth="180" Margin="0,0,6,0" AutomationProperties.Name="{l:T profilingReport.providersCommaSeparated}" />
                 <TextBox Text="{Binding EventName}" PlaceholderText="{l:T profilingReport.eventNames}" MinWidth="160" Margin="0,0,6,0" AutomationProperties.Name="{l:T profilingReport.eventNamesCommaSeparated}" />
                 <TextBox Text="{Binding EventText}" PlaceholderText="{l:T profilingReport.textInThePayload}" MinWidth="160" Margin="0,0,6,0" AutomationProperties.Name="{l:T profilingReport.textInThePayload}" />
-                <Button Content="{l:T profilingReport.filter}" Command="{Binding FilterEventsCommand}" Margin="0,0,12,0" />
-                <Button Content="{l:T profilingReport.exportForSpeedscope}" Command="{Binding ExportSpeedscopeCommand}" Margin="0,0,6,0" ToolTip.Tip="{l:T profilingReport.theCurrentStackProfileAndFilter}" />
-                <Button Content="{l:T profilingReport.exportChromiumTrace}" Command="{Binding ExportChromiumCommand}" Margin="0,0,6,0" ToolTip.Tip="{l:T profilingReport.theCurrentStackProfileAndThe}" />
-                <Button Content="{l:T profilingReport.saveTraceAs}" Command="{Binding SaveTraceCommand}" />
+                <Button Classes="iconText" controls:ButtonIcon.Kind="filter" Content="{l:T profilingReport.filter}" Command="{Binding FilterEventsCommand}" Margin="0,0,12,0" />
+                <Button Classes="iconText" controls:ButtonIcon.Kind="export" Content="{l:T profilingReport.exportForSpeedscope}" Command="{Binding ExportSpeedscopeCommand}" Margin="0,0,6,0" ToolTip.Tip="{l:T profilingReport.theCurrentStackProfileAndFilter}" />
+                <Button Classes="iconText" controls:ButtonIcon.Kind="export" Content="{l:T profilingReport.exportChromiumTrace}" Command="{Binding ExportChromiumCommand}" Margin="0,0,6,0" ToolTip.Tip="{l:T profilingReport.theCurrentStackProfileAndThe}" />
+                <Button Classes="icon" controls:ButtonIcon.Kind="save" Command="{Binding SaveTraceCommand}" ToolTip.Tip="{l:T profilingReport.saveTraceAs}" AutomationProperties.Name="{l:T profilingReport.saveTraceAs}" />
               </WrapPanel>
               <TextBlock Classes="muted" Text="{Binding EventsSummary}" AutomationProperties.LiveSetting="Polite" />
             </StackPanel>

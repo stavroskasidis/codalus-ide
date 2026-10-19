@@ -72,7 +72,7 @@
                     <li>Code Search: files, types, members and text in one window, with filter chips, a live, editable preview, and an index kept with the solution so it finds everything right after a restart</li>
                     <li>Feature Search for commands, settings and Options pages, from the search box</li>
                     <li>Peek Definition, Call and Type Hierarchy, Class View and the Object Browser</li>
-                    <li>Find and Replace in Files: a floating window, results with every match highlighted, filtered, grouped and kept</li>
+                    <li>Find and Replace in Files: a floating window, and results in the editor's colors with every match highlighted, grouped by folder and file as a tree or listed, filtered and kept</li>
                     <li>Inlay hints, CodeLens, an inheritance margin and sticky scroll</li>
                     <li>Library code from Source Link before decompiling</li>
                 </ul>
@@ -130,7 +130,7 @@
                 <h3>Web</h3>
                 <ul>
                     <li>Razor and Blazor, with C# features inside the markup and components, HTML and directives each in their own color</li>
-                    <li>.http files, the HTTP Response window and an Endpoints Explorer</li>
+                    <li>.http files, the HTTP Response window (the status as a chip, the body pretty or raw, the headers, a history of requests) and an Endpoints Explorer</li>
                     <li>HTML, CSS, JavaScript and TypeScript language servers</li>
                     <li>ESLint, Prettier, npm scripts and the Task Runner Explorer</li>
                     <li>Hot Reload through dotnet watch</li>
@@ -250,7 +250,7 @@
                     <li>Namespace, collection types, synchronous operations, type reuse and access; Update and Remove</li>
                     <li>References kept as Visual Studio keeps them: Connected Services and ConnectedService.json</li>
                     <li>CoreWCF services from CoreWCF's templates in New Project</li>
-                    <li>A WCF Test Client: operations from the metadata, a form per operation or raw XML, responses as a tree; BasicHttpBinding and WSHttpBinding</li>
+                    <li>A WCF Test Client: operations with their signatures, a typed form per operation or raw XML, responses as a tree and faults as chips; BasicHttpBinding and WSHttpBinding</li>
                     <li>system.serviceModel completion, hover and checks in app.config and web.config</li>
                 </ul>
             </div>
@@ -297,7 +297,7 @@
             "Roslyn-powered C# with inlay hints, the minimap, Find All References and the Solution Explorer."),
         new("find", "Find in Files", "find-in-files.png",
             "The Find and Replace window floating over the editor, with Find Results below",
-            "Find and Replace in Files from a floating window: scopes, file types and regular expressions, with every match listed in Find Results, which filters, groups by path or file and keeps earlier results on their own pages."),
+            "Find and Replace in Files from a floating window: scopes, file types and regular expressions, with every match listed in Find Results in the editor's colors, which filters, groups by folder and file as a tree or a list, and keeps earlier results on their own pages."),
         new("code-search", "Code Search", "code-search.png",
             "The Code Search window over the editor: filter chips, two-line results for Greet with Greeter selected, and Greeter.cs in the preview below",
             "Go To All is Code Search: files, types, members and text with filter chips, results that say where each one is, and the selected one in a live preview you can edit and save."),
@@ -309,10 +309,10 @@
             "A hosted Blazor app: the server and its WebAssembly page debugged as one session, paused inside a .razor file."),
         new("web", "Web APIs", "web-http.png",
             "A .http file with run buttons, the HTTP Response window and the Endpoints Explorer",
-            "Send requests from a .http file, read the response, and browse every route in the Endpoints Explorer."),
+            "Send requests from a .http file, read the response with its status, headers and history, and browse every route in the Endpoints Explorer."),
         new("wcf", "WCF", "wcf-test-client.png",
             "The WCF Test Client with a CoreWCF service's operations, the request form of Greet and its response as a tree",
-            "Call a WCF or CoreWCF service from its metadata: a form per operation, the SOAP envelope, and the response as a tree."),
+            "Call a WCF or CoreWCF service from its metadata: a typed form per operation, the SOAP envelope, and the response as a tree, a fault as a chip."),
         new("profiling", "Profiling", "profiler.png",
             "A CPU profiling report: the sample timeline above a flame graph of the program's hot methods",
             "Record a CPU trace, scrub the timeline, and find the hot path in the flame graph, with hot lines marked in the editor."),
