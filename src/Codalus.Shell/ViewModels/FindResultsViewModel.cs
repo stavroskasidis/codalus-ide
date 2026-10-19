@@ -42,8 +42,38 @@ public sealed record FindResultRow(string Path, int Line, int Column, int Length
     /// <summary>List View: the File column shows the full path.</summary>
     public bool FullPath { get; init; }
 
-    /// <summary>The Code column: the line's text, with the kind of reference after it.</summary>
-    public string Code => IsHeader || Kind is null ? Text
+    /// <summary>A header: how many matches its group holds (shown as a badge after it); 0 for other rows.</summary>
+    public int Count { get; init; }
+
+    public bool HasCount => Count > 0;
+
+    /// <summary>A header: a folder's (its path shown below the search's root), not a file's or a project's.</summary>
+    public bool IsFolder { get; init; }
+
+    /// <summary>A header of a file, a project or a reference group: drawn semibold (a folder's is regular, M34h).</summary>
+    public bool IsFileHeader => IsHeader && !IsFolder;
+
+    /// <summary>A header's text as shown: a folder below the search's root, a file's name or path.</summary>
+    public string Label { get; init; } = string.Empty;
+
+    /// <summary>A header's icon: the folder (open or closed) or the file's type.</summary>
+    public string? HeaderIcon => !IsHeader ? null
+        : IsFolder ? Controls.FileIcons.ForFolder(System.IO.Path.GetFileName(Path.TrimEnd('/', '\\')), IsExpanded)
+        : GroupKey?.StartsWith("p:", StringComparison.Ordinal) == true ? "project"
+        : GroupKey is null ? null : Controls.FileIcons.ForFile(System.IO.Path.GetFileName(Path));
+
+    /// <summary>The columns a row's first cell takes: a header the whole row, a match the Code column.</summary>
+    public int Span => IsHeader ? 4 : 1;
+
+    /// <summary>
+    /// The row's indent: a header by its depth (its chevron, icon and text after it), a match under its group's text
+    /// (M34h, the mockup's: folder, file, then the code where the file's name starts).
+    /// </summary>
+    public Avalonia.Thickness Indent => new(IsHeader ? 4 + (Depth * 18) : Depth == 0 ? 8 : 40 + ((Depth - 1) * 18), 0, 0, 0);
+
+    /// <summary>The Code column: the line's text, with the kind of reference after it; a header's text with its count.</summary>
+    public string Code => IsHeader ? Count > 0 ? $"{Text} ({Count})" : Text
+        : Kind is null ? Text
         : $"{Text}    [{KindTitle(Kind)}{(Container is null ? string.Empty : " in " + Container)}]";
 
     public string FileName => IsHeader ? string.Empty : FullPath ? Path : System.IO.Path.GetFileName(Path);
@@ -57,11 +87,11 @@ public sealed record FindResultRow(string Path, int Line, int Column, int Length
     /// <summary>A collapsible header's chevron: right when collapsed, down when expanded.</summary>
     public string? Chevron => GroupKey is null ? null : IsExpanded ? "chevron-down" : "chevron-right";
 
-    public string Display => IsHeader ? Text
+    public string Display => IsHeader ? Code
         : Kind is null ? $"{Line,6}:  {Text}"
         : $"{Line,6}:  {Text}    [{KindTitle(Kind)}{(Container is null ? string.Empty : " in " + Container)}]";
 
-    public string AccessibleName => IsHeader ? (GroupKey is null ? Text : $"{Text}, {(IsExpanded ? "expanded" : "collapsed")}")
+    public string AccessibleName => IsHeader ? (GroupKey is null ? Code : $"{Code}, {(IsExpanded ? "expanded" : "collapsed")}")
         : Kind is null ? $"Line {Line}: {Text}" : $"Line {Line}, {KindTitle(Kind)}: {Text}";
 
     public static string KindTitle(string kind) => kind switch
@@ -145,6 +175,9 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
 
     /// <summary>The page tabs show only once there is more than one page.</summary>
     public bool HasManyPages => Pages.Count > 1;
+
+    /// <summary>The folder headers' paths are shown below (the solution's folder) when a search looked in a scope, not a folder.</summary>
+    public Func<string?>? RootFolder { get; set; }
 
     /// <summary>Earlier Find All References results, newest first (every page's Earlier results drop-down).</summary>
     public ObservableCollection<ReferenceSet> ReferenceSets { get; } = [];
@@ -428,12 +461,38 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
             if (SetField(ref _title, value))
             {
                 OnPropertyChanged(nameof(HasTitle));
+                OnPropertyChanged(nameof(TitleVerb));
+                OnPropertyChanged(nameof(TitleTerm));
+                OnPropertyChanged(nameof(TitleRest));
                 _owner.PageChanged(this, nameof(Title));
             }
         }
     }
 
     public bool HasTitle => _title.Length > 0;
+
+    /// <summary>The title's start, before what was searched for: <c>Find all </c>.</summary>
+    public string TitleVerb => SplitTitle().Verb;
+
+    /// <summary>What was searched for, in its quotes: <c>"Person"</c> (drawn semibold).</summary>
+    public string TitleTerm => SplitTitle().Term;
+
+    /// <summary>The rest: <c>, Match case, Entire solution, "*.cs"</c> (muted).</summary>
+    public string TitleRest => SplitTitle().Remainder;
+
+    private (string Verb, string Term, string Remainder) SplitTitle()
+    {
+        var quote = _title.IndexOf('"', StringComparison.Ordinal);
+        var end = Options is { } options && quote >= 0 ? quote + options.Query.Length + 2 : -1;
+        return end > quote && end <= _title.Length && _title[end - 1] == '"'
+            ? (_title[..quote], _title[quote..end], _title[end..])
+            : (_title, string.Empty, string.Empty);
+    }
+
+    /// <summary>The results before the filter (the page's tab shows the count).</summary>
+    public int MatchCount => _matches.Count;
+
+    public bool HasMatches => _matches.Count > 0;
 
     /// <summary>The counts; with a filter, how many of the matches it shows.</summary>
     public string Summary => _filter.Length == 0 || _matches.Count == 0 ? _summary
@@ -511,9 +570,17 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
             if (SetField(ref _isListView, value))
             {
                 OnPropertyChanged(nameof(CanGroupFiles));
+                OnPropertyChanged(nameof(ViewIndex));
                 Refresh();
             }
         }
+    }
+
+    /// <summary>The Tree or List segmented control (M34h, D33: it replaced the List View toggle): 0 grouped, 1 List View.</summary>
+    public int ViewIndex
+    {
+        get => _isListView ? 1 : 0;
+        set => IsListView = value == 1;
     }
 
     /// <summary>The Group by drop-down for Find in Files results shows (references have their own) and is enabled.</summary>
@@ -622,6 +689,8 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
         _collapsed.Clear();
         Rows.Clear();
         SelectedRow = null;
+        OnPropertyChanged(nameof(MatchCount));
+        OnPropertyChanged(nameof(HasMatches));
     }
 
     /// <summary>Collapses or expands a header's group.</summary>
@@ -662,6 +731,8 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
     /// </summary>
     private void Refresh()
     {
+        OnPropertyChanged(nameof(MatchCount));
+        OnPropertyChanged(nameof(HasMatches));
         var rows = Arrange();
         var selected = _selectedRow;
         var index = 0;
@@ -727,13 +798,13 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
         {
             foreach (var folder in shown.GroupBy(m => System.IO.Path.GetDirectoryName(m.Path) ?? string.Empty, SolutionService.PathComparer))
             {
-                var folderHeader = Group("d:" + folder.Key, folder.First().Path, folder.Key, folder.Count(), 0);
+                var folderHeader = Group("d:" + folder.Key, folder.Key, folder.Key, folder.Count(), 0) with { IsFolder = true, Label = Relative(folder.Key) };
                 rows.Add(folderHeader);
                 if (folderHeader.IsExpanded)
                 {
                     foreach (var file in folder.GroupBy(m => m.Path, SolutionService.PathComparer))
                     {
-                        AddFile(file.Key, System.IO.Path.GetFileName(file.Key), [.. file], 1);
+                        AddFile(file.Key, System.IO.Path.GetFileName(file.Key), [.. file], 1, System.IO.Path.GetFileName(file.Key));
                     }
                 }
             }
@@ -742,15 +813,15 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
         {
             foreach (var file in shown.GroupBy(m => m.Path, SolutionService.PathComparer))
             {
-                AddFile(file.Key, file.Key, [.. file], 0);
+                AddFile(file.Key, file.Key, [.. file], 0, Relative(file.Key));
             }
         }
 
         return rows;
 
-        void AddFile(string path, string text, List<FindResultRow> matches, int depth)
+        void AddFile(string path, string text, List<FindResultRow> matches, int depth, string label)
         {
-            var header = Group("f:" + path, path, text, matches.Count, depth);
+            var header = Group("f:" + path, path, text, matches.Count, depth) with { Label = label };
             rows.Add(header);
             if (header.IsExpanded)
             {
@@ -760,7 +831,25 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
     }
 
     private FindResultRow Group(string key, string path, string text, int count, int depth) =>
-        new(path, 0, 0, 0, $"{text} ({count})", true) { GroupKey = key, IsExpanded = !_collapsed.Contains(key), Depth = depth };
+        new(path, 0, 0, 0, text, true) { GroupKey = key, IsExpanded = !_collapsed.Contains(key), Depth = depth, Count = count, Label = text };
+
+    /// <summary>
+    /// A folder or file as a header shows it (M34h): below the folder searched, or the solution's, when it is in it
+    /// (<c>src/Calculator</c>); its full path otherwise.
+    /// </summary>
+    private string Relative(string path)
+    {
+        var root = Options is { LookIn: var lookIn } && System.IO.Path.IsPathRooted(lookIn) ? lookIn : _owner.RootFolder?.Invoke();
+        if (string.IsNullOrEmpty(root))
+        {
+            return path;
+        }
+
+        var relative = System.IO.Path.GetRelativePath(root, path);
+        return relative == "." ? System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(root))
+            : relative.StartsWith("..", StringComparison.Ordinal) || System.IO.Path.IsPathRooted(relative) ? path
+            : relative;
+    }
 
     /// <summary>References group by file (collapsible), by project, or not at all, as M12a showed them.</summary>
     private void ArrangeReferences(List<FindResultRow> shown, List<FindResultRow> rows)

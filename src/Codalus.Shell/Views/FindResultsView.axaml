@@ -6,23 +6,96 @@
              x:Class="Codalus.Shell.Views.FindResultsView"
              x:DataType="vm:FindResultsViewModel">
   <!-- The results only: Find and Replace (the floating window, Ctrl+Shift+F) runs the searches; Modify Find shows it again.
-       Pages kept with Keep Results show as tabs (Find Results 1, 2…) above the current page. -->
+       Pages kept with Keep Results show as tabs (Find Results 1, 2…, each with its count) above the current page.
+       The control set's design (M34h, docs/design/controls/FindResults.dc.html): an icon toolbar, what was searched as a
+       header line, the results grouped by folder and file with their counts, the code in the editor's colors with the
+       match highlighted, line and column columns, and the counts as a status line. -->
+  <UserControl.Styles>
+    <!-- The page tabs are the tabs inside a view (28 px, muted until selected, an accent underline, counts as badges). -->
+    <Style Selector="TabStrip#PageTabs TabStripItem">
+      <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing}" />
+      <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+      <Setter Property="FontWeight" Value="Normal" />
+      <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Tab}" />
+      <Setter Property="Padding" Value="10,0,6,0" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="TabStrip#PageTabs TabStripItem:selected">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TabStrip#PageTabs TabStripItem:pointerover /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+    </Style>
+    <Style Selector="TabStrip#PageTabs TabStripItem:selected /template/ Border#PART_SelectedPipe">
+      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="Height" Value="2" />
+      <Setter Property="CornerRadius" Value="1" />
+      <Setter Property="VerticalAlignment" Value="Bottom" />
+    </Style>
+    <Style Selector="TabStrip#PageTabs TabStripItem:selected Border.badge">
+      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.AccentForeground}" />
+    </Style>
+    <!-- The header line and the column headers. -->
+    <Style Selector="Border.findQuery">
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Grid.Header}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="0,1" />
+    </Style>
+    <Style Selector="Border.findColumns">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Grid.Header}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Border.findColumns TextBlock">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="8,0" />
+    </Style>
+    <Style Selector="Border.findStatus">
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="10,2" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="0,1,0,0" />
+    </Style>
+    <!-- The results: the code on the editor's background, rows of 22 px. -->
+    <Style Selector="ListBox#List">
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Editor.Foreground}" />
+    </Style>
+    <Style Selector="ListBox#List ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox#List ListBoxItem:selected TextBlock.codeLine">
+      <Setter Property="controls:CodeLine.IsPlain" Value="True" />
+    </Style>
+    <Style Selector="TextBlock.findNumber">
+      <Setter Property="TextAlignment" Value="Right" />
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+  </UserControl.Styles>
+
   <DockPanel>
     <TabStrip x:Name="PageTabs" DockPanel.Dock="Top" ItemsSource="{Binding Pages}" SelectedItem="{Binding CurrentPage}" IsVisible="{Binding HasManyPages}"
-              Margin="4,0" AutomationProperties.Name="{l:T findResults.pages}">
-      <TabStrip.Styles>
-        <Style Selector="TabStripItem">
-          <Setter Property="FontSize" Value="12" />
-          <Setter Property="MinHeight" Value="26" />
-          <Setter Property="Padding" Value="8,2,4,2" />
-        </Style>
-      </TabStrip.Styles>
+              Margin="6,0" AutomationProperties.Name="{l:T findResults.pages}">
       <TabStrip.ItemTemplate>
         <DataTemplate x:DataType="vm:FindResultsPage">
-          <StackPanel Orientation="Horizontal" Spacing="4">
+          <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="{Binding Header}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <Button Classes="toolbar" Padding="1" Command="{Binding CloseCommand}" ToolTip.Tip="{l:T findResults.closePage}" AutomationProperties.Name="{l:T findResults.closePage}">
-              <controls:Icon Kind="close" />
+            <Border Classes="badge" IsVisible="{Binding HasMatches}">
+              <TextBlock Text="{Binding MatchCount}" />
+            </Border>
+            <Button Classes="subtle" Width="16" Height="16" MinWidth="16" MinHeight="16" Padding="0" VerticalAlignment="Center" Command="{Binding CloseCommand}"
+                    ToolTip.Tip="{l:T findResults.closePage}" AutomationProperties.Name="{l:T findResults.closePage}">
+              <controls:Icon Kind="close" Width="12" Height="12" Foreground="{DynamicResource Shell.MutedForeground}" />
             </Button>
           </StackPanel>
         </DataTemplate>
@@ -30,64 +103,93 @@
     </TabStrip>
     <DockPanel DataContext="{Binding CurrentPage}" x:DataType="vm:FindResultsPage">
       <controls:ToolbarPanel DockPanel.Dock="Top">
-        <Button Classes="toolbar" Command="{Binding PreviousCommand}" ToolTip.Tip="{l:T findResults.goToPreviousLocation}" AutomationProperties.Name="{l:T findResults.goToPreviousLocation}">
-          <controls:Icon Kind="arrow-up" />
-        </Button>
-        <Button Classes="toolbar" Command="{Binding NextCommand}" ToolTip.Tip="{l:T findResults.goToNextLocation}" AutomationProperties.Name="{l:T findResults.goToNextLocation}">
-          <controls:Icon Kind="arrow-down" />
-        </Button>
-        <Button Classes="toolbar" Command="{Binding ClearCommand}" ToolTip.Tip="{l:T findResults.clearAll}" AutomationProperties.Name="{l:T findResults.clearAll}">
-          <controls:Icon Kind="clear-all" />
-        </Button>
-        <Button Classes="toolbar" Command="{Binding CancelCommand}" IsVisible="{Binding IsSearching}" ToolTip.Tip="{l:T findResults.stopSearching}" AutomationProperties.Name="{l:T findResults.stopSearching}">
-          <controls:Icon Kind="stop" />
-        </Button>
-        <ToggleButton Classes="toolbar" IsChecked="{Binding KeepResults}" ToolTip.Tip="{l:T findResults.keepResultsTip}" AutomationProperties.Name="{l:T findResults.keepResults}">
-          <controls:Icon Kind="pin" />
-        </ToggleButton>
-        <Button Classes="toolbar" Command="{Binding ModifyFindCommand}" ToolTip.Tip="{l:T findResults.modifyFindTip}" AutomationProperties.Name="{l:T findResults.modifyFind}">
-          <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="edit" /><TextBlock Text="{l:T findResults.modifyFind}" /></StackPanel>
-        </Button>
-        <ComboBox MinWidth="120" ItemsSource="{x:Static vm:FindResultsViewModel.FilesGroupByOptions}" SelectedItem="{Binding FilesGroupBy}" IsVisible="{Binding ShowsFiles}" IsEnabled="{Binding CanGroupFiles}"
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="arrow-up" Command="{Binding PreviousCommand}" ToolTip.Tip="{l:T findResults.goToPreviousLocationShiftF8}" AutomationProperties.Name="{l:T findResults.goToPreviousLocation}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="arrow-down" Command="{Binding NextCommand}" ToolTip.Tip="{l:T findResults.goToNextLocationF8}" AutomationProperties.Name="{l:T findResults.goToNextLocation}" />
+        <Border Classes="toolbarSeparator" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="clear-all" Command="{Binding ClearCommand}" ToolTip.Tip="{l:T findResults.clearAll}" AutomationProperties.Name="{l:T findResults.clearAll}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="stop" Command="{Binding CancelCommand}" IsEnabled="{Binding IsSearching}" ToolTip.Tip="{l:T findResults.stopSearching}" AutomationProperties.Name="{l:T findResults.stopSearching}" />
+        <Border Classes="toolbarSeparator" />
+        <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="pin" IsChecked="{Binding KeepResults}" ToolTip.Tip="{l:T findResults.keepResultsTip}" AutomationProperties.Name="{l:T findResults.keepResults}" />
+        <controls:SegmentedControl x:Name="ViewSwitch" SelectedIndex="{Binding ViewIndex}" IsVisible="{Binding ShowsFiles}" Margin="2,0" AutomationProperties.Name="{l:T findResults.view}">
+          <controls:SegmentedControlItem Icon="type-hierarchy" Content="{l:T findResults.tree}" ToolTip.Tip="{l:T findResults.treeGroupedByGroupBy}" />
+          <controls:SegmentedControlItem Icon="list" Content="{l:T findResults.list}" ToolTip.Tip="{l:T findResults.listViewTip}" />
+        </controls:SegmentedControl>
+        <ComboBox MinWidth="130" ItemsSource="{x:Static vm:FindResultsViewModel.FilesGroupByOptions}" SelectedItem="{Binding FilesGroupBy}" IsVisible="{Binding ShowsFiles}" IsEnabled="{Binding CanGroupFiles}"
                   AutomationProperties.Name="{l:T findResults.groupBy}" ToolTip.Tip="{l:T findResults.groupBy}" />
-        <ToggleButton Classes="toolbar" IsChecked="{Binding IsListView}" IsVisible="{Binding ShowsFiles}" ToolTip.Tip="{l:T findResults.listViewTip}" AutomationProperties.Name="{l:T findResults.listView}">
-          <controls:Icon Kind="list" />
-        </ToggleButton>
         <ComboBox MinWidth="200" ItemsSource="{Binding ReferenceSets}" SelectedItem="{Binding CurrentSet}" IsVisible="{Binding IsReferences}" AutomationProperties.Name="{l:T findResults.earlierResults}" ToolTip.Tip="{l:T findResults.earlierResults}" />
         <ComboBox MinWidth="90" ItemsSource="{x:Static vm:FindResultsViewModel.GroupByOptions}" SelectedItem="{Binding GroupBy}" IsVisible="{Binding IsReferences}" AutomationProperties.Name="{l:T findResults.groupBy}" ToolTip.Tip="{l:T findResults.groupBy}" />
         <ComboBox MinWidth="110" ItemsSource="{x:Static vm:FindResultsViewModel.KindFilterOptions}" SelectedItem="{Binding KindFilter}" IsVisible="{Binding IsReferences}" AutomationProperties.Name="{l:T findResults.referenceKind}" ToolTip.Tip="{l:T findResults.show}" />
-        <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="{l:T findResults.searchFindResults}" AutomationProperties.Name="{l:T findResults.searchFindResults}" />
+        <Border Classes="toolbarSeparator" />
+        <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="edit" Content="{l:T findResults.modifyFind}" Command="{Binding ModifyFindCommand}" ToolTip.Tip="{l:T findResults.modifyFindTip}" />
+        <TextBox x:Name="FilterBox" Classes="search" Text="{Binding Filter}" PlaceholderText="{l:T findResults.searchFindResults}" AutomationProperties.Name="{l:T findResults.searchFindResults}" />
       </controls:ToolbarPanel>
-      <TextBlock DockPanel.Dock="Top" Margin="10,2" TextWrapping="Wrap" Text="{Binding Title}" IsVisible="{Binding HasTitle}" />
-      <TextBlock DockPanel.Dock="Bottom" Classes="muted" Margin="10,2" TextWrapping="Wrap" Text="{Binding Summary}" AutomationProperties.LiveSetting="Polite" />
-      <Grid DockPanel.Dock="Top" ColumnDefinitions="3*,*,44,36" Margin="8,2,8,0">
-        <TextBlock Classes="muted" Text="{l:T findResults.code}" TextTrimming="CharacterEllipsis" />
-        <TextBlock Grid.Column="1" Classes="muted" Text="{l:T findResults.file}" TextTrimming="CharacterEllipsis" Margin="8,0,0,0" />
-        <TextBlock Grid.Column="2" Classes="muted" Text="{l:T findResults.line}" TextTrimming="CharacterEllipsis" />
-        <TextBlock Grid.Column="3" Classes="muted" Text="{l:T findResults.col}" TextTrimming="CharacterEllipsis" />
-      </Grid>
-      <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" Background="Transparent" AutomationProperties.Name="{l:T findResults.findResults}">
+      <!-- What was searched: Find all "Person", Match case, Entire solution, "*.cs". -->
+      <Border DockPanel.Dock="Top" Classes="findQuery" IsVisible="{Binding HasTitle}">
+        <DockPanel VerticalAlignment="Center">
+          <controls:Icon DockPanel.Dock="Left" Kind="search" Margin="0,0,8,0" />
+          <!-- One text, trimmed as a whole (a long term too), the whole search in its tooltip. -->
+          <TextBlock x:Name="QueryText" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}">
+            <Run Text="{Binding TitleVerb}" /><Run Text="{Binding TitleTerm}" FontWeight="SemiBold" /><Run Classes="muted" Text="{Binding TitleRest}" />
+          </TextBlock>
+        </DockPanel>
+      </Border>
+      <!-- The counts, and how to walk the results. -->
+      <Border DockPanel.Dock="Bottom" Classes="findStatus">
+        <DockPanel>
+          <TextBlock x:Name="Hint" DockPanel.Dock="Right" Classes="muted small" VerticalAlignment="Center" Margin="16,0,0,0" Text="{l:T findResults.enterOrDoubleClickOpensF8}" />
+          <controls:CountsText Source="{Binding Summary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Summary}" AutomationProperties.LiveSetting="Polite" />
+        </DockPanel>
+      </Border>
+      <Border DockPanel.Dock="Top" Classes="findColumns">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" />
+            <ColumnDefinition Width="*" MaxWidth="220" />
+            <ColumnDefinition Width="52" />
+            <ColumnDefinition Width="44" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Classes="muted" Text="{l:T findResults.code}" TextTrimming="CharacterEllipsis" />
+          <TextBlock Grid.Column="1" Classes="muted" Text="{l:T findResults.file}" TextTrimming="CharacterEllipsis" />
+          <TextBlock Grid.Column="2" Classes="muted" Text="{l:T findResults.line}" TextAlignment="Right" TextTrimming="CharacterEllipsis" />
+          <TextBlock Grid.Column="3" Classes="muted" Text="{l:T findResults.col}" TextAlignment="Right" TextTrimming="CharacterEllipsis" />
+        </Grid>
+      </Border>
+      <ListBox x:Name="List" Classes="rows" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutomationProperties.Name="{l:T findResults.findResults}">
         <ListBox.Styles>
           <Style Selector="ListBoxItem" x:DataType="vm:FindResultRow">
-            <Setter Property="Padding" Value="4,1" />
             <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
           </Style>
         </ListBox.Styles>
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:FindResultRow">
-            <Grid ColumnDefinitions="3*,*,44,36" Opacity="{Binding IsReplaced, Converter={x:Static vm:FindResultsStyles.ReplacedOpacity}}">
-              <DockPanel Margin="{Binding Depth, Converter={x:Static vm:FindResultsStyles.Indent}}">
+            <Grid Height="22" Opacity="{Binding IsReplaced, Converter={x:Static vm:FindResultsStyles.ReplacedOpacity}}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="*" MaxWidth="220" />
+                <ColumnDefinition Width="52" />
+                <ColumnDefinition Width="44" />
+              </Grid.ColumnDefinitions>
+              <DockPanel Grid.ColumnSpan="{Binding Span}" Margin="{Binding Indent}">
                 <!-- A group's chevron: clicking it (or Left and Right, or a double-click on the header) collapses and expands it. -->
-                <Border DockPanel.Dock="Left" Classes="groupToggle" IsVisible="{Binding IsCollapsible}" Background="Transparent" Cursor="Hand" Margin="0,0,2,0">
-                  <controls:Icon Kind="{Binding Chevron}" Width="14" Height="14" />
+                <Border DockPanel.Dock="Left" Classes="groupToggle" IsVisible="{Binding IsCollapsible}" Background="Transparent" Cursor="Hand" Width="16" Height="22">
+                  <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" Foreground="{DynamicResource Shell.MutedForeground}" />
                 </Border>
-                <controls:HighlightedText Source="{Binding Code}" Highlights="{Binding Highlights}"
-                                          FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
-                                          FontWeight="{Binding IsHeader, Converter={x:Static vm:FindResultsStyles.Weight}}" TextTrimming="CharacterEllipsis" />
+                <controls:Icon DockPanel.Dock="Left" Kind="{Binding HeaderIcon}" IsVisible="{Binding IsHeader}" Margin="2,0,6,0" VerticalAlignment="Center" />
+                <!-- A header: its folder or file and the count right after it. -->
+                <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Left" IsVisible="{Binding IsHeader}">
+                  <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}"
+                             FontWeight="{Binding IsFileHeader, Converter={x:Static vm:FindResultsStyles.Weight}}" />
+                  <Border Grid.Column="1" Classes="badge" Margin="6,0,0,0" IsVisible="{Binding HasCount}">
+                    <TextBlock Text="{Binding Count}" />
+                  </Border>
+                </Grid>
+                <!-- A match: the line in the editor's colors, the match highlighted. -->
+                <controls:CodeLine Source="{Binding Code}" Highlights="{Binding Highlights}" Path="{Binding Path}" IsVisible="{Binding !IsHeader}"
+                                   FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Code}" />
               </DockPanel>
-              <TextBlock Grid.Column="1" Text="{Binding FileName}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" Margin="8,0,0,0" />
-              <TextBlock Grid.Column="2" Text="{Binding LineLabel}" FontSize="12" TextTrimming="CharacterEllipsis" />
-              <TextBlock Grid.Column="3" Text="{Binding ColumnLabel}" FontSize="12" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="1" Classes="muted" Text="{Binding FileName}" IsVisible="{Binding !IsHeader}" Margin="8,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+              <TextBlock Grid.Column="2" Classes="muted findNumber" Text="{Binding LineLabel}" IsVisible="{Binding !IsHeader}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="3" Classes="muted findNumber" Text="{Binding ColumnLabel}" IsVisible="{Binding !IsHeader}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>

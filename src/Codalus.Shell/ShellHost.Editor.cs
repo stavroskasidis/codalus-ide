@@ -207,6 +207,10 @@ public sealed partial class ShellHost : IEditorServices
         InitializeSync();
         InitializeColors(); // before ThemeChanged's subscribers: they read the customized theme
         Theme.Changed += (_, _) => ThemeChanged?.Invoke(this, EventArgs.Empty);
+
+        // Lines of code outside the editor (Find Results, the WCF Test Client's response) take the editor's colors (M34h).
+        Editor.CodeColors.Configure(Languages.LanguageIdOf, TextMate.GrammarFor, id => id is null || id == Theme.ActiveTheme ? EditorTheme : Editor.EditorTheme.For(id));
+        ThemeChanged += (_, _) => Editor.CodeColors.NotifyChanged();
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
         Layout.ActiveDocumentChanged += (_, _) => RememberActiveDocument();

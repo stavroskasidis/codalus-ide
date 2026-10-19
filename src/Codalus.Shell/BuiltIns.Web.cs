@@ -15,6 +15,7 @@ internal static partial class BuiltIns
     public const string WebKeybindings = """
         [
           { "key": "ctrl+alt+r", "command": "http.sendRequest", "when": "editorTextFocus && editorLanguageId == http" },
+          { "key": "f5", "command": "wcf.invoke", "when": "focusedView == wcfTestClient && !debugStopped" },
           { "win": "ctrl+alt+backspace", "mac": "ctrl+alt+backspace", "linux": "ctrl+shift+alt+r", "command": "npm.taskRunner", "when": "keyboardScheme != vscode" }
         ]
         """;
@@ -92,6 +93,7 @@ internal static partial class BuiltIns
         Add("web.serviceReferences", "Service References (OpenAPI, gRPC, WCF)…", "ASP.NET Core", project => { shell.OpenServiceReferences(project); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
         Add("wcf.addServiceReference", "Add Service Reference (WCF)…", "WCF", project => { shell.OpenServiceReferences(project, ServiceReferencesViewModel.WcfKind); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
         Add("wcf.testClient", "WCF Test Client", "WCF", address => { shell.OpenWcfTestClient(address); return Task.CompletedTask; });
+        Add("wcf.invoke", "Invoke the Operation", "WCF", _ => shell.InvokeWcfOperationAsync(), "focusedView == wcfTestClient && !debugStopped");
         Add("web.installLanguageServers", "Install the Web Language Servers (Node.js)", "Web", _ => shell.InstallWebLanguagesAsync());
         Add("npm.taskRunner", "Task Runner Explorer", "npm", _ => shell.ShowTaskRunnerAsync());
         Add("npm.runScript", "Run npm Script…", "npm", _ => shell.PickNpmScriptAsync(), "solutionOpen");
