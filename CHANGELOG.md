@@ -48,6 +48,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Fixed:** the lines sticky scroll pins at the top of the editor drew over the branch picker and other quick picks, the command palette, Find and Replace, dialogs and the editor's find widget. They now stay under them.
 - **Fixed:** after you saved a document, Codalus IDE could warn that it had "changed on disk, and you have unsaved changes": on a busy machine, the file watcher could check the file before the save had recorded it. A document's own save is no longer reported; a change made elsewhere still is.
 - **Fixed:** after you closed a solution or folder and opened another, a design-time build of the closed one that finished late could bring its projects back into the new solution's C# language service. Results from a closed solution are now dropped.
+- **Fixed:** running an Aspire AppHost, Aspire's orchestrator could miss that a project it had just asked Codalus IDE to start was running: when the project started right after the orchestrator connected, the IDE sent the program's process id before it had finished accepting that connection, and the message was dropped. Messages sent before the orchestrator listens now wait for it.
 
 ## 0.3.0
 
