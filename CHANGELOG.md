@@ -48,6 +48,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Fixed:** the lines sticky scroll pins at the top of the editor drew over the branch picker and other quick picks, the command palette, Find and Replace, dialogs and the editor's find widget. They now stay under them.
 - **Fixed:** after you saved a document, Codalus IDE could warn that it had "changed on disk, and you have unsaved changes": on a busy machine, the file watcher could check the file before the save had recorded it. A document's own save is no longer reported; a change made elsewhere still is.
 - **Fixed:** after you closed a solution or folder and opened another, a design-time build of the closed one that finished late could bring its projects back into the new solution's C# language service. Results from a closed solution are now dropped.
+- **Fixed:** the Benchmarks window could leave a run out of the selected benchmark's history: when a run measured exactly the same as the one before (a Dry job's single iteration can, on Windows), the history wasn't refreshed. It now always shows the run.
 
 ## 0.3.0
 
