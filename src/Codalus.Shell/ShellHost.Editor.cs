@@ -996,7 +996,7 @@ public sealed partial class ShellHost : IEditorServices
     {
         if (Layout.ActiveDocument?.FilePath is { Length: > 0 } path && Window?.Clipboard is { } clipboard)
         {
-            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, path).ConfigureAwait(true);
+            await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, path).ConfigureAwait(true);
         }
     }
 

@@ -132,7 +132,7 @@ public sealed partial class ShellHost : IAiChatHost
     {
         if (Window?.Clipboard is { } clipboard)
         {
-            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text).ConfigureAwait(true);
+            await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, text).ConfigureAwait(true);
             ShowMessage(Localizer.Get("msg.ai.copied", "Copied."));
         }
     }

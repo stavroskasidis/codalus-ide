@@ -16,6 +16,34 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class SweepFindingsTests
 {
+    [Fact]
+    public async Task A_clipboard_another_program_holds_is_tried_again_then_reported_not_thrown()
+    {
+        // Windows' OpenClipboard fails while another program holds the clipboard, and Avalonia throws COMException: copy
+        // and paste failed with an error (or an unobserved exception) instead of saying so.
+        const int cantOpen = unchecked((int)0x800401D0);
+        var busy = 0;
+        void OnBusy() => busy++;
+        Infrastructure.SafeClipboard.Busy += OnBusy;
+        try
+        {
+            var calls = 0;
+            Assert.Equal("text", await Infrastructure.SafeClipboard.TryAsync(() => ++calls < 2
+                ? throw new System.Runtime.InteropServices.COMException("OpenClipboard Failed", cantOpen)
+                : Task.FromResult<string?>("text")));
+            Assert.Equal((2, 0), (calls, busy));
+
+            Assert.Null(await Infrastructure.SafeClipboard.TryAsync<string?>(() => throw new System.Runtime.InteropServices.COMException("OpenClipboard Failed", cantOpen)));
+            Assert.Equal(1, busy);
+            Assert.True(Infrastructure.SafeClipboard.IsBusy(new AggregateException(new System.Runtime.InteropServices.COMException("x", cantOpen))));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Infrastructure.SafeClipboard.TryAsync<string?>(() => throw new InvalidOperationException()));
+        }
+        finally
+        {
+            Infrastructure.SafeClipboard.Busy -= OnBusy;
+        }
+    }
+
     [AvaloniaFact]
     public async Task A_csharp_references_CodeLens_runs_Find_All_References()
     {

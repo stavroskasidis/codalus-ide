@@ -433,7 +433,7 @@ public sealed partial class ShellHost : IHostingActions
     {
         if (row.UserCode is { } code && Window?.Clipboard is { } clipboard)
         {
-            _ = Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, code);
+            _ = Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, code);
         }
 
         if (row.VerificationUri is { } uri)

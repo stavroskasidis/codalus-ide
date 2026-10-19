@@ -189,7 +189,7 @@ public sealed partial class ShellHost
     {
         if (Window?.Clipboard is { } clipboard)
         {
-            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, code).ConfigureAwait(true);
+            await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, code).ConfigureAwait(true);
         }
 
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri))

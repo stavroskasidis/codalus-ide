@@ -1121,7 +1121,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         if (Node?.Path is { } path && _shell.Window?.Clipboard is { } clipboard)
         {
-            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, path).ConfigureAwait(true);
+            await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, path).ConfigureAwait(true);
         }
     }
 

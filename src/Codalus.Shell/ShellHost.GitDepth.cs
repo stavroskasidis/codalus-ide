@@ -224,7 +224,7 @@ public sealed partial class ShellHost
             case "copyHash":
                 if (Window?.Clipboard is { } clipboard)
                 {
-                    await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, commit.Hash).ConfigureAwait(true);
+                    await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, commit.Hash).ConfigureAwait(true);
                 }
 
                 break;

@@ -226,6 +226,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Theme.Changed += (_, _) => UpdateStatusItems();
         // Any quick pick (the palette is the shared one): Escape closes it before it hides the toasts.
         Palette.Opened += (_, _) => Workbench.Context.Set("inCommandPalette", true);
+        Infrastructure.SafeClipboard.Busy += OnClipboardBusy;
         Palette.Closed += (_, _) => Workbench.Context.Set("inCommandPalette", false);
 
         DiscoverPlugins();
@@ -969,8 +970,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
     }
 
+    /// <summary>Another program held the clipboard through a copy or a paste's retries.</summary>
+    private void OnClipboardBusy() => Ui.Post(() => StatusBar.ShowMessage(
+        Localizer.Get("msg.clipboard.busy", "The clipboard is in use by another program. Try again in a moment."), TimeSpan.FromSeconds(6)));
+
     public async ValueTask DisposeAsync()
     {
+        Infrastructure.SafeClipboard.Busy -= OnClipboardBusy;
         var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
         await FlushSolutionStateAsync().ConfigureAwait(false);

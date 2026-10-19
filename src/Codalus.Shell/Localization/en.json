@@ -1516,6 +1516,7 @@
   "msg.buildDepth.theCustomToolOfFailed": "The custom tool of {0} failed: {1}",
   "msg.buildDepth.theCustomToolOfFailed2": "The custom tool of {0} failed: {1}",
   "msg.builtInsBuild.thereIsNoBuildLogSet": "There is no build log: set Build Log File Verbosity to write one.",
+  "msg.clipboard.busy": "The clipboard is in use by another program. Try again in a moment.",
   "msg.codeSearch.chipAll": "all",
   "msg.codeSearch.chipFiles": "files (f:)",
   "msg.codeSearch.chipMembers": "members (m:)",

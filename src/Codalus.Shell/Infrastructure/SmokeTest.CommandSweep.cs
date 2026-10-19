@@ -1496,6 +1496,11 @@ internal sealed partial class SmokeTest
 
     private void OnSweepUnhandled(object? sender, DispatcherUnhandledExceptionEventArgs e)
     {
+        if (SafeClipboard.IsBusy(e.Exception))
+        {
+            return; // another program holds the clipboard: the app says so on the status bar (App.OnUnhandledException)
+        }
+
         lock (_sweepUnhandled)
         {
             var frame = e.Exception.StackTrace?.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Contains("Codalus.", StringComparison.Ordinal));
@@ -1505,6 +1510,11 @@ internal sealed partial class SmokeTest
 
     private void OnSweepUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
     {
+        if (SafeClipboard.IsBusy(e.Exception))
+        {
+            return; // the editor's Copy with a busy clipboard: the app says so (App.OnUnobservedTaskException)
+        }
+
         lock (_sweepUnhandled)
         {
             // Found when the task is collected: it may be an earlier command's.
