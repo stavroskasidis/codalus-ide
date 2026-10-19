@@ -55,6 +55,13 @@ public sealed class SolutionService : IAsyncDisposable
     private readonly ConcurrentDictionary<string, string> _activeFrameworks = new(PathComparer);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private SupervisedProcess? _host;
+
+    /// <summary>
+    /// The build host whose notifications the service takes: it changes when a solution opens and when it closes. A
+    /// host that is shutting down still delivers what it sent before it stopped (the design-time build it finished
+    /// first), and that belongs to the solution that closed.
+    /// </summary>
+    private int _hostGeneration;
     private SolutionInfo? _solution;
     private OpenSolutionParams? _openParams;
 
@@ -179,9 +186,10 @@ public sealed class SolutionService : IAsyncDisposable
                 launch = place(launch) ?? throw new InvalidOperationException("The build host can't run on the remote machine.");
             }
 
+            var generation = Interlocked.Increment(ref _hostGeneration);
             var host = new SupervisedProcess("build host", launch, (_policy ?? SupervisionPolicy.Default) with { FinalExitCodes = [NoSdkExitCode] })
             {
-                ConfigureConnection = Configure,
+                ConfigureConnection = connection => Configure(connection, generation),
                 Initialize = InitializeAsync,
             };
             host.Crashed += (_, e) => HostCrashed?.Invoke(this, e);
@@ -217,6 +225,7 @@ public sealed class SolutionService : IAsyncDisposable
     private async Task CloseCoreAsync()
     {
         var hadSolution = _solution is not null;
+        Interlocked.Increment(ref _hostGeneration); // what the closing host still sends is dropped
         _solution = null;
         _openParams = null;
         _projects.Clear();
@@ -237,11 +246,21 @@ public sealed class SolutionService : IAsyncDisposable
         }
     }
 
-    private void Configure(JsonRpcConnection connection)
+    private void Configure(JsonRpcConnection connection, int generation)
     {
         var json = ProjectJsonContext.Default;
+
+        // The solution's state comes from the open solution's host only. A closed solution's host finishes the
+        // design-time build it was running before it answers the shutdown, and sends the results: taken, they brought a
+        // closed folder's projects back after the close (the smoke test's EF step after the folder step, on macOS).
+        bool Current() => Volatile.Read(ref _hostGeneration) == generation;
         connection.OnNotification(ProjectMethods.SolutionChanged, json.SolutionInfo, solution =>
         {
+            if (!Current())
+            {
+                return;
+            }
+
             _solution = solution;
             foreach (var removed in _projects.Keys.Where(k => !solution.Projects.Any(p => PathComparer.Equals(p.Path, k))).ToList())
             {
@@ -253,27 +272,52 @@ public sealed class SolutionService : IAsyncDisposable
         });
         connection.OnNotification(ProjectMethods.ProjectEvaluated, json.ProjectInfo, project =>
         {
+            if (!Current())
+            {
+                return;
+            }
+
             _projects[project.Path] = project;
             ProjectChanged?.Invoke(this, project);
         });
         connection.OnNotification(ProjectMethods.EvaluationProgress, json.EvaluationProgressParams, progress =>
         {
+            if (!Current())
+            {
+                return;
+            }
+
             Progress = progress;
             ProgressChanged?.Invoke(this, progress);
         });
         connection.OnNotification(ProjectMethods.CompilerInputs, json.CompilerInputsInfo, inputs =>
         {
+            if (!Current())
+            {
+                return;
+            }
+
             _compilerInputs[inputs.Path] = inputs;
             CompilerInputsChanged?.Invoke(this, inputs);
         });
         connection.OnNotification(ProjectMethods.DesignTimeProgress, json.DesignTimeProgressParams, progress =>
         {
+            if (!Current())
+            {
+                return;
+            }
+
             DesignTimeProgress = progress;
             DesignTimeProgressChanged?.Invoke(this, progress);
         });
         connection.OnNotification(ProjectMethods.RestoreOutput, json.RestoreOutputParams, p => RestoreOutput?.Invoke(this, p.Line));
         connection.OnNotification(ProjectMethods.RestoreState, json.RestoreStateParams, p =>
         {
+            if (!Current())
+            {
+                return;
+            }
+
             RestoreState = p.State;
             RestoreStateChanged?.Invoke(this, new RestoreStateChangedEventArgs(p.State, p.Message));
         });

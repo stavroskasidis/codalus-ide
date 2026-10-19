@@ -1682,7 +1682,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Data solution is open", 300).ConfigureAwait(true);
         var restore = await shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None).ConfigureAwait(true);
         Check(restore.Succeeded, "dotnet tool restore gets the fixture's dotnet-ef:\n" + Tail(restore.Output, 1500));
-        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 1 }, "the C# workspace is ready", 300).ConfigureAwait(true);
+        await WaitAsync(
+            () => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 1 },
+            () => $"the C# workspace is ready with Blogging alone (C# {shell.Languages.Status(ShellHost.CSharpLanguageId)?.ToString() ?? "not running"})",
+            300).ConfigureAwait(true);
 
         await shell.ShowEntityFrameworkAsync().ConfigureAwait(true);
         var ef = shell.EfExplorer;
