@@ -388,6 +388,8 @@ internal sealed partial class SmokeTest
     /// <summary>Merges the conflicting branch: git stops with the conflict in notes.txt (its exit code says so).</summary>
     private void GitMergeConflict()
     {
+        // git won't merge with changes staged (a command before may have staged some): unstaged, they stay in the files.
+        GitIn(_sweepFolder, "reset", "-q");
         var git = Environment.GetEnvironmentVariable(Workbench.Git.GitService.EnvironmentVariable) is { Length: > 0 } custom ? custom : "git";
         var start = new ProcessStartInfo(git) { WorkingDirectory = _sweepFolder, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         foreach (var argument in new[] { "merge", "--no-edit", SweepConflictBranch })
@@ -396,10 +398,9 @@ internal sealed partial class SmokeTest
         }
 
         using var process = Process.Start(start) ?? throw new SmokeFailure("git did not start.");
-        process.StandardOutput.ReadToEnd();
-        process.StandardError.ReadToEnd();
+        var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Check(File.Exists(Path.Combine(_sweepFolder, ".git", "MERGE_HEAD")), "git merge stops with a conflict");
+        Check(File.Exists(Path.Combine(_sweepFolder, ".git", "MERGE_HEAD")), $"git merge stops with a conflict (git said: {output.Trim()})");
     }
 
     /// <summary>Ends a merge the GitMerge context left in progress, so the other contexts see a plain repository.</summary>
