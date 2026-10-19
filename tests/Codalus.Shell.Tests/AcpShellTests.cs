@@ -52,10 +52,15 @@ public sealed class AcpShellTests
         var chat = f.Shell.AiChat;
         var count = chat.Chat.Turns.Count;
         chat.Input = question;
+        string State() => $"turns {chat.Chat.Turns.Count} (were {count}), CanSend {chat.CanSend}, IsBusy {chat.IsBusy}, IsAnswering {chat.IsAnswering}, IsAgentBlocked {chat.IsAgentBlocked} ({chat.AgentBlockedMessage}), input '{chat.Input}'";
+
+        // The previous turn stops streaming on the agent's thread; the chat stops answering a posted job later, and Send
+        // until then leaves the question in the box (as Enter does): wait until it can send (Windows CI, PR #74).
+        await ShellFixture.PumpUntil(() => chat.CanSend, 30, State);
         _ = chat.SendAsync();
-        await ShellFixture.PumpUntil(() => chat.Chat.Turns.Count > count, 30);
+        await ShellFixture.PumpUntil(() => chat.Chat.Turns.Count > count, 30, State);
         var turn = chat.Chat.Turns[^1];
-        await ShellFixture.PumpUntil(() => !turn.IsStreaming || f.Shell.Dialogs.IsOpen, 60);
+        await ShellFixture.PumpUntil(() => !turn.IsStreaming || f.Shell.Dialogs.IsOpen, 60, () => $"the turn streams ({State()})");
         return turn;
     }
 

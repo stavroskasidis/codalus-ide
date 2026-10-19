@@ -130,9 +130,17 @@ public sealed class ProjectSystemDepthTests
         var program = Path.Combine(appDir, "Program.cs");
         explorer.Reveal("f:" + program);
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("explorerItemInProject"));
-        f.Shell.Run("explorer.excludeFromProject");
-        await ShellFixture.PumpUntil(() => Read(app).Contains("<Compile Remove=\"Program.cs\" />", StringComparison.Ordinal), seconds: 60);
-        await ShellFixture.PumpUntil(() => Find(explorer.Root!, "f:" + program) is { IsExcluded: true }, seconds: 60);
+        await f.Shell.Workbench.Commands.ExecuteAsync("explorer.excludeFromProject", TestContext.Current.CancellationToken);
+        Assert.Contains("<Compile Remove=\"Program.cs\" />", Read(app), StringComparison.Ordinal);
+
+        // Once the command has run, the tree and the selection's context keys say so after the posted refresh, not a file
+        // watcher's debounce later: the command sweep's palette run of it found the item gone in between (0.4.0's release).
+        ShellFixture.Pump();
+        Assert.True(Find(explorer.Root!, "f:" + program) is { IsExcluded: true }, "the tree shows Program.cs excluded once the command has run");
+        Assert.Equal("Program.cs", explorer.Selected?.Name);
+        Assert.Equal((true, false), (f.Shell.Workbench.Context.GetValue("explorerItemExcluded"), f.Shell.Workbench.Context.GetValue("explorerItemInProject")));
+        Assert.True(f.Shell.Workbench.Commands.IsEnabled("explorer.includeInProject"));
+        Assert.False(f.Shell.Workbench.Commands.IsEnabled("explorer.excludeFromProject"));
 
         // Without Show All Files, the excluded file is gone from the tree.
         explorer.ShowAllFiles = false;
