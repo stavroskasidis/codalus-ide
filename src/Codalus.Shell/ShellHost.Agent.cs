@@ -166,9 +166,9 @@ public sealed partial class ShellHost
     }
 
     /// <summary>The Error List's rows as text (of one file, or all; at most 200).</summary>
-    private string DiagnosticsText(string? path)
+    private string DiagnosticsText(string? path, Func<string, bool>? outside = null)
     {
-        var rows = ErrorList.Rows.Where(r => path is null || SolutionPaths.Comparer.Equals(r.Path, path)).Take(200).ToList();
+        var rows = ErrorList.Rows.Where(r => (path is null || SolutionPaths.Comparer.Equals(r.Path, path)) && (outside is null || (r.Path.Length > 0 && !outside(r.Path)))).Take(200).ToList();
         if (rows.Count == 0)
         {
             return "No errors or warnings.";
@@ -199,6 +199,14 @@ public sealed partial class ShellHost
     {
         var root = Solutions.Solution?.Directory;
         async Task<bool> Excluded(string path) => await Ai.Exclusions.IsExcludedAsync(path, root, cancellationToken).ConfigureAwait(true);
+
+        // An external agent's session pipe (M48, ADR 0079): only while it may run, and only what's under its workspace.
+        if (agent is not null && ExternalAgents.WhyNot() is { } reason)
+        {
+            throw new McpException(reason);
+        }
+
+        bool Outside(string path) => agent is not null && (root is null || !Codalus.Workbench.FileSystem.FileSystems.IsUnder(Path.GetFullPath(path), Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
         string text;
         switch (tool)
         {
@@ -231,13 +239,13 @@ public sealed partial class ShellHost
                 var open = new StringBuilder();
                 foreach (var editor in Editors.Select(e => e.Model).Distinct())
                 {
-                    if (!await Excluded(editor.Path).ConfigureAwait(true))
+                    if (!Outside(editor.Path) && !await Excluded(editor.Path).ConfigureAwait(true))
                     {
                         open.Append(ReferenceEquals(editor, ActiveEditor?.Model) ? "* " : "- ").AppendLine(editor.Path);
                     }
                 }
 
-                if (ActiveEditor?.Controller?.Editor is { SelectionLength: > 0 } selected && ActiveEditor.Model is { } active && !await Excluded(active.Path).ConfigureAwait(true))
+                if (ActiveEditor?.Controller?.Editor is { SelectionLength: > 0 } selected && ActiveEditor.Model is { } active && !Outside(active.Path) && !await Excluded(active.Path).ConfigureAwait(true))
                 {
                     open.AppendLine().Append("Selection in ").Append(active.Path).AppendLine(":").AppendLine(selected.SelectedText);
                 }
@@ -246,7 +254,9 @@ public sealed partial class ShellHost
                 break;
             case "get_diagnostics":
                 var path = args.ValueKind == JsonValueKind.Object && args.TryGetProperty("path", out var p) && p.GetString() is { Length: > 0 } file ? Path.GetFullPath(file, root ?? Environment.CurrentDirectory) : null;
-                text = path is not null && await Excluded(path).ConfigureAwait(true) ? "That file is excluded from AI." : DiagnosticsText(path);
+                text = path is not null && Outside(path) ? "That file isn't in the workspace."
+                    : path is not null && await Excluded(path).ConfigureAwait(true) ? "That file is excluded from AI."
+                    : DiagnosticsText(path, agent is null ? null : Outside);
                 break;
             case "get_build_output":
                 text = BuildOutputText();

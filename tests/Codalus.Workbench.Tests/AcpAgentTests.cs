@@ -25,6 +25,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
     private readonly FakeHost _host = new();
     private readonly AiChat _chat;
     private bool _trusted = true;
+    private string _workspace;
 
     public AcpAgentTests()
     {
@@ -40,7 +41,8 @@ public sealed class AcpAgentTests : IAsyncDisposable
         _workbench = new WorkbenchServices(AppPaths.Resolve(PlatformInfo.Current, _ => null, Path.Combine(_root, ".user")), PlatformInfo.Current, workspaceFile, watchFiles: false);
         _workbench.Settings.Register(AiSettings.Descriptors(ContributionSource.Shell));
         var models = new LanguageModelService(new PluginManager(_workbench, _ => Codalus.Rpc.ProcessLaunchInfo.FromPath("none"), "test", new Codalus.Rpc.SupervisionPolicy()));
-        _ai = new AiService(_workbench.Settings, models, _workbench.Output, () => _root, () => _trusted);
+        _workspace = _root;
+        _ai = new AiService(_workbench.Settings, models, _workbench.Output, () => _workspace, () => _trusted);
         _agents = new AcpAgents(_workbench.Settings, _ai);
         _chat = new AiChat(_ai);
     }
@@ -69,6 +71,12 @@ public sealed class AcpAgentTests : IAsyncDisposable
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>The dotnet that runs the tests, by its absolute path (it needn't be on the PATH).</summary>
+    private static string Dotnet =>
+        Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } host && File.Exists(host) ? host
+        : (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(d => Path.Combine(d, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")).First(File.Exists);
+
     private async Task ConfigureAsync(string extraEnv = "")
     {
         await _workbench.Settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, Ct);
@@ -78,7 +86,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
             env[pair.Split('=')[0]] = pair.Split('=')[1];
         }
 
-        var agents = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["stand-in"] = new { command = "dotnet", args = new[] { StandInAgent }, env } });
+        var agents = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["stand-in"] = new { command = Dotnet, args = new[] { StandInAgent }, env } });
         await _workbench.Settings.SetAsync(AcpAgents.AgentsSetting, agents, SettingScope.User, Ct);
     }
 
@@ -304,7 +312,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
             Assert.Equal((null, "SIGKILL"), (status.ExitCode, status.Signal));
             Assert.Contains("stopped the command after 1 seconds", terminal.Output.Text, StringComparison.Ordinal);
 
-            var (_, many) = AcpTerminals.CommandLine("dotnet", ["--help"], _root, null);
+            var (_, many) = AcpTerminals.CommandLine(Dotnet, ["--help"], _root, null);
             var cut = await terminals.StartAsync("dotnet --help", many, 64, Ct);
             await cut.Exited.WaitAsync(TimeSpan.FromSeconds(60), Ct);
             Assert.True(cut.Output.Truncated);
@@ -372,7 +380,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
     public async Task Agents_come_from_the_users_settings_only()
     {
         await _workbench.Settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, Ct);
-        var agents = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["evil"] = new { command = "dotnet", args = new[] { StandInAgent } } });
+        var agents = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["evil"] = new { command = Dotnet, args = new[] { StandInAgent } } });
         await _workbench.Settings.SetAsync(AcpAgents.AgentsSetting, agents, SettingScope.Workspace, Ct);
         Assert.Empty(_agents.Configured);
         var turn = await _chat.SendExternalAsync("hello", [], _agents, "evil", _host, Ct);
@@ -382,6 +390,139 @@ public sealed class AcpAgentTests : IAsyncDisposable
         using var parsed = JsonDocument.Parse("""{"pi":{"command":"npx","args":["pi-acp@0.0.34"],"env":{"K":"V"}},"broken":{"args":[]}}""");
         var pi = Assert.Single(AcpAgents.Parse(parsed.RootElement));
         Assert.Equal(("pi", "npx", "pi-acp@0.0.34", "V"), (pi.Key, pi.Value.Command, pi.Value.Args.Single(), pi.Value.Env["K"]));
+    }
+
+    [Fact]
+    public async Task A_command_shows_the_variables_the_agent_sets_and_refuses_ones_that_change_what_runs()
+    {
+        await ConfigureAsync();
+        _host.AllowCommands = true;
+
+        // An ordinary variable is shown in the approval with the command line (its value redacted when it's a secret).
+        var shown = await AskAsync("runenv GREETING=hello echo with-env");
+        Assert.StartsWith("Exit 0:", shown.Answer, StringComparison.Ordinal);
+        var prompt = _host.CommandPrompts.Single();
+        Assert.Equal("echo with-env", prompt.CommandLine);
+        Assert.Equal(["GREETING=hello"], prompt.Environment);
+        await AskAsync("runenv API_TOKEN=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB echo secret");
+        Assert.DoesNotContain("ghp_0123456789abcdefghijklmnopqrstuvwxyzAB", _host.CommandPrompts[^1].Environment[0], StringComparison.Ordinal);
+
+        // One that changes what an allowed command runs is refused before anyone is asked.
+        foreach (var variable in new[] { "PATH=/tmp/evil", "GIT_CONFIG_PARAMETERS='core.pager=sh'", "NODE_OPTIONS=--require=/tmp/x.js", "LD_PRELOAD=/tmp/x.so", "dyld_insert_libraries=/tmp/x" })
+        {
+            var count = _host.CommandPrompts.Count;
+            var refused = await AskAsync("runenv " + variable + " echo should-not-run");
+            Assert.StartsWith("Run failed: The command sets " + variable.Split('=')[0] + ", which changes what a command runs.", refused.Answer, StringComparison.Ordinal);
+            Assert.Equal(count, _host.CommandPrompts.Count);
+        }
+
+        Assert.Equal("NPM_CONFIG_REGISTRY", AcpTerminals.RefusedVariable(["HELLO", "NPM_CONFIG_REGISTRY"]));
+        Assert.Null(AcpTerminals.RefusedVariable(["HELLO", "RUST_LOG", "CI"]));
+    }
+
+    [Fact]
+    public async Task Turning_ai_off_stops_a_running_agent_and_its_requests_are_refused_while_it_may_not_run()
+    {
+        await ConfigureAsync();
+        Assert.Null((await AskAsync("hello")).Error);
+        var session = _agents.Current!;
+
+        // Trust gone (the folder reopened untrusted): the agent's requests are refused, whatever it asks.
+        _trusted = false;
+        var read = await Assert.ThrowsAsync<Codalus.Rpc.JsonRpcHandlerException>(() => session.ReadTextFileAsync(new AcpReadTextFileRequest { SessionId = "s", Path = Path.Combine(_root, "src", "A.cs") }, Ct));
+        Assert.Contains("only in trusted folders", read.Message, StringComparison.Ordinal);
+        await Assert.ThrowsAsync<Codalus.Rpc.JsonRpcHandlerException>(() => session.CreateTerminalAsync(new AcpCreateTerminalRequest { SessionId = "s", Command = "echo", Args = ["hi"] }, Ct));
+        await _agents.EnforceAsync();
+        Assert.Null(_agents.Current);
+        Assert.False(session.IsAlive);
+
+        // AI turned off while one runs: it stops.
+        _trusted = true;
+        Assert.Null((await AskAsync("hello")).Error);
+        var second = _agents.Current!;
+        await _workbench.Settings.SetAsync(AiService.EnabledSetting, false, SettingScope.User, Ct);
+        await WaitUntilAsync(() => _agents.Current is null && !second.IsAlive);
+    }
+
+    [Fact]
+    public async Task A_remote_window_refuses_to_start_an_agent()
+    {
+        await ConfigureAsync();
+        _agents.IsRemoteWindow = () => true;
+        var turn = await AskAsync("hello");
+        Assert.Contains("don't run in a remote window", turn.Error, StringComparison.Ordinal);
+        Assert.False(File.Exists(_log)); // never started
+    }
+
+    [Fact]
+    public async Task A_mistyped_entry_is_skipped_never_a_crash()
+    {
+        using var parsed = JsonDocument.Parse("""{"number":{"command":5},"object":{"command":{"x":1}},"text":"npx","array":[],"ok":{"command":"npx","args":"pi-acp","env":{"K":1,"L":"v"}}}""");
+        var ok = Assert.Single(AcpAgents.Parse(parsed.RootElement));
+        Assert.Equal(("ok", "npx", 0, 1), (ok.Key, ok.Value.Command, ok.Value.Args.Count, ok.Value.Env.Count));
+        await _workbench.Settings.SetAsync(AcpAgents.AgentsSetting, parsed.RootElement.Clone(), SettingScope.User, Ct);
+        Assert.Equal(["ok"], _agents.Configured.Keys);
+    }
+
+    [Fact]
+    public async Task An_agent_started_while_the_folder_changed_doesnt_stay_for_the_old_folder()
+    {
+        await ConfigureAsync();
+        var other = Path.Combine(_root, "src");
+        _host.OnStart = () => _workspace = other;
+        var turn = await AskAsync("hello");
+        Assert.Contains("The folder changed while the agent started", turn.Error, StringComparison.Ordinal);
+        Assert.Null(_agents.Current);
+        Assert.Equal(_host.McpStarted, _host.McpStopped);
+    }
+
+    [Fact]
+    public async Task The_agent_starts_in_a_neutral_folder_and_the_session_carries_the_workspace()
+    {
+        var neutral = Path.Combine(_root, ".user", "external-agents");
+        _agents.ProcessDirectory = neutral;
+        await ConfigureAsync();
+        Assert.Null((await AskAsync("hello")).Error);
+        var started = File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).First(m => m.TryGetProperty("cwd", out _));
+        Assert.Equal(Path.GetFullPath(neutral).TrimEnd(Path.DirectorySeparatorChar), Path.GetFullPath(started.GetProperty("cwd").GetString()!).TrimEnd(Path.DirectorySeparatorChar));
+        Assert.Equal(_root, Received("session/new").Single().GetProperty("params").GetProperty("cwd").GetString());
+    }
+
+    [Fact]
+    public async Task Output_limits_are_clamped_reports_are_throttled_and_only_the_shown_tail_is_redacted()
+    {
+        var terminals = new AcpTerminals();
+        var reports = 0;
+        terminals.Changed += (_, _) => Interlocked.Increment(ref reports);
+        await using (terminals)
+        {
+            var (display, launch) = OperatingSystem.IsWindows()
+                ? AcpTerminals.CommandLine("for /l %i in (1,1,3000) do @echo line %i", [], _root, null)
+                : AcpTerminals.CommandLine("i=0; while [ $i -lt 3000 ]; do echo line $i; i=$((i+1)); done", [], _root, null);
+            var terminal = await terminals.StartAsync(display, launch, long.MaxValue, Ct);
+            Assert.Equal(AcpTerminals.MaxOutputLimit, terminal.OutputLimit);
+            await terminal.Exited.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+            Assert.Contains("line 2999", terminal.Output.Text, StringComparison.Ordinal);
+            Assert.True(reports < 1000, $"{reports} reports for 3000 lines");
+        }
+
+        // The step's output: the end, redacted; a secret far before the end isn't in it, one near the end is redacted.
+        var raw = "password=early-secret\n" + new string('x', 40_000) + "\nlast line password=hunter2\n";
+        var shown = AcpAgentSession.ShownOutput(raw);
+        Assert.StartsWith("…", shown, StringComparison.Ordinal);
+        Assert.Contains("last line password=[redacted]", shown, StringComparison.Ordinal);
+        Assert.DoesNotContain("early-secret", shown, StringComparison.Ordinal);
+        Assert.DoesNotContain("hunter2", shown, StringComparison.Ordinal);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(started.Elapsed < TimeSpan.FromSeconds(30), "Timed out.");
+            await Task.Delay(20, Ct);
+        }
     }
 
     [Fact]
@@ -419,6 +560,11 @@ public sealed class AcpAgentTests : IAsyncDisposable
 
         public List<(string CommandLine, string Folder)> Commands { get; } = [];
 
+        public List<AcpCommandPrompt> CommandPrompts { get; } = [];
+
+        /// <summary>Runs when the session asks for its <c>codalus mcp</c> entry, during its start (tests change the folder there).</summary>
+        public Action? OnStart { get; set; }
+
         public List<IReadOnlyList<AcpAuthMethod>> SignIns { get; } = [];
 
         public Func<IReadOnlyList<AcpAuthMethod>, AcpAuthMethod?> SignIn { get; set; } = _ => null;
@@ -452,11 +598,12 @@ public sealed class AcpAgentTests : IAsyncDisposable
             return PermissionAsync is { } ask ? ask(prompt, cancellationToken) : Task.FromResult(Permission(prompt));
         }
 
-        public Task<bool> ApproveCommandAsync(string agent, string commandLine, string folder, CancellationToken cancellationToken)
+        public Task<bool> ApproveCommandAsync(AcpCommandPrompt prompt, CancellationToken cancellationToken)
         {
             lock (Commands)
             {
-                Commands.Add((commandLine, folder));
+                Commands.Add((prompt.CommandLine, prompt.Folder));
+                CommandPrompts.Add(prompt);
             }
 
             return Task.FromResult(AllowCommands);
@@ -480,6 +627,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
 
         public (AcpMcpServerStdio Server, IDisposable Lifetime)? StartMcpServer(string agent)
         {
+            OnStart?.Invoke();
             McpStarted++;
             var token = "token-" + (++_tokens).ToString(System.Globalization.CultureInfo.InvariantCulture);
             return (AcpAgents.CodalusMcpServer(Path.Combine(Path.GetTempPath(), "codalus"), null, null, token), new Stop(() => McpStopped++));

@@ -101,37 +101,15 @@ public sealed class AcpClient : IAsyncDisposable
         new AcpAuthCapabilities(Terminal: false));
 
     /// <summary>
-    /// How an agent's command starts: as it is configured, except a Windows <c>.cmd</c> or <c>.bat</c> on the PATH (npx is
-    /// <c>npx.cmd</c>), which only <c>cmd.exe</c> can run.
+    /// How an agent's command starts: as it is configured, except on Windows, where a script on the PATH (npx is
+    /// <c>npx.cmd</c>) starts through <see cref="WindowsCommand"/>.
     /// </summary>
     public static ProcessLaunchInfo Launch(AcpAgentConfig config, string workingDirectory, Func<string, string?>? environment = null)
     {
         environment ??= Environment.GetEnvironmentVariable;
         var env = config.Env.Count > 0 ? new Dictionary<string, string>(config.Env, StringComparer.Ordinal) : null;
-        if (OperatingSystem.IsWindows() && Path.GetExtension(config.Command).Length == 0 && !Path.IsPathRooted(config.Command)
-            && FindOnPath(config.Command, environment("PATH"), [".exe", ".com"]) is null && FindOnPath(config.Command, environment("PATH"), [".cmd", ".bat"]) is { } script)
-        {
-            return new ProcessLaunchInfo("cmd.exe", ["/d", "/c", script, .. config.Args]) { Environment = env, WorkingDirectory = workingDirectory };
-        }
-
-        return new ProcessLaunchInfo(config.Command, config.Args) { Environment = env, WorkingDirectory = workingDirectory };
-    }
-
-    private static string? FindOnPath(string command, string? path, IReadOnlyList<string> extensions)
-    {
-        foreach (var directory in (path ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            foreach (var extension in extensions)
-            {
-                var candidate = Path.Combine(directory, command + extension);
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-        }
-
-        return null;
+        var launch = OperatingSystem.IsWindows() ? WindowsCommand.Launch(config.Command, config.Args, environment("PATH")) : new ProcessLaunchInfo(config.Command, config.Args);
+        return launch with { Environment = env, WorkingDirectory = workingDirectory };
     }
 
     /// <summary>Starts the agent in <paramref name="workingDirectory"/> and initializes the connection (protocol version 1).</summary>

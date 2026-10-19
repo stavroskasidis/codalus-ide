@@ -35,6 +35,9 @@ public static class StandInAcpAgent
     public static async Task<int> RunAsync(Stream input, Stream output)
     {
         var agent = new Agent(output, Environment.GetEnvironmentVariable("ACP_FAKE_LOG"));
+
+        // Where the IDE started it (a neutral folder, not the workspace: a cloned repository's .npmrc mustn't steer npx).
+        agent.Log(new JsonObject { ["cwd"] = Environment.CurrentDirectory }.ToJsonString());
         using var reader = new StreamReader(input, new UTF8Encoding(false));
         while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
         {
@@ -249,7 +252,19 @@ public static class StandInAcpAgent
                     return "end_turn";
 
                 case "run":
-                    var created = await RequestAsync("terminal/create", new JsonObject { ["sessionId"] = _sessionId, ["command"] = rest, ["outputByteLimit"] = 10_000 }).ConfigureAwait(false);
+                case "runenv":
+                    // runenv NAME=VALUE <command>: the command with an environment variable the agent supplies.
+                    var request = new JsonObject { ["sessionId"] = _sessionId, ["outputByteLimit"] = 10_000 };
+                    if (word == "runenv")
+                    {
+                        var pair = rest.Split(' ', 2);
+                        var variable = pair[0].Split('=', 2);
+                        request["env"] = new JsonArray(new JsonObject { ["name"] = variable[0], ["value"] = variable[1] });
+                        rest = pair[1];
+                    }
+
+                    request["command"] = rest;
+                    var created = await RequestAsync("terminal/create", request).ConfigureAwait(false);
                     if (created["error"] is not null)
                     {
                         await ChunkAsync("agent_message_chunk", "Run failed: " + ErrorText(created)).ConfigureAwait(false);

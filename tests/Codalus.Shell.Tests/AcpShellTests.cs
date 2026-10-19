@@ -158,6 +158,22 @@ public sealed class AcpShellTests
 
         Assert.Contains("MCP server (external agent stand-in): get_solution", f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
 
+        // Through its session pipe, an agent sees only what's under the workspace: not a file open from elsewhere, nor its selection.
+        var outside = Path.Combine(f.UserData, "outside-notes.txt");
+        await File.WriteAllTextAsync(outside, "private notes outside the workspace\n");
+        await f.Shell.OpenFileAsync(outside);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == outside && f.Shell.ActiveEditor.Controller is not null, 30);
+        f.Shell.ActiveEditor!.Controller!.Editor.SelectAll();
+        await using (var client = await McpClient.StartAsync("codalus", new McpServerConfig(command, args, new Dictionary<string, string>()), CancellationToken.None))
+        {
+            using var empty = JsonDocument.Parse("{}");
+            var open = await client.CallAsync("get_open_files", empty.RootElement, CancellationToken.None);
+            Assert.DoesNotContain("outside-notes", open, StringComparison.Ordinal);
+            Assert.DoesNotContain("private notes", open, StringComparison.Ordinal);
+            using var elsewhere = JsonDocument.Parse(JsonSerializer.Serialize(new { path = outside }));
+            Assert.Contains("isn't in the workspace", await client.CallAsync("get_diagnostics", elsewhere.RootElement, CancellationToken.None), StringComparison.Ordinal);
+        }
+
         // A read step with its location: clicking it opens the file at the line.
         turn = await AskAsync(f, "read src/Greetings/Greeter.cs");
         await ShellFixture.PumpUntil(() => !turn.IsStreaming);
@@ -177,6 +193,14 @@ public sealed class AcpShellTests
         f.Shell.Dialogs.Accept();
         await ShellFixture.PumpUntil(() => !turn.IsStreaming, 30);
         Assert.StartsWith("Run failed: The user didn't allow the command.", turn.Answer, StringComparison.Ordinal);
+
+        // The variables the agent sets for a command show in its approval, under the command line.
+        turn = await AskAsync(f, "runenv GREETING=hello echo with-env");
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.Details.Any(d => d.Text == "echo with-env"), 30);
+        Assert.Contains(f.Shell.Dialogs.Details, d => d.Text == "With these environment variables:");
+        Assert.Contains(f.Shell.Dialogs.Details, d => d.Text == "GREETING=hello");
+        f.Shell.Dialogs.Accept();
+        await ShellFixture.PumpUntil(() => !turn.IsStreaming, 30);
 
         // A permission: Allow Once, Reject and Always Reject, never always allow; Enter rejects. macOS puts them in
         // the reverse order (the primary last).
@@ -264,12 +288,13 @@ public sealed class AcpShellTests
         Assert.Equal("0.93.0", claudeRow.KeyLabel);
         Assert.Equal("ACP wrapper for Anthropic's Claude · npx -y @agentclientprotocol/claude-agent-acp@0.93.0", claudeRow.Detail);
         Assert.Equal("goose acp", rows.Single(r => r.Label == "goose").Detail!.Split(" · ")[^1]);
+        Assert.Equal("tested with 1.55.0", rows.Single(r => r.Label == "goose").KeyLabel);
 
         // Choosing one asks first, in the dialog frame: what runs, that npx downloads it, and the label. Cancel writes nothing.
         f.Shell.Palette.Accept(claudeRow);
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         Assert.Equal("Add Claude?", f.Shell.Dialogs.Title);
-        Assert.Contains("Codalus will run npx -y @agentclientprotocol/claude-agent-acp@0.93.0 when you choose it. npx downloads that package from npm and runs it with your account's access to this folder.", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        Assert.Contains("When you start a chat with it, Codalus will run npx -y @agentclientprotocol/claude-agent-acp@0.93.0: npx downloads that package from npm the first time and runs it as you, with your account's access to your files, not only this folder's.", f.Shell.Dialogs.Message, StringComparison.Ordinal);
         Assert.Contains(Label, f.Shell.Dialogs.Message, StringComparison.Ordinal);
         Assert.Equal(("sparkle", "claude in your user settings (ai.agents)"), (f.Shell.Dialogs.Icon, f.Shell.Dialogs.Context));
         string[] buttons = ["Add", "Cancel"];
@@ -306,6 +331,40 @@ public sealed class AcpShellTests
         Assert.Null(f.Shell.ExternalAgents.Current);
     }
 
+    [AvaloniaFact]
+    public async Task Add_agent_offers_to_replace_an_entry_it_cant_use_and_a_mistyped_entry_doesnt_break_the_chat()
+    {
+        await using var f = ShellFixture.Create();
+        await SetUpAsync(f);
+        var chat = f.Shell.AiChat;
+        var settings = f.Shell.Workbench.Settings;
+        f.Shell.AgentSearchPath = Path.Combine(f.UserData, "empty-path"); // not this machine's PATH
+        using (var broken = JsonDocument.Parse("""{ "claude": { "args": [] }, "typo": { "command": 5 }, "list": [1] }"""))
+        {
+            await settings.SetAsync(AcpAgents.AgentsSetting, broken.RootElement.Clone(), SettingScope.User, CancellationToken.None);
+        }
+
+        // Mistyped entries are skipped: the chat and its picker go on.
+        chat.Refresh();
+        await ShellFixture.PumpUntil(() => chat.AgentChoices.SequenceEqual(["Built-in"]));
+
+        // claude is in the settings but unusable: not "added"; choosing it asks to replace it.
+        await OpenAddAgentAsync(f);
+        var row = f.Shell.Palette.Rows.Single(r => r.Label == "Claude");
+        Assert.Equal("0.93.0", row.KeyLabel);
+        f.Shell.Palette.Accept(row);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Assert.Equal("Replace Claude?", f.Shell.Dialogs.Title);
+        Assert.StartsWith("Your settings have an entry named claude that Codalus can't use. Replace it?", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        Assert.Equal("Replace", f.Shell.Dialogs.Buttons.Single(b => b.IsDefault).Label);
+        f.Shell.Dialogs.Accept();
+        await ShellFixture.PumpUntil(() => chat.SelectedAgent == "claude");
+        var user = settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value;
+        Assert.Equal("npx", AcpAgents.Parse(user)["claude"].Command);
+        Assert.Equal(["typo", "list", "claude"], user.EnumerateObject().Select(p => p.Name));
+        Assert.Null(f.Shell.ExternalAgents.Current);
+    }
+
     [AvaloniaTheory]
     [InlineData("harbor.light")]
     [InlineData("ember.dark")]
@@ -325,7 +384,7 @@ public sealed class AcpShellTests
             Assert.Contains(row.KeyLabel!, row.AccessibleName, StringComparison.Ordinal);
         }
 
-        Assert.Contains(f.Shell.Palette.Rows, r => r.KeyLabel == "1.55.0 · installed");
+        Assert.Contains(f.Shell.Palette.Rows, r => r.KeyLabel == "tested with 1.55.0 · installed");
         Assert.Empty(PolishTests.Clipped(list));
         f.Shell.Palette.Cancel();
     }

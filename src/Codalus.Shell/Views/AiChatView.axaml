@@ -79,7 +79,7 @@
           <TextBlock Text="{Binding ProviderLabel}" TextTrimming="CharacterEllipsis" MaxWidth="200" VerticalAlignment="Center" />
         </StackPanel>
       </DropDownButton>
-      <!-- Who answers (M48, ADR 0079): Built-in, then each external agent of ai.agents; shown once one is configured. -->
+      <!-- Who answers (M48, ADR 0079): Built-in, each external agent of ai.agents, then Add agent…; shown while AI is on. -->
       <DropDownButton x:Name="AgentPicker" Classes="toolbar" IsVisible="{Binding HasAgents}"
                       ToolTip.Tip="{l:T aiChat.whoAnswersTheBuiltIn}" AutomationProperties.Name="{l:T aiChat.agentPicker}">
         <TextBlock Text="{Binding SelectedAgentLabel}" TextTrimming="CharacterEllipsis" MaxWidth="160" VerticalAlignment="Center" />

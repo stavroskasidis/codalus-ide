@@ -15,6 +15,23 @@ public sealed class AcpTerminals : IAsyncDisposable
     /// <summary>The most output kept when the agent sets no limit.</summary>
     public const int DefaultOutputLimit = 1_000_000;
 
+    /// <summary>The most output kept whatever limit the agent asks for.</summary>
+    public const int MaxOutputLimit = 4_000_000;
+
+    /// <summary>Variables that change what a command runs (the program found, the code it loads, how git or a runtime behaves).</summary>
+    private static readonly string[] s_refusedNames = ["PATH", "PATHEXT", "COMSPEC", "SHELL", "BASH_ENV", "ENV", "ZDOTDIR", "SHELLOPTS", "BASHOPTS", "PS4", "PROMPT_COMMAND", "IFS", "CDPATH", "HOME", "USERPROFILE", "NODE_OPTIONS", "NODE_PATH", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONHOME", "PERL5OPT", "PERL5LIB", "PERLLIB", "RUBYOPT", "RUBYLIB", "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS", "CLASSPATH", "MSBUILDUSERPATH"];
+
+    private static readonly string[] s_refusedPrefixes = ["LD_", "DYLD_", "GIT_", "NPM_CONFIG_", "YARN_", "DOTNET_", "COMPLUS_", "CORECLR_", "MSBUILD", "NUGET_", "BUNDLE_", "GEM_", "CARGO_", "RUSTC", "GOFLAGS", "SSH_", "PIP_", "CONDA_"];
+
+    /// <summary>
+    /// The first of <paramref name="names"/> that changes what a command runs (compared ignoring case, as Windows does), or
+    /// null: an agent may set ordinary variables for a command it asks to run, which the approval shows, but not these.
+    /// </summary>
+    public static string? RefusedVariable(IEnumerable<string> names) =>
+        names.FirstOrDefault(name => name.Length == 0 || name.Contains('=', StringComparison.Ordinal)
+            || s_refusedNames.Contains(name, StringComparer.OrdinalIgnoreCase)
+            || s_refusedPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+
     private readonly Dictionary<string, AcpTerminal> _terminals = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
     private readonly IProcessLauncher _launcher;
@@ -31,6 +48,8 @@ public sealed class AcpTerminals : IAsyncDisposable
     /// <summary>
     /// The command line the user sees and the process runs: <paramref name="command"/> with its arguments, or, when it comes
     /// without arguments and has spaces, a shell line (through <c>/bin/sh -c</c> or <c>cmd /c</c>, as agent mode's commands).
+    /// On Windows a script on the PATH (<c>npm</c>, <c>npx</c>) starts through <see cref="WindowsCommand"/>, which refuses one
+    /// <c>cmd.exe</c> would misread (<see cref="AcpException"/>).
     /// </summary>
     public static (string Display, ProcessLaunchInfo Launch) CommandLine(string command, IReadOnlyList<string> args, string folder, IReadOnlyDictionary<string, string>? environment)
     {
@@ -43,7 +62,8 @@ public sealed class AcpTerminals : IAsyncDisposable
         }
 
         var display = string.Join(' ', new[] { command }.Concat(args).Select(Quote));
-        return (display, new ProcessLaunchInfo(command, args) { WorkingDirectory = folder, Environment = environment });
+        var launch = OperatingSystem.IsWindows() ? WindowsCommand.Launch(command, args, System.Environment.GetEnvironmentVariable("PATH")) : new ProcessLaunchInfo(command, args);
+        return (display, launch with { WorkingDirectory = folder, Environment = environment });
     }
 
     private static string Quote(string arg) =>
@@ -68,7 +88,7 @@ public sealed class AcpTerminals : IAsyncDisposable
             id = "term_" + (++_next).ToString(CultureInfo.InvariantCulture);
         }
 
-        var limit = outputByteLimit is > 0 ? (int)Math.Min(outputByteLimit.Value, int.MaxValue) : DefaultOutputLimit;
+        var limit = outputByteLimit is > 0 ? (int)Math.Min(outputByteLimit.Value, MaxOutputLimit) : DefaultOutputLimit;
         var terminal = new AcpTerminal(id, display, launch.WorkingDirectory ?? "", process, limit, Timeout, t => Changed?.Invoke(this, t));
         lock (_gate)
         {
@@ -154,6 +174,8 @@ public sealed class AcpTerminal : IAsyncDisposable
     private readonly CancellationTokenSource _stop = new();
     private int _bytes;
     private bool _truncated;
+    private long _lastNotified;
+    private int _notifyPending;
     private string? _killedBy;
     private Task _reading = Task.CompletedTask;
 
@@ -169,6 +191,9 @@ public sealed class AcpTerminal : IAsyncDisposable
     }
 
     public string Id { get; }
+
+    /// <summary>The most output it keeps (the agent's limit, at most <see cref="AcpTerminals.MaxOutputLimit"/>).</summary>
+    public int OutputLimit => _limit;
 
     /// <summary>The command line the user allowed.</summary>
     public string CommandLine { get; }
@@ -265,6 +290,32 @@ public sealed class AcpTerminal : IAsyncDisposable
         _changed(this);
     }
 
+    /// <summary>How often the output's growth is reported (the step re-renders, redacting the tail, on each report).</summary>
+    internal static TimeSpan NotifyInterval { get; set; } = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>Reports the output grew, at most once per <see cref="NotifyInterval"/>: a chatty command doesn't re-render per chunk.</summary>
+    private void NotifyGrew()
+    {
+        var now = Environment.TickCount64;
+        var wait = Interlocked.Read(ref _lastNotified) + (long)NotifyInterval.TotalMilliseconds - now;
+        if (wait <= 0 && Interlocked.CompareExchange(ref _notifyPending, 0, 0) == 0)
+        {
+            Interlocked.Exchange(ref _lastNotified, now);
+            _changed(this);
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _notifyPending, 1) == 0)
+        {
+            _ = Task.Delay(TimeSpan.FromMilliseconds(Math.Max(1, wait))).ContinueWith(_ =>
+            {
+                Interlocked.Exchange(ref _lastNotified, Environment.TickCount64);
+                Interlocked.Exchange(ref _notifyPending, 0);
+                _changed(this);
+            }, TaskScheduler.Default);
+        }
+    }
+
     private void Append(string text)
     {
         if (text.Length == 0)
@@ -278,15 +329,22 @@ public sealed class AcpTerminal : IAsyncDisposable
             _bytes += Encoding.UTF8.GetByteCount(text);
             if (_bytes > _limit)
             {
-                // Cut from the start, at a character boundary (never between a surrogate pair).
+                // Cut from the start, at a character boundary (never between a surrogate pair), counting UTF-8 bytes per char.
                 var drop = 0;
                 var dropped = 0;
                 while (drop < _output.Length && _bytes - dropped > _limit)
                 {
                     var c = _output[drop];
-                    var width = char.IsHighSurrogate(c) && drop + 1 < _output.Length ? 2 : 1;
-                    dropped += Encoding.UTF8.GetByteCount(_output.ToString(drop, width));
-                    drop += width;
+                    if (char.IsHighSurrogate(c) && drop + 1 < _output.Length)
+                    {
+                        dropped += 4;
+                        drop += 2;
+                    }
+                    else
+                    {
+                        dropped += c < 0x80 ? 1 : c < 0x800 ? 2 : 3;
+                        drop++;
+                    }
                 }
 
                 _output.Remove(0, drop);
@@ -295,7 +353,7 @@ public sealed class AcpTerminal : IAsyncDisposable
             }
         }
 
-        _changed(this);
+        NotifyGrew();
     }
 
     /// <summary>Kills the command (and its children) if it still runs.</summary>

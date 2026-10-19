@@ -55,6 +55,25 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     /// <summary>The session's <c>cwd</c>: the workspace's root, the only folder it works in.</summary>
     public string WorkspaceRoot { get; }
 
+    /// <summary>
+    /// The folder the agent's process starts in: a neutral one, not the workspace, so a cloned repository's <c>.npmrc</c>
+    /// or <c>node_modules</c> can't steer what <c>npx</c> runs. The workspace reaches the agent as the session's <c>cwd</c>.
+    /// </summary>
+    public string ProcessDirectory { get; init; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    /// <summary>Why the agent may not be served now (AI off, an untrusted or remote folder; ADR 0079), or null: checked on every request.</summary>
+    public Func<string?>? Gate { get; init; }
+
+    /// <summary>Refuses a request while the agent may not run (the agent is being stopped).</summary>
+    private void CheckGate(string method)
+    {
+        if (Gate?.Invoke() is { } reason)
+        {
+            _ai.LogAgent(Name, $"{method} → refused: {reason}");
+            throw new JsonRpcHandlerException(JsonRpcConnection.InvalidParams, reason + " Codalus IDE refused it.");
+        }
+    }
+
     /// <summary>The agent's answer to <c>initialize</c> (its name, capabilities, ways to sign in).</summary>
     public AcpInitializeResponse? Info => _client?.Info;
 
@@ -108,7 +127,8 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _ai.LogAgent(Name, $"starting {Config.Command} in {WorkspaceRoot}");
-        _client = await AcpClient.StartAsync(Name, Config, WorkspaceRoot, this, cancellationToken).ConfigureAwait(false);
+        Directory.CreateDirectory(ProcessDirectory);
+        _client = await AcpClient.StartAsync(Name, Config, ProcessDirectory, this, cancellationToken).ConfigureAwait(false);
         _client.Exited += OnExited;
         var info = _client.Info!;
         _ai.LogAgent(Name, string.Create(CultureInfo.InvariantCulture, $"initialize → {info.AgentInfo?.Title ?? info.AgentInfo?.Name ?? Name} {info.AgentInfo?.Version}, protocol {info.ProtocolVersion}, {info.AuthMethods?.Count ?? 0} sign-in method(s)"));
@@ -549,7 +569,24 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
     private static string Cut(string text) => text.Length > MaxOutputShown ? "…" + text[^MaxOutputShown..] : text;
 
-    private static string Shown(AcpTerminal terminal) => Cut(SecretRedactor.Redact(terminal.Output.Text).Text);
+    private static string Shown(AcpTerminal terminal) => ShownOutput(terminal.Output.Text);
+
+    /// <summary>
+    /// The end of a command's output as the step shows it, redacted: only the tail is redacted (from a line's start, so a
+    /// secret isn't cut in half before the redactor sees it), not the whole output on every chunk.
+    /// </summary>
+    internal static string ShownOutput(string raw)
+    {
+        if (raw.Length <= MaxOutputShown * 2)
+        {
+            return Cut(SecretRedactor.Redact(raw).Text);
+        }
+
+        var start = raw.Length - (MaxOutputShown * 2);
+        var line = raw.IndexOf('\n', start);
+        var tail = line >= 0 && line < raw.Length - 1 ? raw[(line + 1)..] : raw[start..];
+        return Cut(SecretRedactor.Redact(tail).Text) is var shown && shown.StartsWith('…') ? shown : "…" + shown;
+    }
 
     private void OnTerminalChanged(object? sender, AcpTerminal terminal)
     {
@@ -570,6 +607,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     /// <summary>A path inside the workspace that the AI boundary doesn't exclude; anything else is refused with why.</summary>
     private async Task<string> AllowedPathAsync(string method, string path, CancellationToken cancellationToken)
     {
+        CheckGate(method);
         string full;
         try
         {
@@ -647,6 +685,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
     public async Task<AcpRequestPermissionResponse> RequestPermissionAsync(AcpRequestPermissionRequest request, CancellationToken cancellationToken)
     {
+        CheckGate(AcpMethods.SessionRequestPermission);
         var call = request.ToolCall ?? new AcpToolCall();
         var options = request.Options ?? [];
 
@@ -689,6 +728,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
     public async Task<AcpCreateTerminalResponse> CreateTerminalAsync(AcpCreateTerminalRequest request, CancellationToken cancellationToken)
     {
+        CheckGate(AcpMethods.TerminalCreate);
         string folder;
         try
         {
@@ -705,8 +745,28 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             throw new JsonRpcHandlerException(JsonRpcConnection.InvalidParams, $"'{Relative(folder)}' isn't a folder.");
         }
 
-        var env = request.Env is { Count: > 0 } variables ? variables.ToDictionary(v => v.Name, v => v.Value, StringComparer.Ordinal) : null;
-        var (display, launch) = AcpTerminals.CommandLine(request.Command, request.Args ?? [], folder, env);
+        // Variables that change what a command runs (PATH, LD_PRELOAD, NODE_OPTIONS, GIT_*…) are refused; the others are
+        // shown in the approval, redacted, with the command line.
+        var variables = request.Env ?? [];
+        if (AcpTerminals.RefusedVariable(variables.Select(v => v.Name)) is { } refused)
+        {
+            _ai.LogAgent(Name, $"{AcpMethods.TerminalCreate} {Short(request.Command)} → refused: sets {refused}");
+            throw new JsonRpcHandlerException(JsonRpcConnection.InvalidParams, $"The command sets {refused}, which changes what a command runs. Codalus IDE refused it; run it without that variable.");
+        }
+
+        var env = variables.Count > 0 ? variables.ToDictionary(v => v.Name, v => v.Value, StringComparer.Ordinal) : null;
+        string display;
+        ProcessLaunchInfo launch;
+        try
+        {
+            (display, launch) = AcpTerminals.CommandLine(request.Command, request.Args ?? [], folder, env);
+        }
+        catch (AcpException ex)
+        {
+            _ai.LogAgent(Name, $"{AcpMethods.TerminalCreate} {Short(request.Command)} → refused: {ex.Message}");
+            throw new JsonRpcHandlerException(JsonRpcConnection.InvalidParams, ex.Message + " Codalus IDE refused it.");
+        }
+
         var where = folder == WorkspaceRoot ? "the workspace" : Relative(folder);
         _ai.LogAgent(Name, $"{AcpMethods.TerminalCreate} {Short(display)} in {where}");
 
@@ -714,7 +774,13 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         bool allowed;
         try
         {
-            allowed = await _host.ApproveCommandAsync(Name, display, folder, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
+            var prompt = new AcpCommandPrompt(
+                Name,
+                display,
+                folder,
+                [.. variables.Select(v => v.Name + "=" + SecretRedactor.Redact(v.Value).Text)],
+                WindowsCommand.Resolved(request.Command, launch) is { } resolved && (request.Args is { Count: > 0 } || !request.Command.Any(char.IsWhiteSpace)) ? resolved : null);
+            allowed = await _host.ApproveCommandAsync(prompt, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

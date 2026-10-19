@@ -36,7 +36,14 @@ public sealed partial class ShellHost
 
     private void InitializeExternalAgents()
     {
-        ExternalAgents = new AcpAgents(Workbench.Settings, Ai);
+        ExternalAgents = new AcpAgents(Workbench.Settings, Ai)
+        {
+            // A remote window's folder is elsewhere: an agent would run here, so none runs (ADR 0079).
+            IsRemoteWindow = () => Remote is not null,
+
+            // Agents start in an empty folder of the IDE's, not the workspace (a repository's .npmrc mustn't steer npx).
+            ProcessDirectory = Path.Combine(Paths.State, "external-agents"),
+        };
         AcpHost = new ShellAcpHost(this);
 
         // The agent works in one workspace: closing it, or opening another, stops it.
@@ -45,6 +52,10 @@ public sealed partial class ShellHost
             if (ExternalAgents.Current is { } session && !string.Equals(session.WorkspaceRoot, Solutions.Solution?.Directory is { } root ? Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) : null, StringComparison.Ordinal))
             {
                 _ = ExternalAgents.StopAsync();
+            }
+            else
+            {
+                _ = ExternalAgents.EnforceAsync();
             }
 
             // Whether the chosen agent can run here follows the workspace (opened, closed, trusted).
@@ -71,8 +82,8 @@ public sealed partial class ShellHost
         {
             Detail = agent.Description + " · " + agent.CommandLine,
             KeyLabel = configured.ContainsKey(agent.Id)
-                ? Localizer.Format("msg.acp.catalogAdded", "{0} · added", agent.Version)
-                : installed.Contains(agent.Id) ? Localizer.Format("msg.acp.catalogInstalled", "{0} · installed", agent.Version) : agent.Version,
+                ? Localizer.Format("msg.acp.catalogAdded", "{0} · added", Version(agent))
+                : installed.Contains(agent.Id) ? Localizer.Format("msg.acp.catalogInstalled", "{0} · installed", Version(agent)) : Version(agent),
             Icon = "sparkle",
             Tag = agent,
         }).ToList();
@@ -86,12 +97,17 @@ public sealed partial class ShellHost
             return chosen.Id; // already there: chosen, not added again
         }
 
-        var add = Localizer.Get("msg.acp.add", "Add");
-        var message = chosen.UsesNpx
-            ? Localizer.Format("msg.acp.addNpx", "Codalus will run {0} when you choose it. npx downloads that package from npm and runs it with your account's access to this folder.", chosen.CommandLine)
-            : Localizer.Format("msg.acp.addInstalled", "Codalus will run {0} when you choose it. {1} must be installed and on your PATH (Codalus doesn't download it); it runs with your account's access to this folder.", chosen.CommandLine, chosen.Cli);
+        // An entry of that name Codalus can't use (no command, a mistyped one): replacing it is the user's choice.
+        var replace = AcpAgentCatalog.HasEntry(Workbench.Settings, chosen.Id);
+        var add = replace ? Localizer.Get("msg.acp.replace", "Replace") : Localizer.Get("msg.acp.add", "Add");
+        var runs = chosen.UsesNpx
+            ? Localizer.Format("msg.acp.addNpx", "When you start a chat with it, Codalus will run {0}: npx downloads that package from npm the first time and runs it as you, with your account's access to your files, not only this folder's.", chosen.CommandLine)
+            : Localizer.Format("msg.acp.addInstalled", "When you start a chat with it, Codalus will run {0}: {1} must be installed and on your PATH (Codalus doesn't download it; tested with {2}), and it runs as you, with your account's access to your files, not only this folder's.", chosen.CommandLine, chosen.Cli, chosen.Version);
+        var message = replace
+            ? Localizer.Format("msg.acp.replaceEntry", "Your settings have an entry named {0} that Codalus can't use. Replace it?", chosen.Id) + "\n\n" + runs
+            : runs;
         var answer = await Dialogs.ShowAsync(new DialogRequest(
-            Localizer.Format("msg.acp.addTitle", "Add {0}?", chosen.Name),
+            replace ? Localizer.Format("msg.acp.replaceTitle", "Replace {0}?", chosen.Name) : Localizer.Format("msg.acp.addTitle", "Add {0}?", chosen.Name),
             message + "\n\n" + Localizer.Get("aiChat.externalAgentUsesItsOwn", AcpAgents.Label),
             [add, Localizer.Get("msg.acp.cancel", "Cancel")])
         {
@@ -104,9 +120,18 @@ public sealed partial class ShellHost
             return null;
         }
 
-        await AcpAgentCatalog.AddAsync(Workbench.Settings, chosen, CancellationToken.None).ConfigureAwait(true);
+        if (!await AcpAgentCatalog.AddAsync(Workbench.Settings, chosen, CancellationToken.None, replace).ConfigureAwait(true))
+        {
+            ShowMessage(Localizer.Format("msg.acp.notAdded", "{0} wasn't added: your settings already have an entry with that name.", chosen.Name));
+            return null;
+        }
+
         return chosen.Id;
     }
+
+    /// <summary>An entry's version as the list shows it: pinned for npx, the one tested with for an installed CLI.</summary>
+    private static string Version(AcpKnownAgent agent) =>
+        agent.UsesNpx ? agent.Version : Localizer.Format("msg.acp.testedWith", "tested with {0}", agent.Version);
 
     /// <summary>Shows a dialog that closes (as cancelled) when <paramref name="cancellationToken"/> is cancelled: the turn was stopped.</summary>
     private async Task<DialogResult> ShowCancellableAsync(DialogRequest request, CancellationToken cancellationToken)
@@ -233,9 +258,10 @@ public sealed partial class ShellHost
                 return buttons.FirstOrDefault(b => b.Label == choice.Button).OptionId is { Length: > 0 } id ? id : null;
             }).Unwrap();
 
-        public Task<bool> ApproveCommandAsync(string agent, string commandLine, string folder, CancellationToken cancellationToken) =>
+        public Task<bool> ApproveCommandAsync(AcpCommandPrompt prompt, CancellationToken cancellationToken) =>
             Ui.RunAsync(async () =>
             {
+                var (agent, commandLine, folder) = (prompt.Agent, prompt.CommandLine, prompt.Folder);
                 var root = shell.ExternalAgents.Current?.WorkspaceRoot;
                 var where = root is null || string.Equals(folder, root, StringComparison.Ordinal) ? Localizer.Get("msg.acp.theWorkspace", "the workspace") : Path.GetRelativePath(root, folder);
                 var allow = Localizer.Get("msg.acp.allow", "Allow");
@@ -245,7 +271,14 @@ public sealed partial class ShellHost
                     Localizer.Format("msg.acp.runMessage", "The external agent {0} wants to run a command in {1}:", agent, where),
                     [allow, reject])
                 {
-                    Details = [new DetailLine(commandLine)],
+                    // The exact command line, what starts on Windows when it's a script, and every variable the agent sets.
+                    Details =
+                    [
+                        new DetailLine(commandLine),
+                        .. prompt.Resolved is { } resolved ? [new DetailLine(Localizer.Format("msg.acp.runsAs", "Runs: {0}", resolved), "header")] : Array.Empty<DetailLine>(),
+                        .. prompt.Environment.Count > 0 ? [new DetailLine(Localizer.Get("msg.acp.withEnvironment", "With these environment variables:"), "header")] : Array.Empty<DetailLine>(),
+                        .. prompt.Environment.Select(v => new DetailLine(v)),
+                    ],
                     DefaultButton = reject,
                     Icon = "terminal",
                     Context = Context(agent, where),

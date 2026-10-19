@@ -116,17 +116,17 @@ AI Chat can also run a coding agent that is a program of its own, such as pi, Cl
 
 **In one step.** In AI Chat, open the agent picker (after the provider in the toolbar) and choose **Add agent…**. It lists the agents Codalus knows, each with what it is, the exact command it would run and its pinned version; **installed** means the agent's own program is on your PATH, and **added** that it's in your settings already (choosing it just picks it). Choose one, read what will run, and choose **Add**: Codalus writes its entry to your user settings (never the workspace's) and picks it, which starts a new chat. Nothing is downloaded or run until you ask that chat something.
 
-| Agent | What runs | Pinned |
+| Agent | What runs | Version |
 |---|---|---|
 | pi | `npx -y pi-acp@0.0.34` | 0.0.34 |
 | Claude | `npx -y @agentclientprotocol/claude-agent-acp@0.93.0` | 0.93.0 |
 | Codex | `npx -y @agentclientprotocol/codex-acp@2.2.2` | 2.2.2 |
 | Gemini CLI | `npx -y @google/gemini-cli@0.64.0 --acp` | 0.64.0 |
 | GitHub Copilot | `npx -y @github/copilot@1.0.98 --acp` | 1.0.98 |
-| OpenCode | `opencode acp` (install OpenCode first) | 1.19.3 |
-| goose | `goose acp` (install goose first) | 1.55.0 |
+| OpenCode | `opencode acp` (install OpenCode first) | tested with 1.19.3 |
+| goose | `goose acp` (install goose first) | tested with 1.55.0 |
 
-The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-10-19 and committed with Codalus: it doesn't fetch the list. `npx` downloads the package from npm the first time the agent starts and runs it with your account's access to the folder. The registry ships OpenCode and goose as programs to download, which Codalus doesn't do: install them yourself, and their entries run your installed copy. Sign in the way the agent says: Codalus doesn't see or keep its credentials. On Windows, `npx` is `npx.cmd`, which Codalus runs through `cmd.exe` for you.
+The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-10-19 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time the agent starts and runs it as you, with your account's access to your files, not only the folder's. The registry ships OpenCode and goose as programs to download, which Codalus doesn't do: install them yourself, and their entries run whatever version you installed (the table says which one was tested). An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. Sign in the way the agent says: Codalus doesn't see or keep its credentials. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`; another `.cmd` or `.bat` runs through `cmd.exe` only when its path and arguments have nothing `cmd.exe` would read differently.
 
 **By hand.** Add an entry to your user settings (**Tools > Options > AI: External Agents**, or `settings.json`); a workspace's settings can't add one. Each entry is the command that starts the agent in ACP mode, with its arguments and environment:
 
@@ -160,8 +160,9 @@ What the agent asks of the IDE goes through the IDE's checks:
 - **Reading** (`fs/read_text_file`): the editor's text when the file is open (unsaved changes included), else the disk's. Only inside the folder: paths that leave it, links included, are refused, and so are files that are never sent (below). What it gets is redacted.
 - **Writing** (`fs/write_text_file`): every change shows in the preview first. **Apply** puts it in the editor (unsaved, one step in undo; the file opens if it isn't open), and **Reject** tells the agent you rejected it. The same paths are refused.
 - **Permissions**: when the agent asks before acting, the approval dialog shows the action, its kind, its input and its changes, with **Allow Once**, **Reject** and **Always Reject**. **Reject** is the default (Enter and Esc reject). There's no "always allow".
-- **Commands**: each one asks first with the exact command line and its folder, as agent mode's do, and runs for at most `ai.agent.commandTimeoutSeconds`. Its output is redacted before the agent reads it, and Stop kills it.
+- **Commands**: each one asks first with the exact command line, its folder and every environment variable the agent sets for it (secrets redacted), as agent mode's do, and runs for at most `ai.agent.commandTimeoutSeconds`. Variables that change what a command runs (`PATH`, `LD_*` and `DYLD_*`, `NODE_OPTIONS`, `GIT_*`, `NPM_CONFIG_*`, `DOTNET_*` and similar) are refused before you're asked. Its output is redacted before the agent reads it, and Stop kills it.
 - **The IDE's tools**: every agent gets `codalus mcp` (the solution, the open files, the Error List, the build output, and a build that asks first) through a pipe of its own that lives as long as the chat, for your user only, even when **MCP Server** is off.
+- **Only while it may run**: if AI assistance is turned off (by you, or for the workspace) or the folder stops being trusted, a running agent stops, and any request it sends meanwhile is refused. The same holds for its `codalus mcp` pipe, which also only shows files under the workspace.
 - **The log**: each prompt, request and tool call is a line of the *AI* Output channel (the agent, the method, the path or command, never the content).
 
 What Codalus can't check:
@@ -169,7 +170,7 @@ What Codalus can't check:
 - Whatever the agent has, it can send to its provider. Keep files out of reach with `.codalusignore` and `ai.exclude` for what goes through the IDE, and with the agent's own settings for what it reads by itself.
 - Its commands run with your permissions once you allow them, like agent mode's.
 
-Not supported yet: MCP servers over HTTP for agents, the agent's forms (elicitation), signing in from a terminal, resuming an earlier session, and external agents in remote windows.
+Not supported yet: MCP servers over HTTP for agents, the agent's forms (elicitation), signing in from a terminal, and resuming an earlier session. External agents don't run in remote windows (WSL, SSH, containers): the agent and its commands would run on this machine, not where the folder is, so the chat says why and nothing starts.
 
 ## What is never sent
 

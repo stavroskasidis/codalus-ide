@@ -12,6 +12,14 @@ namespace Codalus.Workbench.Ai.Acp;
 /// <param name="Options">The options offered: allow once, reject once and reject always (never allow always, ADR 0063).</param>
 public sealed record AcpPermissionPrompt(string Agent, string Title, string? Kind, string? RawInput, IReadOnlyList<AiStepDiff> Diffs, IReadOnlyList<AcpPermissionOption> Options);
 
+/// <summary>A command an agent asks to run, as the approval shows it.</summary>
+/// <param name="Agent">The agent's name.</param>
+/// <param name="CommandLine">The exact command line.</param>
+/// <param name="Folder">Where it runs.</param>
+/// <param name="Environment">The variables the agent sets for it, as <c>NAME=value</c> (values redacted); the ones that change what runs are refused before.</param>
+/// <param name="Resolved">What starts on Windows when it isn't the command as written (a script through node or cmd.exe), or null.</param>
+public sealed record AcpCommandPrompt(string Agent, string CommandLine, string Folder, IReadOnlyList<string> Environment, string? Resolved);
+
 /// <summary>What an external agent's session needs from the shell: files as the editor has them, the preview, approvals.</summary>
 public interface IAcpHost
 {
@@ -27,8 +35,8 @@ public interface IAcpHost
     /// <summary>Asks the user with the approval dialog; the chosen option's id, or null for Reject (the default).</summary>
     Task<string?> RequestPermissionAsync(AcpPermissionPrompt prompt, CancellationToken cancellationToken);
 
-    /// <summary>Asks the user to allow a command, with its exact command line and folder (Reject is the default).</summary>
-    Task<bool> ApproveCommandAsync(string agent, string commandLine, string folder, CancellationToken cancellationToken);
+    /// <summary>Asks the user to allow a command, with its exact command line, folder and environment (Reject is the default).</summary>
+    Task<bool> ApproveCommandAsync(AcpCommandPrompt prompt, CancellationToken cancellationToken);
 
     /// <summary>Shows the agent's ways to sign in; the chosen one, or null.</summary>
     Task<AcpAuthMethod?> ChooseSignInAsync(string agent, IReadOnlyList<AcpAuthMethod> methods, CancellationToken cancellationToken);
@@ -64,6 +72,30 @@ public sealed class AcpAgents : IAsyncDisposable
     {
         _settings = settings;
         _ai = ai;
+
+        // AI turned off (by the user, or for this workspace): a running agent stops, and its requests aren't served.
+        _ai.Changed += (_, _) => _ = EnforceAsync();
+    }
+
+    /// <summary>The window is a remote one (WSL, SSH, a container): an agent would run on this machine, not there (ADR 0079).</summary>
+    public Func<bool> IsRemoteWindow { get; set; } = () => false;
+
+    /// <summary>
+    /// The folder agents' processes start in: neutral, so a cloned repository's <c>.npmrc</c> or <c>node_modules</c> can't
+    /// steer what <c>npx</c> runs (the shell sets an empty folder of its own; the user's home otherwise).
+    /// </summary>
+    public string ProcessDirectory { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    /// <summary>
+    /// Stops the running agent when it may no longer run (AI off, the folder untrusted or closed, a remote window): called
+    /// when AI's state changes and when the workspace or its trust does. Its requests are refused meanwhile (the session's gate).
+    /// </summary>
+    public async Task EnforceAsync()
+    {
+        if (Current is not null && WhyNot() is not null)
+        {
+            await StopAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>The configured agents, read from the user's settings only.</summary>
@@ -82,6 +114,11 @@ public sealed class AcpAgents : IAsyncDisposable
     /// <summary>Why an external agent can't start now, or null when it can: AI on, a workspace, and a trusted one (ADR 0079).</summary>
     public string? WhyNot()
     {
+        if (IsRemoteWindow())
+        {
+            return "External agents don't run in a remote window: the agent and its commands would run on this machine, not where the folder is.";
+        }
+
         if (!_ai.IsEnabled)
         {
             return _ai.IsOffForWorkspace
@@ -129,7 +166,7 @@ public sealed class AcpAgents : IAsyncDisposable
                 await current.DisposeAsync().ConfigureAwait(false);
             }
 
-            var session = new AcpAgentSession(name, config, _ai, host, root) { CommandTimeout = CommandTimeout };
+            var session = new AcpAgentSession(name, config, _ai, host, root) { CommandTimeout = CommandTimeout, Gate = () => WhyNot() ?? (string.Equals(_ai.WorkspaceRoot, root, StringComparison.Ordinal) ? null : "The folder changed."), ProcessDirectory = ProcessDirectory };
             session.StateChanged += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
             try
             {
@@ -139,6 +176,14 @@ public sealed class AcpAgents : IAsyncDisposable
             {
                 await session.DisposeAsync().ConfigureAwait(false);
                 throw;
+            }
+
+            // The folder may have changed, or AI or trust turned off, while it started: it doesn't stay for the old one.
+            var now = WhyNot();
+            if (now is not null || !string.Equals(_ai.WorkspaceRoot, root, StringComparison.Ordinal))
+            {
+                await session.DisposeAsync().ConfigureAwait(false);
+                throw new AcpException(now ?? "The folder changed while the agent started; ask again.");
             }
 
             _current = session;

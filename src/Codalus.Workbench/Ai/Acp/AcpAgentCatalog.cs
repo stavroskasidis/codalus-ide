@@ -10,7 +10,7 @@ namespace Codalus.Workbench.Ai.Acp;
 /// <param name="Id">Its key in <c>ai.agents</c> (<c>claude</c>).</param>
 /// <param name="Name">How the list names it.</param>
 /// <param name="Description">What it is, in a line (the registry's).</param>
-/// <param name="Version">The pinned version: the npm package's, or the registry's for an agent that runs its own CLI.</param>
+/// <param name="Version">The npm package's pinned version; for an agent that runs its installed CLI, the registry's version it was tested with (whatever is installed runs).</param>
 /// <param name="Command">The command that starts it in ACP mode (<c>npx</c>, or the agent's CLI).</param>
 /// <param name="Args">Its arguments: for npx, <c>-y</c> and the pinned package first.</param>
 /// <param name="Package">The npm package with its exact version (<c>pi-acp@0.0.34</c>); null when the agent runs its installed CLI.</param>
@@ -27,7 +27,8 @@ public sealed record AcpKnownAgent(string Id, string Name, string Description, s
 /// <summary>
 /// The ACP agents AI Chat can set up in one step (M48), committed here: no list is fetched at runtime. Each entry is pinned
 /// to the version in the ACP registry (<see cref="RegistryChecked"/>): an npx package with its exact version, or, for an
-/// agent the registry distributes as a binary archive (goose, OpenCode), its installed CLI (Codalus never downloads one).
+/// agent the registry distributes as a binary archive (goose, OpenCode), its installed CLI, whatever version is installed
+/// (the entry says which it was tested with; Codalus never downloads one).
 /// To update it, read the registry (<c>https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json</c>, shown at
 /// agentclientprotocol.com/get-started/registry), check each package and command, change the versions here and in
 /// docs/user-guide/ai.md, and set <see cref="RegistryChecked"/>. <c>AcpAgentCatalogTests</c> refuses an unpinned entry.
@@ -111,14 +112,19 @@ public static class AcpAgentCatalog
         }
     }
 
+    /// <summary>Whether the user's <c>ai.agents</c> has an entry named <paramref name="id"/>, usable or not.</summary>
+    public static bool HasEntry(SettingsService settings, string id) =>
+        settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User) is { ValueKind: JsonValueKind.Object } existing && existing.TryGetProperty(id, out _);
+
     /// <summary>
     /// Adds <paramref name="agent"/>'s entry to <c>ai.agents</c> in the user's settings (never the workspace's, ADR 0079),
-    /// keeping the other entries. False, and nothing written, when an agent of that name is already there.
+    /// keeping the other entries. False, and nothing written, when an entry of that name is already there, unless
+    /// <paramref name="replace"/> (the user chose to replace one Codalus can't use).
     /// </summary>
-    public static async Task<bool> AddAsync(SettingsService settings, AcpKnownAgent agent, CancellationToken cancellationToken)
+    public static async Task<bool> AddAsync(SettingsService settings, AcpKnownAgent agent, CancellationToken cancellationToken, bool replace = false)
     {
         var current = settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User);
-        if (current is { ValueKind: JsonValueKind.Object } existing && existing.TryGetProperty(agent.Id, out _))
+        if (!replace && HasEntry(settings, agent.Id))
         {
             return false;
         }
@@ -129,7 +135,7 @@ public static class AcpAgentCatalog
             writer.WriteStartObject();
             if (current is { ValueKind: JsonValueKind.Object } others)
             {
-                foreach (var property in others.EnumerateObject())
+                foreach (var property in others.EnumerateObject().Where(p => p.Name != agent.Id))
                 {
                     property.WriteTo(writer);
                 }
