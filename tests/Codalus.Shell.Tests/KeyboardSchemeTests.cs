@@ -89,7 +89,7 @@ public sealed class KeyboardSchemeTests
         await SetSchemeAsync(f, "resharper");
         Assert.Equal("editor.action.quickFix", CommandFor(f, "ctrl+shift+r"));
         Assert.Equal("editor.action.smartSelect.expand", CommandFor(f, "ctrl+w"));
-        Assert.Equal("editor.action.referenceSearch", CommandFor(f, "alt+f7"));
+        Assert.Equal("editor.action.referenceSearch", CommandFor(f, OperatingSystem.IsLinux() ? "shift+alt+f12" : "alt+f7")); // GNOME takes Alt+F7
         Assert.Equal("editor.action.quickFix", CommandFor(f, "alt+enter"));
         Assert.Equal("explorer.syncWithActiveDocument", CommandFor(f, "shift+alt+l")); // Locate in Solution Explorer, not the OS file manager
         Assert.Equal("build.buildSolution", CommandFor(f, "f6"));
