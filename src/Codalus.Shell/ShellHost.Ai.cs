@@ -122,6 +122,56 @@ public sealed partial class ShellHost : IAiChatHost
             : Localizer.Get("msg.ai.turnedOnForWorkspace", "AI assistance follows your settings in this workspace again."));
     }
 
+    IEditorServices IAiChatHost.EditorServices => this;
+
+    /// <summary>
+    /// Opens a file an agent's step worked on (M34h): a path relative to the workspace, as the agent's tools give it, at
+    /// its line when it has one. The path comes from the model, so only a file under the workspace's root opens: the
+    /// agent's tools are confined to it too (ADR 0063). Its existence is checked off the UI thread.
+    /// </summary>
+    public async Task OpenAiLocationAsync(string path, int? line)
+    {
+        if (Solutions.Solution?.Directory is not { } root || ResolveInWorkspace(root, path) is not { } full)
+        {
+            ShowMessage(Localizer.Format("msg.ai.locationOutside", "{0} isn't in the workspace, so it doesn't open from AI Chat.", path));
+            return;
+        }
+
+        if (!await Task.Run(() => Codalus.Workbench.FileSystem.FileSystems.FileExistsAsync(full, CancellationToken.None)).ConfigureAwait(true))
+        {
+            ShowMessage(Localizer.Format("msg.ai.locationNotFound", "{0} isn't in the workspace any more.", path));
+            return;
+        }
+
+        await OpenFileAsync(full, at: line is > 0 ? new Position(line.Value - 1, 0) : null).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// <paramref name="path"/> (relative to <paramref name="root"/>, or rooted) as a full path under <paramref name="root"/>,
+    /// or null: a UNC path, a rooted path elsewhere and <c>..</c> out of the root are refused from the text alone, without
+    /// touching the disk or the network.
+    /// </summary>
+    internal static string? ResolveInWorkspace(string root, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        string full;
+        try
+        {
+            full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root, path));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+
+        var workspace = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return !full.StartsWith(@"\\", StringComparison.Ordinal) && full.Length > workspace.Length && Codalus.Workbench.FileSystem.FileSystems.IsUnder(full, workspace) ? full : null;
+    }
+
     public void ShowAiLog()
     {
         var channel = Workbench.Output.GetOrCreate(AiService.OutputChannelId, "AI");

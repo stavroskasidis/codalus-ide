@@ -13,30 +13,32 @@ namespace Codalus.Shell.Controls;
 /// Renders the Markdown subset of plugin Markdown views (ADR 0003) to native controls, so they follow the theme
 /// and stay accessible: ATX headings, paragraphs, bulleted and numbered lists, block quotes, fenced code,
 /// horizontal rules, and inline <c>**bold**</c>, <c>*italic*</c>, <c>`code`</c> and <c>[links](target)</c>.
-/// Link targets are <c>https://…</c>, <c>http://…</c> or <c>command:&lt;id&gt;</c>; others render as text.
+/// Link targets are <c>https://…</c>, <c>http://…</c> or <c>command:&lt;id&gt;</c>; others render as text. Inline code is a
+/// <c>Run.code</c> (the code font on <c>Shell.Badge</c>, ShellStyles.axaml).
 /// </summary>
 public static partial class MarkdownRenderer
 {
     private static readonly FontFamily s_monospace = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace");
 
-    public static Control Render(string markdown, Action<string> openLink) => Render(markdown, openLink, null, new Thickness(12));
+    /// <summary>The code font of inline code and of code outside an editor.</summary>
+    public static FontFamily Monospace => s_monospace;
 
-    /// <summary>
-    /// Renders with <paramref name="codeBlockFooter"/> under each fenced code block (its index, from 0, in the order of
-    /// <c>AiCodeBlocks.Parse</c>), e.g. the AI Chat's Copy, Insert and Apply buttons.
-    /// </summary>
-    public static Control Render(string markdown, Action<string> openLink, Func<int, Control?>? codeBlockFooter, Thickness margin)
+    public static Control Render(string markdown, Action<string> openLink) => Render(markdown, openLink, MarkdownOptions.Default);
+
+    /// <summary>Renders <paramref name="markdown"/> as <paramref name="options"/> say (AI Chat's answers, M34h).</summary>
+    public static Control Render(string markdown, Action<string> openLink, MarkdownOptions options)
     {
-        var panel = new StackPanel { Spacing = 8, Margin = margin };
+        var panel = new StackPanel { Spacing = options.Spacing, Margin = options.Margin };
         var blockIndex = 0;
         var lines = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var paragraph = new List<string>();
+        TextBlock Inline(string source) => Text(source, openLink, options.Selectable);
 
         void FlushParagraph()
         {
             if (paragraph.Count > 0)
             {
-                panel.Children.Add(Text(string.Join(' ', paragraph), openLink));
+                panel.Children.Add(Inline(string.Join(' ', paragraph)));
                 paragraph.Clear();
             }
         }
@@ -44,6 +46,9 @@ public static partial class MarkdownRenderer
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i].Trim();
+
+            // A nested list item keeps its depth: two spaces (or a tab) of indentation a level.
+            var depth = Math.Min(4, lines[i].Replace("\t", "  ", StringComparison.Ordinal).TakeWhile(c => c == ' ').Count() / 2);
             if (Fence().Match(line) is { Success: true } fence)
             {
                 FlushParagraph();
@@ -54,12 +59,9 @@ public static partial class MarkdownRenderer
                     code.Add(lines[i]);
                 }
 
-                panel.Children.Add(CodeBlock(string.Join('\n', code)));
-                if (codeBlockFooter?.Invoke(blockIndex) is { } footer)
-                {
-                    panel.Children.Add(footer);
-                }
-
+                var block = string.Join('\n', code);
+                var closed = i < lines.Length; // its closing fence came (an answer being written may not have it yet)
+                panel.Children.Add(options.CodeBlock?.Invoke(new MarkdownCodeBlock(blockIndex, fence.Groups[2].Value.Trim(), block, closed)) ?? CodeBlock(block));
                 blockIndex++;
             }
             else if (line.Length == 0)
@@ -70,8 +72,10 @@ public static partial class MarkdownRenderer
             {
                 FlushParagraph();
                 var level = heading.Groups[1].Length;
-                var text = Text(heading.Groups[2].Value, openLink);
-                text.FontSize = level switch { 1 => 22, 2 => 18, 3 => 15, _ => 13 };
+                var text = Inline(heading.Groups[2].Value);
+                text.FontSize = options.CompactHeadings
+                    ? level switch { 1 => 16, 2 => 14, 3 => 13, _ => 12 }
+                    : level switch { 1 => 22, 2 => 18, 3 => 15, _ => 13 };
                 text.FontWeight = FontWeight.SemiBold;
                 text.Margin = new Thickness(0, level <= 2 ? 6 : 2, 0, 0);
                 AutomationProperties.SetHeadingLevel(text, level);
@@ -87,17 +91,17 @@ public static partial class MarkdownRenderer
             else if (Bullet().Match(line) is { Success: true } bullet)
             {
                 FlushParagraph();
-                panel.Children.Add(ListItem("•", Text(bullet.Groups[1].Value, openLink)));
+                panel.Children.Add(ListItem(depth % 2 == 0 ? "•" : "◦", Inline(bullet.Groups[1].Value), depth));
             }
             else if (Numbered().Match(line) is { Success: true } numbered)
             {
                 FlushParagraph();
-                panel.Children.Add(ListItem(numbered.Groups[1].Value + ".", Text(numbered.Groups[2].Value, openLink)));
+                panel.Children.Add(ListItem(numbered.Groups[1].Value + ".", Inline(numbered.Groups[2].Value), depth));
             }
             else if (line.StartsWith('>'))
             {
                 FlushParagraph();
-                var quote = new Border { BorderThickness = new Thickness(3, 0, 0, 0), Padding = new Thickness(10, 2), Child = Text(line.TrimStart('>', ' '), openLink) };
+                var quote = new Border { BorderThickness = new Thickness(3, 0, 0, 0), Padding = new Thickness(10, 2), Child = Inline(line.TrimStart('>', ' ')) };
                 quote.Bind(Border.BorderBrushProperty, quote.GetResourceObservable("Shell.Border"));
                 panel.Children.Add(quote);
             }
@@ -111,9 +115,9 @@ public static partial class MarkdownRenderer
         return panel;
     }
 
-    private static Grid ListItem(string marker, Control content)
+    private static Grid ListItem(string marker, Control content, int depth)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(depth * 16, 0, 0, 0) };
         var bullet = new TextBlock { Text = marker, Margin = new Thickness(4, 0, 8, 0), MinWidth = 12 };
         Grid.SetColumn(content, 1);
         grid.Children.Add(bullet);
@@ -133,10 +137,10 @@ public static partial class MarkdownRenderer
         return new ScrollViewer { HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto, Content = border };
     }
 
-    /// <summary>A wrapped text block with inline emphasis, code spans and links.</summary>
-    private static TextBlock Text(string source, Action<string> openLink)
+    /// <summary>A wrapped text block with inline emphasis, code spans and links; selectable for AI Chat's answers.</summary>
+    private static TextBlock Text(string source, Action<string> openLink, bool selectable)
     {
-        var block = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        var block = selectable ? new SelectableTextBlock { TextWrapping = TextWrapping.Wrap } : new TextBlock { TextWrapping = TextWrapping.Wrap };
         var inlines = new InlineCollection();
         var run = new StringBuilder();
         var bold = false;
@@ -166,7 +170,7 @@ public static partial class MarkdownRenderer
             else if (c == '`' && source.IndexOf('`', i + 1) is var end and > 0)
             {
                 Flush();
-                inlines.Add(new Run(source[(i + 1)..end]) { FontFamily = s_monospace });
+                inlines.Add(new Run(source[(i + 1)..end]) { FontFamily = s_monospace, Classes = { "code" } });
                 i = end;
             }
             else if (c == '*' && i + 1 < source.Length && source[i + 1] == '*')
@@ -225,7 +229,7 @@ public static partial class MarkdownRenderer
         return new InlineUIContainer(button);
     }
 
-    [GeneratedRegex(@"^(`{3,}|~{3,})[^`]*$")]
+    [GeneratedRegex(@"^(`{3,}|~{3,})([^`]*)$")]
     private static partial Regex Fence();
 
     [GeneratedRegex(@"^(#{1,6})\s+(.*)$")]
@@ -240,3 +244,31 @@ public static partial class MarkdownRenderer
     [GeneratedRegex(@"\[([^\]]+)\]\(([^)\s]+)\)")]
     private static partial Regex Link();
 }
+
+/// <summary>How <see cref="MarkdownRenderer"/> renders for a host other than a Markdown view (AI Chat's answers, M34h).</summary>
+public sealed class MarkdownOptions
+{
+    /// <summary>A Markdown view's: a document's headings, 12 px around, plain code blocks.</summary>
+    public static MarkdownOptions Default { get; } = new();
+
+    /// <summary>The text can be selected and copied (each paragraph, heading and list item).</summary>
+    public bool Selectable { get; init; }
+
+    /// <summary>Headings sized for a tool window (16, 14, 13 and 12 px) instead of a document's.</summary>
+    public bool CompactHeadings { get; init; }
+
+    /// <summary>A fenced code block's control; null draws the plain block.</summary>
+    public Func<MarkdownCodeBlock, Control>? CodeBlock { get; init; }
+
+    public Thickness Margin { get; init; } = new(12);
+
+    /// <summary>The space between blocks.</summary>
+    public double Spacing { get; init; } = 8;
+}
+
+/// <summary>A fenced code block of rendered Markdown, for <see cref="MarkdownOptions.CodeBlock"/>.</summary>
+/// <param name="Index">Its index, from 0, in the order of <c>AiCodeBlocks.Parse</c>.</param>
+/// <param name="Info">Its info string: the language and any <c>path=</c>.</param>
+/// <param name="Code">Its code.</param>
+/// <param name="IsClosed">Its closing fence came: the block is complete even while the text around it is still written.</param>
+public sealed record MarkdownCodeBlock(int Index, string Info, string Code, bool IsClosed);

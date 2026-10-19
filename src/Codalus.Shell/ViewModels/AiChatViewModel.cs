@@ -42,6 +42,32 @@ public interface IAiChatHost
     void ShowAiChatWindow();
 
     void OpenLink(string target);
+
+    /// <summary>Opens a file a step of an agent worked on (relative to the workspace), at a line (1-based) when given.</summary>
+    Task OpenAiLocationAsync(string path, int? line);
+
+    /// <summary>The editor's services, for code blocks in the editor's colors (M34h).</summary>
+    Editor.IEditorServices EditorServices { get; }
+
+    /// <summary>The editor's font, for code blocks.</summary>
+    EditorFont EditorFont { get; }
+}
+
+/// <summary>A turn as AI Chat shows it (M34h): the turn, who answered (the model then) and when it was asked.</summary>
+public sealed class AiChatTurnItem(AiChatTurn turn, string? model, DateTime asked)
+{
+    public AiChatTurn Turn { get; } = turn;
+
+    /// <summary>The model that answered, as the provider names it.</summary>
+    public string? Model { get; } = model;
+
+    public DateTime Asked { get; } = asked;
+
+    /// <summary>Who answers: the assistant (an external agent's name, later).</summary>
+    public string Author { get; init; } = Localizer.Get("msg.ai.assistant", "Assistant");
+
+    /// <summary>The line beside the author: the model and the time (<c>gpt-4o · 14:32</c>).</summary>
+    public string Byline => string.Join(" · ", new[] { Model, Asked.ToString("t", System.Globalization.CultureInfo.CurrentCulture) }.Where(s => !string.IsNullOrEmpty(s)));
 }
 
 /// <summary>
@@ -63,6 +89,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private bool _solution = true;
     private string _contextPreview = string.Empty;
     private bool _agent;
+    private readonly HashSet<AiChatTurn> _known = [];
 
     public AiChatViewModel(IAiChatHost host)
     {
@@ -70,13 +97,23 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         Chat = new AiChat(host.Ai);
         Chat.TurnChanged += (_, turn) => Ui.Post(() =>
         {
+            // A late change of a turn that New Chat cleared away doesn't bring it back.
+            if (!_known.Contains(turn) && Chat.Turns.Contains(turn))
+            {
+                _known.Add(turn);
+                Turns.Add(new AiChatTurnItem(turn, Ai.ModelId ?? Ai.Provider?.Label, DateTime.Now));
+                OnTurnsChanged();
+            }
+
             TurnChanged?.Invoke(this, turn);
-            OnPropertyChanged(nameof(HasTurns));
+            OnPropertyChanged(nameof(IsAnswering));
         });
         Chat.Cleared += (_, _) => Ui.Post(() =>
         {
+            _known.Clear();
+            Turns.Clear();
+            OnTurnsChanged();
             Cleared?.Invoke(this, EventArgs.Empty);
-            OnPropertyChanged(nameof(HasTurns));
         });
         host.Ai.Changed += (_, _) => Ui.Post(Refresh);
         host.Ai.BusyChanged += (_, _) => Ui.Post(() =>
@@ -90,19 +127,42 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     public AiService Ai => _host.Ai;
 
+    /// <summary>The editor's services and font, for the answers' code blocks.</summary>
+    public Editor.IEditorServices EditorServices => _host.EditorServices;
+
+    public EditorFont EditorFont => _host.EditorFont;
+
     /// <summary>A turn was added or its answer changed (UI thread).</summary>
     public event EventHandler<AiChatTurn>? TurnChanged;
 
     /// <summary>The conversation was cleared (UI thread).</summary>
     public event EventHandler? Cleared;
 
-    public bool HasTurns => Chat.Turns.Count > 0;
+    /// <summary>The conversation, in order (UI thread; the view virtualizes it, M34h).</summary>
+    public System.Collections.ObjectModel.ObservableCollection<AiChatTurnItem> Turns { get; } = [];
+
+    public bool HasTurns => Turns.Count > 0;
+
+    /// <summary>The last turn is being answered: the composer offers Stop instead of Send.</summary>
+    public bool IsAnswering => Turns.Count > 0 && Turns[^1].Turn.IsStreaming;
 
     public bool IsOff => Ai.State == AiState.Off;
 
     public bool IsOn => !IsOff;
 
     public bool NeedsProvider => Ai.State == AiState.NoProvider;
+
+    /// <summary>The empty state while AI is off: what it is, and Turn On.</summary>
+    public bool ShowOffState => IsOff && !HasTurns;
+
+    /// <summary>The empty state while no provider is chosen: Choose Provider….</summary>
+    public bool ShowProviderState => NeedsProvider && !HasTurns;
+
+    /// <summary>The empty state with AI ready: what to ask, and what goes with it.</summary>
+    public bool ShowReadyState => IsOn && !NeedsProvider && !HasTurns;
+
+    /// <summary>AI was turned off with a conversation on screen: the conversation stays, Turn On replaces the composer.</summary>
+    public bool ShowOffBar => IsOff && HasTurns;
 
     public bool IsBusy => Ai.IsBusy;
 
@@ -182,13 +242,36 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     public void Refresh()
     {
+        if (IsOff && IsAnswering)
+        {
+            // AI was turned off (the setting, or for the workspace) while a turn ran: it stops, as Stop does, and the
+            // turn says so. The composer and its Stop are gone while AI is off.
+            Stop();
+        }
+
         OnPropertyChanged(nameof(IsOff));
         OnPropertyChanged(nameof(IsOn));
         OnPropertyChanged(nameof(NeedsProvider));
         OnPropertyChanged(nameof(OffMessage));
         OnPropertyChanged(nameof(ProviderLabel));
         OnPropertyChanged(nameof(CanSend));
+        OnStatesChanged();
         UpdateContextPreview();
+    }
+
+    private void OnTurnsChanged()
+    {
+        OnPropertyChanged(nameof(HasTurns));
+        OnPropertyChanged(nameof(IsAnswering));
+        OnStatesChanged();
+    }
+
+    private void OnStatesChanged()
+    {
+        OnPropertyChanged(nameof(ShowOffState));
+        OnPropertyChanged(nameof(ShowProviderState));
+        OnPropertyChanged(nameof(ShowReadyState));
+        OnPropertyChanged(nameof(ShowOffBar));
     }
 
     /// <summary>Sends the input with the chosen context.</summary>
@@ -274,6 +357,9 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     public Task InsertAsync(AiChatTurn turn, AiCodeBlock block) => _host.ApplyAiCodeAsync(turn, block, insertOnly: true);
 
     public void OpenLink(string target) => _host.OpenLink(target);
+
+    /// <summary>Opens a file a step worked on.</summary>
+    public void OpenLocation(AiStepLocation location) => _ = _host.OpenAiLocationAsync(location.Path, location.Line);
 
     /// <summary>What went with a turn, and what didn't, in a line.</summary>
     public static string ContextSummary(AiChatTurn turn)

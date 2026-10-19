@@ -14,6 +14,8 @@ namespace Codalus.Shell.Controls;
 /// their names, toggle buttons checkable entries, combo boxes submenus of their choices. Text boxes and labels never
 /// overflow. Items at the row's end with <c>HorizontalAlignment="Right"</c> (a status such as "Docker · Linux", M34h)
 /// sit at its right end when there is room and no stretching box.
+/// A spacer (a control with the <c>toolbarSpacer</c> class, M34h) takes the width that is left instead, down to
+/// nothing, so the items after it sit at the right end (AI Chat's Agent switch and its Request Log and Configure).
 /// </summary>
 public sealed class ToolbarPanel : Panel
 {
@@ -72,7 +74,9 @@ public sealed class ToolbarPanel : Panel
 
     private IEnumerable<Control> Items => Children.Where(c => c != _overflow && c.IsVisible);
 
-    private static bool Stretches(Control child) => child is TextBox || child is AutoCompleteBox;
+    private static bool Stretches(Control child) => child is TextBox || child is AutoCompleteBox || IsSpacer(child);
+
+    private static bool IsSpacer(Control child) => child.Classes.Contains("toolbarSpacer");
 
     private static bool CanOverflow(Control child) => child is Button or ToggleButton or ComboBox or SplitButton or SegmentedControl or Separator || child.Classes.Contains("toolbarSeparator");
 
@@ -100,7 +104,7 @@ public sealed class ToolbarPanel : Panel
     {
         var items = Items.ToList();
         var stretch = items.LastOrDefault(Stretches);
-        var widths = items.Select(c => Stretches(c) ? Math.Max(MinStretch, Math.Min(c.DesiredSize.Width, 200)) : c.DesiredSize.Width).ToList();
+        var widths = items.Select(c => IsSpacer(c) ? 0 : Stretches(c) ? Math.Max(MinStretch, Math.Min(c.DesiredSize.Width, 200)) : c.DesiredSize.Width).ToList();
         var total = widths.Sum() + Spacing * Math.Max(0, items.Count - 1);
 
         // A trailing status (right-aligned text at the row's end, M34h) is the first to go when the row is too narrow; it

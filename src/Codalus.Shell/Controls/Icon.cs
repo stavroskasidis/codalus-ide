@@ -341,6 +341,13 @@ public static class IconSet
         ["sparkle"] = "sparkle_16_regular",
         ["phone"] = "phone_16_regular",
 
+        // AI Chat (M34h, docs/design/controls/AiChat.dc.html): a new chat, sending a question, and a code block's Insert
+        // at Cursor and Apply….
+        ["chat-add"] = "chat_add_16_regular",
+        ["send"] = "send_16_regular",
+        ["insert"] = "arrow_import_16_regular",
+        ["document-check"] = "document_checkmark_16_regular",
+
         // The control set's views (M34h): tool window toolbars and command rows as icon buttons; the WCF Test Client's
         // Add an item, the HTTP Response's time and Word Wrap.
         ["add"] = "add_16_regular",
