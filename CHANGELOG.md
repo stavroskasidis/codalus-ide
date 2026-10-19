@@ -29,7 +29,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
   - Save As Solution Filter said "Saved" when the save failed.
   - `Escape` in a quick pick hid the notifications instead of closing the quick pick.
   - Reattach attached to an unrelated `dotnet` process. Over SSH, in a container or in WSL it now finds the same program by its id and command line; on this machine it asks which `dotnet` process to attach to.
-  - Attach to a Process in a Container used Docker unless `debug.containerTool` was set. It uses the Containers window's engine (Docker or Podman). When no container engine answers (the tool is missing, or Docker is installed but its daemon isn't running), it says so and how to start or install one, as the Containers window does, instead of showing `docker ps`'s message as an error.
+  - Attach to a Process in a Container uses the `debug.containerTool` engine (Docker by default, or Podman). When no container engine answers (the tool is missing, or Docker is installed but its daemon isn't running), it says so and how to start or install one, as the Containers window does, instead of showing `docker ps`'s message as an error.
   - Create Dump in a session over SSH, in a container, in WSL or in a remote window dumped a local process with the same id. It now says it dumps programs on this machine only.
   - On Windows, copying and pasting while another program held the clipboard failed with an error. It tries again briefly, then says so on the status bar.
   - Options and Settings open without a pause of about a second.
