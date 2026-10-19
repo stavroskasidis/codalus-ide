@@ -264,6 +264,19 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
     }
 
     [Fact]
+    public void Reattach_finds_the_same_program_never_another_dotnet()
+    {
+        // A framework-dependent program is "dotnet" like every other one there: Reattach went by that name alone and
+        // attached to whichever ran first (an MSBuild node, on the smoke test's stand-in).
+        var last = new RemoteProcess(42, "dotnet", "dotnet App.dll --port 5", IsDotnet: true);
+        RemoteProcess[] others = [new(7, "dotnet", "dotnet /usr/lib/dotnet/sdk/MSBuild.dll /nodemode:1", true), new(9, "sh", "sh", false)];
+
+        Assert.Null(RemoteShell.FindAgain(others, last));
+        Assert.Equal(42, RemoteShell.FindAgain([.. others, last], last)?.Id);
+        Assert.Equal(51, RemoteShell.FindAgain([.. others, last with { Id = 51 }], last)?.Id); // started again
+    }
+
+    [Fact]
     public void Source_maps_go_both_ways_and_infer_folders_from_the_solution()
     {
         var local = Path.Combine(Path.GetTempPath(), "codalus-map", "App");

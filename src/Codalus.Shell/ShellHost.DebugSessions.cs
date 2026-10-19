@@ -30,7 +30,7 @@ public sealed partial class ShellHost
     public static string DefaultDebugConsole => OperatingSystem.IsWindows() ? "externalConsole" : "internalConsole";
 
     private CrashDumpWatcher? _crashWatcher;
-    private (RemoteTarget Target, string Name)? _lastRemote;
+    private (RemoteTarget Target, RemoteProcess Process)? _lastRemote;
     private string _lastSshDestination = string.Empty;
     private readonly Queue<string> _pendingBrowserUrls = new();
 
@@ -366,7 +366,7 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Lists <paramref name="target"/>'s processes (.NET first), and attaches to the one picked (or named <paramref name="processName"/>).</summary>
-    public async Task<bool> AttachToRemoteAsync(RemoteTarget target, string? processName, int? processId = null)
+    public async Task<bool> AttachToRemoteAsync(RemoteTarget target, string? processName, int? processId = null, RemoteProcess? again = null)
     {
         UseAskpassForSsh();
         IReadOnlyList<RemoteProcess> processes;
@@ -382,6 +382,7 @@ public sealed partial class ShellHost
         }
 
         var process = processId is { } id ? processes.FirstOrDefault(p => p.Id == id)
+            : again is not null ? RemoteShell.FindAgain(processes, again)
             : processName is not null ? processes.FirstOrDefault(p => p.Name == processName && p.IsDotnet)
             : null;
         if (process is null)
@@ -414,7 +415,7 @@ public sealed partial class ShellHost
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             var map = new SourceMap(SourceFileMap(), SolutionFiles());
             await Debugger.AttachAsync(process.Id, CancellationToken.None, new RemoteAttach(RemoteShell.Adapter(target, debugger), map, target.Display), process.Name).ConfigureAwait(true);
-            _lastRemote = (target, process.Name);
+            _lastRemote = (target, process);
             _lastAttached = null;
             return true;
         }
@@ -433,7 +434,8 @@ public sealed partial class ShellHost
             return false;
         }
 
-        await AttachToRemoteAsync(last.Target, last.Name).ConfigureAwait(true);
+        // The same program, else the picker: by name alone it could be any "dotnet" there.
+        await AttachToRemoteAsync(last.Target, processName: null, again: last.Process).ConfigureAwait(true);
         return true;
     }
 
