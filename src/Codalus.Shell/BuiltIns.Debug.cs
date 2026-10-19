@@ -19,7 +19,7 @@ internal static partial class BuiltIns
           { "key": "f10", "command": "debug.stepOver", "when": "debugStopped" },
           { "key": "f11", "command": "debug.stepInto", "when": "debugStopped" },
           { "key": "shift+f11", "command": "debug.stepOut", "when": "debugStopped" },
-          { "key": "ctrl+alt+pause", "command": "debug.pause", "when": "debugRunning" },
+          { "key": "ctrl+alt+pause", "mac": "cmd+alt+p", "command": "debug.pause", "when": "debugRunning" },
           { "key": "f9", "command": "debug.toggleBreakpoint", "when": "editorTextFocus" },
           { "key": "ctrl+f9", "command": "debug.toggleBreakpointEnabled", "when": "editorTextFocus" },
           { "key": "primary+shift+f9", "command": "debug.deleteAllBreakpoints", "when": "hasBreakpoints" },

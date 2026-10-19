@@ -149,7 +149,7 @@ public sealed class StartWindowViewModel : ObservableObject
     {
         if (_shell.Window?.Clipboard is { } clipboard)
         {
-            _ = Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, row.Entry.Path);
+            _ = Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, row.Entry.Path);
         }
     }
 

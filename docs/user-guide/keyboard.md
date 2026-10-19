@@ -33,6 +33,10 @@ Undo, Redo, Cut, Copy, Paste and Select All belong to the text controls (Ctrl+Z,
 | Collapse to Definitions | Ctrl+M, Ctrl+O | Ctrl+M, Ctrl+O | ⌘K ⌘0 | the same |
 | Expand All Outlining | Ctrl+M, Ctrl+L | Ctrl+M, Ctrl+L | ⌘K ⌘J | the same |
 | Replace | Ctrl+H | Ctrl+H | ⌘⌥F | ⌘H hides the app on macOS |
+| Start Without Debugging | Ctrl+F5 | Ctrl+F5 | ⌃F5 | ⌘F5 turns VoiceOver on or off on macOS |
+| Break All | Ctrl+Alt+Break | Ctrl+Alt+Break | ⌘⌥P | Mac keyboards have no Break (Pause) key |
+| Git: Toggle Blame | Ctrl+Shift+Alt+B | Ctrl+Shift+Alt+B | ⌘⌥B | Ctrl+Alt+B is the Breakpoints window (⌃⌥B on macOS) |
+| Find Usages (ReSharper scheme) | Alt+F7 | Shift+Alt+F12 | ⌥F7 | GNOME moves the window with Alt+F7 |
 
 ## Shortcuts left as they are, with a note
 
@@ -43,5 +47,5 @@ Undo, Redo, Cut, Copy, Paste and Select All belong to the text controls (Ctrl+Z,
 ## Reserved and never bound by default
 
 - **Windows:** Win+anything, Win+Space (input sources), Alt+Space (the window menu), Alt+Tab, Ctrl+Esc, Ctrl+Shift+Esc (Task Manager), Ctrl+Alt+Del.
-- **Linux:** Super+anything, Alt+F2, Alt+F10, Ctrl+Alt+F1…F12, Ctrl+Alt+arrows, Ctrl+Alt+T, Ctrl+Alt+Backspace.
-- **macOS:** ⌘Space, ⌘⌥Space, ⌘Tab, ⌘H, ⌘M, ⌘⌥⎋ (Force Quit), ⌘⇧3/4/5 (screenshots), ⌃↑/⌃↓ (Mission Control), ⌃←/⌃→ (Spaces), ⌃⌥Space (next input source).
+- **Linux:** Super+anything, Alt+F2, Alt+F7, Alt+F10, Ctrl+Alt+F1…F12, Ctrl+Alt+arrows, Ctrl+Alt+T, Ctrl+Alt+Backspace.
+- **macOS:** ⌘Space, ⌘⌥Space, ⌘Tab, ⌘H, ⌘M, ⌘F5 (VoiceOver), ⌘⌥⎋ (Force Quit), ⌘⇧3/4/5 (screenshots), ⌃↑/⌃↓ (Mission Control), ⌃←/⌃→ (Spaces), ⌃⌥Space (next input source).

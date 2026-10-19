@@ -12,7 +12,7 @@ internal static partial class BuiltIns
     public const string GitKeybindings = """
         [
           { "key": "primary+0 primary+g", "command": "workbench.view.git.changes" },
-          { "key": "primary+alt+b", "command": "git.toggleBlame", "when": "editorTextFocus && gitRepository" },
+          { "key": "ctrl+shift+alt+b", "mac": "cmd+alt+b", "command": "git.toggleBlame", "when": "editorTextFocus && gitRepository" },
           { "key": "primary+0 primary+h", "command": "git.history", "when": "gitRepository" }
         ]
         """;

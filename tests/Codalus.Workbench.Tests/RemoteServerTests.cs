@@ -439,15 +439,8 @@ public sealed class RemoteServerTests
     {
         if (OperatingSystem.IsWindows())
         {
-            var distribution = Environment.GetEnvironmentVariable("CODALUS_TEST_WSL") is { Length: > 0 } name ? name : "Ubuntu";
-            var listed = RemoteTargets.WslDistributionsAsync(CancellationToken.None).GetAwaiter().GetResult();
-            if (!listed.Contains(distribution, StringComparer.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            var dotnet = RemoteShell.RunAsync(new WslTarget(distribution), "PATH=\"$PATH:$HOME/.dotnet\" command -v dotnet", CancellationToken.None).GetAwaiter().GetResult();
-            return dotnet.Succeeded && dotnet.Output.Trim().Length > 0 ? new WslTarget(distribution) : null;
+            // With the tests' .NET there: the framework-dependent server of a Debug build runs on it.
+            return Codalus.Tests.WslStandIn.Distribution is { } distribution ? new WslTarget(distribution) : null;
         }
 
         var script = Path.Combine(folder, "fake-ssh");

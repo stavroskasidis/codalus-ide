@@ -68,6 +68,12 @@ public sealed partial class ShellHost
             return null;
         }
 
+        if (processId is null && RunsElsewhere(Remote?.Display, Debugger.Processes, target) is { } where)
+        {
+            Workbench.Notifications.Info(Localizer.Format("msg.dumps.onlyThisMachine", "Create Dump writes dumps of programs on this machine; this one runs on {0}.", where));
+            return null;
+        }
+
         var folder = Path.Combine(Paths.Logs, "dumps");
         var path = Path.Combine(folder, $"dump-{target}-{DateTime.Now:yyyyMMdd-HHmmss}.dmp");
         try
@@ -88,6 +94,13 @@ public sealed partial class ShellHost
             return null;
         }
     }
+
+    /// <summary>
+    /// Where the debugged process <paramref name="processId"/> runs when it isn't this machine (a remote window, or a
+    /// session over SSH, in a container or in WSL): the companion dumps local processes, and that id here is another one.
+    /// </summary>
+    internal static string? RunsElsewhere(string? remoteWindow, IReadOnlyList<DebugProcess> processes, int processId) =>
+        remoteWindow ?? processes.FirstOrDefault(p => p.Id == processId && !p.Ended)?.Target;
 
     private async Task OpenSourceLineAsync(string file, int line) =>
         await OpenFileAsync(file, at: new Position(Math.Max(0, line - 1), 0)).ConfigureAwait(true);

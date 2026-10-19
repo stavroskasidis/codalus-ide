@@ -51,6 +51,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 - Tests never reach a real service: use `tests/Shared` mocks (HTTP, GitHub, NuGet feed, model servers), stand-in tools and recorded output. Nothing installs, registers (JIT debugging) or pulls images beyond `mcr.microsoft.com/dotnet` for real; container tests remove what they create.
 - Regenerated files: `CODALUS_UPDATE_PUBLIC_API=1`, `CODALUS_UPDATE_API_REFERENCE=1`, `CODALUS_UPDATE_LOCALIZATION=1` (commit `en.json` and `localization-literals.txt` after changing UI text).
 - `eng/smoke-test.sh <codalus>` runs the real windowed app through each major feature (`SmokeTest` in `src/Codalus.Shell/Infrastructure`). Add a step when a feature must be proven in the shipped app.
+- Its last step, `shell.commandSweep` (`SmokeTest.CommandSweep.cs`), runs every command from its menu item, key binding and the palette and writes `command-sweep.json`; `CommandSweepTests` is its static half. A new command that leaves the machine gets a skip reason there; a triaged failure goes in `s_sweepKnown` with a `TODO(issue)`.
 
 ## UI rules
 

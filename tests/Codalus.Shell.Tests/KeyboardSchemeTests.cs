@@ -73,12 +73,25 @@ public sealed class KeyboardSchemeTests
         Assert.Equal("workbench.showCommandPalette", CommandFor(f, "alt+x"));
         Assert.Equal("ctrl+x ctrl+s", f.Shell.Workbench.Keybindings.GetBinding("file.save")?.ToString()); // what the menus show
 
+        // Ctrl+X Ctrl+F finds a file (Go To File), as Emacs's find-file asks for one: the command sweep found it ran the
+        // plugins' workbench.openFile, which fails without a path.
+        var ran = new List<Codalus.Workbench.Commands.CommandExecutedEventArgs>();
+        f.Shell.Workbench.Commands.Executed += (_, e) => ran.Add(e);
+        editor.Editor.TextArea.Focus();
+        f.Press(Key.X, Ctrl);
+        f.Press(Key.F, Ctrl);
+        await ShellFixture.PumpUntil(() => ran.Any(e => e.CommandId == "workbench.action.gotoFile"));
+        Assert.All(ran, e => Assert.Null(e.Error));
+        Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Severity == Codalus.Workbench.Notifications.NotificationSeverity.Error);
+        f.Shell.CodeSearch.Close();
+
         // ReSharper's: over the default scheme, which still holds where it doesn't bind a key.
         await SetSchemeAsync(f, "resharper");
         Assert.Equal("editor.action.quickFix", CommandFor(f, "ctrl+shift+r"));
         Assert.Equal("editor.action.smartSelect.expand", CommandFor(f, "ctrl+w"));
-        Assert.Equal("editor.action.referenceSearch", CommandFor(f, "alt+f7"));
+        Assert.Equal("editor.action.referenceSearch", CommandFor(f, OperatingSystem.IsLinux() ? "shift+alt+f12" : "alt+f7")); // GNOME takes Alt+F7
         Assert.Equal("editor.action.quickFix", CommandFor(f, "alt+enter"));
+        Assert.Equal("explorer.syncWithActiveDocument", CommandFor(f, "shift+alt+l")); // Locate in Solution Explorer, not the OS file manager
         Assert.Equal("build.buildSolution", CommandFor(f, "f6"));
         Assert.Null(CommandFor(f, "ctrl+n"));
 

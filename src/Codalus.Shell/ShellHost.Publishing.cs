@@ -75,7 +75,7 @@ public sealed partial class ShellHost
             {
                 if (t.Result == "Open Folder" && Directory.Exists(folder))
                 {
-                    ShellIntegration.OpenUrl(new Uri(folder + Path.DirectorySeparatorChar));
+                    OpenExternalUrl(new Uri(folder + Path.DirectorySeparatorChar));
                 }
             },
             CancellationToken.None,

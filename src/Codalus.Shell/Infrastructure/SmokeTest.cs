@@ -34,7 +34,7 @@ namespace Codalus.Shell.Infrastructure;
 internal sealed partial class SmokeTest(Window window, ShellHost shell, string samples)
 {
     private const string Branch = "main";
-    private static readonly TimeSpan s_watchdog = TimeSpan.FromMinutes(25);
+    private static readonly TimeSpan s_watchdog = TimeSpan.FromMinutes(40); // the command sweep's 25 at most, with the rest
     private static readonly string[] s_commands = ["workbench.showCommandPalette", "build.buildSolution", "debug.start", "git.commit"];
     private static readonly string[] s_themes = ["blue", "light", "highContrast", "dark"];
 
@@ -1096,7 +1096,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
         else
         {
-            Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, "No stand-in: on Windows a WSL distribution with .NET; elsewhere sh.");
+            Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, $"No stand-in: on Windows a WSL distribution with the .NET {Environment.Version.Major} runtime; elsewhere sh.");
         }
         // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
         await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
@@ -1297,6 +1297,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // Last: it opens a solution of 38 projects, and nothing after it depends on what it leaves behind.
         await StepAsync("dotnet.older", "M33", "Projects of .NET Core 2.0 to .NET 10 open and build; Hot Reload says why it needs .NET 6", OlderFrameworksStepAsync).ConfigureAwait(true);
+
+        // The command sweep: every command through its menu item, key binding and the palette, on its own fixture.
+        await StepAsync("shell.commandSweep", "Sweep", "Every command runs from its menu item, key binding and the command palette without an error, an unhandled exception or a stalled UI, and what it opens closes cleanly", CommandSweepStepAsync, limit: TimeSpan.FromMinutes(25)).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -1590,8 +1593,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             foreach (var distribution in await RemoteTargets.WslDistributionsAsync(CancellationToken.None).ConfigureAwait(true))
             {
                 var target = new WslTarget(distribution) { Home = home };
+                // With the .NET the debuggee targets: a distribution with an older .NET only timed the step out.
                 if (!distribution.StartsWith("docker-", StringComparison.OrdinalIgnoreCase) && !distribution.StartsWith("podman-", StringComparison.OrdinalIgnoreCase)
-                    && (await RemoteShell.RunAsync(target, "exec sh -lc 'command -v dotnet'", CancellationToken.None).ConfigureAwait(true)).Output.Trim().StartsWith('/'))
+                    && (await RemoteShell.RunAsync(target, "exec sh -lc 'dotnet --list-runtimes'", CancellationToken.None).ConfigureAwait(true)).Output
+                        .Contains($"Microsoft.NETCore.App {Environment.Version.Major}.", StringComparison.Ordinal))
                 {
                     return target;
                 }
@@ -3403,7 +3408,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     // ------------------------------------------------------------------ steps
 
-    private async Task StepAsync(string id, string milestone, string title, Func<Task> body, string? requires = null)
+    /// <param name="limit">The step's own time limit (the command sweep's); <see cref="s_stepLimit"/> otherwise.</param>
+    private async Task StepAsync(string id, string milestone, string title, Func<Task> body, string? requires = null, TimeSpan? limit = null)
     {
         if (requires is not null && _results.FirstOrDefault(r => r.Id == requires) is { Outcome: not "passed" })
         {
@@ -3437,7 +3443,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             // A step that hangs (a request without a timeout) fails on its own instead of using up the run.
             running = body();
-            await running.WaitAsync(s_stepLimit).ConfigureAwait(true);
+            await running.WaitAsync(limit ?? s_stepLimit).ConfigureAwait(true);
             Report(id, milestone, title, "passed", Stopwatch.GetElapsedTime(start).TotalSeconds, null);
         }
         catch (Exception ex)
@@ -3445,7 +3451,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             // Only the step limit is reported as such: a TimeoutException from the step itself (a timed wait in the
             // code it drives) is reported with its stack, like any other exception.
             var error = ex is SmokeFailure ? ex.Message
-                : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes."
+                : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {(limit ?? s_stepLimit).TotalMinutes:0} minutes."
                 : ex.ToString();
             Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, error);
             Screenshot($"smoke-test-{id}.png", keepToasts: true); // the toasts may say why

@@ -682,7 +682,7 @@ public sealed partial class ShellHost : IEditorServices
         }
         else if (Uri.TryCreate(target, UriKind.Absolute, out var url) && url.Scheme is "http" or "https")
         {
-            ShellIntegration.OpenUrl(url);
+            OpenExternalUrl(url);
         }
     }
 
@@ -918,7 +918,7 @@ public sealed partial class ShellHost : IEditorServices
         {
             if (Uri.TryCreate(link, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
             {
-                ShellIntegration.OpenUrl(uri);
+                OpenExternalUrl(uri);
             }
             else if (link.StartsWith("command:", StringComparison.Ordinal))
             {
@@ -1011,7 +1011,7 @@ public sealed partial class ShellHost : IEditorServices
     {
         if (Layout.ActiveDocument?.FilePath is { Length: > 0 } path && Window?.Clipboard is { } clipboard)
         {
-            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, path).ConfigureAwait(true);
+            await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, path).ConfigureAwait(true);
         }
     }
 
@@ -1025,7 +1025,7 @@ public sealed partial class ShellHost : IEditorServices
 
         try
         {
-            Codalus.Platform.ShellIntegration.RevealInFileManager(path);
+            RevealPath(path);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {

@@ -94,4 +94,4 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 | | `Ctrl+E Ctrl+E` | Send selection to C# Interactive |
 | Git | `Ctrl+0 Ctrl+G` | Git Changes |
 | | `Ctrl+0 Ctrl+H` | History |
-| | `Ctrl+Alt+B` (in the editor) | Toggle blame |
+| | `Ctrl+Shift+Alt+B` (in the editor) | Toggle blame |

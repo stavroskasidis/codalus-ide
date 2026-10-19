@@ -75,6 +75,25 @@ public sealed class ManifestValidationTests : IDisposable
     }
 
     [Fact]
+    public void Document_tab_menus_are_known_and_clauses_that_dont_parse_are_reported()
+    {
+        // documentTab/context is a documented location (API 1.0, M34e); a when-clause or enablement that doesn't parse
+        // registers as "always" (PluginManager), which the author should hear about.
+        var plugin = PluginDescription.Read(Variant("menus", m =>
+        {
+            m["contributes"]!["menus"]!["documentTab/context"] = JsonNode.Parse("""[{ "command": "hello.sayHello" }]""");
+            m["contributes"]!["menus"]!["menuBar/tools"]![0]!["when"] = "editorTextFocus &&";
+            m["contributes"]!["commands"]![0]!["enablement"] = "(solutionOpen";
+        }), isBuiltIn: false, PlatformKind.Windows);
+
+        Assert.Equal(PluginState.Ready, plugin.State);
+        Assert.DoesNotContain(plugin.Warnings, w => w.Contains("documentTab/context", StringComparison.Ordinal));
+        Assert.Contains(plugin.Warnings, w => w.Contains("the when-clause of 'hello.sayHello' doesn't parse", StringComparison.Ordinal));
+        Assert.Contains(plugin.Warnings, w => w.Contains("Command 'hello.sayHello': its enablement doesn't parse", StringComparison.Ordinal));
+        Assert.Equal(2, plugin.Warnings.Count);
+    }
+
+    [Fact]
     public void Incompatible_engine_ranges_are_rejected_with_a_reason()
     {
         var plugin = PluginDescription.Read(Variant("future", m => m["engines"]!["codalus"] = "^9.0.0"), false, PlatformKind.Windows);

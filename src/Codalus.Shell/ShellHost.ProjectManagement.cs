@@ -190,8 +190,10 @@ public sealed partial class ShellHost
             return;
         }
 
-        await RunManagementAsync(() => ProjectManagement.SaveFilterAsync(path, null, CancellationToken.None)).ConfigureAwait(true);
-        Workbench.Notifications.Info(Localizer.Format("msg.projectManagement.savedOpenItToLoadOnly", "Saved {0}. Open it to load only these projects.", Path.GetFileName(path)));
+        if (await RunManagementAsync(() => ProjectManagement.SaveFilterAsync(path, null, CancellationToken.None)).ConfigureAwait(true))
+        {
+            Workbench.Notifications.Info(Localizer.Format("msg.projectManagement.savedOpenItToLoadOnly", "Saved {0}. Open it to load only these projects.", Path.GetFileName(path)));
+        }
     }
 
     /// <summary>Closes and reopens the solution (or filter): a new build host, e.g. after global.json changed.</summary>
@@ -205,15 +207,18 @@ public sealed partial class ShellHost
         await OpenSolutionAsync(solution.FilterPath ?? solution.Path).ConfigureAwait(true);
     }
 
-    private async Task RunManagementAsync(Func<Task> action)
+    /// <summary>Runs a project management request; false (and an error notification) when the build host refused it.</summary>
+    private async Task<bool> RunManagementAsync(Func<Task> action)
     {
         try
         {
             await action().ConfigureAwait(true);
+            return true;
         }
         catch (Exception ex) when (ex is JsonRpcRemoteException or InvalidOperationException or JsonRpcConnectionLostException or IOException)
         {
             Workbench.Notifications.Error(ex.Message);
+            return false;
         }
     }
 }

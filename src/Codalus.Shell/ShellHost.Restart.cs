@@ -65,16 +65,26 @@ public sealed partial class ShellHost
     /// <summary>Turns a plugin off or back on (<see cref="PluginManager.DisabledSetting"/>); it applies at the next start.</summary>
     public async Task SetPluginTurnedOffAsync(string pluginId, bool off)
     {
-        var ids = Workbench.Settings.GetValue(PluginManager.DisabledSetting) is { ValueKind: JsonValueKind.Array } current
-            ? current.EnumerateArray().Where(i => i.ValueKind == JsonValueKind.String).Select(i => i.GetString()!).ToList()
-            : [];
-        ids.RemoveAll(i => string.Equals(i, pluginId, StringComparison.OrdinalIgnoreCase));
-        if (off)
+        // Each layer's own list, not the merged value (which wrote the workspace's entries into the user's settings): off
+        // goes to the user's settings; on takes the plugin out of every layer that turns it off, the workspace's too.
+        foreach (var scope in off ? [SettingScope.User] : new[] { SettingScope.User, SettingScope.Workspace })
         {
-            ids.Add(pluginId);
+            var ids = Workbench.Settings.GetLayerValue(PluginManager.DisabledSetting, scope) is { ValueKind: JsonValueKind.Array } current
+                ? current.EnumerateArray().Where(i => i.ValueKind == JsonValueKind.String).Select(i => i.GetString()!).ToList()
+                : [];
+            var removed = ids.RemoveAll(i => string.Equals(i, pluginId, StringComparison.OrdinalIgnoreCase)) > 0;
+            if (off)
+            {
+                ids.Add(pluginId);
+            }
+            else if (!removed)
+            {
+                continue;
+            }
+
+            await Workbench.Settings.SetAsync(PluginManager.DisabledSetting, JsonSerializer.SerializeToElement(ids.ToArray(), Docking.ShellJsonContext.Default.StringArray), scope, CancellationToken.None).ConfigureAwait(true);
         }
 
-        await Workbench.Settings.SetAsync(PluginManager.DisabledSetting, JsonSerializer.SerializeToElement(ids.ToArray(), Docking.ShellJsonContext.Default.StringArray), SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         PluginList.Refresh();
         if (await Workbench.Notifications.Info($"The plugin {pluginId} is turned {(off ? "off" : "on")} from the next start.", "Restart Now").Result.ConfigureAwait(true) == "Restart Now")
         {

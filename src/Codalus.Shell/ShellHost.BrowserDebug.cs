@@ -202,7 +202,7 @@ public sealed partial class ShellHost
             Workbench.Notifications.Warning(Localizer.Format("msg.browserDebug.thePageCouldntBeDebuggedIn", "The page couldn't be debugged in {0}: {1} It opened without the debugger; the server is still debugged.", browser.Display, ex.Message));
             if (Uri.TryCreate(page.Url, UriKind.Absolute, out var uri))
             {
-                ShellIntegration.OpenUrl(uri);
+                OpenExternalUrl(uri);
             }
         }
     }
