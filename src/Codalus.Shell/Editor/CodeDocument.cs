@@ -29,6 +29,8 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     private bool _isDeletedOnDisk;
     private bool _isModified;
     private int _changeCheckScheduled;
+    private int _saving;
+    private bool _checkAfterSave;
 
     private CodeDocument(string path, string? uri, string text, TextFileFormat format, bool isReadOnly)
     {
@@ -210,10 +212,25 @@ public sealed class CodeDocument : ObservableObject, IDisposable
             return;
         }
 
-        await TextFiles.WriteAsync(Path, Text.Text, Format, cancellationToken).ConfigureAwait(true);
-        RememberFileState();
-        Text.UndoStack.MarkAsOriginalFile();
-        IsDeletedOnDisk = false;
+        // While the file is written the watcher sees the new time before it is remembered; its check waits for the save
+        // (a save awaited at a low priority, as the smoke test's, could otherwise be reported as a change on disk).
+        _saving++;
+        try
+        {
+            await TextFiles.WriteAsync(Path, Text.Text, Format, cancellationToken).ConfigureAwait(true);
+            RememberFileState();
+            Text.UndoStack.MarkAsOriginalFile();
+            IsDeletedOnDisk = false;
+        }
+        finally
+        {
+            if (--_saving == 0 && _checkAfterSave)
+            {
+                _checkAfterSave = false;
+                ScheduleCheck(); // a change from elsewhere during the save is still seen
+            }
+        }
+
         if (_watcher is null)
         {
             Watch();
@@ -337,6 +354,12 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     private void OnFileState(bool exists, DateTime lastWrite, long length)
     {
+        if (_saving > 0)
+        {
+            _checkAfterSave = true; // our own save is writing the file: checked again once its state is remembered
+            return;
+        }
+
         if (!exists)
         {
             IsDeletedOnDisk = true;

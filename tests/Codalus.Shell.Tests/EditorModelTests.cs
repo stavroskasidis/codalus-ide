@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text;
+using Avalonia.Threading;
 using Codalus.Shell.Editor;
 
 namespace Codalus.Shell.Tests;
@@ -84,5 +86,68 @@ public class MarkdownRendererTests
                     ?? ((Avalonia.Controls.Panel)control).Children.OfType<Avalonia.Controls.TextBlock>().First();
         var text = string.Concat(block.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(r => r.Text));
         Assert.Equal("a *b* _c_ d", text);
+    }
+}
+
+public class CodeDocumentDiskTests
+{
+    /// <summary>
+    /// A save started at a low dispatcher priority (the smoke test runs at Background) while the UI thread is busy: the
+    /// watcher's check of the written file, posted at Default, ran before the save's continuation remembered the file's
+    /// new time, and reported the document's own save as "changed on disk, and you have unsaved changes".
+    /// </summary>
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public async Task Its_own_save_is_not_a_change_on_disk_when_the_watcher_check_runs_first()
+    {
+        var folder = Directory.CreateTempSubdirectory("codalus-save-").FullName;
+        try
+        {
+            var path = Path.Combine(folder, "File.cs");
+            await File.WriteAllTextAsync(path, "class A { }\n");
+            using var document = await CodeDocument.OpenAsync(path, CancellationToken.None);
+            var conflicts = 0;
+            document.ConflictDetected += (_, _) => conflicts++;
+
+            // Big enough that the file is written on the thread pool, so the save awaits it.
+            var edit = string.Concat(Enumerable.Repeat("// edited\n", 500_000));
+            document.Text.Insert(0, edit);
+            Assert.True(document.IsModified);
+            var length = Encoding.UTF8.GetByteCount(document.Text.Text);
+
+            var save = Dispatcher.UIThread.InvokeAsync(() => document.SaveAsync(CancellationToken.None), DispatcherPriority.Background);
+            Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
+            Assert.False(save.IsCompleted, "the save awaits the write");
+
+            // The UI thread stays busy while the file is written and the watcher's check (at Default) is queued ahead of
+            // the save's continuation (at Background).
+            var writing = Stopwatch.StartNew();
+            while (new FileInfo(path).Length != length && writing.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                Thread.Sleep(10);
+            }
+
+            Thread.Sleep(800);
+            Dispatcher.UIThread.RunJobs();
+            await save;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0, conflicts);
+            Assert.False(document.IsModified);
+
+            // A change from outside while the document has unsaved changes is still one.
+            document.Text.Insert(0, "// mine\n");
+            await File.WriteAllTextAsync(path, "class B { }\n");
+            var changing = Stopwatch.StartNew();
+            while (conflicts == 0 && changing.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                Dispatcher.UIThread.RunJobs();
+                await Task.Delay(15);
+            }
+
+            Assert.Equal(1, conflicts);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 }
