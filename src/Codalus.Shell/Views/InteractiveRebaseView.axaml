@@ -1,6 +1,7 @@
 <UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.InteractiveRebaseView"
              x:DataType="vm:InteractiveRebaseViewModel">
@@ -15,8 +16,8 @@
       <Button Classes="accent" Content="{l:T interactiveRebase.startRebase}" Command="{Binding StartCommand}" />
     </StackPanel>
     <StackPanel DockPanel.Dock="Right" Spacing="4" Margin="8,0,0,0">
-      <Button Content="{l:T interactiveRebase.up}" Command="{Binding MoveUpCommand}" MinWidth="64" AutomationProperties.Name="{l:T interactiveRebase.moveUp}" />
-      <Button Content="{l:T interactiveRebase.down}" Command="{Binding MoveDownCommand}" MinWidth="64" AutomationProperties.Name="{l:T interactiveRebase.moveDown}" />
+      <Button Classes="icon" controls:ButtonIcon.Kind="arrow-up" Command="{Binding MoveUpCommand}" AutomationProperties.Name="{l:T interactiveRebase.moveUp}" ToolTip.Tip="{l:T interactiveRebase.up}" />
+      <Button Classes="icon" controls:ButtonIcon.Kind="arrow-down" Command="{Binding MoveDownCommand}" AutomationProperties.Name="{l:T interactiveRebase.moveDown}" ToolTip.Tip="{l:T interactiveRebase.down}" />
     </StackPanel>
     <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T interactiveRebase.commitsToRebase}">
       <ListBox.Styles>

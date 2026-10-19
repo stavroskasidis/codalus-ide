@@ -11,13 +11,13 @@
       <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T entityFramework.buildAndRefreshTheContextsAnd}" AutomationProperties.Name="{l:T entityFramework.refreshEntityFramework}">
         <controls:Icon Kind="refresh" />
       </Button>
-      <Button Classes="toolbar" Content="{l:T entityFramework.addMigration}" Command="{Binding AddCommand}" IsEnabled="{Binding HasContext}" />
-      <Button Classes="toolbar" Content="{l:T entityFramework.updateDatabase}" Command="{Binding UpdateCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.applyThePendingMigrationsTheSql}" />
-      <Button Classes="toolbar" Content="{l:T entityFramework.script}" Command="{Binding ScriptCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.generateASqlScriptOfMigrations}" />
-      <Button Classes="toolbar" Content="{l:T entityFramework.model}" Command="{Binding ModelCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.theContextSModelADiagram}" />
-      <Button Classes="toolbar" Content="{l:T entityFramework.bundle}" Command="{Binding BundleCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.createAMigrationsBundleAnExecutable}" />
-      <Button Classes="toolbar" Content="{l:T entityFramework.compiledModel}" Command="{Binding OptimizeCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.generateACompiledModelDbcontextOptimize}" />
-      <Button Classes="toolbar" Content="{l:T entityFramework.reverseEngineer}" Command="{Binding ScaffoldCommand}" ToolTip.Tip="{l:T entityFramework.generateEntitiesAndAContextFrom}" />
+      <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="add" Content="{l:T entityFramework.addMigration}" Command="{Binding AddCommand}" IsEnabled="{Binding HasContext}" />
+      <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="database-update" Content="{l:T entityFramework.updateDatabase}" Command="{Binding UpdateCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.applyThePendingMigrationsTheSql}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="file-code" Command="{Binding ScriptCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.generateASqlScriptOfMigrations}" AutomationProperties.Name="{l:T entityFramework.script}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="diagram" Command="{Binding ModelCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.theContextSModelADiagram}" AutomationProperties.Name="{l:T entityFramework.model}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="package" Command="{Binding BundleCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.createAMigrationsBundleAnExecutable}" AutomationProperties.Name="{l:T entityFramework.bundle}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="build" Command="{Binding OptimizeCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.generateACompiledModelDbcontextOptimize}" AutomationProperties.Name="{l:T entityFramework.compiledModel}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="schema" Command="{Binding ScaffoldCommand}" ToolTip.Tip="{l:T entityFramework.generateEntitiesAndAContextFrom}" AutomationProperties.Name="{l:T entityFramework.reverseEngineer}" />
     </controls:ToolbarPanel>
     <StackPanel DockPanel.Dock="Top" Margin="8,2,8,4" Spacing="4">
       <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
@@ -45,13 +45,13 @@
         <TextBlock Text="{Binding Busy}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" />
       </StackPanel>
       <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Warning.Foreground}" />
-      <Button Content="{l:T entityFramework.installDotnetEf}" Command="{Binding InstallCommand}" IsVisible="{Binding CanInstall}" HorizontalAlignment="Left" ToolTip.Tip="{l:T entityFramework.installDotnetEfAsALocal}" />
+      <Button Classes="iconText" controls:ButtonIcon.Kind="download" Content="{l:T entityFramework.installDotnetEf}" Command="{Binding InstallCommand}" IsVisible="{Binding CanInstall}" HorizontalAlignment="Left" ToolTip.Tip="{l:T entityFramework.installDotnetEfAsALocal}" />
     </StackPanel>
     <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0" Padding="4,3">
       <controls:ToolbarPanel>
-        <Button Classes="toolbar" Content="{l:T entityFramework.updateToThisMigration}" Command="{Binding UpdateToCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T entityFramework.applyOrRevertMigrationsSoThe}" />
-        <Button Classes="toolbar" Content="{l:T entityFramework.removeLastMigration}" Command="{Binding RemoveCommand}" IsEnabled="{Binding HasContext}" />
-        <Button Classes="toolbar" Content="{l:T entityFramework.goToContext}" Command="{Binding OpenCommand}" IsEnabled="{Binding HasContext}" />
+        <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="database-update" Content="{l:T entityFramework.updateToThisMigration}" Command="{Binding UpdateToCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T entityFramework.applyOrRevertMigrationsSoThe}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="trash" Command="{Binding RemoveCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.removeLastMigration}" AutomationProperties.Name="{l:T entityFramework.removeLastMigration}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="definition" Command="{Binding OpenCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.goToContext}" AutomationProperties.Name="{l:T entityFramework.goToContext}" />
       </controls:ToolbarPanel>
     </Border>
     <ListBox x:Name="List" ItemsSource="{Binding Migrations}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T entityFramework.migrations}">

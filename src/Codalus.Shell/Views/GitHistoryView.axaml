@@ -12,7 +12,7 @@
                 ToolTip.Tip="{l:T gitHistory.branch}" AutomationProperties.Name="{l:T gitHistory.branch}" />
       <TextBox x:Name="AuthorBox" Text="{Binding Author}" Width="160" Margin="0,0,6,0" PlaceholderText="{l:T gitHistory.author}" AutomationProperties.Name="{l:T gitHistory.filterByAuthor}" />
       <TextBox x:Name="MessageBox" Text="{Binding MessageFilter}" Width="220" Margin="0,0,6,0" PlaceholderText="{l:T gitHistory.message}" AutomationProperties.Name="{l:T gitHistory.filterByMessage}" />
-      <Button Content="{l:T gitHistory.filter}" Click="OnFilter" />
+      <Button Classes="iconText compact" controls:ButtonIcon.Kind="filter" Content="{l:T gitHistory.filter}" Click="OnFilter" />
     </WrapPanel>
 
     <Grid Grid.Row="1">

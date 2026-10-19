@@ -1,6 +1,7 @@
 <local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
                    xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
                    xmlns:vm="using:Codalus.Shell.ViewModels"
                    xmlns:local="using:Codalus.Shell.Views"
                    x:Class="Codalus.Shell.Views.SnippetsManagerView"
@@ -12,13 +13,13 @@
       <Grid ColumnDefinitions="Auto,180,*">
         <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" Text="{l:T snippetsManager.language}" />
         <ComboBox Grid.Column="1" ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T snippetsManager.language}" />
-        <TextBox Grid.Column="2" Margin="8,0,0,0" Text="{Binding Search}" PlaceholderText="{l:T snippetsManager.searchNamesPrefixesAndDescriptions}" AutomationProperties.Name="{l:T snippetsManager.searchSnippets}" />
+        <TextBox Grid.Column="2" Margin="8,0,0,0" Classes="search" Text="{Binding Search}" PlaceholderText="{l:T snippetsManager.searchNamesPrefixesAndDescriptions}" AutomationProperties.Name="{l:T snippetsManager.searchSnippets}" />
       </Grid>
       <WrapPanel Orientation="Horizontal">
-        <Button Margin="0,0,6,6" Content="{l:T snippetsManager.openYourSnippets}" Command="{Binding OpenUserSnippetsCommand}" />
-        <Button Margin="0,0,6,6" Content="{l:T snippetsManager.import}" Command="{Binding ImportCommand}" />
-        <Button Margin="0,0,6,6" Content="{l:T snippetsManager.copyToYourSnippets}" Command="{Binding CopyToUserCommand}" />
-        <Button Margin="0,0,6,6" Content="{l:T snippetsManager.remove}" Command="{Binding RemoveCommand}" />
+        <Button Classes="iconText" controls:ButtonIcon.Kind="folder-open" Margin="0,0,6,6" Content="{l:T snippetsManager.openYourSnippets}" Command="{Binding OpenUserSnippetsCommand}" />
+        <Button Classes="icon" controls:ButtonIcon.Kind="import" Margin="0,0,6,6" Command="{Binding ImportCommand}" ToolTip.Tip="{l:T snippetsManager.import}" AutomationProperties.Name="{l:T snippetsManager.import}" />
+        <Button Classes="icon" controls:ButtonIcon.Kind="copy" Margin="0,0,6,6" Command="{Binding CopyToUserCommand}" ToolTip.Tip="{l:T snippetsManager.copyToYourSnippets}" AutomationProperties.Name="{l:T snippetsManager.copyToYourSnippets}" />
+        <Button Classes="icon" controls:ButtonIcon.Kind="trash" Margin="0,0,6,6" Command="{Binding RemoveCommand}" ToolTip.Tip="{l:T snippetsManager.remove}" AutomationProperties.Name="{l:T snippetsManager.remove}" />
         <TextBlock Classes="muted" VerticalAlignment="Center" Margin="0,0,0,6" Text="{Binding Status}" TextWrapping="Wrap" />
       </WrapPanel>
     </StackPanel>

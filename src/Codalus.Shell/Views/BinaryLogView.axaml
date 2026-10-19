@@ -13,10 +13,10 @@
           <TextBlock Classes="heading" Text="{Binding Title}" />
           <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Path}" />
         </StackPanel>
-        <Button Grid.Column="1" Content="{l:T binaryLog.openFile}" Command="{Binding OpenCommand}" VerticalAlignment="Top" ToolTip.Tip="{l:T binaryLog.openTheSelectedNodeSFile}" />
+        <Button Classes="iconText" controls:ButtonIcon.Kind="link-external" Grid.Column="1" Content="{l:T binaryLog.openFile}" Command="{Binding OpenCommand}" VerticalAlignment="Top" ToolTip.Tip="{l:T binaryLog.openTheSelectedNodeSFile}" />
       </Grid>
       <Grid ColumnDefinitions="*,Auto">
-        <TextBox x:Name="SearchBox" Text="{Binding Query}" PlaceholderText="{l:T binaryLog.searchTheLogProjectsTargetsTasks}" AutomationProperties.Name="{l:T binaryLog.searchTheBinaryLog}" />
+        <TextBox x:Name="SearchBox" Classes="search" Text="{Binding Query}" PlaceholderText="{l:T binaryLog.searchTheLogProjectsTargetsTasks}" AutomationProperties.Name="{l:T binaryLog.searchTheBinaryLog}" />
         <Button Grid.Column="1" Margin="6,0,0,0" Content="{l:T binaryLog.search}" Command="{Binding SearchCommand}" IsDefault="True" />
       </Grid>
       <TextBlock Classes="muted" Text="{Binding Summary}" />

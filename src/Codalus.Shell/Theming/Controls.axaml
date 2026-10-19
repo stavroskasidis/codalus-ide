@@ -22,6 +22,19 @@
     </Panel>
   </FocusAdornerTemplate>
 
+  <!--
+    The ring for a control inside a clipping shape (Border.attached, M34h): the adorner layer would clip the ring to the
+    shape, so this one draws past it.
+  -->
+  <FocusAdornerTemplate x:Key="Shell.FocusRing.Unclipped">
+    <Panel AdornerLayer.IsClipEnabled="False">
+      <Border BorderThickness="{DynamicResource Shell.Focus.Thickness}"
+              BorderBrush="{DynamicResource Shell.Focus}"
+              Margin="{DynamicResource Shell.Focus.Margin}"
+              CornerRadius="{DynamicResource Shell.Focus.CornerRadius}" />
+    </Panel>
+  </FocusAdornerTemplate>
+
   <!-- A button's content with controls:ButtonIcon.Kind: the icon alone (class icon), or the icon and the text (iconText). -->
   <DataTemplate x:Key="Shell.Button.IconTemplate">
     <controls:Icon Kind="{Binding $parent[ContentControl].(controls:ButtonIcon.Kind)}" Width="16" Height="16"

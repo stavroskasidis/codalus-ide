@@ -13,8 +13,8 @@
           <TextBlock Text="{l:T databaseExplorer.addConnection2}" VerticalAlignment="Center" />
         </StackPanel>
       </Button>
-      <Button Classes="toolbar" Content="{l:T databaseExplorer.newQuery}" Command="{Binding NewQueryCommand}" ToolTip.Tip="{l:T databaseExplorer.aNewSqlEditorOnThe}" />
-      <Button Classes="toolbar" Content="{l:T databaseExplorer.viewData}" Command="{Binding ViewDataCommand}" ToolTip.Tip="{l:T databaseExplorer.showAndEditTheSelectedTable}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="file-code" Command="{Binding NewQueryCommand}" ToolTip.Tip="{l:T databaseExplorer.aNewSqlEditorOnThe}" AutomationProperties.Name="{l:T databaseExplorer.newQuery}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="table" Command="{Binding ViewDataCommand}" ToolTip.Tip="{l:T databaseExplorer.showAndEditTheSelectedTable}" AutomationProperties.Name="{l:T databaseExplorer.viewData}" />
       <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T databaseExplorer.refreshTheSelectedConnection}" AutomationProperties.Name="{l:T databaseExplorer.refresh}">
         <controls:Icon Kind="refresh" />
       </Button>
