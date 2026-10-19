@@ -255,14 +255,16 @@ public sealed class SupervisedProcess : IAsyncDisposable
         var code = process.Exited.Result;
         var startup = run.DecideStartup(InStartup(run, connection, code));
 
-        // A failed start says why in its first lines; a running host that crashed, in its last ones.
-        var lines = startup ? run.Head() : run.Tail();
+        // A failed start says why in its first lines (from its crash report's first line when it logged before it);
+        // a running host that crashed, in its last ones: from its crash report's first line, not its stack frames.
+        var lines = startup ? run.Head() : run.CrashOutput();
         if (lines.Count == 0 && code is 0 or null)
         {
             return null; // a clean exit says nothing more than "lost"
         }
 
-        var quoted = string.Join(" ", startup ? lines.Take(ErrorLinesQuoted) : lines.TakeLast(ErrorLinesQuoted));
+        var quotedLines = startup ? lines.Skip(Math.Max(0, lines.ToList().FindIndex(ErrorOutputBuffer.BeginsReport))) : run.Report();
+        var quoted = string.Join(" ", quotedLines.Take(ErrorLinesQuoted));
         if (quoted.Length > 1500)
         {
             quoted = quoted[..1500] + "…";
@@ -457,7 +459,9 @@ public sealed class SupervisedProcess : IAsyncDisposable
 
         public IReadOnlyList<string> Head() => _errors.Head();
 
-        public IReadOnlyList<string> Tail() => _errors.Tail();
+        public IReadOnlyList<string> CrashOutput() => _errors.CrashOutput();
+
+        public IReadOnlyList<string> Report() => _errors.Report();
     }
 }
 
@@ -466,14 +470,34 @@ public sealed class SupervisedProcess : IAsyncDisposable
 /// ring of the last ones, which say why a running process crashed (a host that logs to standard error fills the first
 /// ones with its startup). Blank lines aren't kept, and a line is cut at <see cref="MaxLineLength"/> characters.
 /// </summary>
+/// <remarks>
+/// The last line that begins a .NET crash report (<c>Unhandled exception.</c>, <c>Fatal error.</c>, <c>Process
+/// terminated.</c>) is kept with the lines after it even once the ring has moved past it: a crash's last lines are its
+/// stack frames, and the error quotes what the exception was (<see cref="Report"/>).
+/// </remarks>
 internal sealed class ErrorOutputBuffer(int headLines, int tailLines)
 {
     public const int MaxLineLength = 2000;
 
+    /// <summary>The lines kept from a crash report's first line: as many as the error quotes.</summary>
+    public const int ReportLinesKept = SupervisedProcess.ErrorLinesQuoted;
+
     private readonly List<string> _head = [];
     private readonly Queue<string> _tail = new();
+    private readonly List<string> _report = [];
     private readonly Lock _gate = new();
     private int _count;
+    private int _reportAt; // the 1-based number of the last report's first line, 0 for none
+
+    /// <summary>Whether a line begins a crash report: the runtime's own words for an unhandled exception or a fatal error.</summary>
+    public static bool BeginsReport(string line) =>
+        line.StartsWith("Unhandled exception.", StringComparison.Ordinal)
+        || line.StartsWith("Unhandled Exception:", StringComparison.Ordinal)
+        || line.StartsWith("Fatal error.", StringComparison.Ordinal)
+        || line.StartsWith("Process terminated.", StringComparison.Ordinal);
+
+    /// <summary>A stack frame line (or the separator between an inner exception's frames and the outer ones).</summary>
+    private static bool IsFrame(string line) => line.StartsWith("at ", StringComparison.Ordinal) || line.StartsWith("---", StringComparison.Ordinal);
 
     /// <summary>The lines seen, kept or not.</summary>
     public int Count => Volatile.Read(ref _count);
@@ -503,6 +527,48 @@ internal sealed class ErrorOutputBuffer(int headLines, int tailLines)
             {
                 _tail.Dequeue();
             }
+
+            if (BeginsReport(text))
+            {
+                _reportAt = _count;
+                _report.Clear();
+                _report.Add(text);
+            }
+            else if (_reportAt > 0 && _report.Count < ReportLinesKept)
+            {
+                _report.Add(text);
+            }
+        }
+    }
+
+    /// <summary>
+    /// What a crash's error quotes: from the last crash report's first line (the exception, not the frames below it),
+    /// else from the last line of the ring that isn't a stack frame, else the ring.
+    /// </summary>
+    public IReadOnlyList<string> Report()
+    {
+        lock (_gate)
+        {
+            var firstInTail = _count - _tail.Count + 1;
+            if (_reportAt > 0)
+            {
+                return _reportAt >= firstInTail ? [.. _tail.Skip(_reportAt - firstInTail)] : [.. _report];
+            }
+
+            var tail = _tail.ToList();
+            var last = tail.FindLastIndex(line => !IsFrame(line));
+            return last < 0 ? tail : tail[last..];
+        }
+    }
+
+    /// <summary>
+    /// A crash's standard error: the ring, after the crash report's first lines when the ring has moved past them.
+    /// </summary>
+    public IReadOnlyList<string> CrashOutput()
+    {
+        lock (_gate)
+        {
+            return _reportAt > 0 && _reportAt < _count - _tail.Count + 1 ? [.. _report, "…", .. _tail] : [.. _tail];
         }
     }
 

@@ -72,11 +72,15 @@ public static class InstallPlans
     /// <paramref name="hasWinget"/> and <paramref name="linuxDistribution"/> (<c>/etc/os-release</c>'s <c>ID</c> and
     /// <c>ID_LIKE</c>) describe the machine.
     /// </summary>
-    public static InstallPlan? For(ToolStatus tool, PlatformKind platform, string home, bool hasWinget, string? linuxDistribution)
+    /// <param name="emulatedX64">
+    /// The IDE is an x64 process on Arm64 (the win-x64 build on Windows on Arm, M49): .NET installs as x64, the only
+    /// .NET its hosts can load.
+    /// </param>
+    public static InstallPlan? For(ToolStatus tool, PlatformKind platform, string home, bool hasWinget, string? linuxDistribution, bool emulatedX64 = false)
     {
         return tool.Id switch
         {
-            "dotnet" or "dotnet-runtime" => Dotnet(tool, platform, home, hasWinget),
+            "dotnet" or "dotnet-runtime" => Dotnet(tool, platform, home, hasWinget, emulatedX64),
             "git" => Git(platform, hasWinget, linuxDistribution),
             "git-lfs" => platform switch
             {
@@ -95,14 +99,14 @@ public static class InstallPlans
         };
     }
 
-    private static InstallPlan Dotnet(ToolStatus tool, PlatformKind platform, string home, bool hasWinget)
+    private static InstallPlan Dotnet(ToolStatus tool, PlatformKind platform, string home, bool hasWinget, bool emulatedX64)
     {
         var pinned = tool.State == ToolState.Mismatch ? tool.WantedVersion : null;
         var channel = tool.WantedChannel ?? Channel(pinned ?? tool.Version);
         if (platform == PlatformKind.Windows)
         {
             return hasWinget
-                ? Winget(tool.Id, WingetSdk(channel, tool.Id == "dotnet-runtime" && tool.WantedVersion is { } wanted ? wanted : pinned ?? EnvironmentCheck.DefaultHostsRuntime()), pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})")
+                ? Winget(tool.Id, WingetSdk(channel, tool.Id == "dotnet-runtime" && tool.WantedVersion is { } wanted ? wanted : pinned ?? EnvironmentCheck.DefaultHostsRuntime()), pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})", emulatedX64 ? ["--architecture", "x64"] : [])
                 : new(tool.Id, InstallKind.OpenPage, "The .NET download page (winget isn't available)", DotnetDownloadPage);
         }
 
@@ -125,9 +129,9 @@ public static class InstallPlans
         _ => new("git", InstallKind.OpenPage, "Git's download page", GitDownloadPage),
     };
 
-    private static InstallPlan Winget(string tool, string id, string what)
+    private static InstallPlan Winget(string tool, string id, string what, string[]? extra = null)
     {
-        string[] arguments = ["install", "--id", id, "--exact", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements"];
+        string[] arguments = ["install", "--id", id, "--exact", .. extra ?? [], "--source", "winget", "--accept-package-agreements", "--accept-source-agreements"];
         return new(tool, InstallKind.Run, $"{what} with winget", "winget " + string.Join(' ', arguments), "winget", arguments);
     }
 

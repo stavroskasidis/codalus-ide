@@ -112,7 +112,8 @@ public sealed class EnvironmentShellTests
     /// <summary>
     /// A solution whose build host lacks its runtime opens once the runtime is installed: the one notification instead
     /// of an error, then RestartHostsAsync opens it again (here a stand-in build host, which then fails as a program,
-    /// which shows the open was tried again).
+    /// which shows the open was tried again). Hermetic: a fake .NET root (runtime 10.0.9, a <c>dotnet</c> that isn't a
+    /// program) and a described machine, whatever .NET, <c>DOTNET_ROOT</c> or <c>CODALUS_SKIP_RUNTIME_CHECK</c> this one has.
     /// </summary>
     [AvaloniaFact]
     public async Task A_solution_waiting_for_the_runtime_opens_again_when_the_hosts_start_again()
@@ -130,6 +131,21 @@ public sealed class EnvironmentShellTests
             File.WriteAllText(host, "not an assembly");
             var config = Path.ChangeExtension(host, ".runtimeconfig.json");
             File.WriteAllText(config, """{ "runtimeOptions": { "rollForward": "Major", "framework": { "name": "Microsoft.NETCore.App", "version": "99.0.0" } } }""");
+
+            // The fake root: dotnet (the muxer, not a program: starting it fails), host/fxr, and the 10.0.9 runtime.
+            var root = Path.Combine(dir, "dotnet");
+            var muxer = Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
+            Directory.CreateDirectory(Path.Combine(root, "host", "fxr", "10.0.9"));
+            var runtime = Path.Combine(root, "shared", Codalus.Rpc.FrameworkReference.NetCoreApp, "10.0.9");
+            Directory.CreateDirectory(runtime);
+            File.WriteAllText(Path.Combine(runtime, Codalus.Rpc.FrameworkReference.NetCoreApp + ".deps.json"), "{}");
+            File.WriteAllText(muxer, "not a program");
+            var launcher = new Codalus.Rpc.LocalProcessLauncher
+            {
+                Roots = new Codalus.Rpc.DotnetRootResolver { ProcessEnvironment = name => name is "DOTNET_ROOT" or "PATH" ? root : null },
+            };
+            f.Shell.Solutions.Placement = launch => launch with { FileName = muxer, Launcher = launcher };
+            f.Shell.UseEnvironmentCheck(DescribedMachine(f, root));
             f.Shell.BuildHostOverride = () => host;
             f.Shell.Trust.Trust(dir);
             bool IsError(Workbench.Notifications.Notification n) => n.Severity == Workbench.Notifications.NotificationSeverity.Error && n.Message.StartsWith("Could not open App.slnx", StringComparison.Ordinal);
@@ -149,6 +165,7 @@ public sealed class EnvironmentShellTests
         finally
         {
             f.Shell.BuildHostOverride = null;
+            f.Shell.Solutions.Placement = null;
             try
             {
                 Directory.Delete(dir, recursive: true);
@@ -157,6 +174,97 @@ public sealed class EnvironmentShellTests
             {
             }
         }
+    }
+
+    /// <summary>
+    /// A build host that finds no SDK (exit code 3) on the solution's first open says why, with Check Environment: the
+    /// first start's failure isn't swallowed as "the open reports it", and the open doesn't add "Could not open" too.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task No_sdk_on_the_first_open_is_the_check_environment_notification_once()
+    {
+        await using var f = ShellFixture.Create();
+        var dir = Directory.CreateTempSubdirectory("codalus-m49-nosdk-").FullName;
+        try
+        {
+            var solution = Path.Combine(dir, "App.slnx");
+            File.WriteAllText(solution, "<Solution />\n");
+            const string Why = "No .NET SDK was found. Install the .NET SDK to open solutions.";
+            f.Shell.BuildHostOverride = () => Path.Combine(dir, "codalus-buildhost");
+            f.Shell.Solutions.Placement = _ => OperatingSystem.IsWindows()
+                ? new Codalus.Rpc.ProcessLaunchInfo("cmd.exe", ["/c", $"echo {Why} 1>&2 & exit /b 3"])
+                : new Codalus.Rpc.ProcessLaunchInfo("/bin/sh", ["-c", $"echo '{Why}' >&2; exit 3"]);
+            f.Shell.Trust.Trust(dir);
+
+            await f.Shell.OpenSolutionAsync(solution);
+            await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.StartsWith("The solution can't be loaded", StringComparison.Ordinal)), seconds: 30);
+            ShellFixture.Pump();
+            var notification = Assert.Single(f.Shell.Workbench.Notifications.Items, n => n.Message.StartsWith("The solution can't be loaded", StringComparison.Ordinal));
+            Assert.Equal("The solution can't be loaded: " + Why, notification.Message.TrimEnd());
+            Assert.Equal(["Check Environment"], notification.Actions);
+            Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Message.StartsWith("Could not open", StringComparison.Ordinal));
+        }
+        finally
+        {
+            f.Shell.BuildHostOverride = null;
+            f.Shell.Solutions.Placement = null;
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// The runtime notification hidden with Escape is in the center, unseen: the next failure shows it again (once),
+    /// rather than counting it as showing.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_runtime_notification_hidden_with_escape_shows_again_on_the_next_failure()
+    {
+        await using var f = ShellFixture.Create();
+        f.Shell.UseEnvironmentCheck(DescribedMachine(f, "/fake/root"));
+        static bool IsRuntimeNotification(Workbench.Notifications.Notification n) => n.Message.Contains("runtime, which isn't installed", StringComparison.Ordinal);
+        Assert.True(f.Shell.ReportHostRuntimeMissing(Missing(Path.Combine(Path.GetTempPath(), "dev", "pluginhost"), "codalus-pluginhost")));
+        await ShellFixture.PumpUntil(() => f.Shell.Notifications.Toasts.Any(t => IsRuntimeNotification(t.Model)));
+        var first = Assert.Single(f.Shell.Workbench.Notifications.Items, IsRuntimeNotification);
+
+        // While it's a toast, another failure adds nothing.
+        Assert.True(f.Shell.ReportHostRuntimeMissing(Missing(Path.Combine(Path.GetTempPath(), "dev", "lshost"), "codalus-lshost")));
+        ShellFixture.Pump();
+        Assert.Same(first, Assert.Single(f.Shell.Workbench.Notifications.Items, IsRuntimeNotification));
+
+        // Escape: no toast, the notification still unanswered in the center. The next failure shows it again.
+        f.Shell.Notifications.HideToasts();
+        Assert.True(f.Shell.Notifications.HasLeftToasts(first));
+        Assert.True(f.Shell.ReportHostRuntimeMissing(Missing(Path.Combine(Path.GetTempPath(), "dev", "buildhost"), "codalus-buildhost")));
+        await ShellFixture.PumpUntil(() => f.Shell.Notifications.Toasts.Any(t => IsRuntimeNotification(t.Model)));
+        ShellFixture.Pump();
+        var again = Assert.Single(f.Shell.Workbench.Notifications.Items, IsRuntimeNotification);
+        Assert.NotSame(first, again);
+        Assert.True(first.Result.IsCompleted); // the hidden one was closed, not left behind
+    }
+
+    /// <summary>
+    /// A machine whose .NET is at <paramref name="root"/>: an SDK, and the 10.0.9 runtime, but not the 99.0.0 one the
+    /// IDE's hosts need.
+    /// </summary>
+    private static EnvironmentCheck DescribedMachine(ShellFixture f, string root)
+    {
+        static string N(string path) => path.Replace('\\', '/').TrimEnd('/');
+        var variables = new Dictionary<string, string> { ["DOTNET_ROOT"] = root, ["PATH"] = root, ["HOME"] = "/fake/home" };
+        return new EnvironmentCheck(f.Shell.Workbench.Platform, n => variables.GetValueOrDefault(n), (_, _, _, _) => Task.FromResult((1, string.Empty)),
+            path => N(path) == N(root) + "/dotnet" || N(path) == N(root) + "/dotnet.exe")
+        {
+            HostFrameworks = [Codalus.Rpc.FrameworkReference.Create(Codalus.Rpc.FrameworkReference.NetCoreApp, Codalus.Rpc.FrameworkVersion.Parse("99.0.0"), Codalus.Rpc.RollForwardPolicy.Major)],
+            SdkVersions = folder => N(folder) == N(root) ? ["10.0.100"] : [],
+            InstalledFrameworks = (folder, _) => N(folder) == N(root) ? [Codalus.Rpc.FrameworkVersion.Parse("10.0.9")] : [],
+            DirectoryExists = folder => N(folder) == N(root),
+            RealPath = path => path,
+        };
     }
 
     /// <summary>

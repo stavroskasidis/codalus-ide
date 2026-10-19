@@ -69,7 +69,8 @@ public sealed class LanguageService : IAsyncDisposable
 
     /// <summary>
     /// A language host couldn't start (M49): its .NET runtime is missing (<see cref="HostRuntimeMissingException"/>),
-    /// or it exited during startup (<see cref="HostExitedException"/>, with what it wrote). It isn't started again.
+    /// or it exited during startup (<see cref="HostExitedException"/>, with what it wrote; a plain
+    /// <see cref="JsonRpcConnectionLostException"/> when it ended cleanly and said nothing). It isn't started again.
     /// </summary>
     public event EventHandler<(string LanguageId, Exception Error)>? StartFailed;
 
@@ -347,7 +348,10 @@ public sealed class LanguageService : IAsyncDisposable
         {
             Log?.Invoke(this, $"[{languageId}] The language service could not start: {ex.Message}");
             await client.DisposeAsync().ConfigureAwait(false);
-            if (ex is HostRuntimeMissingException or HostExitedException { DuringStartup: true })
+            // Every loss of the host while it starts (before its handshake ended) is its first start failing, which the
+            // crash handler leaves to this: one that exited cleanly or said nothing (no HostExitedException) too.
+            if (ex is HostRuntimeMissingException or HostExitedException { DuringStartup: true }
+                || (ex is JsonRpcConnectionLostException and not HostExitedException && stage == "starting the host"))
             {
                 StartFailed?.Invoke(this, (languageId, ex));
             }

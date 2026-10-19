@@ -36,6 +36,13 @@ public sealed partial class ShellHost
     /// <summary>The missing-SDK notification while it shows: its install brings the runtime, so it stands for both.</summary>
     private Workbench.Notifications.Notification? _sdkNotification;
 
+    /// <summary>
+    /// Whether a notification shows: unanswered, and still a toast (or never one: the Notifications window was open). One
+    /// hidden with Escape or pushed out by newer toasts sits in the center unseen, so a new report shows it again.
+    /// </summary>
+    private bool Showing([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Workbench.Notifications.Notification? notification) =>
+        notification is { Result.IsCompleted: false } && !Notifications.HasLeftToasts(notification);
+
     /// <summary>A solution that couldn't open because the build host's runtime is missing: opened again after the install.</summary>
     private string? _solutionWaitingForRuntime;
 
@@ -171,7 +178,7 @@ public sealed partial class ShellHost
     /// The one notification about the IDE's own .NET runtime (M49), however many hosts and plugins couldn't start: what's
     /// needed and what's there, Install .NET (M37's flow: dotnet-install into <c>~/.dotnet</c>, or winget), then the hosts
     /// start again. While it (or the missing-SDK one, whose install brings the runtime) shows, another report adds
-    /// nothing; once it's answered or closed, a new failure (a solution opened later) shows it again. Any thread.
+    /// nothing; once it's answered, closed or hidden (Escape), a new failure (a solution opened later) shows it again. Any thread.
     /// </summary>
     /// <returns>Whether a notification about it is showing now.</returns>
     private bool OfferHostRuntime(ToolStatus tool)
@@ -180,14 +187,21 @@ public sealed partial class ShellHost
         var install = Localizer.Format("msg.setup.installRuntime", "Install .NET {0}", tool.WantedChannel);
         var details = Localizer.Get("msg.setup.details", "Check Environment");
         Workbench.Notifications.Notification notification;
+        Workbench.Notifications.Notification? hidden;
         lock (_offerGate)
         {
-            if (_runtimeNotification is { Result.IsCompleted: false } || _sdkNotification is { Result.IsCompleted: false })
+            if (Showing(_runtimeNotification) || Showing(_sdkNotification))
             {
                 return true;
             }
 
+            hidden = _runtimeNotification is { Result.IsCompleted: false } unseen ? unseen : null; // shown again, not twice
             notification = _runtimeNotification = Workbench.Notifications.Error(message, install, details);
+        }
+
+        if (hidden is not null)
+        {
+            Workbench.Notifications.Dismiss(hidden);
         }
 
         Workbench.Log.AppendLine($"[setup] {tool.Detail}");
@@ -203,20 +217,25 @@ public sealed partial class ShellHost
         var details = Localizer.Get("msg.setup.details", "Check Environment");
         Workbench.Notifications.Notification notification;
         Workbench.Notifications.Notification? replaced;
+        Workbench.Notifications.Notification? hidden;
         lock (_offerGate)
         {
-            if (_sdkNotification is { Result.IsCompleted: false })
+            if (Showing(_sdkNotification))
             {
                 return true;
             }
 
+            hidden = _sdkNotification is { Result.IsCompleted: false } unseen ? unseen : null;
             replaced = _runtimeNotification is { Result.IsCompleted: false } runtime ? runtime : null;
             notification = _sdkNotification = Workbench.Notifications.Warning(message, install, details);
         }
 
-        if (replaced is not null)
+        foreach (var stale in new[] { hidden, replaced })
         {
-            Workbench.Notifications.Dismiss(replaced);
+            if (stale is not null)
+            {
+                Workbench.Notifications.Dismiss(stale);
+            }
         }
 
         _ = notification.Result.ContinueWith(t => Infrastructure.Ui.Post(() => OnInstallChoice(t.Result, tool, install, details)), TaskScheduler.Default);
@@ -356,7 +375,8 @@ public sealed partial class ShellHost
         Workbench.Platform,
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         hasWinget: Workbench.Platform == PlatformKind.Windows && EnvironmentCheck.FindOnPath("winget") is not null,
-        linuxDistribution: Workbench.Platform == PlatformKind.Linux ? InstallPlans.LinuxDistribution() : null);
+        linuxDistribution: Workbench.Platform == PlatformKind.Linux ? InstallPlans.LinuxDistribution() : null,
+        emulatedX64: EnvironmentCheck.EmulatedX64);
 
     /// <summary>
     /// Installs a tool after the user agrees to the exact command (<paramref name="confirm"/>: tests answer for the user),

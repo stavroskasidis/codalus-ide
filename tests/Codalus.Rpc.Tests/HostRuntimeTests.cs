@@ -445,6 +445,56 @@ public sealed class HostRuntimeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_crash_quotes_its_exception_not_the_stack_frames_below_it()
+    {
+        // The runtime's report: the exception, then 25 frames, more than the ring keeps. The error says what was thrown.
+        var launch = OperatingSystem.IsWindows()
+            ? new ProcessLaunchInfo("cmd.exe", ["/c", "ping -n 4 127.0.0.1 > nul & echo Unhandled exception. System.InvalidOperationException: boom 1>&2 & (for /l %i in (1,1,25) do @echo    at Host.Frame%i^(^) 1>&2) & exit /b 134"])
+            : new ProcessLaunchInfo("/bin/sh", ["-c", "sleep 3; echo 'Unhandled exception. System.InvalidOperationException: boom' >&2; i=1; while [ $i -le 25 ]; do echo \"   at Host.Frame$i()\" >&2; i=$((i+1)); done; exit 134"]);
+        var crashed = new TaskCompletionSource<ProcessCrashedEventArgs>();
+        await using var process = new SupervisedProcess("throwing host", launch, new SupervisionPolicy { MaxRestarts = 0, ShutdownRequest = null, ExitNotification = null });
+        process.Crashed += (_, e) => crashed.TrySetResult(e);
+        await process.StartAsync(TestContext.Current.CancellationToken);
+
+        var crash = await crashed.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var exited = Assert.IsType<HostExitedException>(crash.Error);
+        Assert.Contains("throwing host exited with exit code 134: Unhandled exception. System.InvalidOperationException: boom at Host.Frame1()", exited.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Frame25", exited.Message, StringComparison.Ordinal);
+        // Its standard error keeps the report's first lines ahead of the ring, which ends with the last frames.
+        Assert.Equal("Unhandled exception. System.InvalidOperationException: boom", exited.ErrorOutput[0]);
+        Assert.Equal("at Host.Frame25()", exited.ErrorOutput[^1]);
+    }
+
+    [Fact]
+    public void A_crash_report_is_kept_after_the_ring_moves_past_it()
+    {
+        var buffer = new ErrorOutputBuffer(headLines: 2, tailLines: 3);
+        buffer.Add("starting");
+        buffer.Add("Unhandled exception. System.IO.IOException: gone");
+        buffer.Add("   at A()");
+        Assert.Equal(["Unhandled exception. System.IO.IOException: gone", "at A()"], buffer.Report()); // still in the ring
+        for (var i = 0; i < 10; i++)
+        {
+            buffer.Add($"   at F{i}()");
+        }
+
+        Assert.Equal(["Unhandled exception. System.IO.IOException: gone", "at A()", "at F0()", "at F1()", "at F2()", "at F3()"], buffer.Report());
+        Assert.Equal(["Unhandled exception. System.IO.IOException: gone", "at A()", "at F0()", "at F1()", "at F2()", "at F3()", "…", "at F7()", "at F8()", "at F9()"], buffer.CrashOutput());
+
+        // A newer report replaces it; without one, the quote starts at the ring's last line that isn't a frame.
+        buffer.Add("Fatal error. Internal CLR error.");
+        Assert.Equal("Fatal error. Internal CLR error.", buffer.Report()[0]);
+        var noReport = new ErrorOutputBuffer(headLines: 2, tailLines: 4);
+        foreach (var line in new[] { "log", "System.Exception: thrown", "   at B()", "--- End of inner exception stack trace ---", "   at C()" })
+        {
+            noReport.Add(line);
+        }
+
+        Assert.Equal(["System.Exception: thrown", "at B()", "--- End of inner exception stack trace ---", "at C()"], noReport.Report());
+        Assert.Equal(noReport.Tail(), noReport.CrashOutput());
+    }
+
+    [Fact]
     public void Standard_error_keeps_its_first_lines_and_a_ring_of_its_last_ones()
     {
         var buffer = new ErrorOutputBuffer(headLines: 5, tailLines: 3);

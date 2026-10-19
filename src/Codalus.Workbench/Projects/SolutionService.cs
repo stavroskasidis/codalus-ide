@@ -188,7 +188,11 @@ public sealed class SolutionService : IAsyncDisposable
             host.Restarted += (_, _) => HostRestarted?.Invoke(this, EventArgs.Empty);
             host.Log += (_, line) =>
             {
-                LastHostMessage = line;
+                if (!line.StartsWith("[" + host.Name + "]", StringComparison.Ordinal))
+                {
+                    LastHostMessage = line; // the host's own words, not the supervisor's summary of its exit (M49)
+                }
+
                 Log?.Invoke(this, line);
             };
             _host = host;

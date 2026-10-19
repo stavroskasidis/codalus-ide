@@ -95,8 +95,15 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         DirectoryExists = DirectoryExists,
     };
 
-    private static bool SameRoot(string a, string b) =>
-        string.Equals(System.IO.Path.TrimEndingDirectorySeparator(a), System.IO.Path.TrimEndingDirectorySeparator(b), OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// The same folder: on Windows, '/' and '\\' are the same separator (a root from <c>Path.Combine</c> against one from a
+    /// variable) and case doesn't count; on macOS case doesn't count either.
+    /// </summary>
+    private static bool SameRoot(string a, string b)
+    {
+        static string Normal(string path) => System.IO.Path.TrimEndingDirectorySeparator(OperatingSystem.IsWindows() ? path.Replace('/', '\\') : path);
+        return string.Equals(Normal(a), Normal(b), OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// What the IDE's processes should use (M37, M49): the root <see cref="FindSdkRoot"/> picks, whether it goes on
@@ -126,6 +133,15 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         }
 
         var hostsRoot = HostsRoot();
+        if (!HostsCanUse(root))
+        {
+            // The x64 build on Windows on Arm with the native SDK in use: it stays the SDK's root, and the hosts, which
+            // can't load it, are pinned to the x64 .NET (DOTNET_ROOT_X64) unless the root they'd use has the runtime.
+            return (hostsRoot is null || !HasHostRuntime(hostsRoot)) && PointHostsAt(root) is { Count: > 1 } pinned
+                ? new DotnetRootChoice(root, AddToPath: false, pinned, $"The helper processes use the x64 .NET in {pinned[1].Value} ({pinned[1].Key}).")
+                : new DotnetRootChoice(root, AddToPath: false, [], null);
+        }
+
         if ((hostsRoot is null || !SameRoot(hostsRoot, root)) && (HasHostRuntime(root) || hostsRoot is null || !HasHostRuntime(hostsRoot)))
         {
             return new DotnetRootChoice(root, AddToPath: false, PointHostsAt(root), $"The helper processes use the .NET in {root} (DOTNET_ROOT).");
@@ -135,22 +151,44 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     }
 
     /// <summary>
-    /// The variables that make the app hosts use <paramref name="root"/>: <c>DOTNET_ROOT</c>, and the architecture's
-    /// own <c>DOTNET_ROOT_ARM64</c> (or <c>_X64</c>) when it is set elsewhere, since the host reads that one first.
+    /// The variables that make the IDE's processes use <paramref name="root"/>: <c>DOTNET_ROOT</c> (the SDK's, for
+    /// MSBuildLocator, and the app hosts'), and the architecture's own <c>DOTNET_ROOT_ARM64</c> (or <c>_X64</c>), which
+    /// the app host reads first:
+    /// <list type="bullet">
+    /// <item>set to <paramref name="root"/> when it is set elsewhere and that helps (the root has the hosts' runtime, or
+    /// the one it names doesn't): a working <c>DOTNET_ROOT_ARM64</c> is left as it is;</item>
+    /// <item>for an x64 process on Arm64 pointed at the native .NET (which it can't load), <c>DOTNET_ROOT_X64</c> pins the
+    /// hosts to the x64 .NET they'd use otherwise (<c>%ProgramFiles%\dotnet\x64</c>), when there is one.</item>
+    /// </list>
     /// </summary>
     public IReadOnlyList<KeyValuePair<string, string>> PointHostsAt(string root)
     {
         var variables = new List<KeyValuePair<string, string>> { new("DOTNET_ROOT", root) };
-        if (environment(Resolver.ArchVariable) is { Length: > 0 } byArch && !SameRoot(byArch, root))
+        var byArch = environment(Resolver.ArchVariable) is { Length: > 0 } set ? set : null;
+        if (byArch is not null && !SameRoot(byArch, root) && HostsCanUse(root) && (HasHostRuntime(root) || !HasHostRuntime(byArch)))
         {
             variables.Add(new(Resolver.ArchVariable, root));
+        }
+        else if (!HostsCanUse(root) && (byArch is null || !DirectoryExists(byArch))
+            && Resolver.ForAppHost(name => name == "DOTNET_ROOT" ? null : environment(name)) is { } x64 && HostsCanUse(x64) && DirectoryExists(x64))
+        {
+            variables.Add(new(Resolver.ArchVariable, x64));
         }
 
         return variables;
     }
 
-    /// <summary>Whether every framework the IDE's hosts need resolves under <paramref name="root"/>.</summary>
-    public bool HasHostRuntime(string root) => Frameworks.All(f => FrameworkResolver.Resolve(f, InstalledFrameworks(root, f.Name)) is not null);
+    /// <summary>
+    /// Whether the IDE's app hosts can run from <paramref name="root"/>: not the native .NET for an x64 process on Arm64
+    /// (the win-x64 build on Windows on Arm loads only an x64 hostfxr: <c>%ProgramFiles%\dotnet\x64</c>).
+    /// </summary>
+    public bool HostsCanUse(string root) => !(Resolver.EmulatedX64 && SameRoot(root, Resolver.NativeLocation));
+
+    /// <summary>An x64 process on Arm64: the installs it can use are x64 ones (winget's <c>--architecture x64</c>).</summary>
+    public bool EmulatedX64 => Resolver.EmulatedX64;
+
+    /// <summary>Whether every framework the IDE's hosts need resolves under <paramref name="root"/>, and the hosts can run from it.</summary>
+    public bool HasHostRuntime(string root) => HostsCanUse(root) && Frameworks.All(f => FrameworkResolver.Resolve(f, InstalledFrameworks(root, f.Name)) is not null);
 
     /// <summary>The root the IDE's app hosts start with, as the .NET host picks it in this environment (<c>DOTNET_ROOT</c> first).</summary>
     public string? HostsRoot() => Resolver.ForAppHost(environment);
@@ -174,7 +212,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     {
         var exe = platform == PlatformKind.Windows ? "dotnet.exe" : "dotnet";
         IEnumerable<string> sdkRoots = InstallerFolders().Where(c => _exists(System.IO.Path.Combine(c, exe)) && HasSdks(c));
-        return new[] { hostsRoot, CurrentSdkRoot() ?? string.Empty }.Concat(sdkRoots).Where(r => r.Length > 0)
+        return new[] { hostsRoot, CurrentSdkRoot() ?? string.Empty }.Concat(sdkRoots).Where(r => r.Length > 0 && HostsCanUse(r))
             .Select(r => System.IO.Path.TrimEndingDirectorySeparator(r)).Distinct(StringComparer.Ordinal);
     }
 
@@ -183,7 +221,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         const string NeededFor = "Codalus IDE's helper processes: plugins, builds, language services and debugging";
         const string Title = ".NET runtime for Codalus IDE";
         var root = HostsRoot() ?? string.Empty;
-        FrameworkVersion? Resolve(FrameworkReference reference, string folder) => folder.Length > 0 ? FrameworkResolver.Resolve(reference, InstalledFrameworks(folder, reference.Name)) : null;
+        FrameworkVersion? Resolve(FrameworkReference reference, string folder) => folder.Length > 0 && HostsCanUse(folder) ? FrameworkResolver.Resolve(reference, InstalledFrameworks(folder, reference.Name)) : null;
         var satisfied = frameworks.Count == 0 ? root : (anyRoot ? SelectableRoots(root) : [root]).FirstOrDefault(r => frameworks.All(f => Resolve(f, r) is not null));
         if (satisfied is not null)
         {

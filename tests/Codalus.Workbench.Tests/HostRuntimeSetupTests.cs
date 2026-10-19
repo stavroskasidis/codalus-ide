@@ -54,7 +54,7 @@ public sealed class HostRuntimeSetupTests : IDisposable
     /// A described machine for <see cref="EnvironmentCheck.ChooseDotnetRoot"/>: .NET roots (folders, with a <c>dotnet</c>
     /// when listed in <see cref="Dotnets"/>), their SDKs and runtimes, the environment and the registered location.
     /// </summary>
-    private sealed class Machine(PlatformKind platform, Architecture architecture = Architecture.X64)
+    private sealed class Machine(PlatformKind platform, Architecture architecture = Architecture.X64, Architecture? osArchitecture = null)
     {
         public Dictionary<string, List<string>> Sdks { get; } = [];
 
@@ -81,7 +81,7 @@ public sealed class HostRuntimeSetupTests : IDisposable
             {
                 OS = platform switch { PlatformKind.Windows => "windows", PlatformKind.MacOS => "macos", _ => "linux" },
                 Architecture = architecture,
-                OSArchitecture = architecture,
+                OSArchitecture = osArchitecture ?? architecture,
                 ProcessEnvironment = Variable,
                 DirectoryExists = IsRoot,
                 FileExists = _ => false,
@@ -229,6 +229,89 @@ public sealed class HostRuntimeSetupTests : IDisposable
         Assert.Equal(ToolState.Found, mac.Check().HostRuntimeStatus().State);
         // DOTNET_ROOT alone (what Setup set before) would have left the hosts on DOTNET_ROOT_ARM64's root.
         Assert.Equal([new KeyValuePair<string, string>("DOTNET_ROOT", "/Users/ada/.dotnet")], mac.Check().PointHostsAt("/Users/ada/.dotnet"));
+    }
+
+    [Fact]
+    public void A_working_architecture_root_is_left_alone_when_the_sdk_root_is_pointed_at()
+    {
+        // DOTNET_ROOT_ARM64 at /opt/dotnet-11 has the hosts' runtime. Homebrew's dotnet wrapper is first on the PATH (no
+        // SDKs next to it), the SDK (10) is in /usr/local/share/dotnet: DOTNET_ROOT moves there, for MSBuildLocator, but
+        // DOTNET_ROOT_ARM64 stays: pointing it at a root without the runtime would break hosts that work.
+        var mac = new Machine(PlatformKind.MacOS, Architecture.Arm64);
+        mac.Variables["PATH"] = "/opt/homebrew/bin:/usr/bin";
+        mac.Variables["HOME"] = "/Users/ada";
+        mac.Variables["DOTNET_ROOT_ARM64"] = "/opt/dotnet-11";
+        mac.Runtimes["/opt/dotnet-11"] = [Rc2];
+        mac.Sdks["/usr/local/share/dotnet"] = ["10.0.109"];
+        mac.Runtimes["/usr/local/share/dotnet"] = ["10.0.9"];
+        mac.Dotnets.UnionWith(["/opt/homebrew/bin", "/usr/local/share/dotnet"]);
+        Assert.Equal(ToolState.Found, mac.Check().HostRuntimeStatus().State);
+
+        var choice = mac.Check().ChooseDotnetRoot()!;
+        Assert.Equal(("/usr/local/share/dotnet", true), (N(choice.Root), choice.AddToPath));
+        Assert.Equal([("DOTNET_ROOT", "/usr/local/share/dotnet")], choice.Variables.Select(v => (v.Key, N(v.Value))));
+        mac.Apply(choice);
+        Assert.Equal((ToolState.Found, "/opt/dotnet-11"), (mac.Check().HostRuntimeStatus().State, N(mac.Check().HostRuntimeStatus().Path!)));
+    }
+
+    /// <summary>
+    /// The win-x64 build on Windows on Arm: an x64 process, which can't load the native (Arm64) .NET in
+    /// <c>%ProgramFiles%\dotnet</c>, only the x64 one in its <c>x64</c> folder. The native root never counts for the hosts.
+    /// </summary>
+    [Fact]
+    public void The_x64_build_on_windows_on_arm_keeps_its_hosts_off_the_native_dotnet()
+    {
+        Machine Woa(bool x64Runtime)
+        {
+            var machine = new Machine(PlatformKind.Windows, Architecture.X64, osArchitecture: Architecture.Arm64);
+            machine.Variables["ProgramFiles"] = "C:/pf";
+            machine.Variables["LOCALAPPDATA"] = "C:/Users/u/AppData/Local";
+            machine.Sdks["C:/pf/dotnet"] = ["11.0.100-rc.2.26504.105"];
+            machine.Runtimes["C:/pf/dotnet"] = [Rc2];
+            machine.Dotnets.Add("C:/pf/dotnet");
+            if (x64Runtime)
+            {
+                machine.Runtimes["C:/pf/dotnet/x64"] = [Rc2];
+            }
+
+            return machine;
+        }
+
+        // Nothing set: the native SDK is chosen (DOTNET_ROOT, for MSBuildLocator), and the hosts are pinned to the x64
+        // .NET, which DOTNET_ROOT would otherwise hide.
+        var fresh = Woa(x64Runtime: true);
+        Assert.Equal((ToolState.Found, "C:/pf/dotnet/x64"), (fresh.Check().HostRuntimeStatus().State, N(fresh.Check().HostRuntimeStatus().Path!)));
+        var choice = fresh.Check().ChooseDotnetRoot()!;
+        Assert.Equal(("C:/pf/dotnet", true), (N(choice.Root), choice.AddToPath));
+        Assert.Equal([("DOTNET_ROOT", "C:/pf/dotnet"), ("DOTNET_ROOT_X64", "C:/pf/dotnet/x64")], choice.Variables.Select(v => (v.Key, N(v.Value))));
+        fresh.Apply(choice);
+        Assert.Equal((ToolState.Found, "C:/pf/dotnet/x64"), (fresh.Check().HostRuntimeStatus().State, N(fresh.Check().HostRuntimeStatus().Path!)));
+
+        // DOTNET_ROOT already at the native SDK: it stays, and the hosts are pinned to the x64 .NET, not "redirected" to
+        // the native one (which has the runtime, but not one they can load).
+        var set = Woa(x64Runtime: true);
+        set.Variables["DOTNET_ROOT"] = "C:/pf/dotnet";
+        Assert.Equal(ToolState.Missing, set.Check().HostRuntimeStatus().State);
+        var pinned = set.Check().ChooseDotnetRoot()!;
+        Assert.Equal([("DOTNET_ROOT", "C:/pf/dotnet"), ("DOTNET_ROOT_X64", "C:/pf/dotnet/x64")], pinned.Variables.Select(v => (v.Key, N(v.Value))));
+        set.Apply(pinned);
+        Assert.Equal(ToolState.Found, set.Check().HostRuntimeStatus().State);
+        // Pinned already (the root the hosts use has the runtime): nothing more.
+        Assert.Empty(set.Check().ChooseDotnetRoot()!.Variables);
+
+        // No x64 .NET: the native root's runtime doesn't count, for the hosts nor for an update.
+        var native = Woa(x64Runtime: false);
+        var check = native.Check();
+        Assert.False(check.HasHostRuntime("C:/pf/dotnet"));
+        Assert.Equal(ToolState.Missing, check.HostRuntimeStatus().State);
+        Assert.Equal(ToolState.Missing, check.RuntimeStatusFor([FrameworkReference.Create(FrameworkReference.NetCoreApp, FrameworkVersion.Parse(Rc2), RollForwardPolicy.Major)]).State);
+        Assert.Equal([("DOTNET_ROOT", "C:/pf/dotnet")], check.ChooseDotnetRoot()!.Variables.Select(v => (v.Key, N(v.Value))));
+        Assert.True(check.EmulatedX64);
+
+        // Its install is the x64 .NET; a native process's isn't told an architecture.
+        var row = check.HostRuntimeStatus();
+        Assert.Contains("--exact --architecture x64 --source winget", InstallPlans.For(row, PlatformKind.Windows, @"C:\Users\u", true, null, emulatedX64: true)!.Command, StringComparison.Ordinal);
+        Assert.DoesNotContain("--architecture", InstallPlans.For(row, PlatformKind.Windows, @"C:\Users\u", true, null)!.Command, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -497,6 +580,30 @@ public sealed class HostRuntimeSetupTests : IDisposable
         Assert.Equal(2, failures.Count);
         await Task.Delay(300, TestContext.Current.CancellationToken);
         Assert.Empty(crashes); // never "keeps crashing"
+    }
+
+    [Fact]
+    public async Task A_language_host_that_ends_its_first_start_cleanly_and_silently_is_reported_too()
+    {
+        // Exit code 0, nothing on standard error: the loss is a plain JsonRpcConnectionLostException, not a
+        // HostExitedException. The crash handler leaves a first start to StartAsync, which must still say it.
+        var registry = new LanguageServiceRegistry();
+        registry.Register(new LanguageServiceDescriptor("standin", "Stand-in", [".standin"], null, () =>
+            (OperatingSystem.IsWindows() ? new ProcessLaunchInfo("cmd.exe", ["/c", "exit /b 0"]) : new ProcessLaunchInfo("/bin/sh", ["-c", "exit 0"])) with { Launcher = s_cleanLauncher }));
+        await using var solutions = new Codalus.Workbench.Projects.SolutionService(() => null);
+        await using var service = new LanguageService(registry, solutions, new SupervisionPolicy { ShutdownRequest = null, ExitNotification = null });
+        var crashes = new List<(string, bool)>();
+        var failures = new List<(string LanguageId, Exception Error)>();
+        service.HostCrashed += (_, e) => { lock (crashes) { crashes.Add(e); } };
+        service.StartFailed += (_, e) => { lock (failures) { failures.Add(e); } };
+
+        Assert.Null(await service.ClientAsync("standin"));
+        var failure = Assert.Single(failures);
+        Assert.Equal("standin", failure.LanguageId);
+        Assert.IsAssignableFrom<JsonRpcConnectionLostException>(failure.Error);
+        Assert.IsNotType<HostExitedException>(failure.Error);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.Empty(crashes);
     }
 
     private void WritePlugin(string id, string activation)

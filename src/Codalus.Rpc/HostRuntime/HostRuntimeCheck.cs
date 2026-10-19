@@ -194,7 +194,16 @@ public sealed class DotnetRootResolver
     /// <summary>The variable an app host of this architecture reads before <c>DOTNET_ROOT</c>: <c>DOTNET_ROOT_ARM64</c>.</summary>
     public string ArchVariable => "DOTNET_ROOT_" + ArchName.ToUpperInvariant();
 
-    private bool EmulatedX64 => Architecture == Architecture.X64 && OSArchitecture == Architecture.Arm64;
+    /// <summary>An x64 process on Arm64 (the win-x64 build on Windows on Arm): it can't use the native .NET's hostfxr.</summary>
+    public bool EmulatedX64 => Architecture == Architecture.X64 && OSArchitecture == Architecture.Arm64;
+
+    /// <summary>The OS's native .NET location (<c>%ProgramFiles%\dotnet</c>, <c>/usr/local/share/dotnet</c>), which an emulated x64 process can't use.</summary>
+    public string NativeLocation => OS switch
+    {
+        "windows" => Path.Combine((Architecture == Architecture.X86 ? ProcessEnvironment("ProgramFiles(x86)") : null) ?? ProcessEnvironment("ProgramFiles") ?? @"C:\Program Files", "dotnet"),
+        "macos" => "/usr/local/share/dotnet",
+        _ => "/usr/share/dotnet",
+    };
 
     private string ArchName => Architecture switch
     {

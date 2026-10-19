@@ -66,21 +66,10 @@ public sealed partial class ShellHost
         Solutions.HostCrashed += (_, e) => CrashReporter.Write("host", $"The build host exited unexpectedly (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}); restart: {e.WillRestart}.");
         Solutions.HostCrashed += (_, e) =>
         {
-            if (e is { DuringStartup: true, IsRestart: false })
-            {
-                return; // its first start failed (M49): opening the solution reports that, and it isn't a crash loop
-            }
-
-            if (e is { DuringStartup: true, WillRestart: false } && e.ExitCode != SolutionService.NoSdkExitCode)
-            {
-                // It crashed, and its restart failed during startup (M49): say why, not "crashed repeatedly".
-                Workbench.Notifications.Error(Localizer.Format("msg.solutions.buildHostCouldntStartAgain", "The build host couldn't start again: {0} Reopen the solution to try again.", e.Error?.Message ?? string.Empty));
-                return;
-            }
-
             if (e.ExitCode == SolutionService.NoSdkExitCode)
             {
-                // Not a crash: the build host found no SDK it can use, and says why. Starting it again won't help.
+                // Not a crash: the build host found no SDK it can use, and says why. Starting it again won't help. This
+                // comes first: it ends the first start too, and the open leaves this notification to say it (M49).
                 Ui.Post(async () =>
                 {
                     var why = Solutions.LastHostMessage is { Length: > 0 } message ? message : "No .NET SDK was found.";
@@ -89,6 +78,18 @@ public sealed partial class ShellHost
                         OpenCheckEnvironment();
                     }
                 });
+                return;
+            }
+
+            if (e is { DuringStartup: true, IsRestart: false })
+            {
+                return; // its first start failed (M49): opening the solution reports that, and it isn't a crash loop
+            }
+
+            if (e is { DuringStartup: true, WillRestart: false })
+            {
+                // It crashed, and its restart failed during startup (M49): say why, not "crashed repeatedly".
+                Workbench.Notifications.Error(Localizer.Format("msg.solutions.buildHostCouldntStartAgain", "The build host couldn't start again: {0} Reopen the solution to try again.", e.Error?.Message ?? string.Empty));
                 return;
             }
 
@@ -205,7 +206,11 @@ public sealed partial class ShellHost
         {
             StatusBar.ClearMessage();
             BuildHostLog.AppendLine($"[open] {path}: {ex}");
-            ReportError($"Could not open {Path.GetFileName(path)}: {ex.Message}");
+            if (ex is not HostExitedException { ExitCode: SolutionService.NoSdkExitCode })
+            {
+                // No SDK (exit 3): the crash handler's notification says why, with Check Environment; not twice.
+                ReportError($"Could not open {Path.GetFileName(path)}: {ex.Message}");
+            }
         }
     }
 
