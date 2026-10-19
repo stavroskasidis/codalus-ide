@@ -151,8 +151,8 @@ public sealed class AiStepItem : ObservableObject
 
     /// <summary>
     /// A tool call of the built-in agent (M28c) as a step: its tool as the title, a file it read or changed as a
-    /// location, a pattern or command as its target. A step without an outcome is running while the turn is, and was
-    /// stopped once the turn ended.
+    /// location (only when the call succeeded), a pattern or command as its target. A step without an outcome is
+    /// running while the turn is, and was stopped once the turn ended.
     /// </summary>
     public static AiStepItem From(AiAgentStep step, bool turnRunning, Action<AiStepLocation>? open = null)
     {
@@ -160,7 +160,8 @@ public sealed class AiStepItem : ObservableObject
             ? turnRunning ? AiStepStatus.Running : AiStepStatus.Cancelled
             : step.IsError ? AiStepStatus.Failed : AiStepStatus.Completed;
         var kind = KindOf(step.Tool);
-        var onFile = step.Target.Length > 0 && step.Tool is "read_file" or "edit_file" or "create_file" && !step.Target.EndsWith('…');
+        // A file it worked on is a link; a refused or failed call's path stays text (it may be outside the workspace).
+        var onFile = step.Target.Length > 0 && step.Tool is "read_file" or "edit_file" or "create_file" && !step.Target.EndsWith('…') && !step.IsError;
 
         // A reading tool's outcome names what it read (the file, the pattern, the build): the line says that already.
         var outcome = step.Outcome is { } said && (said.Trim('\'', '"') == step.Target || said == step.Tool) ? null : step.Outcome;

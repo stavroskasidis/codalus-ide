@@ -1453,6 +1453,7 @@
   "msg.ai.insertCode": "Insert the code into {0}?",
   "msg.ai.insertTheCodeAtTheCursor": "Insert the code at the cursor",
   "msg.ai.locationNotFound": "{0} isn't in the workspace any more.",
+  "msg.ai.locationOutside": "{0} isn't in the workspace, so it doesn't open from AI Chat.",
   "msg.ai.mcpBuildMessage": "An AI agent outside the IDE (codalus mcp) asks to build the solution.",
   "msg.ai.mcpBuildTitle": "Build the solution?",
   "msg.ai.modelTakesNoTools": "The model {0} doesn't take tools, so agent mode can't use it. Choose another model, or ask without Agent.",

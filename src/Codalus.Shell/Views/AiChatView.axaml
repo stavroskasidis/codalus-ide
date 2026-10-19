@@ -122,6 +122,9 @@
       <DockPanel>
         <Button x:Name="TurnOnBar" DockPanel.Dock="Right" Classes="accent" Margin="12,0,0,0" VerticalAlignment="Top"
                 Content="{l:T aiChat.turnOnAiAssistance}" AutomationProperties.Name="{l:T aiChat.turnOnAiAssistance}" />
+        <!-- A turn still finishing after AI was turned off (it was told to stop) can be stopped here too. -->
+        <Button x:Name="StopOffBar" DockPanel.Dock="Right" Classes="icon" controls:ButtonIcon.Kind="stop" Margin="8,0,0,0" VerticalAlignment="Top"
+                IsVisible="{Binding IsAnswering}" ToolTip.Tip="{l:T aiChat.stop}" AutomationProperties.Name="{l:T aiChat.stopTheAnswer}" />
         <TextBlock Classes="muted" Text="{Binding OffMessage}" TextWrapping="Wrap" />
       </DockPanel>
     </Border>

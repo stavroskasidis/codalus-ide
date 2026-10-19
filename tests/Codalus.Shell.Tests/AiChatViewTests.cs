@@ -270,7 +270,7 @@ public sealed class AiChatViewTests
         var input = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
         Assert.Equal("Ask about your code", input.PlaceholderText);
         var send = view.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Send the question");
-        var stop = view.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Stop the answer");
+        var stop = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StopButton" && AutomationProperties.GetName(b) == "Stop the answer");
         Assert.Contains("accent", send.Classes);
         Assert.Equal("send", ButtonIcon.GetKind(send));
         Assert.False(send.IsEffectivelyEnabled);
@@ -517,6 +517,231 @@ public sealed class AiChatViewTests
         Assert.Empty(view.RealizedTurns);
         Assert.Empty(chat.Turns);
         window.Close();
+    }
+
+    /// <summary>A conversation of turns of mixed heights (long code answers and short ones), the last one short.</summary>
+    private static async Task<(ShellFixture F, MockHttpServer Server)> MixedConversationAsync(int turns)
+    {
+        var longAnswer = "Here:\n\n```csharp\n" + string.Join('\n', Enumerable.Range(0, 40).Select(i => $"var value{i} = Compute({i});")) + "\n```\n";
+        var server = MockModelServers.OpenAI(request =>
+        {
+            // The question is the last message (the ones before it are the conversation so far).
+            using var body = JsonDocument.Parse(request.Body);
+            var question = body.RootElement.GetProperty("messages").EnumerateArray().Last().GetProperty("content").GetString() ?? "";
+            return question.Contains("long question", StringComparison.OrdinalIgnoreCase) ? longAnswer : "Short answer.";
+        });
+        var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.OpenAI"));
+        await EnableAsync(f, server);
+        var chat = f.Shell.AiChat;
+        chat.IncludeCurrentFile = chat.IncludeSelection = chat.IncludeErrors = chat.IncludeSolution = false;
+        for (var i = 0; i < turns; i++)
+        {
+            chat.Input = i % 3 == 0 && i < turns - 1 ? $"A long question {i}" : $"A short question {i}";
+            await chat.SendAsync();
+            await ShellFixture.PumpUntil(() => chat.Turns.Count == i + 1 && !chat.Turns[i].Turn.IsStreaming);
+        }
+
+        return (f, server);
+    }
+
+    /// <summary>Runs <paramref name="work"/> on the thread pool while the UI thread waits, so what it posts queues up.</summary>
+    private static void RunOnAnotherThreadAndWait(Func<Task> work) => Task.Run(work).GetAwaiter().GetResult();
+
+    private static void Pump(int times)
+    {
+        for (var i = 0; i < times; i++)
+        {
+            ShellFixture.Pump();
+        }
+    }
+
+    private static bool AtEnd(ScrollViewer scroller) => scroller.Offset.Y + scroller.Viewport.Height >= scroller.Extent.Height - 2;
+
+    [AvaloniaFact]
+    public async Task Page_Up_or_the_wheel_from_the_end_of_a_long_conversation_stays_where_it_went()
+    {
+        var (f, server) = await MixedConversationAsync(24);
+        await using var fixture = f;
+        await using var mock = server;
+        var window = Show(f.Shell.AiChat, 556, 700);
+        var view = (AiChatView)window.Content!;
+        var scroller = view.GetVisualDescendants().OfType<ScrollViewer>().First(s => s.Name == "Scroller");
+        await ShellFixture.PumpUntil(() => AtEnd(scroller) && view.RealizedTurns.Any(t => t.Turn == f.Shell.AiChat.Turns[^1].Turn));
+        Pump(6);
+        Assert.True(AtEnd(scroller) && view.IsFollowing);
+
+        // Page Up (the key the scroll viewer handles): the last turn leaves the view and the list re-estimates its extent
+        // in the same layout pass; the view stays a page up instead of snapping back to the end.
+        var before = scroller.Offset.Y;
+        var extents = new List<(double Offset, double Extent)>();
+        scroller.ScrollChanged += (_, e) => extents.Add((e.OffsetDelta.Y, e.ExtentDelta.Y));
+        scroller.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.PageUp, Source = scroller });
+        Pump(10);
+        Assert.Contains(extents, d => d.Offset < 0 && d.Extent != 0); // the case: the extent re-estimated with the page up
+        var paged = scroller.Offset.Y;
+        Assert.True(paged < before - 100, $"Page Up moved from {before:0} to {paged:0}");
+        Assert.False(view.IsFollowing);
+        Assert.False(AtEnd(scroller), $"the view went back to the end ({scroller.Offset.Y:0} + {scroller.Viewport.Height:0} of {scroller.Extent.Height:0})");
+        Pump(10);
+        Assert.Equal(paged, scroller.Offset.Y, 1);
+
+        // Back at the end it follows again; the wheel up leaves it too.
+        scroller.ScrollToEnd();
+        await ShellFixture.PumpUntil(() => AtEnd(scroller) && view.IsFollowing);
+        Pump(6);
+        var point = scroller.TranslatePoint(new Point(scroller.Bounds.Width / 2, scroller.Bounds.Height / 2), window)!.Value;
+        window.MouseWheel(point, new Vector(0, 3));
+        Pump(10);
+        Assert.False(view.IsFollowing);
+        Assert.False(AtEnd(scroller));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task A_new_question_brings_the_view_to_it_even_when_its_turn_ended_before_the_view_saw_it()
+    {
+        var (f, server) = await MixedConversationAsync(12);
+        await using var fixture = f;
+        await using var mock = server;
+        var chat = f.Shell.AiChat;
+        var window = Show(chat, 556, 700);
+        var view = (AiChatView)window.Content!;
+        var scroller = view.GetVisualDescendants().OfType<ScrollViewer>().First(s => s.Name == "Scroller");
+        await ShellFixture.PumpUntil(() => AtEnd(scroller));
+        scroller.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.PageUp, Source = scroller });
+        Pump(10);
+        Assert.False(AtEnd(scroller) || view.IsFollowing);
+
+        // The question goes from another thread to a provider that fails at once (none is chosen): its turn has ended
+        // with an error before the UI thread hears of it.
+        await f.Shell.Workbench.Settings.SetAsync(AiService.ProviderSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => chat.NeedsProvider);
+        RunOnAnotherThreadAndWait(() => chat.Chat.SendAsync("A question that fails", [], CancellationToken.None));
+        await ShellFixture.PumpUntil(() => chat.Turns.Count == 13);
+        Assert.False(chat.Turns[^1].Turn.IsStreaming);
+        Assert.NotNull(chat.Turns[^1].Turn.Error);
+        await ShellFixture.PumpUntil(() => AtEnd(scroller) && view.RealizedTurns.Any(t => t.Turn == chat.Turns[^1].Turn));
+        Assert.True(view.IsFollowing);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task Turning_AI_off_while_an_answer_is_written_stops_it()
+    {
+        using var gate = new ManualResetEventSlim();
+        await using var server = MockModelServers.Script(_ =>
+        {
+            gate.Wait(TimeSpan.FromSeconds(30));
+            return new MockTurn("Late.");
+        });
+        await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.OpenAI"));
+        await EnableAsync(f, server);
+        var chat = f.Shell.AiChat;
+        var window = Show(chat, 556, 700);
+        var view = (AiChatView)window.Content!;
+        chat.Input = "A question";
+        _ = chat.SendAsync();
+        await ShellFixture.PumpUntil(() => chat.IsAnswering);
+
+        // The composer, and its Stop, go with AI; the turn doesn't keep running without a way to stop it.
+        await f.Shell.Workbench.Settings.SetAsync(AiService.EnabledSetting, false, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => chat.IsOff && !chat.IsAnswering);
+        Assert.Equal("stopped", chat.Turns[^1].Turn.FinishReason);
+        Pump(4);
+        Assert.True(chat.ShowOffBar);
+        var offBarStop = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StopOffBar");
+        Assert.Equal("Stop the answer", AutomationProperties.GetName(offBarStop));
+        Assert.False(offBarStop.IsEffectivelyVisible);
+        gate.Set();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task A_code_block_being_written_stays_plain_text_that_grows_and_is_colored_once_complete()
+    {
+        await using var f = ShellFixture.Create();
+        var block = new AiCodeBlockView(f.Shell, f.Shell.EditorFont, () => { }, () => { }, () => { });
+        var window = new Window { Width = 556, Height = 600, Content = new ScrollViewer { Content = block } };
+        window.Show();
+        Pump(2);
+        var lines = Enumerable.Range(0, 400).Select(i => $"    var value{i} = Compute({i}); // line {i}").ToList();
+        AvaloniaEdit.Document.TextDocument? document = null;
+        string Code(int count) => "public void Run()\n{\n" + string.Join('\n', lines.Take(count));
+        for (var count = 50; count <= 400; count += 50)
+        {
+            // Each render of the streaming answer: the block grows at its end, uncolored, in the same document.
+            block.Show("csharp", null, Code(count), streaming: true, closed: false);
+            Pump(2);
+            Assert.False(block.IsColored);
+            Assert.Null(block.Viewer.GrammarColors);
+            Assert.Equal(Code(count), block.Viewer.Editor.Document.Text);
+            document ??= block.Viewer.Editor.Document;
+            Assert.Same(document, block.Viewer.Editor.Document);
+        }
+
+        // Its closing fence came while the answer is still written: colored once, after the layout; the buttons wait.
+        var full = Code(400) + "\n}";
+        block.Show("csharp", null, full, streaming: true, closed: true);
+        Assert.False(block.IsColored);
+        Pump(4);
+        Assert.True(block.IsColored);
+        var colors = Assert.IsType<GrammarColorizer>(block.Viewer.GrammarColors);
+        Assert.Same(document, block.Viewer.Editor.Document);
+        Assert.All(block.GetVisualDescendants().OfType<Button>(), b => Assert.False(b.IsEnabled));
+
+        // The answer ends: the buttons work, and the block isn't colored again.
+        block.Show("csharp", null, full, streaming: false, closed: true);
+        Pump(4);
+        Assert.Same(colors, block.Viewer.GrammarColors);
+        Assert.All(block.GetVisualDescendants().OfType<Button>(), b => Assert.True(b.IsEnabled));
+        block.Release();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void A_step_location_must_be_under_the_workspace_to_open_and_is_judged_from_its_text()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "codalus-workspace");
+        Assert.Equal(Path.Combine(root, "src", "Greeter.cs"), ShellHost.ResolveInWorkspace(root, "src/Greeter.cs"));
+        Assert.Equal(Path.Combine(root, "src", "Greeter.cs"), ShellHost.ResolveInWorkspace(root + Path.DirectorySeparatorChar, Path.Combine(root, "src", "Greeter.cs")));
+        Assert.Null(ShellHost.ResolveInWorkspace(root, "../secret.cs"));
+        Assert.Null(ShellHost.ResolveInWorkspace(root, "src/../../secret.cs"));
+        Assert.Null(ShellHost.ResolveInWorkspace(root, Path.Combine(Path.GetTempPath(), "elsewhere", "secret.cs")));
+        Assert.Null(ShellHost.ResolveInWorkspace(root, root + "-other" + Path.DirectorySeparatorChar + "a.cs"));
+        Assert.Null(ShellHost.ResolveInWorkspace(root, @"\\attacker\share\Greeter.cs"));
+        Assert.Null(ShellHost.ResolveInWorkspace(root, "//attacker/share/Greeter.cs"));
+        Assert.Null(ShellHost.ResolveInWorkspace(root, "."));
+        Assert.Null(ShellHost.ResolveInWorkspace(root, " "));
+
+        // A refused or failed call's path is text, not a link.
+        Assert.Empty(AiStepItem.From(new AiAgentStep("read_file", "../../etc/passwd", "outside the workspace", IsError: true), turnRunning: false).Locations);
+        Assert.Single(AiStepItem.From(new AiAgentStep("read_file", "src/Greeter.cs", "src/Greeter.cs"), turnRunning: false).Locations);
+    }
+
+    [AvaloniaFact]
+    public async Task A_step_location_opens_its_file_at_its_line_and_paths_outside_the_workspace_do_not_open()
+    {
+        await using var f = ShellFixture.Create();
+        var workspace = Path.Combine(f.UserData, "Workspace");
+        Directory.CreateDirectory(Path.Combine(workspace, "src"));
+        await File.WriteAllTextAsync(Path.Combine(workspace, "src", "Greeter.cs"), "namespace Samples;\n\npublic static class Greeter\n{\n    public static string Greet(string name) => name;\n}\n", TestContext.Current.CancellationToken);
+        var outside = Path.Combine(f.UserData, "Outside.cs");
+        await File.WriteAllTextAsync(outside, "class Outside { }\n", TestContext.Current.CancellationToken);
+        f.Shell.Trust.Trust(workspace);
+        await f.Shell.OpenFolderAsync(workspace);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Solution is not null);
+
+        foreach (var refused in new[] { "../Outside.cs", outside, @"\\attacker\share\Outside.cs", "src/Missing.cs" })
+        {
+            await f.Shell.OpenAiLocationAsync(refused, null);
+            ShellFixture.Pump();
+            Assert.DoesNotContain(f.Shell.Layout.Documents.OfType<CodeEditorDocument>(), d => d.Model.Path.EndsWith("Outside.cs", StringComparison.Ordinal) || d.Model.Path.EndsWith("Missing.cs", StringComparison.Ordinal));
+        }
+
+        await f.Shell.OpenAiLocationAsync("src/Greeter.cs", 5);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null && f.Shell.ActiveEditor.Model.Path.EndsWith("Greeter.cs", StringComparison.Ordinal));
+        var editor = f.Shell.ActiveEditor!.Controller!.Editor;
+        await ShellFixture.PumpUntil(() => editor.TextArea.Caret.Line == 5);
     }
 
     private static Color Brush(Visual visual, string token) =>

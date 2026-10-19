@@ -117,10 +117,10 @@ internal sealed class AiChatTurnView : StackPanel
             _renderedStreaming = streaming;
             _blocks = AiCodeBlocks.Parse(answer);
             var used = 0;
-            Control CodeBlock(int index, string info, string code)
+            Control CodeBlock(MarkdownCodeBlock block)
             {
-                used = Math.Max(used, index + 1);
-                return ShowCodeBlock(index, info, code, streaming);
+                used = Math.Max(used, block.Index + 1);
+                return ShowCodeBlock(block, streaming);
             }
 
             _answer.Content = answer.Length == 0
@@ -179,8 +179,9 @@ internal sealed class AiChatTurnView : StackPanel
         _stepsRail.IsVisible = _steps.Count > 0;
     }
 
-    private AiCodeBlockView ShowCodeBlock(int index, string info, string code, bool streaming)
+    private AiCodeBlockView ShowCodeBlock(MarkdownCodeBlock block, bool streaming)
     {
+        var index = block.Index;
         AiCodeBlockView view;
         if (index < _codeBlocks.Count)
         {
@@ -197,14 +198,14 @@ internal sealed class AiChatTurnView : StackPanel
             view = new AiCodeBlockView(
                 _owner.ViewModel!.EditorServices,
                 _owner.ViewModel.EditorFont,
-                () => { if (Block(at) is { } block) { _ = _owner.ViewModel?.CopyAsync(block.Code); } },
-                () => { if (Block(at) is { } block) { _ = _owner.ViewModel?.InsertAsync(_item.Turn, block); } },
-                () => { if (Block(at) is { } block) { _ = _owner.ViewModel?.ApplyAsync(_item.Turn, block); } });
+                () => { if (Block(at) is { } current) { _ = _owner.ViewModel?.CopyAsync(current.Code); } },
+                () => { if (Block(at) is { } current) { _ = _owner.ViewModel?.InsertAsync(_item.Turn, current); } },
+                () => { if (Block(at) is { } current) { _ = _owner.ViewModel?.ApplyAsync(_item.Turn, current); } });
             _codeBlocks.Add(view);
         }
 
         var parsed = index < _blocks.Count ? _blocks[index] : null;
-        view.Show(parsed?.Language ?? info.Split(' ', 2)[0], parsed?.Path, code, streaming);
+        view.Show(parsed?.Language ?? block.Info.Split(' ', 2)[0], parsed?.Path, block.Code, streaming, block.IsClosed);
         return view;
     }
 

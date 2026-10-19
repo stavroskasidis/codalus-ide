@@ -80,6 +80,28 @@ public sealed class CodeViewer : UserControl
         }
     }
 
+    /// <summary>
+    /// Shows <paramref name="text"/> without colors (code still being written, M34h: nothing is tokenized while it
+    /// grows). <see cref="Show"/> colors it later.
+    /// </summary>
+    public void ShowPlain(string text)
+    {
+        _textMate?.Dispose();
+        _textMate = null;
+        _scope = null;
+        RemoveGrammarColors();
+        if (Editor.Document.Text != text)
+        {
+            Editor.Document = new TextDocument(text);
+        }
+
+        _highlight.Set(0, 0);
+        Editor.TextArea.TextView.Redraw();
+    }
+
+    /// <summary>Adds <paramref name="text"/> at the end of what is shown: the lines laid out already stay as they are.</summary>
+    public void Append(string text) => Editor.Document.Insert(Editor.Document.TextLength, text);
+
     /// <summary>Shows <paramref name="text"/> with <paramref name="highlight"/> marked and scrolled into view.</summary>
     public void Show(string text, string? languageId, LanguageServices.Protocol.Range? highlight)
     {

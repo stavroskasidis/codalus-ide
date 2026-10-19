@@ -242,6 +242,13 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     public void Refresh()
     {
+        if (IsOff && IsAnswering)
+        {
+            // AI was turned off (the setting, or for the workspace) while a turn ran: it stops, as Stop does, and the
+            // turn says so. The composer and its Stop are gone while AI is off.
+            Stop();
+        }
+
         OnPropertyChanged(nameof(IsOff));
         OnPropertyChanged(nameof(IsOn));
         OnPropertyChanged(nameof(NeedsProvider));

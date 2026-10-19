@@ -60,7 +60,8 @@ public static partial class MarkdownRenderer
                 }
 
                 var block = string.Join('\n', code);
-                panel.Children.Add(options.CodeBlock?.Invoke(blockIndex, fence.Groups[2].Value.Trim(), block) ?? CodeBlock(block));
+                var closed = i < lines.Length; // its closing fence came (an answer being written may not have it yet)
+                panel.Children.Add(options.CodeBlock?.Invoke(new MarkdownCodeBlock(blockIndex, fence.Groups[2].Value.Trim(), block, closed)) ?? CodeBlock(block));
                 blockIndex++;
             }
             else if (line.Length == 0)
@@ -256,14 +257,18 @@ public sealed class MarkdownOptions
     /// <summary>Headings sized for a tool window (16, 14, 13 and 12 px) instead of a document's.</summary>
     public bool CompactHeadings { get; init; }
 
-    /// <summary>
-    /// A fenced code block's control, from its index (from 0, in the order of <c>AiCodeBlocks.Parse</c>), its info string
-    /// (the language and any <c>path=</c>) and its code; null draws the plain block.
-    /// </summary>
-    public Func<int, string, string, Control>? CodeBlock { get; init; }
+    /// <summary>A fenced code block's control; null draws the plain block.</summary>
+    public Func<MarkdownCodeBlock, Control>? CodeBlock { get; init; }
 
     public Thickness Margin { get; init; } = new(12);
 
     /// <summary>The space between blocks.</summary>
     public double Spacing { get; init; } = 8;
 }
+
+/// <summary>A fenced code block of rendered Markdown, for <see cref="MarkdownOptions.CodeBlock"/>.</summary>
+/// <param name="Index">Its index, from 0, in the order of <c>AiCodeBlocks.Parse</c>.</param>
+/// <param name="Info">Its info string: the language and any <c>path=</c>.</param>
+/// <param name="Code">Its code.</param>
+/// <param name="IsClosed">Its closing fence came: the block is complete even while the text around it is still written.</param>
+public sealed record MarkdownCodeBlock(int Index, string Info, string Code, bool IsClosed);

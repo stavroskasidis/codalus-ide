@@ -21,7 +21,10 @@ internal sealed class AiCodeBlockView : Border
     private readonly CodeViewer _viewer;
     private readonly TextBlock _language = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = FontWeight.SemiBold };
     private readonly Button[] _buttons;
-    private (string Code, string? Language) _shown;
+    private string? _text;
+    private (string Code, string? Language)? _colored;
+    private int _version;
+    private bool _released;
 
     public AiCodeBlockView(IEditorServices services, EditorFont font, Action copy, Action insert, Action apply)
     {
@@ -63,11 +66,17 @@ internal sealed class AiCodeBlockView : Border
     /// <summary>The language as the header shows it (tests).</summary>
     public string? HeaderText => _language.Text;
 
+    /// <summary>The code is in its language's colors (tests: none while it is still written).</summary>
+    public bool IsColored => _colored is not null;
+
     /// <summary>
     /// Shows <paramref name="code"/> in <paramref name="language"/> (the fence's name: <c>csharp</c>, <c>cs</c>, <c>json</c>…)
-    /// with the file it names, if any; its buttons wait while the answer is still being written.
+    /// with the file it names, if any; its buttons wait while the answer is still being written. While the block itself
+    /// is still written (<paramref name="streaming"/> and not <paramref name="closed"/>), it is plain text that grows at
+    /// its end; it is colored once it is complete, after the layout (tokenizing a long block on every render of a
+    /// streaming answer would hold up the UI thread).
     /// </summary>
-    public void Show(string language, string? path, string code, bool streaming)
+    public void Show(string language, string? path, string code, bool streaming, bool closed)
     {
         var id = LanguageId(language);
         var label = LanguageLabel(language);
@@ -78,15 +87,50 @@ internal sealed class AiCodeBlockView : Border
             button.IsEnabled = !streaming;
         }
 
-        if (_shown != (code, id))
+        var complete = !streaming || closed;
+        if (complete && _colored == (code, id))
         {
-            _shown = (code, id);
-            _viewer.Show(code, id, null);
+            return;
+        }
+
+        if (_colored is not null && _colored != (code, id))
+        {
+            _colored = null;
+            _viewer.ShowPlain(code);
+            _text = code;
+        }
+        else if (_text is { } shown && code.Length > shown.Length && code.StartsWith(shown, StringComparison.Ordinal))
+        {
+            _viewer.Append(code[shown.Length..]);
+            _text = code;
+        }
+        else if (_text != code)
+        {
+            _viewer.ShowPlain(code);
+            _text = code;
+        }
+
+        var version = ++_version;
+        if (complete)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (version == _version && !_released)
+                {
+                    _viewer.Show(code, id, null);
+                    _colored = (code, id);
+                }
+            }, Avalonia.Threading.DispatcherPriority.Background);
         }
     }
 
     /// <summary>Stops following the theme (the turn left the screen or the chat was cleared).</summary>
-    public void Release() => _viewer.Release();
+    public void Release()
+    {
+        _released = true;
+        _version++;
+        _viewer.Release();
+    }
 
     /// <summary>The editor's language for a fence's name, or null for plain text (names it doesn't know stay plain).</summary>
     public static string? LanguageId(string fence) => fence.ToLowerInvariant() switch
