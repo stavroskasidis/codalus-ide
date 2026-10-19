@@ -2028,6 +2028,36 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.DevicesWindow.Toolchain.Length > 0, "the Devices window shows the Android toolchain").ConfigureAwait(true);
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("maui-devices.png");
+        await SoftWaitAsync(() => shell.Solutions.RestoreState is "succeeded" or "failed", 300).ConfigureAwait(true);
+        DismissRestoreFailureWithoutMauiWorkloads();
+    }
+
+    /// <summary>
+    /// Without the MAUI workloads (the CI runners and most machines have none), restoring the MAUI solution fails on
+    /// TodoApp (NETSDK1147) and MauiViews is restored on its own, as SolutionSession.RestoreAsync does: the failure is
+    /// expected here, and its error notification would stay in every later picture. It is dismissed, and printed to the
+    /// run's log, only when the restore's output names the missing workload; any other restore failure stays.
+    /// </summary>
+    private void DismissRestoreFailureWithoutMauiWorkloads()
+    {
+        if (shell.Solutions.RestoreState != "failed")
+        {
+            return;
+        }
+
+        var restore = shell.Workbench.Output.Channels.FirstOrDefault(c => c.Id == "codalus.restore")?.GetText() ?? string.Empty;
+        var failures = shell.Workbench.Notifications.Items.Where(n => n.Message.StartsWith("Restore failed", StringComparison.Ordinal)).ToList();
+        if (!restore.Contains("NETSDK1147", StringComparison.Ordinal))
+        {
+            Console.Out.WriteLine("  (the MAUI solution's restore failed, not for want of a workload: " + Tail(restore, 1500) + ")");
+            return;
+        }
+
+        foreach (var failure in failures)
+        {
+            Console.Out.WriteLine($"  (expected without the MAUI workloads, dismissed: {failure.Message})");
+            shell.Workbench.Notifications.Dismiss(failure);
+        }
     }
 
     private async Task WindowsDesktopStepAsync()
@@ -3418,7 +3448,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes."
                 : ex.ToString();
             Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, error);
-            Screenshot($"smoke-test-{id}.png");
+            Screenshot($"smoke-test-{id}.png", keepToasts: true); // the toasts may say why
             if (!_logsShown)
             {
                 // The first failure prints the hosts' logs, so CI's log says why even when the run is cut short.
@@ -3744,8 +3774,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     // ------------------------------------------------------------------ report
 
-    private void Screenshot(string name, Avalonia.Controls.TopLevel? of = null)
+    /// <summary>
+    /// Saves the window (or another of the shell's) as <paramref name="name"/> in the logs. The toasts are hidden first
+    /// (see <see cref="HideToasts"/>) unless <paramref name="keepToasts"/>: a failed step's picture keeps them.
+    /// </summary>
+    private void Screenshot(string name, Avalonia.Controls.TopLevel? of = null, bool keepToasts = false)
     {
+        if (!keepToasts)
+        {
+            HideToasts(name);
+        }
+
         try
         {
             var target = of ?? window;
@@ -3766,6 +3805,28 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             shell.Workbench.Log.AppendLine($"[smoke] Screenshot {name} failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// The pictures the website and the gallery use show their feature, not a toast an earlier step left at the bottom
+    /// right: the toasts are hidden (the Escape of a toast, so each stays in the Notifications window and nothing is
+    /// answered for it), and each hidden one is printed to the run's log, so a real error is still seen there. The
+    /// steps' own checks of notifications are unaffected.
+    /// </summary>
+    private void HideToasts(string picture)
+    {
+        if (shell.Notifications.Toasts.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var toast in shell.Notifications.Toasts)
+        {
+            Console.Out.WriteLine($"  (a toast hidden for {picture}: {toast.Model.Severity}: {toast.Message})");
+        }
+
+        shell.Notifications.HideToasts();
+        window.UpdateLayout();
     }
 
     /// <summary>Whether the run passed: steps ran, and none failed.</summary>

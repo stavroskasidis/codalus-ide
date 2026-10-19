@@ -7,6 +7,7 @@ using Codalus.Shell.Controls;
 using Codalus.Shell.Docking;
 using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Settings;
 
 namespace Codalus.Shell.Infrastructure;
@@ -252,6 +253,14 @@ internal sealed partial class SmokeTest
                 controller.Model.Text.Text = original;
                 await shell.SaveAllAsync().ConfigureAwait(true);
             }
+
+            // The edit is undone on disk and in the editor, and saving it (twice) reported no change on disk with unsaved
+            // changes: the Linux runner's later pictures showed that warning when the watcher's check ran before the save
+            // had remembered the file's time (CodeDocument.SaveAsync now holds the check back).
+            var model = controller.Model;
+            Check(!model.IsModified && (await Editor.TextFiles.ReadAsync(broken, CancellationToken.None).ConfigureAwait(true)).Text == model.Text.Text && model.Text.Text == original, $"{model.Name}'s edit for the error state is undone and saved");
+            var conflict = Localizer.Format("msg.editor.changedOnDiskAndYouHave", "{0} changed on disk, and you have unsaved changes.", model.Name);
+            Check(!shell.Workbench.Notifications.Items.Any(n => n.Message == conflict), $"saving {model.Name} didn't report it as changed on disk");
         }
 
         // A failed test's details: grouped by outcome, the Failed group lists the tests.
@@ -378,6 +387,7 @@ internal sealed partial class SmokeTest
     private void GalleryShot(string surface, string state, string theme, Visual? target, Avalonia.Controls.TopLevel? top = null)
     {
         var name = $"{Slug(surface)}-{state}-{theme}.png";
+        HideToasts(name);
         try
         {
             Visual root = top ?? window;
