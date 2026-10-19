@@ -2,6 +2,11 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.4.0
+
+In progress on `develop`; nightlies show these notes.
+- **Classic is the default theme again, and comes first** ([user guide](docs/user-guide/settings.md#themes)): without a theme setting, Codalus IDE uses Classic following your system (Classic Light, Dark, or High Contrast when your system's high-contrast setting is on) instead of Harbor. Classic is the first card in the first-run setup, where it's now offered and preselected (its modes are Light, Dark, High contrast and Match system; Blue is in Options), and the first in Tools → Options → Environment → Appearance and Tools → Color Theme. **If you used 0.3.0 without choosing a theme, you'll see Classic**: choose Harbor once to keep it. A theme you chose stays as it is. The setup now saves the theme you leave chosen, the preselected one too.
+
 ## 0.3.0
 
 In progress on `develop`; nightlies show these notes.

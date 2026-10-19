@@ -8,6 +8,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
 using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
@@ -95,11 +96,11 @@ public sealed class FirstRunSetupTests
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
         Assert.False(f.Shell.IsStartWindowOpen); // the setup comes first
 
-        // The defaults (D32): Harbor following the system, the default keys.
+        // The defaults (D36): Classic, the first card, following the system; the default keys.
         var model = f.Shell.SetupModel!;
         Assert.Equal(SetupStep.Appearance, model.Current);
-        Assert.Equal(["harbor", "graphite", "daylight", "ember"], model.Families.Select(c => c.Id));
-        Assert.Equal("harbor", model.SelectedFamily);
+        Assert.Equal(["classic", "harbor", "graphite", "daylight", "ember"], model.Families.Select(c => c.Id));
+        Assert.Equal("classic", model.SelectedFamily);
         Assert.True(model.IsMatchSystem);
         Assert.Equal(["Light", "Dark", "High contrast", "Match system"], model.Modes.Select(m => m.Title));
         Assert.Equal("Next: Keyboard", model.NextTitle);
@@ -115,7 +116,7 @@ public sealed class FirstRunSetupTests
         await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
         await ShellFixture.PumpUntil(() => f.Shell.IsStartWindowOpen);
         Assert.False(model.WasDone);
-        Assert.Equal("harbor", f.Shell.Theme.ActiveFamily);
+        Assert.Equal("classic", f.Shell.Theme.ActiveFamily);
         Assert.Null(f.Shell.Workbench.Settings.GetLayerValue(ThemeService.SettingKey, Workbench.Settings.SettingScope.User));
         Assert.Contains("\"workbench.setupCompleted\": true", await File.ReadAllTextAsync(f.Shell.Paths.SettingsFile, TestContext.Current.CancellationToken), StringComparison.Ordinal);
 
@@ -250,7 +251,7 @@ public sealed class FirstRunSetupTests
         await using var f = ShellFixture.Create(firstRun: true);
         f.Shell.Theme.SystemColors = () => new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Light };
         f.Shell.Theme.Apply();
-        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "harbor.light");
+        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "light");
 
         // The first start's setup, skipped; then Help → Set Up Codalus IDE.
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
@@ -278,7 +279,7 @@ public sealed class FirstRunSetupTests
         Assert.Equal(Token("Shell.Panel", ThemeService.EmberDark), ((ISolidColorBrush)window.Background!).Color);
         foreach (var card in model.Families)
         {
-            Assert.Equal(Token("Shell.Background", ThemeService.VariantOf(card.Id + ".dark")), ((ISolidColorBrush)card.Picture.Background).Color);
+            Assert.Equal(Token("Shell.Background", ThemeService.VariantOf(ThemeService.Resolve(card.Id + ".dark", null))), ((ISolidColorBrush)card.Picture.Background).Color);
         }
 
         // The frame itself: the steps' column in Ember Dark's window color.
@@ -353,7 +354,7 @@ public sealed class FirstRunSetupTests
         await ShellFixture.PumpUntil(() => g.Shell.IsSetupOpen, seconds: 30);
         var model = g.Shell.SetupModel!;
         model.Modes.Single(m => m.Id == "light").SelectCommand.Execute(null);
-        await model.NextAsync(); // harbor.light saved: settings on both sides, and the synced ones win
+        await model.NextAsync(); // classic.light saved: settings on both sides, and the synced ones win
         await model.NextAsync();
         await model.SyncAsync(remote);
         Assert.Contains("applied here", model.SettingsStatus, StringComparison.Ordinal);
@@ -371,6 +372,171 @@ public sealed class FirstRunSetupTests
         await ShellFixture.PumpUntil(() => !g.Shell.IsSetupOpen);
         await g.Shell.TurnOffSettingsSyncAsync();
         Directory.Delete(synced, recursive: true);
+    }
+
+    // ------------------------------------------------------------------ Classic, the default (D36)
+
+    [AvaloniaFact]
+    public async Task A_new_profile_starts_in_Classic_following_each_mode_of_the_system()
+    {
+        await using var f = ShellFixture.Create(firstRun: true);
+        var system = new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Light };
+        f.Shell.Theme.SystemColors = () => system;
+        f.Shell.Theme.Apply();
+
+        // No theme in the settings: Classic, following the OS's light, dark and high contrast (high contrast first).
+        Assert.Null(f.Shell.Workbench.Settings.GetLayerValue(ThemeService.SettingKey, Workbench.Settings.SettingScope.User));
+        Assert.Equal("classic", f.Shell.Theme.Setting);
+        foreach (var (os, theme, variant) in new[]
+        {
+            (new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Light }, "light", ThemeVariant.Light),
+            (new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Dark }, "dark", ThemeVariant.Dark),
+            (new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Light, ContrastPreference = ColorContrastPreference.High }, "highContrast", ThemeService.HighContrast),
+            (new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Dark, ContrastPreference = ColorContrastPreference.High }, "highContrast", ThemeService.HighContrast),
+        })
+        {
+            system = os;
+            f.Shell.Theme.Apply(); // what the OS's ColorValuesChanged does
+            Assert.Equal(theme, f.Shell.Theme.ActiveTheme);
+            Assert.Equal("classic", f.Shell.Theme.ActiveFamily);
+            Assert.Equal(variant, Application.Current!.ActualThemeVariant);
+            Assert.Equal(ThemeService.KindOf(theme), f.Shell.Workbench.Context.GetValue("theme"));
+            Assert.Equal("classic", f.Shell.Workbench.Context.GetValue("themeFamily"));
+        }
+
+        // The setup opens on Classic, the first card, with Match system; its picture is the system's mode (high contrast).
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        var model = f.Shell.SetupModel!;
+        Assert.Equal("classic", model.Families[0].Id);
+        Assert.Equal("Classic", model.Families[0].Title);
+        Assert.False(string.IsNullOrEmpty(model.Families[0].Description));
+        Assert.Equal("classic", model.SelectedFamily);
+        Assert.True(model.IsMatchSystem);
+        model.Families[0].SelectCommand.Execute(null); // the pictures as of now (the setup may have opened in another mode)
+        Assert.Equal("classic", model.ThemeSetting);
+        Assert.Equal(ThemeService.HighContrast, model.Families[0].Picture.Variant);
+        Assert.Equal(ThemeService.HarborHighContrast, model.Families.Single(c => c.Id == "harbor").Picture.Variant);
+        await model.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.IsStartWindowOpen);
+        f.Shell.StartWindowModel!.ContinueCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsStartWindowOpen);
+    }
+
+    [AvaloniaFact]
+    public async Task Classic_is_the_first_card_and_each_mode_applies_its_Classic_variant()
+    {
+        await using var f = ShellFixture.Create(firstRun: true);
+        f.Shell.Theme.SystemColors = () => new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Dark };
+        f.Shell.Theme.Apply();
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        var model = f.Shell.SetupModel!;
+        var window = f.Shell.SetupWindowView!;
+        for (var i = 0; i < 4; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        // The window draws Classic's card first, chosen.
+        var cards = window.FindControl<ItemsControl>("FamilyList")!.GetVisualDescendants().OfType<ToggleButton>().ToList();
+        Assert.Equal(["Classic", "Harbor", "Graphite", "Daylight", "Ember"], cards.Select(AutomationProperties.GetName));
+        Assert.True(cards[0].IsChecked);
+
+        // Each mode on the Classic card previews Classic's variant, in the IDE, the window and the card's picture.
+        model.Families.Single(c => c.Id == "harbor").SelectCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "harbor.dark");
+        model.Families[0].SelectCommand.Execute(null);
+        foreach (var (mode, theme, variant) in new[] { ("light", "light", ThemeVariant.Light), ("dark", "dark", ThemeVariant.Dark), ("highContrast", "highContrast", ThemeService.HighContrast) })
+        {
+            model.Modes.Single(m => m.Id == mode).SelectCommand.Execute(null);
+            Assert.Equal("classic." + mode, model.ThemeSetting);
+            await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == theme);
+            Assert.Equal("classic", f.Shell.Theme.ActiveFamily);
+            Assert.Equal(variant, Application.Current!.ActualThemeVariant);
+            Assert.Equal(variant, window.ActualThemeVariant);
+            Assert.Equal(variant, model.Families[0].Picture.Variant);
+        }
+
+        Assert.True(ThemeService.IsHighContrast(Application.Current!.ActualThemeVariant));
+        Assert.Null(f.Shell.Workbench.Settings.GetLayerValue(ThemeService.SettingKey, Workbench.Settings.SettingScope.User)); // a preview
+
+        // Match system: Classic following the OS (dark here); Next writes it, though it's the default, so the choice stays
+        // the user's if the default changes again.
+        model.Modes.Single(m => m.Id is null).SelectCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "dark");
+        await model.NextAsync();
+        Assert.Equal("classic", f.Shell.Workbench.Settings.GetLayerValue(ThemeService.SettingKey, Workbench.Settings.SettingScope.User)?.GetString());
+
+        // Back, Classic High Contrast, Next: saved.
+        await model.BackAsync();
+        Assert.Equal("classic", model.SelectedFamily);
+        Assert.True(model.IsMatchSystem);
+        model.Modes.Single(m => m.Id == "highContrast").SelectCommand.Execute(null);
+        await model.NextAsync();
+        Assert.Equal("classic.highContrast", f.Shell.Workbench.Settings.GetString(ThemeService.SettingKey));
+        Assert.Equal("highContrast", f.Shell.Theme.ActiveTheme);
+        await model.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.IsStartWindowOpen);
+        f.Shell.StartWindowModel!.ContinueCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsStartWindowOpen);
+    }
+
+    [AvaloniaFact]
+    public async Task Classic_Blue_and_a_value_from_before_show_on_the_Classic_card_and_are_kept()
+    {
+        await using var f = ShellFixture.Create(firstRun: true);
+        var settings = f.Shell.Workbench.Settings;
+        f.Shell.Theme.SystemColors = () => new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Light };
+        f.Shell.Theme.Apply();
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        await f.Shell.SetupModel!.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.IsStartWindowOpen);
+        f.Shell.StartWindowModel!.ContinueCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsStartWindowOpen);
+
+        // Classic Blue (chosen in Options): the Classic card, no mode, a note on where Blue is; Next keeps it.
+        await settings.SetAsync(ThemeService.SettingKey, "classic.blue", Workbench.Settings.SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "blue");
+        f.Shell.Run("help.setUp");
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
+        var model = f.Shell.SetupModel!;
+        Assert.Equal("classic", model.SelectedFamily);
+        Assert.Equal("blue", model.SelectedVariant);
+        Assert.True(model.IsClassicBlue);
+        Assert.All(model.Modes, m => Assert.False(m.IsSelected));
+        Assert.Equal(ThemeService.Blue, model.Families[0].Picture.Variant);
+        Assert.Equal(ThemeService.HarborLight, model.Families.Single(c => c.Id == "harbor").Picture.Variant); // Harbor matches the system
+        await model.NextAsync();
+        Assert.Equal("classic.blue", settings.GetString(ThemeService.SettingKey));
+        Assert.Equal("blue", f.Shell.Theme.ActiveTheme);
+
+        // Another card has no Blue: it matches the system, as in Options; a mode on Classic leaves Blue.
+        await model.BackAsync();
+        Assert.True(model.IsClassicBlue);
+        model.Families.Single(c => c.Id == "harbor").SelectCommand.Execute(null);
+        Assert.True(model.IsMatchSystem);
+        Assert.False(model.IsClassicBlue);
+        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "harbor.light");
+        model.Families[0].SelectCommand.Execute(null);
+        model.Modes.Single(m => m.Id == "dark").SelectCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "dark");
+
+        // Skip ends the preview: Blue stays.
+        await model.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.Theme.ActiveTheme == "blue");
+        Assert.Equal("classic.blue", settings.GetString(ThemeService.SettingKey));
+
+        // A value from before the families ("dark", Classic Dark) shows as Classic Dark, and Next doesn't rewrite it.
+        await settings.SetAsync(ThemeService.SettingKey, "dark", Workbench.Settings.SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "dark");
+        f.Shell.Run("help.setUp");
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
+        model = f.Shell.SetupModel!;
+        Assert.Equal("classic", model.SelectedFamily);
+        Assert.Equal("dark", model.SelectedVariant);
+        await model.NextAsync();
+        Assert.Equal("dark", settings.GetString(ThemeService.SettingKey));
+        await model.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
     }
 
     /// <summary>With <c>CODALUS_UI_SNAPSHOTS</c>: the setup window's frame, for a look at each step.</summary>

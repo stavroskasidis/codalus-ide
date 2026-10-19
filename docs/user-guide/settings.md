@@ -45,21 +45,21 @@ Settings you may want first:
 
 ## Themes
 
-Codalus IDE has four **theme families**, each in Light, Dark and High contrast, and Classic. The [first-run setup](getting-started.md#the-first-run-setup) offers the four at the first start (Help → Set Up Codalus IDE shows it again):
+Codalus IDE has five **theme families**: Classic, the default, in Blue, Light, Dark and High Contrast, and Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast. The [first-run setup](getting-started.md#the-first-run-setup) offers them at the first start, Classic first (Help → Set Up Codalus IDE shows it again):
 
 | Family | What it looks like |
 |---|---|
-| **Harbor** (the default) | The closest to a classic IDE: a deep navy title bar in Light, tool windows docked with gaps between them, the focused tool window's caption and the status bar in cobalt, a bar across the top of the active tab. |
+| **Classic** (the default) | The classic IDE's familiar look, the themes from before 0.3: Blue, Light, Dark and High Contrast. |
+| **Harbor** | The closest to a classic IDE: a deep navy title bar in Light, tool windows docked with gaps between them, the focused tool window's caption and the status bar in cobalt, a bar across the top of the active tab. |
 | **Graphite** | Compact and dense: the title bar and toolbar in the window's color, hairlines between tool windows, a bold title with a teal dot on the focused one, an underline on the active tab, a dark teal status bar. |
 | **Daylight** | Flat and airy: hairlines between tool windows, rounded tabs with the active one tinted violet, the Start button filled with the accent. |
 | **Ember** | Warm, with floating panels: tool windows and documents as rounded cards with gaps on the window's background, rounded tabs, and a status bar in the window's color with a dot for the state, orange only while debugging. |
-| **Classic** | The themes from before 0.3: Blue, Light, Dark and High Contrast. |
 
 Choose one in either place; the IDE switches at once:
-- **Tools → Options → Environment → Appearance → Color Theme**: the families as cards, each with a picture of it, and a **mode**: Follow System, Light, Dark or High Contrast (Classic also has Blue). Follow System follows the operating system's light or dark setting and its high-contrast setting as they change, within the family.
-- **Tools → Color Theme** (`Ctrl+K Ctrl+T`): every family following the system and in each mode, Classic's, then the plugins' themes. Moving through the list shows each theme; Enter keeps it, Escape goes back.
+- **Tools → Options → Environment → Appearance → Color Theme**: the families as cards, Classic first, each with a picture of it, and a **mode**: Follow System, Light, Dark or High Contrast (Classic also has Blue). Follow System follows the operating system's light or dark setting and its high-contrast setting as they change, within the family.
+- **Tools → Color Theme** (`Ctrl+K Ctrl+T`): every family following the system and in each mode, Classic first, then the plugins' themes. Moving through the list shows each theme; Enter keeps it, Escape goes back.
 
-In `settings.json`, `workbench.colorTheme` is a family (`"harbor"`, following the system) or a family and its mode (`"ember.dark"`, `"graphite.highContrast"`, `"classic.blue"`). A new install uses Harbor following the system. A setting saved by an earlier version (`"dark"`, `"blue"`, `"followSystem"`…) keeps its look: it reads as Classic.
+In `settings.json`, `workbench.colorTheme` is a family (`"classic"`, following the system) or a family and its mode (`"ember.dark"`, `"graphite.highContrast"`, `"classic.blue"`). Without the setting, Codalus IDE uses Classic following the system: Classic Light or Dark as your system is light or dark, and Classic High Contrast when its high-contrast setting is on. In 0.3.0 that default was Harbor, so if you never chose a theme, 0.4 shows Classic: pick Harbor once to keep it. A theme you chose stays as it is, and a setting saved by an earlier version (`"dark"`, `"blue"`, `"followSystem"`…) keeps its look: it reads as Classic.
 
 Plugins can add color themes, which are listed with these; a plugin's theme goes over Classic's Light, Dark or High Contrast.
 
