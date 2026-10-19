@@ -258,7 +258,13 @@ public sealed class SweepFindingsTests
         var folder = Path.Combine(Path.GetDirectoryName(solution)!, "FolderOnly");
         f.Shell.Trust.Trust(Path.GetDirectoryName(Path.GetDirectoryName(solution))!);
         await f.Shell.OpenFolderAsync(folder);
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Solution is { IsFolder: true } && f.Shell.Solutions.Progress is { Completed: true }, seconds: 120);
+        // Also until the command is enabled: its context keys (solutionOpen, solutionTrusted) are set on the UI thread from
+        // the solution service's event, after the service's own state, which the build host's thread changes. The wait
+        // could end between the two, and the command was refused (#68's and #69's Linux runs).
+        await ShellFixture.PumpUntil(
+            () => f.Shell.Solutions.Solution is { IsFolder: true } && f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Workbench.Commands.IsEnabled("solution.saveFilter"),
+            seconds: 120,
+            describe: () => $"solution {f.Shell.Solutions.Solution?.Path} (folder {f.Shell.Solutions.Solution?.IsFolder}, trusted {f.Shell.Solutions.Solution?.Trusted}), progress completed {f.Shell.Solutions.Progress?.Completed}, solution.saveFilter enabled {f.Shell.Workbench.Commands.IsEnabled("solution.saveFilter")}");
 
         var target = Path.Combine(f.UserData, "Folder.slnf");
         f.Shell.Window = new SavingWindow(f.Shell.Window, target);
