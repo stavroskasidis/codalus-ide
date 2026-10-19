@@ -44,7 +44,12 @@ internal sealed partial class SmokeTest
     /// <summary>A regular expression: the sweep runs only the commands whose ids match it (to bisect a failure).</summary>
     private const string SweepOnlyVariable = "CODALUS_SWEEP_ONLY";
 
-    private static readonly TimeSpan s_sweepStallLimit = TimeSpan.FromMilliseconds(500);
+    /// <summary>
+    /// The longest the UI thread may stall in a command: 500 ms on a developer's machine. CI's hosted runners render in
+    /// software with no GPU (Xvfb on Linux), where opening a window took 530–670 ms: there the row keeps the stall and only
+    /// a real hang fails, as the benchmarks' budgets hold on the reference machine and are indicative on CI (ADR 0002).
+    /// </summary>
+    private static readonly TimeSpan s_sweepStallLimit = TimeSpan.FromMilliseconds(Environment.GetEnvironmentVariable("CI") == "true" ? 2000 : 500);
 
     /// <summary>Commands the sweep never runs, and why: they leave the machine or the app (the report's skips).</summary>
     private static readonly Dictionary<string, string> s_sweepSkips = new(StringComparer.Ordinal)
