@@ -13,6 +13,11 @@
     <Compile Include="..\..\src\Codalus.Projects.Host\DesignTimeCache.cs" Link="Host\DesignTimeCache.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\WindowsDesktop.cs" Link="Host\WindowsDesktop.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\NetFramework.cs" Link="Host\NetFramework.cs" />
+    <Compile Include="..\..\src\Codalus.Projects.Host\StringCacheGate.cs" Link="Host\StringCacheGate.cs" />
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- MSBuild's string cache, which StringCacheGate keeps from being cleared under MSBuild work (the real thing, run here). -->
+    <PackageReference Include="Microsoft.NET.StringTools" />
   </ItemGroup>
 </Project>

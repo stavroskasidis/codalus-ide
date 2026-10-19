@@ -17,19 +17,32 @@ internal static class PackageReferences
     private static readonly StringComparison s_pathComparison =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-    /// <summary>Loads the project for each target framework with <paramref name="globalProperties"/>.</summary>
+    /// <summary>
+    /// Loads the project for each target framework with <paramref name="globalProperties"/>. It holds
+    /// <see cref="StringCacheGate"/> until disposed, so reads and edits through it are covered too.
+    /// </summary>
     public sealed class Evaluation : IDisposable
     {
+        private readonly StringCacheGate.Scope _gate = StringCacheGate.Enter();
         private readonly ProjectCollection _collection;
 
         public Evaluation(string path, IReadOnlyDictionary<string, string> globalProperties)
         {
-            _collection = new ProjectCollection(new Dictionary<string, string>(globalProperties, StringComparer.OrdinalIgnoreCase));
-            Outer = _collection.LoadProject(path);
-            Frameworks = ProjectEvaluator.TargetFrameworks(Outer);
-            Inner = Frameworks.Length <= 1
-                ? [(Frameworks.FirstOrDefault() ?? string.Empty, Outer)]
-                : [.. Frameworks.Select(f => (f, _collection.LoadProject(path, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["TargetFramework"] = f }, null)))];
+            try
+            {
+                _collection = new ProjectCollection(new Dictionary<string, string>(globalProperties, StringComparer.OrdinalIgnoreCase));
+                Outer = _collection.LoadProject(path);
+                Frameworks = ProjectEvaluator.TargetFrameworks(Outer);
+                Inner = Frameworks.Length <= 1
+                    ? [(Frameworks.FirstOrDefault() ?? string.Empty, Outer)]
+                    : [.. Frameworks.Select(f => (f, _collection.LoadProject(path, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["TargetFramework"] = f }, null)))];
+            }
+            catch
+            {
+                _collection?.Dispose();
+                _gate.Dispose();
+                throw;
+            }
         }
 
         public Project Outer { get; }
@@ -44,7 +57,17 @@ internal static class PackageReferences
         public string? CentralPackagesFile =>
             Outer.GetPropertyValue("DirectoryPackagesPropsPath") is { Length: > 0 } path && File.Exists(path) ? Path.GetFullPath(path) : null;
 
-        public void Dispose() => _collection.Dispose();
+        public void Dispose()
+        {
+            try
+            {
+                _collection.Dispose();
+            }
+            finally
+            {
+                _gate.Dispose();
+            }
+        }
     }
 
     // ------------------------------------------------------------------ reading
@@ -298,6 +321,7 @@ internal static class PackageReferences
     /// <summary>The project files an edit touches, opened from disk with their formatting, and saved together.</summary>
     private sealed class Files : IDisposable
     {
+        private readonly StringCacheGate.Scope _gate = StringCacheGate.Enter();
         private readonly ProjectCollection _collection = new();
         private readonly Dictionary<string, ProjectRootElement> _open = new(StringComparer.OrdinalIgnoreCase);
 
@@ -328,6 +352,10 @@ internal static class PackageReferences
             return saved;
         }
 
-        public void Dispose() => _collection.Dispose();
+        public void Dispose()
+        {
+            _collection.Dispose();
+            _gate.Dispose();
+        }
     }
 }

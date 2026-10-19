@@ -70,7 +70,8 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             }
             finally
             {
-                _manager.EndBuild();
+                // The in-process node clears MSBuild's string cache here: not while this process evaluates (StringCacheGate).
+                StringCacheGate.Exclusive(_manager.EndBuild);
             }
         }
         finally
@@ -168,18 +169,27 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
                 global["WindowsAppSDKSelfContained"] = "false";
             }
 
-            var data = request.IgnoreMissingImports
-                ? new BuildRequestData(
-                    ProjectInstance.FromFile(request.Path, new Microsoft.Build.Definition.ProjectOptions
+            BuildRequestData data;
+            if (request.IgnoreMissingImports)
+            {
+                ProjectInstance instance;
+                using (StringCacheGate.Enter())
+                {
+                    instance = ProjectInstance.FromFile(request.Path, new Microsoft.Build.Definition.ProjectOptions
                     {
                         GlobalProperties = global,
                         ProjectCollection = collection,
                         LoadSettings = ProjectLoadSettings.IgnoreMissingImports | ProjectLoadSettings.IgnoreInvalidImports | ProjectLoadSettings.IgnoreEmptyImports,
-                    }),
-                    s_targets,
-                    InProcess(request.Path),
-                    BuildRequestDataFlags.ProvideProjectStateAfterBuild)
-                : new BuildRequestData(request.Path, global, null, s_targets, null, BuildRequestDataFlags.ProvideSubsetOfStateAfterBuild, s_state);
+                    });
+                }
+
+                data = new BuildRequestData(instance, s_targets, InProcess(request.Path), BuildRequestDataFlags.ProvideProjectStateAfterBuild);
+            }
+            else
+            {
+                data = new BuildRequestData(request.Path, global, null, s_targets, null, BuildRequestDataFlags.ProvideSubsetOfStateAfterBuild, s_state);
+            }
+
             var result = await ExecuteAsync(_manager.PendBuildRequest(data)).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             var state = result.ProjectStateAfterBuild;

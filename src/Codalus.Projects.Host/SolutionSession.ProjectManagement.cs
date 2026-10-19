@@ -136,6 +136,7 @@ internal sealed partial class SolutionSession
 
         try
         {
+            using var gate = StringCacheGate.Enter();
             using var collection = new Microsoft.Build.Evaluation.ProjectCollection(SolutionProperties());
             var project = collection.LoadProject(path);
             static string[] Split(string value, string[] fallback) =>

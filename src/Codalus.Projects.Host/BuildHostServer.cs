@@ -275,15 +275,22 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or Microsoft.Build.Exceptions.InvalidProjectFileException)
         {
-            if (ex is ArgumentNullException)
+            if (ex is ArgumentNullException || (ex is not Microsoft.Build.Exceptions.InvalidProjectFileException && !ThrownByHost(ex)))
             {
-                // A bug, not a user's mistake: the stack goes to the host's log (and CI output) too.
+                // A bug, not a user's mistake (the host's own refusals are thrown here; this came from MSBuild, NuGet or
+                // .NET): the stack goes to the host's log (and CI output) and to the error's data, where the shell's
+                // JsonRpcRemoteException shows it.
                 await Console.Error.WriteLineAsync("[host] [error] " + ex).ConfigureAwait(false);
+                throw new JsonRpcHandlerException(ProjectErrorCodes.InvalidOperation, ex.Message) { Details = ex.ToString() };
             }
 
             throw new JsonRpcHandlerException(ProjectErrorCodes.InvalidOperation, ex.Message);
         }
     }
+
+    /// <summary>Whether the build host's own code threw <paramref name="exception"/> (a refusal with a readable message).</summary>
+    internal static bool ThrownByHost(Exception exception) =>
+        exception.TargetSite?.DeclaringType?.Assembly == typeof(BuildHostServer).Assembly;
 
     private static Task<EmptyResult> GuardEmpty(Func<Task> action) => Guard(async () =>
     {
