@@ -34,11 +34,11 @@
           toolbar row that overflows (M34g: the four buttons ran off the tool window's 280 px).
         -->
         <controls:ToolbarPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,4,0,0" IsVisible="{Binding HasDesignerSource}">
-          <ToggleButton Classes="toolbar" IsChecked="{Binding !Alphabetical, Mode=OneWay}" Command="{Binding CategorizedCommand}" Content="{l:T properties.categorized}" AutomationProperties.Name="{l:T properties.categorized}" />
-          <ToggleButton Classes="toolbar" IsChecked="{Binding Alphabetical, Mode=OneWay}" Command="{Binding AlphabeticalCommand}" Content="{l:T properties.alphabetical}" AutomationProperties.Name="{l:T properties.alphabetical}" />
+          <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="type-hierarchy" IsChecked="{Binding !Alphabetical, Mode=OneWay}" Command="{Binding CategorizedCommand}" ToolTip.Tip="{l:T properties.categorized}" AutomationProperties.Name="{l:T properties.categorized}" />
+          <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="arrow-sort" IsChecked="{Binding Alphabetical, Mode=OneWay}" Command="{Binding AlphabeticalCommand}" ToolTip.Tip="{l:T properties.alphabetical}" AutomationProperties.Name="{l:T properties.alphabetical}" />
           <Border Classes="toolbarSeparator" />
-          <ToggleButton Classes="toolbar" IsChecked="{Binding !ShowEvents, Mode=OneWay}" Command="{Binding PropertiesCommand}" Content="{l:T properties.properties}" AutomationProperties.Name="{l:T properties.properties}" />
-          <ToggleButton Classes="toolbar" IsChecked="{Binding ShowEvents, Mode=OneWay}" Command="{Binding EventsCommand}" Content="{l:T properties.events}" AutomationProperties.Name="{l:T properties.events}" />
+          <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="properties" IsChecked="{Binding !ShowEvents, Mode=OneWay}" Command="{Binding PropertiesCommand}" ToolTip.Tip="{l:T properties.properties}" AutomationProperties.Name="{l:T properties.properties}" />
+          <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="events" IsChecked="{Binding ShowEvents, Mode=OneWay}" Command="{Binding EventsCommand}" ToolTip.Tip="{l:T properties.events}" AutomationProperties.Name="{l:T properties.events}" />
         </controls:ToolbarPanel>
       </Grid>
     </Border>

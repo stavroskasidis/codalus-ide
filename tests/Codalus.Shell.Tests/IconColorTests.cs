@@ -86,6 +86,6 @@ public partial class IconColorTests
         }
     }
 
-    [GeneratedRegex(@"controls:Icon[^>]*?Kind=""([a-z0-9:@-]+)""")]
+    [GeneratedRegex(@"(?:controls:Icon[^>]*?Kind|controls:ButtonIcon\.Kind|controls:SegmentedControlItem[^>]*?Icon)=""([a-z0-9:@-]+)""")]
     private static partial Regex ViewIcon();
 }

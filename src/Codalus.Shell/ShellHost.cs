@@ -547,7 +547,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     private IReadOnlyList<ToolbarActionViewModel> TitleActions(string viewId)
     {
         var scope = Workbench.Context.With(new Dictionary<string, object?>(StringComparer.Ordinal) { ["view"] = viewId, ["focusedView"] = viewId });
-        return [.. Workbench.Menus.GetItems(MenuLocations.ToolWindowTitle, scope).Where(i => i.Submenu is null).Select(i => new ToolbarActionViewModel(i.Title, i.KeyLabel, CommandFor(i.Command)))];
+        return [.. Workbench.Menus.GetItems(MenuLocations.ToolWindowTitle, scope).Where(i => i.Submenu is null).Select(i => new ToolbarActionViewModel(i.Title, i.KeyLabel, CommandFor(i.Command), Controls.CommandIcons.For(i.Command)?.Kind))];
     }
 
     /// <summary>One <c>workbench.view.&lt;id&gt;</c> command (and View menu entry) per tool window.</summary>

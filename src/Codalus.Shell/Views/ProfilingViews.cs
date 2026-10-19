@@ -128,7 +128,13 @@ public sealed partial class BenchmarksView : UserControl, IPaneView
 /// <summary>The .NET Counters window (M18).</summary>
 public sealed partial class CountersView : UserControl, IPaneView
 {
-    public CountersView() => InitializeComponent();
+    public CountersView()
+    {
+        InitializeComponent();
+
+        // One box for the id, the name or a running process (M34h): it lists the processes when it opens with none yet.
+        TargetBox.DropDownOpened += (_, _) => _ = (DataContext as CountersViewModel)?.EnsureProcessesAsync();
+    }
 
     public void FocusPrimary() => TargetBox.Focus();
 }

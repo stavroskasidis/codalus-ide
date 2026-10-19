@@ -11,13 +11,13 @@
 
 ## Settings
 
-Tools → Options… lists every setting in a tree of groups (Environment, Text Editor, Projects and Solutions, Debugging, Source Control, Testing, Terminal and Interactive), with a search box. Choosing a group shows all its settings. Changes apply immediately.
+Tools → Options… lists every setting in a tree of groups (Environment, Text Editor, Projects and Solutions, Debugging, Source Control, Testing, Terminal and Interactive), each with its icon and how many settings it has, and a search box (`@modified` shows only the changed ones). Choosing a group shows all its settings under a header with its name and how many of them are changed. Changes apply immediately: a changed setting is marked at its left edge and with a **Modified** chip, and **Reset** puts it back. An on/off setting is one check box labelled with its name.
 
 - **User settings** live in `settings.json` in the user configuration folder:
   - Windows: `%APPDATA%\Codalus`
   - macOS: `~/Library/Application Support/Codalus`
   - Linux: `~/.config/codalus`
-- **Solution settings** live in `.codalus/settings.json` next to the solution and override the user settings for that solution.
+- **Solution settings** live in `.codalus/settings.json` next to the solution and override the user settings for that solution. While a solution is open, **User | Workspace** next to the search box chooses where your changes go; the line under it names the file. Settings that only make sense per user can't be changed on the Workspace side.
 - **Editing the JSON**: open it with "Open User Settings (JSON)" in the command palette.
 - **Settings for one language**: as in VS Code, a `"[languageId]"` block in either file sets values for that language's documents only, and wins over the general value in any file:
 

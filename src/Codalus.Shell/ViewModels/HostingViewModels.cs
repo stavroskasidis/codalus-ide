@@ -6,6 +6,7 @@ using Codalus.Shell.Docking;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Git;
 using Codalus.Workbench.Hosting;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
 
@@ -909,6 +910,15 @@ public sealed class WorktreeRow(GitWorktree worktree, bool isCurrent)
 
     public bool IsCurrent { get; } = isCurrent;
 
+    // The row's chips (M34h): current, the main worktree, locked (with its reason as the tooltip), missing.
+    public bool IsMain => Worktree.IsMain;
+
+    public bool IsLocked => Worktree.IsLocked;
+
+    public string LockReason => Worktree.LockReason is { Length: > 0 } reason ? "Locked: " + reason : "Locked: git worktree prune keeps it";
+
+    public bool IsPrunable => Worktree.IsPrunable;
+
     public string AccessibleName => $"Worktree {Name} on {Branch}, {Flags}";
 }
 
@@ -947,6 +957,8 @@ public sealed class WorktreesViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(HasSelection));
                 OnPropertyChanged(nameof(LockText));
+                OnPropertyChanged(nameof(LockIcon));
+                OnPropertyChanged(nameof(LockTip));
             }
         }
     }
@@ -954,6 +966,13 @@ public sealed class WorktreesViewModel : ObservableObject
     public bool HasSelection => _selected is not null;
 
     public string LockText => _selected?.Worktree.IsLocked == true ? "Unlock" : "Lock";
+
+    /// <summary>The Lock button's icon: an open lock unlocks the selected locked worktree (M34h).</summary>
+    public string LockIcon => _selected?.Worktree.IsLocked == true ? "unlock" : "lock";
+
+    public string LockTip => _selected?.Worktree.IsLocked == true
+        ? Localizer.Get("msg.worktrees.unlockTip", "Unlock (let git worktree prune remove it when its folder is gone)")
+        : Localizer.Get("msg.worktrees.lockTip", "Lock (keep git worktree prune from removing it)");
 
     public string? Message
     {

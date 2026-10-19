@@ -10,9 +10,15 @@ shard="${1:?shard: shell-1, shell-2 or others}"
 configuration="${2:-Release}"
 cd "$(dirname "$0")/.."
 
-# A test process still running after 25 minutes is dumped, and the tests that were running are named, instead of the
-# job timing out without a word.
-common=(-c "$configuration" --no-build -- --hangdump --hangdump-timeout 25m --hangdump-type Mini)
+# A hang is reported twice, well inside the job's 50 minutes (pipeline.yml), instead of the job timing out without a
+# word: after 10 minutes in one test, the test watchdog (tests/Shared/TestWatchdog.cs) names it and prints the managed
+# stacks of the test process and its hosts (dotnet-stack); after 15 minutes without a test finishing, HangDump names
+# the tests still running, dumps the process tree into the results folder (which CI uploads) and ends it, so the job
+# fails instead of being cancelled. HangDump before 2.1 printed nothing: it turned itself off under dotnet test.
+export CODALUS_TEST_WATCHDOG_MINUTES="${CODALUS_TEST_WATCHDOG_MINUTES:-10}"
+results="$PWD/artifacts/test-results/$shard"
+hang=(--hangdump --hangdump-timeout 15m --hangdump-type Mini --results-directory "$results")
+common=(-c "$configuration" --no-build -- "${hang[@]}")
 second=()
 while IFS= read -r line; do
   line="${line%%#*}"
@@ -43,7 +49,7 @@ case "$shard" in
     # Both run whatever the first's outcome, and the shard fails if either did.
     status=0
     dotnet test --solution Codalus.slnx -c "$configuration" --no-build ${extra[@]+"${extra[@]}"} -- \
-      --hangdump --hangdump-timeout 25m --hangdump-type Mini --filter-not-namespace Codalus.Shell.Tests "${without[@]}" --ignore-exit-code 8 || status=$?
+      "${hang[@]}" --filter-not-namespace Codalus.Shell.Tests "${without[@]}" --ignore-exit-code 8 || status=$?
     dotnet test --project tests/Codalus.Debugging.Tests "${common[@]}" "${alone[@]}" || status=$?
     exit "$status"
     ;;

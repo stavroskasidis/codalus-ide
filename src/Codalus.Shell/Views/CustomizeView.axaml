@@ -12,16 +12,16 @@
                  Text="{l:T customize.addAnyCommandToAMenu}" />
       <controls:ToolbarPanel>
         <ComboBox x:Name="TargetBox" ItemsSource="{Binding Targets}" SelectedItem="{Binding Target}" MinWidth="260" AutomationProperties.Name="{l:T customize.menuOrToolbar}" />
-        <Button Content="{l:T customize.newToolbar}" Command="{Binding NewToolbarCommand}" />
-        <Button Content="{l:T customize.deleteToolbar}" Command="{Binding DeleteToolbarCommand}" />
+        <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="add" Content="{l:T customize.newToolbar}" Command="{Binding NewToolbarCommand}" />
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="trash" Command="{Binding DeleteToolbarCommand}" ToolTip.Tip="{l:T customize.deleteToolbar}" AutomationProperties.Name="{l:T customize.deleteToolbar}" />
       </controls:ToolbarPanel>
     </StackPanel>
     <controls:ToolbarPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
-      <Button Content="{l:T customize.addCommand}" Command="{Binding AddCommand}" />
-      <Button Content="{Binding RemoveTitle}" Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding RemoveTitle}" />
-      <Button Content="{l:T customize.moveUp}" Command="{Binding MoveUpCommand}" />
-      <Button Content="{l:T customize.moveDown}" Command="{Binding MoveDownCommand}" />
-      <Button Content="{l:T customize.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T customize.backToTheItemsAsContributed}" />
+      <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="add" Content="{l:T customize.addCommand}" Command="{Binding AddCommand}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="trash" Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding RemoveTitle}" ToolTip.Tip="{Binding RemoveTitle}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="arrow-up" Command="{Binding MoveUpCommand}" ToolTip.Tip="{l:T customize.moveUp}" AutomationProperties.Name="{l:T customize.moveUp}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="arrow-down" Command="{Binding MoveDownCommand}" ToolTip.Tip="{l:T customize.moveDown}" AutomationProperties.Name="{l:T customize.moveDown}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="reset" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T customize.backToTheItemsAsContributed}" AutomationProperties.Name="{l:T customize.reset}" />
     </controls:ToolbarPanel>
     <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" Margin="0,6,0,0" AutomationProperties.Name="{l:T customize.items}">
       <ListBox.Styles>

@@ -40,6 +40,32 @@ public static class CommandIcons
     {
         ["account"] = Blue,
         ["window"] = Blue,
+
+        // The control set's views (M34h).
+        ["add"] = Green,
+        ["subtract"] = Red,
+        ["export"] = Blue,
+        ["import"] = Blue,
+        ["window-new"] = Blue,
+        ["window-remote"] = Blue,
+        ["cloud-download"] = Blue,
+        ["radar"] = Blue,
+        ["reset"] = Blue,
+        ["arrow-sort"] = Blue,
+        ["unlock"] = Yellow,
+        ["snapshot"] = Blue,
+        ["plug"] = Blue,
+        ["detach"] = Red,
+        ["database-update"] = Yellow,
+        ["dump"] = Blue,
+        ["cube"] = Purple,
+        ["mention"] = Blue,
+        ["events"] = Yellow,
+        ["diagram"] = Blue,
+        ["schema"] = Yellow,
+        ["filter"] = Blue,
+        ["breakpoint-solid"] = Red,
+        ["breakpoint-hollow"] = Red,
         ["code"] = Blue,
         ["broom"] = Blue,
         ["save"] = Blue,
@@ -479,6 +505,10 @@ public static class CommandIcons
         ["explorer.reveal"] = new("folder-open", Open),
         ["terminal.openInTerminal"] = new("terminal"),
         ["run.setStartupProject"] = new("play-outline", Run),
+
+        // The built-in plugins' title commands (toolWindow/title), drawn as icons in their tree views' toolbars (M34h).
+        ["welcome.refresh"] = new("refresh"),
+        ["welcome.toggleShowOnStartup"] = new("home"),
     };
 
     /// <summary>The icon for <paramref name="command"/>, or null. <paramref name="toolWindowIcon"/> answers <c>workbench.view.*</c>.</summary>
