@@ -11,13 +11,13 @@
 
 ## Settings
 
-Tools → Options… lists every setting in a tree of groups (Environment, Text Editor, Projects and Solutions, Debugging, Source Control, Testing, Terminal and Interactive), with a search box. Choosing a group shows all its settings. Changes apply immediately.
+Tools → Options… lists every setting in a tree of groups (Environment, Text Editor, Projects and Solutions, Debugging, Source Control, Testing, Terminal and Interactive), each with its icon and how many settings it has, and a search box (`@modified` shows only the changed ones). Choosing a group shows all its settings under a header with its name and how many of them are changed. Changes apply immediately: a changed setting is marked at its left edge and with a **Modified** chip, and **Reset** puts it back. An on/off setting is one check box labelled with its name.
 
 - **User settings** live in `settings.json` in the user configuration folder:
   - Windows: `%APPDATA%\Codalus`
   - macOS: `~/Library/Application Support/Codalus`
   - Linux: `~/.config/codalus`
-- **Solution settings** live in `.codalus/settings.json` next to the solution and override the user settings for that solution.
+- **Solution settings** live in `.codalus/settings.json` next to the solution and override the user settings for that solution. While a solution is open, **User | Workspace** next to the search box chooses where your changes go; the line under it names the file. Settings that only make sense per user can't be changed on the Workspace side.
 - **Editing the JSON**: open it with "Open User Settings (JSON)" in the command palette.
 - **Settings for one language**: as in VS Code, a `"[languageId]"` block in either file sets values for that language's documents only, and wins over the general value in any file:
 
@@ -45,21 +45,21 @@ Settings you may want first:
 
 ## Themes
 
-Codalus IDE has four **theme families**, each in Light, Dark and High contrast, and Classic. The [first-run setup](getting-started.md#the-first-run-setup) offers the four at the first start (Help → Set Up Codalus IDE shows it again):
+Codalus IDE has five **theme families**: Classic, the default, in Blue, Light, Dark and High Contrast, and Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast. The [first-run setup](getting-started.md#the-first-run-setup) offers them at the first start, Classic first (Help → Set Up Codalus IDE shows it again):
 
 | Family | What it looks like |
 |---|---|
-| **Harbor** (the default) | The closest to a classic IDE: a deep navy title bar in Light, tool windows docked with gaps between them, the focused tool window's caption and the status bar in cobalt, a bar across the top of the active tab. |
+| **Classic** (the default) | The classic IDE's familiar look, the themes from before 0.3: Blue, Light, Dark and High Contrast. |
+| **Harbor** | The closest to a classic IDE: a deep navy title bar in Light, tool windows docked with gaps between them, the focused tool window's caption and the status bar in cobalt, a bar across the top of the active tab. |
 | **Graphite** | Compact and dense: the title bar and toolbar in the window's color, hairlines between tool windows, a bold title with a teal dot on the focused one, an underline on the active tab, a dark teal status bar. |
 | **Daylight** | Flat and airy: hairlines between tool windows, rounded tabs with the active one tinted violet, the Start button filled with the accent. |
 | **Ember** | Warm, with floating panels: tool windows and documents as rounded cards with gaps on the window's background, rounded tabs, and a status bar in the window's color with a dot for the state, orange only while debugging. |
-| **Classic** | The themes from before 0.3: Blue, Light, Dark and High Contrast. |
 
 Choose one in either place; the IDE switches at once:
-- **Tools → Options → Environment → Appearance → Color Theme**: the families as cards, each with a picture of it, and a **mode**: Follow System, Light, Dark or High Contrast (Classic also has Blue). Follow System follows the operating system's light or dark setting and its high-contrast setting as they change, within the family.
-- **Tools → Color Theme** (`Ctrl+K Ctrl+T`): every family following the system and in each mode, Classic's, then the plugins' themes. Moving through the list shows each theme; Enter keeps it, Escape goes back.
+- **Tools → Options → Environment → Appearance → Color Theme**: the families as cards, Classic first, each with a picture of it, and a **mode**: Follow System, Light, Dark or High Contrast (Classic also has Blue). Follow System follows the operating system's light or dark setting and its high-contrast setting as they change, within the family.
+- **Tools → Color Theme** (`Ctrl+K Ctrl+T`): every family following the system and in each mode, Classic first, then the plugins' themes. Moving through the list shows each theme; Enter keeps it, Escape goes back.
 
-In `settings.json`, `workbench.colorTheme` is a family (`"harbor"`, following the system) or a family and its mode (`"ember.dark"`, `"graphite.highContrast"`, `"classic.blue"`). A new install uses Harbor following the system. A setting saved by an earlier version (`"dark"`, `"blue"`, `"followSystem"`…) keeps its look: it reads as Classic.
+In `settings.json`, `workbench.colorTheme` is a family (`"classic"`, following the system) or a family and its mode (`"ember.dark"`, `"graphite.highContrast"`, `"classic.blue"`). Without the setting, Codalus IDE uses Classic following the system: Classic Light or Dark as your system is light or dark, and Classic High Contrast when its high-contrast setting is on. In 0.3.0 that default was Harbor, so if you never chose a theme, 0.4 shows Classic: pick Harbor once to keep it. A theme you chose stays as it is, and a setting saved by an earlier version (`"dark"`, `"blue"`, `"followSystem"`…) keeps its look: it reads as Classic.
 
 Plugins can add color themes, which are listed with these; a plugin's theme goes over Classic's Light, Dark or High Contrast.
 
@@ -182,6 +182,7 @@ Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 - **Updates** (`update.mode`): installed builds (the Windows Setup.exe, the macOS .pkg, the AppImage, winget) download new releases in the background and apply them when the IDE restarts: a status bar item offers **Restart to update**, which reopens your solution (on macOS, an app that an older .pkg installed in `/Applications` asks once for an administrator's password, because that installer left it owned by the system). **notify** only says that a release is available; **off** stops all update traffic. Help → Check for Updates checks right away in every mode.
 - **Update Channel** (`update.channel`): stable releases or nightly builds. Empty follows the channel the build came from. Switching from nightly builds to stable releases installs the newest stable release, even when it is older, after you confirm.
 - **Other installs**: the `.deb` and `.rpm` update with the system (`apt upgrade`, `dnf upgrade`); the zip, `.app` zip and tar.gz say that a release is out and link to it. Development builds never check.
+- **A release that needs another .NET runtime**: each release's signed update feed says which .NET runtime its helper processes need. When that runtime isn't installed, the release isn't downloaded; a warning says "Codalus IDE X is available, but it needs the .NET … runtime, which isn't installed", with **Install .NET …** (which then checks again and downloads it) and **Update Anyway**.
 - **What's New** (Help → What's New): the release notes of the versions you skipped, shown once after an update.
 
 **Network access.** Codalus IDE connects to these places, and each can be turned off:

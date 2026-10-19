@@ -1,6 +1,7 @@
 <local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
                    xmlns:vm="using:Codalus.Shell.ViewModels"
                    xmlns:local="using:Codalus.Shell.Views"
                    x:Class="Codalus.Shell.Views.BuildTimingsView"
@@ -10,8 +11,8 @@
       <TextBlock Classes="heading" Text="{l:T buildTimings.buildTimings}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T buildTimings.theLastBuildSProjectBuilds}" />
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <Button x:Name="RefreshButton" Content="{l:T buildTimings.refresh}" Command="{Binding RefreshCommand}" />
-        <Button Content="{l:T buildTimings.openBinaryLog}" Command="{Binding OpenBinaryLogCommand}" IsVisible="{Binding HasBinaryLog}" />
+        <Button Classes="icon" controls:ButtonIcon.Kind="refresh" x:Name="RefreshButton" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T buildTimings.refresh}" AutomationProperties.Name="{l:T buildTimings.refresh}" />
+        <Button Classes="iconText" controls:ButtonIcon.Kind="file-data" Content="{l:T buildTimings.openBinaryLog}" Command="{Binding OpenBinaryLogCommand}" IsVisible="{Binding HasBinaryLog}" />
         <CheckBox Content="{l:T buildTimings.showShortBuildsToo}" IsChecked="{Binding ShowAll}" />
         <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Summary}" />
       </StackPanel>

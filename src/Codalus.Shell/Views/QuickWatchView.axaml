@@ -1,14 +1,15 @@
 <UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.QuickWatchView"
              x:DataType="vm:QuickWatchViewModel">
   <DockPanel>
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="6,4">
       <TextBox x:Name="Input" Text="{Binding Expression}" PlaceholderText="{l:T quickWatch.expressionEnterToEvaluate}" AutomationProperties.Name="{l:T quickWatch.quickwatchExpression}" />
-      <Button x:Name="Reevaluate" Grid.Column="1" Margin="6,0,0,0" Content="{l:T quickWatch.reevaluate}" AutomationProperties.Name="{l:T quickWatch.reevaluate}" />
-      <Button x:Name="AddWatch" Grid.Column="2" Margin="6,0,0,0" Content="{l:T quickWatch.addWatch}" AutomationProperties.Name="{l:T quickWatch.addWatch}" />
+      <Button Classes="iconText compact" controls:ButtonIcon.Kind="refresh" x:Name="Reevaluate" Grid.Column="1" Margin="6,0,0,0" Content="{l:T quickWatch.reevaluate}" AutomationProperties.Name="{l:T quickWatch.reevaluate}" />
+      <Button Classes="iconText compact" controls:ButtonIcon.Kind="watch" x:Name="AddWatch" Grid.Column="2" Margin="6,0,0,0" Content="{l:T quickWatch.addWatch}" AutomationProperties.Name="{l:T quickWatch.addWatch}" />
     </Grid>
     <TextBlock DockPanel.Dock="Top" Classes="error" Margin="12,4" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" />
     <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="{l:T quickWatch.quickwatchValue}">

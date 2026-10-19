@@ -1,6 +1,7 @@
 <UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.DumpView"
              x:DataType="vm:DumpViewModel">
@@ -57,7 +58,7 @@
           <GridSplitter Grid.Column="3" ResizeDirection="Columns" />
           <Grid Grid.Column="4" RowDefinitions="Auto,*">
             <StackPanel Orientation="Horizontal" Margin="2">
-              <Button Content="{l:T dump.back}" Click="OnBack" IsEnabled="{Binding CanGoBack}" Margin="0,0,6,0" />
+              <Button Classes="toolbar icon" controls:ButtonIcon.Kind="arrow-left" Click="OnBack" IsEnabled="{Binding CanGoBack}" Margin="0,0,6,0" ToolTip.Tip="{l:T dump.back}" AutomationProperties.Name="{l:T dump.back}" />
               <TextBlock Text="{Binding ObjectTitle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </StackPanel>
             <ListBox Grid.Row="1" x:Name="FieldList" ItemsSource="{Binding Fields}" DoubleTapped="OnFieldDoubleTapped" AutomationProperties.Name="{l:T dump.fields}">

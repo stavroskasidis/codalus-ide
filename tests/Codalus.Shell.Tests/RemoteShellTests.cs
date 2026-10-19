@@ -212,7 +212,7 @@ public sealed class RemoteShellTests
         {
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } c2 && c2.Model.Path == program && c.CurrentDebugLine() == line, seconds: 30);
         }
-        catch (Xunit.Sdk.TrueException)
+        catch (Xunit.Sdk.FailException)
         {
             Assert.Fail($"Expected {program}:{line}, the active editor is {f.Shell.ActiveEditor?.Model.Path}:{f.Shell.ActiveEditor?.Controller?.CurrentDebugLine()}.\n{f.Shell.DebugLog.GetText()}");
         }

@@ -216,6 +216,14 @@ if [ -n "${CODALUS_PREVIOUS_RELEASE:-}" ] && [ -d "$CODALUS_PREVIOUS_RELEASE" ];
   done
 fi
 
+# The .NET runtime this release's hosts need (M49, ADR 0080), in the feed before it's signed: an installed IDE compares it
+# with the runtimes it finds before it downloads the release, so an update can't leave it unable to start its hosts.
+echo "== The hosts' .NET runtime in the update feed"
+for file in "$feed"/releases.*.json; do
+  [ -e "$file" ] || continue
+  dotnet run --project "$repo/eng/Codalus.Release" -- feed-runtime "$(native "$file")" "$version" "$(native "$app")"
+done
+
 # The feed signature (M32, ADR 0029): base64 of an ECDSA P-256 / SHA-256 signature over the feed's bytes, which the app
 # checks with the project's public key (eng/packaging/update-feed-key.pub.pem) before it trusts the feed's hashes.
 if [ -n "${CODALUS_FEED_KEY:-}" ]; then

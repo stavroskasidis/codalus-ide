@@ -5,22 +5,30 @@
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.BenchmarksView"
              x:DataType="vm:BenchmarksViewModel">
-  <DockPanel Margin="8,6">
-    <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,6">
-      <controls:ToolbarPanel Spacing="8" Margin="0">
-        <Button x:Name="RunAllButton" Content="{l:T benchmarks.runAll}" Command="{Binding RunAllCommand}" />
-        <Button Content="{l:T benchmarks.runSelected}" Command="{Binding RunSelectedCommand}" />
-        <Button Content="{l:T benchmarks.stop}" Command="{Binding StopCommand}" />
-        <TextBlock VerticalAlignment="Center" Text="{l:T benchmarks.job}" Margin="8,0,0,0" />
-        <ComboBox ItemsSource="{Binding Jobs}" SelectedItem="{Binding Job}" MinWidth="100" AutomationProperties.Name="{l:T benchmarks.benchmarkdotnetJob}" ToolTip.Tip="{l:T benchmarks.benchmarkdotnetJob}" />
-        <CheckBox Content="{l:T benchmarks.inProcess}" IsChecked="{Binding InProcess}" ToolTip.Tip="{l:T benchmarks.runInTheBenchmarkProjectS}" />
-      </controls:ToolbarPanel>
-      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
-    </StackPanel>
+  <DockPanel>
+    <!-- The control set's toolbar (M34h): Run All keeps its label, the rest are icons; the job's label is inside its combo box; In process is a toggle. -->
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button x:Name="RunAllButton" Classes="toolbar iconText" controls:ButtonIcon.Kind="run-all" Content="{l:T benchmarks.runAll}" Command="{Binding RunAllCommand}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="play" Command="{Binding RunSelectedCommand}" ToolTip.Tip="{l:T benchmarks.runSelected}" AutomationProperties.Name="{l:T benchmarks.runSelected}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="stop" Command="{Binding StopCommand}" ToolTip.Tip="{l:T benchmarks.stop}" AutomationProperties.Name="{l:T benchmarks.stop}" />
+      <Border Classes="toolbarSeparator" />
+      <ComboBox ItemsSource="{Binding Jobs}" SelectedItem="{Binding Job}" MinWidth="130" AutomationProperties.Name="{l:T benchmarks.benchmarkdotnetJob}" ToolTip.Tip="{l:T benchmarks.benchmarkdotnetJob}">
+        <ComboBox.SelectionBoxItemTemplate>
+          <DataTemplate x:DataType="x:String">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="muted" Text="{l:T benchmarks.job}" />
+              <TextBlock Text="{Binding}" />
+            </StackPanel>
+          </DataTemplate>
+        </ComboBox.SelectionBoxItemTemplate>
+      </ComboBox>
+      <ToggleButton Classes="toolbar iconText" controls:ButtonIcon.Kind="cube" Content="{l:T benchmarks.inProcess}" IsChecked="{Binding InProcess}" ToolTip.Tip="{l:T benchmarks.runInTheBenchmarkProjectS}" />
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="8,2,8,6" TextWrapping="Wrap" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
     <!-- The results' fixed columns need room: narrower, they spilled over the History header (seen on the Mac). -->
     <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->
     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-      <DockPanel MinWidth="900" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
+      <DockPanel MinWidth="900" Width="{Binding $parent[ScrollViewer].Bounds.Width}" Margin="0,0,0,0">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
@@ -30,7 +38,7 @@
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
           <DockPanel>
-            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{l:T benchmarks.benchmarks}" Margin="0,0,0,4" />
+            <Border DockPanel.Dock="Top" Classes="gridHeader"><TextBlock Text="{l:T benchmarks.benchmarks}" /></Border>
             <ListBox x:Name="BenchmarkList" ItemsSource="{Binding Benchmarks}" SelectedItem="{Binding SelectedBenchmark}" AutomationProperties.Name="{l:T benchmarks.benchmarksInTheSolutionDoubleClick}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:BenchmarkRowViewModel">
@@ -43,15 +51,17 @@
             </ListBox>
           </DockPanel>
           <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
-          <DockPanel Grid.Column="2" Margin="6,0" ClipToBounds="True">
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,90,80,90,80,60" Margin="4,0,4,4">
-              <TextBlock FontWeight="SemiBold" Text="{l:T benchmarks.method}" />
-              <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="{l:T benchmarks.mean}" TextAlignment="Right" />
-              <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="{l:T benchmarks.error}" TextAlignment="Right" />
-              <TextBlock Grid.Column="3" FontWeight="SemiBold" Text="{l:T benchmarks.stddev}" TextAlignment="Right" />
-              <TextBlock Grid.Column="4" FontWeight="SemiBold" Text="{l:T benchmarks.allocated}" TextAlignment="Right" />
-              <TextBlock Grid.Column="5" FontWeight="SemiBold" Text="{l:T benchmarks.ratio}" TextAlignment="Right" />
-            </Grid>
+          <DockPanel Grid.Column="2" ClipToBounds="True">
+            <Border DockPanel.Dock="Top" Classes="gridHeader" Padding="12,0,12,0">
+              <Grid ColumnDefinitions="*,90,80,90,80,60">
+                <TextBlock Text="{l:T benchmarks.method}" />
+                <TextBlock Grid.Column="1" Text="{l:T benchmarks.mean}" TextAlignment="Right" />
+                <TextBlock Grid.Column="2" Text="{l:T benchmarks.error}" TextAlignment="Right" />
+                <TextBlock Grid.Column="3" Text="{l:T benchmarks.stddev}" TextAlignment="Right" />
+                <TextBlock Grid.Column="4" Text="{l:T benchmarks.allocated}" TextAlignment="Right" />
+                <TextBlock Grid.Column="5" Text="{l:T benchmarks.ratio}" TextAlignment="Right" />
+              </Grid>
+            </Border>
             <ListBox ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" AutomationProperties.Name="{l:T benchmarks.theLastRunSResults}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:BenchmarkResultRowViewModel">
@@ -69,7 +79,7 @@
           </DockPanel>
           <GridSplitter Grid.Column="3" ResizeDirection="Columns" />
           <DockPanel Grid.Column="4">
-            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{l:T benchmarks.history}" Margin="0,0,0,4" />
+            <Border DockPanel.Dock="Top" Classes="gridHeader"><TextBlock Text="{l:T benchmarks.history}" /></Border>
             <ListBox ItemsSource="{Binding History}" AutomationProperties.Name="{l:T benchmarks.theSelectedBenchmarkSEarlierRuns}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:BenchmarkHistoryRowViewModel">

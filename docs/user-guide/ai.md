@@ -17,9 +17,13 @@ While AI assistance is on, the status bar shows **AI:** and the provider, or **A
 
 ## AI Chat
 
-Type a question and press `Enter` (`Shift+Enter` starts a new line). The answer streams in as the model writes it; **Stop** ends it.
+Type a question in the box at the bottom and press `Enter` or click **Send** (`Shift+Enter` starts a new line). The answer streams in as the model writes it; while it does, **Send** becomes **Stop**, which ends it. You can type your next question meanwhile, but it isn't sent until the answer ends (in agent mode, until the whole turn ends, tool steps included).
 
-**What goes with your question.** The buttons above the box say what the IDE attaches, and the line under them lists it before you send:
+**The conversation.** Your questions are on the right, each with what went with it under it: a chip for each part that was sent, **Not sent:** for a part that was left out (its tooltip says why), and how many secrets were redacted. The answers are on the left, beside the assistant's icon, with the model and the time: formatted text (headings, lists, `code` and links) and code blocks. You can select and copy any of it. A long conversation stays fast: only the part on screen is drawn. Before the first question, the window says what to do next: turn AI on, choose a provider, or ask.
+
+**The toolbar.** **New Chat**, the provider and model (click to change them), the **Agent** switch ([agent mode](#agent-mode)), the request log, and **Configure**.
+
+**What goes with your question.** The chips above the box say what the IDE attaches (click one to turn it on or off), and the line under them lists it before you send:
 - **Selection**: the text selected in the editor.
 - **Current file**: the active editor's whole file.
 - **Open files**: the other open editors.
@@ -27,9 +31,7 @@ Type a question and press `Enter` (`Shift+Enter` starts a new line). The answer 
 - **Build output**: the end of the last build's output.
 - **Solution**: the solution's projects, their target frameworks and output types.
 
-Each answer shows what was sent with its question, what was left out and why, and how many secrets were redacted.
-
-**Code in answers.** Under each code block:
+**Code in answers.** A code block is drawn in your editor's colors and font, and its header names its language (and the file, when the block names one) and has three buttons, ready once the answer is complete:
 - **Copy** copies it.
 - **Insert at Cursor** inserts it at the caret of the active editor.
 - **Apply…** shows the change in a preview first, then replaces the selection you asked about (indented like it), or the whole file when the block names that file (```` ```csharp path=src/App/Program.cs ````) or starts like it. Otherwise it inserts at the caret. Applying is one step in the editor's undo.
@@ -64,7 +66,7 @@ Where AI can help with something the IDE already shows, there's an action for it
 
 ## Agent mode
 
-Turn on **Agent** in AI Chat's toolbar to let the model work in steps: it reads and searches the workspace, looks at the Error List and the build output, builds, proposes edits and asks to run commands. Each step shows under your question as it happens (`⚙ read_file src/App/Program.cs → …`).
+Turn on the **Agent** switch in AI Chat's toolbar to let the model work in steps: it reads and searches the workspace, looks at the Error List and the build output, builds, proposes edits and asks to run commands. Each step shows in the answer as it happens, on a line of its own: an icon for how it stands (a check when it's done, a clock while it runs, an error when it failed or you refused it, a square when you stopped it) and one for what it does, the tool (`read_file`), the file it read or changed (click it to open the file), what it searched for or ran, and how it ended. Answers given in agent mode carry an **Agent** chip.
 
 What it can't do without you:
 - **Every change shows in the preview first.** **Apply** changes the file in the editor (unsaved, in undo), **Cancel** rejects it, and the model is told it was rejected.

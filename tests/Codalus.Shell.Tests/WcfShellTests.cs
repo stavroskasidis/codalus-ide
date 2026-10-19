@@ -93,7 +93,8 @@ public sealed class WcfShellTests
 
             // The form of Greet: a data contract with an enum and a list; the XML follows the form.
             testClient.Select("Greet");
-            Assert.Equal(["person", "Name", "Age", "Mood", "Tags", "string"], testClient.Rows.Select(r => r.Name));
+            // M34h: a list (ArrayOfstring's repeated string) is one row, Tags string[], with its items under it as [0], [1]…
+            Assert.Equal(["person", "Name", "Age", "Mood", "Tags"], testClient.Rows.Select(r => r.Name));
             testClient.Row("person.Name")!.Value = "Ada";
             testClient.Row("person.Age")!.Value = "36";
             var mood = testClient.Row("person.Mood")!;
@@ -102,10 +103,12 @@ public sealed class WcfShellTests
             mood.Value = "Happy";
             var strings = testClient.Row("person.Tags.string")!;
             Assert.True(strings.CanAdd);
+            Assert.Same(testClient.Row("person.Tags"), strings);
             strings.AddCommand.Execute(null);
-            Assert.Equal(7, testClient.Rows.Count);
-            testClient.Rows[6].Value = "math";
-            Assert.True(testClient.Rows[6].CanRemove);
+            Assert.Equal(6, testClient.Rows.Count);
+            Assert.Equal("[0]", testClient.Rows[5].Label);
+            testClient.Rows[5].Value = "math";
+            Assert.True(testClient.Rows[5].CanRemove);
             testClient.RequestTab = 1;
             Assert.Contains("<q1:string>math</q1:string>", testClient.RequestXml, StringComparison.Ordinal);
             testClient.RequestTab = 0;

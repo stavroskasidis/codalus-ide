@@ -219,7 +219,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         var web = Path.Combine(_root, "sdk", "Microsoft", "VisualStudio", "v17.0", "WebApplications", "Microsoft.WebApplication.targets");
         var reason = NetFramework.VisualStudioTargetsReason("WebApp", [(Path.Combine(_root, "sdk", "Microsoft.CSharp.targets"), null), (web, "'$(VSToolsPath)' != ''")]);
         Assert.NotNull(reason);
-        Assert.Contains("WebApp imports Visual Studio's own MSBuild targets (WebApplications/Microsoft.WebApplication.targets)", reason, StringComparison.Ordinal);
+        Assert.Contains("WebApp imports proprietary MSBuild targets (WebApplications/Microsoft.WebApplication.targets) that aren't part of the .NET SDK", reason, StringComparison.Ordinal);
         Assert.Null(NetFramework.VisualStudioTargetsReason("WebApp", [(web, "false")])); // never imported
         Assert.Null(NetFramework.VisualStudioTargetsReason("Tests", [(web, $"Exists('{web}')")])); // imported only where it is (M43b)
         Directory.CreateDirectory(Path.GetDirectoryName(web)!);
@@ -466,7 +466,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.True(web.IsNonSdkStyle);
         Assert.Equal(["net48"], web.TargetFrameworks);
         Assert.Contains("WebApplications/Microsoft.WebApplication.targets", web.CannotBuildReason, StringComparison.Ordinal);
-        Assert.Contains("Visual Studio's is proprietary", web.CannotBuildReason, StringComparison.Ordinal);
+        Assert.Contains("Codalus IDE builds with the .NET SDK's MSBuild", web.CannotBuildReason, StringComparison.Ordinal);
         await WaitUntilAsync(() => _solutions.CompilerInputs.ContainsKey(Project("LegacyWebApp")), DesignTimeState);
         Assert.True(_solutions.CompilerInputs[Project("LegacyWebApp")].State == CompilerInputStates.Ok, DesignTimeState());
         AssertReference(_solutions.CompilerInputs[Project("LegacyWebApp")].Arguments, "System.Web.dll");
@@ -495,11 +495,11 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         // On its own it doesn't build, and says why.
         result = await _builds.BuildAsync(BuildTargets.Build, Project("LegacyWebApp"), Timeout());
         Assert.False(result.Succeeded);
-        await WaitUntilAsync(() => _builds.Channel.GetText().Contains("imports Visual Studio's own MSBuild targets", StringComparison.Ordinal), _builds.Channel.GetText);
+        await WaitUntilAsync(() => _builds.Channel.GetText().Contains("imports proprietary MSBuild targets", StringComparison.Ordinal), _builds.Channel.GetText);
         var blocked = Assert.Single(_builds.Diagnostics); // a failed build always says why in the Error List
         Assert.Equal(BuildSeverities.Error, blocked.Severity);
         Assert.Equal(Project("LegacyWebApp"), blocked.File, ignoreCase: true);
-        Assert.Contains("imports Visual Studio's own MSBuild targets", blocked.Message, StringComparison.Ordinal);
+        Assert.Contains("imports proprietary MSBuild targets", blocked.Message, StringComparison.Ordinal);
 
         // How they start: the .exe itself (the desktop CLR runs it, not dotnet).
         var run = await _solutions.GetRunInfoAsync(legacy, Timeout());

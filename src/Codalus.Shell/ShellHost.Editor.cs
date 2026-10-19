@@ -186,6 +186,17 @@ public sealed partial class ShellHost : IEditorServices
                 Workbench.Notifications.Error(Localizer.Format("msg.editor.theLanguageServiceKeepsCrashingAnd", "The {0} language service keeps crashing and was stopped. Reopen the solution to try again.", name));
             }
         });
+        Languages.StartFailed += (_, e) => Ui.Post(() =>
+        {
+            // M49: a host that couldn't start says why once; the IDE's missing runtime is the one runtime notification.
+            if (e.Error is Codalus.Rpc.HostRuntimeMissingException missing && ReportHostRuntimeMissing(missing))
+            {
+                return;
+            }
+
+            var name = Workbench.LanguageServers.Get(e.LanguageId)?.DisplayName ?? e.LanguageId;
+            Workbench.Notifications.Error(Localizer.Format("msg.editor.languageServiceCouldntStart", "The {0} language service couldn't start: {1}", name, e.Error.Message));
+        });
         Languages.HostRestarted += (_, _) => Ui.Post(RefreshEditors);
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnLanguageStatus(e.LanguageId, e.Status));
         Solutions.DesignTimeProgressChanged += (_, _) => Ui.Post(UpdateLanguageStatus);
@@ -196,6 +207,10 @@ public sealed partial class ShellHost : IEditorServices
         InitializeSync();
         InitializeColors(); // before ThemeChanged's subscribers: they read the customized theme
         Theme.Changed += (_, _) => ThemeChanged?.Invoke(this, EventArgs.Empty);
+
+        // Lines of code outside the editor (Find Results, the WCF Test Client's response) take the editor's colors (M34h).
+        Editor.CodeColors.Configure(Languages.LanguageIdOf, TextMate.GrammarFor, id => id is null || id == Theme.ActiveTheme ? EditorTheme : Editor.EditorTheme.For(id));
+        ThemeChanged += (_, _) => Editor.CodeColors.NotifyChanged();
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
         Layout.ActiveDocumentChanged += (_, _) => RememberActiveDocument();

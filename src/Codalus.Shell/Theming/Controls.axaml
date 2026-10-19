@@ -22,6 +22,19 @@
     </Panel>
   </FocusAdornerTemplate>
 
+  <!--
+    The ring for a control inside a clipping shape (Border.attached, M34h): the adorner layer would clip the ring to the
+    shape, so this one draws past it.
+  -->
+  <FocusAdornerTemplate x:Key="Shell.FocusRing.Unclipped">
+    <Panel AdornerLayer.IsClipEnabled="False">
+      <Border BorderThickness="{DynamicResource Shell.Focus.Thickness}"
+              BorderBrush="{DynamicResource Shell.Focus}"
+              Margin="{DynamicResource Shell.Focus.Margin}"
+              CornerRadius="{DynamicResource Shell.Focus.CornerRadius}" />
+    </Panel>
+  </FocusAdornerTemplate>
+
   <!-- A button's content with controls:ButtonIcon.Kind: the icon alone (class icon), or the icon and the text (iconText). -->
   <DataTemplate x:Key="Shell.Button.IconTemplate">
     <controls:Icon Kind="{Binding $parent[ContentControl].(controls:ButtonIcon.Kind)}" Width="16" Height="16"
@@ -30,6 +43,13 @@
   <DataTemplate x:Key="Shell.Button.IconTextTemplate">
     <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Shell.Space.ButtonIcon}">
       <controls:Icon Kind="{Binding $parent[ContentControl].(controls:ButtonIcon.Kind)}" Width="16" Height="16" VerticalAlignment="Center" />
+      <ContentPresenter Content="{Binding $parent[ContentControl].Content}" VerticalAlignment="Center" />
+    </StackPanel>
+  </DataTemplate>
+  <!-- A chip toggle's content (ToggleButton.chip): a 12 px icon and the text. -->
+  <DataTemplate x:Key="Shell.Button.ChipTemplate">
+    <StackPanel Orientation="Horizontal" Spacing="{DynamicResource Shell.Space.S}">
+      <controls:Icon Kind="{Binding $parent[ContentControl].(controls:ButtonIcon.Kind)}" Width="12" Height="12" VerticalAlignment="Center" />
       <ContentPresenter Content="{Binding $parent[ContentControl].Content}" VerticalAlignment="Center" />
     </StackPanel>
   </DataTemplate>
@@ -238,6 +258,42 @@
     </Style>
     <Style Selector="^.icon.compact">
       <Setter Property="MinWidth" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    </Style>
+    <!--
+      A chip toggle (M34h, AI Chat's context: what goes with a question): a 22 px pill outlined in Shell.Input.Border, a
+      12 px icon (controls:ButtonIcon.Kind) and 11 px text, flat under the pointer like a toolbar button; checked, the
+      toolbar's checked tint with its accent edge. Several sit in a wrapping row, each on or off.
+    -->
+    <Style Selector="^.chip">
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="Height" Value="22" />
+      <Setter Property="CornerRadius" Value="11" />
+      <Setter Property="Padding" Value="6,0,8,0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+      <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+      <Setter Property="ContentTemplate" Value="{StaticResource Shell.Button.ChipTemplate}" />
+      <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+        <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+      </Style>
+      <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Pressed}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+        <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+      </Style>
+      <Style Selector="^:checked /template/ ContentPresenter#PART_ContentPresenter, ^:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Checked}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Checked.Border}" />
+        <Setter Property="Foreground" Value="{DynamicResource Shell.Toolbar.Checked.Foreground}" />
+      </Style>
+      <Style Selector="^:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Pressed}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Checked.Border}" />
+        <Setter Property="Foreground" Value="{DynamicResource Shell.Toolbar.Checked.Foreground}" />
+      </Style>
     </Style>
   </ControlTheme>
 

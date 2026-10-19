@@ -7,7 +7,32 @@ using Codalus.Release;
 //   codalus-release bump [--after <released version>]                       VERSION := the next minor version
 //                                                                            (after a release: past it, unless already further)
 //   codalus-release notes stable|nightly <version> [--repo owner/name] [--to REF] [--since TAG] [--changelog FILE]
+//   codalus-release feed-runtime <releases.<channel>.json> <version> <published app folder>
+//                                                                            the hosts' .NET runtime into the feed (M49)
 string? Option(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+
+if (args is ["feed-runtime", var feedPath, var feedVersion, var appFolder])
+{
+    // No repository needed: eng/package.sh runs it on the feed it just built, before signing it.
+    try
+    {
+        var frameworks = FeedRuntime.Frameworks(appFolder);
+        if (frameworks.Count == 0)
+        {
+            Console.Error.WriteLine($"No host runtimeconfig.json was found under {appFolder}.");
+            return 1;
+        }
+
+        var count = FeedRuntime.Annotate(feedPath, feedVersion, frameworks);
+        Console.WriteLine($"{Path.GetFileName(feedPath)}: {count} entr{(count == 1 ? "y" : "ies")} of {feedVersion} need {string.Join(", ", frameworks.Select(f => $"{f.Name} {f.Version} ({f.RollForward})"))}");
+        return count > 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return 1;
+    }
+}
 
 try
 {

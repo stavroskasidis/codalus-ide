@@ -239,8 +239,8 @@ internal static class NetFramework
             var targets = normalized[(at + "/Microsoft/VisualStudio/".Length)..];
             var slash = targets.IndexOf('/', StringComparison.Ordinal);
             targets = slash >= 0 && targets.StartsWith('v') ? targets[(slash + 1)..] : targets; // v17.0/WebApplications/… → WebApplications/…
-            return $"{projectName} imports Visual Studio's own MSBuild targets ({targets}), which come only with Visual Studio and its Build Tools. "
-                   + "It opens and edits here, but doesn't build: Codalus IDE builds with the .NET SDK's MSBuild, and Visual Studio's is proprietary.";
+            return $"{projectName} imports proprietary MSBuild targets ({targets}) that aren't part of the .NET SDK: Microsoft ships them only with its Windows IDE and Build Tools. "
+                   + "It opens and edits here, but doesn't build: Codalus IDE builds with the .NET SDK's MSBuild.";
         }
 
         return null;

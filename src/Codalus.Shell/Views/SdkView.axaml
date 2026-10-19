@@ -1,6 +1,7 @@
 <local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
                    xmlns:vm="using:Codalus.Shell.ViewModels"
                    xmlns:local="using:Codalus.Shell.Views"
                    xmlns:protocol="using:Codalus.Projects.Protocol"
@@ -19,7 +20,7 @@
         <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="{l:T sdk.installedSdks}" />
         <!-- Wraps rather than clipping when the column is narrow (M34's checklist). -->
         <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" Margin="0,8,0,0">
-          <Button Content="{l:T sdk.useThisSdk}" Command="{Binding PinCommand}" ToolTip.Tip="{l:T sdk.writesGlobalJsonNextToThe}" />
+          <Button Classes="iconText" controls:ButtonIcon.Kind="pin" Content="{l:T sdk.useThisSdk}" Command="{Binding PinCommand}" ToolTip.Tip="{l:T sdk.writesGlobalJsonNextToThe}" />
           <TextBlock VerticalAlignment="Center" Text="{l:T sdk.rollForward}" />
           <ComboBox MinWidth="130" ItemsSource="{x:Static vm:SdkViewModel.RollForwardOptions}" SelectedItem="{Binding RollForward}" AutomationProperties.Name="{l:T sdk.rollForward2}" />
           <Button Content="{l:T sdk.removePin}" Command="{Binding UnpinCommand}" />

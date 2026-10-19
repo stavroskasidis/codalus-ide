@@ -413,7 +413,7 @@ internal static partial class BuiltIns
         {
             Title = "Color Theme",
             Category = "Appearance",
-            Description = "The theme family and its variant: \"harbor\" follows the operating system's light, dark or high-contrast setting, \"harbor.dark\" stays dark. The families are Harbor, Graphite, Daylight and Ember, and Classic (Blue, Light, Dark and High Contrast). Plugins can add themes.",
+            Description = "The theme family and its variant: \"classic\" follows the operating system's light, dark or high-contrast setting, \"classic.dark\" stays dark. The families are Classic (Blue, Light, Dark and High Contrast; the default), Harbor, Graphite, Daylight and Ember. Plugins can add themes.",
             Enum = [.. choices.Select(c => c.Id), .. ThemeService.LegacyChoices.Select(c => c.Id)],
             EnumDescriptions = [.. choices.Select(c => c.Title), .. ThemeService.LegacyChoices.Select(c => c.Title)],
             Scope = SettingScope.User,

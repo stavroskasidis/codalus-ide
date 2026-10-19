@@ -6,8 +6,8 @@ using Codalus.Workbench.Settings;
 namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
-/// M46's smoke step: the first-run setup in the shipped app, as at a first start. Harbor Light's appearance step is the
-/// website's picture (<c>setup-appearance.png</c>); Ember Dark previews live in the setup window and the IDE behind it;
+/// M46's smoke step: the first-run setup in the shipped app, as at a first start. Classic Light's appearance step (Classic
+/// is the first card and the default, D36) is the website's picture (<c>setup-appearance.png</c>); Ember Dark previews live in the setup window and the IDE behind it;
 /// VS Code's keys and a stand-in of VS Code's settings are taken; the tools are checked (nothing installs); Done opens
 /// the start window with all of it applied. The settings it changed are put back afterwards.
 /// </summary>
@@ -24,7 +24,7 @@ internal sealed partial class SmokeTest
         try
         {
             // As in a new user data folder: no theme saved yet (the steps before this one chose some), so the setup
-            // shows Harbor, the default. The settings are put back afterwards.
+            // shows Classic, the default (D36), first. The settings are put back afterwards.
             await settings.SetAsync(ThemeService.SettingKey, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
             shell.ShowSetup(firstStart: true);
             await WaitAsync(() => shell.IsSetupOpen, "the setup opens").ConfigureAwait(true);
@@ -32,12 +32,12 @@ internal sealed partial class SmokeTest
             var window = shell.SetupWindowView!;
             window.Width = 1280;
             window.Height = 800;
-            Check(model.Families.Select(f => f.Id).SequenceEqual([ThemeService.Harbor, ThemeService.Graphite, ThemeService.Daylight, ThemeService.Ember]), "the four families as cards");
-            Check(model.SelectedFamily == ThemeService.Harbor, "Harbor is chosen");
+            Check(model.Families.Select(f => f.Id).SequenceEqual([ThemeService.Classic, ThemeService.Harbor, ThemeService.Graphite, ThemeService.Daylight, ThemeService.Ember]), "the families as cards, Classic first");
+            Check(model.SelectedFamily == ThemeService.Classic && model.IsMatchSystem, "Classic, matching the system, is chosen");
 
-            // The website's picture: Harbor, Light.
+            // The website's picture: Classic, Light.
             model.Modes.Single(m => m.Id == "light").SelectCommand.Execute(null);
-            await WaitAsync(() => shell.Theme.ActiveTheme == "harbor.light", "Harbor Light previews").ConfigureAwait(true);
+            await WaitAsync(() => shell.Theme.ActiveTheme == "light" && shell.Theme.ActiveFamily == ThemeService.Classic, "Classic Light previews").ConfigureAwait(true);
             await Task.Delay(300).ConfigureAwait(true);
             await RenderedAsync(window).ConfigureAwait(true);
             Screenshot("setup-appearance.png", window);

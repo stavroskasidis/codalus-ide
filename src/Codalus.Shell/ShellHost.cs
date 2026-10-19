@@ -96,6 +96,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             DevelopmentDirs = Options.PluginDirs,
         };
         Plugins.Prompts = new PluginPrompts(this);
+        Plugins.HostRuntimeMissing = ReportHostRuntimeMissing; // one notification, not one per plugin (M49); any thread
         EditorFont = new EditorFont(Workbench.Settings);
         Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
         Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));
@@ -558,7 +559,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     private IReadOnlyList<ToolbarActionViewModel> TitleActions(string viewId)
     {
         var scope = Workbench.Context.With(new Dictionary<string, object?>(StringComparer.Ordinal) { ["view"] = viewId, ["focusedView"] = viewId });
-        return [.. Workbench.Menus.GetItems(MenuLocations.ToolWindowTitle, scope).Where(i => i.Submenu is null).Select(i => new ToolbarActionViewModel(i.Title, i.KeyLabel, CommandFor(i.Command)))];
+        return [.. Workbench.Menus.GetItems(MenuLocations.ToolWindowTitle, scope).Where(i => i.Submenu is null).Select(i => new ToolbarActionViewModel(i.Title, i.KeyLabel, CommandFor(i.Command), Controls.CommandIcons.For(i.Command)?.Kind))];
     }
 
     /// <summary>One <c>workbench.view.&lt;id&gt;</c> command (and View menu entry) per tool window.</summary>

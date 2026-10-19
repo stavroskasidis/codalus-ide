@@ -28,6 +28,19 @@ public sealed partial class FindResultsView : UserControl, IPaneView
             }
         };
 
+        // The keys' hint in the status line shows where there is room for it beside the counts.
+        SizeChanged += (_, e) => Hint.IsVisible = e.NewSize.Width >= 640;
+
+        // F8 and Shift+F8 walk the results from anywhere in the window (its toolbar's tooltips say so).
+        KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.F8 && (e.KeyModifiers & ~KeyModifiers.Shift) == KeyModifiers.None && Page is { } page)
+            {
+                _ = page.GoToAsync(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
+                e.Handled = true;
+            }
+        };
+
         // A header's chevron collapses and expands its group.
         List.AddHandler(PointerPressedEvent, (_, e) =>
         {

@@ -68,7 +68,27 @@ public sealed partial class ShellHost
 
         return OpenManagement(
             "configurationManager",
-            () => new ConfigurationManagerViewModel(ProjectManagement, Dialogs, Solutions.Solution?.Active, configuration => Solutions.SetConfigurationAsync(configuration, CancellationToken.None)),
+            () =>
+            {
+                var viewModel = new ConfigurationManagerViewModel(ProjectManagement, Dialogs, () => Solutions.Solution?.Active, configuration => Solutions.SetConfigurationAsync(configuration, CancellationToken.None));
+                // The active pair can change from the toolbar while the document is open (M34h): its chip follows. A weak
+                // reference, so a closed document's view model isn't kept by the solution.
+                var weak = new WeakReference<ConfigurationManagerViewModel>(viewModel);
+                EventHandler? changed = null;
+                changed = (_, _) => Ui.Post(() =>
+                {
+                    if (weak.TryGetTarget(out var target))
+                    {
+                        target.ActiveChanged();
+                    }
+                    else
+                    {
+                        Solutions.SolutionChanged -= changed;
+                    }
+                });
+                Solutions.SolutionChanged += changed;
+                return viewModel;
+            },
             _ => "Configuration Manager");
     }
 

@@ -136,8 +136,14 @@ jobs:
           display: true
       - run: dotnet restore Codalus.slnx
       - run: dotnet build Codalus.slnx -c Release --no-restore
+      - name: Stack traces for a hang (dotnet-stack)
+        # The test watchdog prints a hanging test's stacks with it (tests/Shared/TestWatchdog.cs, eng/ci-test.sh).
+        run: dotnet tool install -g dotnet-stack || true
       - name: Test (${{ matrix.shard }})
         shell: bash
+        # A hang is reported and ended by 15 minutes (eng/ci-test.sh): this is the last resort, leaving the job time for
+        # the steps below.
+        timeout-minutes: 40
         run: bash eng/ci-test.sh ${{ matrix.shard }}
       - name: Processes the tests left running
         # What the tests left behind is listed: a leak to fix.
@@ -147,6 +153,26 @@ jobs:
           # BSD ps (macOS) has no --sort: sort by the CPU column instead.
           ps -eo pid,ppid,etime,pcpu,rss,args | sort -k4 -nr | head -25 | cut -c1-240 || true
           df -h / /tmp | uniq
+      - name: Stacks in the hang dumps
+        # HangDump's dumps, read here (on the OS that wrote them) in case the watchdog's dotnet-stack got nothing.
+        if: (failure() || cancelled()) && hashFiles('artifacts/test-results/**/*.dmp') != ''
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          dotnet tool install -g dotnet-dump || true
+          find artifacts/test-results -name '*.dmp' | while IFS= read -r dump; do
+            echo "::group::Managed stacks in $dump"
+            "$HOME/.dotnet/tools/dotnet-dump" analyze "$dump" -c "clrstack -all" -c exit > "$dump.stacks.txt" 2>&1 || true
+            cat "$dump.stacks.txt"
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        if: failure() || cancelled()
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.shard }}
+          path: artifacts/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
 
   # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the in-process
   # headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform). On a runner

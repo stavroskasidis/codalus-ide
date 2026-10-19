@@ -436,7 +436,11 @@ public sealed class DataService : IAsyncDisposable
                 process.Crashed += (_, e) =>
                 {
                     Log?.Invoke(this, $"The data host exited (code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}); {(e.WillRestart ? "restarting" : "giving up")}.");
-                    HostCrashed?.Invoke(this, e.WillRestart);
+                    if (e is not { DuringStartup: true, IsRestart: false })
+                    {
+                        // Not a first start that failed (M49): StartAsync's caller reports that one, and it isn't a crash loop.
+                        HostCrashed?.Invoke(this, e.WillRestart);
+                    }
                 };
                 process.Log += (_, line) => Log?.Invoke(this, line);
                 _process = process;

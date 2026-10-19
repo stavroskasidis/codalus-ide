@@ -150,9 +150,12 @@ public sealed class PluginsViewModel : ObservableObject
 }
 
 /// <summary>A toolbar button of a tool window (contributed to <c>toolWindow/title</c>).</summary>
-public sealed class ToolbarActionViewModel(string title, string? keyLabel, ICommand command)
+public sealed class ToolbarActionViewModel(string title, string? keyLabel, ICommand command, string? icon = null)
 {
     public string Title { get; } = title;
+
+    /// <summary>The command's icon (<see cref="Controls.CommandIcons"/>): with one, the toolbar shows an icon button (M34h).</summary>
+    public string? Icon { get; } = icon;
 
     public string Tooltip { get; } = keyLabel is null ? title : $"{title} ({keyLabel})";
 

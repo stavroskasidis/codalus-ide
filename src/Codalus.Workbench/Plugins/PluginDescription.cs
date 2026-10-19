@@ -106,6 +106,15 @@ public sealed partial class PluginDescription
 
     public string? Error { get; internal set; }
 
+    /// <summary>
+    /// It failed because its plugin host couldn't start (M49: its .NET runtime is missing, or it exited during startup),
+    /// not because of the plugin itself: <see cref="PluginManager.RetryFailedHostsAsync"/> makes it usable again.
+    /// </summary>
+    public bool FailedWithItsHost { get; internal set; }
+
+    /// <summary>Its own activation was what failed with its host (M49): a retry activates it again; otherwise it waits for its events.</summary>
+    internal bool ActivationFailedWithItsHost { get; set; }
+
     public IReadOnlyList<string> Warnings { get; private set; } = [];
 
     public IReadOnlySet<string> ActivationEvents { get; private set; } = new HashSet<string>();

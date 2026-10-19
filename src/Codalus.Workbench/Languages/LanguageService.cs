@@ -61,8 +61,18 @@ public sealed class LanguageService : IAsyncDisposable
     /// </summary>
     public Func<Rpc.ProcessLaunchInfo, Rpc.ProcessLaunchInfo?>? Placement { get; set; }
 
-    /// <summary>A language host crashed: (language, whether it restarts).</summary>
+    /// <summary>
+    /// A running language host crashed: (language, whether it restarts). Since M49 a host that exits during its first
+    /// start isn't a crash (<see cref="StartFailed"/>), and one that exits during a restart is reported there too.
+    /// </summary>
     public event EventHandler<(string LanguageId, bool WillRestart)>? HostCrashed;
+
+    /// <summary>
+    /// A language host couldn't start (M49): its .NET runtime is missing (<see cref="HostRuntimeMissingException"/>),
+    /// or it exited during startup (<see cref="HostExitedException"/>, with what it wrote; a plain
+    /// <see cref="JsonRpcConnectionLostException"/> when it ended cleanly and said nothing). It isn't started again.
+    /// </summary>
+    public event EventHandler<(string LanguageId, Exception Error)>? StartFailed;
 
     public event EventHandler<string>? HostRestarted;
 
@@ -142,6 +152,20 @@ public sealed class LanguageService : IAsyncDisposable
     /// open documents of its languages are opened in it. Returns whether it runs now.
     /// </summary>
     public Task<bool> RetryAsync(string languageId) => StartAgainAsync(languageId, restart: false);
+
+    /// <summary>
+    /// Every service that couldn't start is tried again (M49: once the .NET runtime its host needs is installed), with the
+    /// open documents of its languages.
+    /// </summary>
+    public async Task RetryFailedAsync()
+    {
+        var failed = _clients.Where(c => c.Value.IsValueCreated && c.Value.Value.IsCompleted && (!c.Value.Value.IsCompletedSuccessfully || c.Value.Value.Result is null))
+            .Select(c => c.Key).ToList();
+        foreach (var server in failed)
+        {
+            await RetryAsync(server).ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// Stops a running service and starts it again with the open documents: a server that loads the workspace itself
@@ -279,7 +303,17 @@ public sealed class LanguageService : IAsyncDisposable
                 Diagnostics.Clear(languageId);
             }
 
-            HostCrashed?.Invoke(this, (languageId, e.WillRestart));
+            switch (e)
+            {
+                case { DuringStartup: true, IsRestart: false }:
+                    break; // the first start failed: StartAsync below reports it, once
+                case { DuringStartup: true, WillRestart: false }:
+                    StartFailed?.Invoke(this, (languageId, e.Error ?? new JsonRpcConnectionLostException($"The {descriptor.DisplayName} language service exited during startup.", null)));
+                    break;
+                default:
+                    HostCrashed?.Invoke(this, (languageId, e.WillRestart));
+                    break;
+            }
         };
         client.Restarted += (_, _) => HostRestarted?.Invoke(this, languageId);
 
@@ -314,6 +348,14 @@ public sealed class LanguageService : IAsyncDisposable
         {
             Log?.Invoke(this, $"[{languageId}] The language service could not start: {ex.Message}");
             await client.DisposeAsync().ConfigureAwait(false);
+            // Every loss of the host while it starts (before its handshake ended) is its first start failing, which the
+            // crash handler leaves to this: one that exited cleanly or said nothing (no HostExitedException) too.
+            if (ex is HostRuntimeMissingException or HostExitedException { DuringStartup: true }
+                || (ex is JsonRpcConnectionLostException and not HostExitedException && stage == "starting the host"))
+            {
+                StartFailed?.Invoke(this, (languageId, ex));
+            }
+
             return null;
         }
     }
@@ -520,10 +562,23 @@ public sealed class LanguageService : IAsyncDisposable
     /// <summary>How long design-time build results gather before they go to the language host together (M34b).</summary>
     internal static readonly TimeSpan BatchDelay = TimeSpan.FromMilliseconds(150);
 
-    private readonly ConcurrentDictionary<string, CompilerInputsInfo> _pendingInputs = new(SolutionService.PathComparer);
+    private readonly ConcurrentDictionary<string, PendingInputs> _pendingInputs = new(SolutionService.PathComparer);
     private readonly SemaphoreSlim _flushGate = new(1, 1);
     private int _flushScheduled;
     private bool? _sentLoading;
+
+    /// <summary>Changes when another solution opens or the solution closes: inputs gathered before belong to the one before.</summary>
+    private int _solutionEpoch;
+    private string? _solutionPath;
+
+    /// <summary>The solution changed: the next flush drops the projects it no longer has.</summary>
+    private int _removeProjects;
+
+    /// <summary>A design-time build's result waiting for the next flush, and the solution it came from.</summary>
+    private readonly record struct PendingInputs(CompilerInputsInfo Inputs, int Epoch);
+
+    /// <summary>Flushes and removals run while holding it, one at a time (tests hold it to delay them, as a busy machine does).</summary>
+    internal SemaphoreSlim FlushGate => _flushGate;
 
     /// <summary>
     /// Whether the solution is still loading: projects are being evaluated, design-time builds are running, or their
@@ -536,12 +591,12 @@ public sealed class LanguageService : IAsyncDisposable
 
     private void OnCompilerInputs(object? sender, CompilerInputsInfo inputs)
     {
-        if (_registry.ForProjectLanguage(inputs.Language) is null || IsClosed(inputs.Path))
+        if (_registry.ForProjectLanguage(inputs.Language) is null)
         {
             return;
         }
 
-        _pendingInputs[inputs.Path] = inputs;
+        _pendingInputs[inputs.Path] = new PendingInputs(inputs, Volatile.Read(ref _solutionEpoch));
         ScheduleFlush();
     }
 
@@ -594,14 +649,36 @@ public sealed class LanguageService : IAsyncDisposable
     /// Sends what gathered. Flushes run one at a time and the pending set keeps each project's newest inputs, so a host
     /// that starts slowly never gets a design-time build from before a restore after the one from after it.
     /// </summary>
+    /// <remarks>
+    /// The projects a solution change removed go out here too, before the updates and in the same order as them: a
+    /// removal sent on its own could pass an update of the same project still on its way, and the host kept it. Inputs
+    /// gathered for a solution that has closed since are dropped: flushed after the next solution opened, they loaded the
+    /// closed folder's projects next to its projects for good (the smoke test's EF step after the folder step, on macOS:
+    /// the C# host "ready" with 2 or 3 projects instead of 1).
+    /// </remarks>
     private async Task FlushAsync()
     {
+        // Removals first, then the batch: a solution change from here on leaves its removals to the next flush.
+        var gone = new List<ProjectData>();
+        if (Interlocked.Exchange(ref _removeProjects, 0) == 1)
+        {
+            var current = _solutions.Solution?.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer) ?? [];
+            foreach (var path in _projects.Keys.Where(p => !current.Contains(p)).ToList())
+            {
+                if (_projects.TryRemove(path, out var project))
+                {
+                    gone.Add(project);
+                }
+            }
+        }
+
+        var epoch = Volatile.Read(ref _solutionEpoch);
         var batch = new List<CompilerInputsInfo>();
         foreach (var path in _pendingInputs.Keys)
         {
-            if (_pendingInputs.TryRemove(path, out var inputs))
+            if (_pendingInputs.TryRemove(path, out var pending) && pending.Epoch == epoch)
             {
-                batch.Add(inputs);
+                batch.Add(pending.Inputs);
             }
         }
 
@@ -610,8 +687,8 @@ public sealed class LanguageService : IAsyncDisposable
         foreach (var descriptor in _registry.All.Where(d => d.ProjectLanguage is not null))
         {
             var updated = new List<ProjectData>();
-            var removed = new List<string>();
-            foreach (var inputs in batch.Where(i => descriptor.TakesProjects(i.Language) && !IsClosed(i.Path)))
+            var removed = gone.Where(p => descriptor.TakesProjects(p.Language)).Select(p => p.Path).ToList();
+            foreach (var inputs in batch.Where(i => descriptor.TakesProjects(i.Language)))
             {
                 if (inputs.State != CompilerInputStates.Ok)
                 {
@@ -656,59 +733,19 @@ public sealed class LanguageService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Projects of a solution closed since: a design-time build of theirs that ends after the switch must not bring them
-    /// back into the next solution's workspace (seen on macOS: the C# host still counted the solution before's project).
+    /// The solution opened, closed or changed: the next flush removes the projects it no longer has, in order with the
+    /// updates, and drops what was gathered for another solution.
     /// </summary>
-    private readonly ConcurrentDictionary<string, byte> _closed = new(SolutionService.PathComparer);
-
-    private bool IsClosed(string path) => _closed.ContainsKey(path);
-
-    /// <summary>The solution's projects when it last changed: those it no longer lists are the closed ones.</summary>
-    private HashSet<string> _listed = new(SolutionService.PathComparer);
-
     private void OnSolutionChanged(object? sender, EventArgs e)
     {
-        var current = _solutions.Solution?.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer) ?? [];
-        var gone = _listed.Where(p => !current.Contains(p)).ToList();
-        _listed = current;
-        foreach (var path in current)
+        var path = _solutions.Solution?.Path;
+        if (!string.Equals(Interlocked.Exchange(ref _solutionPath, path), path, StringComparison.Ordinal))
         {
-            _closed.TryRemove(path, out _);
+            Interlocked.Increment(ref _solutionEpoch);
         }
 
-        foreach (var path in gone)
-        {
-            _closed[path] = 0;
-            _pendingInputs.TryRemove(path, out _);
-        }
-
-        var removed = _projects.Keys.Where(p => !current.Contains(p)).ToList();
-        if (removed.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var path in removed)
-        {
-            _projects.TryRemove(path, out _);
-        }
-
-        _ = Task.Run(async () =>
-        {
-            foreach (var lazy in _clients.Values.Where(l => l.IsValueCreated))
-            {
-                try
-                {
-                    if (await lazy.Value.ConfigureAwait(false) is { } client)
-                    {
-                        await client.RemoveProjectsAsync(removed, _lifetime.Token).ConfigureAwait(false);
-                    }
-                }
-                catch (Exception ex) when (ex is JsonRpcConnectionLostException or OperationCanceledException or InvalidOperationException)
-                {
-                }
-            }
-        });
+        Volatile.Write(ref _removeProjects, 1);
+        ScheduleFlush();
     }
 
     public async ValueTask DisposeAsync()

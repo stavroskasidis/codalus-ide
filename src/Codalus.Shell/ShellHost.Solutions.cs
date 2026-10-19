@@ -36,9 +36,12 @@ public sealed partial class ShellHost
 
     private OutputChannel RestoreLog => Workbench.Output.GetOrCreate("codalus.restore", "Restore");
 
+    /// <summary>Tests: the build host to start instead of the one <see cref="BuildHostLocator"/> finds.</summary>
+    internal Func<string?>? BuildHostOverride { get; set; }
+
     private void InitializeSolutions()
     {
-        Solutions = new SolutionService(BuildHostLocator.Resolve);
+        Solutions = new SolutionService(() => BuildHostOverride?.Invoke() ?? BuildHostLocator.Resolve());
         Trust = new TrustStore(Path.Combine(Paths.State, "trusted-folders.json"));
         Recent = new RecentSolutions(Path.Combine(Paths.State, "recent-solutions.json"));
         Explorer = new SolutionExplorerViewModel(this);
@@ -65,7 +68,8 @@ public sealed partial class ShellHost
         {
             if (e.ExitCode == SolutionService.NoSdkExitCode)
             {
-                // Not a crash: the build host found no SDK it can use, and says why. Starting it again won't help.
+                // Not a crash: the build host found no SDK it can use, and says why. Starting it again won't help. This
+                // comes first: it ends the first start too, and the open leaves this notification to say it (M49).
                 Ui.Post(async () =>
                 {
                     var why = Solutions.LastHostMessage is { Length: > 0 } message ? message : "No .NET SDK was found.";
@@ -74,6 +78,18 @@ public sealed partial class ShellHost
                         OpenCheckEnvironment();
                     }
                 });
+                return;
+            }
+
+            if (e is { DuringStartup: true, IsRestart: false })
+            {
+                return; // its first start failed (M49): opening the solution reports that, and it isn't a crash loop
+            }
+
+            if (e is { DuringStartup: true, WillRestart: false })
+            {
+                // It crashed, and its restart failed during startup (M49): say why, not "crashed repeatedly".
+                Workbench.Notifications.Error(Localizer.Format("msg.solutions.buildHostCouldntStartAgain", "The build host couldn't start again: {0} Reopen the solution to try again.", e.Error?.Message ?? string.Empty));
                 return;
             }
 
@@ -173,11 +189,28 @@ public sealed partial class ShellHost
                 await OpenRepositoryAsync(folder).ConfigureAwait(true);
             }
         }
+        catch (HostRuntimeMissingException ex)
+        {
+            // The build host's .NET runtime isn't installed (M49): the one runtime notification says so, and the solution
+            // opens again once it is installed from there.
+            StatusBar.ClearMessage();
+            BuildHostLog.AppendLine($"[open] {path}: {ex.Message}");
+            _solutionWaitingForRuntime = path;
+            if (!ReportHostRuntimeMissing(ex))
+            {
+                // Not the IDE's own build host (CODALUS_BUILDHOST elsewhere), or nothing says it: the open's own error.
+                ReportError($"Could not open {Path.GetFileName(path)}: {ex.Message}");
+            }
+        }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException or System.ComponentModel.Win32Exception)
         {
             StatusBar.ClearMessage();
             BuildHostLog.AppendLine($"[open] {path}: {ex}");
-            ReportError($"Could not open {Path.GetFileName(path)}: {ex.Message}");
+            if (ex is not HostExitedException { ExitCode: SolutionService.NoSdkExitCode })
+            {
+                // No SDK (exit 3): the crash handler's notification says why, with Check Environment; not twice.
+                ReportError($"Could not open {Path.GetFileName(path)}: {ex.Message}");
+            }
         }
     }
 

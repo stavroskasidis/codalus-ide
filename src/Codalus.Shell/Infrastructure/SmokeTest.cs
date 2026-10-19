@@ -224,6 +224,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => tree.Roots.Count > 0, "the Start page has items").ConfigureAwait(true);
         }).ConfigureAwait(true);
 
+        // M49: the shipped hosts' runtime requirement, resolved by the check as hostfxr resolves it: the plugin host ran
+        // above, so the check must agree that its runtime is installed (a check that misjudged would block every host).
+        await StepAsync("setup.hostRuntime", "M49", "The IDE's .NET runtime: what the shipped hosts ask for is found under their root, as their start shows", () =>
+        {
+            var requirements = Codalus.Workbench.Setup.IdeRuntime.Requirements(AppContext.BaseDirectory, Environment.GetEnvironmentVariable);
+            Check(requirements.Any(r => r.Name == Codalus.Rpc.FrameworkReference.NetCoreApp), $"the hosts' runtimeconfig.json files name Microsoft.NETCore.App (found: {string.Join(", ", requirements)})");
+            var row = shell.EnvironmentCheck.HostRuntimeStatus();
+            Check(row.State == Codalus.Workbench.Setup.ToolState.Found, $"the runtime row is Found ({row.State}: {row.Detail})");
+            var host = PluginHostLocator.Resolve();
+            Check(host is not null && Codalus.Rpc.HostRuntimeCheck.Check(host) is null or { IsSatisfied: true }, "the plugin host's own check passes");
+            return Task.CompletedTask;
+        }, "plugins.host").ConfigureAwait(true);
+
         // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
         await StepAsync("shell.setup", "M46", "The first-run setup: a theme family previewed live, a keyboard scheme, VS Code's settings imported and the tools checked; Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
 
@@ -1687,7 +1700,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Data solution is open", 300).ConfigureAwait(true);
         var restore = await shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None).ConfigureAwait(true);
         Check(restore.Succeeded, "dotnet tool restore gets the fixture's dotnet-ef:\n" + Tail(restore.Output, 1500));
-        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 1 }, "the C# workspace is ready", 300).ConfigureAwait(true);
+        await WaitAsync(
+            () => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 1 },
+            () => $"the C# workspace is ready with Blogging alone (C# {shell.Languages.Status(ShellHost.CSharpLanguageId)?.ToString() ?? "not running"})",
+            300).ConfigureAwait(true);
 
         await shell.ShowEntityFrameworkAsync().ConfigureAwait(true);
         var ef = shell.EfExplorer;
@@ -2095,7 +2111,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                   && shell.Solutions.Projects.TryGetValue(legacy, out var info) && info.References.Any(r => r.Kind == Codalus.Projects.Protocol.ReferenceKinds.Package && r.Resolved),
             "the NetFramework solution is open, LegacyApp's packages.config package restored", 600).ConfigureAwait(true);
         Check(shell.Solutions.Projects[legacy].IsNonSdkStyle, "LegacyApp is a non-SDK-style project");
-        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("Visual Studio's own MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
+        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("imports proprietary MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
         shell.Explorer.Reveal("p:" + legacy);
         await Task.Delay(1000).ConfigureAwait(true);
         Screenshot("netfx-projects.png");
@@ -3160,7 +3176,18 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task AiChatStepAsync()
     {
         const string Reply = "This adds two numbers. A shorter version:\n\n```csharp\nstatic int Add(int a, int b) => a + b;\n```\n\nThe expression body returns the same value.";
-        await using var server = Tests.MockModelServers.OpenAI(Reply);
+        const string AgentQuestion = "Does Greeter handle an empty name?";
+        const string AgentReply = "### Empty names\n\n`Greeter.Greet` formats whatever it gets, so an empty name gives `Hello, !`. Check it first:\n\n```csharp\npublic static string Greet(string name) =>\n    string.IsNullOrWhiteSpace(name) ? \"Hello!\" : $\"Hello, {name}!\";\n```\n\n- The callers in `Program.cs` keep working.\n- Add a test for the empty name.";
+
+        // M34h: a second question in agent mode reads a file, so AI Chat shows a step (and the gallery photographs it).
+        await using var server = Tests.MockModelServers.Script(request =>
+        {
+            using var body = JsonDocument.Parse(request.Body);
+            var last = body.RootElement.GetProperty("messages").EnumerateArray().Last();
+            return last.GetProperty("role").GetString() == "tool" ? new Tests.MockTurn(AgentReply)
+                : last.GetProperty("content").GetString()?.EndsWith(AgentQuestion, StringComparison.Ordinal) == true ? new Tests.MockTurn("Reading Greeter first.", "read_file", """{"path":"src/Greetings/Greeter.cs"}""")
+                : new Tests.MockTurn(Reply);
+        });
         var settings = shell.Workbench.Settings;
         Check(shell.Ai.State == Workbench.Ai.AiState.Off, "AI assistance is off by default");
         Check(shell.Plugins.Plugins.Any(p => p.Id == "codalus.openai" && p.State == PluginState.Ready), "the OpenAI-compatible plugin is installed and not loaded");
@@ -3198,6 +3225,28 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await applying.ConfigureAwait(true);
             Check(editor.Model.Text.Text.Contains("    static int Add(int a, int b) => a + b;\n}", StringComparison.Ordinal), "Apply replaced the selection");
             Check(!shell.Workbench.Output.GetOrCreate(Workbench.Ai.AiService.OutputChannelId).GetText().Contains("return a + b", StringComparison.Ordinal), "the request log has no content");
+
+            // Agent mode in the trusted solution (projects.open): a step that read a file, as the step template shows it.
+            if (shell.Solutions.Solution is { Trusted: true } && File.Exists(Greeter))
+            {
+                shell.AiChat.IsAgent = true;
+                shell.AiChat.Input = AgentQuestion;
+                try
+                {
+                    await shell.AiChat.SendAsync().ConfigureAwait(true);
+                }
+                finally
+                {
+                    shell.AiChat.IsAgent = false;
+                }
+
+                var agentTurn = shell.AiChat.Chat.Turns[^1];
+                await WaitAsync(() => !agentTurn.IsStreaming, "the agent's answer streams in", 60).ConfigureAwait(true);
+                Check(agentTurn.IsAgent && agentTurn.Error is null && agentTurn.Steps is [{ Tool: "read_file", Outcome: not null, IsError: false }], $"the agent read Greeter.cs ({agentTurn.Error ?? string.Join(", ", agentTurn.Steps)})");
+                await WaitAsync(() => window.GetVisualDescendants().OfType<AiStepView>().Any(s => s.DataContext is AiStepItem { Title: "read_file", Status: AiStepStatus.Completed }), "AI Chat shows the agent's step").ConfigureAwait(true);
+                await RenderedAsync().ConfigureAwait(true);
+                Screenshot("ai-chat-agent.png");
+            }
         }
         finally
         {

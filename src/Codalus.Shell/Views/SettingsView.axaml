@@ -3,17 +3,42 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              xmlns:views="using:Codalus.Shell.Views"
+             xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
   <UserControl.Styles>
+    <!--
+      A setting (M34h, docs/design/controls/Options.dc.html): Shell.Row.Hover under the pointer; a modified one is marked
+      with the accent at its left edge and a Modified chip.
+    -->
     <Style Selector="Border.setting">
-      <Setter Property="Padding" Value="12,10" />
-      <Setter Property="Margin" Value="0,0,0,6" />
+      <Setter Property="Padding" Value="14,10,14,10" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+      <Setter Property="MaxWidth" Value="780" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
       <Setter Property="BorderThickness" Value="3,0,0,0" />
       <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    </Style>
+    <Style Selector="Border.setting:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Shell.Row.Hover}" />
     </Style>
     <Style Selector="Border.setting.modified">
-      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Modified}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+    </Style>
+    <!-- A boolean's description and key line up under its check box's label. -->
+    <Style Selector="StackPanel.indented">
+      <Setter Property="Margin" Value="26,0,0,0" />
+    </Style>
+    <!-- The page's header tile behind the category's icon. -->
+    <Style Selector="Border.pageTile">
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Info}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Status.Info.Foreground}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
     </Style>
     <!-- The color theme's family cards (M45): the chosen one outlined in the accent. -->
     <Style Selector="ToggleButton.themeCard">
@@ -45,7 +70,9 @@
   <!-- Editors by setting type. -->
   <UserControl.DataTemplates>
     <DataTemplate DataType="vm:BoolSettingViewModel">
-      <CheckBox IsChecked="{Binding Value}" Content="{Binding Title}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Heading}" />
+      <CheckBox IsChecked="{Binding Value}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Heading}">
+        <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+      </CheckBox>
     </DataTemplate>
     <DataTemplate DataType="vm:EnumSettingViewModel">
       <StackPanel Spacing="4" HorizontalAlignment="Left">
@@ -120,32 +147,44 @@
   <DockPanel>
     <Border DockPanel.Dock="Top" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.Border}">
       <StackPanel Spacing="8">
-        <Grid ColumnDefinitions="*,Auto">
+        <!-- The search, User or Workspace as a segmented control (M34h, the toggle buttons before), and the JSON's link. -->
+        <Grid ColumnDefinitions="*,Auto,Auto">
           <TextBox x:Name="SearchBox"
+                   Classes="search"
                    Text="{Binding Search}"
                    PlaceholderText="{l:T settings.searchSettingsModifiedShowsChangedOnes}"
                    AutomationProperties.Name="{l:T settings.searchSettings}" />
-          <Button Grid.Column="1"
+          <controls:SegmentedControl Grid.Column="1"
+                                     Margin="10,0,0,0"
+                                     VerticalAlignment="Center"
+                                     SelectedIndex="{Binding ScopeIndex}"
+                                     IsVisible="{Binding HasWorkspace}"
+                                     ToolTip.Tip="{l:T settings.whereChangesAreSaved}"
+                                     AutomationProperties.Name="{l:T settings.settingsScope}">
+            <controls:SegmentedControlItem Icon="file" Content="{l:T settings.user}" AutomationProperties.Name="{l:T settings.userSettings}" />
+            <controls:SegmentedControlItem Icon="solution" Content="{l:T settings.workspace}" AutomationProperties.Name="{l:T settings.workspaceSettings}" />
+          </controls:SegmentedControl>
+          <Button Grid.Column="2"
                   Classes="link"
-                  Margin="16,0,0,0"
+                  Margin="14,0,0,0"
                   VerticalAlignment="Center"
                   Content="{l:T settings.editInSettingsJson}"
                   Command="{Binding OpenJsonCommand}" />
         </Grid>
-        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasWorkspace}">
-          <ToggleButton Content="{l:T settings.user}" IsChecked="{Binding IsUserScope}" AutomationProperties.Name="{l:T settings.userSettings}" />
-          <ToggleButton Content="{l:T settings.workspace}" IsChecked="{Binding IsWorkspaceScope}" AutomationProperties.Name="{l:T settings.workspaceSettings}" />
-        </StackPanel>
-        <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding FileLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FileLabel}" />
-        <TextBlock Foreground="{DynamicResource Shell.Warning.Foreground}" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
+        <!-- A dock, not a horizontal stack: the path gets exactly the width left after the icon and trims there. -->
+        <DockPanel>
+          <controls:Icon DockPanel.Dock="Left" Kind="file" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center" />
+          <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding FileLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FileLabel}" VerticalAlignment="Center" />
+        </DockPanel>
+        <TextBlock Classes="warning" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
       </StackPanel>
     </Border>
-    <Grid ColumnDefinitions="210,*">
+    <Grid ColumnDefinitions="240,*">
       <!-- The Options tree (M29): groups as a classic IDE arranges them, with their categories. -->
       <TreeView ItemsSource="{Binding Categories}"
                 SelectedItem="{Binding SelectedCategory}"
                 Background="Transparent"
-                Margin="0,8,0,0"
+                Margin="4,8,0,0"
                 AutomationProperties.Name="{l:T settings.settingCategories}">
         <TreeView.Styles>
           <Style Selector="TreeViewItem" x:DataType="vm:SettingCategoryViewModel">
@@ -155,13 +194,28 @@
           </Style>
         </TreeView.Styles>
         <TreeView.ItemTemplate>
+          <!-- Each node with its palette-colored icon and its count (M34h). -->
           <TreeDataTemplate x:DataType="vm:SettingCategoryViewModel" ItemsSource="{Binding Children}">
-            <TextBlock Text="{Binding Label}" />
+            <DockPanel>
+              <controls:Icon Kind="{Binding Icon}" Margin="0,0,6,0" VerticalAlignment="Center" />
+              <TextBlock DockPanel.Dock="Right" Classes="muted small" Text="{Binding Count}" Margin="8,0,4,0" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Name}" Classes.group="{Binding IsExpanded}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+            </DockPanel>
           </TreeDataTemplate>
         </TreeView.ItemTemplate>
       </TreeView>
-      <ScrollViewer Grid.Column="1">
-        <StackPanel Margin="16,8,16,16">
+      <ScrollViewer Grid.Column="1" BorderThickness="1,0,0,0">
+        <StackPanel Margin="24,14,16,16">
+          <!-- The page's header (M34h): the category's icon on a tile, its name, its count and how many are changed. -->
+          <DockPanel Margin="0,0,0,10">
+            <Border DockPanel.Dock="Left" Classes="pageTile" Margin="0,0,10,0">
+              <controls:Icon Kind="{Binding PageIcon}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Classes="heading" Text="{Binding PageTitle}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PageTitle}" />
+              <TextBlock Classes="muted small" Text="{Binding PageSummary}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PageSummary}" />
+            </StackPanel>
+          </DockPanel>
           <TextBlock Classes="muted" Text="{l:T settings.noSettingsFound}" IsVisible="{Binding IsEmpty}" Margin="0,8" />
           <ItemsControl x:Name="Items" ItemsSource="{Binding Items}">
             <!-- All Settings is hundreds of editors: only those in view are made (opening it stalled the UI for a second). -->
@@ -174,22 +228,27 @@
               <DataTemplate x:DataType="vm:SettingItemViewModel">
                 <Border Classes="setting" Classes.modified="{Binding IsModified}">
                   <StackPanel Spacing="4">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                      <TextBlock FontWeight="SemiBold" Text="{Binding Heading}" />
-                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T settings.modified}" IsVisible="{Binding IsModified}" VerticalAlignment="Center" />
+                    <!-- The title, a Modified chip and Reset; a boolean is one check box, its label the title (M34h). -->
+                    <WrapPanel Orientation="Horizontal">
+                      <ContentControl Content="{Binding}" IsVisible="{Binding IsBool}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                      <TextBlock FontWeight="SemiBold" Text="{Binding DisplayTitle}" IsVisible="{Binding !IsBool}" Margin="0,0,8,0" VerticalAlignment="Center" TextWrapping="Wrap" />
+                      <Border Classes="chip info" IsVisible="{Binding IsModified}" Margin="0,0,8,0">
+                        <TextBlock Text="{l:T settings.modified}" />
+                      </Border>
                       <Button Classes="link"
-                              FontSize="{DynamicResource Shell.FontSize.Small}"
                               Content="{l:T settings.reset}"
                               Command="{Binding ResetCommand}"
                               IsVisible="{Binding IsModified}"
                               VerticalAlignment="Center"
                               AutomationProperties.Name="{Binding Title, StringFormat='Reset {0}'}" />
+                    </WrapPanel>
+                    <StackPanel Spacing="4" Classes.indented="{Binding IsBool}">
+                      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" MaxWidth="640" HorizontalAlignment="Left" />
+                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="{l:T settings.thisSettingCanOnlyBeChanged}" IsVisible="{Binding IsUserOnlyHere}" />
+                      <ContentControl Content="{Binding}" Margin="0,4,0,0" IsVisible="{Binding !IsBool}" />
+                      <TextBlock Classes="error" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" Text="{Binding Key}" />
                     </StackPanel>
-                    <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
-                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="{l:T settings.thisSettingCanOnlyBeChanged}" IsVisible="{Binding IsUserOnlyHere}" />
-                    <ContentControl Content="{Binding}" Margin="0,4,0,0" />
-                    <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
-                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Key}" />
                   </StackPanel>
                 </Border>
               </DataTemplate>

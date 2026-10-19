@@ -61,6 +61,47 @@ public sealed class CodeViewer : UserControl
     /// <summary>The colorizer of <see cref="EditorColors"/>, or null when the language is colored by TextMate (tests).</summary>
     public GrammarColorizer? GrammarColors => _grammarColors;
 
+    /// <summary>
+    /// As high as its text, without line numbers or a vertical scroll bar: a code block among other content that scrolls
+    /// (AI Chat's answers, M34h). Long lines still scroll sideways.
+    /// </summary>
+    public bool FitsContent
+    {
+        get => !Editor.ShowLineNumbers && Editor.VerticalScrollBarVisibility == ScrollBarVisibility.Disabled;
+        init
+        {
+            if (value)
+            {
+                Editor.ShowLineNumbers = false;
+                Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                Editor.Options.AllowScrollBelowDocument = false;
+                Editor.Padding = new Thickness(12, 8, 8, 8);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows <paramref name="text"/> without colors (code still being written, M34h: nothing is tokenized while it
+    /// grows). <see cref="Show"/> colors it later.
+    /// </summary>
+    public void ShowPlain(string text)
+    {
+        _textMate?.Dispose();
+        _textMate = null;
+        _scope = null;
+        RemoveGrammarColors();
+        if (Editor.Document.Text != text)
+        {
+            Editor.Document = new TextDocument(text);
+        }
+
+        _highlight.Set(0, 0);
+        Editor.TextArea.TextView.Redraw();
+    }
+
+    /// <summary>Adds <paramref name="text"/> at the end of what is shown: the lines laid out already stay as they are.</summary>
+    public void Append(string text) => Editor.Document.Insert(Editor.Document.TextLength, text);
+
     /// <summary>Shows <paramref name="text"/> with <paramref name="highlight"/> marked and scrolled into view.</summary>
     public void Show(string text, string? languageId, LanguageServices.Protocol.Range? highlight)
     {
