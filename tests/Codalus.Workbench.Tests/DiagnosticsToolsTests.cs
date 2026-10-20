@@ -317,6 +317,42 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
         }
     }
 
+    /// <summary>
+    /// Memory Usage from launch: the resume is the first connection to the held process's port, made right after it
+    /// starts (no trace or counters session connects first). On Windows a client that connects as the runtime makes its
+    /// pipe is never answered, which held the profiling start until the shell gave up after 60 s ("A task was
+    /// canceled."); a few launches in a row, each resumed at once, then a snapshot of the running program.
+    /// </summary>
+    [Fact]
+    public async Task Memory_usage_from_launch_resumes_the_held_program_as_the_first_connection()
+    {
+        for (var launch = 0; launch < 3; launch++)
+        {
+            var process = await fixture.StartAsync("Leaky", 0, suspended: true);
+            try
+            {
+                await _diagnostics.ResumeAsync(process.Id, Timeout(60));
+                string? line;
+                do
+                {
+                    line = await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+                }
+                while (line is not null && !line.StartsWith("Leaky ", StringComparison.Ordinal)); // the runtime's pause banner may come first
+
+                Assert.StartsWith("Leaky ", line, StringComparison.Ordinal);
+                if (launch == 0)
+                {
+                    var taken = await _diagnostics.TakeHeapSnapshotAsync(process.Id, Path.Combine(_work, "from-launch.nettrace"), Timeout());
+                    Assert.True(taken.Bytes > 10_000, $"{taken.Bytes} bytes");
+                }
+            }
+            finally
+            {
+                Kill(process);
+            }
+        }
+    }
+
     [Fact]
     public async Task Heap_snapshots_their_diff_and_paths_to_roots()
     {

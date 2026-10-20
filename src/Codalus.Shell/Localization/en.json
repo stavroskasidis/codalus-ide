@@ -2057,6 +2057,7 @@
   "msg.profiling.theCountersOfCouldNotBe": "The counters of {0} could not be saved: {1}",
   "msg.profiling.theCpuTraceOfCouldNot": "The CPU trace of {0} could not be finished: {1}",
   "msg.profiling.theDiagnosticsHostCodalusDiaghostWas": "The diagnostics host (codalus-diaghost) was not found.",
+  "msg.profiling.theDiagnosticsHostDidNotAnswer": "the diagnostics host didn't answer within 60 s.",
   "msg.profiling.theDumpCouldNotBeWritten": "The dump could not be written: {0}",
   "msg.profiling.theHeapSnapshotCouldNotBe": "The heap snapshot could not be taken: {0}",
   "msg.profiling.theProfilingSessionCouldNotBe": "The profiling session could not be saved: {0}",
