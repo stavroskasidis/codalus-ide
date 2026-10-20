@@ -73,6 +73,12 @@ internal static class TargetCatalog
                 File.WriteAllText(Path.Combine(userData, "config", "settings.json"), settings);
             }
 
+            // Every launch is a first start, but the first-run setup isn't what's measured: cold-start opens nothing, so
+            // without this the setup window and its live theme previews were in its idle memory (ADR 0002, amendment
+            // 2026-10-20). The other scenarios open something or run a bench, which skip the setup anyway. The variable,
+            // not --skip-setup, so a shell from before M46 (CODALUS_BENCH_SHELL_DIR) still starts.
+            psi.Environment["CODALUS_SKIP_SETUP"] = "1";
+
             if (request.EventsFile is not null)
             {
                 psi.Environment["CODALUS_BENCH_EVENTS"] = request.EventsFile;

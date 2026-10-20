@@ -47,6 +47,10 @@ public sealed partial class ShellHost : IHostingActions
     private DateTime? _lfsAttributes;
     private DateTime _locksRead;
 
+    /// <summary>LFS reads started, and the newest one whose result Git Changes shows: an older read never replaces it.</summary>
+    private long _lfsReadsStarted;
+    private long _lfsReadShown;
+
     public SecretStorage Secrets { get; private set; } = null!;
 
     public HostingService Hosting { get; private set; } = null!;
@@ -1101,14 +1105,21 @@ public sealed partial class ShellHost : IHostingActions
         }
 
         var includeLocks = _lfsRoot != root || DateTime.UtcNow - _locksRead > TimeSpan.FromMinutes(1);
+
+        // Every status change starts a read, and reads overlap: one that listed the files before a change can end after
+        // one that started after the change. Shown last, it put the older list back until the next status change (a
+        // pointer file written right after .gitattributes kept no badge: the repository's first read, slow on Windows,
+        // was still running while the files were written).
+        var read = ++_lfsReadsStarted;
         try
         {
             var lfs = await Git.LfsStatusAsync(includeLocks).ConfigureAwait(true);
-            if (Git.Root != root)
+            if (Git.Root != root || read < _lfsReadShown)
             {
                 return;
             }
 
+            _lfsReadShown = read;
             if (includeLocks)
             {
                 _locksRead = DateTime.UtcNow;

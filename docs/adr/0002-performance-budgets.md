@@ -1,6 +1,6 @@
 # 0002. Performance budgets
 
-- **Status:** accepted (2026-10-08), amended 2026-10-10 ([see below](#amendment-2026-10-10-rider-dropped-proposed-budgets-approved)) and 2026-10-17 (the regression gate: [accepted values and runner-aware comparisons](#amendment-2026-10-17-accepted-values-and-runner-aware-comparisons)). All budgets are final. Rider is no longer a reference, so budget 4 (solution) is final as it stands, and the budgets proposed at M8–M16 are gates. *Update 2026-10-14:* `benchmarks.yml` is gone; the benchmarks are `pipeline.yml`'s `benchmarks` job, run for stable releases or on a dispatch with `benchmarks` checked, with the regression gate against the last 10 runs on `master`. Hosted macOS and Linux results aren't committed yet (`benchmarks/results/` holds Windows only).
+- **Status:** accepted (2026-10-08), amended 2026-10-10 ([see below](#amendment-2026-10-10-rider-dropped-proposed-budgets-approved)) 2026-10-17 (the regression gate: [accepted values and runner-aware comparisons](#amendment-2026-10-17-accepted-values-and-runner-aware-comparisons)) and 2026-10-20 ([`cold-start` without the first-run setup](#amendment-2026-10-20-cold-start-without-the-first-run-setup)). All budgets are final. Rider is no longer a reference, so budget 4 (solution) is final as it stands, and the budgets proposed at M8–M16 are gates. *Update 2026-10-14:* `benchmarks.yml` is gone; the benchmarks are `pipeline.yml`'s `benchmarks` job, run for stable releases or on a dispatch with `benchmarks` checked, with the regression gate against the last 10 runs on `master`. Hosted macOS and Linux results aren't committed yet (`benchmarks/results/` holds Windows only).
 - **Date:** 2026-10-08
 - **Deciders:** maintainer
 
@@ -127,4 +127,18 @@ The maintainer decided on 2026-10-17: **accept the 0.3.0 sizes, and fix the gate
 - The gate's table goes to the job summary whether the gate passes or fails.
 
 Replayed on the 0.3.0 results: they pass against the baseline that release had (0.2.1). A language host 6% over its accepted value still fails. Against the runs the new baseline selection finds, the Mac's `file_highlight_ms` fails against three earlier runs on the same CPU, confirmation included. That metric also rose on Linux on the same CPU. It is left to the maintainer, either to accept or to investigate.
+
+## Amendment (2026-10-20): `cold-start` without the first-run setup
+
+The 0.4.0 release (run 39367310356) failed the regression gate on the Mac's `cold-start` `memory_idle_ws_mb`: 276.8 MB against a 266.4 MB limit, confirmation included. The same increase showed on Linux and Windows as warnings, since there were too few runs on the same CPU. The cause isn't the idle IDE. Every harness launch uses a fresh user data folder, so every launch is a first start. `cold-start` opens nothing, so the first-run setup (M46) opened over the IDE and stayed open through the 5 s idle wait. The other scenarios open a file or a solution, or run a bench, and those skip the setup.
+
+- **The setup grew.** Since M34h (`119322e1`), its five theme cards are live miniatures of the shell's chrome in each variant's resources. Measured on Linux (the published AOT shell under Xvfb):
+  - With the cards' content stubbed out, idle memory was about 20 MB lower.
+  - Without the setup at all, it was about 26 MB lower.
+  - At `c6c944c0`, the last baseline run on `master`, the setup was about 7 MB of the idle measurement. The baseline only ever had that much setup in it.
+  - The memory is live, not garbage: a forced compacting GC with the setup open doesn't lower it.
+- **The decision (the maintainer, 2026-10-20):** `cold-start` measures the idle IDE. The harness starts the shell with `CODALUS_SKIP_SETUP=1` at every launch (`Targets.cs`). That changes only `cold-start`, the one scenario where the setup showed. The first-run setup's own cost is a one-time cost at a new user data folder, and no budget covers it.
+- **The baseline needs nothing.** Accepted values (the 2026-10-17 amendment) are for accepting an increase. Here the measurement goes down, by about 7 MB against runs from before 0.4.0, so nothing can fail on it. The earlier runs leave the 10-run window as new releases come in.
+  - Until they do, the reference for `memory_idle_*` is a few MB higher than what is measured now, about 3% of it, under the +10% threshold.
+  - A regression smaller than that difference would pass in that time.
 

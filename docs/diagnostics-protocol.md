@@ -23,7 +23,7 @@
 | Method | Params | Result | Notes |
 |---|---|---|---|
 | `diag/processes` | `{}` | `{processes: [{id, name, commandLine?}]}` | Processes with a .NET diagnostics port, except this host, the shell and the IDE's other hosts. `commandLine` on Linux only. |
-| `diag/resume` | `{processId}` | `{}` | Resumes a program started with `DOTNET_DefaultDiagnosticPortSuspend=1` (profiling from launch), after its sessions have started. Retries while the port isn't open yet. |
+| `diag/resume` | `{processId}` | `{}` | Resumes a program started with `DOTNET_DefaultDiagnosticPortSuspend=1` (profiling from launch), after its sessions have started. Waits for a just-started program's port (on Windows, until its pipe is listed: connecting as the runtime creates it is never answered) and retries while it isn't open yet; fails with `NotAvailable` when the port doesn't answer within 20 s. |
 
 ## Live sessions
 

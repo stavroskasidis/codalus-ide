@@ -124,6 +124,9 @@ internal sealed partial class SmokeTest
 
         public double StallMilliseconds { get; init; }
 
+        /// <summary>How long the garbage collector paused the process during the run: a stall it explains isn't the command's code.</summary>
+        public double GcPauseMilliseconds { get; init; }
+
         public string? Saw { get; init; }
 
         public string? Screenshot { get; init; }
@@ -951,6 +954,7 @@ internal sealed partial class SmokeTest
         var clock = Stopwatch.StartNew();
         var enabled = SweepContextWatch.Read(command.Enablement, shell.Workbench.Context);
         _sweepStall!.Reset();
+        var gcBefore = GC.GetTotalPauseDuration();
         string? problem = null;
         try
         {
@@ -1006,6 +1010,7 @@ internal sealed partial class SmokeTest
 
         var milliseconds = clock.Elapsed.TotalMilliseconds;
         var stall = _sweepStall.MaxMilliseconds;
+        var gcPause = (GC.GetTotalPauseDuration() - gcBefore).TotalMilliseconds;
         if (problem is null && executed.Task.IsCompleted && executed.Task.Result.Error is { } error)
         {
             problem = $"the command threw {error.GetType().Name}: {error.Message}";
@@ -1040,7 +1045,7 @@ internal sealed partial class SmokeTest
         var stallLimit = SweepStallLimit(firstRun);
         if (problem is null && stall > stallLimit.TotalMilliseconds)
         {
-            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run)";
+            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run; the GC paused {gcPause:0} ms of the run)";
         }
 
         var unclosed = await CleanUpSweepAsync(before, saw).ConfigureAwait(true);
@@ -1064,7 +1069,7 @@ internal sealed partial class SmokeTest
         var known = s_sweepKnown.ContainsKey($"{command.Id}|{entry}") || s_sweepKnown.ContainsKey($"{command.Id}|*");
         lock (saw)
         {
-            Sweep(command.Id, entry, problem is null ? "pass" : "fail", problem, location, milliseconds, stall, saw.Count > 0 ? string.Join(" | ", saw.Distinct()) : null, screenshot, known);
+            Sweep(command.Id, entry, problem is null ? "pass" : "fail", problem, location, milliseconds, stall, saw.Count > 0 ? string.Join(" | ", saw.Distinct()) : null, screenshot, known, gcPause);
         }
     }
 
@@ -1613,10 +1618,11 @@ internal sealed partial class SmokeTest
 
     // ------------------------------------------------------------------ report
 
-    private void Sweep(string command, string entry, string outcome, string? reason, string? location = null, double milliseconds = 0, double stall = 0, string? saw = null, string? screenshot = null, bool known = false)
+    private void Sweep(string command, string entry, string outcome, string? reason, string? location = null, double milliseconds = 0, double stall = 0, string? saw = null, string? screenshot = null, bool known = false, double gcPause = 0)
     {
         var row = new SweepRow(command, entry, outcome, reason)
         {
+            GcPauseMilliseconds = Math.Round(gcPause),
             Location = location,
             Scenario = _sweepScenario.ToString(),
             Milliseconds = Math.Round(milliseconds),
@@ -1684,6 +1690,11 @@ internal sealed partial class SmokeTest
             Write("scenario", r.Scenario);
             json.WriteNumber("ms", r.Milliseconds);
             json.WriteNumber("stallMs", r.StallMilliseconds);
+            if (r.GcPauseMilliseconds > 0)
+            {
+                json.WriteNumber("gcPauseMs", r.GcPauseMilliseconds);
+            }
+
             Write("saw", r.Saw);
             Write("screenshot", r.Screenshot);
             if (r.Known)
@@ -1796,39 +1807,98 @@ internal sealed partial class SmokeTest
         }
     }
 
-    /// <summary>Measures how long the UI thread takes to answer, every 20 ms, from a background thread: its longest wait is the stall.</summary>
+    /// <summary>
+    /// Measures how long the UI thread takes to answer, every 20 ms, from a thread of its own: its longest wait is the
+    /// stall. The answer's time is read on the UI thread as it runs the probe, and the monitor waits on its own thread:
+    /// an await on the thread pool timed the pool's queue too, so a pool busy with blocking work (ending a process tree,
+    /// waiting for a program's output) read as a stalled UI thread. HotReloadRestartTests saw 897 ms that way under load,
+    /// while a monitor on its own thread saw 57 ms in the same run.
+    /// </summary>
     internal sealed class SweepStallMonitor
     {
+        private readonly Lock _gate = new();
         private volatile bool _stopped;
         private long _maxTicks;
+        private TimeSpan _maxGcPause;
 
-        public SweepStallMonitor() => _ = Task.Run(LoopAsync);
+        public SweepStallMonitor() => new Thread(Loop) { IsBackground = true, Name = "Sweep stall monitor" }.Start();
 
-        public double MaxMilliseconds => Interlocked.Read(ref _maxTicks) * 1000.0 / Stopwatch.Frequency;
+        public double MaxMilliseconds
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxTicks * 1000.0 / Stopwatch.Frequency;
+                }
+            }
+        }
 
-        public void Reset() => Interlocked.Exchange(ref _maxTicks, 0);
+        /// <summary>How long the garbage collector paused the process during the longest wait: a part of it that isn't the UI's code.</summary>
+        public double GcPauseOfMaxMilliseconds
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxGcPause.TotalMilliseconds;
+                }
+            }
+        }
 
-        private async Task LoopAsync()
+        public void Reset()
+        {
+            lock (_gate)
+            {
+                _maxTicks = 0;
+                _maxGcPause = TimeSpan.Zero;
+            }
+        }
+
+        private void Loop()
         {
             while (!_stopped)
             {
                 var start = Stopwatch.GetTimestamp();
+                var gcBefore = GC.GetTotalPauseDuration();
+                long answered = 0;
+                Task probe;
                 try
                 {
-                    await Dispatcher.UIThread.InvokeAsync(static () => { }, DispatcherPriority.Send);
+                    probe = Dispatcher.UIThread.InvokeAsync(() => Interlocked.Exchange(ref answered, Stopwatch.GetTimestamp()), DispatcherPriority.Send).GetTask();
                 }
-                catch (Exception ex) when (ex is TaskCanceledException or InvalidOperationException)
+                catch (InvalidOperationException)
                 {
-                    return;
+                    return; // the dispatcher has shut down
                 }
 
-                var ticks = Stopwatch.GetTimestamp() - start;
-                long seen;
-                while (ticks > (seen = Interlocked.Read(ref _maxTicks)) && Interlocked.CompareExchange(ref _maxTicks, ticks, seen) != seen)
+                try
                 {
+                    while (!probe.Wait(100))
+                    {
+                        if (_stopped)
+                        {
+                            return;
+                        }
+                    }
+                }
+                catch (AggregateException)
+                {
+                    return; // the dispatcher has shut down
                 }
 
-                await Task.Delay(20).ConfigureAwait(false);
+                var ticks = Interlocked.Read(ref answered) - start;
+                var gcPause = GC.GetTotalPauseDuration() - gcBefore;
+                lock (_gate)
+                {
+                    if (ticks > _maxTicks)
+                    {
+                        _maxTicks = ticks;
+                        _maxGcPause = gcPause;
+                    }
+                }
+
+                Thread.Sleep(20);
             }
         }
 
