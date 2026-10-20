@@ -17,6 +17,11 @@ public sealed class PackageSignInTests : IAsyncLifetime
     private static readonly string s_authorization = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("ada:secret"));
     private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-signin-" + Guid.NewGuid().ToString("N"));
     private readonly Dictionary<string, string?> _environment = [];
+    // NuGet keeps a service index in its machine-wide HTTP cache for 30 minutes, keyed by the source's URL alone, and
+    // reads it from there without a request. A loopback port comes back for later mock feeds, so on a plain
+    // 127.0.0.1:<port>/v3/index.json this feed would be answered by an earlier feed's index (for example MockNuGetServer's,
+    // which has no search NuGet uses), without its 401. A path of its own keeps the URL, and the cache entry, this feed's.
+    private readonly string _index = Guid.NewGuid().ToString("N") + "/v3/index.json";
     private MockHttpServer _feed = null!;
     private SolutionService _service = null!;
 
@@ -38,7 +43,7 @@ public sealed class PackageSignInTests : IAsyncLifetime
             var root = _feed.BaseUrl.TrimEnd('/');
             return request.Path.TrimStart('/') switch
             {
-                "v3/index.json" => MockHttpResponse.Json($$"""{ "version": "3.0.0", "resources": [ { "@id": "{{root}}/search", "@type": "SearchQueryService/3.0.0-beta" }, { "@id": "{{root}}/search", "@type": "SearchQueryService/3.5.0" } ] }"""),
+                var path when path == _index => MockHttpResponse.Json($$"""{ "version": "3.0.0", "resources": [ { "@id": "{{root}}/search", "@type": "SearchQueryService/3.0.0-beta" }, { "@id": "{{root}}/search", "@type": "SearchQueryService/3.5.0" } ] }"""),
                 "search" => MockHttpResponse.Json("""{ "totalHits": 1, "data": [ { "id": "Contoso.Private", "version": "1.2.0", "description": "Behind a sign-in.", "versions": [ { "version": "1.2.0" } ] } ] }"""),
                 _ => MockHttpResponse.NotFound(),
             };
@@ -56,7 +61,7 @@ public sealed class PackageSignInTests : IAsyncLifetime
             <configuration>
               <packageSources>
                 <clear />
-                <add key="private" value="{_feed.BaseUrl.TrimEnd('/')}/v3/index.json" allowInsecureConnections="true" />
+                <add key="private" value="{_feed.BaseUrl.TrimEnd('/')}/{_index}" allowInsecureConnections="true" />
               </packageSources>
             </configuration>
             """);

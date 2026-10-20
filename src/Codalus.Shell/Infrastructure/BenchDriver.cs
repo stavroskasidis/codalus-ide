@@ -85,7 +85,16 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
         }
 
         var highlighted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        controller.TokensApplied += (_, _) => highlighted.TrySetResult();
+        // The first colors, not the first answer: a language service that hasn't loaded the file yet answers with no
+        // tokens, and the editor asks again once it's ready. Counted, that empty answer was a second, faster mode of
+        // file_highlight_ms on the Mac's CI runners (1.0-2.1 s, where the first colors took 2.3-3.8 s).
+        controller.TokensApplied += (_, _) =>
+        {
+            if (controller.Colorizer.HasTokens)
+            {
+                highlighted.TrySetResult();
+            }
+        };
         if (controller.Colorizer.HasTokens)
         {
             highlighted.TrySetResult();

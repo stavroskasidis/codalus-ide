@@ -22,6 +22,12 @@ internal static class DiagnosticsPort
     /// <summary>How long a live process's port may leave session starts unanswered before starting fails, saying so.</summary>
     private static readonly TimeSpan s_answerTimeout = TimeSpan.FromSeconds(60);
 
+    /// <summary>How long a resume waits for the port's answer: less than the shell gives a profiling start (60 s) with the wait for the port.</summary>
+    private static readonly TimeSpan s_resumeTimeout = TimeSpan.FromSeconds(20);
+
+    /// <summary>How long a Windows pipe just made is left for the runtime to start waiting on before connecting (<see cref="WaitForPortAsync"/>).</summary>
+    private static readonly TimeSpan s_listenGrace = TimeSpan.FromMilliseconds(250);
+
     /// <summary>The runtime's own events a CPU trace needs: method loads (names), IL-to-native maps (source lines), modules.</summary>
     private const long CpuRuntimeKeywords = 0x8 /* Loader */ | 0x10 /* Jit */ | 0x20 /* NGen (ReadyToRun) */ | 0x20000 /* JittedMethodILToNativeMap */;
 
@@ -249,11 +255,14 @@ internal static class DiagnosticsPort
     /// made yet, or a connection it missed), which held a trace's start until the caller gave up after 3 minutes (the
     /// Windows CI runner): each try now waits <see cref="s_attemptTimeout"/>, and after <see cref="s_answerTimeout"/>
     /// starting fails with the reason. A start that does its work before it answers (<paramref name="slowStart"/>: a
-    /// heap snapshot's induced GC, as long as the heap is large) waits for its answer instead.
+    /// heap snapshot's induced GC, as long as the heap is large) waits for its answer instead. A just-started process's
+    /// port is waited for before the first try (<see cref="WaitForPortAsync"/>), as a connection the Windows runtime
+    /// misses can't be tried again.
     /// </summary>
     public static async Task<EventPipeSession> StartSessionAsync(int processId, IReadOnlyList<EventPipeProvider> providers, bool rundown, bool stacks, int bufferMegabytes, bool slowStart, CancellationToken cancellationToken)
     {
         NameOf(processId);
+        await WaitForPortAsync(processId, cancellationToken).ConfigureAwait(false);
         var client = new DiagnosticsClient(processId);
         var clock = Stopwatch.StartNew();
         while (true)
@@ -337,27 +346,84 @@ internal static class DiagnosticsPort
             TaskContinuationOptions.None,
             TaskScheduler.Default);
 
-    /// <summary>Resumes a process started with <c>DOTNET_DefaultDiagnosticPortSuspend=1</c>.</summary>
+    /// <summary>
+    /// Resumes a process started with <c>DOTNET_DefaultDiagnosticPortSuspend=1</c>. Memory Usage alone resumes as its first
+    /// contact with the port, right after the launch, so the port is waited for first (<see cref="WaitForPortAsync"/>).
+    /// The client's resume is synchronous and reads its answer without a time limit: it runs on its own thread, and a
+    /// port that doesn't answer within <see cref="s_resumeTimeout"/> fails the resume, saying so, before the shell's
+    /// own time limit cancels it without a reason.
+    /// </summary>
     public static async Task ResumeAsync(int processId, CancellationToken cancellationToken)
     {
         NameOf(processId);
+        await WaitForPortAsync(processId, cancellationToken).ConfigureAwait(false);
         var client = new DiagnosticsClient(processId);
         var clock = Stopwatch.StartNew();
         while (true)
         {
+            var resuming = Task.Factory.StartNew(client.ResumeRuntime, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             try
             {
-                client.ResumeRuntime();
+                await resuming.WaitAsync(s_resumeTimeout, cancellationToken).ConfigureAwait(false);
                 return;
+            }
+            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException && !resuming.IsCompleted)
+            {
+                // Given up on: its thread ends when the port answers or closes (the process ending).
+                _ = resuming.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                if (ex is OperationCanceledException)
+                {
+                    throw;
+                }
+
+                throw new JsonRpcHandlerException(
+                    IsAlive(processId) ? DiagnosticsErrorCodes.NotAvailable : DiagnosticsErrorCodes.ProcessNotFound,
+                    IsAlive(processId) ? $"Process {processId}'s .NET diagnostics port didn't answer the resume within {s_resumeTimeout.TotalSeconds:0} s." : $"Process {processId} has exited.");
             }
             catch (ServerNotAvailableException) when (clock.Elapsed < s_connectTimeout && IsAlive(processId))
             {
                 await Task.Delay(100, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is ServerNotAvailableException or UnsupportedCommandException or ServerErrorException or IOException)
+            catch (Exception ex) when (ex is ServerNotAvailableException or UnsupportedCommandException or ServerErrorException or IOException or TimeoutException)
             {
+                // TimeoutException: the client's own 30 s wait for the Windows pipe.
                 throw new JsonRpcHandlerException(DiagnosticsErrorCodes.NotAvailable, $"Process {processId} could not be resumed: {ex.Message}");
             }
         }
     }
+
+    /// <summary>
+    /// Waits for a just-started process's diagnostics port before the first connection to it (Windows). The runtime makes
+    /// its named pipe (<c>CreateNamedPipe</c>) and only then starts waiting for a client on it (an overlapped
+    /// <c>ConnectNamedPipe</c>). A client that connects in between is connected, but the runtime takes the
+    /// <c>ERROR_PIPE_CONNECTED</c> it gets as a wait in progress and never signals it, so the port never reads the
+    /// client's command and never makes another pipe: a process held at startup is held for good. The diagnostics client
+    /// waits for a pipe by trying to connect until it exists, which lands right in that gap; listing <c>\\.\pipe\</c>
+    /// doesn't connect, so the pipe is waited for that way, and once it appears the runtime is given
+    /// <see cref="s_listenGrace"/> to start waiting on it. A pipe already there when asked is connected to at once. Off
+    /// Windows the port is a Unix socket, whose listen queue keeps an early client.
+    /// </summary>
+    internal static async Task WaitForPortAsync(int processId, CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsWindows() || PipeListed(processId))
+        {
+            return;
+        }
+
+        var clock = Stopwatch.StartNew();
+        while (!PipeListed(processId))
+        {
+            if (clock.Elapsed >= s_connectTimeout || !IsAlive(processId))
+            {
+                return; // the connection says what's wrong
+            }
+
+            await Task.Delay(25, cancellationToken).ConfigureAwait(false);
+        }
+
+        await Task.Delay(s_listenGrace, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool PipeListed(int processId) =>
+        ListedPorts(@"\\.\pipe\").Contains(processId);
 }

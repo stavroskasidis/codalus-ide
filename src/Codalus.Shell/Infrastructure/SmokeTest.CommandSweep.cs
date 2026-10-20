@@ -1807,39 +1807,98 @@ internal sealed partial class SmokeTest
         }
     }
 
-    /// <summary>Measures how long the UI thread takes to answer, every 20 ms, from a background thread: its longest wait is the stall.</summary>
+    /// <summary>
+    /// Measures how long the UI thread takes to answer, every 20 ms, from a thread of its own: its longest wait is the
+    /// stall. The answer's time is read on the UI thread as it runs the probe, and the monitor waits on its own thread:
+    /// an await on the thread pool timed the pool's queue too, so a pool busy with blocking work (ending a process tree,
+    /// waiting for a program's output) read as a stalled UI thread. HotReloadRestartTests saw 897 ms that way under load,
+    /// while a monitor on its own thread saw 57 ms in the same run.
+    /// </summary>
     internal sealed class SweepStallMonitor
     {
+        private readonly Lock _gate = new();
         private volatile bool _stopped;
         private long _maxTicks;
+        private TimeSpan _maxGcPause;
 
-        public SweepStallMonitor() => _ = Task.Run(LoopAsync);
+        public SweepStallMonitor() => new Thread(Loop) { IsBackground = true, Name = "Sweep stall monitor" }.Start();
 
-        public double MaxMilliseconds => Interlocked.Read(ref _maxTicks) * 1000.0 / Stopwatch.Frequency;
+        public double MaxMilliseconds
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxTicks * 1000.0 / Stopwatch.Frequency;
+                }
+            }
+        }
 
-        public void Reset() => Interlocked.Exchange(ref _maxTicks, 0);
+        /// <summary>How long the garbage collector paused the process during the longest wait: a part of it that isn't the UI's code.</summary>
+        public double GcPauseOfMaxMilliseconds
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxGcPause.TotalMilliseconds;
+                }
+            }
+        }
 
-        private async Task LoopAsync()
+        public void Reset()
+        {
+            lock (_gate)
+            {
+                _maxTicks = 0;
+                _maxGcPause = TimeSpan.Zero;
+            }
+        }
+
+        private void Loop()
         {
             while (!_stopped)
             {
                 var start = Stopwatch.GetTimestamp();
+                var gcBefore = GC.GetTotalPauseDuration();
+                long answered = 0;
+                Task probe;
                 try
                 {
-                    await Dispatcher.UIThread.InvokeAsync(static () => { }, DispatcherPriority.Send);
+                    probe = Dispatcher.UIThread.InvokeAsync(() => Interlocked.Exchange(ref answered, Stopwatch.GetTimestamp()), DispatcherPriority.Send).GetTask();
                 }
-                catch (Exception ex) when (ex is TaskCanceledException or InvalidOperationException)
+                catch (InvalidOperationException)
                 {
-                    return;
+                    return; // the dispatcher has shut down
                 }
 
-                var ticks = Stopwatch.GetTimestamp() - start;
-                long seen;
-                while (ticks > (seen = Interlocked.Read(ref _maxTicks)) && Interlocked.CompareExchange(ref _maxTicks, ticks, seen) != seen)
+                try
                 {
+                    while (!probe.Wait(100))
+                    {
+                        if (_stopped)
+                        {
+                            return;
+                        }
+                    }
+                }
+                catch (AggregateException)
+                {
+                    return; // the dispatcher has shut down
                 }
 
-                await Task.Delay(20).ConfigureAwait(false);
+                var ticks = Interlocked.Read(ref answered) - start;
+                var gcPause = GC.GetTotalPauseDuration() - gcBefore;
+                lock (_gate)
+                {
+                    if (ticks > _maxTicks)
+                    {
+                        _maxTicks = ticks;
+                        _maxGcPause = gcPause;
+                    }
+                }
+
+                Thread.Sleep(20);
             }
         }
 

@@ -224,9 +224,9 @@ public sealed partial class ShellHost
         TraceRecordingHandle? trace = null;
         CounterMonitor? counters = null;
         var traced = request.Tools.Where(ProfilerTools.Traced.Contains).ToList();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         try
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             if (traced.Count > 0)
             {
                 trace = await Profiling.StartTraceAsync(processId, Path.Combine(folder, "trace.nettrace"), traced, null, timeout.Token).ConfigureAwait(true);
@@ -246,7 +246,10 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
         {
-            Workbench.Notifications.Error(Localizer.Format("msg.profiling.profilingCouldNotStart", "Profiling {0} could not start: {1}", target, ex.Message));
+            var reason = ex is OperationCanceledException && timeout.IsCancellationRequested
+                ? Localizer.Get("msg.profiling.theDiagnosticsHostDidNotAnswer", "the diagnostics host didn't answer within 60 s.")
+                : ex.Message;
+            Workbench.Notifications.Error(Localizer.Format("msg.profiling.profilingCouldNotStart", "Profiling {0} could not start: {1}", target, reason));
             program?.Stop();
             if (trace is not null)
             {
