@@ -5,6 +5,7 @@ using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Git;
 using Codalus.Workbench.Localization;
+using Codalus.Workbench.Settings;
 
 namespace Codalus.Shell;
 
@@ -298,11 +299,11 @@ public sealed partial class ShellHost
         }
 
         var (@base, ours, theirs) = await Git.ConflictVersionsAsync(path).ConfigureAwait(true);
-        var result = File.Exists(path) ? await File.ReadAllTextAsync(path).ConfigureAwait(true) : string.Empty;
+        var (result, format) = File.Exists(path) ? TextFiles.Decode(await File.ReadAllBytesAsync(path).ConfigureAwait(true)) : (string.Empty, TextFileFormat.Default);
         MergeEditorDocument? document = null;
         var viewModel = new MergeEditorViewModel(path, result, ours, theirs, @base, async text =>
         {
-            await Git.ResolveAsync(path, text).ConfigureAwait(true);
+            await Git.ResolveAsync(path, text, format.Encoding).ConfigureAwait(true);
             if (_models.TryGetValue(Path.GetFullPath(path), out var model) && !model.IsModified)
             {
                 await model.ReloadAsync(CancellationToken.None).ConfigureAwait(true);
@@ -314,11 +315,71 @@ public sealed partial class ShellHost
             }
 
             StatusBar.ShowMessage(Localizer.Format("msg.gitDepth.isResolved", "{0} is resolved.", Path.GetFileName(path)), TimeSpan.FromSeconds(5));
-        });
-        document = new MergeEditorDocument(viewModel, EditorFont);
+        }, CurrentBranchFor(path), format: format);
+        document = new MergeEditorDocument(SetUpMergeEditor(viewModel), EditorFont);
         Layout.OpenDocument(document, focus: true);
         return document;
     });
+
+    /// <summary>The branch a merge goes into, for the merge editor's "Current: develop" (null outside a merge).</summary>
+    private string? CurrentBranchFor(string path) =>
+        Git.Status is { Operation: "merge", Branch: { } branch } status
+        && Path.GetFullPath(path).StartsWith(Path.GetFullPath(status.Root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            ? branch
+            : null;
+
+    /// <summary>The merge editor's layout from the settings (saved back when its gear menu changes it), and its shortcuts.</summary>
+    private MergeEditorViewModel SetUpMergeEditor(MergeEditorViewModel viewModel)
+    {
+        viewModel.LoadLayout(
+            Workbench.Settings.GetString(BuiltIns.MergeEditorLayoutSetting, MergeEditorViewModel.LayoutSourcesAbove),
+            Workbench.Settings.GetBoolean(BuiltIns.MergeEditorIncomingOnLeftSetting, true));
+        viewModel.SaveLayout = vm => _ = SaveMergeEditorLayoutAsync(vm);
+        viewModel.ShortcutFor = command => Workbench.Keybindings.GetBinding(command)?.ToLabel(Workbench.Platform);
+        return viewModel;
+    }
+
+    private async Task SaveMergeEditorLayoutAsync(MergeEditorViewModel viewModel)
+    {
+        try
+        {
+            await Workbench.Settings.SetAsync(BuiltIns.MergeEditorLayoutSetting, viewModel.Layout, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await Workbench.Settings.SetAsync(BuiltIns.MergeEditorIncomingOnLeftSetting, viewModel.IncomingOnLeft, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Workbench.Log.AppendLine($"[merge] The merge editor's layout wasn't saved: {ex.Message}");
+        }
+    }
+
+    /// <summary>Runs a merge editor command on the active merge editor.</summary>
+    public Task OnMergeEditorAsync(Action<MergeEditorViewModel> action)
+    {
+        if (Layout.ActiveDocument is MergeEditorDocument document)
+        {
+            action(document.ViewModel);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary><c>git.mergeEditor.acceptMerge</c>: Accept Merge in the active merge editor.</summary>
+    public async Task AcceptActiveMergeAsync()
+    {
+        if (Layout.ActiveDocument is not MergeEditorDocument document)
+        {
+            return;
+        }
+
+        try
+        {
+            await document.ViewModel.AcceptAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
+        {
+            ReportGitError(ex);
+        }
+    }
 
     /// <summary>
     /// <c>codalus merge LOCAL REMOTE BASE MERGED</c> (git mergetool): the merge editor on git's four files. True when the
@@ -334,16 +395,17 @@ public sealed partial class ShellHost
 
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         MergeEditorDocument? document = null;
-        var viewModel = new MergeEditorViewModel(merged, Read(merged), Read(local), Read(remote), Read(@base), async text =>
+        var (result, format) = File.Exists(merged) ? TextFiles.Decode(await File.ReadAllBytesAsync(merged).ConfigureAwait(true)) : (string.Empty, TextFileFormat.Default);
+        var viewModel = new MergeEditorViewModel(merged, result, Read(local), Read(remote), Read(@base), async text =>
         {
-            await File.WriteAllTextAsync(merged, text).ConfigureAwait(true);
+            await File.WriteAllTextAsync(merged, text, format.Encoding).ConfigureAwait(true);
             done.TrySetResult(true);
             if (document is not null)
             {
                 Layout.CloseDocument(document);
             }
-        }, "Local (ours)", "Remote (theirs)");
-        document = new MergeEditorDocument(viewModel, EditorFont);
+        }, CurrentBranchFor(merged), format: format);
+        document = new MergeEditorDocument(SetUpMergeEditor(viewModel), EditorFont);
         void OnClosed(object? sender, Docking.ShellDocument closed)
         {
             if (closed == document)
