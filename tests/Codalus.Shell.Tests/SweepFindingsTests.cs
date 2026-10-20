@@ -243,7 +243,7 @@ public sealed class SweepFindingsTests
         shapes.Editor.TextArea.Focus();
         ShellFixture.Pump();
 
-        await f.Shell.Workbench.Commands.ExecuteAsync("editor.action.showReferences", TestContext.Current.CancellationToken);
+        await f.ExecuteAsync("editor.action.showReferences");
         await ShellFixture.PumpUntil(() => f.Shell.FindResults.Summary?.Contains("References to 'Circle'", StringComparison.Ordinal) == true, seconds: 60);
         Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Severity == NotificationSeverity.Error);
     }
@@ -285,6 +285,10 @@ public sealed class SweepFindingsTests
         f.Shell.Trust.Trust(Path.GetDirectoryName(root)!);
         await f.Shell.OpenSolutionAsync(solution);
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.Projects.Count > 0 && f.Shell.HasRepository, seconds: 120);
+
+        // HasRepository holds once the repository is found; gitRepository (the command's enablement) once its first
+        // status has run, a git process and a posted job later: the command was refused in between (macOS CI, PR #76).
+        await f.WhenEnabledAsync("git.fileHistory", seconds: 60);
 
         var file = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories).First(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
         Assert.NotNull(await f.Shell.OpenFileAsync(file));
@@ -369,7 +373,7 @@ public sealed class SweepFindingsTests
         var target = Path.Combine(f.UserData, "Folder.slnf");
         f.Shell.Window = new SavingWindow(f.Shell.Window, target);
         var before = f.Shell.Workbench.Notifications.Items.Count;
-        await f.Shell.Workbench.Commands.ExecuteAsync("solution.saveFilter", TestContext.Current.CancellationToken);
+        await f.ExecuteAsync("solution.saveFilter");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Count > before || File.Exists(target), seconds: 60);
         ShellFixture.Pump();
 

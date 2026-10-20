@@ -210,9 +210,12 @@ public sealed class ItemsIntegrationTests : IAsyncLifetime
 
         await _items.ExcludeAsync(App, [program], Timeout());
         Assert.Contains("<Compile Remove=\"ReleaseOnly.cs\" Condition=\"'$(Configuration)' != 'Release'\" />\n    <Compile Remove=\"Program.cs\" />", Text(App), StringComparison.Ordinal);
-        await WaitUntilAsync(() => !_service.Projects[App].Items.Any(i => i.Path == program));
+        // The project's new items have been reported when the edit returns, not a watcher's debounce later (the
+        // Solution Explorer kept an excluded folder, selected and "in the project", until then: the command sweep).
+        Assert.DoesNotContain(_service.Projects[App].Items, i => i.Path == program);
         await _items.IncludeAsync(App, [program], Timeout());
         Assert.Equal(original, Text(App));
+        Assert.Contains(_service.Projects[App].Items, i => i.Path == program);
 
         // A file under a wildcard Remove: an explicit Include.
         var ignored = Path.Combine(AppDir, "Excluded", "Ignored.cs");
@@ -230,9 +233,10 @@ public sealed class ItemsIntegrationTests : IAsyncLifetime
             Assert.Contains($"<{type} Remove=\"Forms\\**\" />", Text(App), StringComparison.Ordinal);
         }
 
-        await WaitUntilAsync(() => !_service.Projects[App].Items.Any(i => i.Path.StartsWith(forms, StringComparison.OrdinalIgnoreCase)));
+        Assert.DoesNotContain(_service.Projects[App].Items, i => i.Path.StartsWith(forms, StringComparison.OrdinalIgnoreCase));
         await _items.IncludeAsync(App, [forms], Timeout());
         Assert.Equal(original, Text(App));
+        Assert.Contains(_service.Projects[App].Items, i => i.Path.StartsWith(forms, StringComparison.OrdinalIgnoreCase));
 
         // A linked file: excluding it removes the link.
         var shared = Path.Combine(Fixture, "src", "Shared", "Shared.cs");

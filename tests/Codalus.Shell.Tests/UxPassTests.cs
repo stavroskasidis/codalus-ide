@@ -568,7 +568,7 @@ public class UxPassTests
         Walk("live-property-explorer", new LivePropertiesView { DataContext = properties }, 280, 420);
 
         // The setup window's settings step, and Code Search's floating window over the main window (Feature Search).
-        f.Shell.Run("help.setUp");
+        await f.RunAsync("help.setUp");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
         await f.Shell.SetupModel!.NextAsync();
         await f.Shell.SetupModel.NextAsync();

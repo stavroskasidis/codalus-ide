@@ -162,13 +162,13 @@ public sealed class WindowsDesktopShellTests
             var model = Path.Combine(folder, "WpfApp", "ViewModels", "MainViewModel.cs");
             var line = Array.FindIndex(File.ReadAllLines(model), l => l.Contains("Items.Add(new TodoItem(\"Open the WPF fixture\"))", StringComparison.Ordinal)) + 1;
             f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(model, line));
-            f.Shell.Run("debug.start");
+            await f.RunAsync("debug.start");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 240, describe: () => DebugStates(f));
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line, describe: () => DebugStates(f));
             await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0, describe: () => DebugStates(f));
             Assert.Contains("MainViewModel", f.Shell.CallStack.Frames[0].Name, StringComparison.Ordinal);
             f.Shell.Debugger.Breakpoints.Clear();
-            f.Shell.Run("debug.stop");
+            await f.RunAsync("debug.stop");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
         }
 

@@ -398,20 +398,26 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             if (SetField(ref _selected, value))
             {
-                _shell.Workbench.Context.Set("explorerItemKind", value is null ? null : KindKey(value.Node.Kind));
-                _shell.Workbench.Context.Set("explorerItemIsProjectReference", value?.Node is { Kind: ExplorerNodeKind.Dependency } n && n.Id.Contains("|project|", StringComparison.Ordinal));
-                _shell.Workbench.Context.Set("explorerProjectUnloaded", value?.Node.IsUnloaded == true);
-                _shell.Workbench.Context.Set("explorerProjectNonSdkStyle", value?.Node is { Kind: ExplorerNodeKind.Project, ProjectPath: { } nonSdk } && _shell.Solutions.Projects.TryGetValue(nonSdk, out var nonSdkInfo) && nonSdkInfo.IsNonSdkStyle);
-                _shell.Workbench.Context.Set("explorerItemName", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } file } ? System.IO.Path.GetFileName(file) : null);
-                _shell.Workbench.Context.Set("explorerItemExcluded", value?.Node.IsExcluded == true);
-                _shell.Workbench.Context.Set("explorerItemLinked", value?.Node.IsLinked == true);
-                _shell.Workbench.Context.Set("explorerItemInProject", value?.Node is { Kind: ExplorerNodeKind.File or ExplorerNodeKind.Folder, ProjectPath: not null, IsExcluded: false } n2 && !SolutionTree.IsProjectFile(n2.Path ?? string.Empty) && !IsFolderView);
-                _shell.Workbench.Context.Set("explorerItemOrdered", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } ordered, ProjectPath: { } orderedProject } && SolutionTree.IsOrdered(orderedProject)
-                    && _shell.Solutions.Projects.TryGetValue(orderedProject, out var orderedInfo) && CompileOrder.Of(orderedInfo).Contains(ordered, SolutionService.PathComparer));
-                _shell.Workbench.Context.Set("explorerItemIsProjectFile", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } projectFile } && SolutionTree.IsProjectFile(projectFile));
-                _shell.Workbench.Context.Set("explorerProjectLoaded", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } loadedFile } && _shell.Solutions.Solution?.Projects.Any(p => SolutionService.PathComparer.Equals(p.Path, loadedFile)) == true);
+                SetSelectionContext(value);
             }
         }
+    }
+
+    /// <summary>The context keys that describe the selected item, which commands' enablement and the context menu read.</summary>
+    private void SetSelectionContext(ExplorerRowViewModel? value)
+    {
+        _shell.Workbench.Context.Set("explorerItemKind", value is null ? null : KindKey(value.Node.Kind));
+        _shell.Workbench.Context.Set("explorerItemIsProjectReference", value?.Node is { Kind: ExplorerNodeKind.Dependency } n && n.Id.Contains("|project|", StringComparison.Ordinal));
+        _shell.Workbench.Context.Set("explorerProjectUnloaded", value?.Node.IsUnloaded == true);
+        _shell.Workbench.Context.Set("explorerProjectNonSdkStyle", value?.Node is { Kind: ExplorerNodeKind.Project, ProjectPath: { } nonSdk } && _shell.Solutions.Projects.TryGetValue(nonSdk, out var nonSdkInfo) && nonSdkInfo.IsNonSdkStyle);
+        _shell.Workbench.Context.Set("explorerItemName", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } file } ? System.IO.Path.GetFileName(file) : null);
+        _shell.Workbench.Context.Set("explorerItemExcluded", value?.Node.IsExcluded == true);
+        _shell.Workbench.Context.Set("explorerItemLinked", value?.Node.IsLinked == true);
+        _shell.Workbench.Context.Set("explorerItemInProject", value?.Node is { Kind: ExplorerNodeKind.File or ExplorerNodeKind.Folder, ProjectPath: not null, IsExcluded: false } n2 && !SolutionTree.IsProjectFile(n2.Path ?? string.Empty) && !IsFolderView);
+        _shell.Workbench.Context.Set("explorerItemOrdered", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } ordered, ProjectPath: { } orderedProject } && SolutionTree.IsOrdered(orderedProject)
+            && _shell.Solutions.Projects.TryGetValue(orderedProject, out var orderedInfo) && CompileOrder.Of(orderedInfo).Contains(ordered, SolutionService.PathComparer));
+        _shell.Workbench.Context.Set("explorerItemIsProjectFile", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } projectFile } && SolutionTree.IsProjectFile(projectFile));
+        _shell.Workbench.Context.Set("explorerProjectLoaded", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } loadedFile } && _shell.Solutions.Solution?.Projects.Any(p => SolutionService.PathComparer.Equals(p.Path, loadedFile)) == true);
     }
 
     public ExplorerNode? Root => _root;
@@ -558,10 +564,17 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
 
         MarkStartupProject();
+        var before = _selected;
         Selected = Rows.FirstOrDefault(r => r.Id == selectedId) ?? (selectedId is null ? null : Selected);
         if (Selected is not null && !Rows.Contains(Selected))
         {
             Selected = null;
+        }
+
+        // The same row with a new node (excluded or included under Show All Files, unloaded): its keys follow the node.
+        if (_selected is not null && ReferenceEquals(_selected, before))
+        {
+            SetSelectionContext(_selected);
         }
     }
 
