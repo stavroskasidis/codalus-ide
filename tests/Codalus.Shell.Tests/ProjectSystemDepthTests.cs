@@ -123,16 +123,24 @@ public sealed class ProjectSystemDepthTests
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("explorerItemExcluded"));
         NavigationDepthTests.Screenshot(f, "m26a-show-all-files");
 
-        f.Shell.Run("explorer.includeInProject");
+        await f.RunAsync("explorer.includeInProject");
         await ShellFixture.PumpUntil(() => Read(app).Contains("<Compile Include=\"Excluded\\Ignored.cs\" />", StringComparison.Ordinal), seconds: 60);
         await ShellFixture.PumpUntil(() => Find(explorer.Root!, "f:" + ignored) is { IsExcluded: false }, seconds: 60);
 
         var program = Path.Combine(appDir, "Program.cs");
         explorer.Reveal("f:" + program);
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("explorerItemInProject"));
-        f.Shell.Run("explorer.excludeFromProject");
-        await ShellFixture.PumpUntil(() => Read(app).Contains("<Compile Remove=\"Program.cs\" />", StringComparison.Ordinal), seconds: 60);
-        await ShellFixture.PumpUntil(() => Find(explorer.Root!, "f:" + program) is { IsExcluded: true }, seconds: 60);
+        await f.ExecuteAsync("explorer.excludeFromProject");
+        Assert.Contains("<Compile Remove=\"Program.cs\" />", Read(app), StringComparison.Ordinal);
+
+        // Once the command has run, the tree and the selection's context keys say so after the posted refresh, not a file
+        // watcher's debounce later: the command sweep's palette run of it found the item gone in between (0.4.0's release).
+        ShellFixture.Pump();
+        Assert.True(Find(explorer.Root!, "f:" + program) is { IsExcluded: true }, "the tree shows Program.cs excluded once the command has run");
+        Assert.Equal("Program.cs", explorer.Selected?.Name);
+        Assert.Equal((true, false), (f.Shell.Workbench.Context.GetValue("explorerItemExcluded"), f.Shell.Workbench.Context.GetValue("explorerItemInProject")));
+        Assert.True(f.Shell.Workbench.Commands.IsEnabled("explorer.includeInProject"));
+        Assert.False(f.Shell.Workbench.Commands.IsEnabled("explorer.excludeFromProject"));
 
         // Without Show All Files, the excluded file is gone from the tree.
         explorer.ShowAllFiles = false;
@@ -276,7 +284,7 @@ public sealed class ProjectSystemDepthTests
         NavigationDepthTests.Screenshot(f, "m26a-folder-view");
 
         // Load All Projects: the solution view of the folder's projects.
-        f.Shell.Run("folder.loadAllProjects");
+        await f.RunAsync("folder.loadAllProjects");
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Projects.Values.All(p => p.State == ProjectStates.Loaded), seconds: 120);
         await ShellFixture.PumpUntil(() => !explorer.IsFolderView && explorer.Rows.Any(r => r.Name == "Tool") && explorer.Rows.Any(r => r.Name == "Lib"));
         NavigationDepthTests.Screenshot(f, "m26a-folder-solution");
@@ -291,12 +299,12 @@ public sealed class ProjectSystemDepthTests
         // The launch configurations are the startup list; Ctrl+F5 runs the selected one with its arguments.
         await ShellFixture.PumpUntil(() => f.Shell.Toolbar.StartupProjects.Count == 2);
         Assert.Equal(["Tool", "Tool (program)"], f.Shell.Toolbar.StartupProjects.Select(p => p.Name));
-        f.Shell.Run("run.startWithoutDebugging");
+        await f.RunAsync("run.startWithoutDebugging");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Output.GetOrCreate("codalus.run.Tool").GetText().Contains("FROM LAUNCH.JSON!", StringComparison.Ordinal), seconds: 240);
 
         // The program configuration runs its pre-launch task (a build), then the .dll.
         f.Shell.SelectLaunchConfiguration("Tool (program)");
-        f.Shell.Run("run.startWithoutDebugging");
+        await f.RunAsync("run.startWithoutDebugging");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Output.GetOrCreate("codalus.run.Tool (program)").GetText().Contains("PROGRAM!", StringComparison.Ordinal), seconds: 240);
         Assert.Contains("build tool", f.Shell.Workbench.Output.GetOrCreate("codalus.tasks").GetText(), StringComparison.Ordinal);
     }
@@ -320,7 +328,7 @@ public sealed class ProjectSystemDepthTests
         var tool = Assert.Single(ExternalToolStore.Load(f.Shell.ExternalToolsFile));
         Assert.NotNull(f.Shell.Workbench.Commands.Find(tool.CommandId));
         Assert.Contains(f.Shell.Workbench.Menus.GetItems("menuBar/tools"), i => i.Command == tool.CommandId && i.Title == "SDK Version");
-        f.Shell.Run(tool.CommandId);
+        await f.RunAsync(tool.CommandId);
         var channel = f.Shell.Workbench.Output.GetOrCreate("codalus.externalTools");
         await ShellFixture.PumpUntil(() => channel.GetText().Contains("exited with code 0", StringComparison.Ordinal), seconds: 60);
         Assert.Matches(@"(?m)^\d+\.\d+\.\d+", channel.GetText());
@@ -329,7 +337,7 @@ public sealed class ProjectSystemDepthTests
         await f.Shell.SaveExternalToolsAsync([tool with { Arguments = "--list-sdks \"$(ProjectFileName)\"", PromptForArguments = true }]);
         f.Shell.Explorer.Reveal("p:" + Path.Combine(folder, "src", "App", "App.csproj"));
         f.Shell.Workbench.Context.Set("focusedView", SolutionExplorerViewModel.ToolWindowId);
-        f.Shell.Run(tool.CommandId);
+        await f.RunAsync(tool.CommandId);
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         Assert.Equal("--list-sdks \"App.csproj\"", f.Shell.Dialogs.InputText);
         f.Shell.Dialogs.Cancel();

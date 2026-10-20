@@ -7,6 +7,7 @@ using Codalus.Shell.Controls;
 using Codalus.Shell.Docking;
 using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Settings;
 
 namespace Codalus.Shell.Infrastructure;
@@ -211,8 +212,11 @@ internal sealed partial class SmokeTest
 
         await GalleryDialogOnMacAsync(checklist).ConfigureAwait(true); // M34h: the buttons in macOS's order
 
-        // Error states: a compile error in the Error List, the failed build's output, a failed test's details.
-        if (sources.FirstOrDefault() is { } broken && await shell.OpenFileAsync(broken, preview: false).ConfigureAwait(true) is { } editorDocument)
+        // Error states: a compile error in the Error List, the failed build's output, a failed test's details. The error goes
+        // in a project of the smoke solution (the first of the sources above can be in one it leaves out, depending on the
+        // file system's order: then the build was up to date, not failed).
+        var broken = Path.Combine(_testing, "src", "Calculator", "Calculator.cs");
+        if (await shell.OpenFileAsync(broken, preview: false).ConfigureAwait(true) is { } editorDocument)
         {
             await WaitAsync(() => editorDocument.Controller is not null, "the editor for the error state opens").ConfigureAwait(true);
             var controller = editorDocument.Controller!;
@@ -224,7 +228,13 @@ internal sealed partial class SmokeTest
                 await WaitAsync(() => shell.ErrorList.Rows.Count > 0, "the Error List shows the error", 120).ConfigureAwait(true);
                 var built = shell.Builds.LastBuild;
                 shell.Run("build.buildSolution");
-                await WaitAsync(() => shell.Builds.LastBuild is { } b && b != built, "the failing build finishes", 300).ConfigureAwait(true);
+                await WaitAsync(
+                    () => shell.Builds.LastBuild is { } b && b != built,
+                    () => $"the failing build finishes (building: {shell.Builds.Current?.ToString() ?? "no"}; buildRunning: {shell.Workbench.Context.GetValue("buildRunning") ?? "unset"}; "
+                          + $"last build: {shell.Builds.LastBuild?.ToString() ?? "none"}, before it: {built?.ToString() ?? "none"}; "
+                          + $"the build host's last message: {shell.Solutions.LastHostMessage ?? "none"}). The Build output:\n{Tail(shell.Builds.Channel.GetText(), 1500)}",
+                    300).ConfigureAwait(true);
+                Check(shell.Builds.LastBuild is { Result: { Succeeded: false, Errors: > 0 } }, $"the build fails ({shell.Builds.LastBuild?.Result}):\n{Tail(shell.Builds.Channel.GetText(), 1500)}");
                 await GalleryThemesAsync(async theme =>
                 {
                     // The failed build's output, its errors in the error color (M34h). The Output window and the Error
@@ -243,6 +253,14 @@ internal sealed partial class SmokeTest
                 controller.Model.Text.Text = original;
                 await shell.SaveAllAsync().ConfigureAwait(true);
             }
+
+            // The edit is undone on disk and in the editor, and saving it (twice) reported no change on disk with unsaved
+            // changes: the Linux runner's later pictures showed that warning when the watcher's check ran before the save
+            // had remembered the file's time (CodeDocument.SaveAsync now holds the check back).
+            var model = controller.Model;
+            Check(!model.IsModified && (await Editor.TextFiles.ReadAsync(broken, CancellationToken.None).ConfigureAwait(true)).Text == model.Text.Text && model.Text.Text == original, $"{model.Name}'s edit for the error state is undone and saved");
+            var conflict = Localizer.Format("msg.editor.changedOnDiskAndYouHave", "{0} changed on disk, and you have unsaved changes.", model.Name);
+            Check(!shell.Workbench.Notifications.Items.Any(n => n.Message == conflict), $"saving {model.Name} didn't report it as changed on disk");
         }
 
         // A failed test's details: grouped by outcome, the Failed group lists the tests.
@@ -369,6 +387,7 @@ internal sealed partial class SmokeTest
     private void GalleryShot(string surface, string state, string theme, Visual? target, Avalonia.Controls.TopLevel? top = null)
     {
         var name = $"{Slug(surface)}-{state}-{theme}.png";
+        HideToasts(name);
         try
         {
             Visual root = top ?? window;

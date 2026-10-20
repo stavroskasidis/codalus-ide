@@ -5,7 +5,7 @@ if (args.Length == 2 && args[0] == "--wait-for")
 {
     // Attach tests: wait until the test creates the file, then run as usual.
     Console.WriteLine("waiting");
-    while (!File.Exists(args[1]))
+    while (!File.Exists(args[1])) // [wait-check]
     {
         Thread.Sleep(50); // [wait]
     }
@@ -25,7 +25,7 @@ if (args.Length == 2 && args[0] == "--main-returns")
         }
 
         Console.WriteLine("main returned");
-        while (!File.Exists(args[1]))
+        while (!File.Exists(args[1])) // [waiter-check]
         {
             Thread.Sleep(50); // [waiter]
         }

@@ -16,7 +16,7 @@ public sealed class EnvironmentShellTests
     public async Task Check_environment_lists_the_tools_and_an_install_runs_only_after_consent()
     {
         await using var f = ShellFixture.Create();
-        f.Shell.Run("help.checkEnvironment");
+        await f.RunAsync("help.checkEnvironment");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is EnvironmentDocument);
         var page = ((EnvironmentDocument)f.Shell.Layout.ActiveDocument!).ViewModel;
         await ShellFixture.PumpUntil(() => page.Rows.Count > 0, seconds: 60);

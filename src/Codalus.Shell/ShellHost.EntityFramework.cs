@@ -366,7 +366,7 @@ public sealed partial class ShellHost
             {
                 if (t.Result == "Open Folder")
                 {
-                    Codalus.Platform.ShellIntegration.RevealInFileManager(bundle ?? output);
+                    RevealPath(bundle ?? output);
                 }
             },
             CancellationToken.None,

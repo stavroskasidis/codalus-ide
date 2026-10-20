@@ -113,7 +113,7 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
     [Fact]
     public async Task Attach_to_a_program_in_WSL()
     {
-        Assert.SkipWhen(RemoteFixture.WslDistribution is null, "No WSL distribution with .NET (Windows; CODALUS_TEST_WSL).");
+        Assert.SkipWhen(RemoteFixture.WslDistribution is null, Codalus.Tests.WslStandIn.SkipReason);
         var distribution = RemoteFixture.WslDistribution!;
         var target = new WslTarget(distribution) { Home = TestHome };
         var signal = "/tmp/codalus-wsl-" + Guid.NewGuid().ToString("N")[..8];
@@ -148,7 +148,7 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
     [Fact]
     public async Task Launch_in_WSL_through_the_WSL_profile()
     {
-        Assert.SkipWhen(RemoteFixture.WslDistribution is null, "No WSL distribution with .NET (Windows; CODALUS_TEST_WSL).");
+        Assert.SkipWhen(RemoteFixture.WslDistribution is null, Codalus.Tests.WslStandIn.SkipReason);
         var distribution = RemoteFixture.WslDistribution!;
         var info = new Codalus.Projects.Protocol.RunInfo(Path.Combine(debuggee.Folder, "Debuggee.csproj"), "net11.0", "Exe", debuggee.Dll, null, null, null, null);
         var profile = new LaunchProfile("WSL", LaunchProfile.Wsl, CommandLineArgs: "--depth", DistributionName: distribution, EnvironmentVariables: new Dictionary<string, string> { ["GREETING"] = "from WSL" });
@@ -261,6 +261,19 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
         Assert.Equal(["docker"], RemoteTargets.ContainerTool(" "));
         Assert.Equal("linux-x64", RemoteDebuggers.Platform("Linux", "x86_64"));
         Assert.Null(RemoteDebuggers.Platform("Darwin", "x86_64"));
+    }
+
+    [Fact]
+    public void Reattach_finds_the_same_program_never_another_dotnet()
+    {
+        // A framework-dependent program is "dotnet" like every other one there: Reattach went by that name alone and
+        // attached to whichever ran first (an MSBuild node, on the smoke test's stand-in).
+        var last = new RemoteProcess(42, "dotnet", "dotnet App.dll --port 5", IsDotnet: true);
+        RemoteProcess[] others = [new(7, "dotnet", "dotnet /usr/lib/dotnet/sdk/MSBuild.dll /nodemode:1", true), new(9, "sh", "sh", false)];
+
+        Assert.Null(RemoteShell.FindAgain(others, last));
+        Assert.Equal(42, RemoteShell.FindAgain([.. others, last], last)?.Id);
+        Assert.Equal(51, RemoteShell.FindAgain([.. others, last with { Id = 51 }], last)?.Id); // started again
     }
 
     [Fact]

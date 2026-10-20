@@ -39,7 +39,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 - Built-in features register through the same registries as plugins (`BuiltIns*.cs`).
 - Git, docker/podman, `dotnet ef`, netcoredbg and similar are the user's CLIs, one process per operation, parsing machine-readable output.
 - Never run managed code in a forked child (the terminal uses `openpty` + `posix_spawn`, not `forkpty`).
-- `AiService` is the only code that may send workspace content to a model. AI is off by default.
+- `AiService` is the only code that may send workspace content to a model. AI is off by default. The one exception is external agents over ACP (ADR 0079): they call their own provider, so they're off by default, configured in user settings only (`ai.agents`), run only in trusted workspaces, are labeled in AI Chat, and everything the IDE gives them passes the same checks (exclusions, redaction, the preview, approvals).
 - Secrets go only to the OS credential store through `SecretStorage`.
 - The plugin API is a public contract (ADR 0003, 0058): `PublicAPI.txt` is checked by `PublicApiTests`; deprecate with `[Obsolete(DiagnosticId = "CODALUS0001")]`, never remove in a minor version; note changes in `docs/plugins.md`.
 - New dependencies: central package management (`Directory.Packages.props`), license recorded in `THIRD-PARTY-NOTICES.md`. No proprietary native binaries.
@@ -51,6 +51,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 - Tests never reach a real service: use `tests/Shared` mocks (HTTP, GitHub, NuGet feed, model servers), stand-in tools and recorded output. Nothing installs, registers (JIT debugging) or pulls images beyond `mcr.microsoft.com/dotnet` for real; container tests remove what they create.
 - Regenerated files: `CODALUS_UPDATE_PUBLIC_API=1`, `CODALUS_UPDATE_API_REFERENCE=1`, `CODALUS_UPDATE_LOCALIZATION=1` (commit `en.json` and `localization-literals.txt` after changing UI text).
 - `eng/smoke-test.sh <codalus>` runs the real windowed app through each major feature (`SmokeTest` in `src/Codalus.Shell/Infrastructure`). Add a step when a feature must be proven in the shipped app.
+- Its last step, `shell.commandSweep` (`SmokeTest.CommandSweep.cs`), runs every command from its menu item, key binding and the palette and writes `command-sweep.json`; `CommandSweepTests` is its static half. A new command that leaves the machine gets a skip reason there; a triaged failure goes in `s_sweepKnown` with a `TODO(issue)`.
 
 ## UI rules
 

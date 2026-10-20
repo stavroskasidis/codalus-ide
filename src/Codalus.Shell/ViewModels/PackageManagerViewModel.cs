@@ -602,6 +602,12 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     private CancellationToken RestartListLoad()
     {
+        // A load that finishes after the document closed: nothing to restart (Dispose disposed the source).
+        if (_disposed)
+        {
+            return new CancellationToken(canceled: true);
+        }
+
         _listLoad.Cancel();
         _listLoad.Dispose();
         _listLoad = new CancellationTokenSource();
@@ -610,6 +616,11 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     private async Task LoadListAsync(bool refresh)
     {
+        if (_disposed)
+        {
+            return; // the document closed while a load (or the first one) was on its way
+        }
+
         Error = null;
         if (_tab != PackageTab.Browse)
         {
@@ -666,7 +677,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     private async Task LoadMoreAsync()
     {
-        if (_tab != PackageTab.Browse || !_hasMore || _isLoading)
+        if (_disposed || _tab != PackageTab.Browse || !_hasMore || _isLoading)
         {
             return;
         }
@@ -826,6 +837,11 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     private async Task LoadDetailsAsync(PackageRowViewModel? row, string? version)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         _detailsLoad.Cancel();
         _detailsLoad.Dispose();
         _detailsLoad = new CancellationTokenSource();

@@ -176,6 +176,7 @@ internal sealed partial class SmokeTest
 
     private void Screenshot(string name, IEnumerable<Popup> open)
     {
+        HideToasts(name);
         try
         {
             Visual root = window;

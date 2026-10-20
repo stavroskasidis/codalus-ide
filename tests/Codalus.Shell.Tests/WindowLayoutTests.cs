@@ -30,13 +30,13 @@ public sealed class WindowLayoutTests
         Assert.DoesNotContain("Debugging", f.Shell.SavedLayouts().Keys);
 
         // Full screen, and back.
-        f.Shell.Run("workbench.toggleFullScreen");
+        await f.RunAsync("workbench.toggleFullScreen");
         Assert.True(f.Shell.Window!.IsFullScreen);
-        f.Shell.Run("workbench.toggleFullScreen");
+        await f.RunAsync("workbench.toggleFullScreen");
         Assert.False(f.Shell.Window.IsFullScreen);
 
         // Distraction-free: no tool windows, toolbar or status bar, full screen; again: as before.
-        f.Shell.Run("workbench.toggleDistractionFree");
+        await f.RunAsync("workbench.toggleDistractionFree");
         ShellFixture.Pump();
         Assert.True(f.Shell.IsDistractionFree);
         Assert.Empty(Tools());
@@ -44,7 +44,7 @@ public sealed class WindowLayoutTests
         Assert.False(f.Shell.StatusBar.IsVisible);
         Assert.True(f.Shell.Window.IsFullScreen);
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("distractionFree"));
-        f.Shell.Run("workbench.toggleDistractionFree");
+        await f.RunAsync("workbench.toggleDistractionFree");
         ShellFixture.Pump();
         Assert.False(f.Shell.IsDistractionFree);
         Assert.Equal(withErrorList, Tools());

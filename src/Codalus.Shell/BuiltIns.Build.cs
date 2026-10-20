@@ -16,7 +16,7 @@ internal static partial class BuiltIns
         [
           { "key": "primary+shift+b", "command": "build.buildSolution" },
           { "key": "ctrl+pause", "command": "build.cancel", "when": "buildRunning" },
-          { "key": "ctrl+f5", "mac": "cmd+f5", "command": "run.startWithoutDebugging" },
+          { "key": "ctrl+f5", "command": "run.startWithoutDebugging" },
           { "key": "alt+f10", "linux": "shift+alt+f10", "command": "run.applyCodeChanges", "when": "hotReloadRunning" },
           { "key": "shift+f5", "command": "run.stop", "when": "programRunning && !debugActive" }
         ]
@@ -182,11 +182,7 @@ internal static partial class BuiltIns
             shell.OpenSettings("Hot Reload");
             return Task.CompletedTask;
         });
-        Add("run.stop", "Stop Running Programs", "Debug", _ =>
-        {
-            shell.StopRunning();
-            return Task.CompletedTask;
-        }, "programRunning");
+        Add("run.stop", "Stop Running Programs", "Debug", _ => shell.StopRunningAsync(), "programRunning");
         Add("run.selectStartupProject", "Select Startup Project…", "Debug", _ => shell.SelectStartupProjectAsync(), "solutionOpen");
         Add("run.selectLaunchProfile", "Select Launch Profile…", "Debug", shell.SelectLaunchProfileAsync, "hasStartupProject");
         Add("run.configureStartupProjects", "Configure Startup Projects…", "Debug", _ =>

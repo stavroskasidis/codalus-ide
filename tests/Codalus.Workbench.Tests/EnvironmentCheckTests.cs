@@ -1,10 +1,11 @@
+using System.Runtime.InteropServices;
 using Codalus.Platform;
 using Codalus.Workbench.Setup;
 
 namespace Codalus.Workbench.Tests;
 
 /// <summary>Environment setup (M37): what's found with stand-in tools, and the install plans on each OS. Nothing installs.</summary>
-public sealed class EnvironmentCheckTests : IDisposable
+public sealed partial class EnvironmentCheckTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("codalus-env-").FullName;
 
@@ -80,6 +81,20 @@ public sealed class EnvironmentCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task Podmans_docker_emulation_shows_its_version_line_without_its_notice()
+    {
+        // podman-docker's docker prints podman's version and a notice: Check Environment's row showed both, cut off.
+        const string bin = "/x/bin";
+        var check = new EnvironmentCheck(PlatformKind.Linux, Env(("PATH", bin), ("HOME", "/home/u")), (program, arguments, _, _) => Task.FromResult(
+            Path.GetFileName(program) == "docker" && arguments is ["--version"]
+                ? (0, "podman version 4.9.3\nEmulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.\n")
+                : (1, string.Empty)), path => path == Path.Combine(bin, "docker"));
+
+        var docker = (await check.CheckAsync(null, TestContext.Current.CancellationToken)).Single(t => t.Id == "docker");
+        Assert.Equal((ToolState.Found, "podman version 4.9.3"), (docker.State, docker.Version));
+    }
+
+    [Fact]
     public void Versions_order_as_the_host_rolls_forward_and_winget_has_a_release_candidate_as_the_preview_sdk()
     {
         Assert.True(EnvironmentCheck.CompareVersions("11.0.0-rc.1.26425.128", "11.0.0-rc.2.26504.105") < 0);
@@ -152,12 +167,15 @@ public sealed class EnvironmentCheckTests : IDisposable
             }
         }
 
-        // Unix: the shell prints the background process's id. Windows: cmd can't, so the ping started since the test began.
+        // Unix: the shell prints the background process's id. Windows: cmd can't, so the ping started since the test began
+        // whose parent has exited: `start /b` left it behind when its cmd ended. Every ping started since, as this test did,
+        // killed the pings of tests running beside it (AcpAgentTests' timeout command ended with exit code -1 in 0.7 s,
+        // HostRuntimeTests' stand-in hosts): theirs run under a cmd /c that waits for them.
         static IEnumerable<System.Diagnostics.Process> LeftBehind(string output, DateTime started)
         {
             if (OperatingSystem.IsWindows())
             {
-                return System.Diagnostics.Process.GetProcessesByName("PING").Where(p => StartedSince(p, started));
+                return System.Diagnostics.Process.GetProcessesByName("PING").Where(p => StartedSince(p, started) && Orphaned(p));
             }
 
             return System.Text.RegularExpressions.Regex.Match(output, @"held by (\d+)") is { Success: true } held
@@ -190,5 +208,39 @@ public sealed class EnvironmentCheckTests : IDisposable
                 return null;
             }
         }
+
+        // Its parent has exited: no process runs under the parent's id, or the one that does started after it (a reused id).
+        static bool Orphaned(System.Diagnostics.Process process)
+        {
+            try
+            {
+                if (NtQueryInformationProcess(process.Handle, 0, out var info, Marshal.SizeOf<ProcessBasicInformation>(), out _) != 0)
+                {
+                    return false;
+                }
+
+                using var parent = Running((int)info.InheritedFromUniqueProcessId);
+                return parent is null || parent.StartTime > process.StartTime;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return false;
+            }
+        }
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessBasicInformation
+    {
+        public nint ExitStatus;
+        public nint PebBaseAddress;
+        public nint AffinityMask;
+        public nint BasePriority;
+        public nint UniqueProcessId;
+        public nint InheritedFromUniqueProcessId;
+    }
+
+    // ProcessBasicInformation (0): the parent's id, which .NET doesn't expose on Windows.
+    [LibraryImport("ntdll.dll")]
+    private static partial int NtQueryInformationProcess(nint process, int informationClass, out ProcessBasicInformation information, int length, out int returned);
 }

@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Ai;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.Views;
 
@@ -13,7 +14,8 @@ namespace Codalus.Shell.Views;
 /// The AI Chat window (M28a; redesigned in M34h, docs/design/controls/AiChat.dc.html). The conversation is a virtualized
 /// list of turns (<see cref="AiChatTurnView"/>): only the turns in view are built, and an answer re-renders as it streams
 /// (at most every 100 ms). It follows the end while you are there and goes to each new question
-/// (<see cref="AiChatFollower"/>). Enter sends and Shift+Enter starts a new line.
+/// (<see cref="AiChatFollower"/>). Enter sends and Shift+Enter starts a new line. With an external agent (M48), its
+/// slash commands are offered under <c>/</c> and Tab takes the first.
 /// </summary>
 public sealed partial class AiChatView : UserControl, IPaneView
 {
@@ -32,6 +34,19 @@ public sealed partial class AiChatView : UserControl, IPaneView
         TurnsList.ItemTemplate = new FuncDataTemplate<AiChatTurnItem?>((item, _) => item is null ? null : new AiChatTurnView(item, this), supportsRecycling: false);
         _follow = new AiChatFollower(Scroller);
         Provider.Click += (_, _) => _ = _vm?.ChooseProviderAsync();
+        AgentPicker.Flyout = Choices(
+            () => _vm?.AgentChoices ?? [],
+            () => _vm?.SelectedAgentIndex ?? 0,
+            i => { if (_vm is { } vm) { vm.SelectedAgentIndex = i; } },
+            (Localizer.Get("msg.acp.addAgent", "Add agent…"), () => _ = _vm?.AddAgentAsync()));
+        ModePicker.Flyout = Choices(() => _vm?.ModeNames ?? [], () => _vm?.SelectedModeIndex ?? -1, i => { if (_vm is { } vm) { vm.SelectedModeIndex = i; } });
+        CommandList.SelectionChanged += (_, _) =>
+        {
+            if (CommandList.SelectedItem is AiCommandSuggestion suggestion)
+            {
+                UseCommand(suggestion);
+            }
+        };
         ChooseProvider.Click += (_, _) => _ = _vm?.ChooseProviderAsync();
         Configure.Click += (_, _) => _ = _vm?.ConfigureAsync();
         NewChat.Click += (_, _) => _vm?.NewChat();
@@ -68,6 +83,48 @@ public sealed partial class AiChatView : UserControl, IPaneView
         {
             TurnOn.Focus();
         }
+    }
+
+    /// <summary>
+    /// A picker's menu (M48: who answers, and the agent's mode): one radio item per choice, the current one checked,
+    /// built as it opens so it shows the choices of now, and an action after a separator ("Add agent…").
+    /// </summary>
+    private static MenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose, (string Label, Action Run)? last = null)
+    {
+        var flyout = new MenuFlyout();
+        flyout.Opening += (_, _) =>
+        {
+            flyout.Items.Clear();
+            var current = selected();
+            var names = items();
+            for (var i = 0; i < names.Count; i++)
+            {
+                var index = i;
+                var item = new MenuItem { Header = names[i], ToggleType = MenuItemToggleType.Radio, IsChecked = i == current };
+                Avalonia.Automation.AutomationProperties.SetName(item, names[i]);
+                item.Click += (_, _) => choose(index);
+                flyout.Items.Add(item);
+            }
+
+            if (last is { } action)
+            {
+                flyout.Items.Add(new Separator());
+                var item = new MenuItem { Header = action.Label, Icon = new Icon { Kind = "new", Width = 16, Height = 16 } };
+                Avalonia.Automation.AutomationProperties.SetName(item, action.Label);
+                item.Click += (_, _) => action.Run();
+                flyout.Items.Add(item);
+            }
+        };
+        return flyout;
+    }
+
+    /// <summary>An external agent's slash command goes into the input, ready for its argument.</summary>
+    private void UseCommand(AiCommandSuggestion suggestion)
+    {
+        _vm?.UseCommand(suggestion);
+        CommandList.SelectedItem = null;
+        InputBox.Focus();
+        InputBox.CaretIndex = InputBox.Text?.Length ?? 0;
     }
 
     /// <summary>A turn came into view (its view renders itself).</summary>
@@ -110,6 +167,13 @@ public sealed partial class AiChatView : UserControl, IPaneView
     /// </summary>
     private void OnInputKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.None && _vm is { HasCommandSuggestions: true } chat)
+        {
+            e.Handled = true;
+            UseCommand(chat.CommandSuggestions[0]);
+            return;
+        }
+
         if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && _vm is { } vm)
         {
             e.Handled = true;

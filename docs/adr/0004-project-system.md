@@ -34,7 +34,7 @@ Constraints:
 
 **Watching.** The host watches the solution and project directories (debounced). Project and imported-file changes trigger re-evaluation; file additions and removals refresh the affected projects.
 
-**Trust.** Trust is stored per folder in the user's state (not in the repository). An untrusted solution shows only the structure from the solution file: no evaluation, no restore, no builds, until the user trusts it. The decision can be changed later (Trust command, or revoking in settings).
+**Trust.** Trust is stored per folder in the user's state (not in the repository). An untrusted solution shows only the structure from the solution file: no evaluation, no restore, no builds, until the user trusts it. The decision can be changed later (Trust command, or revoking in settings). Folders are saved and matched by their real path (symbolic links resolved, the platform's case rules), the spelling solutions are opened under, so a folder trusted through a link counts through its target and the other way round; entries saved under a link's spelling still match by where the link leads.
 
 **Templates.** New Project and New Solution run `dotnet new` from a built-in plugin, using quick-pick and input-box APIs added to the plugin API. They shipped as 0.1.1, not 0.2.0: they are additive, and under the caret rules a 0.2.0 would have locked out `^0.1.0` plugins.
 

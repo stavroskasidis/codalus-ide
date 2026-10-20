@@ -45,8 +45,7 @@ internal static partial class BuiltIns
           { "key": "f6", "command": "build.buildSolution", "when": "keyboardScheme != vscode" },
           { "key": "alt+f6", "command": "workbench.focusNextPane", "when": "keyboardScheme != vscode" },
           { "key": "alt+shift+f6", "command": "workbench.focusPreviousPane", "when": "keyboardScheme != vscode" },
-          { "key": "primary+s", "command": "file.save", "when": "activeDocumentKind == textFile" },
-          { "key": "primary+s", "command": "file.save", "when": "activeDocumentKind == customEditor" },
+          { "key": "primary+s", "command": "file.save", "when": "activeDocumentKind =~ /^(textFile|customEditor|resx|editorconfig|winformsDesigner)$/" },
           { "key": "primary+w", "command": "workbench.closeActiveDocument", "when": "activeDocumentKind && keyboardScheme == vscode" },
           { "win": "ctrl+f4", "linux": "ctrl+f4", "mac": "cmd+f4", "command": "workbench.closeActiveDocument", "when": "activeDocumentKind" },
           { "mac": "cmd+q", "command": "workbench.quit" },
@@ -252,7 +251,9 @@ internal static partial class BuiltIns
         Add("workbench.hideToasts", "Hide Notification Toasts", "Notifications", Ui(shell.Notifications.HideToasts));
         Add("workbench.showLogs", "Show Logs", "Help", Ui(shell.ShowLogs));
         Add("workbench.openPluginsFolder", "Open User Plugins Folder", "Plugins", Ui(shell.OpenPluginsFolder));
-        Add("file.save", "Save", "File", Ui(shell.SaveActiveDocumentAsync), enablement: "activeDocumentKind == textFile");
+        // The documents SaveActiveDocumentAsync saves: the text editor and the ISavableDocuments (custom editors, .resx,
+        // .editorconfig, the Windows Forms designer).
+        Add("file.save", "Save", "File", Ui(shell.SaveActiveDocumentAsync), enablement: "activeDocumentKind =~ /^(textFile|customEditor|resx|editorconfig|winformsDesigner)$/");
         Add("workbench.closeActiveDocument", "Close Document", "File", Ui(shell.CloseActiveDocument), enablement: "activeDocumentKind");
         Add("workbench.quit", PlatformInfo.Current == PlatformKind.Windows ? Localizer.Get("command.workbench.quit.windows", "Exit") : Localizer.Get("command.workbench.quit.other", "Quit"), "File", Ui(() => shell.Window?.RequestClose()));
         Add("help.about", "About Codalus IDE", "Help", Ui(shell.ShowAbout));
@@ -309,7 +310,7 @@ internal static partial class BuiltIns
         ["solutionExplorer", "git.changes", "testExplorer", "bookmarks", "codeDefinition", "errorList", "output", "taskList", "terminal", "notifications", "properties", "toolbox"];
 
     /// <summary>Tool windows whose menu entry is contributed explicitly (with a command that does more than show them).</summary>
-    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", AiChatViewModel.ToolWindowId, DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId, XamlPreviewViewModel.ToolWindowId, ShellHost.CodeSearchToolWindowId };
+    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", AiChatViewModel.ToolWindowId, DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId, XamlPreviewViewModel.ToolWindowId, ShellHost.CodeSearchToolWindowId, RemotePortsViewModel.ToolWindowId };
 
     /// <summary>
     /// Where a tool window's <c>workbench.view.*</c> entry goes, or null when it has an explicit one (Code Search's window

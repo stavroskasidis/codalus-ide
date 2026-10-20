@@ -391,6 +391,48 @@ public sealed class HostRuntimeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_host_killed_in_its_first_seconds_after_it_logged_is_restarted()
+    {
+        // No handshake, so the startup heuristic decides: an exit with a failure code and standard error output within
+        // the startup window. A host killed then (by the user, the OOM killer, a test) was running: its exit code (128 +
+        // SIGKILL, or -1 from Kill on Windows) says so, and it is started again, whatever it printed first.
+        var launch = OperatingSystem.IsWindows()
+            ? new ProcessLaunchInfo("cmd.exe", ["/c", "echo host: started 1>&2 & ping -n 120 127.0.0.1 > nul"])
+            : new ProcessLaunchInfo("/bin/sh", ["-c", "echo 'host: started' >&2; sleep 120"]);
+        var logged = new TaskCompletionSource();
+        var restarted = new TaskCompletionSource();
+        var crashes = new List<ProcessCrashedEventArgs>();
+        await using var process = new SupervisedProcess("logging host", launch, new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(10), StartupWindow = TimeSpan.FromMinutes(1), ShutdownRequest = null, ExitNotification = null });
+        process.Log += (_, line) =>
+        {
+            if (line.Contains("host: started", StringComparison.Ordinal))
+            {
+                logged.TrySetResult();
+            }
+        };
+        process.Crashed += (_, e) => { lock (crashes) { crashes.Add(e); } };
+        process.Restarted += (_, _) => restarted.TrySetResult();
+        await process.StartAsync(TestContext.Current.CancellationToken);
+        await logged.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        using (var running = System.Diagnostics.Process.GetProcessById(process.ProcessId!.Value))
+        {
+            running.Kill(entireProcessTree: true);
+        }
+
+        await WaitUntilAsync(() => { lock (crashes) { return crashes.Count > 0; } });
+        ProcessCrashedEventArgs crash;
+        lock (crashes)
+        {
+            crash = crashes[0];
+        }
+
+        Assert.True(SupervisedProcess.IsKill(crash.ExitCode!.Value), $"exit code {crash.ExitCode}");
+        Assert.Equal((true, false), (crash.WillRestart, crash.DuringStartup));
+        await restarted.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        Assert.False(process.GaveUp);
+    }
+
+    [Fact]
     public async Task A_host_whose_handshake_failed_but_kept_running_is_restarted_when_it_crashes_later()
     {
         // Initialize refuses (a request the host answered with an error, a cancelled start) while the process runs on:

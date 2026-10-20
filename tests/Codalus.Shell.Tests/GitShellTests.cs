@@ -80,7 +80,7 @@ public sealed class GitShellTests
 
         // Blame annotates the editor; a new branch shows in the status bar.
         f.Shell.Layout.OpenDocument(editor);
-        f.Shell.Run("git.toggleBlame");
+        await f.RunAsync("git.toggleBlame");
         await ShellFixture.PumpUntil(() => controller.Blame is { Ranges.Count: > 0 });
         Assert.Equal("Add a comment", controller.Blame!.Ranges[0].Summary);
         Assert.Contains("Ada Tester", BlameMargin.Describe(controller.Blame.Ranges[0]), StringComparison.Ordinal);

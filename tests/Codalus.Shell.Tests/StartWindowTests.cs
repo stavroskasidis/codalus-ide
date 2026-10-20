@@ -16,7 +16,7 @@ public sealed class StartWindowTests
         f.Shell.Recent.Add(gone);
         f.Shell.Recent.Add(solution);
 
-        f.Shell.Run("workbench.showStartWindow");
+        await f.RunAsync("workbench.showStartWindow");
         await ShellFixture.PumpUntil(() => f.Shell.IsStartWindowOpen);
         var model = f.Shell.StartWindowModel!;
         Assert.Equal(["Today", "ProjectSystem.slnx", "Gone.sln"], model.Rows.Select(r => r is StartGroupRowViewModel g ? g.Title : ((StartEntryRowViewModel)r).Name));

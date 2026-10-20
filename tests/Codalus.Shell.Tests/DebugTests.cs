@@ -29,11 +29,11 @@ public sealed class DebugTests
         var loop = Line(program, "loop");
         var editor = await f.Shell.OpenFileAsync(program, preview: false, new Codalus.LanguageServices.Protocol.Position(loop - 1, 0));
         await ShellFixture.PumpUntil(() => editor?.Controller is not null);
-        f.Shell.Run("debug.toggleBreakpoint");
+        await f.RunAsync("debug.toggleBreakpoint");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.Breakpoints.At(program, loop) is not null);
         f.Shell.Debugger.Breakpoints.Set(f.Shell.Debugger.Breakpoints.At(program, loop)! with { Condition = "i == 1" });
 
-        f.Shell.Run("debug.start");
+        await f.RunAsync("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 180);
         // The context keys follow the state through Ui.Post.
         await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("debugStopped"), true));
@@ -54,12 +54,12 @@ public sealed class DebugTests
         Assert.Equal("numbers", controller.ExpressionAt(text.IndexOf("numbers[i]", StringComparison.Ordinal) + 2));
 
         // F10 steps; the watch is evaluated again at the next stop.
-        f.Shell.Run("debug.stepOver");
+        await f.RunAsync("debug.stepOver");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped && f.Shell.Watch.Roots.Single().Value == "30", seconds: 60);
 
         // Remove the breakpoint, continue to the end: the session ends with the program's exit code.
         f.Shell.Debugger.Breakpoints.Clear();
-        f.Shell.Run("debug.continue");
+        await f.RunAsync("debug.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
         Assert.Contains(OperatingSystem.IsMacOS() ? "exited with code" : "exited with code 15", f.Shell.DebugLog.GetText(), StringComparison.Ordinal); // netcoredbg reports 0 on macOS
         Assert.Contains("total=15 Ada is 36", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);

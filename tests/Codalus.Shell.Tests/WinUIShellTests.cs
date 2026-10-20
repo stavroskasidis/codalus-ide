@@ -167,12 +167,12 @@ public sealed class WinUIShellTests
             var model = Path.Combine(Path.GetDirectoryName(project)!, "ViewModels", "MainViewModel.cs");
             var line = Array.FindIndex(File.ReadAllLines(model), l => l.Contains("Items.Add(new TodoItem(\"Open the WinUI fixture\"))", StringComparison.Ordinal)) + 1;
             f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(model, line));
-            f.Shell.Run("debug.start");
+            await f.RunAsync("debug.start");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 300);
             await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0);
             Assert.Contains("MainViewModel", f.Shell.CallStack.Frames[0].Name, StringComparison.Ordinal);
             f.Shell.Debugger.Breakpoints.Clear();
-            f.Shell.Run("debug.stop");
+            await f.RunAsync("debug.stop");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
         }
     }
@@ -181,6 +181,8 @@ public sealed class WinUIShellTests
     public async Task Windows_registers_starts_and_attaches_to_the_packaged_winui_app()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Packaged (MSIX) apps register and start on Windows only (D31).");
+        // It attaches the debugger: without netcoredbg it failed instead of skipping, as the other debugger tests do.
+        Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
         var (f, project) = await OpenAsync(packaged: true);
         await using var _ = f;
         Assert.SkipUnless(f.Shell.DeveloperModeProbe() == true, "Developer Mode is off on this machine (CI's windows runner may not have it): registering a build's layout needs it. The explanation is A_packaged_app_explains_developer_mode_first_and_has_no_hot_reload.");
@@ -210,16 +212,16 @@ public sealed class WinUIShellTests
             var notified = f.Shell.Workbench.Notifications.Items.Select(n => n.Id).DefaultIfEmpty().Max();
             string Diagnostics() =>
                 $"Debugger: {f.Shell.Debugger.State}\nRun output:\n{channel.GetText()}\nDebug Console:\n{f.Shell.DebugLog.GetText()}\nNotifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}";
-            f.Shell.Run("debug.start");
+            await f.RunAsync("debug.start");
             await WaitAsync(() => f.Shell.Debugger.State == DebugState.Running || f.Shell.Workbench.Notifications.Items.Any(n => n.Id > notified && n.Severity == NotificationSeverity.Error), seconds: 600);
             Assert.True(f.Shell.Debugger.State == DebugState.Running, Diagnostics());
             await ShellFixture.PumpUntil(() => HasWindow("WinUIApp") || f.Shell.Debugger.State != DebugState.Running, seconds: 120, describe: () => "the app's window didn't show.\n" + Diagnostics());
             Assert.True(f.Shell.Debugger.State == DebugState.Running, Diagnostics());
-            f.Shell.Run("debug.pause");
+            await f.RunAsync("debug.pause");
             await WaitAsync(() => f.Shell.Debugger.State == DebugState.Stopped || f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
             Assert.True(f.Shell.Debugger.State == DebugState.Stopped, Diagnostics());
             await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Any(r => !r.IsExternalCode), describe: () => $"the Call Stack shows {string.Join(", ", f.Shell.CallStack.Frames.Select(r => r.Name))}.\n{Stacks(f)}\n{Diagnostics()}");
-            f.Shell.Run("debug.stop");
+            await f.RunAsync("debug.stop");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
         }
         finally

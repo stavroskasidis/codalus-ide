@@ -19,7 +19,7 @@ internal static partial class BuiltIns
           { "key": "f10", "command": "debug.stepOver", "when": "debugStopped" },
           { "key": "f11", "command": "debug.stepInto", "when": "debugStopped" },
           { "key": "shift+f11", "command": "debug.stepOut", "when": "debugStopped" },
-          { "key": "ctrl+alt+pause", "command": "debug.pause", "when": "debugRunning" },
+          { "key": "ctrl+alt+pause", "mac": "cmd+alt+p", "command": "debug.pause", "when": "debugRunning" },
           { "key": "f9", "command": "debug.toggleBreakpoint", "when": "editorTextFocus" },
           { "key": "ctrl+f9", "command": "debug.toggleBreakpointEnabled", "when": "editorTextFocus" },
           { "key": "primary+shift+f9", "command": "debug.deleteAllBreakpoints", "when": "hasBreakpoints" },
@@ -109,11 +109,11 @@ internal static partial class BuiltIns
             EnumDescriptions = ["Debug Console", "Integrated terminal", "Console window (Windows)"],
             Order = 5,
         },
-        SettingDescriptor.Create(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, "\"docker\"", SettingType.String, ContributionSource.Shell) with
+        SettingDescriptor.Create(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, "\"\"", SettingType.String, ContributionSource.Shell) with
         {
             Title = "Container tool",
             Category = "Debugging",
-            Description = "The container command line for attaching in containers: docker, podman, or one inside WSL such as \"wsl -d Ubuntu --exec podman\".",
+            Description = "The container command line for attaching in containers: docker, podman, or one inside WSL such as \"wsl -d Ubuntu --exec podman\". Empty: the Containers window's engine (containers.tool, else docker when it is installed, else podman).",
             Order = 6,
         },
         SettingDescriptor.Create(Workbench.Debugging.Remote.RemoteTargets.SourceFileMapSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with

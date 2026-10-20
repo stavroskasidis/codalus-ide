@@ -61,7 +61,7 @@ public sealed class GitDepthShellTests
         var (f, _, greeter) = await OpenRepositoryAsync();
         await using var fixture = f;
 
-        f.Shell.Run("git.history");
+        await f.RunAsync("git.history");
         try
         {
             await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d.ViewModel.Rows.Count == 3));
@@ -94,13 +94,13 @@ public sealed class GitDepthShellTests
 
         // File history and line history.
         await f.Shell.OpenFileAsync(greeter);
-        f.Shell.Run("git.fileHistory");
+        await f.RunAsync("git.fileHistory");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d is { Title: "History: Greeter.cs", ViewModel.Rows.Count: 2 }));
         await f.Shell.OpenFileAsync(greeter);
         await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("activeDocumentKind"), "textFile"));
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null);
         Assert.True(f.Shell.Workbench.Commands.Find("git.lineHistory")!.Enablement.Evaluate(f.Shell.Workbench.Context), "git.lineHistory is disabled");
-        f.Shell.Run("git.lineHistory");
+        await f.RunAsync("git.lineHistory");
         try
         {
             await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d is { ViewModel.Lines: not null, ViewModel.Rows.Count: > 0 }));
@@ -155,7 +155,7 @@ public sealed class GitDepthShellTests
         Assert.Contains("Greeter.cs", Git(folder, "diff", "--cached", "--name-only"), StringComparison.Ordinal);
         Assert.Empty(f.Shell.Layout.Documents.OfType<MergeEditorDocument>());
 
-        f.Shell.Run("git.continue");
+        await f.RunAsync("git.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Operation: null });
         Assert.Contains("Merge branch 'feature'", Git(folder, "log", "-1", "--format=%s"), StringComparison.Ordinal);
         await ShellFixture.PumpUntil(() => !f.Shell.GitChanges.HasOperation); // the view model follows through Ui.Post
@@ -186,7 +186,7 @@ public sealed class GitDepthShellTests
         Git(folder, "commit", "-q", "-m", "two");
         await f.Shell.Git.RefreshAsync();
 
-        f.Shell.Run("git.history");
+        await f.RunAsync("git.history");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d.ViewModel.Rows.Count > 3));
         var history = f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Single().ViewModel;
         history.Selected = history.Rows.Single(r => r.Subject == "Say greetings");

@@ -78,10 +78,27 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     public static TimeSpan SlowNotification { get; set; } = TimeSpan.FromSeconds(2);
 
     public JsonRpcConnection(Stream reader, Stream writer)
+        : this(reader, writer, JsonRpcFraming.ContentLength)
+    {
+    }
+
+    /// <param name="framing">How messages are delimited: <c>Content-Length</c> headers, or one per line (M48).</param>
+    public JsonRpcConnection(Stream reader, Stream writer, JsonRpcFraming framing)
     {
         _reader = reader;
         _writer = writer;
+        Framing = framing;
     }
+
+    /// <summary>How messages are delimited on the streams.</summary>
+    public JsonRpcFraming Framing { get; }
+
+    /// <summary>
+    /// The notification a cancelled outgoing request sends, and the one that cancels an incoming request's handler:
+    /// LSP's <c>$/cancelRequest</c> by default, the Agent Client Protocol's <c>$/cancel_request</c> (M48), or null to
+    /// send none (a protocol that cancels its own way). Set it before <see cref="Start"/>.
+    /// </summary>
+    public JsonRpcCancelNotification? CancelNotification { get; set; } = JsonRpcCancelNotification.Lsp;
 
     /// <summary>Raised once when the connection is lost (stream closed, peer died, or protocol error).</summary>
     public event EventHandler<Exception?>? Disconnected;
@@ -378,13 +395,15 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         WriteMessageAsync(writer => writer.WriteString("method", method), cancellationToken, "notification " + method);
 
     private Task CancelRemoteAsync(long id) =>
-        WriteMessageAsync(writer =>
-        {
-            writer.WriteString("method", "$/cancelRequest");
-            writer.WriteStartObject("params");
-            writer.WriteNumber("id", id);
-            writer.WriteEndObject();
-        }, CancellationToken.None).ContinueWith(static _ => { }, TaskScheduler.Default);
+        CancelNotification is not { } cancel
+            ? Task.CompletedTask
+            : WriteMessageAsync(writer =>
+            {
+                writer.WriteString("method", cancel.Method);
+                writer.WriteStartObject("params");
+                writer.WriteNumber(cancel.IdProperty, id);
+                writer.WriteEndObject();
+            }, CancellationToken.None).ContinueWith(static _ => { }, TaskScheduler.Default);
 
     private async Task WriteMessageAsync(Action<Utf8JsonWriter> writeBody, CancellationToken cancellationToken, string what = "a message")
     {
@@ -397,7 +416,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             writer.WriteEndObject();
         }
 
-        var header = FramedMessageWriter.Header(body.WrittenCount);
+        var header = Framing == JsonRpcFraming.NewlineDelimited ? null : FramedMessageWriter.Header(body.WrittenCount);
         var write = Interlocked.Increment(ref _nextWrite);
         _writing[write] = (what, System.Diagnostics.Stopwatch.GetTimestamp(), false);
         try
@@ -415,7 +434,16 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         {
             // Never cancel a frame halfway: a header without its body corrupts the stream, and the peer drops
             // the connection. Cancellation applies while waiting for the lock only.
-            await _writer.WriteAsync(header, CancellationToken.None).ConfigureAwait(false);
+            if (header is not null)
+            {
+                await _writer.WriteAsync(header, CancellationToken.None).ConfigureAwait(false);
+            }
+            else
+            {
+                // Utf8JsonWriter escapes control characters in strings, so the body holds no newline of its own.
+                body.Write("\n"u8);
+            }
+
             await _writer.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
             await _writer.FlushAsync(CancellationToken.None).ConfigureAwait(false);
         }
@@ -443,10 +471,13 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         Exception? failure = null;
         try
         {
-            var reader = new FramedMessageReader(_reader);
+            var framed = Framing == JsonRpcFraming.ContentLength ? new FramedMessageReader(_reader) : null;
+            var lines = framed is null ? new LineMessageReader(_reader) : null;
             while (!_shutdown.IsCancellationRequested)
             {
-                var payload = await reader.ReadMessageAsync(_shutdown.Token).ConfigureAwait(false);
+                var payload = framed is not null
+                    ? await framed.ReadMessageAsync(_shutdown.Token).ConfigureAwait(false)
+                    : await lines!.ReadMessageAsync(_shutdown.Token).ConfigureAwait(false);
                 if (payload is null)
                 {
                     break;
@@ -552,9 +583,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             // Started in order; completes concurrently.
             _ = HandleRequestAsync(id.Clone(), method, parameters);
         }
-        else if (method == "$/cancelRequest")
+        else if (method == "$/cancelRequest" || method == CancelNotification?.Method)
         {
-            if (parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty("id", out var cancelId)
+            var idProperty = method == CancelNotification?.Method ? CancelNotification.IdProperty : "id";
+            if (parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty(idProperty, out var cancelId)
                 && _incoming.TryGetValue(cancelId.GetRawText(), out var incoming))
             {
                 await incoming.CancelAsync().ConfigureAwait(false);
@@ -735,6 +767,16 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             }
         }
     }
+}
+
+/// <summary>The notification that cancels a request, and the name of its parameter that holds the request's id.</summary>
+public sealed record JsonRpcCancelNotification(string Method, string IdProperty)
+{
+    /// <summary>LSP's <c>$/cancelRequest</c> with <c>id</c>.</summary>
+    public static JsonRpcCancelNotification Lsp { get; } = new("$/cancelRequest", "id");
+
+    /// <summary>The Agent Client Protocol's <c>$/cancel_request</c> with <c>requestId</c> (M48).</summary>
+    public static JsonRpcCancelNotification Acp { get; } = new("$/cancel_request", "requestId");
 }
 
 /// <summary>The peer answered a request with a JSON-RPC error.</summary>

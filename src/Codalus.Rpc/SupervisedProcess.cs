@@ -43,8 +43,8 @@ public sealed record SupervisionPolicy
     /// Whether a process that ends during startup is started again (M49: no, by default). Startup lasts until
     /// <see cref="SupervisedProcess.Initialize"/> finishes; without one, an exit with a failure code and standard error
     /// output, before the process first writes a message and within <see cref="StartupWindow"/>, counts (a process killed
-    /// early says nothing, and is restarted). An exit that early is deterministic (a missing runtime, a missing file, a
-    /// bad setting): starting again would fail the same way.
+    /// early is restarted, whatever it printed: its exit code says it was killed). An exit that early is deterministic (a
+    /// missing runtime, a missing file, a bad setting): starting again would fail the same way.
     /// </summary>
     public bool RestartAfterStartupExit { get; init; }
 
@@ -126,6 +126,9 @@ public sealed class SupervisedProcess : IAsyncDisposable
 
     public string Name { get; }
 
+    /// <summary>How the process delimits its messages: <c>Content-Length</c> headers (the default), or one per line (M48).</summary>
+    public JsonRpcFraming Framing { get; init; }
+
     /// <summary>Registers incoming handlers on every new connection, before it starts reading.</summary>
     public Action<JsonRpcConnection>? ConfigureConnection { get; set; }
 
@@ -196,7 +199,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
         };
         process.BeginErrorRead();
 
-        var connection = new JsonRpcConnection(process.Output, process.Input);
+        var connection = new JsonRpcConnection(process.Output, process.Input, Framing);
         connection.ExplainLoss = _ => ExplainAsync(run, connection);
         ConfigureConnection?.Invoke(connection);
         connection.Disconnected += OnDisconnected;
@@ -230,7 +233,19 @@ public sealed class SupervisedProcess : IAsyncDisposable
     private bool InStartup(Run run, JsonRpcConnection connection, int? exitCode) =>
         Initialize is not null
             ? !run.StartupOver
-            : exitCode is not (null or 0) && run.HasErrorOutput && !connection.HasReceived && System.Diagnostics.Stopwatch.GetElapsedTime(run.Started) < _policy.StartupWindow;
+            : exitCode is { } code and not 0 && !IsKill(code) && run.HasErrorOutput && !connection.HasReceived && System.Diagnostics.Stopwatch.GetElapsedTime(run.Started) < _policy.StartupWindow;
+
+    /// <summary>
+    /// Whether an exit code says the process was killed from outside, which a start that fails on its own doesn't: 137
+    /// and 143 (SIGKILL and SIGTERM, which .NET reports as 128 plus the signal, here or from a remote server), and -1
+    /// (.NET's <see cref="System.Diagnostics.Process.Kill()"/> on Windows; a Unix exit code is never negative).
+    /// </summary>
+    /// <remarks>
+    /// Without it, a host killed in its first seconds counted as a failed start once it had written to standard error
+    /// (as hosts log while they start), and wasn't started again: whether it was restarted depended on whether the kill
+    /// came before or after its first line (develop's macOS run of 0.4.0, a remote host killed on the server).
+    /// </remarks>
+    internal static bool IsKill(int exitCode) => exitCode is 137 or 143 or -1;
 
     /// <summary>
     /// The error for a lost connection: when the process ended, its exit code and its standard error's lines. It waits

@@ -425,7 +425,7 @@ public sealed partial class ShellHost
                 }
                 else
                 {
-                    ShellIntegration.OpenUrl(new Uri(plan.Command));
+                    OpenExternalUrl(new Uri(plan.Command));
                 }
 
                 return;

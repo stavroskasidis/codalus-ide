@@ -14,8 +14,15 @@ public sealed record BuildRequest(string Target, string? Project)
     public int Batch { get; init; }
 }
 
-/// <summary>A build that finished.</summary>
-public sealed record BuildCompleted(BuildRequest Request, BuildResultInfo Result);
+/// <summary>
+/// A build that finished. <see cref="Number"/> counts the service's builds, so two builds are never equal: without it,
+/// two up-to-date builds of the solution that took the same milliseconds were, and a wait for "a build after this one"
+/// never ended (the smoke test's gallery on the macOS package).
+/// </summary>
+public sealed record BuildCompleted(BuildRequest Request, BuildResultInfo Result)
+{
+    public long Number { get; init; }
+}
 
 /// <summary>
 /// Builds through the build host (ADR 0006): one at a time, output in the Build channel, errors and warnings kept
@@ -28,6 +35,7 @@ public sealed class BuildService
     private readonly SolutionService _solutions;
     private readonly OutputService _output;
     private readonly Lock _gate = new();
+    private long _builds;
     private readonly List<BuildDiagnosticInfo> _diagnostics = [];
     private CancellationTokenSource? _current;
 
@@ -164,7 +172,7 @@ public sealed class BuildService
             cancellation.Dispose();
         }
 
-        var completed = new BuildCompleted(request, result);
+        var completed = new BuildCompleted(request, result) { Number = Interlocked.Increment(ref _builds) };
         LastBuild = completed;
         Finished?.Invoke(this, completed);
         return result;

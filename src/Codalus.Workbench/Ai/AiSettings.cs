@@ -107,6 +107,14 @@ public static class AiSettings
             Scope = SettingScope.User,
             Order = 22,
         },
+        SettingDescriptor.Create(Acp.AcpAgents.AgentsSetting, "{}", SettingType.Object, source) with
+        {
+            Title = "External Agents",
+            Category = "AI",
+            Description = "External coding agents AI Chat can run over the Agent Client Protocol (ACP), each your own CLI: { \"name\": { \"command\": \"…\", \"args\": [\"…\"], \"env\": { } } }. They use their own provider and data policy; Codalus checks what they ask the IDE for. They run only while AI assistance is on, in trusted folders. Read from your user settings only.",
+            Scope = SettingScope.User,
+            Order = 24,
+        },
         SettingDescriptor.Create("ai.mcpServer.enabled", "false", SettingType.Boolean, source) with
         {
             Title = "MCP Server",

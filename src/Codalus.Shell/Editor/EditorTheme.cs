@@ -173,7 +173,7 @@ public sealed class EditorTheme
         Set(colors.Method, "method", "extensionMethod", "function");
         Set(colors.String, "string", "stringVerbatim", "markupAttributeQuote", "markupAttributeValue");
         Set(colors.Number, "number");
-        Set(colors.Comment, "comment", "xmlDocComment", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation");
+        Set(colors.Comment, "comment", "xmlDocComment", "xmlDocText", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation");
         var elements = new Dictionary<string, uint>(baseTheme._elementColors, StringComparer.Ordinal) { ["editor.lineHighlightBackground"] = colors.CurrentLine };
         return new EditorTheme(id, tokens, elements);
     }
@@ -182,7 +182,9 @@ public sealed class EditorTheme
         "dark",
         new()
         {
-            ["namespace"] = 0xFFC8C8C8,
+            // Visual Studio 2022's Dark: Roslyn's color scheme (ColorSchemes/VisualStudio2019.xml) over the plain text,
+            // #DCDCDC, which namespaces, fields, properties, events, labels and punctuation keep.
+            ["namespace"] = 0xFFDCDCDC,
             ["class"] = 0xFF4EC9B0, ["record"] = 0xFF4EC9B0, ["type"] = 0xFF4EC9B0, ["delegate"] = 0xFF4EC9B0,
             ["struct"] = 0xFF86C691, ["recordStruct"] = 0xFF86C691, ["enum"] = 0xFFB8D7A3, ["interface"] = 0xFFB8D7A3,
             ["typeParameter"] = 0xFFB8D7A3,
@@ -191,11 +193,11 @@ public sealed class EditorTheme
             ["enumMember"] = 0xFF4FC1FF,
             ["method"] = 0xFFDCDCAA, ["extensionMethod"] = 0xFFDCDCAA, ["function"] = 0xFFDCDCAA,
             ["keyword"] = 0xFF569CD6, ["modifier"] = 0xFF569CD6, ["controlKeyword"] = 0xFFC586C0,
-            ["comment"] = 0xFF6A9955, ["xmlDocComment"] = 0xFF608B4E,
+            ["comment"] = 0xFF6A9955, ["xmlDocComment"] = 0xFF608B4E, ["xmlDocText"] = 0xFF608B4E,
             ["string"] = 0xFFCE9178, ["stringVerbatim"] = 0xFFCE9178, ["stringEscape"] = 0xFFFFD68F,
             ["number"] = 0xFFB5CEA8, ["regexp"] = 0xFFD16969,
-            ["operator"] = 0xFFD4D4D4, ["punctuation"] = 0xFFD4D4D4,
-            ["preprocessor"] = 0xFF9B9B9B, ["excludedCode"] = 0xFF767676, ["label"] = 0xFFC8C8C8,
+            ["operator"] = 0xFFD4D4D4, ["punctuation"] = 0xFFDCDCDC,
+            ["preprocessor"] = 0xFF9B9B9B, ["excludedCode"] = 0xFF767676, ["label"] = 0xFFDCDCDC,
 
             // Razor and its markup, as Visual Studio's Dark theme colors them.
             ["razorTransition"] = 0xFFA699E6, ["razorDirective"] = 0xFFA699E6, ["razorDirectiveAttribute"] = 0xFFA699E6, ["razorDirectiveColon"] = 0xFFA699E6,
@@ -213,20 +215,21 @@ public sealed class EditorTheme
         "light",
         new()
         {
-            ["namespace"] = 0xFF1E1E1E,
+            // Visual Studio 2022's Light (and Blue): Roslyn's color scheme over the plain text, black.
+            ["namespace"] = 0xFF000000,
             ["class"] = 0xFF267F99, ["record"] = 0xFF267F99, ["type"] = 0xFF267F99, ["delegate"] = 0xFF267F99,
             ["struct"] = 0xFF2B91AF, ["recordStruct"] = 0xFF2B91AF, ["enum"] = 0xFF2B91AF, ["interface"] = 0xFF2B91AF,
             ["typeParameter"] = 0xFF2B91AF,
-            ["parameter"] = 0xFF001080, ["local"] = 0xFF001080, ["variable"] = 0xFF001080,
-            ["field"] = 0xFF1E1E1E, ["property"] = 0xFF1E1E1E, ["event"] = 0xFF1E1E1E, ["constant"] = 0xFF0070C1,
+            ["parameter"] = 0xFF1F377F, ["local"] = 0xFF1F377F, ["variable"] = 0xFF1F377F,
+            ["field"] = 0xFF000000, ["property"] = 0xFF000000, ["event"] = 0xFF000000, ["constant"] = 0xFF0070C1,
             ["enumMember"] = 0xFF0070C1,
             ["method"] = 0xFF795E26, ["extensionMethod"] = 0xFF795E26, ["function"] = 0xFF795E26,
             ["keyword"] = 0xFF0000FF, ["modifier"] = 0xFF0000FF, ["controlKeyword"] = 0xFFAF00DB,
-            ["comment"] = 0xFF008000, ["xmlDocComment"] = 0xFF808080,
+            ["comment"] = 0xFF008000, ["xmlDocComment"] = 0xFF808080, ["xmlDocText"] = 0xFF008000,
             ["string"] = 0xFFA31515, ["stringVerbatim"] = 0xFFA31515, ["stringEscape"] = 0xFFEE0000,
             ["number"] = 0xFF098658, ["regexp"] = 0xFF811F3F,
-            ["operator"] = 0xFF1E1E1E, ["punctuation"] = 0xFF1E1E1E,
-            ["preprocessor"] = 0xFF808080, ["excludedCode"] = 0xFF9E9E9E, ["label"] = 0xFF1E1E1E,
+            ["operator"] = 0xFF000000, ["punctuation"] = 0xFF000000,
+            ["preprocessor"] = 0xFF808080, ["excludedCode"] = 0xFF9E9E9E, ["label"] = 0xFF000000,
 
             // Razor and its markup, as Visual Studio's Light (and Blue) theme colors them.
             ["razorTransition"] = 0xFF826EE6, ["razorDirective"] = 0xFF826EE6, ["razorDirectiveAttribute"] = 0xFF826EE6, ["razorDirectiveColon"] = 0xFF826EE6,
@@ -253,7 +256,7 @@ public sealed class EditorTheme
             ["enumMember"] = 0xFF9CDCFE,
             ["method"] = 0xFFDCDCAA, ["extensionMethod"] = 0xFFDCDCAA, ["function"] = 0xFFDCDCAA,
             ["keyword"] = 0xFF569CD6, ["modifier"] = 0xFF569CD6, ["controlKeyword"] = 0xFFC586C0,
-            ["comment"] = 0xFF7CA668, ["xmlDocComment"] = 0xFF7CA668,
+            ["comment"] = 0xFF7CA668, ["xmlDocComment"] = 0xFF7CA668, ["xmlDocText"] = 0xFF7CA668,
             ["string"] = 0xFFCE9178, ["stringVerbatim"] = 0xFFCE9178, ["stringEscape"] = 0xFFFFD68F,
             ["number"] = 0xFFB5CEA8, ["regexp"] = 0xFFD16969,
             ["operator"] = 0xFFFFFFFF, ["punctuation"] = 0xFFFFFFFF,

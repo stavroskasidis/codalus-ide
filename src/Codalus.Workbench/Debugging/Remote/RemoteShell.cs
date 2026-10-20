@@ -135,6 +135,14 @@ public static class RemoteShell
     }
 
     /// <summary>
+    /// Reattach's process: the one attached to last if it still runs, else a .NET process with its command line (the
+    /// program started again). Never one by name alone: a framework-dependent program is "dotnet", like any other.
+    /// </summary>
+    public static RemoteProcess? FindAgain(IReadOnlyList<RemoteProcess> processes, RemoteProcess last) =>
+        processes.FirstOrDefault(p => p.Id == last.Id && p.CommandLine == last.CommandLine)
+        ?? processes.FirstOrDefault(p => p.IsDotnet && p.CommandLine == last.CommandLine);
+
+    /// <summary>
     /// The adapter's pipe transport: netcoredbg at <paramref name="debuggerPath"/> on the target, speaking DAP on its
     /// stdin and stdout.
     /// </summary>

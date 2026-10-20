@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
@@ -24,15 +25,15 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public class ControlSetTests
 {
-    private static Color Token(string key, ThemeVariant variant)
+    internal static Color Token(string key, ThemeVariant variant)
     {
         Assert.True(Application.Current!.TryGetResource(key, variant, out var value) && value is ISolidColorBrush, $"{key} in {variant}");
         return ((ISolidColorBrush)value!).Color;
     }
 
-    private static Color? BrushColor(IBrush? brush) => (brush as ISolidColorBrush)?.Color;
+    internal static Color? BrushColor(IBrush? brush) => (brush as ISolidColorBrush)?.Color;
 
-    private static void SetState(StyledElement element, string pseudoClass, bool on = true) => ((IPseudoClasses)element.Classes).Set(pseudoClass, on);
+    internal static void SetState(StyledElement element, string pseudoClass, bool on = true) => ((IPseudoClasses)element.Classes).Set(pseudoClass, on);
 
     private static Window Show(Control content, ThemeVariant variant, double width = 600, double height = 300)
     {
@@ -145,6 +146,83 @@ public class ControlSetTests
             Assert.Equal("search", iconText.GetVisualDescendants().OfType<Icon>().Single().Kind);
             Assert.Contains(iconText.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Discover");
             Assert.Equal("Discover", Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(iconText).GetName());
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>The vertical middle of a text block's or text presenter's first line, in <paramref name="field"/>'s coordinates.</summary>
+    internal static double TextMiddle(Control text, Visual field) => text switch
+    {
+        TextBlock block => block.TranslatePoint(new Point(0, block.Padding.Top + (block.TextLayout.Height / 2)), field)!.Value.Y,
+        TextPresenter presenter => presenter.TranslatePoint(new Point(0, presenter.TextLayout.Height / 2), field)!.Value.Y,
+        _ => throw new ArgumentException(text.GetType().Name, nameof(text)),
+    };
+
+    /// <summary>
+    /// The text and placeholder a combo box shows (its selection, or its text box's text or placeholder), whichever is
+    /// visible.
+    /// </summary>
+    internal static Control ShownText(ComboBox combo) =>
+        combo.GetVisualDescendants().OfType<Control>().First(c => c.IsEffectivelyVisible && c is TextPresenter or TextBlock { Text.Length: > 0 } && (c is not TextPresenter p || p.Text is { Length: > 0 }));
+
+    [AvaloniaTheory]
+    [InlineData("harbor.light")]
+    [InlineData("dark")]
+    [InlineData("highContrast")]
+    [InlineData("ember.highContrast")]
+    public void A_combo_box_draws_one_border_around_its_text_and_chevron_and_centers_its_text(string theme)
+    {
+        // The maintainer's report on Find and Replace: hovering the editable Find what box drew a box around the chevron
+        // only (the text box's hover fill hid the combo's border along the text), and its placeholder, like Look in's
+        // and File types' text, sat at the top of the field.
+        var variant = ThemeService.VariantOf(theme);
+        var query = new ComboBox { IsEditable = true, PlaceholderText = "Find what", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var lookIn = new ComboBox { IsEditable = true, Text = "Entire solution", ItemsSource = new[] { "Entire solution" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var plain = new ComboBox { ItemsSource = new[] { "Debug", "Release" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var placeholder = new ComboBox { PlaceholderText = "Default", ItemsSource = new[] { "Debug" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var window = Show(new StackPanel { Spacing = 8, Margin = new Thickness(20), Children = { query, lookIn, plain, placeholder } }, variant, 420);
+        try
+        {
+            // Text and placeholders in the middle of the 28 px field, editable or not.
+            foreach (var combo in new[] { query, lookIn, plain, placeholder })
+            {
+                Assert.Equal(28, combo.Bounds.Height);
+                var text = ShownText(combo);
+                var middle = TextMiddle(text, combo);
+                Assert.True(Math.Abs(middle - (combo.Bounds.Height / 2)) <= 1.5, $"{theme}: {text.GetType().Name} of {combo.PlaceholderText ?? combo.Text ?? combo.SelectionBoxItem} centered at {middle:0.#} of {combo.Bounds.Height}");
+            }
+
+            // The field's one border, around the text and the chevron, in every state; the text box draws none of its
+            // own and no fill over it.
+            var field = query.GetVisualDescendants().OfType<Border>().First(b => b.Name == "Background");
+            var textBox = query.GetVisualDescendants().OfType<TextBox>().First(t => t.Name == "PART_EditableTextBox");
+            var inner = textBox.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_BorderElement");
+            void Expect(string border, double thickness, string state)
+            {
+                ShellFixture.Pump();
+                Assert.True(Token(border, variant) == BrushColor(field.BorderBrush), $"{theme} {state}: border {BrushColor(field.BorderBrush)} is not {border}");
+                Assert.Equal(new Thickness(thickness), field.BorderThickness);
+                Assert.Equal(query.Bounds.Size, field.Bounds.Size);
+                Assert.True(inner.BorderThickness == default, $"{theme} {state}: the text box draws a border of {inner.BorderThickness}");
+                Assert.True(inner.Background is null || BrushColor(inner.Background) is { A: 0 }, $"{theme} {state}: the text box fills {BrushColor(inner.Background)} over the field's border");
+            }
+
+            Expect("Shell.Input.Border", 1, "normal");
+            SetState(query, ":pointerover");
+            SetState(textBox, ":pointerover");
+            Expect("Shell.Input.Border.Hover", 1, "hover over the text");
+            SetState(textBox, ":pointerover", false);
+            Expect("Shell.Input.Border.Hover", 1, "hover over the chevron");
+            SetState(query, ":pointerover", false);
+            textBox.Focus();
+            Assert.True(textBox.IsFocused);
+            Expect("Shell.Focus", 2, "focus");
+            SetState(query, ":pointerover");
+            SetState(textBox, ":pointerover");
+            Expect("Shell.Focus", 2, "focus and hover");
         }
         finally
         {

@@ -134,7 +134,7 @@ public class ChromeTests
         // Sync with Active Document selects the active file.
         var program = Path.Combine(Path.GetDirectoryName(solution)!, "src", "App", "Program.cs");
         await f.Shell.OpenFileAsync(program);
-        f.Shell.Run("explorer.syncWithActiveDocument");
+        await f.RunAsync("explorer.syncWithActiveDocument");
         await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == program);
 
         // Home collapses back to the projects.
@@ -166,7 +166,7 @@ public class ChromeTests
         await ShellFixture.PumpUntil(() => f.Shell.Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId) is { ViewModel.Search: ThemeService.SettingKey });
 
         // Files are found by name, on the Code Search tab.
-        f.Shell.Run("workbench.action.gotoAll");
+        await f.RunAsync("workbench.action.gotoAll");
         await ShellFixture.PumpUntil(() => search is { IsOpen: true, IsCodeTab: true });
         search.Query = "notes";
         await ShellFixture.PumpUntil(() => search.Rows.Any(r => r.Name == "Notes.txt"));
@@ -209,7 +209,7 @@ public class ChromeTests
     public async Task Settings_are_an_options_tree_reached_from_the_tools_menu()
     {
         await using var f = ShellFixture.Create();
-        f.Shell.Run("workbench.openOptions");
+        await f.RunAsync("workbench.openOptions");
         var document = f.Shell.Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId);
         Assert.NotNull(document);
         var vm = document.ViewModel;

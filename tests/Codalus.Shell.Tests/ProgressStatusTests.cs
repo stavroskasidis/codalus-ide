@@ -71,7 +71,7 @@ public sealed class ProgressStatusTests
 
         // A build is a cancellable task while it runs.
         var before = f.Shell.Builds.LastBuild;
-        f.Shell.Run("build.buildSolution");
+        await f.RunAsync("build.buildSolution");
         await ShellFixture.PumpUntil(() => f.Shell.StatusBar.HasProgress && f.Shell.StatusBar.DisplayMessage.StartsWith("Building ", StringComparison.Ordinal) || f.Shell.Builds.LastBuild != before, seconds: 120);
         if (f.Shell.Builds.LastBuild == before)
         {

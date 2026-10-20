@@ -78,7 +78,7 @@ public sealed partial class ShellHost
         var context = new PackageManagerContext(
             Dialogs,
             Workbench.Notifications,
-            url => ShellIntegration.OpenUrl(new Uri(url)),
+            url => OpenExternalUrl(new Uri(url)),
             OpenPackageSources,
             () => Workbench.Output.Show(RestoreLog))
         {
@@ -189,12 +189,12 @@ public sealed partial class ShellHost
     {
         if (Window?.Clipboard is { } clipboard)
         {
-            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, code).ConfigureAwait(true);
+            await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, code).ConfigureAwait(true);
         }
 
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
-            ShellIntegration.OpenUrl(uri);
+            OpenExternalUrl(uri);
         }
     }
 
@@ -270,7 +270,7 @@ public sealed partial class ShellHost
                 {
                     if (t.Result is not null)
                     {
-                        ShellIntegration.RevealInFileManager(created[0]);
+                        RevealPath(created[0]);
                     }
                 },
                 TaskScheduler.Default);

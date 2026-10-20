@@ -40,6 +40,7 @@ public static class ClassificationMapper
         [ClassificationTypeNames.EventName] = TokenTypes.IndexOf("event"),
         [ClassificationTypeNames.NamespaceName] = TokenTypes.IndexOf("namespace"),
         [ClassificationTypeNames.LabelName] = TokenTypes.IndexOf("label"),
+        [ClassificationTypeNames.XmlDocCommentText] = TokenTypes.IndexOf("xmlDocText"),
     };
 
     public static IReadOnlyList<TokenSpan> Map(IEnumerable<ClassifiedSpan> spans)

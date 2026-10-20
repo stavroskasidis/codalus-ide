@@ -34,7 +34,8 @@ public static class RemoteTargets
     /// <summary>The running containers of <paramref name="tool"/> (<c>docker ps</c>).</summary>
     public static async Task<IReadOnlyList<ContainerInfo>> ContainersAsync(IReadOnlyList<string> tool, CancellationToken cancellationToken)
     {
-        var (code, output) = await RunAsync(tool[0], [.. tool.Skip(1), "ps", "--format", "{{.ID}}\t{{.Names}}\t{{.Image}}"], cancellationToken).ConfigureAwait(false);
+        var (code, output) = await RunAsync(tool[0], [.. tool.Skip(1), "ps", "--format", "{{.ID}}\t{{.Names}}\t{{.Image}}"], cancellationToken,
+            $"Install Docker or Podman, or set '{ContainerToolSetting}'.").ConfigureAwait(false);
         if (code != 0)
         {
             throw new InvalidOperationException($"{string.Join(' ', tool)} ps failed: {RemoteShell.Trim(output)}");
@@ -49,7 +50,7 @@ public static class RemoteTargets
             .Where(f => f.Length >= 3 && f[0].Length > 0)
             .Select(f => new ContainerInfo(f[0], f[1], f[2]))];
 
-    private static async Task<(int Code, string Output)> RunAsync(string program, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    internal static async Task<(int Code, string Output)> RunAsync(string program, IReadOnlyList<string> arguments, CancellationToken cancellationToken, string? whatToDo = null)
     {
         var start = new ProcessStartInfo(program, arguments)
         {
@@ -75,7 +76,8 @@ public static class RemoteTargets
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
-            throw new InvalidOperationException($"{program} isn't installed or isn't on the PATH: {ex.Message}", ex);
+            // Not .NET's message: it names the working directory, as if that were what's missing.
+            throw new InvalidOperationException($"{program} isn't installed or isn't on the PATH.{(whatToDo is null ? string.Empty : " " + whatToDo)}", ex);
         }
     }
 }

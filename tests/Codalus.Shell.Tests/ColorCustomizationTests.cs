@@ -74,7 +74,7 @@ public sealed class ColorCustomizationTests
         var settings = f.Shell.Workbench.Settings;
         await settings.SetAsync(Theming.ThemeService.SettingKey, "dark", SettingScope.User, CancellationToken.None);
         ShellFixture.Pump();
-        f.Shell.Run("workbench.openFontsAndColors");
+        await f.RunAsync("workbench.openFontsAndColors");
         ShellFixture.Pump();
         var page = Assert.IsType<ViewModels.FontsAndColorsDocument>(f.Shell.Layout.ActiveDocument).ViewModel;
         Assert.Equal("Dark", page.ThemeTitle);
