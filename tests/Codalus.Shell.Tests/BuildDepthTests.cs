@@ -150,11 +150,27 @@ public sealed class BuildDepthTests
         var source = editor.Controller.Editor.Document.Text;
         var line = source.IndexOf("namespace Fixture.Items;", StringComparison.Ordinal);
         editor.Controller.Editor.Document.Insert(line, "// regenerated on save\n");
+        var saves = 0;
+        editor.Model.Saved += (_, _) => saves++;
         await f.RunAsync("file.save");
-        await ShellFixture.PumpUntil(() => ReadWhileWritten(Path.Combine(items, "Greeting.cs")).Contains("// regenerated on save", StringComparison.Ordinal), seconds: 120);
+        var output = Path.Combine(items, "Greeting.cs");
+        await ShellFixture.PumpUntil(() => ReadWhileWritten(output).Contains("// regenerated on save", StringComparison.Ordinal), seconds: 120, describe: () =>
+        {
+            // Whether the save ran, whether it asked for the custom tool, what the tool said, and the T4 host's state.
+            var log = f.Shell.Workbench.Log.GetText().Split('\n');
+            return $"saves: {saves}, modified: {editor.Model.IsModified}, template saved: {File.ReadAllText(template).Contains("// regenerated on save", StringComparison.Ordinal)}"
+                   + $"\nrequested: {string.Join(" | ", log.Where(l => l.StartsWith("[custom tool]", StringComparison.Ordinal)))}"
+                   + $"\nCustom Tool output: {f.Shell.Workbench.Output.GetOrCreate("codalus.customTool", "Custom Tool").GetText()}"
+                   + $"\nnotifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}"
+                   + $"\nT4 host: running {f.Shell.TextTemplates.IsRunning}, pid {f.Shell.TextTemplates.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}; {string.Join(" | ", log.Where(l => l.StartsWith("[t4host]", StringComparison.Ordinal)).TakeLast(10))}"
+                   + $"\nGreeting.cs: {ReadWhileWritten(output)}";
+        });
     }
 
-    /// <summary>A file the generator may be writing right now: locked means not ready yet (the Windows runner).</summary>
+    /// <summary>
+    /// A file the generator may be writing right now: locked means not ready yet (the Windows runner). On Windows this read
+    /// also denies the generator's write while it holds the file, as other programs can: the custom tool waits for it.
+    /// </summary>
     private static string ReadWhileWritten(string path)
     {
         try
