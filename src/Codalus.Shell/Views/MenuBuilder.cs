@@ -34,28 +34,45 @@ internal static class MenuBuilder
             window.Opened += (_, _) => AttachApplicationMenu(shell); // again, should Avalonia install its default after us
             var native = new NativeMenu();
             NativeMenu.SetMenu(window, native);
-            void RebuildNative() => BuildNative(native, shell);
+            var nativeShown = string.Empty;
+            void RebuildNative() => nativeShown = BuildNative(native, shell);
             RebuildNative();
             menus.Changed += (_, _) => Ui.Post(RebuildNative);
-            RebuildOnActiveDocument(shell, RebuildNative);
+            RebuildOnActiveDocument(shell, () => nativeShown, RebuildNative);
             return;
         }
 
-        void Rebuild() => Build(menuBar, shell);
+        var shown = string.Empty;
+        void Rebuild() => shown = Build(menuBar, shell);
         Rebuild();
         menus.Changed += (_, _) => Ui.Post(Rebuild);
-        RebuildOnActiveDocument(shell, Rebuild);
+        RebuildOnActiveDocument(shell, () => shown, Rebuild);
     }
 
-    /// <summary>Menus whose items all depend on the active document (the Windows Forms designer's Format menu) come and go with it.</summary>
-    private static void RebuildOnActiveDocument(ShellHost shell, Action rebuild) =>
+    /// <summary>
+    /// Menus whose items all depend on the active document (the Windows Forms designer's Format menu) come and go with it:
+    /// the bar is rebuilt when the active document's kind changes the menus it shows, and only then (their items are
+    /// filled as each menu opens). Rebuilt at every change of kind, opening the WCF Test Client from the code editor
+    /// spent 200 ms of its 220 ms on the UI thread rebuilding a bar that showed the same menus.
+    /// </summary>
+    private static void RebuildOnActiveDocument(ShellHost shell, Func<string> built, Action rebuild) =>
         shell.Workbench.Context.Changed += (_, key) =>
         {
             if (key == "activeDocumentKind")
             {
-                Ui.Post(rebuild);
+                Ui.Post(() =>
+                {
+                    if (Shown(shell) != built())
+                    {
+                        rebuild();
+                    }
+                });
             }
         };
+
+    /// <summary>The ids of the menu bar's menus that have items in the current context.</summary>
+    private static string Shown(ShellHost shell) =>
+        string.Join('\n', shell.Workbench.Menus.MenuBar.Where(m => shell.Workbench.Menus.GetItems(MenuLocations.MenuBar(m.Id)).Count > 0).Select(m => m.Id));
 
     private static void OpenDocumentTabMenu(ShellHost shell, ContextRequestedEventArgs e)
     {
@@ -132,9 +149,11 @@ internal static class MenuBuilder
         return menu;
     }
 
-    private static void Build(Menu menuBar, ShellHost shell)
+    /// <summary>Builds the in-window menu bar; returns the ids of the menus it shows (<see cref="Shown"/>).</summary>
+    private static string Build(Menu menuBar, ShellHost shell)
     {
         menuBar.Items.Clear();
+        var shown = new List<string>();
         foreach (var menu in shell.Workbench.Menus.MenuBar)
         {
             var location = MenuLocations.MenuBar(menu.Id);
@@ -143,9 +162,13 @@ internal static class MenuBuilder
                 continue;
             }
 
+            shown.Add(menu.Id);
             var top = new MenuItem { Header = menu.Title };
             AutomationProperties.SetName(top, menu.Title.Replace("_", string.Empty, StringComparison.Ordinal));
-            Fill(top.Items, location, shell, c => shell.CommandFor(c));
+
+            // Its items are made as it opens, in the context of then: until then a placeholder makes it a menu that opens.
+            // Making every menu's entries here (about 600, each with its icon and tooltip) took 200 ms of the UI thread.
+            top.Items.Add(new Separator());
             top.SubmenuOpened += (_, e) =>
             {
                 if (e.Source == top)
@@ -155,6 +178,8 @@ internal static class MenuBuilder
             };
             menuBar.Items.Add(top);
         }
+
+        return string.Join('\n', shown);
     }
 
     private static void Fill(ItemCollection items, string location, ShellHost shell, Func<string, ICommand> commandFor)
@@ -214,9 +239,10 @@ internal static class MenuBuilder
         return entry;
     }
 
-    private static void BuildNative(NativeMenu native, ShellHost shell)
+    private static string BuildNative(NativeMenu native, ShellHost shell)
     {
         native.Items.Clear();
+        var shown = new List<string>();
         foreach (var menu in shell.Workbench.Menus.MenuBar)
         {
             var location = MenuLocations.MenuBar(menu.Id);
@@ -225,11 +251,15 @@ internal static class MenuBuilder
                 continue;
             }
 
+            shown.Add(menu.Id);
+
             var top = new NativeMenuItem(menu.Title.Replace("_", string.Empty, StringComparison.Ordinal)) { Menu = new NativeMenu() };
             FillNative(top.Menu, location, shell);
             top.Menu.Opening += (_, _) => FillNative(top.Menu, location, shell);
             native.Items.Add(top);
         }
+
+        return string.Join('\n', shown);
     }
 
     /// <summary>
