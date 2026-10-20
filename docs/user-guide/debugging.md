@@ -92,7 +92,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
 
 ## Breakpoints
 
-- **Add or remove**: click in the margin left of the line numbers, or press `F9` on the line. `Ctrl+F9` enables or disables it.
+- **Add or remove**: click in the margin left of the line numbers (with the pointer over it, a faint circle shows the line a click adds one to), or press `F9` on the line. `Ctrl+F9` enables or disables it.
 - **How they look**: red circles. Disabled breakpoints, and those that haven't bound to code yet, are hollow. A dot marks a condition or hit count; a diamond marks a logpoint.
 - **Conditions and actions**: Debug → Breakpoint Conditions and Actions sets them on the caret's line, or right-click the breakpoint in the margin:
   - **Condition**: a C# expression; the debugger breaks only when it is true.

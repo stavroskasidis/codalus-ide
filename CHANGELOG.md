@@ -2,6 +2,16 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.5.0
+
+- **The editor works more like Visual Studio's**:
+  - **CodeLens sits above each declaration** ([user guide](docs/user-guide/editing.md#inline-information)), on a small row of its own lined up with the code, instead of at the end of its line. A declaration on the first line, or right after a folded block, keeps it at the end of its line.
+  - **Holding `Ctrl` (`⌘` on macOS) over a symbol shows Go to Definition's link** ([user guide](docs/user-guide/editing.md#navigation)): the symbol is underlined and the pointer is a hand when the language service knows its definition, which `Ctrl+Click` goes to as before.
+  - **The breakpoint margin comes before the line numbers** ([user guide](docs/user-guide/debugging.md#breakpoints)), and with the pointer over it a faint circle shows the line a click adds a breakpoint to.
+  - **Document tabs have a pin beside a thin close button** ([user guide](docs/user-guide/solutions.md#solution-explorer)): the selected or hovered tab shows the pin to pin it (to the left of its group), and a pinned tab keeps it, upright, to unpin it.
+- **Codalus IDE comes to the front when the program stops** ([user guide](docs/user-guide/debugging.md#while-stopped)) at a breakpoint, an exception or a step, even when the program's window or the browser had the focus, so `F10` and `F11` go to the debugger. On Windows, the debugged app kept the focus, and in a Blazor WebAssembly app `F11` toggled the browser's full screen instead of stepping into the method.
+- **Solution Explorer sorts like Visual Studio** ([user guide](docs/user-guide/solutions.md#solution-explorer)): a project's `Properties` (`My Project`) and `wwwroot` folders come first, and names with `_` sort before letters.
+
 ## 0.4.0
 
 - **The merge editor looks and works like Visual Studio's** ([user guide](docs/user-guide/git.md#resolving-conflicts)): the incoming and current versions side by side, named by their branches ("Incoming: master", "Current: develop"), with a check box beside each conflict: check one side to take its block, both to take both, neither to undo it. A box in each header takes every conflict from that side. The result below no longer shows git's `<<<<<<<` markers: each unresolved conflict shows the merge base's text, highlighted in muted red, and you can still edit it. A compact toolbar has the previous and next conflict (`Shift+F8`, `F8`), the count ("1 Conflict (1 Remaining)") and Accept Merge; its gear menu switches to three columns, puts your version on the left if you prefer, and takes all incoming or all current. The three panes scroll together, and a status bar shows the zoom, the caret, the indentation, the line endings and the encoding, which Accept Merge now keeps. The tab is the file's name, with `*` once you've changed something.
