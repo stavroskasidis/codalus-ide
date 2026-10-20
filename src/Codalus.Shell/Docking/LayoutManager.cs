@@ -40,6 +40,14 @@ public sealed class LayoutManager : ObservableObject
         Factory.ActiveDockableChanged += OnActiveDockableChanged;
         Factory.FocusedDockableChanged += OnFocusedDockableChanged;
         Factory.DockableClosed += OnDockableClosed;
+        // Every document's tab has its pin button, wherever it was added (opened, dragged to another group, restored).
+        Factory.DockableAdded += (_, e) =>
+        {
+            if (e.Dockable is ShellDocument document)
+            {
+                document.PinCommand ??= new Infrastructure.RelayCommand(_ => SetPinned(document, !document.IsPinned));
+            }
+        };
         _root = Build(DefaultTree())!;
     }
 

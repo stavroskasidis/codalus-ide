@@ -3319,6 +3319,7 @@
   "setupWindow.title": "Set up Codalus IDE",
   "setupWindow.tools": "Tools",
   "shellStyles.clearSearch": "Clear search",
+  "shellStyles.pinTab": "Pin or Unpin Tab",
   "shellStyles.pinned": "Pinned",
   "snippetsManager.body": "Snippet body",
   "snippetsManager.codeSnippets": "Code Snippets",

@@ -48,6 +48,10 @@ public sealed class BlazorWasmTests
             var initialized = Line(counter, "initialized");
             f.Shell.Debugger.Breakpoints.Toggle(counter, initialized);
 
+            // The IDE comes to the front when the program stops (the browser often has the focus).
+            var activations = 0;
+            f.Window.Activated += (_, _) => activations++;
+
             await f.RunAsync("debug.start");
             try
             {
@@ -60,12 +64,25 @@ public sealed class BlazorWasmTests
             }
 
             Assert.Equal("breakpoint", f.Shell.Debugger.CurrentStop!.Reason);
+            await ShellFixture.PumpUntil(() => activations > 0);
             await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0);
             Assert.Contains("Counter.OnInitialized", f.Shell.CallStack.Frames[0].Name, StringComparison.Ordinal);
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == initialized
                 && string.Equals(f.Shell.ActiveEditor.Model.Path, counter, StringComparison.OrdinalIgnoreCase));
             await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "this"));
             Assert.Single(f.Shell.Runs.Running); // the dev server
+
+            // F11 steps into the method the line calls, in the browser's .NET.
+            var stops = 0;
+            void OnStopped(object? sender, StopInfo e) => stops++;
+            f.Shell.Debugger.Stopped += OnStopped;
+            await f.RunAsync("debug.stepInto");
+            await ShellFixture.PumpUntil(() => stops > 0 && f.Shell.Debugger.State == DebugState.Stopped, seconds: 60,
+                describe: () => $"{stops} stops, state {f.Shell.Debugger.State}. Debug Console:\n{f.Shell.DebugLog.GetText()}");
+            f.Shell.Debugger.Stopped -= OnStopped;
+            await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0 && f.Shell.CallStack.Frames[0].Name.Contains("Start", StringComparison.Ordinal),
+                describe: () => $"top frame {f.Shell.CallStack.Frames.FirstOrDefault()?.Name}, stop {f.Shell.Debugger.CurrentStop?.Reason}");
+            await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == Line(counter, "start"));
 
             // Stopping the session closes the browser and the dev server.
             f.Shell.Debugger.Breakpoints.Clear();
