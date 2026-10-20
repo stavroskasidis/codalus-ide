@@ -880,6 +880,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             properties["TargetFramework"] = framework;
         }
 
+        using var gate = StringCacheGate.Enter();
         using var collection = new ProjectCollection(properties);
         var project = collection.LoadProject(path);
         string? Property(string name) => project.GetPropertyValue(name) is { Length: > 0 } value ? value : null;
@@ -967,7 +968,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
             foreach (var file in changes.MSBuildFiles)
             {
-                ProjectRootElement.TryOpen(file, _collection, preserveFormatting: true)?.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
+                using (StringCacheGate.Enter())
+                {
+                    ProjectRootElement.TryOpen(file, _collection, preserveFormatting: true)?.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
+                }
             }
 
             // Projects whose own folder changed, plus every project that imports a changed MSBuild file.

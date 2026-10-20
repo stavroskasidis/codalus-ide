@@ -150,7 +150,8 @@ internal sealed class SolutionBuilder : IDisposable
         }
         finally
         {
-            _manager.EndBuild();
+            // With an in-process node, it clears MSBuild's string cache here (StringCacheGate).
+            StringCacheGate.Exclusive(_manager.EndBuild);
         }
 
         // A failed build always says why in the Error List: one that logged no error (a task that returned false

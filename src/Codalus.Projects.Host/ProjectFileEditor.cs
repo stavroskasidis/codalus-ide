@@ -20,6 +20,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
     /// </summary>
     public IReadOnlyList<string> Renamed(IEnumerable<string> projects, string oldPath, string newPath)
     {
+        using var gate = StringCacheGate.Enter();
         var changed = new List<string>();
         foreach (var projectPath in projects.Where(File.Exists))
         {
@@ -51,6 +52,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
     /// <summary>Removes items that name <paramref name="deletedPath"/> (or anything under it) explicitly.</summary>
     public IReadOnlyList<string> Deleted(IEnumerable<string> projects, string deletedPath)
     {
+        using var gate = StringCacheGate.Enter();
         var changed = new List<string>();
         foreach (var projectPath in projects.Where(File.Exists))
         {
@@ -89,6 +91,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
     /// </summary>
     public bool TakeItems(string projectPath, string source, bool copy, List<ProjectManagement.ProjectItems.CarriedItem> carried)
     {
+        using var gate = StringCacheGate.Enter();
         if (!File.Exists(projectPath))
         {
             return false;
@@ -137,6 +140,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
 
     public bool AddProjectReference(string projectPath, string referencePath)
     {
+        using var gate = StringCacheGate.Enter();
         var xml = Open(projectPath);
         var relative = Relative(Path.GetDirectoryName(projectPath)!, referencePath);
         if (xml.Items.Any(i => i.ItemType == "ProjectReference" && Full(Path.GetDirectoryName(projectPath)!, i.Include).Equals(referencePath, s_pathComparison)))
@@ -157,6 +161,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
 
     public bool RemoveProjectReference(string projectPath, string referencePath)
     {
+        using var gate = StringCacheGate.Enter();
         var xml = Open(projectPath);
         var directory = Path.GetDirectoryName(projectPath)!;
         var items = xml.Items.Where(i => i.ItemType == "ProjectReference" && Full(directory, i.Include).Equals(referencePath, s_pathComparison)).ToList();
@@ -179,6 +184,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
     /// </summary>
     public bool AddFileReference(string projectPath, string kind, string file)
     {
+        using var gate = StringCacheGate.Enter();
         var xml = Open(projectPath);
         var directory = Path.GetDirectoryName(projectPath)!;
         var relative = Relative(directory, file);
@@ -204,6 +210,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
 
     public bool RemoveFileReference(string projectPath, string kind, string file)
     {
+        using var gate = StringCacheGate.Enter();
         var xml = Open(projectPath);
         var items = FileReferences(xml, Path.GetDirectoryName(projectPath)!, kind, file).ToList();
         foreach (var item in items)

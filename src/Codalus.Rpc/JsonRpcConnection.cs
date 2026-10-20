@@ -534,7 +534,8 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             {
                 var message = error.TryGetProperty("message", out var m) ? m.GetString() : "Unknown error";
                 var code = error.TryGetProperty("code", out var c) ? c.GetInt32() : 0;
-                completion.TrySetException(new JsonRpcRemoteException(code, message ?? string.Empty));
+                var details = error.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
+                completion.TrySetException(new JsonRpcRemoteException(code, message ?? string.Empty) { Details = details });
             }
             else
             {
@@ -651,7 +652,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             }
             catch (JsonRpcHandlerException ex)
             {
-                await WriteErrorAsync(id, ex.Code, ex.Message).ConfigureAwait(false);
+                await WriteErrorAsync(id, ex.Code, ex.Message, ex.Details).ConfigureAwait(false);
                 return;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -691,7 +692,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
     }
 
-    private Task WriteErrorAsync(JsonElement id, int code, string message) =>
+    private Task WriteErrorAsync(JsonElement id, int code, string message, string? data = null) =>
         WriteMessageAsync(writer =>
         {
             writer.WritePropertyName("id");
@@ -699,6 +700,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             writer.WriteStartObject("error");
             writer.WriteNumber("code", code);
             writer.WriteString("message", message);
+            if (data is not null)
+            {
+                writer.WriteString("data", data);
+            }
+
             writer.WriteEndObject();
         }, CancellationToken.None);
 
@@ -783,12 +789,20 @@ public sealed record JsonRpcCancelNotification(string Method, string IdProperty)
 public sealed class JsonRpcRemoteException(int code, string message) : Exception(message)
 {
     public int Code { get; } = code;
+
+    /// <summary>The error's <c>data</c> when it is a string: a host sends the full exception there for a bug.</summary>
+    public string? Details { get; init; }
+
+    public override string ToString() => Details is null ? base.ToString() : base.ToString() + Environment.NewLine + "--- Remote exception ---" + Environment.NewLine + Details;
 }
 
 /// <summary>Thrown by an incoming request handler to answer with a specific JSON-RPC error code.</summary>
 public sealed class JsonRpcHandlerException(int code, string message) : Exception(message)
 {
     public int Code { get; } = code;
+
+    /// <summary>Sent as the error's <c>data</c> (a string), such as the full exception behind an unexpected failure.</summary>
+    public string? Details { get; init; }
 }
 
 /// <summary>

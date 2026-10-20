@@ -109,6 +109,8 @@ static async Task<int> RunAsync(Stream input, Stream output, string msbuildPath,
     await using var connection = new JsonRpcConnection(input, output);
     await using var server = new BuildHostServer(connection, msbuildPath) { SdkWarning = sdkWarning };
     server.RegisterHandlers();
+    // A handler's unexpected exception answers with its message only: its stack goes to the log (and CI output).
+    connection.HandlerFailed += (_, ex) => Console.Error.WriteLine("[host] [error] " + ex);
     connection.Start();
     await Task.WhenAny(connection.Completion, server.ExitRequested).ConfigureAwait(false);
     return 0;

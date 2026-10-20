@@ -336,6 +336,60 @@ public sealed class PackageIntegrationTests : IAsyncLifetime
         Assert.Equal(["Codalus.Sample.Greeting/1.1.0", "Codalus.Sample.Text/1.0.0"], why.Chain);
     }
 
+    /// <summary>
+    /// The end of every design-time build clears MSBuild's process-wide string cache (its in-process node calls
+    /// <c>Strings.ClearCachedStrings</c>), which once failed a concurrent evaluation with "Handle is not initialized."
+    /// (PR #68's CI); the build host now keeps the two apart (<c>StringCacheGate</c>, whose own tests reproduce the race).
+    /// A stress test of that through the real host: installed packages are read over and over, by three readers whose
+    /// evaluations overlap, while design-time builds start and end. No read may fail, and the design-time builds must
+    /// still end while the reads go on (a gate that let readers in first kept one from ending for a minute).
+    /// </summary>
+    [Fact]
+    public async Task Installed_packages_answer_while_design_time_builds_end()
+    {
+        // Strings over 500 characters are the ones the cache holds through GC handles: a thousand of them in every
+        // evaluation widen the window in which a cleared cache breaks one.
+        File.WriteAllText(Path.Combine(_root, "Directory.Build.props"), $"""
+            <Project>
+              <PropertyGroup>
+            {string.Concat(Enumerable.Range(0, 1000).Select(i => $"    <Long{i}>{i}{new string('x', 600)}</Long{i}>\n"))}  </PropertyGroup>
+            </Project>
+            """);
+        await OpenRestoredAsync();
+        var batches = 0;
+        _service.Log += (_, line) =>
+        {
+            if (line.Contains("Design-time build cache:", StringComparison.Ordinal) && line.Contains("asked for", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref batches);
+            }
+        };
+
+        // At least 6 seconds, and until one of the design-time builds asked for here has ended (2 minutes at most).
+        var started = DateTime.UtcNow;
+        bool Going() => DateTime.UtcNow - started < s_timeout && (DateTime.UtcNow - started < TimeSpan.FromSeconds(6) || Volatile.Read(ref batches) == 0);
+        var reads = 0;
+        var builds = Task.Run(async () =>
+        {
+            while (Going())
+            {
+                await _service.DesignTimeBuildAsync(null, Timeout());
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+            }
+        }, TestContext.Current.CancellationToken);
+        var readers = Enumerable.Range(0, 3).Select(_ => Task.Run(async () =>
+        {
+            while (Going())
+            {
+                Assert.Equal(4, (await _packages.InstalledAsync(null, Timeout())).Count);
+                Interlocked.Increment(ref reads);
+            }
+        }, TestContext.Current.CancellationToken)).ToList();
+        await Task.WhenAll(readers.Append(builds));
+        Console.Error.WriteLine($"[stress] {reads} reads of installed packages during {batches} design-time builds, in {(DateTime.UtcNow - started).TotalSeconds:0} s.");
+        Assert.True(batches > 0, "No design-time build ended while installed packages were read.");
+    }
+
     // ------------------------------------------------------------------ edits (compared with the CLI)
 
     [Fact]
