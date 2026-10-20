@@ -296,10 +296,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         {
             if (reload)
             {
-                foreach (var project in projects)
-                {
-                    ProjectRootElement.TryOpen(project, _collection, preserveFormatting: true)?.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
-                }
+                await ReloadAsync(projects, cancellationToken).ConfigureAwait(false);
             }
 
             await EvaluateLockedAsync(projects, designTime, cancellationToken).ConfigureAwait(false);
@@ -307,6 +304,41 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         finally
         {
             _evaluationLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reads <paramref name="files"/> (projects and the MSBuild files they import) from disk again, under
+    /// <see cref="_evaluationLock"/>. Reloading rewrites the collection's cached <see cref="ProjectRootElement"/> in place,
+    /// so nothing else may read or reload it meanwhile: an edit's reload and the file watcher's both run here, under the
+    /// lock (Windows CI saw the two at once fail an edit with a NullReferenceException in XmlNode.RemoveChild, develop run
+    /// 39505256369), and design-time and real builds, which load the XML from the same cache, are paused (and queued
+    /// again after) behind the build gate.
+    /// </summary>
+    private async Task ReloadAsync(IReadOnlyCollection<string> files, CancellationToken cancellationToken)
+    {
+        var interrupted = await PauseDesignTimeBuildsAsync().ConfigureAwait(false);
+        try
+        {
+            await _builder.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                using (StringCacheGate.Enter())
+                {
+                    foreach (var file in files)
+                    {
+                        ProjectRootElement.TryOpen(file, _collection, preserveFormatting: true)?.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
+                    }
+                }
+            }
+            finally
+            {
+                _builder.Gate.Release();
+            }
+        }
+        finally
+        {
+            ScheduleDesignTimeBuilds(interrupted);
         }
     }
 
@@ -966,11 +998,17 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 }
             }
 
-            foreach (var file in changes.MSBuildFiles)
+            if (changes.MSBuildFiles.Count > 0)
             {
-                using (StringCacheGate.Enter())
+                // As an edit's reload does, and never at the same time as one (both rewrite the same cached XML).
+                await _evaluationLock.WaitAsync(_lifetime.Token).ConfigureAwait(false);
+                try
                 {
-                    ProjectRootElement.TryOpen(file, _collection, preserveFormatting: true)?.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
+                    await ReloadAsync(changes.MSBuildFiles, _lifetime.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _evaluationLock.Release();
                 }
             }
 

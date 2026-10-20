@@ -245,6 +245,24 @@ public sealed class ItemsIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Edits_one_after_another_never_reload_a_project_while_a_build_reads_it()
+    {
+        // Windows CI (develop run 39505256369): an edit reloaded the project's XML while the previous edit's design-time
+        // build read it from the same cache, and the edit failed with a NullReferenceException in XmlNode.RemoveChild.
+        await OpenAsync();
+        var program = Path.Combine(AppDir, "Program.cs");
+        var original = Text(App);
+        for (var i = 0; i < 20; i++)
+        {
+            await _items.ExcludeAsync(App, [program], Timeout());
+            await _items.IncludeAsync(App, [program], Timeout());
+        }
+
+        Assert.Equal(original, Text(App));
+        await WaitUntilAsync(() => _service.Projects[App].Items.Any(item => item.Path == program));
+    }
+
+    [Fact]
     public async Task Add_existing_item_copies_or_links()
     {
         await OpenAsync();
