@@ -57,6 +57,9 @@ public sealed class PreviewerSession : IAsyncDisposable
     public const string AgentTokenVariable = "CODALUS_PREVIEW_AGENT_TOKEN";
     public const string StartupHooksVariable = "DOTNET_STARTUP_HOOKS";
 
+    // An update's answer comes in well under a second once the designer runs (a cold first load takes a few).
+    private static readonly TimeSpan s_resendAfter = TimeSpan.FromSeconds(10);
+
     private readonly Process _process;
     private readonly TcpListener _listener;
     private readonly TcpListener _agentListener;
@@ -72,6 +75,9 @@ public sealed class PreviewerSession : IAsyncDisposable
     private TaskCompletionSource<UpdateXamlResultMessage>? _pendingResult;
     private TaskCompletionSource<PreviewFrame>? _pendingFrame;
     private bool _resultSeen;
+    private long _updatesSent;
+    private long _resultsReceived;
+    private long _answerFrom;
     private PreviewAgentConnection? _agent;
     private readonly TaskCompletionSource<PreviewAgentConnection> _agentConnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private double _scale = 1;
@@ -347,6 +353,13 @@ public sealed class PreviewerSession : IAsyncDisposable
                     case UpdateXamlResultMessage result:
                         lock (_gate)
                         {
+                            // The designer answers every update in order: an answer to an update sent before the
+                            // current one (sent again because its answer was late) is the earlier update's.
+                            if (++_resultsReceived < _answerFrom)
+                            {
+                                break;
+                            }
+
                             // Frames before the answer still show the previous XAML.
                             _resultSeen = true;
                             _pendingResult?.TrySetResult(result);
@@ -421,15 +434,40 @@ public sealed class PreviewerSession : IAsyncDisposable
                 _pendingResult = result;
                 _pendingFrame = frame;
                 _resultSeen = false;
+                _answerFrom = _updatesSent + 1;
             }
 
             using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
             timeoutSource.CancelAfter(timeout);
-            await SendAsync(new UpdateXamlMessage(xaml, assemblyPath, projectPath), timeoutSource.Token).ConfigureAwait(false);
+            var update = new UpdateXamlMessage(xaml, assemblyPath, projectPath);
             UpdateXamlResultMessage answer;
             try
             {
-                answer = await result.Task.WaitAsync(timeoutSource.Token).ConfigureAwait(false);
+                while (true)
+                {
+                    lock (_gate)
+                    {
+                        _updatesSent++;
+                    }
+
+                    await SendAsync(update, timeoutSource.Token).ConfigureAwait(false);
+
+                    // Avalonia's designer queues what it sends for a worker that can miss its wake-up
+                    // (TransportConnectionWrapper), so an answer can wait there until the designer sends anything else,
+                    // and after an error nothing else comes. Sending the update again sends its answer: the first that
+                    // comes is this update's, and the rest are dropped as they arrive.
+                    using var resend = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token);
+                    resend.CancelAfter(s_resendAfter);
+                    try
+                    {
+                        answer = await result.Task.WaitAsync(resend.Token).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (OperationCanceledException) when (!timeoutSource.IsCancellationRequested)
+                    {
+                        Output("[previewer] no answer to the update yet, sent again");
+                    }
+                }
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
