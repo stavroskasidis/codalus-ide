@@ -54,7 +54,9 @@ Debug → **Start with Hot Reload** runs the startup project under `dotnet watch
 
 The toolbar's **Hot Reload** button (the flame, next to Start) starts with Hot Reload, and while the app runs applies the code changes. Its menu also has Stop Running Programs, the Hot Reload on Start Without Debugging switch and the settings.
 
-The status bar shows the state (watching, applied in N ms, compile errors, restarting); click it to see the output. The **Hot Reload on Start Without Debugging** setting (`run.hotReload`) makes `Ctrl+F5` start with Hot Reload. Hot Reload isn't available while debugging: the debugger can't apply changes to a paused program, so restart the session instead. It needs .NET 6 or later: for an older startup project the command is disabled, and its menu item says so.
+The status bar shows the state (watching, applied in N ms, compile errors, restarting); click it to see the output. The **Hot Reload on Start Without Debugging** setting (`run.hotReload`) makes `Ctrl+F5` start with Hot Reload. It needs .NET 6 or later: for an older startup project the command is disabled, and its menu item says so.
+
+**While debugging a Blazor WebAssembly app**, Hot Reload works too: Start Debugging runs its dev server under `dotnet watch`, so saving a file (or `Alt+F10`) applies the edit to the app in the browser while the debugger stays attached, and breakpoints stop in the changed code. The **Hot Reload while debugging** setting (`debug.hotReload`, on by default) turns it off. Other apps, and a Blazor Web App's server, run under the debugger itself, and the .NET runtime refuses Hot Reload's updates to a program a debugger runs: restart the session to see an edit there.
 
 ## Razor and Blazor
 

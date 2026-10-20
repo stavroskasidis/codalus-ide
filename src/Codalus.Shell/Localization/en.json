@@ -2940,6 +2940,8 @@
   "setting.debug.console.title": "Console of debugged programs",
   "setting.debug.containerTool.description": "The container command line for attaching in containers: docker, podman, or one inside WSL such as \"wsl -d Ubuntu --exec podman\". Empty: the Containers window's engine (containers.tool, else docker when it is installed, else podman).",
   "setting.debug.containerTool.title": "Container tool",
+  "setting.debug.hotReload.description": "Start Debugging runs a Blazor WebAssembly app's dev server under dotnet watch, so saving a file (or Apply Code Changes, Alt+F10) applies the edit to the app in the browser while you debug it. The .NET runtime refuses edits to a program the debugger runs, so other apps restart instead.",
+  "setting.debug.hotReload.title": "Hot Reload while debugging",
   "setting.debug.javaScript.description": "Start Debugging opens an ASP.NET Core app's page in Chrome or Edge under the debugger, when its launch profile opens a browser, so breakpoints in its scripts bind too. Blazor WebAssembly components always debug in the browser.",
   "setting.debug.javaScript.title": "JavaScript debugging for ASP.NET Core",
   "setting.debug.justMyCode.description": "Step through and break in your own code only (optimized and framework code is stepped over).",
