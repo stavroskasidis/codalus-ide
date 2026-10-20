@@ -182,11 +182,7 @@ internal static partial class BuiltIns
             shell.OpenSettings("Hot Reload");
             return Task.CompletedTask;
         });
-        Add("run.stop", "Stop Running Programs", "Debug", _ =>
-        {
-            shell.StopRunning();
-            return Task.CompletedTask;
-        }, "programRunning");
+        Add("run.stop", "Stop Running Programs", "Debug", _ => shell.StopRunningAsync(), "programRunning");
         Add("run.selectStartupProject", "Select Startup Project…", "Debug", _ => shell.SelectStartupProjectAsync(), "solutionOpen");
         Add("run.selectLaunchProfile", "Select Launch Profile…", "Debug", shell.SelectLaunchProfileAsync, "hasStartupProject");
         Add("run.configureStartupProjects", "Configure Startup Projects…", "Debug", _ =>

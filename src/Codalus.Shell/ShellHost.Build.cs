@@ -315,7 +315,11 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>Stops the running programs without waiting for them to end (a process tree's end can take seconds).</summary>
     public void StopRunning() => Runs.StopAll();
+
+    /// <summary>Stops the running programs; completes once they are ended, without blocking the UI thread.</summary>
+    public Task StopRunningAsync() => Runs.StopAllAsync();
 
     public async Task SelectStartupProjectAsync()
     {
