@@ -264,6 +264,7 @@ internal sealed class UpToDateCheck(Func<string, IReadOnlyDictionary<string, str
         {
             try
             {
+                using var gate = StringCacheGate.Enter();
                 loaded = new Project(project, new Dictionary<string, string>(globalProperties(project), StringComparer.OrdinalIgnoreCase), null, _collection);
             }
             catch (Exception ex) when (ex is Microsoft.Build.Exceptions.InvalidProjectFileException or IOException or UnauthorizedAccessException)
@@ -300,7 +301,12 @@ internal sealed class UpToDateCheck(Func<string, IReadOnlyDictionary<string, str
         {
             foreach (var framework in frameworks)
             {
-                var inner = new Project(project, new Dictionary<string, string>(globalProperties(project), StringComparer.OrdinalIgnoreCase) { ["TargetFramework"] = framework }, null, _collection);
+                Project inner;
+                using (StringCacheGate.Enter())
+                {
+                    inner = new Project(project, new Dictionary<string, string>(globalProperties(project), StringComparer.OrdinalIgnoreCase) { ["TargetFramework"] = framework }, null, _collection);
+                }
+
                 snapshots.Add(Capture(inner));
             }
         }

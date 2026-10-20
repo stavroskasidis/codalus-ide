@@ -33,6 +33,7 @@ public sealed partial class ShellHost
         GitChanges.OpenFile = path => OpenFileAsync(path);
         GitChangesView.ReportError = ReportGitError;
         DiffView.ReportError = ReportGitError;
+        MergeEditorView.ReportError = ReportGitError;
         UpdateGitStatus();
     }
 

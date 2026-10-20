@@ -79,6 +79,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
 
     public EvaluatedProject Evaluate(string path, string configuration, string platform, EvaluationContext context)
     {
+        using var gate = StringCacheGate.Enter();
         var name = Path.GetFileNameWithoutExtension(path);
         if (!File.Exists(path))
         {

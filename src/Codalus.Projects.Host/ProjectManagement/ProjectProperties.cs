@@ -13,6 +13,7 @@ internal static class ProjectProperties
 {
     public static ProjectPropertiesResult Get(string path, IReadOnlyDictionary<string, string> globalProperties, IReadOnlyList<string> names, string? scope)
     {
+        using var gate = StringCacheGate.Enter();
         using var collection = new ProjectCollection(new Dictionary<string, string>(globalProperties, StringComparer.OrdinalIgnoreCase));
         var project = collection.LoadProject(path);
         var xml = ProjectRootElement.Open(path, collection, preserveFormatting: true);
@@ -58,6 +59,7 @@ internal static class ProjectProperties
     /// </summary>
     public static bool Set(string path, string name, string? value, string? scope)
     {
+        using var gate = StringCacheGate.Enter();
         using var collection = new ProjectCollection();
         var xml = ProjectRootElement.Open(path, collection, preserveFormatting: true);
         xml.Reload(throwIfUnsavedChanges: false, preserveFormatting: true); // always the file on disk

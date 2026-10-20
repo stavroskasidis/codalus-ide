@@ -42,14 +42,16 @@ internal sealed class ProjectItems : IDisposable
     /// <summary>Folders never listed or included (version control, IDE state, packages).</summary>
     private static readonly HashSet<string> s_skippedFolders = new(StringComparer.OrdinalIgnoreCase) { ".git", ".vs", ".idea", "node_modules", "bin", "obj" };
 
+    private readonly StringCacheGate.Scope _gate;
     private readonly ProjectCollection _collection;
     private readonly Dictionary<string, string> _globals;
     private readonly string _before;
     private readonly string _directory;
     private readonly Project _project;
 
-    private ProjectItems(string path, IReadOnlyDictionary<string, string> globals)
+    private ProjectItems(string path, IReadOnlyDictionary<string, string> globals, StringCacheGate.Scope gate)
     {
+        _gate = gate;
         Path = path;
         _directory = System.IO.Path.GetDirectoryName(path)!;
         _globals = new Dictionary<string, string>(globals, StringComparer.OrdinalIgnoreCase);
@@ -77,7 +79,20 @@ internal sealed class ProjectItems : IDisposable
     public bool IsOrdered => _project.GetPropertyValue("DefaultLanguageSourceExtension").Equals(".fs", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Opens a project file for item edits, evaluated with <paramref name="globals"/> (the active configuration).</summary>
-    public static ProjectItems Open(string projectPath, IReadOnlyDictionary<string, string> globals) => new(projectPath, globals);
+    /// <remarks>It holds <see cref="StringCacheGate"/> until disposed: its reads, edits and re-evaluations are MSBuild work.</remarks>
+    public static ProjectItems Open(string projectPath, IReadOnlyDictionary<string, string> globals)
+    {
+        var gate = StringCacheGate.Enter();
+        try
+        {
+            return new(projectPath, globals, gate);
+        }
+        catch
+        {
+            gate.Dispose();
+            throw;
+        }
+    }
 
     /// <summary>Writes the project file if an edit changed it. Returns whether it did.</summary>
     public bool Save()
@@ -91,7 +106,11 @@ internal sealed class ProjectItems : IDisposable
         return true;
     }
 
-    public void Dispose() => _collection.Dispose();
+    public void Dispose()
+    {
+        _collection.Dispose();
+        _gate.Dispose();
+    }
 
     // ------------------------------------------------------------------ reading
 

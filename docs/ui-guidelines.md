@@ -80,6 +80,7 @@ All tokens are in `src/Codalus.Shell/Theming/Tokens.axaml`. Colors and the famil
 | `Shell.Info`, `Shell.Warning`, `Shell.Error`, `Shell.Modified` | States (icons and borders) |
 | `Shell.Error.Foreground`, `Shell.Warning.Foreground` | Error and warning text (4.5:1 on every surface, 7:1 in the families' High contrast; M34g), through `TextBlock.error` and `.warning` |
 | `Shell.Diff.Added`, `Shell.Diff.Removed` | Diffs, and passed tests (graphics: gutters, icons) |
+| `Shell.Merge.Conflict`, `.Conflict.Border`, `.Resolved.Border` | The merge editor's conflict blocks: an unresolved block's muted red fill (opaque, under the code; none in High Contrast) and dashed outline, and a resolved block's solid outline |
 | `Shell.Diff.Added.Foreground`, `Shell.Diff.Removed.Foreground` | Added and removed lines as text (a preview of changes; 4.5:1 on every surface, 7:1 in the families' High contrast; M34g) |
 | `Shell.Toolbar`, `Shell.Toolbar.Border`, `Shell.TitleBar*`, `Shell.Search*` | The title row and the standard toolbar: `Shell.TitleBar.Hover` for the menu bar's items, `.Chip` behind the solution's name, `Shell.Search.Foreground` for the search box's text |
 | `Shell.Toolbar.Start`, `.Foreground`, `.Icon` | The Start button (filled with the accent in Daylight) |

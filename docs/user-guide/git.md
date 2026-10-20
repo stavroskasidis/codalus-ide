@@ -18,10 +18,15 @@ Git → Git Changes (`Ctrl+0 Ctrl+G`).
 
 ## Resolving conflicts
 
-The merge editor shows the current version (yours) and the incoming one side by side, and the result below it, which starts as the file with git's conflict markers.
-- **Accept Current**, **Accept Incoming** or **Accept Both** for the conflict at the caret, or **Accept All Current** / **Accept All Incoming**. You can also edit the result directly.
-- **Previous Conflict** and **Next Conflict** move between them; the toolbar says how many are left.
-- **Accept Merge** (once none are left) saves the file and stages it. When every conflict is resolved, **Continue** in Git Changes finishes the merge, rebase, cherry-pick or revert.
+The merge editor opens as a tab named after the file (with `*` once you've changed something). It shows the two versions side by side, **Incoming** (the branch you're merging, e.g. `Incoming: master`) on the left and **Current** (your branch, e.g. `Current: develop`) on the right, and the **Result** below them. Each conflict is a block highlighted in muted red with a dashed outline in all three panes. Until you resolve it, the result shows the merge base's text for that block (what the file had before either side changed it) instead of git's `<<<<<<<` markers.
+- **Check the box beside a block** to take that side's block into the result. Check both boxes to take both: the current block first, then the incoming one, in whichever order you check them. Uncheck a box to take its block out again; with neither checked, the merge base's text comes back and the conflict counts as unresolved.
+- **The box in a pane's header** takes every conflict from that side (it shows a dash when only some do); uncheck it to take them all out.
+- **Edit the result** directly as well: typing in a block resolves that conflict with what you typed. Undo (`Ctrl+Z`) takes back edits and check boxes alike.
+- **The toolbar**: the up and down arrows (`Shift+F8`, `F8`) move to the previous and next conflict, followed by the count, e.g. **1 Conflict (1 Remaining)**. **Accept Merge** (once none remain) saves the file and stages it. When every conflicted file is resolved, **Continue** in Git Changes finishes the merge, rebase, cherry-pick or revert.
+- **The gear menu**: the layout (**Versions Above the Result**, or **Three Columns** with the result in the middle), **Incoming on the Left** (uncheck it to put your version on the left), and **Take All Incoming**, **Take All Current** and **Reset All Conflicts**. The layout is remembered (`git.mergeEditor.layout`, `git.mergeEditor.incomingOnLeft`).
+- **Scrolling**: the three panes scroll together, up and down and sideways, keeping each conflict's blocks level with each other. `Ctrl` + mouse wheel zooms all three.
+- **The status bar** under the panes shows the zoom, the caret's line and character, the indentation (`SPC` or `TABS`), the line endings (`CRLF` or `LF`) and the encoding. Accept Merge keeps the file's encoding.
+- **From the Command Palette**: Next Conflict, Previous Conflict, Take Incoming, Take Current and Take Both (for the conflict at the result's caret), Take All Incoming, Take All Current and Accept Merge.
 
 **Using Codalus IDE as git's merge tool and editor:**
 

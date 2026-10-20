@@ -63,7 +63,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
         }
     }
 
-    private static string Metadata(string key) =>
+    internal static string Metadata(string key) =>
         typeof(AcpAgentTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
 
     /// <summary>The stand-in agent's assembly (run with dotnet, as a user's agent CLI is run).</summary>
