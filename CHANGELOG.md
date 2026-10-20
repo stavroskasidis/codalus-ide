@@ -54,6 +54,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Fixed:** stopping a running program or Hot Reload session could freeze Codalus IDE for up to 10 seconds, most often on macOS, where ending the program's child processes can wait on the system's process list; starting with Hot Reload right after a stop froze the same way. The stop now finishes in the background, and the IDE stays responsive.
 - **Fixed:** running an Aspire AppHost, Aspire's orchestrator could miss that a project it had just asked Codalus IDE to start was running: when the project started right after the orchestrator connected, the IDE sent the program's process id before it had finished accepting that connection, and the message was dropped. Messages sent before the orchestrator listens now wait for it.
 - **Fixed:** on Windows, saving a text template or a `.resx` file could fail to regenerate its output, with "The custom tool failed: The process cannot access the file", when another program was reading the generated file at that moment. The custom tool now waits a few seconds for the file to be free.
+- **Fixed:** the Benchmarks window could leave a run out of the selected benchmark's history: when a run measured exactly the same as the one before (a Dry job's single iteration can, on Windows), the history wasn't refreshed. It now always shows the run.
 
 ## 0.3.0
 
