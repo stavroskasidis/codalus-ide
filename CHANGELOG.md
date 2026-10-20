@@ -52,6 +52,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Fixed:** after **Exclude From Project** on a folder, Solution Explorer kept showing the folder, selected and still offering Exclude From Project, until the file watcher noticed the project file had changed a moment later. A project Codalus IDE changes is now read again from disk as part of the change. With **Show All Files**, an item you excluded or included also kept offering the command it had before until you selected it again.
 - **Fixed:** in a repository that started using Git LFS after Codalus IDE opened it (`git lfs track`), Git Changes didn't show the LFS badges until you reopened the repository. A change to the repository's `.gitattributes` now checks again.
 - **Fixed:** stopping a running program or Hot Reload session could freeze Codalus IDE for up to 10 seconds, most often on macOS, where ending the program's child processes can wait on the system's process list; starting with Hot Reload right after a stop froze the same way. The stop now finishes in the background, and the IDE stays responsive.
+- **Fixed:** running an Aspire AppHost, Aspire's orchestrator could miss that a project it had just asked Codalus IDE to start was running: when the project started right after the orchestrator connected, the IDE sent the program's process id before it had finished accepting that connection, and the message was dropped. Messages sent before the orchestrator listens now wait for it.
 
 ## 0.3.0
 

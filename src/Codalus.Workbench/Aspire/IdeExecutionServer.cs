@@ -84,6 +84,21 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     private readonly Func<IdeRunRequest, CancellationToken, Task<IIdeRunSession>> _start;
     private readonly ConcurrentDictionary<string, IIdeRunSession> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<WebSocket, SemaphoreSlim> _sockets = new();
+
+    /// <summary>
+    /// Notifications sent while no socket listens, oldest first, for the next socket that does. The orchestrator connects
+    /// the notification socket before it asks for a run session, but its connection completes when the handshake's answer
+    /// arrives, before the server has registered the socket: a run session asked for at once can start, and its
+    /// <c>processRestarted</c> be sent, in between. Dropped, the orchestrator never learned that the program runs.
+    /// </summary>
+    private readonly Queue<byte[]> _waiting = new();
+
+    /// <summary>Guards <see cref="_waiting"/> and adding a socket to <see cref="_sockets"/>: a notification is either queued or sent.</summary>
+    private readonly Lock _socketsLock = new();
+
+    /// <summary>How many notifications wait for a socket at most; beyond that, the oldest are dropped.</summary>
+    private const int WaitingLimit = 1000;
+
     private readonly CancellationTokenSource _lifetime = new();
     private int _nextSession;
     private int _disposed;
@@ -317,12 +332,27 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     private async Task SendAsync(IdeNotification notification)
     {
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(notification, IdeExecutionJsonContext.Default.IdeNotification));
-        if (_sockets.IsEmpty && notification.Type != "serviceLogs")
+        KeyValuePair<WebSocket, SemaphoreSlim>[] sockets;
+        lock (_socketsLock)
         {
-            Log?.Invoke($"No notification socket: {notification.Type} for run session {notification.SessionId} wasn't sent.");
+            sockets = _sockets.ToArray();
+            if (sockets.Length == 0 && Volatile.Read(ref _disposed) == 0)
+            {
+                if (_waiting.Count == WaitingLimit)
+                {
+                    _waiting.Dequeue();
+                }
+
+                _waiting.Enqueue(bytes);
+            }
         }
 
-        foreach (var (socket, gate) in _sockets)
+        if (sockets.Length == 0 && notification.Type != "serviceLogs")
+        {
+            Log?.Invoke($"No notification socket yet: {notification.Type} for run session {notification.SessionId} waits for one.");
+        }
+
+        foreach (var (socket, gate) in sockets)
         {
             await gate.WaitAsync().ConfigureAwait(false);
             try
@@ -356,11 +386,38 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     {
         var accepted = await context.AcceptWebSocketAsync(null).ConfigureAwait(false);
         var socket = accepted.WebSocket;
-        _sockets[socket] = new SemaphoreSlim(1, 1);
+
+        // The socket's gate is held until the notifications that waited for a socket are sent, so they go first.
+        var gate = new SemaphoreSlim(0, 1);
+        byte[][] waiting;
+        lock (_socketsLock)
+        {
+            _sockets[socket] = gate;
+            waiting = [.. _waiting];
+            _waiting.Clear();
+        }
+
         Log?.Invoke("The AppHost listens for notifications.");
         var buffer = new byte[1024];
         try
         {
+            try
+            {
+                foreach (var bytes in waiting)
+                {
+                    await socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (waiting.Length > 0)
+                {
+                    Log?.Invoke($"Sent {waiting.Length} notification(s) that waited for the socket.");
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+
             while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
                 var result = await socket.ReceiveAsync(buffer, cancellationToken).ConfigureAwait(false);
@@ -370,7 +427,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
                 }
             }
         }
-        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException)
+        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException or IOException)
         {
         }
         finally
@@ -406,6 +463,17 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             {
                 session.Terminate();
             }
+        }
+    }
+
+    /// <summary>The sessions and notification sockets the server holds, for a test's failure message.</summary>
+    internal string DescribeState()
+    {
+        lock (_socketsLock)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"sessions [{string.Join(", ", _sessions.Keys)}]; notification sockets [{string.Join(", ", _sockets.Keys.Select(s => s.State))}]; {_waiting.Count} notification(s) waiting for a socket; {(Volatile.Read(ref _disposed) != 0 ? "disposed" : "not disposed")}");
         }
     }
 
