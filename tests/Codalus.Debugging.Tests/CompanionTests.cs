@@ -183,7 +183,10 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
         var dumps = new Dumps();
         try
         {
-            await Task.Delay(1500, TestContext.Current.CancellationToken); // in the wait loop by now
+            // It says "waiting" as it enters the wait loop. A fixed delay wasn't enough on a loaded macOS runner: the dump
+            // caught the runtime still starting, its three threads without a managed frame.
+            var said = await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.Equal("waiting", said);
 
             var created = await Dumps.CreateAsync(process.Id, dump, "full", Dumps.DumpTimeout, TestContext.Current.CancellationToken); // full: the JIT data that maps code to lines
             Assert.True(created.Size > 0);
