@@ -81,6 +81,42 @@ public static class SolutionTree
 {
     private static readonly StringComparer s_names = StringComparer.OrdinalIgnoreCase;
 
+    /// <summary>
+    /// The order of names in the tree, as Visual Studio's: case-insensitive with letters compared in lower case, so
+    /// punctuation such as <c>_</c> comes before them (<c>_Imports.razor</c> before <c>App.razor</c>; an ordinal
+    /// case-insensitive comparison upper-cases, which puts it after).
+    /// </summary>
+    internal static readonly StringComparer Order = new NameOrder();
+
+    private sealed class NameOrder : StringComparer
+    {
+        public override int Compare(string? x, string? y)
+        {
+            if (x is null || y is null)
+            {
+                return x is null ? (y is null ? 0 : -1) : 1;
+            }
+
+            for (var i = 0; i < Math.Min(x.Length, y.Length); i++)
+            {
+                var difference = char.ToLowerInvariant(x[i]).CompareTo(char.ToLowerInvariant(y[i]));
+                if (difference != 0)
+                {
+                    return difference;
+                }
+            }
+
+            return x.Length != y.Length ? x.Length.CompareTo(y.Length) : string.CompareOrdinal(x, y);
+        }
+
+        public override bool Equals(string? x, string? y) => Compare(x, y) == 0;
+
+        public override int GetHashCode(string obj) => obj.GetHashCode(StringComparison.Ordinal);
+    }
+
+    /// <summary>A project's folders that Visual Studio lists before the others, in this order.</summary>
+    private static readonly string[] s_projectFoldersFirst = ["Properties", "My Project", "wwwroot"];
+
     public static ExplorerNode Build(
         SolutionInfo solution,
         IReadOnlyDictionary<string, ProjectInfo> projects,
@@ -96,7 +132,7 @@ public static class SolutionTree
         IReadOnlyList<ExplorerNode> ChildrenOf(string? parent)
         {
             var nodes = new List<ExplorerNode>();
-            foreach (var folder in solution.Folders.Where(f => f.Parent == parent).OrderBy(f => f.Name, s_names))
+            foreach (var folder in solution.Folders.Where(f => f.Parent == parent).OrderBy(f => f.Name, Order))
             {
                 nodes.Add(new ExplorerNode("sf:" + folder.Id, ExplorerNodeKind.SolutionFolder, folder.Name)
                 {
@@ -105,13 +141,13 @@ public static class SolutionTree
                     Children =
                     [
                         .. ChildrenOf(folder.Id),
-                        .. folder.Files.OrderBy(System.IO.Path.GetFileName, s_names).Select(file =>
+                        .. folder.Files.OrderBy(System.IO.Path.GetFileName, Order).Select(file =>
                             new ExplorerNode("si:" + file, ExplorerNodeKind.SolutionItem, System.IO.Path.GetFileName(file)) { Path = file, Icon = "file" }),
                     ],
                 });
             }
 
-            foreach (var project in solution.Projects.Where(p => p.Parent == parent && (p.Parent is null || folders.ContainsKey(p.Parent))).OrderBy(p => p.Name, s_names))
+            foreach (var project in solution.Projects.Where(p => p.Parent == parent && (p.Parent is null || folders.ContainsKey(p.Parent))).OrderBy(p => p.Name, Order))
             {
                 nodes.Add(Project(project, projects.GetValueOrDefault(project.Path), solution.Trusted, compilerInputs?.GetValueOrDefault(project.Path), options?.DiskEntries?.GetValueOrDefault(project.Path)));
             }
@@ -157,7 +193,7 @@ public static class SolutionTree
 
         IReadOnlyList<ExplorerNode> NodesOf(string folder) =>
         [
-            .. (children.GetValueOrDefault(folder) ?? []).Where(e => e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), s_names)
+            .. (children.GetValueOrDefault(folder) ?? []).Where(e => e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), Order)
                 .Select(e => new ExplorerNode("d:" + e.Path, ExplorerNodeKind.Folder, System.IO.Path.GetFileName(e.Path))
                 {
                     Path = e.Path,
@@ -165,7 +201,7 @@ public static class SolutionTree
                     Icon = "folder",
                     Children = NodesOf(e.Path),
                 }),
-            .. (children.GetValueOrDefault(folder) ?? []).Where(e => !e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), s_names)
+            .. (children.GetValueOrDefault(folder) ?? []).Where(e => !e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), Order)
                 .Select(e =>
                 {
                     var name = System.IO.Path.GetFileName(e.Path);
@@ -356,7 +392,10 @@ public static class SolutionTree
     private static List<ExplorerNode> Build(FolderBuilder folder, string projectPath)
     {
         var nodes = new List<(int Order, ExplorerNode Node)>();
-        foreach (var child in folder.Folders.Values.OrderBy(f => f.Name, s_names))
+        // At the project's root, Properties (My Project) and wwwroot come first, then the other folders by name.
+        var atRoot = folder.Name.Length == 0;
+        int First(FolderBuilder f) => atRoot && Array.FindIndex(s_projectFoldersFirst, n => s_names.Equals(n, f.Name)) is >= 0 and var at ? at : s_projectFoldersFirst.Length;
+        foreach (var child in folder.Folders.Values.OrderBy(First).ThenBy(f => f.Name, Order))
         {
             nodes.Add((child.Order, new ExplorerNode("d:" + child.Path, ExplorerNodeKind.Folder, child.Name)
             {
@@ -381,11 +420,11 @@ public static class SolutionTree
                 IsExcluded = file.Excluded,
                 Children = [.. folder.Files
                     .Where(f => s_names.Equals(parentOf[f.Name], file.Name))
-                    .OrderBy(f => f.Name, s_names)
+                    .OrderBy(f => f.Name, Order)
                     .Select(File)],
             };
 
-        nodes.AddRange(folder.Files.Where(f => parentOf[f.Name] is null).OrderBy(f => f.Name, s_names).Select(f => (f.Order, File(f))));
+        nodes.AddRange(folder.Files.Where(f => parentOf[f.Name] is null).OrderBy(f => f.Name, Order).Select(f => (f.Order, File(f))));
 
         // By name, folders first; in an F# project, compiled files and the folders holding them first, in compile order.
         // (OrderBy is stable, so the rest keep their order by name.)

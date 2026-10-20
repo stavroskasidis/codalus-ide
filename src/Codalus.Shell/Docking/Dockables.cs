@@ -41,6 +41,9 @@ public interface IShellTab
     /// <summary>A pinned tab (documents only).</summary>
     bool IsPinned { get; }
 
+    /// <summary>Pins or unpins the tab (its pin button beside the close button), or null when it can't be pinned.</summary>
+    System.Windows.Input.ICommand? PinCommand { get; }
+
     /// <summary>The stripe along the tab's bottom edge (a document colored by project), or null.</summary>
     Avalonia.Media.IBrush? TabAccent { get; }
 
@@ -83,6 +86,8 @@ public sealed class ToolWindowDockable : Tool, IShellTab
     public bool IsPreview => false;
 
     public bool IsPinned => false;
+
+    public System.Windows.Input.ICommand? PinCommand => null;
 
     public Avalonia.Media.IBrush? TabAccent => null;
 
@@ -129,6 +134,9 @@ public abstract class ShellDocument : Document, IShellTab
         get => _isPinned;
         set => SetProperty(ref _isPinned, value);
     }
+
+    /// <summary>Pins or unpins the tab (the layout sets it as the document joins a group).</summary>
+    public System.Windows.Input.ICommand? PinCommand { get; set; }
 
     /// <summary>
     /// The tab's color by project (M34d, <c>workbench.editor.colorTabsByProject</c>): a stripe along the tab's bottom

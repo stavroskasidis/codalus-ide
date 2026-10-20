@@ -79,11 +79,24 @@ public class NavigationDepthTests
         f.Press(Key.Left);
         Assert.Equal(radius - 1, program.Editor.CaretOffset);
 
-        // CodeLens: counts at the end of declarations; clicking one runs Find All References.
+        // CodeLens: counts on a row of their own above declarations, where the code starts; clicking one runs Find All
+        // References.
         var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
         var interfaceLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("interface IShape", StringComparison.Ordinal)).LineNumber;
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(interfaceLine) is { } eol && eol.Contains("implementations", StringComparison.Ordinal), seconds: 60);
-        Assert.Contains("2 references", shapes.Insights.EndOfLineText(interfaceLine), StringComparison.Ordinal);
+        Assert.Contains("2 references", shapes.Insights.LensRowAbove(interfaceLine), StringComparison.Ordinal);
+        var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) is not null, seconds: 60);
+        ShellFixture.Pump();
+        var view = shapes.Editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        var declaration = view.GetVisualLine(areaDeclaration)!;
+        var before = view.GetVisualLine(areaDeclaration - 1)!;
+        Assert.Single(declaration.TextLines); // the declaration keeps its own height: no taller caret or selection
+        Assert.Equal(view.DefaultLineHeight, declaration.Height, 1);
+        Assert.Equal(2, before.TextLines.Count); // the line before ends, then the row
+        var rowTop = before.VisualTop + before.TextLines[0].Height - view.VerticalOffset;
+        var codeX = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(areaDeclaration, shapes.Model.Text.GetLineByNumber(areaDeclaration).Length - "double Area();".Length + 1), AvaloniaEdit.Rendering.VisualYPosition.LineTop).X;
 
         // The inheritance margin: Circle.Area overrides and implements.
         var areaLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("override double Area() => System.Math.PI", StringComparison.Ordinal)).LineNumber;
@@ -116,9 +129,97 @@ public class NavigationDepthTests
         Assert.Equal((0, 0), shapesView.OverviewRuler.Health);
         Screenshot(f, "m12a-inline-information");
 
+        // Clicking the row runs its lens (Find All References from IShape.Area).
+        shapes.Editor.CaretOffset = 0;
+        shapes.Editor.ScrollTo(1, 1);
+        await ShellFixture.PumpUntil(() => view.VerticalOffset == 0 && view.GetVisualLine(areaDeclaration - 1) is { TextLines.Count: 2 }, describe: () => $"offset {view.VerticalOffset}, lines {view.GetVisualLine(areaDeclaration - 1)?.TextLines.Count}, row '{shapes.Insights.LensRowAbove(areaDeclaration)}', folded {shapes.Insights.IsFoldedAway?.Invoke(shapes.Model.Text.GetLineByNumber(areaDeclaration - 1).EndOffset)}");
+        before = view.GetVisualLine(areaDeclaration - 1)!;
+        rowTop = before.VisualTop + before.TextLines[0].Height - view.VerticalOffset;
+        var references = 0;
+        f.Shell.Workbench.Commands.Executed += (_, e) => references += e.CommandId is "editor.action.showReferences" or "editor.action.referenceSearch" ? 1 : 0;
+        var click = Avalonia.VisualExtensions.TranslatePoint(view, new Avalonia.Point(codeX + 8, rowTop + before.TextLines[1].Height / 2), f.Window)!.Value;
+        f.Window.MouseDown(click, Avalonia.Input.MouseButton.Left);
+        f.Window.MouseUp(click, Avalonia.Input.MouseButton.Left);
+        await ShellFixture.PumpUntil(() => references > 0, describe: () => $"commands run: {references}; row '{shapes.Insights.LensRowAbove(areaDeclaration)}'");
+
         // CodeLens can be turned off.
         await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CodeLensKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(interfaceLine) is null);
+    }
+
+    [AvaloniaFact]
+    public async Task Ctrl_hover_shows_a_symbol_as_a_link_to_its_definition()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var program = await OpenAsync(f, Path.Combine(folder, "src", "App", "Program.cs"));
+        await ShellFixture.PumpUntil(() => program.Insights.Hints.Count > 0, seconds: 60); // the language service answers
+        var view = program.Editor.TextArea.TextView;
+        Avalonia.Point At(string text, int into)
+        {
+            var offset = program.Model.Text.Text.IndexOf(text, StringComparison.Ordinal) + into;
+            var location = program.Model.Text.GetLocation(offset);
+            var visual = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(location), AvaloniaEdit.Rendering.VisualYPosition.LineMiddle) - view.ScrollOffset;
+            return Avalonia.VisualExtensions.TranslatePoint(view, new Avalonia.Point(visual.X + 2, visual.Y), f.Window)!.Value;
+        }
+
+        // Without Ctrl, nothing; with Ctrl over Scale, the method is a link: underlined, the pointer a hand.
+        var scale = program.Model.Text.Text.IndexOf("Scale(", StringComparison.Ordinal);
+        f.Window.MouseMove(At("Scale(", 1));
+        ShellFixture.Pump();
+        Assert.Null(program.Link.Link);
+        f.Window.MouseMove(At("Scale(", 2), Avalonia.Input.RawInputModifiers.Control);
+        await ShellFixture.PumpUntil(() => program.Link.Link is not null, seconds: 30);
+        Assert.Equal((scale, scale + "Scale".Length), program.Link.Link);
+        Assert.Equal("Hand", view.Cursor?.ToString());
+
+        // Text in a string isn't a link, and letting go of Ctrl takes the link away.
+        f.Window.MouseMove(At("\"Ada\"", 2), Avalonia.Input.RawInputModifiers.Control);
+        await ShellFixture.PumpUntil(() => program.Link.Link is null);
+        f.Window.MouseMove(At("Scale(", 2), Avalonia.Input.RawInputModifiers.Control);
+        await ShellFixture.PumpUntil(() => program.Link.Link is not null, seconds: 30);
+        f.Window.KeyReleaseQwerty(Avalonia.Input.PhysicalKey.ControlLeft, Avalonia.Input.RawInputModifiers.None);
+        await ShellFixture.PumpUntil(() => program.Link.Link is null);
+        Assert.NotEqual("Hand", view.Cursor?.ToString());
+    }
+
+    [AvaloniaFact]
+    public async Task The_breakpoint_margin_comes_before_the_line_numbers_and_shows_where_a_click_adds_one()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        var margins = shapes.Editor.TextArea.LeftMargins;
+        var numbers = margins.IndexOf(margins.OfType<AvaloniaEdit.Editing.LineNumberMargin>().Single());
+        Assert.True(margins.IndexOf(shapes.BreakpointMargin) < numbers, string.Join(", ", margins.Select(m => m.GetType().Name)));
+        Assert.True(margins.IndexOf(shapes.Folding.GetType().Assembly.GetType("AvaloniaEdit.Folding.FoldingMargin") is { } type ? margins.First(type.IsInstanceOfType) : margins[^1]) > numbers);
+
+        // Over a line, the margin shows where a click puts the breakpoint; the pointer leaving takes it away.
+        var area = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(area) is not null, seconds: 60);
+        ShellFixture.Pump();
+        var view = shapes.Editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        Avalonia.Point InMargin(double y) => Avalonia.VisualExtensions.TranslatePoint(shapes.BreakpointMargin, new Avalonia.Point(shapes.BreakpointMargin.Bounds.Width / 2, y - view.VerticalOffset), f.Window)!.Value;
+        var line = view.GetVisualLine(area)!;
+        f.Window.MouseMove(InMargin(line.VisualTop + line.Height / 2));
+        await ShellFixture.PumpUntil(() => shapes.BreakpointMargin.HoverLine == area);
+
+        // Next to the CodeLens row above it, the margin is the declaration's too: a click there sets its breakpoint.
+        var before = view.GetVisualLine(area - 1)!;
+        var row = InMargin(before.VisualTop + before.TextLines[0].Height + before.TextLines[1].Height / 2);
+        f.Window.MouseMove(row);
+        ShellFixture.Pump();
+        Assert.Equal(area, shapes.BreakpointMargin.HoverLine);
+        f.Window.MouseDown(row, Avalonia.Input.MouseButton.Left);
+        f.Window.MouseUp(row, Avalonia.Input.MouseButton.Left);
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.Breakpoints.At(shapes.Model.Path, area) is not null);
+        Assert.Null(f.Shell.Debugger.Breakpoints.At(shapes.Model.Path, area - 1));
+        f.Shell.Debugger.Breakpoints.Clear();
     }
 
     [AvaloniaFact]

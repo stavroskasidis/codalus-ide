@@ -69,6 +69,32 @@ public class NestingTests
     }
 
     [Fact]
+    public void A_projects_properties_and_wwwroot_come_first_and_underscores_before_letters()
+    {
+        // As Visual Studio orders them: Properties and wwwroot, the other folders by name, then the files, with
+        // _Imports.razor before App.razor (an ordinal case-insensitive order upper-cases and puts it last).
+        var dir = Path.Combine(Path.GetTempPath(), "client");
+        var project = Path.Combine(dir, "Client.csproj");
+        string F(string relative) => Path.Combine(dir, relative.Replace('/', Path.DirectorySeparatorChar));
+        var info = new ProjectInfo(project, "Client", ProjectStates.Loaded, null, ["net10.0"], "Exe",
+        [
+            new("Content", F("App.razor"), null, null),
+            new("Content", F("_Imports.razor"), null, null),
+            new("Compile", F("Program.cs"), null, null),
+            new("Content", F("Components/Card.razor"), null, null),
+            new("Content", F("Pages/Home.razor"), null, null),
+            new("None", F("Properties/launchSettings.json"), null, null),
+            new("Content", F("Shared/MainLayout.razor"), null, null),
+            new("Content", F("wwwroot/index.html"), null, null),
+            new("Content", F("docfx/toc.yml"), null, null),
+        ], [], [], Restored: true);
+
+        var contents = SolutionTree.Contents(project, info);
+
+        Assert.Equal(["Properties", "wwwroot", "Components", "docfx", "Pages", "Shared", "_Imports.razor", "App.razor", "Program.cs"], contents.Select(n => n.Name));
+    }
+
+    [Fact]
     public void Analyzers_come_from_the_design_time_build_of_the_active_framework()
     {
         Assert.Equal([@"C:\a\One.dll", "/b/Two.dll", "/c/Three.dll"], SolutionTree.AnalyzerPaths(["/reference:x.dll", @"/analyzer:""C:\a\One.dll""", "/analyzer:/b/Two.dll,/c/Three.dll", "Program.cs"]));

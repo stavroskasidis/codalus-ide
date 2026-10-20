@@ -51,7 +51,8 @@ internal static class DebugColors
 /// The breakpoint margin (ADR 0007): a filled circle per breakpoint, hollow when disabled or not verified by the
 /// debugger, a diamond for logpoints, a dot inside for conditions and hit counts; an arrow on the current statement.
 /// Clicking toggles a breakpoint; Ctrl+click runs to the line while paused (Run to Click); right-clicking a breakpoint
-/// opens its menu. With <paramref name="relocate"/>, breakpoints follow edits to the document.
+/// opens its menu; the pointer over a line without one shows a faint breakpoint where a click puts one. With
+/// <paramref name="relocate"/>, breakpoints follow edits to the document.
 /// </summary>
 public sealed class BreakpointMargin : AbstractMargin
 {
@@ -63,6 +64,7 @@ public sealed class BreakpointMargin : AbstractMargin
     private readonly bool _relocate;
     private readonly Dictionary<int, TextAnchor> _anchors = [];
     private TextDocument? _document;
+    private int? _hoverLine;
 
     public BreakpointMargin(Func<string> path, BreakpointStore store, Func<int?> currentLine, bool relocate)
     {
@@ -174,6 +176,46 @@ public sealed class BreakpointMargin : AbstractMargin
 
     protected override Size MeasureOverride(Size availableSize) => new(Size, 0);
 
+    /// <summary>The line under the pointer (one-based, tests).</summary>
+    internal int? HoverLine => _hoverLine;
+
+    /// <summary>
+    /// The one-based line at a y position (the text view's document coordinates): a CodeLens row, which ends the line
+    /// before it, belongs to the declaration below it.
+    /// </summary>
+    private int? LineAt(double y)
+    {
+        if (TextView?.GetVisualLineFromVisualTop(y) is not { } line)
+        {
+            return null;
+        }
+
+        var below = line.TextLines.Count > 1 && line.GetTextLineByVisualYPosition(y) != line.TextLines[0];
+        var number = below ? line.LastDocumentLine.LineNumber + 1 : line.FirstDocumentLine.LineNumber;
+        return number <= (_document?.LineCount ?? number) ? number : null;
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        var line = TextView is { } view ? LineAt(e.GetPosition(view).Y + view.VerticalOffset) : null;
+        if (line != _hoverLine)
+        {
+            _hoverLine = line;
+            InvalidateVisual();
+        }
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        if (_hoverLine is not null)
+        {
+            _hoverLine = null;
+            InvalidateVisual();
+        }
+    }
+
     public override void Render(DrawingContext context)
     {
         var view = TextView;
@@ -192,6 +234,15 @@ public sealed class BreakpointMargin : AbstractMargin
             var height = line.GetTextLineVisualYPosition(line.TextLines[0], VisualYPosition.LineBottom) - view.VerticalOffset - top;
             var center = new Point(Size / 2, top + (height / 2));
             var radius = Math.Min(Size, height) / 2 - 2;
+            if (number == _hoverLine && !breakpoints.ContainsKey(number))
+            {
+                // Where a click puts a breakpoint.
+                using (context.PushOpacity(0.35))
+                {
+                    context.DrawEllipse(DebugColors.Breakpoint(this), null, center, radius, radius);
+                }
+            }
+
             if (breakpoints.TryGetValue(number, out var breakpoint))
             {
                 var verified = _store.StateOf(breakpoint)?.Verified ?? true;
@@ -233,13 +284,11 @@ public sealed class BreakpointMargin : AbstractMargin
             return;
         }
 
-        var y = e.GetPosition(view).Y + view.VerticalOffset;
-        if (view.GetVisualLineFromVisualTop(y) is not { } line)
+        if (LineAt(e.GetPosition(view).Y + view.VerticalOffset) is not { } number)
         {
             return;
         }
 
-        var number = line.FirstDocumentLine.LineNumber;
         if (properties.IsRightButtonPressed)
         {
             if (_store.At(_path(), number) is not null && ShowMenu is { } menu)
@@ -291,7 +340,7 @@ public sealed class DebugLineRenderer(Func<string> path, BreakpointStore store, 
             }
 
             var top = line.VisualTop - textView.VerticalOffset;
-            drawingContext.DrawRectangle(brush, null, new Rect(0, top, textView.Bounds.Width, line.Height));
+            drawingContext.DrawRectangle(brush, null, new Rect(0, top, textView.Bounds.Width, EditorInsights.CodeHeight(line)));
         }
     }
 }

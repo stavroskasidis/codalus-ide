@@ -46,6 +46,7 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly Popup _hoverPopup;
     private readonly SemanticColorizer _colorizer = new();
     private readonly DiagnosticMarkers _markers;
+    private readonly DefinitionLink _link;
     private readonly HighlightRenderer _highlights;
     private readonly FoldingManager _folding;
     private readonly SearchPanel _search;
@@ -109,6 +110,8 @@ public sealed partial class CodeEditorController : IDisposable
         var view = editor.TextArea.TextView;
         view.LineTransformers.Add(_colorizer);
         view.LineTransformers.Add(_markers);
+        _link = new DefinitionLink(editor, () => Model, () => Client);
+        view.LineTransformers.Add(_link);
         view.BackgroundRenderers.Add(_highlights);
         view.BackgroundRenderers.Add(_markers);
         _breakpointMargin = new BreakpointMargin(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine, relocate: attach)
@@ -146,6 +149,7 @@ public sealed partial class CodeEditorController : IDisposable
         _insights = new EditorInsights(editor, () => Model, () => Client, services);
         editor.TextArea.LeftMargins.Insert(2, _insights.Margin);
         _folding = FoldingManager.Install(editor.TextArea);
+        _insights.IsFoldedAway = offset => _folding.GetFoldingsContaining(offset).Any(f => f.IsFolded && f.StartOffset < offset && offset < f.EndOffset);
         _search = SearchPanel.Install(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
         _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush);
@@ -171,6 +175,7 @@ public sealed partial class CodeEditorController : IDisposable
         editor.TextArea.TextEntered += OnTextEntered;
         // Tunnel: with extra carets, Backspace/Delete/Enter must be seen before AvaloniaEdit handles them.
         editor.TextArea.AddHandler(InputElement.KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        editor.TextArea.AddHandler(InputElement.KeyUpEvent, OnKeyUp, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         editor.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         view.PointerMoved += OnPointerMoved;
         view.PointerExited += OnPointerExited;
@@ -248,6 +253,9 @@ public sealed partial class CodeEditorController : IDisposable
 
     public DiagnosticMarkers Markers => _markers;
 
+    /// <summary>The Ctrl+hover link to a symbol's definition (tests).</summary>
+    internal DefinitionLink Link => _link;
+
     public HighlightRenderer Highlights => _highlights;
 
     public FoldingManager Folding => _folding;
@@ -296,6 +304,37 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>The editor options of the document's language (its <c>"[languageId]"</c> settings over the general ones).</summary>
     private EditorOptions Options => _services.Options.For(Model.LanguageId);
 
+    /// <summary>
+    /// The glyph margins (breakpoints, bookmarks, run and test glyphs, the inheritance margin) left of the line numbers,
+    /// the change bar, coverage and folding right of them, as in Visual Studio: AvaloniaEdit puts its line numbers (and the
+    /// line after them) first whenever they're turned on.
+    /// </summary>
+    private void OrderMargins()
+    {
+        var margins = Editor.TextArea.LeftMargins;
+        var numbers = margins.OfType<LineNumberMargin>().FirstOrDefault();
+        if (numbers is null)
+        {
+            return;
+        }
+
+        var at = margins.IndexOf(numbers);
+        var separator = at + 1 < margins.Count && margins[at + 1] is Avalonia.Controls.Shapes.Line line ? line : null;
+        margins.Remove(numbers);
+        if (separator is not null)
+        {
+            margins.Remove(separator);
+        }
+
+        var before = margins.IndexOf(_gitMargin);
+        before = before < 0 ? margins.Count : before;
+        margins.Insert(before, numbers);
+        if (separator is not null)
+        {
+            margins.Insert(before + 1, separator);
+        }
+    }
+
     private void ApplyOptions()
     {
         var options = Options;
@@ -312,6 +351,7 @@ public sealed partial class CodeEditorController : IDisposable
         editorOptions.AllowScrollBelowDocument = true;
         Editor.WordWrap = options.WordWrap;
         Editor.ShowLineNumbers = options.LineNumbers;
+        OrderMargins();
     }
 
     private void OnThemeChanged(object? sender, EventArgs e) => ApplyTheme();
@@ -1434,9 +1474,24 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
+    private void OnKeyUp(object? sender, KeyEventArgs e) => _link.Update(null, LinkModifiers(e, pressed: false));
+
+    /// <summary>The modifiers after a key event: a Ctrl or Cmd key's own event may not count itself yet.</summary>
+    private static KeyModifiers LinkModifiers(KeyEventArgs e, bool pressed)
+    {
+        var own = e.Key switch
+        {
+            Key.LeftCtrl or Key.RightCtrl => KeyModifiers.Control,
+            Key.LWin or Key.RWin => KeyModifiers.Meta,
+            _ => KeyModifiers.None,
+        };
+        return pressed ? e.KeyModifiers | own : e.KeyModifiers & ~own;
+    }
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         TrackCopy(e);
+        _link.Update(null, LinkModifiers(e, pressed: true));
 
         // The completion list and signature help take their keys first (the arrows, Enter, Tab, Escape).
         if (HandlePopupKey(e))
@@ -1481,6 +1536,7 @@ public sealed partial class CodeEditorController : IDisposable
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
         var point = e.GetPosition(Editor.TextArea.TextView);
+        _link.Update(point, e.KeyModifiers);
         if (_hoverPopup.IsOpen && Math.Abs(point.X - _hoverPoint.X) + Math.Abs(point.Y - _hoverPoint.Y) < 8)
         {
             return;
@@ -1492,7 +1548,11 @@ public sealed partial class CodeEditorController : IDisposable
         _hoverTimer.Start();
     }
 
-    private void OnPointerExited(object? sender, PointerEventArgs e) => _hoverTimer.Stop();
+    private void OnPointerExited(object? sender, PointerEventArgs e)
+    {
+        _hoverTimer.Stop();
+        _link.Clear();
+    }
 
     private void OnHoverTimer(object? sender, EventArgs e)
     {
@@ -1864,6 +1924,7 @@ public sealed partial class CodeEditorController : IDisposable
         else if (primaryModifier)
         {
             // Ctrl+Click: Go to Definition.
+            _link.Clear();
             Editor.CaretOffset = offset;
             _ = GoToDefinitionAsync();
             e.Handled = true;
@@ -1977,6 +2038,8 @@ public sealed partial class CodeEditorController : IDisposable
         var view = Editor.TextArea.TextView;
         view.LineTransformers.Remove(_colorizer);
         view.LineTransformers.Remove(_markers);
+        view.LineTransformers.Remove(_link);
+        _link.Dispose();
         view.BackgroundRenderers.Remove(_highlights);
         view.BackgroundRenderers.Remove(_markers);
         view.BackgroundRenderers.Remove(_debugLines);
@@ -2006,6 +2069,7 @@ public sealed partial class CodeEditorController : IDisposable
         Editor.TextArea.TextEntering -= OnTextEntering;
         Editor.TextArea.TextEntered -= OnTextEntered;
         Editor.TextArea.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
+        Editor.TextArea.RemoveHandler(InputElement.KeyUpEvent, OnKeyUp);
     }
 }
 
