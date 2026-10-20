@@ -157,41 +157,52 @@ public sealed class LanguageTests
                 return sticky.Shown.SequenceEqual([1, 2]);
             },
             seconds: 20);
-        ShellFixture.Pump();
 
+        // Hit testing reads the last rendered frame: each check below comes after a frame with what it checks.
+        ShellFixture.RenderFrame(f.Window);
         Rect BoundsInWindow(Visual visual) => new(visual.TranslatePoint(default, f.Window)!.Value, visual.Bounds.Size);
         Visual? HitAt(Point point) => f.Window.InputHitTest(point) as Visual;
         bool Within<T>(Visual? hit)
             where T : Visual => hit is T || hit?.FindAncestorOfType<T>() is not null;
 
-        // The band is the editor's: in its text area, over the code.
+        // A failure names the visual hit with its ancestors: a type name alone (a DockPanel) is in several templates.
+        string Describe(Visual? hit) => hit is null ? "nothing" : string.Join(" < ", hit.GetSelfAndVisualAncestors().Take(14).Select(v => v is Control { Name: { Length: > 0 } name } ? $"{v.GetType().Name}#{name}" : v.GetType().Name));
+
+        // The band is the editor's: in its text area, over the code and over the margins beside it. The points come from
+        // the layout: the text view's left edge (the margins' widths vary), and a margin's middle.
         Assert.Same(editor.Editor.TextArea, sticky.GetVisualParent());
         var band = BoundsInWindow(sticky);
         Assert.True(band.Height > 0);
-        var overCode = new Point(band.X + 20, band.Y + (band.Height / 2));
-        Assert.True(Within<StickyScroll>(HitAt(overCode)), $"over the code at {overCode}: {HitAt(overCode)}");
+        var text = BoundsInWindow(editor.Editor.TextArea.TextView);
+        var overCode = new Point(text.X + 20, band.Center.Y);
+        Assert.True(band.Contains(overCode) && text.Contains(overCode), $"the band {band} doesn't cover the text view {text}");
+        Assert.True(Within<StickyScroll>(HitAt(overCode)), $"over the code at {overCode} (band {band}, text view {text}): {Describe(HitAt(overCode))}");
+        var margin = BoundsInWindow(editor.BreakpointMargin);
+        var overMargin = new Point(margin.Center.X, band.Center.Y);
+        Assert.True(band.Contains(overMargin), $"the band {band} doesn't cover the breakpoint margin {margin}");
+        Assert.True(Within<StickyScroll>(HitAt(overMargin)), $"over the breakpoint margin at {overMargin} (band {band}, margin {margin}): {Describe(HitAt(overMargin))}");
 
         // The find widget, opened over the band, takes the pointer where they overlap.
         editor.Search.Open();
-        ShellFixture.Pump();
+        ShellFixture.RenderFrame(f.Window);
         var widget = BoundsInWindow(editor.Search.GetVisualDescendants().OfType<Border>().First(b => b.IsEffectivelyVisible && b.Bounds.Height > 0)).Intersect(band);
         Assert.True(widget.Width > 0 && widget.Height > 0, $"the find widget {editor.Search.Bounds} doesn't overlap the band {band}");
-        Assert.True(Within<AvaloniaEdit.Search.SearchPanel>(HitAt(widget.Center)), $"the find widget at {widget.Center}: {HitAt(widget.Center)}");
+        Assert.True(Within<AvaloniaEdit.Search.SearchPanel>(HitAt(widget.Center)), $"the find widget at {widget.Center}: {Describe(HitAt(widget.Center))}");
         editor.Search.Close();
         ShellFixture.Pump();
 
         // A quick pick (the branch picker, the command palette) over the band: its rows take the pointer, not the band.
         var picking = f.Shell.Palette.ShowAsync([.. Enumerable.Range(0, 12).Select(i => new ViewModels.QuickPickItem($"branch-{i}"))], "Switch to a branch");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.QuickPickView>().Any(v => v.IsEffectivelyVisible && v.Bounds.Height > 0));
-        ShellFixture.Pump();
+        ShellFixture.RenderFrame(f.Window);
         var picker = f.Window.GetVisualDescendants().OfType<Views.QuickPickView>().First(v => v.IsEffectivelyVisible);
         var overlap = BoundsInWindow(picker).Intersect(band);
         Assert.True(overlap.Width > 0 && overlap.Height > 0, $"the quick pick {BoundsInWindow(picker)} doesn't overlap the band {band}");
         var hit = HitAt(overlap.Center);
-        Assert.True(Within<Views.QuickPickView>(hit) && !Within<StickyScroll>(hit), $"the quick pick at {overlap.Center}: {hit}");
+        Assert.True(Within<Views.QuickPickView>(hit) && !Within<StickyScroll>(hit), $"the quick pick at {overlap.Center}: {Describe(hit)}");
         var firstRow = picker.GetVisualDescendants().OfType<ListBoxItem>().First();
         var rowPoint = BoundsInWindow(firstRow).Center;
-        Assert.True(Within<ListBoxItem>(HitAt(rowPoint)), $"the first row at {rowPoint}: {HitAt(rowPoint)}");
+        Assert.True(Within<ListBoxItem>(HitAt(rowPoint)), $"the first row at {rowPoint}: {Describe(HitAt(rowPoint))}");
         f.Shell.Palette.Cancel();
         Assert.Null(await picking);
     }
@@ -274,12 +285,12 @@ public sealed class LanguageTests
         Assert.Contains(todo.CompletionWindow!.CompletionList.CompletionData, d => d.Text == "later");
         f.Press(Avalonia.Input.Key.Escape);
 
-        f.Shell.Run("editor.action.formatDocument");
+        await f.RunAsync("editor.action.formatDocument");
         await ShellFixture.PumpUntil(() => todo.Model.Text.Text.Contains("\n- [ ] Messy", StringComparison.Ordinal), seconds: 30);
 
         // The language configuration: '#' comments.
         todo.Editor.Select(0, 0);
-        f.Shell.Run("editor.action.commentLine");
+        await f.RunAsync("editor.action.commentLine");
         Assert.StartsWith("# Week:", todo.Model.Text.Text, StringComparison.Ordinal);
     }
 
@@ -296,7 +307,7 @@ public sealed class LanguageTests
 
         // Markdown: Open Preview to the Side follows edits.
         var readme = await OpenAsync(f, "README.md", "# Title\n\nSome *text*.\n");
-        f.Shell.Run("markdown.showPreviewToSide");
+        await f.RunAsync("markdown.showPreviewToSide");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.MarkdownPreviewView>().Any());
         var preview = f.Window.GetVisualDescendants().OfType<Views.MarkdownPreviewView>().Single();
         Assert.StartsWith("# Title", preview.Rendered, StringComparison.Ordinal);
@@ -314,9 +325,9 @@ public sealed class LanguageTests
         // Line comments (YAML's #), toggled on the selected lines.
         var yaml = await OpenAsync(f, "ci.yml", "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: dotnet build\n");
         yaml.Editor.Select(0, yaml.Model.Text.GetLineByNumber(2).EndOffset);
-        f.Shell.Run("editor.action.commentLine");
+        await f.RunAsync("editor.action.commentLine");
         Assert.StartsWith("# jobs:\n#   build:\n", yaml.Model.Text.Text, StringComparison.Ordinal); // aligned at the smallest indentation
-        f.Shell.Run("editor.action.commentLine");
+        await f.RunAsync("editor.action.commentLine");
         Assert.StartsWith("jobs:\n  build:\n", yaml.Model.Text.Text, StringComparison.Ordinal);
 
         // Folding without a language server: indentation for YAML.
@@ -339,7 +350,7 @@ public sealed class LanguageTests
         var xml = await OpenAsync(f, "Sample.props", "<Project>\n  <PropertyGroup>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>\n");
         await ShellFixture.PumpUntil(() => xml.Folding.AllFoldings.Count() >= 2, seconds: 10);
         xml.Editor.Select(xml.Model.Text.GetLineByNumber(3).Offset, 0);
-        f.Shell.Run("editor.action.commentLine");
+        await f.RunAsync("editor.action.commentLine");
         Assert.Contains("<!-- <Nullable>enable</Nullable> -->", xml.Model.Text.Text, StringComparison.Ordinal);
 
         var json = await OpenAsync(f, "data.json", "\n");

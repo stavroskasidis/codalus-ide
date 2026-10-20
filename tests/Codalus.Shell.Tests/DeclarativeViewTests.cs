@@ -55,7 +55,7 @@ public sealed class DeclarativeViewTests
         Assert.Contains("chores.todos.json", Text(f, "todoboard.summary"), StringComparison.Ordinal);
 
         // Reopen With Text Editor: the same file as text; the board's view goes.
-        f.Shell.Run(ShellHost.ReopenWithTextEditorCommand);
+        await f.RunAsync(ShellHost.ReopenWithTextEditorCommand);
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == file);
         await ShellFixture.PumpUntil(() => f.Shell.Plugins.GetView(document.ViewId) is null);
         await ShellFixture.PumpUntil(() => !Text(f, "todoboard.summary").Contains("chores.todos.json", StringComparison.Ordinal));

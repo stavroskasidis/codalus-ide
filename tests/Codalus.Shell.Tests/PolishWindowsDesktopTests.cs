@@ -148,7 +148,7 @@ public partial class PolishTests
         }
 
         // M46: the setup window at its minimum size, each step; the Tools step with a missing SDK's plan shown.
-        f.Shell.Run("help.setUp");
+        await f.RunAsync("help.setUp");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
         var setup = f.Shell.SetupModel!;
         var setupWindow = f.Shell.SetupWindowView!;

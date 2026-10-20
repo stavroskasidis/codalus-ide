@@ -415,7 +415,7 @@ public partial class PolishTests
             Assert.True(Contrast(Color("Shell.Tab.Selected.Foreground", variant), Color("Shell.Tab.Selected", variant)) >= 4.5, name);
         }
 
-        f.Shell.Run("workbench.closeUnpinnedDocuments");
+        await f.RunAsync("workbench.closeUnpinnedDocuments");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.Count() == 1);
         Assert.Equal(third, f.Shell.Layout.Documents.Single());
     }

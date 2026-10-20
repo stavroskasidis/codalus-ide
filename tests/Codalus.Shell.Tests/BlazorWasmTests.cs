@@ -48,7 +48,7 @@ public sealed class BlazorWasmTests
             var initialized = Line(counter, "initialized");
             f.Shell.Debugger.Breakpoints.Toggle(counter, initialized);
 
-            f.Shell.Run("debug.start");
+            await f.RunAsync("debug.start");
             try
             {
                 await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 600);
@@ -115,7 +115,7 @@ public sealed class BlazorWasmTests
             await ShellFixture.PumpUntil(() => editor?.Controller is not null);
             var offset = editor!.Model.Text.Text.IndexOf("<h1>Counter</h1>", StringComparison.Ordinal);
             editor.Model.Text.Replace(offset, "<h1>Counter</h1>".Length, "<h1>Counter, reloaded</h1>");
-            f.Shell.Run("run.applyCodeChanges");
+            await f.RunAsync("run.applyCodeChanges");
             await ShellFixture.PumpUntil(() => program.HotReload!.Applied >= 1, seconds: 120);
         }
         finally

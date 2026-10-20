@@ -22,7 +22,7 @@ public sealed class AiChatTests
 
     private static async Task<AiChatView> ShowChatAsync(ShellFixture f)
     {
-        f.Shell.Run("ai.chat.show");
+        await f.RunAsync("ai.chat.show");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<AiChatView>().Any());
         return f.Window.GetVisualDescendants().OfType<AiChatView>().First();
     }

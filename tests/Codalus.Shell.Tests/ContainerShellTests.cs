@@ -129,7 +129,7 @@ public sealed class ContainerShellTests
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line);
             await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "host"));
             f.Shell.Debugger.Breakpoints.Clear();
-            f.Shell.Run("debug.continue");
+            await f.RunAsync("debug.continue");
             await ShellFixture.PumpUntil(() => request.IsCompleted, seconds: 60);
             Assert.StartsWith("Hello from ", await request, StringComparison.Ordinal);
             await f.Shell.Debugger.StopAsync();

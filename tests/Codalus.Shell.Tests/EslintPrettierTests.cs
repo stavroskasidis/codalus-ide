@@ -78,7 +78,7 @@ public sealed class EslintPrettierTests
             await ShellFixture.PumpUntil(() => !f.Shell.Languages.Diagnostics.For(app).Any(d => d.Code == "eqeqeq"), seconds: 60);
 
             // Prettier: Format Document runs the project's Prettier (its configuration: semicolons, one statement a line).
-            f.Shell.Run("editor.action.formatDocument");
+            await f.RunAsync("editor.action.formatDocument");
             await ShellFixture.PumpUntil(() => model.Text.Text.Contains("let sum = 0;", StringComparison.Ordinal), seconds: 60);
             Assert.Contains("    if (item.count === 0) {", model.Text.Text.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
             Assert.Contains("console.log(total([{ count: 1 }, { count: 2 }]));", model.Text.Text, StringComparison.Ordinal);

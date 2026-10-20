@@ -41,7 +41,7 @@ public sealed class DebugSessionsTests
         var partner = Path.Combine(folder, "Partner", "Program.cs");
 
         // The page: multiple startup projects, Debuggee and Partner started, Partner first.
-        f.Shell.Run("run.configureStartupProjects");
+        await f.RunAsync("run.configureStartupProjects");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<StartupProjectsView>().Any());
         var page = f.Shell.Layout.Documents.OfType<SolutionManagementDocument>().Select(d => d.ViewModel).OfType<StartupProjectsViewModel>().Single();
         await ShellFixture.PumpUntil(() => page.Rows.Count == 4);
@@ -62,7 +62,7 @@ public sealed class DebugSessionsTests
         // F5: both build and start; each stops at its breakpoint.
         f.Shell.Debugger.Breakpoints.Toggle(debuggee, Line(debuggee, "print"));
         f.Shell.Debugger.Breakpoints.Toggle(partner, Line(partner, "partner"));
-        f.Shell.Run("debug.start");
+        await f.RunAsync("debug.start");
         var stops = new List<string>();
         for (var i = 0; i < 2; i++)
         {
@@ -78,7 +78,7 @@ public sealed class DebugSessionsTests
             }
 
             await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("debugStopped"), true)); // the command's enablement
-            f.Shell.Run("debug.continue");
+            await f.RunAsync("debug.continue");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State != DebugState.Stopped || i == 1);
         }
 
@@ -116,7 +116,7 @@ public sealed class DebugSessionsTests
         var program = Path.Combine(folder, "Debuggee", "Program.cs");
         f.Shell.Debugger.Breakpoints.Toggle(program, Line(program, "loop"));
 
-        f.Shell.Run("debug.start");
+        await f.RunAsync("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.DebugTerminal.Last is not null, seconds: 300);
         var session = f.Shell.DebugTerminal.Last!;
         await ShellFixture.PumpUntil(() => f.Shell.TerminalWindow.Tabs.Any(t => t.Primary == session));
@@ -135,7 +135,7 @@ public sealed class DebugSessionsTests
         await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("debugCanDetach"), true));
         Assert.True(f.Shell.Workbench.Commands.IsEnabled("debug.detachAll"));
 
-        f.Shell.Run("debug.detachAll");
+        await f.RunAsync("debug.detachAll");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
         await ShellFixture.PumpUntil(() => session.ExitCode is not null, seconds: 120);
         Assert.True(session.ExitCode == 15, $"exit code {session.ExitCode}; terminal:\n{Screen()}\nDebug Console:\n{f.Shell.DebugLog.GetText()}");
@@ -152,7 +152,7 @@ public sealed class DebugSessionsTests
         f.Shell.SetStartupProject(Path.Combine(folder, "Generator", "Generator.csproj"));
         f.Shell.Debugger.Breakpoints.Toggle(generator, Line(generator, "generate"));
 
-        f.Shell.Run("debug.start");
+        await f.RunAsync("debug.start");
         try
         {
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped
@@ -167,7 +167,7 @@ public sealed class DebugSessionsTests
         Assert.Equal(generator, f.Shell.Debugger.SelectedFrame?.Source?.Path, ignoreCase: OperatingSystem.IsWindows());
         Assert.Contains("csc.dll", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
         await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "list" && r.Value.Contains("Customer", StringComparison.Ordinal)));
-        f.Shell.Run("debug.stop");
+        await f.RunAsync("debug.stop");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
     }
 

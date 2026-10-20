@@ -2,6 +2,7 @@ using System.Collections;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Codalus.Platform;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Context;
@@ -138,6 +139,62 @@ public sealed partial class CommandSweepTests
                 problems.Add($"{where}: the when-clause '{when.Text}' can never hold");
             }
         }
+    }
+
+    [AvaloniaFact]
+    public async Task The_sweep_waits_for_the_jobs_a_command_posted_and_says_which_keys_took_a_command_away()
+    {
+        // The release run of 0.4.0: Exclude From Project's folder left the Solution Explorer in a refresh posted after the
+        // command, and the sweep's next entry point (the palette) ran into it. The sweep now settles first.
+        var context = new ContextKeyService();
+        context.Set("solutionOpen", true);
+        context.Set("explorerItemInProject", true);
+        var clause = WhenClause.Parse("solutionOpen && explorerItemInProject");
+        var chosen = Infrastructure.SweepContextWatch.Read(clause, context);
+        Assert.Equal(["solutionOpen", "explorerItemInProject"], chosen.Select(p => p.Key));
+        Assert.Equal("context: no key it reads changed (solutionOpen = True, explorerItemInProject = True)", Infrastructure.SweepContextWatch.Differences(clause, chosen, context));
+
+        var watch = new Infrastructure.SweepContextWatch(context);
+        try
+        {
+            watch.Watch(chosen.Select(p => p.Key));
+
+            // A refresh posted at Background priority that posts another: both have run when it has settled.
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    context.Set("explorerItemInProject", false);
+                    Dispatcher.UIThread.Post(() => context.Set("explorerItemKind", "solution"), DispatcherPriority.Background);
+                },
+                DispatcherPriority.Background);
+            Assert.True(await watch.SettleAsync(() => false, TimeSpan.FromSeconds(10)));
+            Assert.Equal(("solution", false), (context.GetValue("explorerItemKind"), context.GetValue("explorerItemInProject")));
+            Assert.Equal(1, watch.Changes); // explorerItemKind isn't watched
+            Assert.Equal("context: explorerItemInProject was True, is False", Infrastructure.SweepContextWatch.Differences(clause, chosen, context));
+
+            // Busy (a project evaluation in progress): settled once it ends, and never later than the limit.
+            var polls = 0;
+            Assert.True(await watch.SettleAsync(() => ++polls < 3, TimeSpan.FromSeconds(10)));
+            Assert.Equal(3, polls);
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            Assert.False(await watch.SettleAsync(() => true, TimeSpan.FromMilliseconds(200)));
+            Assert.InRange(clock.Elapsed, TimeSpan.FromMilliseconds(200), TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            watch.Stop();
+        }
+
+        // A key read only now (the clause read fewer before, short-circuited) is named as such.
+        var either = WhenClause.Parse("explorerItemInProject || solutionOpen");
+        Assert.Equal("context: solutionOpen was True, is False", Infrastructure.SweepContextWatch.Differences(either, Infrastructure.SweepContextWatch.Read(either, context), Changed(context, "solutionOpen", false)));
+        Assert.Equal("context: solutionOpen is True (not read before), explorerItemInProject is 'yes' (not read before)", Infrastructure.SweepContextWatch.Differences(clause, [], Changed(Changed(context, "solutionOpen", true), "explorerItemInProject", "yes")));
+    }
+
+    private static ContextKeyService Changed(ContextKeyService context, string key, object value)
+    {
+        context.Set(key, value);
+        return context;
     }
 
     [AvaloniaFact]

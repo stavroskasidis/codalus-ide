@@ -35,7 +35,7 @@ public static class ColorCustomizations
     /// <summary>VS Code's token color shorthands, as our semantic token types.</summary>
     public static IReadOnlyDictionary<string, string[]> Shorthands { get; } = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
-        ["comments"] = ["comment", "xmlDocComment", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation"],
+        ["comments"] = ["comment", "xmlDocComment", "xmlDocText", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation"],
         ["strings"] = ["string", "stringVerbatim"],
         ["keywords"] = ["keyword", "modifier", "controlKeyword"],
         ["numbers"] = ["number"],

@@ -68,7 +68,7 @@ public static class ThemeFiles
     /// <summary>TextMate scope prefixes and the semantic token types they color (the most specific prefix wins).</summary>
     public static IReadOnlyList<(string Scope, string[] Types)> Scopes { get; } =
     [
-        ("comment.block.documentation", ["xmlDocComment"]),
+        ("comment.block.documentation", ["xmlDocComment", "xmlDocText"]),
         ("comment", ["comment", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation"]),
         ("string.regexp", ["regexp"]),
         ("constant.character.escape", ["stringEscape"]),

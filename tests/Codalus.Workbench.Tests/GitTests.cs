@@ -40,6 +40,54 @@ public sealed class GitServiceTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// git starts on the thread pool, never on the caller's thread, which is often the UI thread (Sync, Git Changes): a
+    /// start can take long (CreateProcess on Windows, a fork on Linux). Here the start, reading the variables it's given,
+    /// waits for the call to have returned, which a start on the caller's thread can't see.
+    /// </summary>
+    [Fact]
+    public async Task Git_starts_off_the_callers_thread()
+    {
+        using var returned = new ManualResetEventSlim();
+        var probe = new StartProbe(returned);
+        var run = _git.RunAsync(Repo, ["--version"], Ct, environment: probe);
+        returned.Set();
+        var (code, output, _) = await run;
+        Assert.Equal(0, code);
+        Assert.StartsWith("git version", output, StringComparison.Ordinal);
+        Assert.True(probe.CallerHadReturned, "git started on the caller's thread, before RunAsync returned");
+    }
+
+    /// <summary>Variables for a git process that, when read, wait for the caller of RunAsync to have returned (5 s at most).</summary>
+    private sealed class StartProbe(ManualResetEventSlim returned) : IReadOnlyDictionary<string, string>
+    {
+        public bool CallerHadReturned { get; private set; }
+
+        public int Count => 0;
+
+        public IEnumerable<string> Keys => [];
+
+        public IEnumerable<string> Values => [];
+
+        public string this[string key] => throw new KeyNotFoundException(key);
+
+        public bool ContainsKey(string key) => false;
+
+        public bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out string value)
+        {
+            value = null;
+            return false;
+        }
+
+        public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+        {
+            CallerHadReturned = returned.Wait(TimeSpan.FromSeconds(5));
+            return Enumerable.Empty<KeyValuePair<string, string>>().GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private static async Task Configure(string repo)
     {
         await Git(repo, "config", "user.name", "Ada Tester");

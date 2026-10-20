@@ -41,55 +41,18 @@ public sealed partial class GitService : IDisposable
 
     // ------------------------------------------------------------------ running git
 
-    /// <summary>Runs git in <paramref name="directory"/>; throws <see cref="GitException"/> on a non-zero exit (unless <paramref name="check"/> is false).</summary>
+    /// <summary>
+    /// Runs git in <paramref name="directory"/>; throws <see cref="GitException"/> on a non-zero exit (unless <paramref name="check"/> is false).
+    /// The process starts on the thread pool, never on the caller's thread, which is often the UI thread (Sync, Git
+    /// Changes, the status bar): starting a process can take long. On Windows, CreateProcess runs under a lock that every
+    /// Process.Start in the IDE shares, and the antivirus may scan it; on Linux, it forks a large process (the Windows
+    /// command sweep saw Sync, which started pull and then push on the UI thread, hold it for 2 s).
+    /// </summary>
     public async Task<(int ExitCode, string Output, string Error)> RunAsync(
         string directory, IReadOnlyList<string> arguments, CancellationToken cancellationToken, string? input = null, bool check = true, bool readOnly = false,
         IReadOnlyDictionary<string, string>? environment = null)
     {
-        var start = new ProcessStartInfo(_git)
-        {
-            WorkingDirectory = directory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = input is not null,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = new UTF8Encoding(false),
-            StandardErrorEncoding = new UTF8Encoding(false),
-        };
-        foreach (var argument in (string[])["-c", "core.quotepath=false", "-c", "color.ui=false", .. arguments])
-        {
-            start.ArgumentList.Add(argument);
-        }
-
-        start.Environment["GIT_TERMINAL_PROMPT"] = "0";
-        start.Environment["LC_ALL"] = "C";
-        if (readOnly)
-        {
-            start.Environment["GIT_OPTIONAL_LOCKS"] = "0";
-        }
-
-        // The shell's askpass (M13b): git and ssh ask it for what no credential helper answered.
-        foreach (var (name, value) in AskpassEnvironment ?? new Dictionary<string, string>())
-        {
-            start.Environment[name] = value;
-        }
-
-        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
-        {
-            start.Environment[name] = value;
-        }
-
-        Process process;
-        try
-        {
-            process = Process.Start(start) ?? throw new GitException("git did not start.", -1);
-        }
-        catch (System.ComponentModel.Win32Exception ex)
-        {
-            throw new GitException($"git was not found ({ex.Message}). Install git, or set {EnvironmentVariable}.", -1);
-        }
-
+        var process = await Task.Run(() => Start(directory, arguments, input is not null, readOnly, environment), CancellationToken.None).ConfigureAwait(false);
         using (process)
         {
             if (input is not null)
@@ -130,6 +93,52 @@ public sealed partial class GitService : IDisposable
             }
 
             return result;
+        }
+    }
+
+    private Process Start(string directory, IReadOnlyList<string> arguments, bool redirectInput, bool readOnly, IReadOnlyDictionary<string, string>? environment)
+    {
+        var start = new ProcessStartInfo(_git)
+        {
+            WorkingDirectory = directory,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = redirectInput,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = new UTF8Encoding(false),
+            StandardErrorEncoding = new UTF8Encoding(false),
+        };
+        foreach (var argument in (string[])["-c", "core.quotepath=false", "-c", "color.ui=false", .. arguments])
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        start.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        start.Environment["LC_ALL"] = "C";
+        if (readOnly)
+        {
+            start.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+        }
+
+        // The shell's askpass (M13b): git and ssh ask it for what no credential helper answered.
+        foreach (var (name, value) in AskpassEnvironment ?? new Dictionary<string, string>())
+        {
+            start.Environment[name] = value;
+        }
+
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+        {
+            start.Environment[name] = value;
+        }
+
+        try
+        {
+            return Process.Start(start) ?? throw new GitException("git did not start.", -1);
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            throw new GitException($"git was not found ({ex.Message}). Install git, or set {EnvironmentVariable}.", -1);
         }
     }
 

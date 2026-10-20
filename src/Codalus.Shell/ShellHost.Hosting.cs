@@ -42,7 +42,14 @@ public sealed partial class ShellHost : IHostingActions
     private BranchStatusDto? _branchStatus;
     private string? _lfsRoot;
     private bool _lfsUsed;
+
+    /// <summary>When the repository's root <c>.gitattributes</c> was written, as of the last LFS check (null: none).</summary>
+    private DateTime? _lfsAttributes;
     private DateTime _locksRead;
+
+    /// <summary>LFS reads started, and the newest one whose result Git Changes shows: an older read never replaces it.</summary>
+    private long _lfsReadsStarted;
+    private long _lfsReadShown;
 
     public SecretStorage Secrets { get; private set; } = null!;
 
@@ -1088,20 +1095,31 @@ public sealed partial class ShellHost : IHostingActions
             return;
         }
 
-        if (_lfsRoot == root && !_lfsUsed)
+        // No LFS in this repository: checked again only once its root .gitattributes changes (git lfs track writes it).
+        // Checked once per repository, a repository that started using LFS after it was opened never showed it (a test
+        // that sets LFS up right after opening the repository saw the first check land before its .gitattributes).
+        var attributes = GitAttributesWritten(root);
+        if (_lfsRoot == root && !_lfsUsed && attributes == _lfsAttributes)
         {
-            return; // no LFS in this repository (checked once per repository)
+            return;
         }
 
         var includeLocks = _lfsRoot != root || DateTime.UtcNow - _locksRead > TimeSpan.FromMinutes(1);
+
+        // Every status change starts a read, and reads overlap: one that listed the files before a change can end after
+        // one that started after the change. Shown last, it put the older list back until the next status change (a
+        // pointer file written right after .gitattributes kept no badge: the repository's first read, slow on Windows,
+        // was still running while the files were written).
+        var read = ++_lfsReadsStarted;
         try
         {
             var lfs = await Git.LfsStatusAsync(includeLocks).ConfigureAwait(true);
-            if (Git.Root != root)
+            if (Git.Root != root || read < _lfsReadShown)
             {
                 return;
             }
 
+            _lfsReadShown = read;
             if (includeLocks)
             {
                 _locksRead = DateTime.UtcNow;
@@ -1113,6 +1131,7 @@ public sealed partial class ShellHost : IHostingActions
 
             _lfsRoot = root;
             _lfsUsed = lfs.IsUsed;
+            _lfsAttributes = attributes;
             GitChanges.Lfs = lfs;
             Workbench.Context.Set("gitLfs", lfs.IsUsed);
         }
@@ -1120,6 +1139,12 @@ public sealed partial class ShellHost : IHostingActions
         {
             GitLog.AppendLine("[lfs] " + ex.Message);
         }
+    }
+
+    private static DateTime? GitAttributesWritten(string root)
+    {
+        var file = Path.Combine(root, ".gitattributes");
+        return File.Exists(file) ? File.GetLastWriteTimeUtc(file) : null;
     }
 
     /// <summary>Git LFS locks: unlock one (force for someone else's).</summary>

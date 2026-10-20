@@ -73,6 +73,106 @@ public sealed class SweepFindingsTests
     }
 
     [AvaloniaFact]
+    public async Task Attach_to_a_process_in_a_container_says_when_no_container_engine_answers()
+    {
+        // With Docker's CLI installed but its daemon not running (GitHub's Windows runners, now and then), 'docker ps' failed
+        // and its raw message was an error notification: no engine is the machine's state, which the Containers window
+        // states. A stand-in CLI plays the engine.
+        await using var f = ShellFixture.Create();
+        var notifications = f.Shell.Workbench.Notifications;
+        var docker = Path.Combine(f.UserData, OperatingSystem.IsWindows() ? "docker.cmd" : "docker");
+        await f.Shell.Workbench.Settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, $"\"{docker}\"", SettingScope.User, CancellationToken.None);
+
+        async Task<Notification> AttachAsync(string windows, string unix)
+        {
+            await File.WriteAllTextAsync(docker, OperatingSystem.IsWindows() ? "@echo off\r\n" + windows.ReplaceLineEndings("\r\n") + "\r\n" : "#!/bin/sh\n" + unix + "\n", CancellationToken.None);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(docker, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            notifications.DismissAll();
+            await f.Shell.AttachToRemoteProcessAsync("container");
+            return Assert.Single(notifications.Items);
+        }
+
+        // The daemon isn't running: 'docker version' and 'docker ps' fail.
+        var stopped = await AttachAsync(
+            "echo failed to connect to the docker API at npipe:////./pipe/docker_engine; check if the path is correct and if the daemon is running 1>&2\nexit /b 1",
+            "echo 'failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running' >&2\nexit 1");
+        Assert.Equal(NotificationSeverity.Info, stopped.Severity);
+        Assert.Equal("No container engine is running: docker doesn't answer. Start Docker or Podman (or 'podman machine start'), or choose the engine in the 'debug.containerTool' setting.", stopped.Message);
+
+        // The engine answers, and 'docker ps' fails all the same: that is an error, with its message.
+        var failed = await AttachAsync(
+            "if \"%1\"==\"version\" (echo linux& exit /b 0)\necho ps went wrong 1>&2\nexit /b 1",
+            "if [ \"$1\" = version ]; then echo linux; exit 0; fi\necho 'ps went wrong' >&2\nexit 1");
+        Assert.Equal(NotificationSeverity.Error, failed.Severity);
+        Assert.Contains("ps went wrong", failed.Message, StringComparison.Ordinal);
+
+        // No CLI at all.
+        await f.Shell.Workbench.Settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, $"\"{Path.Combine(f.UserData, "missing", "podman")}\"", SettingScope.User, CancellationToken.None);
+        notifications.DismissAll();
+        await f.Shell.AttachToRemoteProcessAsync("container");
+        var missing = Assert.Single(notifications.Items);
+        Assert.Equal(NotificationSeverity.Info, missing.Severity);
+        Assert.Equal("No container engine is installed: podman isn't on the PATH. Install Docker or Podman, or choose the engine in the 'debug.containerTool' setting.", missing.Message);
+    }
+
+    [AvaloniaFact]
+    public async Task Attach_to_a_process_in_a_container_uses_the_Containers_windows_engine_unless_debug_containerTool_is_set()
+    {
+        // debug.containerTool defaulted to "docker": attaching never used containers.tool, nor Podman where only Podman is
+        // installed. Stand-in CLIs list one container each.
+        Assert.Equal(["podman"], Workbench.Containers.ContainerEngine.Resolve(null, program => program == "podman").Tool);
+        await using var f = ShellFixture.Create();
+        var settings = f.Shell.Workbench.Settings;
+        Assert.Equal(string.Empty, settings.GetString(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting));
+        Assert.Equal(f.Shell.ContainerEngine.Tool, f.Shell.AttachContainerTool);
+
+        async Task<string> StandInAsync(string name, string container)
+        {
+            var path = Path.Combine(f.UserData, OperatingSystem.IsWindows() ? name + ".cmd" : name);
+            await File.WriteAllTextAsync(path, OperatingSystem.IsWindows()
+                ? $"@echo off\r\necho {name}1\t{container}\tdemo:1\r\n"
+                : $"#!/bin/sh\nprintf '{name}1\\t{container}\\tdemo:1\\n'\n", CancellationToken.None);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            return $"\"{path}\"";
+        }
+
+        async Task<string[]> ListedAsync()
+        {
+            f.Shell.Workbench.Notifications.DismissAll();
+            var attach = f.Shell.AttachToRemoteProcessAsync("container");
+            await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen || attach.IsCompleted, describe: () => string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message)));
+            string[] listed = [.. f.Shell.Palette.Rows.Select(r => r.Label)];
+            f.Shell.Palette.Cancel();
+            await attach;
+            Assert.Empty(f.Shell.Workbench.Notifications.Items);
+            return listed;
+        }
+
+        // The Containers window's engine: a machine with only Podman (containers.tool names it here, as detection would).
+        await settings.SetAsync(Workbench.Containers.ContainerEngine.ToolSetting, await StandInAsync("podman", "web-on-podman"), SettingScope.User, CancellationToken.None);
+        Assert.Equal(["web-on-podman"], await ListedAsync());
+
+        // debug.containerTool, when set, is the user's choice for attaching.
+        await settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, await StandInAsync("docker", "web-on-docker"), SettingScope.User, CancellationToken.None);
+        Assert.Equal(["web-on-docker"], await ListedAsync());
+
+        // Without it, no engine names the setting in effect.
+        await settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(Workbench.Containers.ContainerEngine.ToolSetting, $"\"{Path.Combine(f.UserData, "missing", "podman")}\"", SettingScope.User, CancellationToken.None);
+        f.Shell.Workbench.Notifications.DismissAll();
+        await f.Shell.AttachToRemoteProcessAsync("container");
+        Assert.Equal("No container engine is installed: podman isn't on the PATH. Install Docker or Podman, or choose the engine in the 'containers.tool' setting.", Assert.Single(f.Shell.Workbench.Notifications.Items).Message);
+    }
+
+    [AvaloniaFact]
     public async Task Turning_a_plugin_on_or_off_keeps_each_settings_layers_own_list()
     {
         // The merged list was written to the user's settings: a workspace's plugins leaked into them, and Turn On never
@@ -143,7 +243,7 @@ public sealed class SweepFindingsTests
         shapes.Editor.TextArea.Focus();
         ShellFixture.Pump();
 
-        await f.Shell.Workbench.Commands.ExecuteAsync("editor.action.showReferences", TestContext.Current.CancellationToken);
+        await f.ExecuteAsync("editor.action.showReferences");
         await ShellFixture.PumpUntil(() => f.Shell.FindResults.Summary?.Contains("References to 'Circle'", StringComparison.Ordinal) == true, seconds: 60);
         Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Severity == NotificationSeverity.Error);
     }
@@ -185,6 +285,10 @@ public sealed class SweepFindingsTests
         f.Shell.Trust.Trust(Path.GetDirectoryName(root)!);
         await f.Shell.OpenSolutionAsync(solution);
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.Projects.Count > 0 && f.Shell.HasRepository, seconds: 120);
+
+        // HasRepository holds once the repository is found; gitRepository (the command's enablement) once its first
+        // status has run, a git process and a posted job later: the command was refused in between (macOS CI, PR #76).
+        await f.WhenEnabledAsync("git.fileHistory", seconds: 60);
 
         var file = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories).First(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
         Assert.NotNull(await f.Shell.OpenFileAsync(file));
@@ -269,7 +373,7 @@ public sealed class SweepFindingsTests
         var target = Path.Combine(f.UserData, "Folder.slnf");
         f.Shell.Window = new SavingWindow(f.Shell.Window, target);
         var before = f.Shell.Workbench.Notifications.Items.Count;
-        await f.Shell.Workbench.Commands.ExecuteAsync("solution.saveFilter", TestContext.Current.CancellationToken);
+        await f.ExecuteAsync("solution.saveFilter");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Count > before || File.Exists(target), seconds: 60);
         ShellFixture.Pump();
 

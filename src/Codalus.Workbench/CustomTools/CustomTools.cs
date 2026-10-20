@@ -139,6 +139,9 @@ public sealed class CustomToolService(ProjectItemService items, TextTemplatingSe
     public const string TextTemplating = "TextTemplatingFileGenerator";
     public const string TextTemplatingPreprocessor = "TextTemplatingFilePreprocessor";
 
+    /// <summary>How long writing the output is tried again while another process has it open.</summary>
+    private static readonly TimeSpan s_outputInUseLimit = TimeSpan.FromSeconds(5);
+
     /// <summary>Plugins' generators by name; the shell sets them from the plugins' manifests.</summary>
     public Func<IReadOnlyList<PluginCustomTool>> PluginTools { get; set; } = () => [];
 
@@ -209,11 +212,7 @@ public sealed class CustomToolService(ProjectItemService items, TextTemplatingSe
         }
 
         var output = Path.Combine(Path.GetDirectoryName(file)!, stem + (extension.StartsWith('.') ? extension : "." + extension));
-        if (!File.Exists(output) || await File.ReadAllTextAsync(output, cancellationToken).ConfigureAwait(false) != content)
-        {
-            await File.WriteAllTextAsync(output, content, cancellationToken).ConfigureAwait(false);
-        }
-
+        await WriteOutputAsync(output, content, cancellationToken).ConfigureAwait(false);
         await items.SetAsync(project, file, null, new Dictionary<string, string?> { ["LastGenOutput"] = Path.GetFileName(output) }, cancellationToken).ConfigureAwait(false);
         if (output.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || output.EndsWith(".vb", StringComparison.OrdinalIgnoreCase))
         {
@@ -226,5 +225,32 @@ public sealed class CustomToolService(ProjectItemService items, TextTemplatingSe
         }
 
         return new CustomToolResult(file, generator, output, diagnostics);
+    }
+
+    /// <summary>
+    /// Writes the generated output unless it already holds it. Another process that has the file open for reading without
+    /// sharing it for writing (a language server, an indexer, a virus scanner; the shell test polling for the output) makes
+    /// the write fail with a sharing violation on Windows. That failed the custom tool, and the save that ran it lost its
+    /// regenerated output (PR #74's Windows run), so a file in use is tried again for a few seconds.
+    /// </summary>
+    private static async Task WriteOutputAsync(string output, string content, CancellationToken cancellationToken)
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                if (!File.Exists(output) || await File.ReadAllTextAsync(output, cancellationToken).ConfigureAwait(false) != content)
+                {
+                    await File.WriteAllTextAsync(output, content, cancellationToken).ConfigureAwait(false);
+                }
+
+                return;
+            }
+            catch (IOException ex) when (ex is not (FileNotFoundException or DirectoryNotFoundException or PathTooLongException) && started.Elapsed < s_outputInUseLimit)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(25 * attempt, 250)), cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 }

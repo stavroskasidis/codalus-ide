@@ -68,7 +68,7 @@ public sealed class ContributedDebuggerTests
             }
 
             f.Shell.SelectLaunchConfiguration("Run the script");
-            f.Shell.Run("debug.start");
+            await f.RunAsync("debug.start");
 
             // The adapter got the configuration, variables expanded and other values as they were, and its program ran.
             try
@@ -85,7 +85,7 @@ public sealed class ContributedDebuggerTests
             await ShellFixture.PumpUntil(() => !f.Shell.Debugger.IsActive, seconds: 30);
 
             // Start Without Debugging: the same adapter, told noDebug.
-            f.Shell.Run("run.startWithoutDebugging");
+            await f.RunAsync("run.startWithoutDebugging");
             await ShellFixture.PumpUntil(() => Output().Contains("\"noDebug\":true", StringComparison.Ordinal), seconds: 60);
             await ShellFixture.PumpUntil(() => !f.Shell.Debugger.IsActive, seconds: 30);
         }

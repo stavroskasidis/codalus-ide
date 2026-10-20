@@ -143,6 +143,57 @@ internal sealed class ShellFixture : IAsyncDisposable
         Dispatcher.UIThread.RunJobs();
     }
 
+    /// <summary>
+    /// Runs pending dispatcher work and layout, then renders a frame with all of it. Call it before hit testing:
+    /// <c>InputHitTest</c> reads the compositor's last rendered frame, not the layout, and after <see cref="Pump"/> that
+    /// frame can still be the one before the last layout change (its commit waits for the previous one, and the headless
+    /// render timer also ticks on its own clock). The sticky scroll's band, laid out but not yet drawn, let the point over
+    /// it through to the breakpoint margin under it (develop's macOS run of 0.4.0).
+    /// </summary>
+    /// <remarks>
+    /// It returns only when the frame it waited for is also the last batch committed. A hit test mixes two states: the
+    /// visuals' transforms and bounds come from the last rendered frame, but which visuals there are (each one's
+    /// children, drawing and visibility) comes from the last commit. Jobs run while waiting can commit a newer batch
+    /// right after the awaited one is rendered (the headless render timer ticks inside them too; the render loop's own
+    /// batch-finished callback schedules the next commit), and that batch is not rendered yet: its new visuals have no
+    /// rendered bounds and are skipped with everything under them. Measured on the first Find widget open after a file
+    /// opens: 7 of 224 runs under CPU load returned with such a batch pending. So the frame counts only when this
+    /// method's own tick rendered it, before any job ran after it; otherwise it commits and waits again.
+    /// </remarks>
+    public static void RenderFrame(Avalonia.Controls.TopLevel top)
+    {
+        var compositor = Avalonia.Rendering.Composition.ElementComposition.GetElementVisual(top)!.Compositor;
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            Dispatcher.UIThread.RunJobs();
+            top.UpdateLayout();
+            var batch = compositor.RequestCompositionBatchCommitAsync();
+            while (true)
+            {
+                Assert.True(started.Elapsed < TimeSpan.FromSeconds(10), "No frame was rendered in 10 s.");
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                if (batch.Rendered.IsCompleted)
+                {
+                    // This tick rendered it, and no job has run since: nothing was committed after it.
+                    return;
+                }
+
+                Dispatcher.UIThread.RunJobs();
+                if (batch.Rendered.IsCompleted)
+                {
+                    // Rendered by a tick inside the jobs, which may then have committed a newer batch: render again.
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pumps the dispatcher until <paramref name="condition"/> holds, then once more: a service's state (set on its own
+    /// thread, which the condition usually reads) reaches the views and the context keys through a job posted to the UI
+    /// thread, and the last delay could end the wait before that job ran (PR #69's Save As Solution Filter).
+    /// </summary>
     /// <param name="describe">What the shell was doing, added to the failure on a timeout.</param>
     public static async Task PumpUntil(Func<bool> condition, int seconds = 30, Func<string>? describe = null)
     {
@@ -158,6 +209,44 @@ internal sealed class ShellFixture : IAsyncDisposable
             Pump();
             await Task.Delay(15);
         }
+
+        Dispatcher.UIThread.RunJobs(); // the jobs only: a frame each time made the shell tests about a tenth slower
+    }
+
+    /// <summary>
+    /// Waits until <paramref name="id"/> is enabled. A command run right after a state change can find the keys its
+    /// enablement reads not set yet: they follow the state a posted job later (a solution's <c>solutionTrusted</c>, a
+    /// repository's <c>gitRepository</c>, the focus), and the command was refused (PR #76's View History). On a timeout,
+    /// the failure names the keys and their values.
+    /// </summary>
+    public async Task WhenEnabledAsync(string id, int seconds = 30)
+    {
+        // Already enabled: nothing is pumped, so a focus a test set just before (as a click would) stays for the command.
+        var commands = Shell.Workbench.Commands;
+        if (!commands.IsEnabled(id))
+        {
+            await PumpUntil(() => commands.IsEnabled(id), seconds, () => $"'{id}' to be enabled ({DescribeEnablement(id)})");
+        }
+    }
+
+    /// <summary>The command's enablement and the context keys it reads, with their values.</summary>
+    public string DescribeEnablement(string id) =>
+        Shell.Workbench.Commands.Descriptors.FirstOrDefault(d => d.Id == id) is { } command
+            ? $"enablement: {command.Enablement.Text}; " + string.Join(", ", Infrastructure.SweepContextWatch.Read(command.Enablement, Shell.Workbench.Context).Select(p => $"{p.Key} = {p.Value ?? "unset"}"))
+            : "no such command is registered";
+
+    /// <summary>Runs <paramref name="id"/> as the UI does (<see cref="ShellHost.Run(string)"/>), once it is enabled.</summary>
+    public async Task RunAsync(string id)
+    {
+        await WhenEnabledAsync(id);
+        Shell.Run(id);
+    }
+
+    /// <summary>Executes <paramref name="id"/> and waits for it, once it is enabled.</summary>
+    public async Task<System.Text.Json.JsonElement?> ExecuteAsync(string id, params System.Text.Json.JsonElement[] args)
+    {
+        await WhenEnabledAsync(id);
+        return await Shell.Workbench.Commands.ExecuteAsync(id, args, TestContext.Current.CancellationToken);
     }
 
     /// <summary>

@@ -65,7 +65,7 @@ public sealed class BlazorTests
 
             // The app can listen before dotnet watch watches, and dotnet watch drops a change saved before then: Apply
             // Code Changes saves once it watches.
-            f.Shell.Run("run.applyCodeChanges");
+            await f.RunAsync("run.applyCodeChanges");
             var page = string.Empty;
             try
             {

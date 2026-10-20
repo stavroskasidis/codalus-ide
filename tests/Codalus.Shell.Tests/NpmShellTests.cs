@@ -34,7 +34,7 @@ public sealed class NpmShellTests
 
         // The Task Runner Explorer: the packages (the app's and its local dependency's), the app's scripts, and the
         // one bound to Before Build.
-        f.Shell.Run("npm.taskRunner");
+        await f.RunAsync("npm.taskRunner");
         await ShellFixture.PumpUntil(() => f.Shell.TaskRunner.Rows.Count == 5, seconds: 30);
         var rows = f.Shell.TaskRunner.Rows;
         Assert.Equal(["WebScripts/local-greeting/package.json", "WebScripts/package.json"], rows.Where(r => r.IsHeader).Select(r => r.Label));
