@@ -7,6 +7,7 @@ using Codalus.Shell.Editor;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Build;
+using Codalus.Workbench.Containers;
 using Codalus.Workbench.Debugging;
 using Codalus.Workbench.Debugging.Remote;
 using Codalus.Workbench.Terminal;
@@ -30,7 +31,7 @@ public sealed partial class ShellHost
     public static string DefaultDebugConsole => OperatingSystem.IsWindows() ? "externalConsole" : "internalConsole";
 
     private CrashDumpWatcher? _crashWatcher;
-    private (RemoteTarget Target, string Name)? _lastRemote;
+    private (RemoteTarget Target, RemoteProcess Process)? _lastRemote;
     private string _lastSshDestination = string.Empty;
     private readonly Queue<string> _pendingBrowserUrls = new();
 
@@ -280,7 +281,7 @@ public sealed partial class ShellHost
             List<QuickPickItem> kinds =
             [
                 new("SSH…") { Tag = "ssh", Detail = "A Linux or macOS machine, through your ssh and its keys" },
-                new("Docker or Podman container…") { Tag = "container", Detail = "A running container, through " + string.Join(' ', RemoteTargets.ContainerTool(Workbench.Settings.GetString(RemoteTargets.ContainerToolSetting))) + " exec" },
+                new("Docker or Podman container…") { Tag = "container", Detail = "A running container, through " + string.Join(' ', AttachContainerTool) + " exec" },
             ];
             if (OperatingSystem.IsWindows())
             {
@@ -334,10 +335,35 @@ public sealed partial class ShellHost
         return target;
     }
 
+    /// <summary>
+    /// The container CLI attaching goes through: <c>debug.containerTool</c> when set, else the Containers window's engine
+    /// (<c>containers.tool</c>, or Docker or Podman, whichever is there), not always <c>docker</c>. The setting is empty
+    /// unless the user sets it: its default was <c>docker</c>, which made the Containers window's engine unreachable.
+    /// </summary>
+    internal IReadOnlyList<string> AttachContainerTool =>
+        Workbench.Settings.GetString(RemoteTargets.ContainerToolSetting) is { Length: > 0 } own ? RemoteTargets.ContainerTool(own) : ContainerEngine.Tool;
+
     private async Task<RemoteTarget?> PickContainerAsync()
     {
-        var tool = RemoteTargets.ContainerTool(Workbench.Settings.GetString(RemoteTargets.ContainerToolSetting));
-        var containers = await RemoteTargets.ContainersAsync(tool, CancellationToken.None).ConfigureAwait(true);
+        var tool = AttachContainerTool;
+        IReadOnlyList<ContainerInfo> containers;
+        try
+        {
+            containers = await RemoteTargets.ContainersAsync(tool, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // No engine to list containers from is the machine's state, not a failure: say so and how to get one, as the
+            // Containers window does (a daemon that isn't running made 'docker ps' fail with its raw message, an error).
+            if (await NoContainerEngineAsync(tool, ex).ConfigureAwait(true) is not { } none)
+            {
+                throw;
+            }
+
+            Workbench.Notifications.Info(none);
+            return null;
+        }
+
         if (containers.Count == 0)
         {
             StatusBar.ShowMessage(Localizer.Format("msg.debugSessions.noContainersAreRunningPs", "No containers are running ({0} ps).", string.Join(' ', tool)), TimeSpan.FromSeconds(5));
@@ -347,6 +373,25 @@ public sealed partial class ShellHost
         var items = containers.Select(c => new QuickPickItem(c.Name) { Tag = c.Name, Detail = $"{c.Image} · {c.Id}" }).ToList();
         return await Palette.ShowAsync(items, "Attach to a process in a container").ConfigureAwait(true) is { Tag: string container }
             ? new ContainerTarget(container, tool)
+            : null;
+    }
+
+    /// <summary>
+    /// What to tell the user when <paramref name="tool"/> couldn't list containers because no engine answers it (the CLI
+    /// isn't installed, or its daemon or machine isn't running), as the Containers window does; null when the engine
+    /// answers, and <paramref name="failure"/> is a real error.
+    /// </summary>
+    private async Task<string?> NoContainerEngineAsync(IReadOnlyList<string> tool, InvalidOperationException failure)
+    {
+        var engine = new ContainerEngine(tool);
+        var setting = Workbench.Settings.GetString(RemoteTargets.ContainerToolSetting) is { Length: > 0 } ? RemoteTargets.ContainerToolSetting : ContainerEngine.ToolSetting;
+        if (failure.InnerException is System.ComponentModel.Win32Exception)
+        {
+            return Localizer.Format("msg.debugSessions.noContainerEngineIsInstalled", "No container engine is installed: {0} isn't on the PATH. Install Docker or Podman, or choose the engine in the '{1}' setting.", engine.Name, setting);
+        }
+
+        return (await engine.ServerOsAsync(CancellationToken.None).ConfigureAwait(true)).Os is null
+            ? Localizer.Format("msg.debugSessions.noContainerEngineIsRunning", "No container engine is running: {0} doesn't answer. Start Docker or Podman (or 'podman machine start'), or choose the engine in the '{1}' setting.", engine.Name, setting)
             : null;
     }
 
@@ -366,7 +411,7 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Lists <paramref name="target"/>'s processes (.NET first), and attaches to the one picked (or named <paramref name="processName"/>).</summary>
-    public async Task<bool> AttachToRemoteAsync(RemoteTarget target, string? processName, int? processId = null)
+    public async Task<bool> AttachToRemoteAsync(RemoteTarget target, string? processName, int? processId = null, RemoteProcess? again = null)
     {
         UseAskpassForSsh();
         IReadOnlyList<RemoteProcess> processes;
@@ -382,6 +427,7 @@ public sealed partial class ShellHost
         }
 
         var process = processId is { } id ? processes.FirstOrDefault(p => p.Id == id)
+            : again is not null ? RemoteShell.FindAgain(processes, again)
             : processName is not null ? processes.FirstOrDefault(p => p.Name == processName && p.IsDotnet)
             : null;
         if (process is null)
@@ -414,7 +460,7 @@ public sealed partial class ShellHost
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             var map = new SourceMap(SourceFileMap(), SolutionFiles());
             await Debugger.AttachAsync(process.Id, CancellationToken.None, new RemoteAttach(RemoteShell.Adapter(target, debugger), map, target.Display), process.Name).ConfigureAwait(true);
-            _lastRemote = (target, process.Name);
+            _lastRemote = (target, process);
             _lastAttached = null;
             return true;
         }
@@ -433,7 +479,8 @@ public sealed partial class ShellHost
             return false;
         }
 
-        await AttachToRemoteAsync(last.Target, last.Name).ConfigureAwait(true);
+        // The same program, else the picker: by name alone it could be any "dotnet" there.
+        await AttachToRemoteAsync(last.Target, processName: null, again: last.Process).ConfigureAwait(true);
         return true;
     }
 
@@ -580,7 +627,7 @@ public sealed partial class ShellHost
         }
         else if (choice == "Show in Folder")
         {
-            ShellIntegration.RevealInFileManager(dump.Path);
+            RevealPath(dump.Path);
         }
     }
 }

@@ -127,39 +127,7 @@ public sealed partial class AgentTools(AiService ai, IAgentHost host, string wor
     // ------------------------------------------------------------------ paths
 
     /// <summary>A path inside the workspace (relative to it, or absolute under it); anything else is refused.</summary>
-    public string Resolve(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            throw new AgentToolException("A path is needed.");
-        }
-
-        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(_root, path.Replace('/', Path.DirectorySeparatorChar)));
-        if (!IsInside(full))
-        {
-            throw new AgentToolException($"'{path}' is outside the workspace.");
-        }
-
-        // A link that leads out of the workspace is outside it too.
-        for (var dir = full; dir.Length > _root.Length; dir = Path.GetDirectoryName(dir)!)
-        {
-            var info = new FileInfo(dir);
-            if (info.Exists ? info.LinkTarget is not null : new DirectoryInfo(dir) is { Exists: true, LinkTarget: not null })
-            {
-                var target = info.Exists ? info.ResolveLinkTarget(returnFinalTarget: true)?.FullName : new DirectoryInfo(dir).ResolveLinkTarget(returnFinalTarget: true)?.FullName;
-                if (target is null || !IsInside(Path.GetFullPath(target)))
-                {
-                    throw new AgentToolException($"'{path}' leads outside the workspace.");
-                }
-            }
-        }
-
-        return full;
-    }
-
-    private bool IsInside(string full) =>
-        full.Equals(_root, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)
-        || full.StartsWith(_root + Path.DirectorySeparatorChar, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+    public string Resolve(string? path) => WorkspacePaths.Resolve(_root, path);
 
     private string? OptionalPath(string? path) => string.IsNullOrWhiteSpace(path) ? null : Resolve(path);
 
@@ -417,3 +385,46 @@ public sealed partial class AgentTools(AiService ai, IAgentHost host, string wor
 
 /// <summary>A tool call the agent can't do: the message goes back to the model.</summary>
 public sealed class AgentToolException(string message) : Exception(message);
+
+/// <summary>
+/// Confines an agent's paths to the workspace (ADR 0063; external agents' too, ADR 0079): relative to its root or absolute
+/// under it, and a link on the way that leads out of it is refused.
+/// </summary>
+public static class WorkspacePaths
+{
+    /// <summary>The full path of <paramref name="path"/> inside <paramref name="root"/>; throws <see cref="AgentToolException"/> otherwise.</summary>
+    public static string Resolve(string root, string? path)
+    {
+        root = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new AgentToolException("A path is needed.");
+        }
+
+        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsInside(root, full))
+        {
+            throw new AgentToolException($"'{path}' is outside the workspace.");
+        }
+
+        // A link that leads out of the workspace is outside it too.
+        for (var dir = full; dir.Length > root.Length; dir = Path.GetDirectoryName(dir)!)
+        {
+            var info = new FileInfo(dir);
+            if (info.Exists ? info.LinkTarget is not null : new DirectoryInfo(dir) is { Exists: true, LinkTarget: not null })
+            {
+                var target = info.Exists ? info.ResolveLinkTarget(returnFinalTarget: true)?.FullName : new DirectoryInfo(dir).ResolveLinkTarget(returnFinalTarget: true)?.FullName;
+                if (target is null || !IsInside(root, Path.GetFullPath(target)))
+                {
+                    throw new AgentToolException($"'{path}' leads outside the workspace.");
+                }
+            }
+        }
+
+        return full;
+    }
+
+    private static bool IsInside(string root, string full) =>
+        full.Equals(root, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)
+        || full.StartsWith(root + Path.DirectorySeparatorChar, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+}

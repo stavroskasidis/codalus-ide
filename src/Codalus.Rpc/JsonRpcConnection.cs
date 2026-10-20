@@ -44,6 +44,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     private long _nextId;
     private int _started;
     private int _disposed;
+    private int _received;
+    private int _readEnded;
+    private readonly object _lostGate = new(); // not Lock: the .NET 8 designer hosts compile this file too
+    private Task<JsonRpcConnectionLostException>? _lost;
 
     /// <summary>Requests being handled: their method and when they started (slow-request reports).</summary>
     private readonly ConcurrentDictionary<string, (string Method, long Started)> _running = new(StringComparer.Ordinal);
@@ -74,10 +78,27 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     public static TimeSpan SlowNotification { get; set; } = TimeSpan.FromSeconds(2);
 
     public JsonRpcConnection(Stream reader, Stream writer)
+        : this(reader, writer, JsonRpcFraming.ContentLength)
+    {
+    }
+
+    /// <param name="framing">How messages are delimited: <c>Content-Length</c> headers, or one per line (M48).</param>
+    public JsonRpcConnection(Stream reader, Stream writer, JsonRpcFraming framing)
     {
         _reader = reader;
         _writer = writer;
+        Framing = framing;
     }
+
+    /// <summary>How messages are delimited on the streams.</summary>
+    public JsonRpcFraming Framing { get; }
+
+    /// <summary>
+    /// The notification a cancelled outgoing request sends, and the one that cancels an incoming request's handler:
+    /// LSP's <c>$/cancelRequest</c> by default, the Agent Client Protocol's <c>$/cancel_request</c> (M48), or null to
+    /// send none (a protocol that cancels its own way). Set it before <see cref="Start"/>.
+    /// </summary>
+    public JsonRpcCancelNotification? CancelNotification { get; set; } = JsonRpcCancelNotification.Lsp;
 
     /// <summary>Raised once when the connection is lost (stream closed, peer died, or protocol error).</summary>
     public event EventHandler<Exception?>? Disconnected;
@@ -96,6 +117,45 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     /// <summary>Completes when the connection has stopped reading.</summary>
     public Task Completion => _readLoop;
+
+    /// <summary>Whether a message has arrived from the peer (a host that got this far started).</summary>
+    public bool HasReceived => Volatile.Read(ref _received) != 0;
+
+    /// <summary>
+    /// Says why the connection was lost (M49): called once, when reading stops or a write finds the peer gone (not on
+    /// <see cref="DisposeAsync"/>), with the failure if there was one. The exception it returns is what pending and later
+    /// requests fail with (a supervisor puts the process's exit code and standard error in it); null, or no callback,
+    /// keeps "The connection was lost." Register before <see cref="Start"/>.
+    /// </summary>
+    public Func<Exception?, Task<JsonRpcConnectionLostException?>>? ExplainLoss { get; set; }
+
+    private Task<JsonRpcConnectionLostException> LostAsync(Exception? failure)
+    {
+        lock (_lostGate)
+        {
+            return _lost ??= ExplainAsync(failure);
+        }
+    }
+
+    private async Task<JsonRpcConnectionLostException> ExplainAsync(Exception? failure)
+    {
+        if (ExplainLoss is { } explain && !_shutdown.IsCancellationRequested)
+        {
+            try
+            {
+                if (await explain(failure).ConfigureAwait(false) is { } explained)
+                {
+                    return explained;
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The plain message below: an explanation that fails must not hide the loss itself.
+            }
+        }
+
+        return new JsonRpcConnectionLostException("The connection was lost.", failure);
+    }
 
     public void Start()
     {
@@ -259,6 +319,12 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 writeParams(writer);
             }, cancellationToken, "request " + method).ConfigureAwait(false);
 
+            if (Volatile.Read(ref _readEnded) != 0)
+            {
+                // Sent after the reading stopped: no answer can come.
+                completion.TrySetException(await LostAsync(null).ConfigureAwait(false));
+            }
+
             try
             {
                 return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -329,13 +395,15 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         WriteMessageAsync(writer => writer.WriteString("method", method), cancellationToken, "notification " + method);
 
     private Task CancelRemoteAsync(long id) =>
-        WriteMessageAsync(writer =>
-        {
-            writer.WriteString("method", "$/cancelRequest");
-            writer.WriteStartObject("params");
-            writer.WriteNumber("id", id);
-            writer.WriteEndObject();
-        }, CancellationToken.None).ContinueWith(static _ => { }, TaskScheduler.Default);
+        CancelNotification is not { } cancel
+            ? Task.CompletedTask
+            : WriteMessageAsync(writer =>
+            {
+                writer.WriteString("method", cancel.Method);
+                writer.WriteStartObject("params");
+                writer.WriteNumber(cancel.IdProperty, id);
+                writer.WriteEndObject();
+            }, CancellationToken.None).ContinueWith(static _ => { }, TaskScheduler.Default);
 
     private async Task WriteMessageAsync(Action<Utf8JsonWriter> writeBody, CancellationToken cancellationToken, string what = "a message")
     {
@@ -348,7 +416,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             writer.WriteEndObject();
         }
 
-        var header = FramedMessageWriter.Header(body.WrittenCount);
+        var header = Framing == JsonRpcFraming.NewlineDelimited ? null : FramedMessageWriter.Header(body.WrittenCount);
         var write = Interlocked.Increment(ref _nextWrite);
         _writing[write] = (what, System.Diagnostics.Stopwatch.GetTimestamp(), false);
         try
@@ -366,14 +434,24 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         {
             // Never cancel a frame halfway: a header without its body corrupts the stream, and the peer drops
             // the connection. Cancellation applies while waiting for the lock only.
-            await _writer.WriteAsync(header, CancellationToken.None).ConfigureAwait(false);
+            if (header is not null)
+            {
+                await _writer.WriteAsync(header, CancellationToken.None).ConfigureAwait(false);
+            }
+            else
+            {
+                // Utf8JsonWriter escapes control characters in strings, so the body holds no newline of its own.
+                body.Write("\n"u8);
+            }
+
             await _writer.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
             await _writer.FlushAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {
-            // The peer is gone (e.g. a crashed host's stdin pipe closed): one exception type for callers.
-            throw new JsonRpcConnectionLostException("The connection was lost.", ex);
+            // The peer is gone (e.g. a crashed host's stdin pipe closed): one exception type for callers, which says why
+            // when the supervisor knows (M49).
+            throw await LostAsync(ex).ConfigureAwait(false);
         }
         finally
         {
@@ -393,14 +471,19 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         Exception? failure = null;
         try
         {
-            var reader = new FramedMessageReader(_reader);
+            var framed = Framing == JsonRpcFraming.ContentLength ? new FramedMessageReader(_reader) : null;
+            var lines = framed is null ? new LineMessageReader(_reader) : null;
             while (!_shutdown.IsCancellationRequested)
             {
-                var payload = await reader.ReadMessageAsync(_shutdown.Token).ConfigureAwait(false);
+                var payload = framed is not null
+                    ? await framed.ReadMessageAsync(_shutdown.Token).ConfigureAwait(false)
+                    : await lines!.ReadMessageAsync(_shutdown.Token).ConfigureAwait(false);
                 if (payload is null)
                 {
                     break;
                 }
+
+                Volatile.Write(ref _received, 1);
 
                 if (!TryCompleteResponse(payload))
                 {
@@ -420,7 +503,8 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
 
         _inbox.Writer.TryComplete();
-        var lost = new JsonRpcConnectionLostException("The connection was lost.", failure);
+        var lost = await LostAsync(failure).ConfigureAwait(false);
+        Volatile.Write(ref _readEnded, 1);
         foreach (var pending in _pending.Values)
         {
             pending.TrySetException(lost);
@@ -499,9 +583,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             // Started in order; completes concurrently.
             _ = HandleRequestAsync(id.Clone(), method, parameters);
         }
-        else if (method == "$/cancelRequest")
+        else if (method == "$/cancelRequest" || method == CancelNotification?.Method)
         {
-            if (parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty("id", out var cancelId)
+            var idProperty = method == CancelNotification?.Method ? CancelNotification.IdProperty : "id";
+            if (parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty(idProperty, out var cancelId)
                 && _incoming.TryGetValue(cancelId.GetRawText(), out var incoming))
             {
                 await incoming.CancelAsync().ConfigureAwait(false);
@@ -684,6 +769,16 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     }
 }
 
+/// <summary>The notification that cancels a request, and the name of its parameter that holds the request's id.</summary>
+public sealed record JsonRpcCancelNotification(string Method, string IdProperty)
+{
+    /// <summary>LSP's <c>$/cancelRequest</c> with <c>id</c>.</summary>
+    public static JsonRpcCancelNotification Lsp { get; } = new("$/cancelRequest", "id");
+
+    /// <summary>The Agent Client Protocol's <c>$/cancel_request</c> with <c>requestId</c> (M48).</summary>
+    public static JsonRpcCancelNotification Acp { get; } = new("$/cancel_request", "requestId");
+}
+
 /// <summary>The peer answered a request with a JSON-RPC error.</summary>
 public sealed class JsonRpcRemoteException(int code, string message) : Exception(message)
 {
@@ -696,4 +791,8 @@ public sealed class JsonRpcHandlerException(int code, string message) : Exceptio
     public int Code { get; } = code;
 }
 
-public sealed class JsonRpcConnectionLostException(string message, Exception? inner) : Exception(message, inner);
+/// <summary>
+/// The peer went away: pending and later requests fail with this. Subclasses say why when it's known (M49:
+/// <see cref="HostExitedException"/>, <see cref="HostRuntimeMissingException"/>).
+/// </summary>
+public class JsonRpcConnectionLostException(string message, Exception? inner) : Exception(message, inner);

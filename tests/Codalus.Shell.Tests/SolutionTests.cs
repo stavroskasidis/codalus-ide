@@ -50,7 +50,7 @@ public class SolutionTests
         File.SetLastWriteTimeUtc(app, DateTime.UtcNow);
         await Task.Delay(1000);
         var before = f.Shell.Builds.LastBuild;
-        f.Shell.Run("build.buildSolution");
+        await f.RunAsync("build.buildSolution");
         await ShellFixture.PumpUntil(() => f.Shell.Builds.LastBuild is { } b && b != before, seconds: 300);
         Assert.True(f.Shell.Builds.LastBuild!.Result.Succeeded, f.Shell.Builds.Channel.GetText());
         Assert.Equal(3, f.Shell.Solutions.Projects.Count);
@@ -90,7 +90,7 @@ public class SolutionTests
         await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Left.Any(i => i.Text == "Restricted mode"));
         Assert.Empty(f.Shell.Solutions.Projects);
 
-        f.Shell.Run("solution.trust");
+        await f.RunAsync("solution.trust");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.Accept();
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 3, seconds: 90);
@@ -107,7 +107,7 @@ public class SolutionTests
 
         explorer.Reveal("p:" + app);
         f.Shell.Workbench.Context.Set("focusedView", SolutionExplorerViewModel.ToolWindowId);
-        f.Shell.Run("explorer.newFile");
+        await f.RunAsync("explorer.newFile");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.InputText = "Order.cs";
         f.Shell.Dialogs.Accept();
@@ -118,7 +118,7 @@ public class SolutionTests
         explorer.Reveal("f:" + Path.Combine(appDir, "appsettings.json"));
         Assert.Equal("appsettings.json", explorer.Selected?.Name);
         f.Shell.Workbench.Context.Set("focusedView", SolutionExplorerViewModel.ToolWindowId);
-        f.Shell.Run("explorer.rename");
+        await f.RunAsync("explorer.rename");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.InputText = "Order.cs";
         Assert.True(f.Shell.Dialogs.HasError); // a sibling already has that name
@@ -132,7 +132,7 @@ public class SolutionTests
         await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Name == "settings.json"), seconds: 30);
         explorer.Reveal("f:" + Path.Combine(appDir, "settings.json"));
         f.Shell.Workbench.Context.Set("focusedView", SolutionExplorerViewModel.ToolWindowId);
-        f.Shell.Run("explorer.delete");
+        await f.RunAsync("explorer.delete");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.Accept();
         await ShellFixture.PumpUntil(() => !File.Exists(Path.Combine(appDir, "settings.json")));
@@ -175,7 +175,7 @@ public class SolutionTests
     {
         await using var f = await OpenTrustedAsync();
 
-        f.Shell.Run("solution.selectConfiguration");
+        await f.RunAsync("solution.selectConfiguration");
         await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen);
         f.Shell.Palette.Query = "Release|Any";
         f.Shell.Palette.Accept();
@@ -212,7 +212,7 @@ public class SolutionTests
     public async Task The_start_page_lists_recent_solutions()
     {
         await using var f = await OpenTrustedAsync();
-        var recentCommand = await f.Shell.Workbench.Commands.ExecuteAsync("workbench.getRecentSolutions", CancellationToken.None);
+        var recentCommand = await f.ExecuteAsync("workbench.getRecentSolutions");
 
         Assert.Equal("ProjectSystem.slnx", recentCommand!.Value[0].GetProperty("name").GetString());
         Assert.Equal(f.Shell.Solutions.Solution!.Path, recentCommand.Value[0].GetProperty("path").GetString());

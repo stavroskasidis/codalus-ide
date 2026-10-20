@@ -322,15 +322,47 @@ public sealed class RemoteServerTests
         await using var connection = await ConnectLocalAsync();
         var launch = ProcessLaunchInfo.FromPath(ServerDll, "--echo") with { Launcher = new RemoteProcessLauncher(connection, RemotePathMap.Identity, mapJson: false) };
         var restarted = new TaskCompletionSource();
+        var running = new TaskCompletionSource();
+        var events = new System.Collections.Concurrent.ConcurrentQueue<string>();
         await using var host = new SupervisedProcess("echo host", launch, new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50), ShutdownRequest = null, ExitNotification = null });
-        host.Restarted += (_, _) => restarted.TrySetResult();
+        host.Log += (_, line) =>
+        {
+            events.Enqueue("log: " + line);
+            if (line == "echo: started")
+            {
+                running.TrySetResult();
+            }
+        };
+        host.Crashed += (_, e) =>
+        {
+            events.Enqueue($"crashed: exit code {e.ExitCode}, will restart {e.WillRestart}, during startup {e.DuringStartup}: {e.Error?.Message}");
+            if (!e.WillRestart)
+            {
+                restarted.TrySetException(new InvalidOperationException("The supervisor gave up instead of restarting the host."));
+            }
+        };
+        host.Restarted += (_, _) =>
+        {
+            events.Enqueue("restarted");
+            restarted.TrySetResult();
+        };
+        string State() =>
+            $"connected {connection.IsConnected}, host running {host.IsRunning}, gave up {host.GaveUp}, last failure '{host.LastFailure?.Message}'; events: {string.Join(" | ", events)}";
         await host.StartAsync(Timeout());
         var first = host.ProcessId;
         Assert.NotNull(first);
 
+        // Once the host runs and has written to standard error, as a real host logs while it starts. The test killed it
+        // as soon as the server said it started, so it was restarted only if the kill came before that line: on a
+        // loaded Mac it came after, and the kill counted as a failed start, which is never restarted (develop's 0.4.0
+        // run). A process killed from outside is restarted, whatever it printed.
+        await running.Task.WaitAsync(Timeout()).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        Assert.True(running.Task.IsCompleted, $"The echo host didn't say it started: {State()}");
+
         // The host "crashes" (its process is killed on the server): the supervisor starts it again there.
         Process.GetProcessById(first!.Value).Kill();
-        await restarted.Task.WaitAsync(Timeout());
+        await ((Task)restarted.Task).WaitAsync(Timeout()).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        Assert.True(restarted.Task.IsCompletedSuccessfully, $"The killed host wasn't started again: {State()}");
         Assert.NotEqual(first, host.ProcessId);
     }
 
@@ -439,15 +471,8 @@ public sealed class RemoteServerTests
     {
         if (OperatingSystem.IsWindows())
         {
-            var distribution = Environment.GetEnvironmentVariable("CODALUS_TEST_WSL") is { Length: > 0 } name ? name : "Ubuntu";
-            var listed = RemoteTargets.WslDistributionsAsync(CancellationToken.None).GetAwaiter().GetResult();
-            if (!listed.Contains(distribution, StringComparer.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            var dotnet = RemoteShell.RunAsync(new WslTarget(distribution), "PATH=\"$PATH:$HOME/.dotnet\" command -v dotnet", CancellationToken.None).GetAwaiter().GetResult();
-            return dotnet.Succeeded && dotnet.Output.Trim().Length > 0 ? new WslTarget(distribution) : null;
+            // With the tests' .NET there: the framework-dependent server of a Debug build runs on it.
+            return Codalus.Tests.WslStandIn.Distribution is { } distribution ? new WslTarget(distribution) : null;
         }
 
         var script = Path.Combine(folder, "fake-ssh");

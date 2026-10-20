@@ -283,7 +283,7 @@ public class ShellHeadlessTests
         }
 
         // The keyboard scheme from the plugin's quick pick (M23a).
-        f.Shell.Run("welcome.chooseKeyboardScheme");
+        await f.RunAsync("welcome.chooseKeyboardScheme");
         await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen, seconds: 30);
         f.Type("Emacs");
         f.Press(Key.Enter);
@@ -296,7 +296,7 @@ public class ShellHeadlessTests
         await ShellFixture.PumpUntil(() => TipShown() is { } next && next != firstTip, seconds: 30);
 
         // Get Started is the first-run setup (M46): Help → Get Started opens it.
-        f.Shell.Run("welcome.showOnboarding");
+        await f.RunAsync("welcome.showOnboarding");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
         await f.Shell.SetupModel!.FinishAsync(done: false);
         await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);

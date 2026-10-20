@@ -14,6 +14,11 @@
     <Compile Include="$(MSBuildThisFileDirectory)Shared/FixtureSdk.cs" Link="Shared/FixtureSdk.cs" />
     <!-- The repository's target framework, for paths to built hosts and plugins (M30b). -->
     <Compile Include="$(MSBuildThisFileDirectory)Shared/RepoBuild.cs" Link="Shared/RepoBuild.cs" />
+    <!-- The WSL distribution the remote tests use, when it has the tests' .NET. -->
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/WslStandIn.cs" Link="Shared/WslStandIn.cs" />
+    <!-- Names a test that hangs and prints the stacks while the process still runs (CI's silent macOS hangs). Test
+         projects only: the stand-in tools here have no xUnit (items see the project's own IsTestProject). -->
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/TestWatchdog.cs" Link="Shared/TestWatchdog.cs" Condition="'$(IsTestProject)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>

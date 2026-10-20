@@ -26,7 +26,7 @@
 
     <section style="padding-top: 32px" aria-labelledby="prereq">
         <div class="notice">
-            <p><strong id="prereq">Before you install:</strong> the <a href="https://dotnet.microsoft.com/download/dotnet/11.0">.NET 11 SDK</a> (release candidate 2 or later until .NET 11's release in November) or newer, and <a href="https://git-scm.com/downloads">git</a> 2.30 or newer on the PATH. Codalus runs its helper processes on .NET 11, and builds your solutions with any SDK from 2.1.200 on.</p>
+            <p><strong id="prereq">Before you install:</strong> the <a href="https://dotnet.microsoft.com/download/dotnet/11.0">.NET 11 SDK</a> (release candidate 2 or later until .NET 11's release in November) or newer, and <a href="https://git-scm.com/downloads">git</a> 2.30 or newer on the PATH. Codalus runs its helper processes on .NET 11, and builds your solutions with any SDK from 2.1.200 on. When that runtime is missing, Codalus says so and offers to install it, and it doesn't download an update whose runtime isn't installed.</p>
             <a class="link-arrow" href="docs/getting-started/#prerequisites">Details</a>
         </div>
     </section>
@@ -78,12 +78,13 @@
             </DownloadFile>
             <div class="os-foot">
                 <strong>Package repositories</strong>
-                <span>Installs from the apt and dnf repositories update with the system. The packages and the repositories are signed with the project's key.</span>
+                <span>Installs from the apt and dnf repositories update with the system. The repositories and the .rpm packages are signed with the project's key, and the packages download from the GitHub release.</span>
             </div>
             <div class="repo-grid" style="margin: 0; padding: 20px 24px 24px">
                 <div class="card card-outline">
                     <h3 id="apt">Debian and Ubuntu (apt)</h3>
                     <Commands Text="@Apt" />
+                    <p>Needs apt 1.6 or later (Debian 10, Ubuntu 18.04). Added the repository before 0.4.0? Run the second command again.</p>
                 </div>
                 <div class="card card-outline">
                     <h3 id="dnf">Fedora and RHEL (dnf)</h3>
@@ -93,7 +94,7 @@
                 <div class="card card-outline">
                     <h3 id="zypper">openSUSE (zypper)</h3>
                     <Commands Text="@Zypper" />
-                    <p>The same rpm repository, so it updates with the system.</p>
+                    <p>The same rpm repository, so it updates with the system. Added it before 0.4.0? Remove it with <code>sudo zypper removerepo codalus-stable</code> and add it again.</p>
                 </div>
                 <div class="card card-outline">
                     <h3 id="aur">Arch Linux (AUR)</h3>
@@ -119,7 +120,7 @@
             </div>
             <div class="card card-outline">
                 <h2>Check the download</h2>
-                <p>Every release lists the SHA-256 of each file in SHA256SUMS.txt. The .deb and .rpm packages and the repositories are signed with the project's key.</p>
+                <p>Every release lists the SHA-256 of each file in SHA256SUMS.txt. The .rpm packages and the apt and dnf repositories are signed with the project's key.</p>
                 <a class="link-arrow" href="@Site.Blob("eng/packaging/linux/codalus-packages.asc")">The signing key</a>
             </div>
             <div class="card card-outline">
@@ -141,10 +142,11 @@
 </div>
 
 @code {
-    // The repositories are served next to the site (eng/linux-repos.sh, .github/workflows/pages.yml).
+    // The repositories' metadata is served next to the site and the packages from the releases (eng/linux-repos.sh,
+    // .github/workflows/pages.yml): apt and zypper read through mirror lists, dnf through the metadata's package addresses.
     private string Apt => $"""
         curl -fsSL {Site.BaseUrl}codalus-packages.asc | sudo gpg --dearmor -o /usr/share/keyrings/codalus.gpg
-        echo "deb [signed-by=/usr/share/keyrings/codalus.gpg] {Site.BaseUrl}apt stable main" | sudo tee /etc/apt/sources.list.d/codalus.list
+        echo "deb [signed-by=/usr/share/keyrings/codalus.gpg] mirror+{Site.BaseUrl}apt/mirrors.txt stable main" | sudo tee /etc/apt/sources.list.d/codalus.list
         sudo apt update && sudo apt install codalus
         """;
 

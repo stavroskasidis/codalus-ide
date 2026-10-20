@@ -66,12 +66,12 @@ public sealed class Net11Tests
         // F5 on the .NET 11 runtime: a breakpoint, a local, the program's output.
         var stop = Line(program, "break");
         f.Shell.Debugger.Breakpoints.Toggle(program, stop);
-        f.Shell.Run("debug.start");
+        await f.RunAsync("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 240);
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == stop);
         await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "circle"));
         f.Shell.Debugger.Breakpoints.Clear();
-        f.Shell.Run("debug.continue");
+        await f.RunAsync("debug.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
         Assert.Contains("runtime=11 library=net11.0", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
     }
@@ -135,7 +135,7 @@ public sealed class Net11Tests
             await ShellFixture.PumpUntil(() => editor?.Controller is not null);
             var offset = editor!.Model.Text.Text.IndexOf("message: before", StringComparison.Ordinal);
             editor.Model.Text.Replace(offset, "message: before".Length, "message: after");
-            f.Shell.Run("run.applyCodeChanges");
+            await f.RunAsync("run.applyCodeChanges");
             await ShellFixture.PumpUntil(() => program.Channel!.GetText().Contains("message: after", StringComparison.Ordinal), seconds: 180);
             // dotnet watch reports the change after the app already runs the new code.
             await ShellFixture.PumpUntil(() => program.HotReload!.Applied >= 1 || program.HotReload.Restarts >= 1, seconds: 60);

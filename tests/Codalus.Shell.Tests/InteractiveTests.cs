@@ -19,7 +19,7 @@ public sealed class InteractiveTests
         // The REPL host starts lazily, when the window first shows (roadmap: every host has a lazy-start test).
         ShellFixture.Pump();
         Assert.False(f.Shell.Interactive.IsRunning);
-        f.Shell.Run("workbench.view.interactive");
+        await f.RunAsync("workbench.view.interactive");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<InteractiveView>().Any());
         var view = f.Window.GetVisualDescendants().OfType<InteractiveView>().Single();
         var vm = f.Shell.InteractiveWindow;
@@ -61,7 +61,7 @@ public sealed class InteractiveTests
         await File.WriteAllTextAsync(file, "Console.WriteLine(\"sent \" + (x + 1));\n", TestContext.Current.CancellationToken);
         await f.Shell.OpenFileAsync(file, preview: false, null);
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null);
-        f.Shell.Run("interactive.sendSelection");
+        await f.RunAsync("interactive.sendSelection");
         await ShellFixture.PumpUntil(() => Transcript(f).Contains("sent 7", StringComparison.Ordinal), seconds: 30);
 
         // Reset drops the state.

@@ -582,7 +582,7 @@ public sealed class TerminalControl : Control
     {
         if (SelectedText() is { Length: > 0 } text && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
         {
-            await clipboard.SetTextAsync(text).ConfigureAwait(true);
+            await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, text).ConfigureAwait(true);
         }
 
         ClearSelection();
@@ -591,7 +591,7 @@ public sealed class TerminalControl : Control
     public async Task PasteAsync()
     {
         if (_session is { } session && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard
-            && await clipboard.TryGetTextAsync().ConfigureAwait(true) is { Length: > 0 } text)
+            && await Codalus.Shell.Infrastructure.SafeClipboard.TryGetTextAsync(clipboard).ConfigureAwait(true) is { Length: > 0 } text)
         {
             Send(TerminalInput.Paste(text, session.Terminal.BracketedPaste));
         }

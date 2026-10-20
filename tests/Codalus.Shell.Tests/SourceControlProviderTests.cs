@@ -16,7 +16,8 @@ public sealed class SourceControlProviderTests
         File.WriteAllText(Path.Combine(folder, "a.txt"), "the new a\n");
         File.WriteAllText(Path.Combine(folder, "b.txt"), "b\n");
 
-        f.Shell.Workbench.Commands.ExecuteAsync("hello.startScm", [JsonSerializer.SerializeToElement(folder)], CancellationToken.None).GetAwaiter();
+        await f.WhenEnabledAsync("hello.startScm", seconds: 60); // the plugin registers it as it activates
+        _ = f.Shell.Workbench.Commands.ExecuteAsync("hello.startScm", [JsonSerializer.SerializeToElement(folder)], CancellationToken.None);
         await ShellFixture.PumpUntil(() => f.Shell.Plugins.SourceControls.Any(s => s.Groups.Count == 1), seconds: 60);
         f.Shell.Layout.ShowToolWindow(ShellHost.SourceControlProvidersWindow);
 

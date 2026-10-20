@@ -96,6 +96,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             DevelopmentDirs = Options.PluginDirs,
         };
         Plugins.Prompts = new PluginPrompts(this);
+        Plugins.HostRuntimeMissing = ReportHostRuntimeMissing; // one notification, not one per plugin (M49); any thread
         EditorFont = new EditorFont(Workbench.Settings);
         Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
         Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));
@@ -224,6 +225,18 @@ public sealed partial class ShellHost : IAsyncDisposable
         Layout.ActiveDocumentChanged += (_, _) => OnSqlEditorActivated();
         Notifications.Changed += (_, _) => UpdateStatusItems();
         Theme.Changed += (_, _) => UpdateStatusItems();
+        // Any quick pick (the palette is the shared one): Escape closes it before it hides the toasts.
+        Palette.Opened += (_, _) => Workbench.Context.Set("inCommandPalette", true);
+        Infrastructure.SafeClipboard.Busy += OnClipboardBusy;
+
+        // Activation event onSolutionOpened (API 1.0, docs/plugins.md): plugins that start with a solution.
+        Solutions.SolutionChanged += (_, _) =>
+        {
+            if (Solutions.Solution is not null)
+            {
+                _ = Plugins.ActivateByEventAsync("onSolutionOpened", CancellationToken.None);
+            }
+        };
         Palette.Closed += (_, _) => Workbench.Context.Set("inCommandPalette", false);
 
         DiscoverPlugins();
@@ -282,7 +295,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         Directory.CreateDirectory(folder);
-        ShellIntegration.OpenUrl(new Uri(folder + Path.DirectorySeparatorChar));
+        OpenExternalUrl(new Uri(folder + Path.DirectorySeparatorChar));
     }
 
     public ShellOptions Options { get; }
@@ -546,7 +559,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     private IReadOnlyList<ToolbarActionViewModel> TitleActions(string viewId)
     {
         var scope = Workbench.Context.With(new Dictionary<string, object?>(StringComparer.Ordinal) { ["view"] = viewId, ["focusedView"] = viewId });
-        return [.. Workbench.Menus.GetItems(MenuLocations.ToolWindowTitle, scope).Where(i => i.Submenu is null).Select(i => new ToolbarActionViewModel(i.Title, i.KeyLabel, CommandFor(i.Command)))];
+        return [.. Workbench.Menus.GetItems(MenuLocations.ToolWindowTitle, scope).Where(i => i.Submenu is null).Select(i => new ToolbarActionViewModel(i.Title, i.KeyLabel, CommandFor(i.Command), Controls.CommandIcons.For(i.Command)?.Kind))];
     }
 
     /// <summary>One <c>workbench.view.&lt;id&gt;</c> command (and View menu entry) per tool window.</summary>
@@ -764,7 +777,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Directory.CreateDirectory(Paths.PluginsDirectory);
         try
         {
-            ShellIntegration.RevealInFileManager(Paths.PluginsDirectory);
+            RevealPath(Paths.PluginsDirectory);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -780,7 +793,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             throw new ArgumentException("workbench.openExternal expects an http(s) URL.");
         }
 
-        ShellIntegration.OpenUrl(url);
+        OpenExternalUrl(url);
     }
 
     /// <summary>
@@ -967,8 +980,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
     }
 
+    /// <summary>Another program held the clipboard through a copy or a paste's retries.</summary>
+    private void OnClipboardBusy() => Ui.Post(() => StatusBar.ShowMessage(
+        Localizer.Get("msg.clipboard.busy", "The clipboard is in use by another program. Try again in a moment."), TimeSpan.FromSeconds(6)));
+
     public async ValueTask DisposeAsync()
     {
+        Infrastructure.SafeClipboard.Busy -= OnClipboardBusy;
         var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
         await FlushSolutionStateAsync().ConfigureAwait(false);
@@ -982,6 +1000,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         _instance?.Dispose();
         _mcpBridge?.Dispose();
         await McpServers.DisposeAsync().ConfigureAwait(false);
+        await ExternalAgents.DisposeAsync().ConfigureAwait(false);
         Askpass?.Dispose();
         Terminals?.Dispose();
         if (Interactive is not null)

@@ -99,7 +99,7 @@ public sealed class AspireShellTests
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 90);
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line);
             f.Shell.Debugger.Breakpoints.Clear();
-            f.Shell.Run("debug.continue");
+            await f.RunAsync("debug.continue");
             await ShellFixture.PumpUntil(() => request.IsCompleted, seconds: 60);
             Assert.StartsWith("Frontend: Sunny, from the api", await request, StringComparison.Ordinal);
 

@@ -58,7 +58,7 @@ public class FindInFilesTests
             // Ctrl+Shift+F shows the window on Find in Files; the Find Results window has no search box of its own.
             var find = f.Shell.FindReplace;
             var results = f.Shell.FindResults;
-            f.Shell.Run("workbench.action.findInFiles");
+            await f.RunAsync("workbench.action.findInFiles");
             await ShellFixture.PumpUntil(() => find.IsOpen && f.Window.GetVisualDescendants().OfType<FindReplaceView>().Any(v => v.IsEffectivelyVisible));
             Assert.False(find.IsReplace);
 
@@ -100,7 +100,7 @@ public class FindInFilesTests
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is { } c && c.Model.Path == one && c.Caret.Line == 2);
 
             // Replace, one match at a time: whole words, case matched; each line's matches in turn.
-            f.Shell.Run("workbench.action.replaceInFiles");
+            await f.RunAsync("workbench.action.replaceInFiles");
             Assert.True(find.IsReplace);
             NavigationDepthTests.Screenshot(f, "replace-in-files");
             find.MatchCase = true;
@@ -167,6 +167,56 @@ public class FindInFilesTests
         {
             Directory.Delete(folder, recursive: true);
         }
+    }
+
+    [AvaloniaFact]
+    public async Task Find_and_replaces_combo_boxes_center_their_text_and_hover_as_one_field()
+    {
+        // The maintainer's report: Find what's placeholder, Look in's "Entire solution" and File types' patterns sat at
+        // the top of their fields, and hovering Find what drew a box around its chevron only.
+        await using var f = ShellFixture.Create();
+        await f.RunAsync("workbench.action.findInFiles");
+        await ShellFixture.PumpUntil(() => f.Shell.FindReplace.IsOpen && f.Window.GetVisualDescendants().OfType<FindReplaceView>().Any(v => v.IsEffectivelyVisible));
+        ShellFixture.Pump();
+        var view = f.Window.GetVisualDescendants().OfType<FindReplaceView>().First();
+        var combos = view.GetVisualDescendants().OfType<Avalonia.Controls.ComboBox>().Where(c => c.IsEffectivelyVisible).ToList();
+        Assert.Equal(3, combos.Count); // Find what, Look in, File types
+        foreach (var combo in combos)
+        {
+            var text = ControlSetTests.ShownText(combo);
+            var middle = ControlSetTests.TextMiddle(text, combo);
+            Assert.True(Math.Abs(middle - (combo.Bounds.Height / 2)) <= 1.5, $"{Avalonia.Automation.AutomationProperties.GetName(combo)}: text centered at {middle:0.#} of {combo.Bounds.Height}");
+        }
+
+        // Find what has the focus: the field's 2 px focus edge goes around the text and the chevron, and the text box
+        // draws no edge or fill of its own over it.
+        var variant = f.Window.ActualThemeVariant;
+        (Avalonia.Controls.Border Field, Avalonia.Controls.TextBox Text, Avalonia.Controls.Border Inner) Parts(Avalonia.Controls.ComboBox combo)
+        {
+            var text = combo.GetVisualDescendants().OfType<Avalonia.Controls.TextBox>().First(t => t.Name == "PART_EditableTextBox");
+            return (combo.GetVisualDescendants().OfType<Avalonia.Controls.Border>().First(b => b.Name == "Background"), text,
+                text.GetVisualDescendants().OfType<Avalonia.Controls.Border>().First(b => b.Name == "PART_BorderElement"));
+        }
+
+        void ExpectOneField(Avalonia.Controls.ComboBox combo, string border, double thickness)
+        {
+            ShellFixture.Pump();
+            var (field, _, inner) = Parts(combo);
+            Assert.Equal(ControlSetTests.Token(border, variant), ControlSetTests.BrushColor(field.BorderBrush));
+            Assert.Equal(new Avalonia.Thickness(thickness), field.BorderThickness);
+            Assert.Equal(combo.Bounds.Width, field.Bounds.Width);
+            Assert.True(inner.Background is null || inner.Background is Avalonia.Media.ISolidColorBrush { Color.A: 0 }, $"the text box fills {inner.Background}");
+            Assert.Equal(default, inner.BorderThickness);
+        }
+
+        Assert.True(Parts(combos[0]).Text.IsFocused);
+        ExpectOneField(combos[0], "Shell.Focus", 2);
+
+        // Look in under the pointer, over its text: the field's border takes the hover color all around.
+        var lookIn = combos[1];
+        ControlSetTests.SetState(lookIn, ":pointerover");
+        ControlSetTests.SetState(Parts(lookIn).Text, ":pointerover");
+        ExpectOneField(lookIn, "Shell.Input.Border.Hover", 1);
     }
 
     [AvaloniaFact]

@@ -61,6 +61,7 @@
     <Project Path="src/Plugins/Codalus.Plugins.Welcome/Codalus.Plugins.Welcome.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Codalus.AcpAgent.Fake/Codalus.AcpAgent.Fake.csproj" />
     <Project Path="tests/Codalus.Benchmarks.Harness.Tests/Codalus.Benchmarks.Harness.Tests.csproj" />
     <Project Path="tests/Codalus.Debugging.Tests/Codalus.Debugging.Tests.csproj" />
     <Project Path="tests/Codalus.LanguageServices.Host.Tests/Codalus.LanguageServices.Host.Tests.csproj" />

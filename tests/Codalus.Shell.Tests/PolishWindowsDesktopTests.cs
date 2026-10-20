@@ -148,7 +148,7 @@ public partial class PolishTests
         }
 
         // M46: the setup window at its minimum size, each step; the Tools step with a missing SDK's plan shown.
-        f.Shell.Run("help.setUp");
+        await f.RunAsync("help.setUp");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
         var setup = f.Shell.SetupModel!;
         var setupWindow = f.Shell.SetupWindowView!;
@@ -510,7 +510,7 @@ public partial class PolishTests
         {
             var content = text.Text ?? text.Inlines?.Text;
             if (!text.IsEffectivelyVisible || string.IsNullOrWhiteSpace(content) || text.Bounds.Width < 1 || text.Bounds.Height < 1
-                || text.FindAncestorOfType<TextBox>() is not null || InOverflow(text) || text.TranslatePoint(default, root) is not { } origin)
+                || text.FindAncestorOfType<TextBox>() is not null || InOverflow(text) || InThemePreview(text) || text.TranslatePoint(default, root) is not { } origin)
             {
                 continue;
             }
@@ -542,8 +542,10 @@ public partial class PolishTests
         {
             for (var j = i + 1; j < inks.Count; j++)
             {
+                // A link inside a paragraph (an inline container, rendered Markdown) is laid out by the text around it.
+                var inline = inks[i].Text.IsVisualAncestorOf(inks[j].Text) || inks[j].Text.IsVisualAncestorOf(inks[i].Text);
                 var overlap = inks[i].Ink.Intersect(inks[j].Ink);
-                if (overlap.Width > 1 && overlap.Height > 2)
+                if (!inline && overlap.Width > 1 && overlap.Height > 2)
                 {
                     static string Label(string s) => s.Length > 30 ? s[..30] + "…" : s;
                     yield return $"\"{Label(inks[i].Content)}\" and \"{Label(inks[j].Content)}\" are drawn over each other ({overlap.Width:0} × {overlap.Height:0} px; {Describe(inks[j].Text, root)})";
@@ -578,12 +580,14 @@ public partial class PolishTests
     /// </summary>
     internal static IEnumerable<string> LowContrast(Visual root, ThemeVariant variant)
     {
-        var aaa = ThemeService.IsHighContrast(variant) && variant != ThemeService.HighContrast;
         foreach (var text in root.GetVisualDescendants().OfType<TextBlock>())
         {
+            // The text's own variant: a theme's preview (M34h) draws in its variant inside a window in another.
+            var textVariant = text.ActualThemeVariant ?? variant;
+            var aaa = ThemeService.IsHighContrast(textVariant) && textVariant != ThemeService.HighContrast;
             var content = text.Text ?? text.Inlines?.Text;
             if (!text.IsEffectivelyVisible || !text.IsEffectivelyEnabled || string.IsNullOrWhiteSpace(content) || text.Bounds.Width < 1 || text.Bounds.Height < 1
-                || text.FindAncestorOfType<TextBox>() is not null || text.Foreground is not ISolidColorBrush foreground)
+                || text.FindAncestorOfType<TextBox>() is not null || InThemePreview(text) || text.Foreground is not ISolidColorBrush foreground)
             {
                 continue;
             }

@@ -76,16 +76,37 @@ public partial class ThemeFamilyTests
         Assert.Equal("highContrast", ThemeService.Resolve("classic", high));
         Assert.Equal("blue", ThemeService.Resolve("blue", dark));
 
-        // Unknown values and no system information: the default, Harbor, dark.
-        Assert.Equal("harbor.light", ThemeService.Resolve("neon", light));
+        // Unknown values and no system information: the default (D36), Classic, dark.
+        Assert.Equal("light", ThemeService.Resolve("neon", light));
+        Assert.Equal("highContrast", ThemeService.Resolve("neon", high));
         Assert.Equal("harbor.dark", ThemeService.Resolve("harbor", null));
+        Assert.Equal("dark", ThemeService.Resolve(ThemeService.DefaultSetting, null));
     }
 
     [Fact]
-    public void The_setting_defaults_to_Harbor_and_offers_every_family_variant_and_todays_values()
+    public void The_default_is_Classic_following_each_mode_of_the_system()
+    {
+        // D36 (the maintainer, 2026-10-19): Classic is the default, so a profile without the setting follows the OS
+        // within Classic, high contrast first.
+        Assert.Equal("classic", ThemeService.DefaultSetting);
+        Assert.Equal("light", ThemeService.Resolve(ThemeService.DefaultSetting, new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Light }));
+        Assert.Equal("dark", ThemeService.Resolve(ThemeService.DefaultSetting, new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Dark }));
+        Assert.Equal("highContrast", ThemeService.Resolve(ThemeService.DefaultSetting, new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Light, ContrastPreference = ColorContrastPreference.High }));
+        Assert.Equal("highContrast", ThemeService.Resolve(ThemeService.DefaultSetting, new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Dark, ContrastPreference = ColorContrastPreference.High }));
+        Assert.Equal(ThemeService.HighContrast, ThemeService.VariantOf("highContrast"));
+
+        // Classic comes first wherever the families are listed: the families, the quick pick's choices, the setting's values.
+        Assert.Equal(["classic", "harbor", "graphite", "daylight", "ember"], ThemeService.Families.Select(f => f.Id));
+        Assert.Equal(["classic", "classic.blue", "classic.light", "classic.dark", "classic.highContrast", "harbor"], ThemeService.Choices.Take(6).Select(c => c.Id));
+        Assert.Equal("classic", BuiltIns.ColorThemeSetting(ThemeService.Choices).Enum![0]);
+    }
+
+    [Fact]
+    public void The_setting_defaults_to_Classic_and_offers_every_family_variant_and_todays_values()
     {
         var descriptor = BuiltIns.ColorThemeSetting(ThemeService.Choices);
-        Assert.Equal("harbor", descriptor.Default.GetString());
+        Assert.Equal("classic", descriptor.Default.GetString());
+        Assert.Contains("The families are Classic (Blue, Light, Dark and High Contrast; the default), Harbor, Graphite, Daylight and Ember.", descriptor.Description, StringComparison.Ordinal);
         Assert.Equal(21, ThemeService.Choices.Count); // four families and Classic, each following the system or pinned
         foreach (var theme in FamilyThemes.Concat(s_families).Concat(["classic", "classic.blue", "classic.light", "classic.dark", "classic.highContrast"]))
         {
@@ -306,10 +327,11 @@ public partial class ThemeFamilyTests
         f.Shell.Theme.SystemColors = () => new PlatformColorValues { ThemeVariant = PlatformThemeVariant.Dark };
         f.Shell.Theme.Apply();
 
-        // A new install: Harbor, following the system.
-        Assert.Equal("harbor", f.Shell.Theme.Setting);
-        Assert.Equal("harbor.dark", f.Shell.Theme.ActiveTheme);
-        Assert.Equal(ThemeService.HarborDark, Application.Current!.ActualThemeVariant);
+        // A new install: Classic, following the system (D36).
+        Assert.Equal("classic", f.Shell.Theme.Setting);
+        Assert.Equal("dark", f.Shell.Theme.ActiveTheme);
+        Assert.Equal("classic", f.Shell.Theme.ActiveFamily);
+        Assert.Equal(ThemeVariant.Dark, Application.Current!.ActualThemeVariant);
 
         await settings.SetAsync(ThemeService.SettingKey, "graphite.light", SettingScope.User, CancellationToken.None);
         await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "graphite.light");
@@ -454,10 +476,16 @@ public partial class ThemeFamilyTests
         await ShellFixture.PumpUntil(() => f.Shell.Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId) is not null);
         var document = f.Shell.Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId)!;
         var picker = Assert.IsType<ColorThemeSettingViewModel>(document.ViewModel.Items.Single(i => i.Key == ThemeService.SettingKey));
-        Assert.Equal(["harbor", "graphite", "daylight", "ember", "classic"], picker.Families.Select(c => c.Id));
-        Assert.Equal("harbor", picker.SelectedFamily?.Id);
+        // Classic first, and chosen: the default (D36), following the system, with Classic's Blue among its modes.
+        Assert.Equal(["classic", "harbor", "graphite", "daylight", "ember"], picker.Families.Select(c => c.Id));
+        Assert.Equal("classic", picker.SelectedFamily?.Id);
         Assert.Null(picker.SelectedMode?.Variant); // Follow System
-        Assert.Equal(["Follow System", "Light", "Dark", "High Contrast"], picker.Modes.Select(m => m.Label));
+        Assert.Equal(["Follow System", "Blue", "Light", "Dark", "High Contrast"], picker.Modes.Select(m => m.Label));
+        List<string?> Shown() => [.. f.Window.GetVisualDescendants().OfType<ToggleButton>().Where(b => b.Classes.Contains("themeCard")).Select(Avalonia.Automation.AutomationProperties.GetName)];
+        await ShellFixture.PumpUntil(() => Shown().Count == 5);
+        var shown = Shown();
+        Assert.Equal(["Classic", "Harbor", "Graphite", "Daylight", "Ember"], shown);
+        Assert.StartsWith("The classic IDE's familiar look", picker.Families[0].Description, StringComparison.Ordinal);
 
         // A card, then a mode: each writes the setting, and the IDE follows.
         picker.Families.Single(c => c.Id == "ember").SelectCommand.Execute(null);
@@ -497,9 +525,10 @@ public partial class ThemeFamilyTests
         Assert.Equal(5, cards.Count);
         var harbor = cards.Single(c => Avalonia.Automation.AutomationProperties.GetName(c) == "Harbor");
         Assert.True(harbor.IsChecked);
-        var picture = harbor.GetVisualDescendants().OfType<Border>().First(b => b.Width == 178);
+        // The picture is the shell's chrome at half size (M34h): the window's color, the title bar's.
+        var picture = harbor.GetVisualDescendants().OfType<Border>().First(b => b.Width == 356);
         Assert.Equal(Color.Parse("#D5DDEF"), ((ISolidColorBrush)picture.Background!).Color);
-        var title = picture.GetVisualDescendants().OfType<Border>().First(b => b.Height == 12);
+        var title = picture.GetVisualDescendants().OfType<Border>().First(b => b.Height == 24);
         Assert.Equal(Color.Parse("#1B2645"), ((ISolidColorBrush)title.Background!).Color);
         if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
         {

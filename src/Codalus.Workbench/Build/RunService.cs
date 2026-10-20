@@ -79,23 +79,37 @@ public sealed class RunningProgram : IDisposable
         _listening.TrySetCanceled();
     }
 
-    /// <summary>Ends the program and every process it started; a child the OS won't let us end (access denied, already exiting) is left.</summary>
-    public void Stop()
+    /// <summary>Ends the program and every process it started, without waiting for that (<see cref="StopAsync"/>).</summary>
+    public void Stop() => _ = StopAsync();
+
+    /// <summary>
+    /// Ends the program and every process it started; a child the OS won't let us end (access denied, already exiting) is
+    /// left. Completes once they are ended; the calling thread (the UI thread) never waits for it.
+    /// </summary>
+    public async Task StopAsync()
     {
         // Ending the tree lists the system's processes to find the program's children. On macOS that listing can block
         // for many minutes (task information of a crashed process that ReportCrash holds: `ps -o pcpu,rss` blocks the
         // same way; seen after a debugging session closed its browser): the tree's end then gets a while, and after it
         // the program alone is ended, so its run ends (a child it started, if any, is left; the dev server's
-        // BrowserDebugHost ends with its owner).
+        // BrowserDebugHost ends with its owner). The wait is asynchronous: waiting on the UI thread froze the IDE for
+        // those 10 s (the command sweep's Start with Hot Reload on macOS, right after the run before it was stopped).
         var tree = Task.Run(() => Kill(entireProcessTree: true));
-        if (!tree.Wait(s_treeKillWait))
+        try
+        {
+            await tree.WaitAsync(s_treeKillWait).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
         {
             Kill(entireProcessTree: false);
         }
     }
 
-    /// <summary>How long <see cref="Stop"/> lets the tree's end take before it ends the program alone.</summary>
+    /// <summary>How long <see cref="StopAsync"/> lets the tree's end take before it ends the program alone.</summary>
     private static readonly TimeSpan s_treeKillWait = TimeSpan.FromSeconds(10);
+
+    /// <summary>Ends the process tree in place of <see cref="Process.Kill(bool)"/> (tests: a process listing that blocks).</summary>
+    internal Action<Process>? KillTree { get; init; }
 
     private void Kill(bool entireProcessTree)
     {
@@ -103,7 +117,14 @@ public sealed class RunningProgram : IDisposable
         {
             if (!_process.HasExited)
             {
-                _process.Kill(entireProcessTree);
+                if (entireProcessTree && KillTree is { } killTree)
+                {
+                    killTree(_process);
+                }
+                else
+                {
+                    _process.Kill(entireProcessTree);
+                }
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)
@@ -475,7 +496,7 @@ public sealed class RunService : IDisposable
     {
         var channel = _output.GetOrCreate("codalus.run." + name, "Run: " + name);
         var process = Process.GetProcessById(processId);
-        var program = new RunningProgram(key, name, process, channel);
+        var program = new RunningProgram(key, name, process, channel) { KillTree = KillTree };
         var gone = 0;
         void OnGone()
         {
@@ -532,7 +553,7 @@ public sealed class RunService : IDisposable
             throw new InvalidOperationException($"{plan.FileName} did not start.");
         }
 
-        var program = new RunningProgram(projectPath, name, process, console ? null : channel) { HotReload = hotReload ? new HotReloadSession() : null };
+        var program = new RunningProgram(projectPath, name, process, console ? null : channel) { HotReload = hotReload ? new HotReloadSession() : null, KillTree = KillTree };
         var browserOpened = plan.BrowserUrl is null;
         void OpenBrowserOnce()
         {
@@ -554,14 +575,23 @@ public sealed class RunService : IDisposable
 
         if (!console)
         {
-            void OnLine(string? line)
+            void OnLine(string? line, bool isError)
             {
                 if (line is null)
                 {
                     return;
                 }
 
-                channel.AppendLine(line);
+                // Standard error shows in the error color (M34h).
+                if (isError)
+                {
+                    channel.AppendErrorLine(line);
+                }
+                else
+                {
+                    channel.AppendLine(line);
+                }
+
                 program.OnLine(line);
                 program.HotReload?.OnLine(line);
                 if (!browserOpened && s_listeningMarkers.Any(m => line.Contains(m, StringComparison.Ordinal)))
@@ -570,8 +600,8 @@ public sealed class RunService : IDisposable
                 }
             }
 
-            process.OutputDataReceived += (_, e) => OnLine(e.Data);
-            process.ErrorDataReceived += (_, e) => OnLine(e.Data);
+            process.OutputDataReceived += (_, e) => OnLine(e.Data, isError: false);
+            process.ErrorDataReceived += (_, e) => OnLine(e.Data, isError: true);
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             process.StandardInput.Close(); // no console to read from: input ends right away instead of hanging
@@ -650,14 +680,14 @@ public sealed class RunService : IDisposable
         return start;
     }
 
-    /// <summary>Stops every running program.</summary>
-    public void StopAll()
-    {
-        foreach (var program in Running)
-        {
-            program.Stop();
-        }
-    }
+    /// <summary>Stops every running program, without waiting for that (<see cref="StopAllAsync"/>).</summary>
+    public void StopAll() => _ = StopAllAsync();
+
+    /// <summary>Stops every running program; completes once they are ended.</summary>
+    public Task StopAllAsync() => Task.WhenAll(Running.Select(p => p.StopAsync()));
+
+    /// <summary>Ends a program's process tree in place of <see cref="Process.Kill(bool)"/> (tests: a process listing that blocks).</summary>
+    internal Action<Process>? KillTree { get; set; }
 
     public void Dispose() => StopAll();
 }

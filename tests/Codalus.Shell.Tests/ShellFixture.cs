@@ -143,6 +143,32 @@ internal sealed class ShellFixture : IAsyncDisposable
         Dispatcher.UIThread.RunJobs();
     }
 
+    /// <summary>
+    /// Runs pending dispatcher work and layout, then renders a frame with all of it. Call it before hit testing:
+    /// <c>InputHitTest</c> reads the compositor's last rendered frame, not the layout, and after <see cref="Pump"/> that
+    /// frame can still be the one before the last layout change (its commit waits for the previous one, and the headless
+    /// render timer also ticks on its own clock). The sticky scroll's band, laid out but not yet drawn, let the point over
+    /// it through to the breakpoint margin under it (develop's macOS run of 0.4.0).
+    /// </summary>
+    public static void RenderFrame(Avalonia.Controls.TopLevel top)
+    {
+        Dispatcher.UIThread.RunJobs();
+        top.UpdateLayout();
+        var batch = Avalonia.Rendering.Composition.ElementComposition.GetElementVisual(top)!.Compositor.RequestCompositionBatchCommitAsync();
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        while (!batch.Rendered.IsCompleted)
+        {
+            Assert.True(started.Elapsed < TimeSpan.FromSeconds(10), "No frame was rendered in 10 s.");
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>
+    /// Pumps the dispatcher until <paramref name="condition"/> holds, then once more: a service's state (set on its own
+    /// thread, which the condition usually reads) reaches the views and the context keys through a job posted to the UI
+    /// thread, and the last delay could end the wait before that job ran (PR #69's Save As Solution Filter).
+    /// </summary>
     /// <param name="describe">What the shell was doing, added to the failure on a timeout.</param>
     public static async Task PumpUntil(Func<bool> condition, int seconds = 30, Func<string>? describe = null)
     {
@@ -158,7 +184,117 @@ internal sealed class ShellFixture : IAsyncDisposable
             Pump();
             await Task.Delay(15);
         }
+
+        Dispatcher.UIThread.RunJobs(); // the jobs only: a frame each time made the shell tests about a tenth slower
     }
+
+    /// <summary>
+    /// Waits until <paramref name="id"/> is enabled. A command run right after a state change can find the keys its
+    /// enablement reads not set yet: they follow the state a posted job later (a solution's <c>solutionTrusted</c>, a
+    /// repository's <c>gitRepository</c>, the focus), and the command was refused (PR #76's View History). On a timeout,
+    /// the failure names the keys and their values.
+    /// </summary>
+    public async Task WhenEnabledAsync(string id, int seconds = 30)
+    {
+        // Already enabled: nothing is pumped, so a focus a test set just before (as a click would) stays for the command.
+        var commands = Shell.Workbench.Commands;
+        if (!commands.IsEnabled(id))
+        {
+            await PumpUntil(() => commands.IsEnabled(id), seconds, () => $"'{id}' to be enabled ({DescribeEnablement(id)})");
+        }
+    }
+
+    /// <summary>The command's enablement and the context keys it reads, with their values.</summary>
+    public string DescribeEnablement(string id) =>
+        Shell.Workbench.Commands.Descriptors.FirstOrDefault(d => d.Id == id) is { } command
+            ? $"enablement: {command.Enablement.Text}; " + string.Join(", ", Infrastructure.SweepContextWatch.Read(command.Enablement, Shell.Workbench.Context).Select(p => $"{p.Key} = {p.Value ?? "unset"}"))
+            : "no such command is registered";
+
+    /// <summary>Runs <paramref name="id"/> as the UI does (<see cref="ShellHost.Run(string)"/>), once it is enabled.</summary>
+    public async Task RunAsync(string id)
+    {
+        await WhenEnabledAsync(id);
+        Shell.Run(id);
+    }
+
+    /// <summary>Executes <paramref name="id"/> and waits for it, once it is enabled.</summary>
+    public async Task<System.Text.Json.JsonElement?> ExecuteAsync(string id, params System.Text.Json.JsonElement[] args)
+    {
+        await WhenEnabledAsync(id);
+        return await Shell.Workbench.Commands.ExecuteAsync(id, args, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// Asks <paramref name="attempt"/> again, <paramref name="delayMilliseconds"/> apart, until <paramref name="done"/>
+    /// holds, all within <paramref name="seconds"/>. Each attempt gets at most <paramref name="attemptSeconds"/>, and never
+    /// more than the time left, so a server that never answers fails the test in minutes instead of attempts × timeout
+    /// (60 × 62 s outlasted a CI job's 50 minutes). On the deadline, the failure says what it waited for and the last reply.
+    /// </summary>
+    /// <param name="describe">The last reply, for the failure.</param>
+    /// <param name="retryOn">Exceptions that mean "ask again" (a server starting again); any other fails the test at once.</param>
+    public static async Task<T?> RetryUntil<T>(
+        string waitingFor,
+        Func<CancellationToken, Task<T?>> attempt,
+        Func<T?, bool> done,
+        Func<T?, string> describe,
+        int seconds = 240,
+        int attemptSeconds = 60,
+        int delayMilliseconds = 2000,
+        Func<Exception, bool>? retryOn = null)
+    {
+        var test = TestContext.Current.CancellationToken;
+        var deadline = TimeSpan.FromSeconds(seconds);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var last = "none (no attempt finished)";
+        var attempts = 0;
+        while (true)
+        {
+            var left = deadline - started.Elapsed;
+            if (left <= TimeSpan.Zero)
+            {
+                Assert.Fail($"Timed out after {seconds} s and {attempts} attempts waiting for {waitingFor}. The last reply: {last}.");
+            }
+
+            attempts++;
+            var limit = left < TimeSpan.FromSeconds(attemptSeconds) ? left : TimeSpan.FromSeconds(attemptSeconds);
+            using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(test))
+            {
+                timeout.CancelAfter(limit);
+                try
+                {
+                    // WaitAsync: an attempt that doesn't watch its token is left behind at its limit all the same.
+                    var reply = await attempt(timeout.Token).WaitAsync(timeout.Token);
+                    if (done(reply))
+                    {
+                        return reply;
+                    }
+
+                    last = describe(reply);
+                }
+                catch (OperationCanceledException) when (!test.IsCancellationRequested)
+                {
+                    last = $"no answer within {limit.TotalSeconds:0} s";
+                }
+                catch (Exception ex) when (retryOn?.Invoke(ex) == true)
+                {
+                    last = $"{ex.GetType().Name}: {ex.Message}";
+                }
+            }
+
+            left = deadline - started.Elapsed;
+            if (left > TimeSpan.Zero)
+            {
+                var pause = TimeSpan.FromMilliseconds(delayMilliseconds);
+                await Task.Delay(pause < left ? pause : left, test);
+            }
+        }
+    }
+
+    /// <summary>A completion list for a <see cref="RetryUntil"/> failure: how many items, and the first labels.</summary>
+    public static string Describe(Codalus.LanguageServices.Protocol.CompletionList? completion) =>
+        completion is null
+            ? "no completion list (no language client yet, or the server returned none)"
+            : $"{completion.Items.Length} items ({string.Join(", ", completion.Items.Take(15).Select(i => i.Label))}{(completion.Items.Length > 15 ? ", …" : "")})";
 
     /// <summary>
     /// A token for one language request: canceled after <paramref name="seconds"/>, so a server that never answers

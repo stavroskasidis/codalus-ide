@@ -1,9 +1,6 @@
-using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Text;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Threading;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Output;
@@ -11,29 +8,31 @@ using Codalus.Workbench.Output;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// Shows one output channel in a read-only, virtualized text editor. Appends arrive on any thread; they are
-/// queued and applied in one batch per dispatcher pass, so a chatty channel can't flood the UI thread.
+/// Shows one output channel in a read-only, virtualized text editor, its lines colored by what they report and by the
+/// processes' ANSI colors (M34h, <see cref="OutputPresenter"/>). Appends arrive on any thread; they are decoded there
+/// and applied in one batch per dispatcher pass, so a chatty channel can't flood the UI thread.
 /// </summary>
 public sealed partial class OutputView : UserControl, IPaneView
 {
-    private readonly ConcurrentQueue<string?> _pending = new();
-    private OutputViewModel? _viewModel;
-    private OutputChannel? _channel;
-    private int _flushScheduled;
-
+    private readonly OutputPresenter _presenter;
     private readonly FollowTail _tail;
+    private OutputViewModel? _viewModel;
 
     public OutputView()
     {
         InitializeComponent();
+        _presenter = new OutputPresenter(Editor);
         _tail = FollowTail.Attach(Editor);
     }
 
     /// <summary>Whether the view sticks to the end of the output (tests).</summary>
     public bool IsFollowing => _tail.IsFollowing;
 
-    /// <summary>The text currently shown (for tests).</summary>
+    /// <summary>The text currently shown, without escape sequences (for tests).</summary>
     public string Text => Editor.Text;
+
+    /// <summary>What colors the text (tests).</summary>
+    internal OutputPresenter Coloring => _presenter;
 
     public void FocusPrimary() => Editor.TextArea.Focus();
 
@@ -73,58 +72,9 @@ public sealed partial class OutputView : UserControl, IPaneView
 
     private void Show(OutputChannel? channel)
     {
-        if (_channel is not null)
-        {
-            _channel.Appended -= OnAppended;
-        }
-
-        _channel = channel;
-        _pending.Clear();
-        Editor.Text = channel?.GetText() ?? string.Empty;
-        if (channel is not null)
-        {
-            channel.Appended += OnAppended;
-        }
-
+        _presenter.Show(channel);
         _tail.Enabled = _viewModel is not { ScrollLock: true };
         _tail.Reset();
-    }
-
-    private void OnAppended(object? sender, string? text)
-    {
-        _pending.Enqueue(text);
-        if (Interlocked.Exchange(ref _flushScheduled, 1) == 0)
-        {
-            Dispatcher.UIThread.Post(Flush, DispatcherPriority.Background);
-        }
-    }
-
-    private void Flush()
-    {
-        Volatile.Write(ref _flushScheduled, 0);
-        var appended = new StringBuilder();
-        var reload = false;
-        while (_pending.TryDequeue(out var text))
-        {
-            if (text is null)
-            {
-                reload = true;
-                appended.Clear();
-            }
-            else
-            {
-                appended.Append(text);
-            }
-        }
-
-        if (reload)
-        {
-            Editor.Text = _channel?.GetText() ?? string.Empty;
-        }
-        else if (appended.Length > 0)
-        {
-            Editor.Document.Insert(Editor.Document.TextLength, appended.ToString());
-        }
 
         // FollowTail scrolls once layout knows the new end, if the user is still at the end.
     }

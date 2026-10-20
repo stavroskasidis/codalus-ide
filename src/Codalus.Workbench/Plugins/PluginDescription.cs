@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Codalus.Platform;
 using Codalus.Plugins.Protocol;
 using Codalus.Workbench.Commands;
+using Codalus.Workbench.Context;
 using Codalus.Workbench.Keybindings;
 using Codalus.Workbench.Menus;
 
@@ -104,6 +105,15 @@ public sealed partial class PluginDescription
     public PluginState State { get; internal set; }
 
     public string? Error { get; internal set; }
+
+    /// <summary>
+    /// It failed because its plugin host couldn't start (M49: its .NET runtime is missing, or it exited during startup),
+    /// not because of the plugin itself: <see cref="PluginManager.RetryFailedHostsAsync"/> makes it usable again.
+    /// </summary>
+    public bool FailedWithItsHost { get; internal set; }
+
+    /// <summary>Its own activation was what failed with its host (M49): a retry activates it again; otherwise it waits for its events.</summary>
+    internal bool ActivationFailedWithItsHost { get; set; }
 
     public IReadOnlyList<string> Warnings { get; private set; } = [];
 
@@ -244,19 +254,33 @@ public sealed partial class PluginDescription
             {
                 warnings.Add($"Ignoring invalid or duplicate command '{command.Id}'.");
             }
+            else if (!WhenClause.TryParse(command.Enablement, out _, out var error))
+            {
+                // PluginManager registers it always enabled: say so, rather than let a typo pass unnoticed.
+                warnings.Add($"Command '{command.Id}': its enablement doesn't parse, so it is always enabled ({error})");
+            }
         }
 
         foreach (var (location, items) in c?.Menus ?? [])
         {
             if (!IsKnownMenuLocation(location))
             {
-                warnings.Add($"Ignoring unknown menu location '{location}'.");
+                // PluginManager adds the items anyway: no menu shows them.
+                warnings.Add($"Unknown menu location '{location}': no menu shows its items.");
                 continue;
             }
 
             foreach (var item in items.Where(i => !commandIds.Contains(i.Command)))
             {
                 warnings.Add($"Menu '{location}' refers to '{item.Command}', which this plugin does not declare.");
+            }
+
+            foreach (var item in items)
+            {
+                if (!WhenClause.TryParse(item.When, out _, out var error))
+                {
+                    warnings.Add($"Menu '{location}': the when-clause of '{item.Command}' doesn't parse, so it always shows ({error})");
+                }
             }
         }
 
@@ -355,7 +379,7 @@ public sealed partial class PluginDescription
     /// </summary>
     private static bool IsKnownMenuLocation(string location)
     {
-        if (location is MenuLocations.CommandPalette or MenuLocations.ToolWindowTitle)
+        if (location is MenuLocations.CommandPalette or MenuLocations.ToolWindowTitle or MenuLocations.DocumentTabContext)
         {
             return true;
         }

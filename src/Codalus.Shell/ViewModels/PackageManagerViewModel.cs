@@ -602,6 +602,12 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     private CancellationToken RestartListLoad()
     {
+        // A load that finishes after the document closed: nothing to restart (Dispose disposed the source).
+        if (_disposed)
+        {
+            return new CancellationToken(canceled: true);
+        }
+
         _listLoad.Cancel();
         _listLoad.Dispose();
         _listLoad = new CancellationTokenSource();
@@ -610,6 +616,11 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     private async Task LoadListAsync(bool refresh)
     {
+        if (_disposed)
+        {
+            return; // the document closed while a load (or the first one) was on its way
+        }
+
         Error = null;
         if (_tab != PackageTab.Browse)
         {
@@ -666,7 +677,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     private async Task LoadMoreAsync()
     {
-        if (_tab != PackageTab.Browse || !_hasMore || _isLoading)
+        if (_disposed || _tab != PackageTab.Browse || !_hasMore || _isLoading)
         {
             return;
         }
@@ -826,6 +837,11 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     private async Task LoadDetailsAsync(PackageRowViewModel? row, string? version)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         _detailsLoad.Cancel();
         _detailsLoad.Dispose();
         _detailsLoad = new CancellationTokenSource();
@@ -1215,9 +1231,44 @@ public sealed class PackageRowViewModel(string id) : ObservableObject
             {
                 OnPropertyChanged(nameof(IsInstalled));
                 OnPropertyChanged(nameof(VersionLine));
+                OnPropertyChanged(nameof(IsUpToDate));
+                OnPropertyChanged(nameof(IsUpdatable));
+                OnPropertyChanged(nameof(IsAvailable));
+                OnPropertyChanged(nameof(AccessibleName));
             }
         }
     }
+
+    /// <summary>The installed version is the one listed (M34h: a green badge with a check).</summary>
+    public bool IsUpToDate => IsInstalled && _installedVersion == Version;
+
+    /// <summary>An older version is installed than the one listed (M34h: the installed badge, then the update's in the accent).</summary>
+    public bool IsUpdatable => IsInstalled && _installedVersion != Version && Version is not null;
+
+    /// <summary>Not installed (or only transitively): the listed version in a plain badge.</summary>
+    public bool IsAvailable => !IsInstalled && Version is not null;
+
+    /// <summary>The listed version is a prerelease (<c>1.0.0-beta.1</c>): a badge in the warning color.</summary>
+    public bool IsPrerelease => Version?.Contains('-', StringComparison.Ordinal) == true;
+
+    /// <summary>The update's badge text: "↑ 1.1.0".</summary>
+    public string UpdateLabel => "↑ " + Version;
+
+    /// <summary>
+    /// The initial's color (M34h): one of the icon palette's colors (blue, green, purple, orange, tan), the same for a
+    /// package on every run (a sum of its id's characters, not the per-process string hash).
+    /// </summary>
+    public int AvatarColor => IsHeader ? 0 : Id.Sum(c => char.ToLowerInvariant(c)) % 5;
+
+    public bool AvatarBlue => AvatarColor == 0;
+
+    public bool AvatarGreen => AvatarColor == 1;
+
+    public bool AvatarPurple => AvatarColor == 2;
+
+    public bool AvatarOrange => AvatarColor == 3;
+
+    public bool AvatarTan => AvatarColor == 4;
 
     public bool IsInstalled => _installedVersion is not null && !IsTransitive;
 
@@ -1249,7 +1300,7 @@ public sealed class PackageRowViewModel(string id) : ObservableObject
 
     public string Initial => IsHeader || Id.Length == 0 ? string.Empty : Id[..1].ToUpperInvariant();
 
-    public string AccessibleName => IsHeader ? Id : $"{Id} {VersionLine}{(IsDeprecated ? ", deprecated" : string.Empty)}{(IsVulnerable ? ", vulnerable" : string.Empty)}{(IsInstalled ? ", installed" : string.Empty)}";
+    public string AccessibleName => IsHeader ? Id : $"{Id} {VersionLine}{(IsPrerelease ? ", prerelease" : string.Empty)}{(IsDeprecated ? ", deprecated" : string.Empty)}{(IsVulnerable ? ", vulnerable" : string.Empty)}{(IsInstalled ? ", installed" : string.Empty)}{(IsUpdatable ? ", update available" : string.Empty)}";
 
     internal static string FormatDownloads(long downloads) => downloads switch
     {

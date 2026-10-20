@@ -61,7 +61,7 @@ public static class VsCodeImport
                 }
                 else
                 {
-                    skipped.Add((property.Name, $"the theme {value} isn't one of Codalus IDE's (Harbor, Graphite, Daylight, Ember or Classic)"));
+                    skipped.Add((property.Name, $"the theme {value} isn't one of Codalus IDE's (Classic, Harbor, Graphite, Daylight or Ember)"));
                 }
 
                 continue;

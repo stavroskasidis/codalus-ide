@@ -59,6 +59,8 @@ public partial class PolishTests
             ShellFixture.Pump();
             clipped.AddRange(Clipped(window).Select(p => $"{name}: {p}"));
             unnamed.AddRange(Unnamed(window).Select(p => $"{name}: {p}"));
+            // M34h: text over text too (NuGet's byline ran under its versions in the gallery; this walk didn't look).
+            clipped.AddRange(Overlapping(window).Select(p => $"{name}: {p}"));
             window.Close();
             if (document is Docking.ShellDocument shellDocument)
             {
@@ -93,6 +95,7 @@ public partial class PolishTests
             ShellFixture.Pump();
             ShellFixture.Pump();
             clipped.AddRange(Clipped(window).Select(p => $"dialog {name}: {p}"));
+            clipped.AddRange(Overlapping(window).Select(p => $"dialog {name}: {p}"));
             unnamed.AddRange(Unnamed(window).Select(p => $"dialog {name}: {p}"));
             dialog.Cancel();
             await shown;
@@ -100,7 +103,7 @@ public partial class PolishTests
             ShellFixture.Pump();
         }
 
-        Assert.True(clipped.Count == 0, "Text cut off:\n" + string.Join('\n', clipped));
+        Assert.True(clipped.Count == 0, "Text cut off or drawn over other text:\n" + string.Join('\n', clipped));
         Assert.True(unnamed.Count == 0, "Controls without an accessible name:\n" + string.Join('\n', unnamed));
     }
 

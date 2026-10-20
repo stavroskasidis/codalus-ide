@@ -34,7 +34,7 @@ namespace Codalus.Shell.Infrastructure;
 internal sealed partial class SmokeTest(Window window, ShellHost shell, string samples)
 {
     private const string Branch = "main";
-    private static readonly TimeSpan s_watchdog = TimeSpan.FromMinutes(25);
+    private static readonly TimeSpan s_watchdog = TimeSpan.FromMinutes(40); // the command sweep's 25 at most, with the rest
     private static readonly string[] s_commands = ["workbench.showCommandPalette", "build.buildSolution", "debug.start", "git.commit"];
     private static readonly string[] s_themes = ["blue", "light", "highContrast", "dark"];
 
@@ -224,6 +224,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => tree.Roots.Count > 0, "the Start page has items").ConfigureAwait(true);
         }).ConfigureAwait(true);
 
+        // M49: the shipped hosts' runtime requirement, resolved by the check as hostfxr resolves it: the plugin host ran
+        // above, so the check must agree that its runtime is installed (a check that misjudged would block every host).
+        await StepAsync("setup.hostRuntime", "M49", "The IDE's .NET runtime: what the shipped hosts ask for is found under their root, as their start shows", () =>
+        {
+            var requirements = Codalus.Workbench.Setup.IdeRuntime.Requirements(AppContext.BaseDirectory, Environment.GetEnvironmentVariable);
+            Check(requirements.Any(r => r.Name == Codalus.Rpc.FrameworkReference.NetCoreApp), $"the hosts' runtimeconfig.json files name Microsoft.NETCore.App (found: {string.Join(", ", requirements)})");
+            var row = shell.EnvironmentCheck.HostRuntimeStatus();
+            Check(row.State == Codalus.Workbench.Setup.ToolState.Found, $"the runtime row is Found ({row.State}: {row.Detail})");
+            var host = PluginHostLocator.Resolve();
+            Check(host is not null && Codalus.Rpc.HostRuntimeCheck.Check(host) is null or { IsSatisfied: true }, "the plugin host's own check passes");
+            return Task.CompletedTask;
+        }, "plugins.host").ConfigureAwait(true);
+
         // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
         await StepAsync("shell.setup", "M46", "The first-run setup: a theme family previewed live, a keyboard scheme, VS Code's settings imported and the tools checked; Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
 
@@ -268,7 +281,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }).ConfigureAwait(true);
 
         // M34d: the UI gallery's empty states, before a solution opens.
-        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
+        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Classic's four themes and Harbor's three (M34h)", GalleryEmptyStepAsync).ConfigureAwait(true);
 
         // M2: project system (build host, MSBuild evaluation, Solution Explorer).
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>
@@ -797,7 +810,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, "testing.run").ConfigureAwait(true);
 
         // M34d: the UI gallery with data (the Testing solution after its runs), the documents, the chrome and the error states.
-        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, the error states, Code Search's results, the color theme cards and the WCF references page (M34g), in every theme", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
+        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, the error states, Code Search's results, the color theme cards and the WCF references page (M34g), in Classic's four themes and Harbor's three (M34h)", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
 
         // M9: NuGet packages, on a copy of samples/Packages and its local feed (ADR 0012).
         await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>
@@ -1083,7 +1096,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
         else
         {
-            Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, "No stand-in: on Windows a WSL distribution with .NET; elsewhere sh.");
+            Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, $"No stand-in: on Windows a WSL distribution with the .NET {Environment.Version.Major} runtime; elsewhere sh.");
         }
         // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
         await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
@@ -1284,6 +1297,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // Last: it opens a solution of 38 projects, and nothing after it depends on what it leaves behind.
         await StepAsync("dotnet.older", "M33", "Projects of .NET Core 2.0 to .NET 10 open and build; Hot Reload says why it needs .NET 6", OlderFrameworksStepAsync).ConfigureAwait(true);
+
+        // The command sweep: every command through its menu item, key binding and the palette, on its own fixture.
+        await StepAsync("shell.commandSweep", "Sweep", "Every command runs from its menu item, key binding and the command palette without an error, an unhandled exception or a stalled UI, and what it opens closes cleanly", CommandSweepStepAsync, limit: TimeSpan.FromMinutes(25)).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -1577,8 +1593,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             foreach (var distribution in await RemoteTargets.WslDistributionsAsync(CancellationToken.None).ConfigureAwait(true))
             {
                 var target = new WslTarget(distribution) { Home = home };
+                // With the .NET the debuggee targets: a distribution with an older .NET only timed the step out.
                 if (!distribution.StartsWith("docker-", StringComparison.OrdinalIgnoreCase) && !distribution.StartsWith("podman-", StringComparison.OrdinalIgnoreCase)
-                    && (await RemoteShell.RunAsync(target, "exec sh -lc 'command -v dotnet'", CancellationToken.None).ConfigureAwait(true)).Output.Trim().StartsWith('/'))
+                    && (await RemoteShell.RunAsync(target, "exec sh -lc 'dotnet --list-runtimes'", CancellationToken.None).ConfigureAwait(true)).Output
+                        .Contains($"Microsoft.NETCore.App {Environment.Version.Major}.", StringComparison.Ordinal))
                 {
                     return target;
                 }
@@ -1682,7 +1700,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Data solution is open", 300).ConfigureAwait(true);
         var restore = await shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None).ConfigureAwait(true);
         Check(restore.Succeeded, "dotnet tool restore gets the fixture's dotnet-ef:\n" + Tail(restore.Output, 1500));
-        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 1 }, "the C# workspace is ready", 300).ConfigureAwait(true);
+        await WaitAsync(
+            () => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 1 },
+            () => $"the C# workspace is ready with Blogging alone (C# {shell.Languages.Status(ShellHost.CSharpLanguageId)?.ToString() ?? "not running"})",
+            300).ConfigureAwait(true);
 
         await shell.ShowEntityFrameworkAsync().ConfigureAwait(true);
         var ef = shell.EfExplorer;
@@ -2012,6 +2033,36 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.DevicesWindow.Toolchain.Length > 0, "the Devices window shows the Android toolchain").ConfigureAwait(true);
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("maui-devices.png");
+        await SoftWaitAsync(() => shell.Solutions.RestoreState is "succeeded" or "failed", 300).ConfigureAwait(true);
+        DismissRestoreFailureWithoutMauiWorkloads();
+    }
+
+    /// <summary>
+    /// Without the MAUI workloads (the CI runners and most machines have none), restoring the MAUI solution fails on
+    /// TodoApp (NETSDK1147) and MauiViews is restored on its own, as SolutionSession.RestoreAsync does: the failure is
+    /// expected here, and its error notification would stay in every later picture. It is dismissed, and printed to the
+    /// run's log, only when the restore's output names the missing workload; any other restore failure stays.
+    /// </summary>
+    private void DismissRestoreFailureWithoutMauiWorkloads()
+    {
+        if (shell.Solutions.RestoreState != "failed")
+        {
+            return;
+        }
+
+        var restore = shell.Workbench.Output.Channels.FirstOrDefault(c => c.Id == "codalus.restore")?.GetText() ?? string.Empty;
+        var failures = shell.Workbench.Notifications.Items.Where(n => n.Message.StartsWith("Restore failed", StringComparison.Ordinal)).ToList();
+        if (!restore.Contains("NETSDK1147", StringComparison.Ordinal))
+        {
+            Console.Out.WriteLine("  (the MAUI solution's restore failed, not for want of a workload: " + Tail(restore, 1500) + ")");
+            return;
+        }
+
+        foreach (var failure in failures)
+        {
+            Console.Out.WriteLine($"  (expected without the MAUI workloads, dismissed: {failure.Message})");
+            shell.Workbench.Notifications.Dismiss(failure);
+        }
     }
 
     private async Task WindowsDesktopStepAsync()
@@ -2090,7 +2141,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                   && shell.Solutions.Projects.TryGetValue(legacy, out var info) && info.References.Any(r => r.Kind == Codalus.Projects.Protocol.ReferenceKinds.Package && r.Resolved),
             "the NetFramework solution is open, LegacyApp's packages.config package restored", 600).ConfigureAwait(true);
         Check(shell.Solutions.Projects[legacy].IsNonSdkStyle, "LegacyApp is a non-SDK-style project");
-        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("Visual Studio's own MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
+        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("imports proprietary MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
         shell.Explorer.Reveal("p:" + legacy);
         await Task.Delay(1000).ConfigureAwait(true);
         Screenshot("netfx-projects.png");
@@ -2361,7 +2412,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(button is not null && shell.Toolbox.IsAvailable, "the Toolbox has the Button");
         shell.Toolbox.Armed = button;
         var root = designer.Root!;
-        await designer.CreateAsync(button!.Type, root.ClientX + 290, root.ClientY + 300).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        // On the form's free space left of the counter (M34h: dropped at 290, 300 it landed on the counter control and the
+        // gallery showed its selection around nothing, beside the counter's own button).
+        await designer.CreateAsync(button!.Type, root.ClientX + 48, root.ClientY + 300).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
         Check(code.Text.Text.Contains("button1 = new Button();", StringComparison.Ordinal) && code.Text.Text.Contains("Controls.Add(button1);", StringComparison.Ordinal),
             "the new button is in OrderForm.Designer.cs: " + designer.Status);
 
@@ -3153,7 +3206,18 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task AiChatStepAsync()
     {
         const string Reply = "This adds two numbers. A shorter version:\n\n```csharp\nstatic int Add(int a, int b) => a + b;\n```\n\nThe expression body returns the same value.";
-        await using var server = Tests.MockModelServers.OpenAI(Reply);
+        const string AgentQuestion = "Does Greeter handle an empty name?";
+        const string AgentReply = "### Empty names\n\n`Greeter.Greet` formats whatever it gets, so an empty name gives `Hello, !`. Check it first:\n\n```csharp\npublic static string Greet(string name) =>\n    string.IsNullOrWhiteSpace(name) ? \"Hello!\" : $\"Hello, {name}!\";\n```\n\n- The callers in `Program.cs` keep working.\n- Add a test for the empty name.";
+
+        // M34h: a second question in agent mode reads a file, so AI Chat shows a step (and the gallery photographs it).
+        await using var server = Tests.MockModelServers.Script(request =>
+        {
+            using var body = JsonDocument.Parse(request.Body);
+            var last = body.RootElement.GetProperty("messages").EnumerateArray().Last();
+            return last.GetProperty("role").GetString() == "tool" ? new Tests.MockTurn(AgentReply)
+                : last.GetProperty("content").GetString()?.EndsWith(AgentQuestion, StringComparison.Ordinal) == true ? new Tests.MockTurn("Reading Greeter first.", "read_file", """{"path":"src/Greetings/Greeter.cs"}""")
+                : new Tests.MockTurn(Reply);
+        });
         var settings = shell.Workbench.Settings;
         Check(shell.Ai.State == Workbench.Ai.AiState.Off, "AI assistance is off by default");
         Check(shell.Plugins.Plugins.Any(p => p.Id == "codalus.openai" && p.State == PluginState.Ready), "the OpenAI-compatible plugin is installed and not loaded");
@@ -3191,6 +3255,28 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await applying.ConfigureAwait(true);
             Check(editor.Model.Text.Text.Contains("    static int Add(int a, int b) => a + b;\n}", StringComparison.Ordinal), "Apply replaced the selection");
             Check(!shell.Workbench.Output.GetOrCreate(Workbench.Ai.AiService.OutputChannelId).GetText().Contains("return a + b", StringComparison.Ordinal), "the request log has no content");
+
+            // Agent mode in the trusted solution (projects.open): a step that read a file, as the step template shows it.
+            if (shell.Solutions.Solution is { Trusted: true } && File.Exists(Greeter))
+            {
+                shell.AiChat.IsAgent = true;
+                shell.AiChat.Input = AgentQuestion;
+                try
+                {
+                    await shell.AiChat.SendAsync().ConfigureAwait(true);
+                }
+                finally
+                {
+                    shell.AiChat.IsAgent = false;
+                }
+
+                var agentTurn = shell.AiChat.Chat.Turns[^1];
+                await WaitAsync(() => !agentTurn.IsStreaming, "the agent's answer streams in", 60).ConfigureAwait(true);
+                Check(agentTurn.IsAgent && agentTurn.Error is null && agentTurn.Steps is [{ Tool: "read_file", Outcome: not null, IsError: false }], $"the agent read Greeter.cs ({agentTurn.Error ?? string.Join(", ", agentTurn.Steps)})");
+                await WaitAsync(() => window.GetVisualDescendants().OfType<AiStepView>().Any(s => s.DataContext is AiStepItem { Title: "read_file", Status: AiStepStatus.Completed }), "AI Chat shows the agent's step").ConfigureAwait(true);
+                await RenderedAsync().ConfigureAwait(true);
+                Screenshot("ai-chat-agent.png");
+            }
         }
         finally
         {
@@ -3322,7 +3408,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     // ------------------------------------------------------------------ steps
 
-    private async Task StepAsync(string id, string milestone, string title, Func<Task> body, string? requires = null)
+    /// <param name="limit">The step's own time limit (the command sweep's); <see cref="s_stepLimit"/> otherwise.</param>
+    private async Task StepAsync(string id, string milestone, string title, Func<Task> body, string? requires = null, TimeSpan? limit = null)
     {
         if (requires is not null && _results.FirstOrDefault(r => r.Id == requires) is { Outcome: not "passed" })
         {
@@ -3356,7 +3443,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             // A step that hangs (a request without a timeout) fails on its own instead of using up the run.
             running = body();
-            await running.WaitAsync(s_stepLimit).ConfigureAwait(true);
+            await running.WaitAsync(limit ?? s_stepLimit).ConfigureAwait(true);
             Report(id, milestone, title, "passed", Stopwatch.GetElapsedTime(start).TotalSeconds, null);
         }
         catch (Exception ex)
@@ -3364,10 +3451,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             // Only the step limit is reported as such: a TimeoutException from the step itself (a timed wait in the
             // code it drives) is reported with its stack, like any other exception.
             var error = ex is SmokeFailure ? ex.Message
-                : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes."
+                : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {(limit ?? s_stepLimit).TotalMinutes:0} minutes."
                 : ex.ToString();
             Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, error);
-            Screenshot($"smoke-test-{id}.png");
+            Screenshot($"smoke-test-{id}.png", keepToasts: true); // the toasts may say why
             if (!_logsShown)
             {
                 // The first failure prints the hosts' logs, so CI's log says why even when the run is cut short.
@@ -3693,8 +3780,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     // ------------------------------------------------------------------ report
 
-    private void Screenshot(string name, Avalonia.Controls.TopLevel? of = null)
+    /// <summary>
+    /// Saves the window (or another of the shell's) as <paramref name="name"/> in the logs. The toasts are hidden first
+    /// (see <see cref="HideToasts"/>) unless <paramref name="keepToasts"/>: a failed step's picture keeps them.
+    /// </summary>
+    private void Screenshot(string name, Avalonia.Controls.TopLevel? of = null, bool keepToasts = false)
     {
+        if (!keepToasts)
+        {
+            HideToasts(name);
+        }
+
         try
         {
             var target = of ?? window;
@@ -3715,6 +3811,28 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             shell.Workbench.Log.AppendLine($"[smoke] Screenshot {name} failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// The pictures the website and the gallery use show their feature, not a toast an earlier step left at the bottom
+    /// right: the toasts are hidden (the Escape of a toast, so each stays in the Notifications window and nothing is
+    /// answered for it), and each hidden one is printed to the run's log, so a real error is still seen there. The
+    /// steps' own checks of notifications are unaffected.
+    /// </summary>
+    private void HideToasts(string picture)
+    {
+        if (shell.Notifications.Toasts.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var toast in shell.Notifications.Toasts)
+        {
+            Console.Out.WriteLine($"  (a toast hidden for {picture}: {toast.Model.Severity}: {toast.Message})");
+        }
+
+        shell.Notifications.HideToasts();
+        window.UpdateLayout();
     }
 
     /// <summary>Whether the run passed: steps ran, and none failed.</summary>

@@ -13,6 +13,8 @@ public sealed record ShellOptions
                codalus --wait <file> [options]         Edit a file and exit when its tab closes (git's core.editor).
                codalus mcp [options]                   An MCP server on stdio for AI agents, reaching the running IDE
                                                         (turn on Tools > Options > AI > MCP Server first).
+                 --agent-session <token>               With mcp: reach the AI Chat session that started this agent
+                                                        (AI Chat passes it to external agents itself).
 
           --user-data-dir <dir>   Keep settings, state and plugins under <dir> instead of the OS defaults.
           --locale <name>         The display language for this run (qps-ploc: pseudo-language).
@@ -72,6 +74,12 @@ public sealed record ShellOptions
 
     /// <summary><c>codalus mcp</c> (M28c): serve MCP on stdio, relaying to the running IDE.</summary>
     public bool Mcp { get; init; }
+
+    /// <summary>
+    /// <c>--agent-session &lt;token&gt;</c> with <c>mcp</c> (M48, ADR 0079): relay to the pipe AI Chat opened for one external
+    /// agent's session instead of the one <c>ai.mcpServer.enabled</c> opens.
+    /// </summary>
+    public string? AgentSession { get; init; }
 
     /// <summary><c>codalus diff left right</c>: two files to compare side by side.</summary>
     public (string Left, string Right)? Diff { get; init; }
@@ -191,6 +199,9 @@ public sealed record ShellOptions
             {
                 case "--user-data-dir":
                     options = options with { UserDataDir = Value() };
+                    break;
+                case "--agent-session":
+                    options = options with { AgentSession = Value() };
                     break;
                 case "--locale":
                     options = options with { Locale = Value() };

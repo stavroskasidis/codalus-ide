@@ -113,7 +113,7 @@ Git → Compare with Unmodified opens the active file's diff.
 ## In the editor
 
 - **Change markers** in the gutter, as you type, against the staged version: green for added lines, blue for modified lines, a red wedge for deleted lines.
-- **Blame** (Git → Toggle Blame, `Ctrl+Alt+B`): the commit, author, date and summary of each block of lines. Lines you haven't committed say so.
+- **Blame** (Git → Toggle Blame, `Ctrl+Shift+Alt+B`; `⌘⌥B` on macOS): the commit, author, date and summary of each block of lines. Lines you haven't committed say so.
 
 ## Branches and remotes
 

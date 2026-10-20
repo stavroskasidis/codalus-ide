@@ -43,7 +43,7 @@ public sealed class BuildDepthTests
         var hello = Path.Combine(folder, "src", "Hello", "Hello.csproj");
 
         // Batch Build: every project × configuration; the checked ones build in turn.
-        f.Shell.Run("build.batchBuild");
+        await f.RunAsync("build.batchBuild");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<PageDocument>().Any(d => d.ViewModel is BatchBuildViewModel { Rows.Count: >= 4 }), seconds: 60);
         var batch = Page<BatchBuildViewModel>(f);
         Assert.Contains(batch.Rows, r => r is { Name: "Greetings", Configuration: "Release", Platform: "AnyCPU" });
@@ -67,7 +67,7 @@ public sealed class BuildDepthTests
         Assert.True(verdict!.UpToDate, string.Join("; ", verdict.Projects.Select(p => p.Reason)));
 
         // Build with Binary Log runs MSBuild anyway and opens the log; search reveals a node.
-        f.Shell.Run("build.buildWithBinaryLog");
+        await f.RunAsync("build.buildWithBinaryLog");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<PageDocument>().Any(d => d.ViewModel is BinaryLogViewModel { Roots.Count: 1 } log && log.Roots[0].Children.Count > 1), seconds: 180);
         var binlog = Page<BinaryLogViewModel>(f);
         Assert.StartsWith(f.Shell.BinaryLogsFolder, binlog.Path, StringComparison.Ordinal);
@@ -82,7 +82,7 @@ public sealed class BuildDepthTests
         NavigationDepthTests.Screenshot(f, "m26b-binary-log");
 
         // Build Timings: the projects of that build, on the critical path.
-        f.Shell.Run("build.showTimings");
+        await f.RunAsync("build.showTimings");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<PageDocument>().Any(d => d.ViewModel is BuildTimingsViewModel { Projects.Count: > 0 }), seconds: 60);
         var timings = Page<BuildTimingsViewModel>(f);
         Assert.Contains(timings.Projects, p => p.Name == "Hello");
@@ -150,11 +150,27 @@ public sealed class BuildDepthTests
         var source = editor.Controller.Editor.Document.Text;
         var line = source.IndexOf("namespace Fixture.Items;", StringComparison.Ordinal);
         editor.Controller.Editor.Document.Insert(line, "// regenerated on save\n");
-        f.Shell.Run("file.save");
-        await ShellFixture.PumpUntil(() => ReadWhileWritten(Path.Combine(items, "Greeting.cs")).Contains("// regenerated on save", StringComparison.Ordinal), seconds: 120);
+        var saves = 0;
+        editor.Model.Saved += (_, _) => saves++;
+        await f.RunAsync("file.save");
+        var output = Path.Combine(items, "Greeting.cs");
+        await ShellFixture.PumpUntil(() => ReadWhileWritten(output).Contains("// regenerated on save", StringComparison.Ordinal), seconds: 120, describe: () =>
+        {
+            // Whether the save ran, whether it asked for the custom tool, what the tool said, and the T4 host's state.
+            var log = f.Shell.Workbench.Log.GetText().Split('\n');
+            return $"saves: {saves}, modified: {editor.Model.IsModified}, template saved: {File.ReadAllText(template).Contains("// regenerated on save", StringComparison.Ordinal)}"
+                   + $"\nrequested: {string.Join(" | ", log.Where(l => l.StartsWith("[custom tool]", StringComparison.Ordinal)))}"
+                   + $"\nCustom Tool output: {f.Shell.Workbench.Output.GetOrCreate("codalus.customTool", "Custom Tool").GetText()}"
+                   + $"\nnotifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}"
+                   + $"\nT4 host: running {f.Shell.TextTemplates.IsRunning}, pid {f.Shell.TextTemplates.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}; {string.Join(" | ", log.Where(l => l.StartsWith("[t4host]", StringComparison.Ordinal)).TakeLast(10))}"
+                   + $"\nGreeting.cs: {ReadWhileWritten(output)}";
+        });
     }
 
-    /// <summary>A file the generator may be writing right now: locked means not ready yet (the Windows runner).</summary>
+    /// <summary>
+    /// A file the generator may be writing right now: locked means not ready yet (the Windows runner). On Windows this read
+    /// also denies the generator's write while it holds the file, as other programs can: the custom tool waits for it.
+    /// </summary>
     private static string ReadWhileWritten(string path)
     {
         try

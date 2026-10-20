@@ -35,7 +35,7 @@ public sealed partial class ShellHost
             () => ContainerEngine,
             container => AttachToRemoteAsync(new ContainerTarget(container.Name, ContainerEngine.Tool), processName: null),
             container => OpenContainerTerminalAsync(container.Name),
-            ShellIntegration.OpenUrl,
+            uri => OpenExternalUrl(uri),
             OpenContainerFileAsync,
             container => OpenRemoteWindowAsync("container:" + container.Name));
         Debugger.Ended += (_, _) =>
@@ -282,7 +282,7 @@ public sealed partial class ShellHost
                 {
                     if (launch.BrowserUrl is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri))
                     {
-                        ShellIntegration.OpenUrl(uri);
+                        OpenExternalUrl(uri);
                     }
 
                     await Debugger.AttachAsync(process.Id, CancellationToken.None, new RemoteAttach(RemoteShell.Adapter(target, debugger), map, target.Display), process.Name).ConfigureAwait(true);

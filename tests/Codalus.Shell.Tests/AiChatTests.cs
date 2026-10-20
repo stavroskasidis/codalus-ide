@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -21,7 +22,7 @@ public sealed class AiChatTests
 
     private static async Task<AiChatView> ShowChatAsync(ShellFixture f)
     {
-        f.Shell.Run("ai.chat.show");
+        await f.RunAsync("ai.chat.show");
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<AiChatView>().Any());
         return f.Window.GetVisualDescendants().OfType<AiChatView>().First();
     }
@@ -86,6 +87,21 @@ public sealed class AiChatTests
 
         await ShellFixture.PumpUntil(() => view.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b) == "Apply the code after a preview"));
         await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.ai" && i.Item.Text.Contains("OpenAI-compatible", StringComparison.Ordinal)));
+
+        // M34h: at a tool window's narrowest (280 px) the code block's Copy, Insert at Cursor and Apply… wrap onto
+        // another line instead of running off the pane (the gallery showed Apply… cut off).
+        var narrow = new Window { Width = 280, Height = 640, Content = new AiChatView { DataContext = chat } };
+        narrow.Show();
+        await ShellFixture.PumpUntil(() => narrow.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b) == "Apply the code after a preview" && b.Bounds.Width > 0));
+        ShellFixture.Pump();
+        foreach (var name in new[] { "Copy the code", "Insert the code at the cursor", "Apply the code after a preview" })
+        {
+            var button = narrow.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == name);
+            var right = button.TranslatePoint(new Point(button.Bounds.Width, 0), narrow)!.Value.X;
+            Assert.True(right <= narrow.Bounds.Width - 8, $"'{name}' ends at {right:0} px, past the 280 px pane");
+        }
+
+        narrow.Close();
 
         // Apply replaces the selection after the preview, as one undoable change.
         var block = Assert.Single(AiCodeBlocks.Parse(turn.Answer));

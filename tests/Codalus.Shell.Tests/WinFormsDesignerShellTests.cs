@@ -1,4 +1,9 @@
+using System.Runtime.InteropServices;
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
+using Avalonia.VisualTree;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.WinForms;
@@ -25,6 +30,64 @@ public sealed class WinFormsDesignerShellTests
         return (f, Path.Combine(folder, "WinFormsApp"));
     }
 
+    /// <summary>
+    /// M34h: the selection adorner is a designer's: a one-pixel accent frame on the pixels just outside the control's
+    /// bounds, and grab handles of whole pixels centered on its corners and edge middles. As drawn, the frame's line
+    /// between two handles is the accent and the control's own first row and column aren't (the gallery showed the
+    /// frame blurred over two pixels and the handles a pixel inside it).
+    /// </summary>
+    private static async Task AssertSelectionAdornerAsync(ShellFixture f, WinFormsDesignerDocument designer, string name)
+    {
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.DesignerSurface>().Any(s => s.IsEffectivelyVisible));
+        var surface = f.Window.GetVisualDescendants().OfType<Views.DesignerSurface>().First(s => s.IsEffectivelyVisible);
+        ShellFixture.Pump();
+        var view = designer.Find(name)!;
+        var model = WinFormsDesignerDocument.Bounds(view);
+        var bounds = new Rect(model.X, model.Y, model.Width, model.Height);
+        Assert.Equal(1, f.Window.RenderScaling);
+        Assert.Equal(bounds.Inflate(1), surface.Frame(bounds));
+        var handles = surface.Handles(bounds);
+        Assert.Equal(8, handles.Length);
+        Assert.All(handles, h => Assert.True(h is { Width: 7, Height: 7 } && h.X == Math.Round(h.X) && h.Y == Math.Round(h.Y), $"a handle at {h} isn't whole pixels"));
+        Assert.Equal(new Point(bounds.Left - 0.5, bounds.Top - 0.5), handles[0].Center); // on the frame's top-left pixel
+        Assert.Equal(new Point(bounds.Right + 0.5, bounds.Bottom + 0.5), handles[4].Center); // and its bottom-right
+
+        var accent = surface.TryFindResource("Shell.Accent", surface.ActualThemeVariant, out var found) && found is ISolidColorBrush brush ? brush.Color : default;
+        // The surface drawn alone (the document's pane may be fading in, which would blend every color).
+        Assert.True(surface.TranslatePoint(default, f.Window) is { } at && at.X == Math.Round(at.X) && at.Y == Math.Round(at.Y));
+        var origin = default(Point);
+        using var rendered = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize((int)surface.Bounds.Width, (int)surface.Bounds.Height));
+        rendered.Render(surface);
+        using var png = new MemoryStream();
+        rendered.Save(png, Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        png.Position = 0;
+        using var frame = Avalonia.Media.Imaging.WriteableBitmap.Decode(png);
+        var x = (int)(origin.X + bounds.Left + (bounds.Width / 4)); // between the corner's handle and the middle's
+        var top = (int)(origin.Y + bounds.Top);
+        Assert.Equal(accent, Pixel(frame, x, top - 1));
+        Assert.NotEqual(accent, Pixel(frame, x, top - 2)); // one pixel wide, not two
+        Assert.NotEqual(accent, Pixel(frame, x, top));
+        Assert.True(handles[7].Y - handles[0].Bottom >= 1, "no frame between the left handles to look at");
+        var y = (int)(origin.Y + handles[0].Bottom); // between the top-left handle and the left middle's
+        var left = (int)(origin.X + bounds.Left);
+        Assert.Equal(accent, Pixel(frame, left - 1, y));
+        Assert.NotEqual(accent, Pixel(frame, left, y));
+
+        // A handle: an accent edge around the panel's color.
+        var panel = surface.TryFindResource("Shell.Panel", surface.ActualThemeVariant, out var fill) && fill is ISolidColorBrush fillBrush ? fillBrush.Color : default;
+        var corner = handles[0];
+        Assert.Equal(accent, Pixel(frame, (int)(origin.X + corner.X), (int)(origin.Y + corner.Center.Y)));
+        Assert.Equal(panel, Pixel(frame, (int)(origin.X + corner.Center.X), (int)(origin.Y + corner.Center.Y)));
+    }
+
+    private static Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, int x, int y)
+    {
+        using var buffer = frame.Lock();
+        var offset = (y * buffer.RowBytes) + (x * 4);
+        var (b0, b1, b2, b3) = (Marshal.ReadByte(buffer.Address, offset), Marshal.ReadByte(buffer.Address, offset + 1), Marshal.ReadByte(buffer.Address, offset + 2), Marshal.ReadByte(buffer.Address, offset + 3));
+        return buffer.Format == Avalonia.Platform.PixelFormat.Rgba8888 ? Color.FromArgb(b3, b0, b1, b2) : Color.FromArgb(b3, b2, b1, b0);
+    }
+
     [AvaloniaFact]
     public async Task Off_windows_a_form_opens_as_code_and_view_designer_says_windows_only()
     {
@@ -40,7 +103,7 @@ public sealed class WinFormsDesignerShellTests
 
         // View Designer (Shift+F7): says so, and the code stays.
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Context.GetValue("editorHasWinFormsDesigner") is true);
-        f.Shell.Run("winforms.viewDesigner");
+        await f.RunAsync("winforms.viewDesigner");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("Windows Forms designer runs on Windows only", StringComparison.Ordinal)));
         Assert.Empty(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>());
         Assert.Same(editor, f.Shell.ActiveEditor);
@@ -154,7 +217,7 @@ public sealed class WinFormsDesignerShellTests
 
         // F7 from the designer shows the code; double-clicking a control with a handler goes to it.
         f.Shell.Layout.OpenDocument(designer, focus: true);
-        f.Shell.Run("winforms.viewCode");
+        await f.RunAsync("winforms.viewCode");
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == form);
         f.Shell.Layout.OpenDocument(designer, focus: true);
         var place = designer.Find("placeOrderButton")!;
@@ -169,6 +232,7 @@ public sealed class WinFormsDesignerShellTests
         Assert.Contains("giftCheckBox.Location = new Point(106, 75);", code.Text.Text, StringComparison.Ordinal);
         await designer.NudgeAsync(1, 0, resize: false);
         Assert.Contains("giftCheckBox.Location = new Point(107, 75);", code.Text.Text, StringComparison.Ordinal);
+        await AssertSelectionAdornerAsync(f, designer, "giftCheckBox");
         designer.SetSelection(["button1"], notify: true);
         await designer.DeleteSelectionAsync();
         Assert.DoesNotContain("button1 =", code.Text.Text, StringComparison.Ordinal);

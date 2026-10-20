@@ -404,6 +404,7 @@ public sealed partial class ShellHost
         var candidate = extension.Equals(".resx", StringComparison.OrdinalIgnoreCase) || extension.Equals(".tt", StringComparison.OrdinalIgnoreCase) || Plugins.CustomTools.Count > 0;
         if (candidate && Solutions.Projects.Values.Any(p => p.Items.Any(i => SolutionService.PathComparer.Equals(i.Path, path))))
         {
+            Workbench.Log.AppendLine($"[custom tool] {path} saved: running its custom tool.");
             _ = RunCustomToolAsync(path, quiet: true);
         }
     }

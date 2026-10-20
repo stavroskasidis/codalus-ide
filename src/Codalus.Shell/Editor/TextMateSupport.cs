@@ -33,6 +33,7 @@ public sealed class TextMateSupport : IRegistryOptions
     private readonly ConcurrentDictionary<string, IRawGrammar?> _files = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, LanguageConfiguration?> _configurations = new(StringComparer.Ordinal);
     private ThemeName _theme = ThemeName.DarkPlus;
+    private TextMateSharp.Registry.Registry? _registry;
 
     public TextMateSupport(LanguageRegistry languages)
     {
@@ -73,6 +74,29 @@ public sealed class TextMateSupport : IRegistryOptions
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log?.Invoke($"TextMate: no grammar for '{languageId}': {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A language's grammar loaded for tokenizing outside an editor (Add New Item's preview, M34h), or null when it has
+    /// none or it can't be read.
+    /// </summary>
+    public IGrammar? GrammarFor(string? languageId)
+    {
+        if (GrammarScopeFor(languageId) is not { } scope)
+        {
+            return null;
+        }
+
+        try
+        {
+            _registry ??= new TextMateSharp.Registry.Registry(this);
+            return _registry.LoadGrammar(scope);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Log?.Invoke($"TextMate: the grammar {scope} could not be loaded: {ex.Message}");
             return null;
         }
     }
@@ -137,7 +161,11 @@ public sealed class TextMateSupport : IRegistryOptions
         };
     }
 
-    /// <summary>The TextMate theme for the shell's theme, by its kind (<c>dark</c>, <c>light</c>, <c>highContrast</c>; a family's variant too).</summary>
+    /// <summary>
+    /// The TextMate theme for the shell's theme, by its kind (<c>dark</c>, <c>light</c>, <c>highContrast</c>; a family's
+    /// variant too). Dark+ draws plain text (embedded code, operators) in VS Code's #D4D4D4; it takes the editor's plain
+    /// text color instead, Visual Studio's #DCDCDC, as the C# around it does.
+    /// </summary>
     public IRawTheme ThemeFor(string themeId)
     {
         _theme = Theming.ThemeService.KindOf(themeId) switch
@@ -146,12 +174,53 @@ public sealed class TextMateSupport : IRegistryOptions
             "highContrast" => ThemeName.HighContrastDark,
             _ => ThemeName.DarkPlus,
         };
-        return _bundled.Value.LoadTheme(_theme);
+        return Recolor(_bundled.Value.LoadTheme(_theme));
+    }
+
+    /// <summary>Dark+'s plain text color and the editor's (Light+ and High Contrast's already match the editor's).</summary>
+    private const string DarkPlusPlainText = "#D4D4D4";
+    private const string DarkPlainText = "#DCDCDC";
+
+    private IRawTheme Recolor(IRawTheme theme) => theme is null || _theme != ThemeName.DarkPlus ? theme! : new RecoloredTheme(theme);
+
+    private static string? PlainText(string? color) => string.Equals(color, DarkPlusPlainText, StringComparison.OrdinalIgnoreCase) ? DarkPlainText : color;
+
+    /// <summary>A theme (and the themes it includes) with Dark+'s plain text color replaced by the editor's.</summary>
+    private sealed class RecoloredTheme(IRawTheme inner) : IRawTheme
+    {
+        public string GetName() => inner.GetName();
+
+        public string GetInclude() => inner.GetInclude();
+
+        public ICollection<IRawThemeSetting> GetSettings() => Recolor(inner.GetSettings());
+
+        public ICollection<IRawThemeSetting> GetTokenColors() => Recolor(inner.GetTokenColors());
+
+        public ICollection<KeyValuePair<string, object>> GetGuiColors() =>
+            inner.GetGuiColors()?.Select(c => c.Value is string color ? new KeyValuePair<string, object>(c.Key, PlainText(color)!) : c).ToList()!;
+
+        private static List<IRawThemeSetting> Recolor(ICollection<IRawThemeSetting>? settings) =>
+            settings?.Select(s => (IRawThemeSetting)new RecoloredSetting(s)).ToList()!;
+    }
+
+    private sealed class RecoloredSetting(IRawThemeSetting inner) : IRawThemeSetting, IThemeSetting
+    {
+        public string GetName() => inner.GetName();
+
+        public object GetScope() => inner.GetScope();
+
+        public IThemeSetting GetSetting() => inner.GetSetting() is null ? null! : this;
+
+        public object GetFontStyle() => inner.GetSetting().GetFontStyle();
+
+        public string GetBackground() => inner.GetSetting().GetBackground();
+
+        public string GetForeground() => PlainText(inner.GetSetting().GetForeground())!;
     }
 
     // ------------------------------------------------------------------ IRegistryOptions
 
-    public IRawTheme GetTheme(string scopeName) => _bundled.Value.GetTheme(scopeName);
+    public IRawTheme GetTheme(string scopeName) => Recolor(_bundled.Value.GetTheme(scopeName));
 
     public IRawGrammar GetGrammar(string scopeName)
     {
@@ -181,5 +250,5 @@ public sealed class TextMateSupport : IRegistryOptions
 
     public ICollection<string> GetInjections(string scopeName) => _bundled.Value.GetInjections(scopeName);
 
-    public IRawTheme GetDefaultTheme() => _bundled.Value.LoadTheme(_theme);
+    public IRawTheme GetDefaultTheme() => Recolor(_bundled.Value.LoadTheme(_theme));
 }

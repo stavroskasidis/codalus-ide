@@ -568,7 +568,7 @@ public class UxPassTests
         Walk("live-property-explorer", new LivePropertiesView { DataContext = properties }, 280, 420);
 
         // The setup window's settings step, and Code Search's floating window over the main window (Feature Search).
-        f.Shell.Run("help.setUp");
+        await f.RunAsync("help.setUp");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
         await f.Shell.SetupModel!.NextAsync();
         await f.Shell.SetupModel.NextAsync();
@@ -615,7 +615,7 @@ public class UxPassTests
     /// The controls under <paramref name="root"/> that Tab, from the first one, never reaches (a list or tree counts as
     /// reached when its item is); a toolbar's items in its overflow menu are left out (the menu reaches them).
     /// </summary>
-    private static IEnumerable<string> Unreached(Visual root)
+    internal static IEnumerable<string> Unreached(Visual root)
     {
         static bool Overflowed(Control c) => c.FindAncestorOfType<ToolbarPanel>() is { } toolbar && toolbar.Overflowed.Any(o => o == c);
         static bool Interactive(Control c) => c is Button or Avalonia.Controls.Primitives.ToggleButton or ComboBox or TextBox or ListBox or TreeView or Slider

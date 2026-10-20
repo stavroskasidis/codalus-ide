@@ -1,5 +1,6 @@
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Ai;
+using Codalus.Workbench.Ai.Acp;
 using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
@@ -12,6 +13,11 @@ public sealed record AiSelectionAnchor(string Path, int Offset, string Text);
 
 /// <summary>Which context goes with the next question (the chips above the input).</summary>
 public sealed record AiContextChoice(bool Selection, bool CurrentFile, bool OpenFiles, bool Errors, bool BuildOutput, bool Solution);
+
+/// <summary>An external agent's slash command, offered in the input (M48).</summary>
+/// <param name="Name">The command, without its slash.</param>
+/// <param name="Text">How the list shows it: <c>/name — description</c>.</param>
+public sealed record AiCommandSuggestion(string Name, string Text);
 
 /// <summary>What the chat window needs from the shell: context, applying code, and the provider prompts.</summary>
 public interface IAiChatHost
@@ -42,6 +48,41 @@ public interface IAiChatHost
     void ShowAiChatWindow();
 
     void OpenLink(string target);
+
+    /// <summary>Opens a file a step of an agent worked on (relative to the workspace), at a line (1-based) when given.</summary>
+    Task OpenAiLocationAsync(string path, int? line);
+
+    /// <summary>The editor's services, for code blocks in the editor's colors (M34h).</summary>
+    Editor.IEditorServices EditorServices { get; }
+
+    /// <summary>The editor's font, for code blocks.</summary>
+    EditorFont EditorFont { get; }
+
+    /// <summary>The external agents (M48, ADR 0079) and the session that runs.</summary>
+    AcpAgents ExternalAgents { get; }
+
+    /// <summary>The IDE's side of an external agent's requests.</summary>
+    IAcpHost AcpHost { get; }
+
+    /// <summary>"Add agent…": a known ACP agent added to the user's settings after asking; the agent to choose, or null.</summary>
+    Task<string?> AddExternalAgentAsync();
+}
+
+/// <summary>A turn as AI Chat shows it (M34h): the turn, who answered (the model then) and when it was asked.</summary>
+public sealed class AiChatTurnItem(AiChatTurn turn, string? model, DateTime asked)
+{
+    public AiChatTurn Turn { get; } = turn;
+
+    /// <summary>The model that answered, as the provider names it.</summary>
+    public string? Model { get; } = model;
+
+    public DateTime Asked { get; } = asked;
+
+    /// <summary>Who answers: the assistant, or the external agent by its name (M48).</summary>
+    public string Author { get; init; } = Localizer.Get("msg.ai.assistant", "Assistant");
+
+    /// <summary>The line beside the author: the model and the time (<c>gpt-4o · 14:32</c>).</summary>
+    public string Byline => string.Join(" · ", new[] { Model, Asked.ToString("t", System.Globalization.CultureInfo.CurrentCulture) }.Where(s => !string.IsNullOrEmpty(s)));
 }
 
 /// <summary>
@@ -54,6 +95,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     private readonly IAiChatHost _host;
     private CancellationTokenSource? _cts;
+    private bool _sending;
     private string _input = string.Empty;
     private bool _selection = true;
     private bool _currentFile = true;
@@ -63,20 +105,39 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private bool _solution = true;
     private string _contextPreview = string.Empty;
     private bool _agent;
+    private readonly HashSet<AiChatTurn> _known = [];
+    private int _agentIndex;
+    private List<string> _agentNames;
+    private IReadOnlyList<AiCommandSuggestion> _suggestions = [];
 
     public AiChatViewModel(IAiChatHost host)
     {
         _host = host;
+        _agentNames = [.. host.ExternalAgents.Configured.Keys.Order(StringComparer.OrdinalIgnoreCase)];
+        host.ExternalAgents.Changed += (_, _) => Ui.Post(RefreshAgentState);
         Chat = new AiChat(host.Ai);
         Chat.TurnChanged += (_, turn) => Ui.Post(() =>
         {
+            // A late change of a turn that New Chat cleared away doesn't bring it back.
+            if (!_known.Contains(turn) && Chat.Turns.Contains(turn))
+            {
+                _known.Add(turn);
+                // An external agent's turn names the agent; its model is its own business (ADR 0079).
+                Turns.Add(turn.ExternalAgent is { } agent
+                    ? new AiChatTurnItem(turn, null, DateTime.Now) { Author = agent }
+                    : new AiChatTurnItem(turn, Ai.ModelId ?? Ai.Provider?.Label, DateTime.Now));
+                OnTurnsChanged();
+            }
+
             TurnChanged?.Invoke(this, turn);
-            OnPropertyChanged(nameof(HasTurns));
+            OnAnsweringChanged();
         });
         Chat.Cleared += (_, _) => Ui.Post(() =>
         {
+            _known.Clear();
+            Turns.Clear();
+            OnTurnsChanged();
             Cleared?.Invoke(this, EventArgs.Empty);
-            OnPropertyChanged(nameof(HasTurns));
         });
         host.Ai.Changed += (_, _) => Ui.Post(Refresh);
         host.Ai.BusyChanged += (_, _) => Ui.Post(() =>
@@ -90,19 +151,45 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     public AiService Ai => _host.Ai;
 
+    /// <summary>The editor's services and font, for the answers' code blocks.</summary>
+    public Editor.IEditorServices EditorServices => _host.EditorServices;
+
+    public EditorFont EditorFont => _host.EditorFont;
+
     /// <summary>A turn was added or its answer changed (UI thread).</summary>
     public event EventHandler<AiChatTurn>? TurnChanged;
 
     /// <summary>The conversation was cleared (UI thread).</summary>
     public event EventHandler? Cleared;
 
-    public bool HasTurns => Chat.Turns.Count > 0;
+    /// <summary>The conversation, in order (UI thread; the view virtualizes it, M34h).</summary>
+    public System.Collections.ObjectModel.ObservableCollection<AiChatTurnItem> Turns { get; } = [];
+
+    public bool HasTurns => Turns.Count > 0;
+
+    /// <summary>
+    /// A question is being answered, from Send until its turn ends (an agent's turn too, while a tool runs between its
+    /// requests): the composer offers Stop instead of Send, and nothing else is sent meanwhile.
+    /// </summary>
+    public bool IsAnswering => _sending || (Turns.Count > 0 && Turns[^1].Turn.IsStreaming);
 
     public bool IsOff => Ai.State == AiState.Off;
 
     public bool IsOn => !IsOff;
 
     public bool NeedsProvider => Ai.State == AiState.NoProvider;
+
+    /// <summary>The empty state while AI is off: what it is, and Turn On.</summary>
+    public bool ShowOffState => IsOff && !HasTurns;
+
+    /// <summary>The empty state while no provider is chosen: Choose Provider… (an external agent brings its own, M48).</summary>
+    public bool ShowProviderState => NeedsProvider && !IsExternal && !HasTurns;
+
+    /// <summary>The empty state with AI ready: what to ask, and what goes with it.</summary>
+    public bool ShowReadyState => IsOn && (!NeedsProvider || IsExternal) && !HasTurns;
+
+    /// <summary>AI was turned off with a conversation on screen: the conversation stays, Turn On replaces the composer.</summary>
+    public bool ShowOffBar => IsOff && HasTurns;
 
     public bool IsBusy => Ai.IsBusy;
 
@@ -123,11 +210,13 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
             if (SetField(ref _input, value))
             {
                 OnPropertyChanged(nameof(CanSend));
+                UpdateSuggestions();
             }
         }
     }
 
-    public bool CanSend => !IsBusy && !IsOff && Input.Trim().Length > 0;
+    /// <summary>A question can go now: AI is on and idle, no turn is being answered, there is a question, and a chosen external agent may run.</summary>
+    public bool CanSend => !IsBusy && !IsAnswering && !IsOff && Input.Trim().Length > 0 && !IsAgentBlocked;
 
     /// <summary>Agent mode (M28c): the model may read, search, build, propose edits and ask to run commands.</summary>
     public bool IsAgent
@@ -180,61 +269,294 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
             : Localizer.Format("msg.ai.contextPreview", "Sent with your question: {0}", string.Join(", ", items.Select(i => i.Label).Distinct(StringComparer.Ordinal)));
     }
 
+    // ------------------------------------------------------------------ external agents (M48, ADR 0079)
+
+    /// <summary>The picker: Built-in, then each agent of <c>ai.agents</c>.</summary>
+    public IReadOnlyList<string> AgentChoices => [Localizer.Get("msg.acp.builtIn", "Built-in"), .. _agentNames];
+
+    /// <summary>The picker's choice: 0 is the built-in assistant. Picking another agent starts a new chat.</summary>
+    public int SelectedAgentIndex
+    {
+        get => _agentIndex;
+        set
+        {
+            // -1 is the picker clearing its selection while its items are replaced, not a choice.
+            if (value < 0 || value > _agentNames.Count || value == _agentIndex)
+            {
+                return;
+            }
+
+            NewChat();
+            _agentIndex = value;
+            OnPropertyChanged();
+            RefreshAgentState();
+        }
+    }
+
+    /// <summary>The external agent chosen, or null for the built-in assistant.</summary>
+    public string? SelectedAgent => _agentIndex > 0 && _agentIndex <= _agentNames.Count ? _agentNames[_agentIndex - 1] : null;
+
+    public bool IsExternal => SelectedAgent is not null;
+
+    /// <summary>The picker's label: the chosen agent, or Built-in.</summary>
+    public string SelectedAgentLabel => AgentChoices[Math.Clamp(_agentIndex, 0, _agentNames.Count)];
+
+    /// <summary>The mode picker's label: the agent's current mode.</summary>
+    public string SelectedModeLabel => Session is { } session && session.Modes.FirstOrDefault(m => m.Id == session.CurrentModeId) is { } mode ? mode.Name : string.Empty;
+
+    /// <summary>The picker shows while AI is on: Built-in, the agents, and "Add agent…" to set up a known one.</summary>
+    public bool HasAgents => IsOn;
+
+    /// <summary>The provider, model and Agent switch are the built-in assistant's.</summary>
+    public bool ShowBuiltInControls => IsOn && !IsExternal;
+
+    /// <summary>Why the chosen external agent can't run here (AI off, no workspace, an untrusted one), or null.</summary>
+    public string? AgentBlockedMessage => IsExternal ? _host.ExternalAgents.WhyNot() : null;
+
+    public bool IsAgentBlocked => AgentBlockedMessage is not null;
+
+    /// <summary>The running agent's session, when it is the chosen one.</summary>
+    private AcpAgentSession? Session => _host.ExternalAgents.Current is { } session && session.Name == SelectedAgent ? session : null;
+
+    /// <summary>The agent's modes (empty when it has none, or hasn't started).</summary>
+    public IReadOnlyList<string> ModeNames => Session?.Modes.Select(m => m.Name).ToList() ?? [];
+
+    public bool HasModes => IsExternal && ModeNames.Count > 0;
+
+    public int SelectedModeIndex
+    {
+        get => Session is { } session ? session.Modes.ToList().FindIndex(m => m.Id == session.CurrentModeId) : -1;
+        set
+        {
+            if (Session is { } session && value >= 0 && value < session.Modes.Count && session.Modes[value].Id != session.CurrentModeId)
+            {
+                _ = SetModeAsync(session, session.Modes[value].Id);
+            }
+        }
+    }
+
+    private async Task SetModeAsync(AcpAgentSession session, string modeId)
+    {
+        try
+        {
+            await session.SetModeAsync(modeId, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (AcpException)
+        {
+            // The agent refused: the picker shows its current mode again.
+        }
+
+        OnPropertyChanged(nameof(SelectedModeIndex));
+        OnPropertyChanged(nameof(SelectedModeLabel));
+    }
+
+    /// <summary>The agent's slash commands matching what's typed after <c>/</c>.</summary>
+    public IReadOnlyList<AiCommandSuggestion> CommandSuggestions
+    {
+        get => _suggestions;
+        private set
+        {
+            if (SetField(ref _suggestions, value))
+            {
+                OnPropertyChanged(nameof(HasCommandSuggestions));
+            }
+        }
+    }
+
+    public bool HasCommandSuggestions => _suggestions.Count > 0;
+
+    private void UpdateSuggestions()
+    {
+        var typed = Input;
+        if (Session is not { } session || !typed.StartsWith('/') || typed.Any(char.IsWhiteSpace))
+        {
+            CommandSuggestions = [];
+            return;
+        }
+
+        var prefix = typed[1..];
+        CommandSuggestions = [.. session.Commands
+            .Where(c => c.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Select(c => new AiCommandSuggestion(c.Name, "/" + c.Name + (c.Description is { Length: > 0 } d ? " — " + d : "") + (c.Input?.Hint is { Length: > 0 } hint ? " (" + hint + ")" : "")))];
+    }
+
+    /// <summary>Puts a suggested command in the input, ready for its argument.</summary>
+    public void UseCommand(AiCommandSuggestion suggestion)
+    {
+        Input = "/" + suggestion.Name + " ";
+        CommandSuggestions = [];
+    }
+
+    /// <summary>
+    /// "Add agent…" (M48): picks a known ACP agent, adds it to the user's settings after asking, and chooses it (a new
+    /// chat, as any other choice). One already added is chosen, not added again.
+    /// </summary>
+    public async Task AddAgentAsync()
+    {
+        if (await _host.AddExternalAgentAsync().ConfigureAwait(true) is not { } name)
+        {
+            return;
+        }
+
+        RefreshAgentState();
+        if (_agentNames.IndexOf(name) is var at and >= 0)
+        {
+            SelectedAgentIndex = at + 1;
+        }
+    }
+
+    /// <summary>The settings or the running session changed: the picker, the label, the modes and the commands follow.</summary>
+    private void RefreshAgentState()
+    {
+        var names = _host.ExternalAgents.Configured.Keys.Order(StringComparer.OrdinalIgnoreCase).ToList();
+        if (!names.SequenceEqual(_agentNames, StringComparer.Ordinal))
+        {
+            var selected = SelectedAgent;
+            var at = selected is null ? -1 : names.IndexOf(selected);
+            if (selected is not null && at < 0)
+            {
+                // The chosen agent left the settings: back to the built-in assistant.
+                NewChat();
+            }
+
+            _agentNames = names;
+            _agentIndex = at < 0 ? 0 : at + 1;
+            OnPropertyChanged(nameof(AgentChoices));
+            OnPropertyChanged(nameof(SelectedAgentIndex));
+        }
+
+        OnPropertyChanged(nameof(SelectedAgent));
+        OnPropertyChanged(nameof(SelectedAgentLabel));
+        OnPropertyChanged(nameof(IsExternal));
+        OnPropertyChanged(nameof(HasAgents));
+        OnPropertyChanged(nameof(ShowBuiltInControls));
+        OnPropertyChanged(nameof(AgentBlockedMessage));
+        OnPropertyChanged(nameof(IsAgentBlocked));
+        OnPropertyChanged(nameof(ModeNames));
+        OnPropertyChanged(nameof(HasModes));
+        OnPropertyChanged(nameof(SelectedModeIndex));
+        OnPropertyChanged(nameof(SelectedModeLabel));
+        OnPropertyChanged(nameof(CanSend));
+        OnStatesChanged();
+        UpdateSuggestions();
+    }
+
     public void Refresh()
     {
+        RefreshAgentState();
+        if (IsOff && IsAnswering)
+        {
+            // AI was turned off (the setting, or for the workspace) while a turn ran: it stops, as Stop does, and the
+            // turn says so. The composer and its Stop are gone while AI is off.
+            Stop();
+        }
+
         OnPropertyChanged(nameof(IsOff));
         OnPropertyChanged(nameof(IsOn));
         OnPropertyChanged(nameof(NeedsProvider));
         OnPropertyChanged(nameof(OffMessage));
         OnPropertyChanged(nameof(ProviderLabel));
         OnPropertyChanged(nameof(CanSend));
+        OnStatesChanged();
         UpdateContextPreview();
     }
 
-    /// <summary>Sends the input with the chosen context.</summary>
+    private void OnTurnsChanged()
+    {
+        OnPropertyChanged(nameof(HasTurns));
+        OnAnsweringChanged();
+        OnStatesChanged();
+    }
+
+    private void OnAnsweringChanged()
+    {
+        OnPropertyChanged(nameof(IsAnswering));
+        OnPropertyChanged(nameof(CanSend));
+    }
+
+    private void OnStatesChanged()
+    {
+        OnPropertyChanged(nameof(ShowOffState));
+        OnPropertyChanged(nameof(ShowProviderState));
+        OnPropertyChanged(nameof(ShowReadyState));
+        OnPropertyChanged(nameof(ShowOffBar));
+    }
+
+    /// <summary>
+    /// Sends the input with the chosen context. Nothing is sent while a turn is answered (Enter included): AI isn't busy
+    /// between an agent's steps, and a second question would take Stop away from the running turn.
+    /// </summary>
     public async Task SendAsync()
     {
         var question = Input.Trim();
-        if (question.Length == 0 || IsBusy || IsOff)
+        if (question.Length == 0 || IsBusy || IsAnswering || IsOff)
         {
             return;
         }
 
-        if (NeedsProvider)
+        if (IsExternal)
+        {
+            if (IsAgentBlocked)
+            {
+                return;
+            }
+        }
+        else if (NeedsProvider)
         {
             await _host.ChooseAiProviderAsync().ConfigureAwait(true);
-            if (NeedsProvider)
+            if (NeedsProvider || IsAnswering)
             {
                 return;
             }
         }
 
         var (items, anchor) = _host.GatherAiContext(Choice);
+        var agent = IsAgent;
         Input = string.Empty;
-        _cts?.Dispose();
-        _cts = new CancellationTokenSource();
-        if (IsAgent)
-        {
-            await _host.RunAgentAsync(question, items, anchor, _cts.Token).ConfigureAwait(true);
-        }
-        else
-        {
-            await Chat.SendAsync(question, items, _cts.Token, anchor).ConfigureAwait(true);
-        }
+        var external = SelectedAgent;
+        await AnswerAsync(token => external is { } selected
+            ? Chat.SendExternalAsync(question, items, _host.ExternalAgents, selected, _host.AcpHost, token, anchor)
+            : agent
+                ? _host.RunAgentAsync(question, items, anchor, token)
+                : Chat.SendAsync(question, items, token, anchor)).ConfigureAwait(true);
     }
 
     /// <summary>Asks <paramref name="question"/> with <paramref name="items"/> chosen by an action (not the chips), in this chat.</summary>
     public async Task AskAsync(string question, IReadOnlyList<AiContextItem> items, AiSelectionAnchor? anchor = null)
     {
         _host.ShowAiChatWindow();
-        if (IsBusy || IsOff)
+        if (IsBusy || IsAnswering || IsOff)
         {
             return;
         }
 
+        await AnswerAsync(token => Chat.SendAsync(question, items, token, anchor)).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Runs one question with its own cancellation, which Stop reaches until its turn ends. The question counts as being
+    /// answered from now (before its turn exists: the context is prepared and agent mode checks first), so Stop shows at
+    /// once and may stop it before its turn starts.
+    /// </summary>
+    private async Task AnswerAsync(Func<CancellationToken, Task> answer)
+    {
         _cts?.Dispose();
-        _cts = new CancellationTokenSource();
-        await Chat.SendAsync(question, items, _cts.Token, anchor).ConfigureAwait(true);
+        var cts = _cts = new CancellationTokenSource();
+        _sending = true;
+        OnAnsweringChanged();
+        try
+        {
+            await answer(cts.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            // Stopped before its turn started (a started turn ends as stopped instead).
+        }
+        finally
+        {
+            _sending = false;
+            OnAnsweringChanged();
+        }
     }
 
     public void Stop() => _cts?.Cancel();
@@ -245,10 +567,12 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         _cts?.Dispose();
     }
 
+    /// <summary>Starts over: the conversation is cleared, and an external agent's process stops (its session and pipe with it).</summary>
     public void NewChat()
     {
         Stop();
         Chat.Clear();
+        _ = _host.ExternalAgents.StopAsync();
     }
 
     public async Task TurnOnAsync()
@@ -274,6 +598,9 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     public Task InsertAsync(AiChatTurn turn, AiCodeBlock block) => _host.ApplyAiCodeAsync(turn, block, insertOnly: true);
 
     public void OpenLink(string target) => _host.OpenLink(target);
+
+    /// <summary>Opens a file a step worked on.</summary>
+    public void OpenLocation(AiStepLocation location) => _ = _host.OpenAiLocationAsync(location.Path, location.Line);
 
     /// <summary>What went with a turn, and what didn't, in a line.</summary>
     public static string ContextSummary(AiChatTurn turn)

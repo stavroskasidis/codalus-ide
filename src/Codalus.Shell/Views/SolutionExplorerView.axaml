@@ -6,26 +6,28 @@
              x:Class="Codalus.Shell.Views.SolutionExplorerView"
              x:DataType="vm:SolutionExplorerViewModel">
   <DockPanel>
-  <!-- The toolbar and search box of a classic IDE's Solution Explorer (M29). -->
+  <!-- The toolbar and search box of a classic IDE's Solution Explorer (M29). Each icon in its family's color (M34h): Home
+       navigates (blue), Sync with Active Document is a refresh (green), Collapse All and Switch Views act on the solution's
+       tree (purple), Show All Files shows the folder's files (tan), Properties the Properties window's grid (blue). -->
   <StackPanel DockPanel.Dock="Top" IsVisible="{Binding HasSolution}">
     <controls:ToolbarPanel Spacing="1">
       <Button Classes="toolbar" Command="{Binding HomeCommand}" ToolTip.Tip="{l:T solutionExplorer.home}" AutomationProperties.Name="{l:T solutionExplorer.home}">
         <controls:Icon Kind="home" />
       </Button>
       <Button Classes="toolbar" Command="{Binding SyncCommand}" ToolTip.Tip="{l:T solutionExplorer.syncWithActiveDocument}" AutomationProperties.Name="{l:T solutionExplorer.syncWithActiveDocument}">
-        <controls:Icon Kind="link" />
+        <controls:Icon Kind="link" Classes="accent-green" />
       </Button>
       <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="{l:T solutionExplorer.collapseAll}" AutomationProperties.Name="{l:T solutionExplorer.collapseAll}">
-        <controls:Icon Kind="collapse-all" />
+        <controls:Icon Kind="collapse-all" Classes="accent-purple" />
       </Button>
       <ToggleButton Classes="toolbar" IsChecked="{Binding ShowAllFiles}" ToolTip.Tip="{l:T solutionExplorer.showAllFiles}" AutomationProperties.Name="{l:T solutionExplorer.showAllFiles}" IsVisible="{Binding !IsFolderView}">
-        <controls:Icon Kind="files" />
+        <controls:Icon Kind="files" Classes="accent-folder" />
       </ToggleButton>
       <Button Classes="toolbar" Command="{Binding SwitchViewsCommand}" IsVisible="{Binding CanSwitchViews}" ToolTip.Tip="{l:T solutionExplorer.switchViewsFolderViewSolutionView}" AutomationProperties.Name="{l:T solutionExplorer.switchViews}">
-        <controls:Icon Kind="layout" />
+        <controls:Icon Kind="layout" Classes="accent-purple" />
       </Button>
       <Button Classes="toolbar" Command="{Binding PropertiesCommand}" ToolTip.Tip="{l:T solutionExplorer.propertiesAltEnter}" AutomationProperties.Name="{l:T solutionExplorer.properties}">
-        <controls:Icon Kind="gear" />
+        <controls:Icon Kind="properties" />
       </Button>
     </controls:ToolbarPanel>
     <TextBox x:Name="SearchBox" Text="{Binding Filter}" Margin="4,0,4,4" PlaceholderText="{l:T solutionExplorer.searchSolutionExplorerCtrl}"
@@ -34,7 +36,7 @@
   <Grid>
     <StackPanel Margin="{DynamicResource Shell.Padding.EmptyState}" Spacing="10" IsVisible="{Binding !HasSolution}">
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T solutionExplorer.noSolutionIsOpen}" />
-      <Button Content="{l:T solutionExplorer.openSolution}" HorizontalAlignment="Left" Command="{Binding OpenSolutionCommand}" />
+      <Button Classes="iconText" controls:ButtonIcon.Kind="folder-open" Content="{l:T solutionExplorer.openSolution}" HorizontalAlignment="Left" Command="{Binding OpenSolutionCommand}" />
     </StackPanel>
     <ListBox x:Name="List"
              ItemsSource="{Binding Rows}"

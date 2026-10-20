@@ -165,7 +165,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        var json = await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard).ConfigureAwait(true);
+        var json = await Codalus.Shell.Infrastructure.SafeClipboard.TryGetTextAsync(clipboard).ConfigureAwait(true);
         if (string.IsNullOrWhiteSpace(json))
         {
             ShowMessage("The clipboard has no text.");
@@ -194,7 +194,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        var xml = await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard).ConfigureAwait(true);
+        var xml = await Codalus.Shell.Infrastructure.SafeClipboard.TryGetTextAsync(clipboard).ConfigureAwait(true);
         if (string.IsNullOrWhiteSpace(xml))
         {
             ShowMessage("The clipboard has no text.");

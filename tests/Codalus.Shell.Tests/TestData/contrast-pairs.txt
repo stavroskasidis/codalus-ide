@@ -157,3 +157,42 @@ Shell.Accent Shell.Editor.Background 3
 
 # A checked toggle button (M34g): Fluent's, set per family.
 ToggleButtonForegroundChecked ToggleButtonBackgroundChecked 4.5
+
+# The control set (M34h, docs/design/controls.md): buttons in each state, toolbar buttons and toggles, fields and
+# their placeholders, check box outlines, segments, rows (hover, inactive selection), grid headers, find matches,
+# badges and chips, the dialog's footer and icon tile, AI Chat's messages and code block headers.
+Shell.Button.Foreground Shell.Button 4.5
+Shell.Button.Foreground Shell.Button.Hover 4.5
+Shell.Button.Foreground Shell.Button.Pressed 4.5
+Shell.AccentForeground Shell.Accent.Hover 4.5
+Shell.AccentForeground Shell.Accent.Pressed 4.5
+ToggleButtonForegroundChecked Shell.Accent.Hover 4.5
+Shell.Foreground Shell.Toolbar.Hover 4.5
+Shell.Foreground Shell.Toolbar.Pressed 4.5
+Shell.Toolbar.Checked.Foreground Shell.Toolbar.Checked 4.5
+Shell.Input.Placeholder Shell.Input 4.5
+Shell.Check.Border Shell.Input 3
+Shell.Focus Shell.Overlay 3
+Shell.Focus Shell.Input 3
+Shell.Segment.Selected.Foreground Shell.Segment.Selected 4.5
+Shell.Selection.Inactive.Foreground Shell.Selection.Inactive 4.5
+Shell.Foreground Shell.Row.Hover 4.5
+Shell.MutedForeground Shell.Row.Hover 4.5
+Shell.Foreground Shell.Grid.Header 4.5
+Shell.MutedForeground Shell.Grid.Header 4.5
+Shell.Match.Background.Foreground Shell.Match.Background 4.5
+Shell.Badge.Foreground Shell.Badge 4.5
+Shell.Status.Success.Foreground Shell.Status.Success 4.5
+Shell.Status.Error.Foreground Shell.Status.Error 4.5
+Shell.Status.Warning.Foreground Shell.Status.Warning 4.5
+Shell.Status.Info.Foreground Shell.Status.Info 4.5
+Shell.Foreground Shell.Dialog.Footer 4.5
+Shell.MutedForeground Shell.Dialog.Footer 4.5
+Shell.Icon.Blue Shell.Status.Info 3
+Shell.Icon.Yellow Shell.Status.Warning 3
+Shell.Icon.Green Shell.Status.Success 3
+Shell.Icon.Red Shell.Status.Error 3
+Shell.Chat.User.Foreground Shell.Chat.User 4.5
+Shell.Foreground Shell.CodeBlock.Header 4.5
+# A disabled control's text is exempt from AA (WCAG 1.4.3) and drawn at about 3:1; it is held to 2.5 so it stays visible.
+Shell.Disabled.Foreground Shell.Disabled 2.5

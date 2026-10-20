@@ -193,11 +193,24 @@ public sealed class McpBridge : IDisposable
     /// <summary>The bridge's pipe for a user-data folder's pipe name (the single-instance pipe's, with <c>-mcp</c>).</summary>
     public static string PipeName(string instancePipeName) => instancePipeName + "-mcp";
 
+    /// <summary>
+    /// The pipe of one external agent's chat session (M48, ADR 0079): the instance pipe's name, <c>-a</c> and the session's
+    /// token. Kept short: on Unix a pipe is a socket file whose path (in the temporary folder) has a length limit.
+    /// </summary>
+    public static string SessionPipeName(string instancePipeName, string sessionToken) => instancePipeName + "-a" + sessionToken;
+
+    /// <summary>A new session token: 12 hexadecimal characters.</summary>
+    public static string NewSessionToken() => Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(6)).ToLowerInvariant();
+
     /// <summary>Answers calls with <paramref name="handler"/> (on a background thread) until disposed.</summary>
     public static McpBridge Listen(string pipeName, Func<string, JsonElement, CancellationToken, Task<string>> handler) => new(pipeName, handler);
 
     /// <summary>Sends a call to the running IDE; throws <see cref="McpException"/> when none answers or the call fails.</summary>
-    public static async Task<string> CallAsync(string pipeName, string tool, JsonElement arguments, CancellationToken cancellationToken)
+    public static Task<string> CallAsync(string pipeName, string tool, JsonElement arguments, CancellationToken cancellationToken) =>
+        CallAsync(pipeName, tool, arguments, null, cancellationToken);
+
+    /// <summary>A call, with what to say when nobody listens on the pipe (an agent's session that ended).</summary>
+    public static async Task<string> CallAsync(string pipeName, string tool, JsonElement arguments, string? notListening, CancellationToken cancellationToken)
     {
         try
         {
@@ -223,7 +236,7 @@ public sealed class McpBridge : IDisposable
         }
         catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
         {
-            throw new McpException("Codalus IDE isn't running, or its MCP server is off: turn on Tools → Options → AI → MCP Server (ai.mcpServer.enabled).");
+            throw new McpException(notListening ?? "Codalus IDE isn't running, or its MCP server is off: turn on Tools → Options → AI → MCP Server (ai.mcpServer.enabled).");
         }
     }
 

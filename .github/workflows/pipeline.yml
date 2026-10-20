@@ -136,8 +136,14 @@ jobs:
           display: true
       - run: dotnet restore Codalus.slnx
       - run: dotnet build Codalus.slnx -c Release --no-restore
+      - name: Stack traces for a hang (dotnet-stack)
+        # The test watchdog prints a hanging test's stacks with it (tests/Shared/TestWatchdog.cs, eng/ci-test.sh).
+        run: dotnet tool install -g dotnet-stack || true
       - name: Test (${{ matrix.shard }})
         shell: bash
+        # A hang is reported and ended by 15 minutes (eng/ci-test.sh): this is the last resort, leaving the job time for
+        # the steps below.
+        timeout-minutes: 40
         run: bash eng/ci-test.sh ${{ matrix.shard }}
       - name: Processes the tests left running
         # What the tests left behind is listed: a leak to fix.
@@ -147,6 +153,26 @@ jobs:
           # BSD ps (macOS) has no --sort: sort by the CPU column instead.
           ps -eo pid,ppid,etime,pcpu,rss,args | sort -k4 -nr | head -25 | cut -c1-240 || true
           df -h / /tmp | uniq
+      - name: Stacks in the hang dumps
+        # HangDump's dumps, read here (on the OS that wrote them) in case the watchdog's dotnet-stack got nothing.
+        if: (failure() || cancelled()) && hashFiles('artifacts/test-results/**/*.dmp') != ''
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          dotnet tool install -g dotnet-dump || true
+          find artifacts/test-results -name '*.dmp' | while IFS= read -r dump; do
+            echo "::group::Managed stacks in $dump"
+            "$HOME/.dotnet/tools/dotnet-dump" analyze "$dump" -c "clrstack -all" -c exit > "$dump.stacks.txt" 2>&1 || true
+            cat "$dump.stacks.txt"
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        if: failure() || cancelled()
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.shard }}
+          path: artifacts/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
 
   # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the in-process
   # headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform). On a runner
@@ -158,7 +184,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -179,7 +205,8 @@ jobs:
         run: dotnet tool install -g dotnet-stack || true
       - name: End-to-end smoke test of the published app
         shell: bash
-        timeout-minutes: 25
+        # The command sweep (shell.commandSweep) takes up to 25 of these.
+        timeout-minutes: 40
         env:
           CODALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
         run: bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test
@@ -246,6 +273,8 @@ jobs:
           CODALUS_FEED_KEY: ${{ secrets.FEED_SIGNING_KEY }}
           # Code signing (D19) waits behind this secret.
           CODALUS_CODESIGN_IDENTITY: ${{ secrets.CODALUS_CODESIGN_IDENTITY }}
+          # The .rpm's signature: the dnf repository serves the release's own file with gpgcheck on (eng/linux-repos.sh).
+          CODALUS_PACKAGES_KEY: ${{ secrets.PACKAGES_GPG_PRIVATE_KEY }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
           bash eng/package.sh "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.kind }}"
@@ -446,6 +475,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pages: read # the site's address, to keep the nightly it serves
     steps:
       - uses: actions/checkout@v4
         with:
@@ -460,14 +490,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash eng/publish-release.sh "${{ needs.plan.outputs.kind }}" "${{ needs.plan.outputs.version }}" "$GITHUB_SHA" downloaded
-      - name: Keep the newest 14 nightlies
+      # Pages holds only the repositories' metadata and the packages come from their release, so the nightly the site's
+      # nightly channel serves (packages.txt, eng/linux-repos.sh) stays until a stable release redeploys the site.
+      - name: Keep the newest 14 nightlies, and the one the site serves
         if: needs.plan.outputs.kind == 'nightly'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+        # The release is out by now: tidying up mustn't fail the job, which would untag it.
+        continue-on-error: true
         run: |
+          if ! site="$(gh api "repos/$GITHUB_REPOSITORY/pages" -q .html_url)" \
+            || ! served="$(curl -fsSL "https://$(sed -e 's|^[a-z]*://||' -e 's|/*$||' <<< "$site")/packages.txt")"; then
+            echo "::warning::Couldn't read the site's packages.txt, so no nightly is deleted this time."
+            exit 0
+          fi
+          keep="$(awk '$1 == "nightly" { print $2 }' <<< "$served")"
           gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- '-nightly\.' | sort -rV | tail -n +15 \
-            | while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done
+            | { grep -vxF -- "${keep:-none}" || true; } | while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done
 
   untag:
     needs: [plan, publish]
@@ -537,13 +577,16 @@ jobs:
           git add PKGBUILD .SRCINFO
           git diff --cached --quiet || { git commit -q -m "Update to $VERSION"; git push -q origin HEAD:master; }
 
-  # Last: develop moves past the release (and takes in a hotfix), once everything is out. The workflow token's push
-  # starts no run, so it makes no nightly.
+  # Last: develop moves past the release (and takes in a hotfix), once everything is out. The "protect" ruleset lets
+  # develop change only through a pull request, so the job opens one and merges it (it needs no approval, and the
+  # repository lets GitHub Actions create pull requests). The workflow token's pull request and merge start no run,
+  # so they make no CI run and no nightly; master's content already passed this release's gates.
   finish:
     needs: [plan, aur]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -551,6 +594,9 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Move develop past the release (and take in a hotfix)
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASED: ${{ needs.plan.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -565,8 +611,24 @@ jobs:
               echo "::error::Merging master into develop conflicts beyond VERSION; merge it by hand." && exit 1
             fi
           fi
-          next="$(dotnet run --project eng/Codalus.Release -- bump --after "${{ needs.plan.outputs.version }}")"
+          next="$(dotnet run --project eng/Codalus.Release -- bump --after "$RELEASED")"
           if ! git diff --quiet VERSION; then
-            git commit -m "Start $next after the ${{ needs.plan.outputs.version }} release" VERSION
+            git commit -m "Start $next after the $RELEASED release" VERSION
           fi
-          git push origin HEAD:develop
+          if [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/develop)" ]]; then
+            echo "develop already contains the release and its VERSION is past it." && exit 0
+          fi
+          # A re-run replaces the branch and reuses its pull request.
+          branch="release/develop-after-$RELEASED"
+          git push --force origin "HEAD:refs/heads/$branch"
+          if [[ -z "$(gh pr list --head "$branch" --base develop --state open --json number --jq '.[].number')" ]]; then
+            gh pr create --head "$branch" --base develop --title "Start $next after the $RELEASED release" \
+              --body "Merges \`master\` into \`develop\` after the $RELEASED release and moves \`VERSION\` to $next. Opened and merged by the release run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          fi
+          # GitHub may still be working out whether the new pull request merges.
+          for attempt in 1 2 3 4 5; do
+            gh pr merge "$branch" --merge --match-head-commit "$(git rev-parse HEAD)" && break
+            [[ $attempt == 5 ]] && echo "::error::Couldn't merge $branch into develop; merge its pull request by hand." && exit 1
+            sleep 15
+          done
+          git push origin --delete "$branch" || true

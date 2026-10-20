@@ -1,10 +1,7 @@
-using Avalonia;
-using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Layout;
-using Avalonia.Media;
 using Avalonia.Threading;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
@@ -14,15 +11,19 @@ using Codalus.Workbench.Localization;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// The AI Chat window (M28a): turns rendered as Markdown with Copy, Insert and Apply under each code block, the answer
-/// re-rendered as it streams (at most every 100 ms), Enter sends and Shift+Enter starts a new line.
+/// The AI Chat window (M28a; redesigned in M34h, docs/design/controls/AiChat.dc.html). The conversation is a virtualized
+/// list of turns (<see cref="AiChatTurnView"/>): only the turns in view are built, and an answer re-renders as it streams
+/// (at most every 100 ms). It follows the end while you are there and goes to each new question
+/// (<see cref="AiChatFollower"/>). Enter sends and Shift+Enter starts a new line. With an external agent (M48), its
+/// slash commands are offered under <c>/</c> and Tab takes the first.
 /// </summary>
 public sealed partial class AiChatView : UserControl, IPaneView
 {
     private static readonly TimeSpan s_renderInterval = TimeSpan.FromMilliseconds(100);
-    private readonly Dictionary<AiChatTurn, TurnView> _turns = [];
+    private readonly Dictionary<AiChatTurn, AiChatTurnView> _realized = [];
     private readonly HashSet<AiChatTurn> _dirty = [];
     private readonly DispatcherTimer _render;
+    private readonly AiChatFollower _follow;
     private AiChatViewModel? _vm;
 
     public AiChatView()
@@ -30,27 +31,110 @@ public sealed partial class AiChatView : UserControl, IPaneView
         InitializeComponent();
         _render = new DispatcherTimer { Interval = s_renderInterval };
         _render.Tick += (_, _) => RenderDirty();
+        TurnsList.ItemTemplate = new FuncDataTemplate<AiChatTurnItem?>((item, _) => item is null ? null : new AiChatTurnView(item, this), supportsRecycling: false);
+        _follow = new AiChatFollower(Scroller);
         Provider.Click += (_, _) => _ = _vm?.ChooseProviderAsync();
+        AgentPicker.Flyout = Choices(
+            () => _vm?.AgentChoices ?? [],
+            () => _vm?.SelectedAgentIndex ?? 0,
+            i => { if (_vm is { } vm) { vm.SelectedAgentIndex = i; } },
+            (Localizer.Get("msg.acp.addAgent", "Add agent…"), () => _ = _vm?.AddAgentAsync()));
+        ModePicker.Flyout = Choices(() => _vm?.ModeNames ?? [], () => _vm?.SelectedModeIndex ?? -1, i => { if (_vm is { } vm) { vm.SelectedModeIndex = i; } });
+        CommandList.SelectionChanged += (_, _) =>
+        {
+            if (CommandList.SelectedItem is AiCommandSuggestion suggestion)
+            {
+                UseCommand(suggestion);
+            }
+        };
+        ChooseProvider.Click += (_, _) => _ = _vm?.ChooseProviderAsync();
         Configure.Click += (_, _) => _ = _vm?.ConfigureAsync();
         NewChat.Click += (_, _) => _vm?.NewChat();
         StopButton.Click += (_, _) => _vm?.Stop();
+        StopOffBar.Click += (_, _) => _vm?.Stop();
         Log.Click += (_, _) => _vm?.ShowLog();
         TurnOn.Click += (_, _) => _ = _vm?.TurnOnAsync();
-        Send.Click += (_, _) => _ = _vm?.SendAsync();
+        TurnOnBar.Click += (_, _) => _ = _vm?.TurnOnAsync();
+        Send.Click += (_, _) => OnSendClick();
         InputBox.AddHandler(KeyDownEvent, OnInputKeyDown, RoutingStrategies.Tunnel);
         InputBox.GotFocus += (_, _) => _vm?.UpdateContextPreview();
         DataContextChanged += (_, _) => Attach(DataContext as AiChatViewModel);
     }
 
+    internal AiChatViewModel? ViewModel => _vm;
+
+    /// <summary>The turns built now, the ones in view (tests).</summary>
+    internal IReadOnlyCollection<AiChatTurnView> RealizedTurns => _realized.Values;
+
+    /// <summary>Whether the conversation sticks to its end now (tests).</summary>
+    internal bool IsFollowing => _follow.IsFollowing;
+
     public void FocusPrimary()
     {
-        if (InputBox.IsVisible)
+        if (InputBox.IsEffectivelyVisible)
         {
             InputBox.Focus();
+        }
+        else if (TurnOnBar.IsEffectivelyVisible)
+        {
+            TurnOnBar.Focus();
         }
         else
         {
             TurnOn.Focus();
+        }
+    }
+
+    /// <summary>
+    /// A picker's menu (M48: who answers, and the agent's mode): one radio item per choice, the current one checked,
+    /// built as it opens so it shows the choices of now, and an action after a separator ("Add agent…").
+    /// </summary>
+    private static MenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose, (string Label, Action Run)? last = null)
+    {
+        var flyout = new MenuFlyout();
+        flyout.Opening += (_, _) =>
+        {
+            flyout.Items.Clear();
+            var current = selected();
+            var names = items();
+            for (var i = 0; i < names.Count; i++)
+            {
+                var index = i;
+                var item = new MenuItem { Header = names[i], ToggleType = MenuItemToggleType.Radio, IsChecked = i == current };
+                Avalonia.Automation.AutomationProperties.SetName(item, names[i]);
+                item.Click += (_, _) => choose(index);
+                flyout.Items.Add(item);
+            }
+
+            if (last is { } action)
+            {
+                flyout.Items.Add(new Separator());
+                var item = new MenuItem { Header = action.Label, Icon = new Icon { Kind = "new", Width = 16, Height = 16 } };
+                Avalonia.Automation.AutomationProperties.SetName(item, action.Label);
+                item.Click += (_, _) => action.Run();
+                flyout.Items.Add(item);
+            }
+        };
+        return flyout;
+    }
+
+    /// <summary>An external agent's slash command goes into the input, ready for its argument.</summary>
+    private void UseCommand(AiCommandSuggestion suggestion)
+    {
+        _vm?.UseCommand(suggestion);
+        CommandList.SelectedItem = null;
+        InputBox.Focus();
+        InputBox.CaretIndex = InputBox.Text?.Length ?? 0;
+    }
+
+    /// <summary>A turn came into view (its view renders itself).</summary>
+    internal void Realized(AiChatTurnView view) => _realized[view.Turn] = view;
+
+    internal void Unrealized(AiChatTurnView view)
+    {
+        if (_realized.TryGetValue(view.Turn, out var current) && current == view)
+        {
+            _realized.Remove(view.Turn);
         }
     }
 
@@ -60,11 +144,11 @@ public sealed partial class AiChatView : UserControl, IPaneView
         {
             _vm.TurnChanged -= OnTurnChanged;
             _vm.Cleared -= OnCleared;
+            _vm.Turns.CollectionChanged -= OnTurnsChanged;
         }
 
         _vm = vm;
-        _turns.Clear();
-        TurnsPanel.Children.Clear();
+        _dirty.Clear();
         if (vm is null)
         {
             return;
@@ -72,48 +156,79 @@ public sealed partial class AiChatView : UserControl, IPaneView
 
         vm.TurnChanged += OnTurnChanged;
         vm.Cleared += OnCleared;
-        foreach (var turn in vm.Chat.Turns)
-        {
-            OnTurnChanged(this, turn);
-        }
-
+        vm.Turns.CollectionChanged += OnTurnsChanged;
         vm.UpdateContextPreview();
+        _follow.Reset();
     }
 
+    /// <summary>
+    /// Enter sends (Shift+Enter is a new line). While a turn is answered it sends nothing and keeps the text, as Send is
+    /// Stop then; the view model refuses it too.
+    /// </summary>
     private void OnInputKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.None && _vm is { HasCommandSuggestions: true } chat)
+        {
+            e.Handled = true;
+            UseCommand(chat.CommandSuggestions[0]);
+            return;
+        }
+
         if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && _vm is { } vm)
         {
             e.Handled = true;
-            _ = vm.SendAsync();
+            if (!vm.IsAnswering)
+            {
+                _ = vm.SendAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Send hides as Stop takes its place, so the focus goes back to the input box rather than being lost: where Enter
+    /// leaves it, where the next question is typed, with Stop the next Tab stop.
+    /// </summary>
+    private void OnSendClick()
+    {
+        if (_vm is not { } vm)
+        {
+            return;
+        }
+
+        _ = vm.SendAsync();
+        if (vm.IsAnswering && InputBox.IsEffectivelyVisible)
+        {
+            InputBox.Focus();
         }
     }
 
     private void OnCleared(object? sender, EventArgs e)
     {
-        _turns.Clear();
         _dirty.Clear();
-        TurnsPanel.Children.Clear();
+        _follow.Reset();
+    }
+
+    /// <summary>A new question: the view goes to it, wherever the user had scrolled (the turn's state doesn't matter).</summary>
+    private void OnTurnsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+        {
+            _follow.Reset();
+        }
     }
 
     private void OnTurnChanged(object? sender, AiChatTurn turn)
     {
-        if (!_turns.TryGetValue(turn, out var existing))
+        if (!_realized.TryGetValue(turn, out var view))
         {
-            var view = new TurnView(turn, this);
-            _turns[turn] = view;
-            TurnsPanel.Children.Add(view.Root);
-            view.Render();
-            ScrollToEnd(force: true);
-            return;
+            return; // out of view: it renders when it comes back
         }
 
         if (!turn.IsStreaming)
         {
             // The end renders at once: the buttons and any error appear without waiting for the timer.
             _dirty.Remove(turn);
-            existing.Render();
-            ScrollToEnd(force: false);
+            view.Render();
             return;
         }
 
@@ -129,160 +244,12 @@ public sealed partial class AiChatView : UserControl, IPaneView
         _render.Stop();
         foreach (var turn in _dirty)
         {
-            if (_turns.TryGetValue(turn, out var view))
+            if (_realized.TryGetValue(turn, out var view))
             {
                 view.Render();
             }
         }
 
         _dirty.Clear();
-        ScrollToEnd(force: false);
-    }
-
-    /// <summary>Follows the answer while the view is at (or near) the end, as log views do.</summary>
-    private void ScrollToEnd(bool force)
-    {
-        var atEnd = Scroller.Offset.Y + Scroller.Viewport.Height >= Scroller.Extent.Height - 40;
-        if (force || atEnd)
-        {
-            Dispatcher.UIThread.Post(() => Scroller.ScrollToEnd(), DispatcherPriority.Background);
-        }
-    }
-
-    /// <summary>One turn: the question, what went with it, and the answer.</summary>
-    private sealed class TurnView
-    {
-        private readonly AiChatTurn _turn;
-        private readonly AiChatView _owner;
-        private readonly ContentControl _answer = new();
-        private readonly StackPanel _steps = new() { Spacing = 2 };
-        private readonly StackPanel _status = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
-        private string? _rendered;
-
-        public TurnView(AiChatTurn turn, AiChatView owner)
-        {
-            _turn = turn;
-            _owner = owner;
-            var question = new SelectableTextBlock { Text = turn.Question, TextWrapping = TextWrapping.Wrap, FontWeight = FontWeight.SemiBold };
-            var questionBox = new Border { Padding = new Thickness(8, 6), CornerRadius = new CornerRadius(4), Child = question };
-            questionBox.Bind(Border.BackgroundProperty, questionBox.GetResourceObservable("Shell.Hover"));
-            var panel = new StackPanel { Spacing = 4 };
-            panel.Children.Add(questionBox);
-            if (AiChatViewModel.ContextSummary(turn) is { Length: > 0 } summary)
-            {
-                var context = new TextBlock { Text = summary, TextWrapping = TextWrapping.Wrap, FontSize = 11 };
-                context.Classes.Add("muted");
-                panel.Children.Add(context);
-            }
-
-            panel.Children.Add(_steps);
-            panel.Children.Add(_answer);
-            panel.Children.Add(_status);
-            Root = panel;
-        }
-
-        public Control Root { get; }
-
-        public void Render()
-        {
-            var steps = _turn.Steps;
-            _steps.Children.Clear();
-            foreach (var step in steps)
-            {
-                var line = new TextBlock
-                {
-                    Text = "⚙ " + step.Tool + (step.Target.Length > 0 ? " " + step.Target : "") + (step.Outcome is { } outcome ? " → " + outcome : " …"),
-                    TextWrapping = TextWrapping.Wrap,
-                    FontSize = 11,
-                };
-                if (step.IsError)
-                {
-                    line.Bind(TextBlock.ForegroundProperty, line.GetResourceObservable("Shell.Warning.Foreground"));
-                }
-                else
-                {
-                    line.Classes.Add("muted");
-                }
-
-                _steps.Children.Add(line);
-            }
-
-            var answer = _turn.Answer;
-            if (answer != _rendered || !_turn.IsStreaming)
-            {
-                _rendered = answer;
-                _answer.Content = answer.Length == 0
-                    ? null
-                    : MarkdownRenderer.Render(answer, target => _owner._vm?.OpenLink(target), _turn.IsStreaming ? null : Footer, new Thickness(0));
-            }
-
-            _status.Children.Clear();
-            if (_turn.IsStreaming)
-            {
-                _status.Children.Add(Muted(answer.Length == 0 ? Localizer.Get("msg.ai.waiting", "Waiting for the answer…") : Localizer.Get("msg.ai.writing", "Writing…")));
-            }
-            else if (_turn.Error is { } error)
-            {
-                var text = new TextBlock { Text = error, TextWrapping = TextWrapping.Wrap, MaxWidth = 600 };
-                text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable("Shell.Error.Foreground"));
-                _status.Children.Add(text);
-                if (_turn.NeedsConfiguration)
-                {
-                    _status.Children.Add(Button(Localizer.Get("msg.ai.configure", "Configure"), Localizer.Get("msg.ai.configureTheProvider", "Configure the provider"), () => _ = _owner._vm?.ConfigureAsync()));
-                }
-            }
-            else if (_turn.FinishReason == "stopped")
-            {
-                _status.Children.Add(Muted(Localizer.Get("msg.ai.stopped", "Stopped.")));
-            }
-            else if (_turn.FinishReason == "length")
-            {
-                _status.Children.Add(Muted(Localizer.Get("msg.ai.cut", "The answer reached its length limit.")));
-            }
-        }
-
-        /// <summary>Copy, Insert and Apply under a code block (by its index in the answer).</summary>
-        private StackPanel? Footer(int index)
-        {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-            AiCodeBlock? Block() => AiCodeBlocks.Parse(_turn.Answer) is var blocks && index < blocks.Count ? blocks[index] : null;
-            row.Children.Add(Button(Localizer.Get("msg.ai.copy", "Copy"), Localizer.Get("msg.ai.copyTheCode", "Copy the code"), () =>
-            {
-                if (Block() is { } block)
-                {
-                    _ = _owner._vm?.CopyAsync(block.Code);
-                }
-            }));
-            row.Children.Add(Button(Localizer.Get("msg.ai.insert", "Insert at Cursor"), Localizer.Get("msg.ai.insertTheCodeAtTheCursor", "Insert the code at the cursor"), () =>
-            {
-                if (Block() is { } block)
-                {
-                    _ = _owner._vm?.InsertAsync(_turn, block);
-                }
-            }));
-            row.Children.Add(Button(Localizer.Get("msg.ai.apply", "Apply…"), Localizer.Get("msg.ai.applyTheCodeAfterAPreview", "Apply the code after a preview"), () =>
-            {
-                if (Block() is { } block)
-                {
-                    _ = _owner._vm?.ApplyAsync(_turn, block);
-                }
-            }));
-            return row;
-        }
-
-        private static TextBlock Muted(string text)
-        {
-            var block = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap };
-            block.Classes.Add("muted");
-            return block;
-        }
-
-        private static Button Button(string label, string accessibleName, Action click)
-        {
-            var button = new Button { Content = label, Padding = new Thickness(8, 2) };
-            AutomationProperties.SetName(button, accessibleName);
-            button.Click += (_, _) => click();
-            return button;
-        }
     }
 }

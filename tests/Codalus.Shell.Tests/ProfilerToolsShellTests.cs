@@ -192,10 +192,30 @@ public sealed class ProfilerToolsShellTests
         // Running one from its glyph: BenchmarkDotNet's Dry job in process, then again for the history.
         window.Job = "Dry";
         window.InProcess = true;
-        string Describe()
+        // What the wait is missing first (the end of the run, a result, the history's runs), then the window and the output.
+        string Describe(int? history = null)
         {
+            var missing = new List<string>();
+            if (window.IsRunning)
+            {
+                missing.Add("the end of the run");
+            }
+
+            if (window.Results.Count == 0)
+            {
+                missing.Add("a result in the window");
+            }
+
+            if (history is { } runs && window.History.Count != runs)
+            {
+                var fullName = window.SelectedResult?.Result.FullName;
+                missing.Add($"{runs} runs in the window's history of {fullName ?? "(no result selected)"} (it shows {window.History.Count}, "
+                    + $"the history file has {(fullName is null ? 0 : f.Shell.Benchmarks.HistoryOf(fullName).Count)})");
+            }
+
             var output = f.Shell.BenchmarkLog.GetText();
-            return $"status '{window.Status}', running {window.IsRunning}, {window.Results.Count} results, {window.History.Count} in the history, "
+            return (missing.Count == 0 ? "nothing missing now; " : $"missing {string.Join(" and ", missing)}; ")
+                + $"status '{window.Status}', running {window.IsRunning}, {window.Results.Count} results, {window.History.Count} in the history, "
                 + $"{f.Shell.Benchmarks.History().Runs.Count} runs in {f.Shell.Benchmarks.HistoryPath}, project of the file '{f.Shell.Benchmarks.ProjectOf(file)}'\n"
                 + "Notifications:\n" + string.Join('\n', f.Shell.Workbench.Notifications.Items.Select(n => n.Message))
                 + "\nBenchmarks output (the end):\n" + output[Math.Max(0, output.Length - 6000)..];
@@ -228,7 +248,7 @@ public sealed class ProfilerToolsShellTests
         f.Shell.Benchmarks.Output += OnRun;
         await f.Shell.Solutions.RestoreAsync(null, CancellationToken.None);
         await f.Shell.RunBenchmarkAsync(file, concat);
-        await ShellFixture.PumpUntil(() => window.Results.Count > 0 && !window.IsRunning, seconds: 600, Describe);
+        await ShellFixture.PumpUntil(() => window.Results.Count > 0 && !window.IsRunning, seconds: 600, () => Describe());
         f.Shell.Solutions.RestoreStateChanged -= OnRestore;
         f.Shell.Benchmarks.Output -= OnRun;
         Assert.True(restoresEndedAtRun >= 1, $"dotnet run started before the restore ended ({restoresEndedAtRun} ended then)\n{Describe()}");
@@ -240,8 +260,40 @@ public sealed class ProfilerToolsShellTests
         Assert.True(result.Result.Mean > 0);
         Assert.True(result.Result.Allocated > 0, "MemoryDiagnoser's allocations");
         await f.Shell.RunBenchmarkAsync(file, concat);
-        await ShellFixture.PumpUntil(() => window.History.Count == 2 && !window.IsRunning, seconds: 600, Describe);
+        await ShellFixture.PumpUntil(() => window.History.Count == 2 && !window.IsRunning, seconds: 600, () => Describe(history: 2));
         Assert.True(File.Exists(f.Shell.Benchmarks.HistoryPath));
         Assert.StartsWith(Path.Combine(folder, ".codalus", "benchmarks"), f.Shell.Benchmarks.HistoryPath, StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public async Task Benchmarks_window_shows_a_run_in_the_history_when_it_equals_the_one_before()
+    {
+        // A Dry job's one iteration can measure the same to the tick twice (Windows' 100 ns clock: CI waited 10 minutes
+        // for "2 in the history" with 2 runs in the file). The rows are equal records; the history reloads all the same.
+        var folder = Directory.CreateTempSubdirectory("codalus-benchmarks-").FullName;
+        try
+        {
+            var service = new BenchmarkService(() => folder, folder);
+            var result = new BenchmarkResult("Benchmarks.StringBenchmarks.Concat", "StringBenchmarks", "Concat", null, 419_300, null, 0, 419_300, 1000, null);
+            var runs = new List<BenchmarkRun>();
+            Task<BenchmarkRun?> Run(BenchmarkRequest request)
+            {
+                // As BenchmarkService.RunAsync: the run goes to the history before it returns.
+                runs.Add(new BenchmarkRun(DateTimeOffset.Now, request.Project, request.Filters, request.Job, request.InProcess, 0, [result]));
+                Directory.CreateDirectory(service.Root);
+                File.WriteAllText(service.HistoryPath, System.Text.Json.JsonSerializer.Serialize(new BenchmarkHistory(runs), System.Text.Json.JsonSerializerOptions.Web));
+                return Task.FromResult<BenchmarkRun?>(runs[^1]);
+            }
+
+            var window = new BenchmarksViewModel(service, Run, (_, _) => Task.CompletedTask);
+            await window.RunAsync(Path.Combine(folder, "Benchmarks.csproj"), ["Benchmarks.StringBenchmarks.Concat"]);
+            Assert.Single(window.History);
+            await window.RunAsync(Path.Combine(folder, "Benchmarks.csproj"), ["Benchmarks.StringBenchmarks.Concat"]);
+            Assert.Equal(2, window.History.Count);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 }

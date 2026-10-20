@@ -7,11 +7,11 @@
              x:DataType="vm:AspireViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button x:Name="Dashboard" Content="{l:T aspire.openDashboard}" IsEnabled="{Binding HasDashboard}" AutomationProperties.Name="{l:T aspire.openTheAspireDashboardInThe}" />
-      <Button x:Name="Start" Content="{l:T aspire.start}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.startTheSelectedResource}" />
-      <Button x:Name="Stop" Content="{l:T aspire.stop}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.stopTheSelectedResource}" />
-      <Button x:Name="Restart" Content="{l:T aspire.restart}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.restartTheSelectedResource}" />
-      <Button x:Name="Browse" Content="{l:T aspire.openEndpoint}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.openTheSelectedResourceSEndpoint}" />
+      <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="gauge" x:Name="Dashboard" Content="{l:T aspire.openDashboard}" IsEnabled="{Binding HasDashboard}" AutomationProperties.Name="{l:T aspire.openTheAspireDashboardInThe}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="play" x:Name="Start" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.startTheSelectedResource}" ToolTip.Tip="{l:T aspire.start}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="stop" x:Name="Stop" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.stopTheSelectedResource}" ToolTip.Tip="{l:T aspire.stop}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="restart" x:Name="Restart" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.restartTheSelectedResource}" ToolTip.Tip="{l:T aspire.restart}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="globe" x:Name="Browse" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.openTheSelectedResourceSEndpoint}" ToolTip.Tip="{l:T aspire.openEndpoint}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
     <Grid ColumnDefinitions="2*,4,3*">

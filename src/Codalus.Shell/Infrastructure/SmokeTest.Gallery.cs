@@ -7,14 +7,16 @@ using Codalus.Shell.Controls;
 using Codalus.Shell.Docking;
 using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Settings;
 
 namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
-/// The UI gallery (M34d, D25): every tool window, the main documents and the window's chrome, photographed in Blue,
-/// Light, Dark and High Contrast, empty (before a solution opens), with data (the Testing solution after its tests
-/// ran) and in an error state (errors in the Error List and the build output, a failed test's details). The pictures
+/// The UI gallery (M34d, D25): every tool window, the main documents and the window's chrome, photographed in Classic's
+/// Blue, Light, Dark and High Contrast and Harbor's Light, Dark and High contrast (M34h), empty (before a solution
+/// opens), with data (the Testing solution after its tests ran) and in an error state (errors in the Error List and the
+/// build output, a failed test's details). The pictures
 /// go to <c>logs/gallery</c> with an index, <c>index.md</c>, for the maintainer's review; eng/smoke-test.sh copies them
 /// next to the report.
 /// </summary>
@@ -29,13 +31,46 @@ internal sealed partial class SmokeTest
     {
         await GalleryToolWindowsAsync("empty").ConfigureAwait(true);
         await GalleryNewViewsEmptyAsync().ConfigureAwait(true);
+        await GalleryControlSetAsync().ConfigureAwait(true); // M34h
         WriteGalleryIndex();
     }
 
     /// <summary>Every tool window with data, the documents, the chrome, and the error states.</summary>
     private async Task GalleryDataStepAsync()
     {
-        await GalleryToolWindowsAsync("data").ConfigureAwait(true);
+        // The Output window shows the build's output, its lines colored by what they report (M34h).
+        shell.Output.Selected = shell.Builds.Channel;
+        // AI Chat with the ai.chat step's conversation (M34h), as it looks with AI on: the composer under it. Nothing is
+        // asked, so nothing is sent; AI goes back off after the pictures.
+        var aiOn = shell.AiChat.HasTurns && shell.Ai.State == Workbench.Ai.AiState.Off;
+        if (aiOn)
+        {
+            await shell.Workbench.Settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await shell.Workbench.Settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, "openai", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => shell.AiChat.IsOn, "AI is on for AI Chat's picture").ConfigureAwait(true);
+        }
+
+        // M34h: Find Results and the HTTP Response as the designs show them, cleared after their pictures, so the later
+        // steps (web.http's screenshot, the website's) don't show the sample requests and searches.
+        var httpOpen = shell.Layout.IsVisible(HttpResponseViewModel.ToolWindowId);
+        try
+        {
+            await GallerySampleResultsAsync().ConfigureAwait(true);
+            await GalleryToolWindowsAsync("data").ConfigureAwait(true);
+            if (aiOn)
+            {
+                await GalleryAiChatAsync().ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            ClearGallerySampleResults(httpOpen);
+            if (aiOn)
+            {
+                await shell.Workbench.Settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                await shell.Workbench.Settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            }
+        }
 
         // Documents and the window's chrome: tabs pinned, previewed and colored by project, a tool window focused so the
         // selected document tab is the one of a pane without the focus.
@@ -71,7 +106,17 @@ internal sealed partial class SmokeTest
         var documents = new List<(string Name, Func<ShellDocument?> Open)>
         {
             ("options", () => { shell.OpenSettings(); return shell.Layout.ActiveDocument; }),
-            ("keyboard-shortcuts", () => { shell.OpenKeyboardShortcuts(); return shell.Layout.ActiveDocument; }),
+            ("keyboard-shortcuts", () =>
+            {
+                // M34h: a command with a key binding selected, so the picture shows the selection's colors.
+                shell.OpenKeyboardShortcuts();
+                if (shell.Layout.ActiveDocument is KeyboardShortcutsDocument shortcuts)
+                {
+                    shortcuts.ViewModel.Selected = shortcuts.ViewModel.Rows.FirstOrDefault(r => r.KeyLabel.Length > 0) ?? shortcuts.ViewModel.Rows.FirstOrDefault();
+                }
+
+                return shell.Layout.ActiveDocument;
+            }),
             ("project-properties", () => shell.OpenProjectProperties(shell.Solutions.Projects.Keys.FirstOrDefault()) is null ? null : shell.Layout.ActiveDocument),
             ("nuget", () => shell.OpenPackageManager(shell.Solutions.Projects.Keys.FirstOrDefault()) is null ? null : shell.Layout.ActiveDocument),
             ("configuration-manager", () => shell.OpenConfigurationManager() is null ? null : shell.Layout.ActiveDocument),
@@ -106,19 +151,52 @@ internal sealed partial class SmokeTest
             shell.Layout.CloseDocument(document);
         }
 
-        // The in-window dialog (M34's final pass): a preview of changes and a checklist, over the window.
+        // The in-window dialog (M34's final pass; M34h's frame): a preview of changes, the checklist of
+        // docs/design/controls/ChecklistDialog.dc.html, a name with an error, a dangerous confirmation, over the window.
+        var checklist = new DialogRequest("Generate Constructor", "Members to initialize:", ["OK", "Cancel"])
+        {
+            Icon = "tools",
+            Context = "Person · ICalculatorService.cs",
+            Choices =
+            [
+                new DialogChoice("name", "string Name", true, "property") { Icon = "tools" },
+                new DialogChoice("age", "int Age", true, "property") { Icon = "tools" },
+                new DialogChoice("mood", "Mood Mood", false, "property") { Icon = "tools" },
+                new DialogChoice("tags", "List<string> Tags", false, "property") { Icon = "tools" },
+            ],
+            Reorderable = true,
+        };
         var dialogs = new List<(string Name, DialogRequest Request)>
         {
-            ("dialog-preview", new DialogRequest("Preview Changes: Rename", "2 changes in 2 files.", ["Apply", "Cancel"])
+            ("dialog-preview", new DialogRequest("Preview Changes: Rename", "4 changes in 2 files.", ["Apply", "Cancel"])
             {
-                Details = [new DetailLine("src/Greeter.cs", "header"), new DetailLine("- public sealed class Greeter", "removed"), new DetailLine("+ public sealed class Welcomer", "added")],
+                // M34h: a rename's preview as the C# service gives it, context lines included, at the dialog's size.
+                Details =
+                [
+                    new DetailLine("src/Greeter.cs", "header"),
+                    new DetailLine("  namespace Greetings;"),
+                    new DetailLine("  "),
+                    new DetailLine("- public sealed class Greeter(string name)", "removed"),
+                    new DetailLine("+ public sealed class Welcomer(string name)", "added"),
+                    new DetailLine("  {"),
+                    new DetailLine("-     public static Greeter Default { get; } = new(\"world\");", "removed"),
+                    new DetailLine("+     public static Welcomer Default { get; } = new(\"world\");", "added"),
+                    new DetailLine("  "),
+                    new DetailLine("      public string Greet() => $\"Hello, {name}!\";"),
+                    new DetailLine("  }"),
+                    new DetailLine("src/Program.cs", "header"),
+                    new DetailLine("  using Greetings;"),
+                    new DetailLine("  "),
+                    new DetailLine("- var greeter = new Greeter(args.FirstOrDefault() ?? \"world\");", "removed"),
+                    new DetailLine("+ var greeter = new Welcomer(args.FirstOrDefault() ?? \"world\");", "added"),
+                    new DetailLine("  Console.WriteLine(greeter.Greet());"),
+                    new DetailLine("- Console.WriteLine(Greeter.Default.Greet());", "removed"),
+                    new DetailLine("+ Console.WriteLine(Welcomer.Default.Greet());", "added"),
+                ],
             }),
-            ("dialog-checklist", new DialogRequest("Generate Constructor", "Members to initialize:", ["OK", "Cancel"])
-            {
-                Choices = [new DialogChoice("name", "string Name", true), new DialogChoice("age", "int Age", false, "a property")],
-                Reorderable = true,
-            }),
-            ("dialog-input", new DialogRequest("Rename", "The new name of the class and its file:", ["Rename", "Cancel"]) { Input = "Gr", Validate = text => text.Length < 3 ? "The name is too short." : null }),
+            ("dialog-checklist", checklist),
+            ("dialog-input", new DialogRequest("Rename", "The new name of the class and its file:", ["Rename", "Cancel"]) { Input = "Gr", Validate = text => text.Length < 3 ? "The name is too short." : null, Icon = "rename", Context = "Greeter · Greeter.cs" }),
+            ("dialog-confirm", new DialogRequest("Remove Worktree", "Remove the worktree and its folder? Its uncommitted changes are lost.", ["Remove", "Cancel"]) { IsDanger = true }),
         };
         foreach (var (name, request) in dialogs)
         {
@@ -132,8 +210,13 @@ internal sealed partial class SmokeTest
             await shown.ConfigureAwait(true);
         }
 
-        // Error states: a compile error in the Error List, the failed build's output, a failed test's details.
-        if (sources.FirstOrDefault() is { } broken && await shell.OpenFileAsync(broken, preview: false).ConfigureAwait(true) is { } editorDocument)
+        await GalleryDialogOnMacAsync(checklist).ConfigureAwait(true); // M34h: the buttons in macOS's order
+
+        // Error states: a compile error in the Error List, the failed build's output, a failed test's details. The error goes
+        // in a project of the smoke solution (the first of the sources above can be in one it leaves out, depending on the
+        // file system's order: then the build was up to date, not failed).
+        var broken = Path.Combine(_testing, "src", "Calculator", "Calculator.cs");
+        if (await shell.OpenFileAsync(broken, preview: false).ConfigureAwait(true) is { } editorDocument)
         {
             await WaitAsync(() => editorDocument.Controller is not null, "the editor for the error state opens").ConfigureAwait(true);
             var controller = editorDocument.Controller!;
@@ -145,12 +228,24 @@ internal sealed partial class SmokeTest
                 await WaitAsync(() => shell.ErrorList.Rows.Count > 0, "the Error List shows the error", 120).ConfigureAwait(true);
                 var built = shell.Builds.LastBuild;
                 shell.Run("build.buildSolution");
-                await WaitAsync(() => shell.Builds.LastBuild is { } b && b != built, "the failing build finishes", 300).ConfigureAwait(true);
+                await WaitAsync(
+                    () => shell.Builds.LastBuild is { } b && b != built,
+                    () => $"the failing build finishes (building: {shell.Builds.Current?.ToString() ?? "no"}; buildRunning: {shell.Workbench.Context.GetValue("buildRunning") ?? "unset"}; "
+                          + $"last build: {shell.Builds.LastBuild?.ToString() ?? "none"}, before it: {built?.ToString() ?? "none"}; "
+                          + $"the build host's last message: {shell.Solutions.LastHostMessage ?? "none"}). The Build output:\n{Tail(shell.Builds.Channel.GetText(), 1500)}",
+                    300).ConfigureAwait(true);
+                Check(shell.Builds.LastBuild is { Result: { Succeeded: false, Errors: > 0 } }, $"the build fails ({shell.Builds.LastBuild?.Result}):\n{Tail(shell.Builds.Channel.GetText(), 1500)}");
                 await GalleryThemesAsync(async theme =>
                 {
+                    // The failed build's output, its errors in the error color (M34h). The Output window and the Error
+                    // List share a group: each is shown and settled before its picture (the Output's was the window).
+                    shell.Output.Selected = shell.Builds.Channel;
+                    shell.Layout.ShowToolWindow(BuiltIns.OutputWindow, focus: true);
+                    await SettleAsync().ConfigureAwait(true);
                     GalleryTool(BuiltIns.OutputWindow, "error", theme);
+                    shell.Layout.ShowToolWindow(ErrorListViewModel.ToolWindowId, focus: true);
+                    await SettleAsync().ConfigureAwait(true);
                     GalleryTool(ErrorListViewModel.ToolWindowId, "error", theme);
-                    await Task.CompletedTask.ConfigureAwait(true);
                 }, settle: true).ConfigureAwait(true);
             }
             finally
@@ -158,6 +253,14 @@ internal sealed partial class SmokeTest
                 controller.Model.Text.Text = original;
                 await shell.SaveAllAsync().ConfigureAwait(true);
             }
+
+            // The edit is undone on disk and in the editor, and saving it (twice) reported no change on disk with unsaved
+            // changes: the Linux runner's later pictures showed that warning when the watcher's check ran before the save
+            // had remembered the file's time (CodeDocument.SaveAsync now holds the check back).
+            var model = controller.Model;
+            Check(!model.IsModified && (await Editor.TextFiles.ReadAsync(broken, CancellationToken.None).ConfigureAwait(true)).Text == model.Text.Text && model.Text.Text == original, $"{model.Name}'s edit for the error state is undone and saved");
+            var conflict = Localizer.Format("msg.editor.changedOnDiskAndYouHave", "{0} changed on disk, and you have unsaved changes.", model.Name);
+            Check(!shell.Workbench.Notifications.Items.Any(n => n.Message == conflict), $"saving {model.Name} didn't report it as changed on disk");
         }
 
         // A failed test's details: grouped by outcome, the Failed group lists the tests.
@@ -204,6 +307,30 @@ internal sealed partial class SmokeTest
         }
 
         WriteGalleryIndex();
+    }
+
+    /// <summary>
+    /// AI Chat at its design's size (M34h, docs/design/controls/AiChat.dc.html, 556 × 800) in a window of its own, beside
+    /// its docked pane's picture, so the two can be compared.
+    /// </summary>
+    private async Task GalleryAiChatAsync()
+    {
+        var panel = new Border { Child = new Views.AiChatView { DataContext = shell.AiChat } };
+        panel.Bind(Border.BackgroundProperty, panel.GetResourceObservable("Shell.Panel"));
+        var host = new Window { Width = 556, Height = 800, Content = panel, ShowInTaskbar = false, Title = shell.Workbench.ToolWindows.All.FirstOrDefault(d => d.Id == AiChatViewModel.ToolWindowId)?.Title ?? AiChatViewModel.ToolWindowId };
+        host.Show();
+        try
+        {
+            await GalleryThemesAsync(async theme =>
+            {
+                await SettleAsync().ConfigureAwait(true);
+                GalleryShot("aichat-design", "data", theme, null, host);
+            }).ConfigureAwait(true);
+        }
+        finally
+        {
+            host.Close();
+        }
     }
 
     /// <summary>Runs <paramref name="body"/> in each gallery theme and restores the user's theme.</summary>
@@ -260,6 +387,7 @@ internal sealed partial class SmokeTest
     private void GalleryShot(string surface, string state, string theme, Visual? target, Avalonia.Controls.TopLevel? top = null)
     {
         var name = $"{Slug(surface)}-{state}-{theme}.png";
+        HideToasts(name);
         try
         {
             Visual root = top ?? window;
@@ -317,8 +445,9 @@ internal sealed partial class SmokeTest
         text.AppendLine("# UI gallery");
         text.AppendLine();
         text.AppendLine($"Codalus IDE {ShellInfo.Version} on {System.Runtime.InteropServices.RuntimeInformation.OSDescription}: every surface in each theme, empty, with data and in an error state (M34d, D25).");
+        text.AppendLine($"Themes: {string.Join(", ", s_galleryThemes.Select(t => $"{ThemeService.Title(t)} (`{t}`)"))}. A picture is `{{surface}}-{{state}}-{{theme}}.png`.");
         text.AppendLine();
-        text.AppendLine("| Surface | " + string.Join(" | ", s_galleryThemes) + " |");
+        text.AppendLine("| Surface | " + string.Join(" | ", s_galleryThemes.Select(ThemeService.Title)) + " |");
         text.AppendLine("|---|" + string.Concat(Enumerable.Repeat("---|", s_galleryThemes.Length)));
         foreach (var (surface, themes) in _gallery)
         {

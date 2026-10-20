@@ -68,7 +68,27 @@ public sealed partial class ShellHost
 
         return OpenManagement(
             "configurationManager",
-            () => new ConfigurationManagerViewModel(ProjectManagement, Dialogs, Solutions.Solution?.Active, configuration => Solutions.SetConfigurationAsync(configuration, CancellationToken.None)),
+            () =>
+            {
+                var viewModel = new ConfigurationManagerViewModel(ProjectManagement, Dialogs, () => Solutions.Solution?.Active, configuration => Solutions.SetConfigurationAsync(configuration, CancellationToken.None));
+                // The active pair can change from the toolbar while the document is open (M34h): its chip follows. A weak
+                // reference, so a closed document's view model isn't kept by the solution.
+                var weak = new WeakReference<ConfigurationManagerViewModel>(viewModel);
+                EventHandler? changed = null;
+                changed = (_, _) => Ui.Post(() =>
+                {
+                    if (weak.TryGetTarget(out var target))
+                    {
+                        target.ActiveChanged();
+                    }
+                    else
+                    {
+                        Solutions.SolutionChanged -= changed;
+                    }
+                });
+                Solutions.SolutionChanged += changed;
+                return viewModel;
+            },
             _ => "Configuration Manager");
     }
 
@@ -170,8 +190,10 @@ public sealed partial class ShellHost
             return;
         }
 
-        await RunManagementAsync(() => ProjectManagement.SaveFilterAsync(path, null, CancellationToken.None)).ConfigureAwait(true);
-        Workbench.Notifications.Info(Localizer.Format("msg.projectManagement.savedOpenItToLoadOnly", "Saved {0}. Open it to load only these projects.", Path.GetFileName(path)));
+        if (await RunManagementAsync(() => ProjectManagement.SaveFilterAsync(path, null, CancellationToken.None)).ConfigureAwait(true))
+        {
+            Workbench.Notifications.Info(Localizer.Format("msg.projectManagement.savedOpenItToLoadOnly", "Saved {0}. Open it to load only these projects.", Path.GetFileName(path)));
+        }
     }
 
     /// <summary>Closes and reopens the solution (or filter): a new build host, e.g. after global.json changed.</summary>
@@ -185,15 +207,18 @@ public sealed partial class ShellHost
         await OpenSolutionAsync(solution.FilterPath ?? solution.Path).ConfigureAwait(true);
     }
 
-    private async Task RunManagementAsync(Func<Task> action)
+    /// <summary>Runs a project management request; false (and an error notification) when the build host refused it.</summary>
+    private async Task<bool> RunManagementAsync(Func<Task> action)
     {
         try
         {
             await action().ConfigureAwait(true);
+            return true;
         }
         catch (Exception ex) when (ex is JsonRpcRemoteException or InvalidOperationException or JsonRpcConnectionLostException or IOException)
         {
             Workbench.Notifications.Error(ex.Message);
+            return false;
         }
     }
 }

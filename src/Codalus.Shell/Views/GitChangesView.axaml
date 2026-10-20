@@ -101,8 +101,8 @@
         </DockPanel>
         <TextBlock Grid.Column="1" Text="{Binding Location}" Margin="6,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Location}" />
         <StackPanel Grid.Column="2" Classes="rowActions" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right">
-          <Button Classes="toolbar" Content="+" ToolTip.Tip="{l:T gitChanges.stage}" IsVisible="{Binding CanStage}" Tag="stage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.stage}" />
-          <Button Classes="toolbar" Content="−" ToolTip.Tip="{l:T gitChanges.unstage}" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.unstage}" />
+          <Button Classes="toolbar icon" controls:ButtonIcon.Kind="add" ToolTip.Tip="{l:T gitChanges.stage}" IsVisible="{Binding CanStage}" Tag="stage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.stage}" />
+          <Button Classes="toolbar icon" controls:ButtonIcon.Kind="subtract" ToolTip.Tip="{l:T gitChanges.unstage}" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.unstage}" />
           <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.discardChanges}" IsVisible="{Binding CanStage}" Tag="discard" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.discardChanges}">
             <controls:Icon Kind="discard" />
           </Button>
@@ -131,8 +131,8 @@
           </Border>
         </StackPanel>
         <StackPanel Grid.Column="2" Classes="rowActions" Orientation="Horizontal" Spacing="2" Margin="6,0,0,0">
-          <Button Classes="toolbar" Content="+" ToolTip.Tip="{l:T gitChanges.stage}" IsVisible="{Binding CanStage}" Tag="stage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.stage}" />
-          <Button Classes="toolbar" Content="−" ToolTip.Tip="{l:T gitChanges.unstage}" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.unstage}" />
+          <Button Classes="toolbar icon" controls:ButtonIcon.Kind="add" ToolTip.Tip="{l:T gitChanges.stage}" IsVisible="{Binding CanStage}" Tag="stage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.stage}" />
+          <Button Classes="toolbar icon" controls:ButtonIcon.Kind="subtract" ToolTip.Tip="{l:T gitChanges.unstage}" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.unstage}" />
           <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.discardChanges}" IsVisible="{Binding CanDiscard}" Tag="discard" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.discardChanges}">
             <controls:Icon Kind="discard" />
           </Button>
@@ -160,7 +160,7 @@
     <StackPanel Margin="12" Spacing="8" IsVisible="{Binding HasNoRepository}">
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T gitChanges.theOpenSolutionIsNotIn}" />
       <!-- The empty state's next step (M34d). -->
-      <Button Content="{l:T gitChanges.createGitRepository}" Tag="git.init" Click="OnCommand" HorizontalAlignment="Left" AutomationProperties.Name="{l:T gitChanges.createGitRepository}" />
+      <Button Classes="iconText" controls:ButtonIcon.Kind="branch" Content="{l:T gitChanges.createGitRepository}" Tag="git.init" Click="OnCommand" HorizontalAlignment="Left" AutomationProperties.Name="{l:T gitChanges.createGitRepository}" />
     </StackPanel>
     <DockPanel IsVisible="{Binding HasRepository}">
       <StackPanel DockPanel.Dock="Top" Margin="6,6,6,4" Spacing="6">
@@ -177,20 +177,20 @@
           </ComboBox.ItemTemplate>
         </ComboBox>
 
-        <!-- The branch, and fetch, pull, push, sync and more. -->
+        <!-- The branch, and fetch, pull, push, sync and more: Git's commands in the Git family's color, as in the menus (M34h). -->
         <DockPanel>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="4,0,0,0">
             <Button Classes="toolbar" Tag="git.fetch" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.fetch}" AutomationProperties.Name="{l:T gitChanges.fetch}">
-              <controls:Icon Kind="arrow-down" />
+              <controls:Icon Kind="arrow-down" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" Tag="git.pull" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.pull}" AutomationProperties.Name="{l:T gitChanges.pull}">
-              <controls:Icon Kind="download" />
+              <controls:Icon Kind="download" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" Tag="git.push" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.push}" AutomationProperties.Name="{l:T gitChanges.push}">
-              <controls:Icon Kind="upload" />
+              <controls:Icon Kind="upload" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" Tag="git.sync" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.syncPullThenPush}" AutomationProperties.Name="{l:T gitChanges.sync}">
-              <controls:Icon Kind="sync" />
+              <controls:Icon Kind="sync" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.moreActions}" AutomationProperties.Name="{l:T gitChanges.moreActions}">
               <controls:Icon Kind="more" />
@@ -257,8 +257,8 @@
                    PlaceholderText="{l:T gitChanges.enterAMessageRequired}" AutomationProperties.Name="{l:T gitChanges.commitMessage}" />
           <Border VerticalAlignment="Bottom" Margin="1,0,1,1" Height="28" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Shell.Border}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,4,0">
-              <Button Classes="toolbar" Content="✦" Tag="ai.generateCommitMessage" Click="OnCommand" IsVisible="{Binding IsEnabled, Source={x:Static l:AiUi.Current}}" ToolTip.Tip="{l:T gitChanges.writeTheMessageWithAi}" AutomationProperties.Name="{l:T gitChanges.writeTheMessageWithAi}" />
-              <Button Classes="toolbar" Content="#" Click="OnMention" ToolTip.Tip="{l:T gitChanges.mentionAnIssueOrWorkItem}" AutomationProperties.Name="{l:T gitChanges.mentionAnIssueOrWorkItem}" />
+              <Button Classes="toolbar icon" controls:ButtonIcon.Kind="sparkle" Tag="ai.generateCommitMessage" Click="OnCommand" IsVisible="{Binding IsEnabled, Source={x:Static l:AiUi.Current}}" ToolTip.Tip="{l:T gitChanges.writeTheMessageWithAi}" AutomationProperties.Name="{l:T gitChanges.writeTheMessageWithAi}" />
+              <Button Classes="toolbar icon" controls:ButtonIcon.Kind="mention" Click="OnMention" ToolTip.Tip="{l:T gitChanges.mentionAnIssueOrWorkItem}" AutomationProperties.Name="{l:T gitChanges.mentionAnIssueOrWorkItem}" />
             </StackPanel>
           </Border>
           <Popup x:Name="CompletionPopup" PlacementTarget="{Binding #Message}" Placement="Bottom" IsLightDismissEnabled="True">
@@ -348,7 +348,7 @@
 
           <StackPanel IsVisible="{Binding HasStaged}">
             <DockPanel>
-              <Button DockPanel.Dock="Right" Classes="toolbar" Content="−" Tag="unstageAll" Click="OnAll" ToolTip.Tip="{l:T gitChanges.unstageAll}" AutomationProperties.Name="{l:T gitChanges.unstageAll}" />
+              <Button DockPanel.Dock="Right" Classes="toolbar icon" controls:ButtonIcon.Kind="subtract" Tag="unstageAll" Click="OnAll" ToolTip.Tip="{l:T gitChanges.unstageAll}" AutomationProperties.Name="{l:T gitChanges.unstageAll}" />
               <ToggleButton x:Name="StagedToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.stagedChanges}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <controls:Icon Classes="chevron" Kind="chevron-right" />
@@ -380,7 +380,7 @@
 
           <DockPanel>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-              <Button Classes="toolbar" Content="+" Tag="stageAll" Click="OnAll" IsEnabled="{Binding HasChanges}" ToolTip.Tip="{l:T gitChanges.stageAll}" AutomationProperties.Name="{l:T gitChanges.stageAll}" />
+              <Button Classes="toolbar icon" controls:ButtonIcon.Kind="add" Tag="stageAll" Click="OnAll" IsEnabled="{Binding HasChanges}" ToolTip.Tip="{l:T gitChanges.stageAll}" AutomationProperties.Name="{l:T gitChanges.stageAll}" />
               <Button x:Name="ViewOptionsButton" Classes="toolbar" ToolTip.Tip="{l:T gitChanges.moreActions}" AutomationProperties.Name="{l:T gitChanges.moreActions}">
                 <controls:Icon Kind="more" />
                 <Button.Flyout>

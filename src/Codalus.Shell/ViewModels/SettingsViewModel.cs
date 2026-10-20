@@ -32,6 +32,51 @@ public sealed record SettingCategoryViewModel(string Name, int Count, bool IsAll
 {
     public string Label => $"{Name} ({Count})";
 
+    /// <summary>The node's icon, in its palette color (M34h, docs/design/controls/Options.dc.html).</summary>
+    public string Icon => IsAll ? "list" : IconOf(Name);
+
+    /// <summary>The icon of a group or category of the Options tree, by its name; a gear for the others.</summary>
+    internal static string IconOf(string name) => name.ToLowerInvariant() switch
+    {
+        "environment" or "view" => "window",
+        "appearance" => "color",
+        "keyboard" => "keyboard",
+        "notifications" => "bell",
+        "updates" => "cloud-download",
+        "privacy" => "shield",
+        "output" => "output",
+        "files" => "files",
+        "welcome" => "home",
+        "text editor" => "document-text",
+        "code cleanup" => "broom",
+        "json" => "braces",
+        "xml" or "c# interactive" or "f#" => "code",
+        "navigation" => "arrow-sort",
+        "task list" => "task-list",
+        "language services" => "lightbulb",
+        "projects and solutions" => "cube",
+        "projects" or "solution explorer" => "solution",
+        "build and run" => "build",
+        "nuget" => "package",
+        "debugging" or "debug" => "debug",
+        "source control" or "git" => "branch",
+        "testing" or "test" => "beaker",
+        "terminal and interactive" or "terminal" => "terminal",
+        "other" => "layers",
+        "ai" => "sparkle",
+        "containers" => "container",
+        "code search" => "search",
+        "data" => "database",
+        "error list" => "error",
+        "mobile" => "phone",
+        "plugins" => "extensions",
+        "remote" => "window-remote",
+        "settings sync" => "sync",
+        "web" => "globe",
+        "windows forms" => "control-generic",
+        _ => "gear",
+    };
+
     public IReadOnlyList<SettingCategoryViewModel> Children { get; init; } = [];
 
     /// <summary>For a group: its categories.</summary>
@@ -107,10 +152,33 @@ public sealed class SettingsViewModel : ObservableObject
         set => IsWorkspaceScope = !value;
     }
 
+    /// <summary>User (0) or Workspace (1), the scope's segmented control (M34h).</summary>
+    public int ScopeIndex
+    {
+        get => _workspaceScope ? 1 : 0;
+        set => IsWorkspaceScope = value == 1;
+    }
+
+    /// <summary>The page's header (M34h): the chosen node of the tree, its icon, and how many settings it shows and are changed.</summary>
+    public string PageTitle => _selectedCategory?.Name ?? "All Settings";
+
+    public string PageIcon => _selectedCategory?.Icon ?? "list";
+
+    public string PageSummary
+    {
+        get
+        {
+            var modified = Items.Count(i => i.IsModified);
+            var count = Items.Count == 1 ? "1 setting" : $"{Items.Count.ToString(CultureInfo.CurrentCulture)} settings";
+            return modified == 0 ? count : $"{count} · {modified.ToString(CultureInfo.CurrentCulture)} modified";
+        }
+    }
+
     private void OnScopeChanged()
     {
         OnPropertyChanged(nameof(Scope));
         OnPropertyChanged(nameof(IsUserScope));
+        OnPropertyChanged(nameof(ScopeIndex));
         OnPropertyChanged(nameof(FilePath));
         OnPropertyChanged(nameof(FileLabel));
         foreach (var item in _all)
@@ -186,6 +254,8 @@ public sealed class SettingsViewModel : ObservableObject
         {
             item.Refresh();
         }
+
+        OnPropertyChanged(nameof(PageSummary));
 
         UpdateDiagnostics();
         if (_search.Contains("@modified", StringComparison.OrdinalIgnoreCase))
@@ -266,6 +336,8 @@ public sealed class SettingsViewModel : ObservableObject
         var terms = _search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var modifiedOnly = terms.Any(t => t.Equals("@modified", StringComparison.OrdinalIgnoreCase));
         var words = terms.Where(t => !t.StartsWith('@')).ToList();
+        // A category's page names its settings by their titles; a group, All Settings and a search by category and title.
+        var showCategory = _selectedCategory is null || _selectedCategory.IsAll || _selectedCategory.Children.Count > 0 || terms.Length > 0;
         Items.Clear();
         foreach (var item in _all)
         {
@@ -273,11 +345,15 @@ public sealed class SettingsViewModel : ObservableObject
                 && (!modifiedOnly || item.IsModified)
                 && words.All(item.Matches))
             {
+                item.ShowCategory = showCategory;
                 Items.Add(item);
             }
         }
 
         OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(PageTitle));
+        OnPropertyChanged(nameof(PageIcon));
+        OnPropertyChanged(nameof(PageSummary));
     }
 }
 
@@ -285,6 +361,7 @@ public abstract class SettingItemViewModel : ObservableObject
 {
     private readonly Func<SettingScope> _scope;
     private bool _isModified;
+    private bool _showCategory = true;
     private string? _error;
 
     protected SettingItemViewModel(SettingDescriptor descriptor, SettingsService settings, Func<SettingScope> scope)
@@ -316,6 +393,25 @@ public abstract class SettingItemViewModel : ObservableObject
     public bool HasDescription => !string.IsNullOrEmpty(Descriptor.Description);
 
     public string Heading => $"{Category}: {Title}";
+
+    /// <summary>Whether the page shows the category before the title (a group, All Settings or a search; M34h).</summary>
+    public bool ShowCategory
+    {
+        get => _showCategory;
+        set
+        {
+            if (SetField(ref _showCategory, value))
+            {
+                OnPropertyChanged(nameof(DisplayTitle));
+            }
+        }
+    }
+
+    /// <summary>The setting's title on its page: the title alone on its category's page.</summary>
+    public string DisplayTitle => _showCategory ? Heading : Title;
+
+    /// <summary>A boolean is one check box whose label is its title (M34h).</summary>
+    public virtual bool IsBool => false;
 
     public string AccessibleName => IsModified ? $"{Heading} (modified)" : Heading;
 
@@ -422,6 +518,8 @@ public sealed class BoolSettingViewModel : SettingItemViewModel
 
     public BoolSettingViewModel(SettingDescriptor descriptor, SettingsService settings, Func<SettingScope> scope)
         : base(descriptor, settings, scope) => Refresh();
+
+    public override bool IsBool => true;
 
     public bool Value
     {

@@ -15,7 +15,7 @@
       <ToggleButton Classes="toolbar" IsChecked="{Binding ShowVisualTree}"
                     ToolTip.Tip="{l:T liveTree.showTheVisualTreeTemplatesParts}"
                     AutomationProperties.Name="{l:T liveTree.showVisualTree}">
-        <controls:Icon Kind="layers" />
+        <controls:Icon Kind="layers" Classes="accent-purple" />
       </ToggleButton>
       <Button Classes="toolbar" Command="{Binding GoToXamlCommand}" ToolTip.Tip="{l:T liveTree.goToTheElementSXaml}" AutomationProperties.Name="{l:T liveTree.goToXaml}">
         <controls:Icon Kind="go-to" />
@@ -30,6 +30,10 @@
       <TreeView.Styles>
         <Style Selector="TextBlock.muted.onSelection">
           <Setter Property="Foreground" Value="{DynamicResource TreeViewItemForegroundSelected}" />
+        </Style>
+        <!-- M34h: without the focus the selection is Shell.Selection.Inactive, with its own text. -->
+        <Style Selector="TreeView:not(:focus-within) TextBlock.muted.onSelection">
+          <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
         </Style>
         <Style Selector="TreeViewItem" x:DataType="vm:LiveNodeViewModel">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />

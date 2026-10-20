@@ -1,3 +1,6 @@
+using Codalus.Rpc;
+using Codalus.Workbench.Setup;
+
 namespace Codalus.Workbench.Updates;
 
 /// <summary>How the running IDE was installed (M32, ADR 0029): what it can do about a newer release.</summary>
@@ -54,7 +57,11 @@ public sealed record InstallInfo(string Version, InstallKind Kind)
 }
 
 /// <summary>A release on the channel: newer than this build, or (when switching to stable) the newest one at all.</summary>
-public sealed record UpdateOffer(string Version, string Channel, bool IsDowngrade, string? Notes, Uri? ReleasePage);
+public sealed record UpdateOffer(string Version, string Channel, bool IsDowngrade, string? Notes, Uri? ReleasePage)
+{
+    /// <summary>The .NET runtime the release's hosts need, from its signed feed (M49, <see cref="UpdateRuntime"/>); empty when it doesn't say.</summary>
+    public IReadOnlyList<FrameworkReference> Requires { get; init; } = [];
+}
 
 /// <summary>Finds, downloads and applies releases (the shell's Velopack client; fakes in tests).</summary>
 public interface IUpdateBackend
@@ -79,9 +86,19 @@ public enum UpdateStatus
     Downloading,
     Ready,
     Failed,
+
+    /// <summary>
+    /// A release is out, but its hosts need a .NET runtime that isn't installed (M49): it isn't downloaded on its own;
+    /// <see cref="UpdateState.Runtime"/> says what's missing, and the user installs it first or updates anyway.
+    /// </summary>
+    NeedsRuntime,
 }
 
-public sealed record UpdateState(UpdateStatus Status, UpdateOffer? Offer = null, int Progress = 0, string? Error = null);
+public sealed record UpdateState(UpdateStatus Status, UpdateOffer? Offer = null, int Progress = 0, string? Error = null)
+{
+    /// <summary>For <see cref="UpdateStatus.NeedsRuntime"/>: the runtime the release needs, and what's installed.</summary>
+    public ToolStatus? Runtime { get; init; }
+}
 
 /// <summary>
 /// Self-update (M32, D16): checks after startup and every four hours, downloads in the background and has the update
@@ -119,6 +136,15 @@ public sealed class UpdateService : IAsyncDisposable
     public InstallInfo Install { get; }
 
     public UpdateState State => _state;
+
+    /// <summary>
+    /// Whether an offer's runtime is installed (M49: the shell's <see cref="EnvironmentCheck.RuntimeStatusFor"/>). An offer
+    /// whose runtime isn't is reported as <see cref="UpdateStatus.NeedsRuntime"/> instead of being downloaded.
+    /// </summary>
+    public Func<UpdateOffer, ToolStatus?>? RuntimeCheck { get; init; }
+
+    private ToolStatus? MissingRuntime(UpdateOffer offer) =>
+        offer.Requires.Count > 0 && RuntimeCheck?.Invoke(offer) is { NeedsAttention: true } runtime ? runtime : null;
 
     /// <summary>Raised on any thread: marshal to the UI (<c>Ui.Post</c>).</summary>
     public event EventHandler<UpdateState>? StateChanged;
@@ -171,6 +197,11 @@ public sealed class UpdateService : IAsyncDisposable
             if (offer is null)
             {
                 return Set(new UpdateState(UpdateStatus.UpToDate));
+            }
+
+            if (MissingRuntime(offer) is { } runtime)
+            {
+                return Set(new UpdateState(UpdateStatus.NeedsRuntime, offer, Error: runtime.Detail) { Runtime = runtime });
             }
 
             return Install.Kind == InstallKind.SelfUpdating && _mode() == UpdateMode.Auto
@@ -250,6 +281,11 @@ public sealed class UpdateService : IAsyncDisposable
         if (offer.IsDowngrade && !await confirmDowngrade(offer).ConfigureAwait(false))
         {
             return Set(new UpdateState(UpdateStatus.Idle));
+        }
+
+        if (MissingRuntime(offer) is { } runtime)
+        {
+            return Set(new UpdateState(UpdateStatus.NeedsRuntime, offer, Error: runtime.Detail) { Runtime = runtime });
         }
 
         return Install.Kind == InstallKind.SelfUpdating

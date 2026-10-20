@@ -83,12 +83,12 @@ public sealed class CoverageTests
         editor.Controller.Editor.Document.Insert(0, "// edited\n");
         ShellFixture.Pump();
         Assert.True(margin.IsStale);
-        await f.Shell.Workbench.Commands.ExecuteAsync("testing.toggleCoverageColoring", CancellationToken.None);
+        await f.ExecuteAsync("testing.toggleCoverageColoring");
         await ShellFixture.PumpUntil(() => margin.Lines.Count == 0);
         Assert.False(results.ShowColoring);
         results.ShowColoring = true;
         await ShellFixture.PumpUntil(() => margin.Lines.Count == 5);
-        await f.Shell.Workbench.Commands.ExecuteAsync("testing.clearCoverage", CancellationToken.None);
+        await f.ExecuteAsync("testing.clearCoverage");
         await ShellFixture.PumpUntil(() => margin.Lines.Count == 0 && results.IsEmpty);
         Assert.False(f.Shell.Workbench.Context.GetValue("coverageAvailable") is true);
     }

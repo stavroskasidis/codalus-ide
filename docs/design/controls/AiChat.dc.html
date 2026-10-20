@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI Chat: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+.canvas{width:1280px;height:800px;padding:6px;display:flex;gap:6px}
+.fam-classic .canvas{padding:4px;gap:4px}
+.ed{flex:1;min-width:0;display:flex;flex-direction:column}
+.ed .code{flex:1;padding:6px 0;border:1px solid var(--border);border-top:0}
+.ed .code .ln{height:19px}
+.ed .code .ln.selected{background:var(--sel)}
+.ed .code .ln.selected span{color:var(--sel-fg)}
+.ed .code .ln.caret .no{color:var(--editor-fg)}
+.chat{width:556px;flex:none}
+.convo{flex:1;min-height:0;overflow:hidden;padding:14px 14px 8px;display:flex;flex-direction:column;gap:14px}
+.you{align-self:flex-end;max-width:86%;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.bubble{background:var(--user-bubble);color:var(--user-bubble-fg);padding:8px 12px;border-radius:12px 12px 4px 12px;line-height:18px}
+.kind-hc .bubble{border:1px solid var(--fg)}
+.sent{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+.sent .chip{font-weight:500}
+.ai{display:flex;gap:10px;align-items:flex-start}
+.avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--chip-info);flex:none}
+.kind-hc .avatar{background:transparent;border:1px solid var(--fg)}
+.ai .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;line-height:18px}
+.who{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.who b{color:var(--fg);font-weight:600;font-size:12px}
+.steps{border-left:2px solid var(--soft-border);padding:2px 0 2px 10px;display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}
+.steps .s{display:flex;align-items:center;gap:6px}
+.steps .tool{font-family:var(--mono);color:var(--fg)}
+.ai p{margin:0}
+.ic{font-family:var(--mono);font-size:11.5px;padding:0 4px;border-radius:3px;background:var(--badge);color:var(--badge-fg)}
+.kind-hc .ic{border:1px solid var(--soft-border)}
+.cb-card{border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);overflow:hidden}
+.cb-head{display:flex;align-items:center;gap:2px;height:30px;padding:0 4px 0 10px;background:var(--code-header);border-bottom:1px solid var(--soft-border)}
+.cb-head .lang{font-size:11px;color:var(--muted);font-weight:600;margin-right:auto}
+.cb-card .code{padding:8px 0 8px 12px;overflow-x:auto}
+.cb-card .code .ln{height:18px}
+.status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.composer{border-top:1px solid var(--soft-border);padding:8px 12px 12px;display:flex;flex-direction:column;gap:8px;background:var(--panel)}
+.ctx{display:flex;flex-wrap:wrap;gap:3px}
+.ctx .tb{height:22px;border-radius:11px;padding:0 7px 0 6px;gap:4px;border-color:var(--input-border);font-size:11px}
+.ctx .tb svg.i{width:12px;height:12px}
+.ctx .tb.is-checked{border-color:var(--tb-checked-border)}
+.prev{font-size:11px;color:var(--muted)}
+.box{border:1px solid var(--focus);box-shadow:inset 0 0 0 1px var(--focus);background:var(--input);border-radius:calc(var(--radius) + 3px);padding:8px 8px 6px 10px;display:flex;flex-direction:column;gap:6px}
+.box .txt{min-height:36px;line-height:18px}
+.box .caret{display:inline-block;width:1px;height:14px;background:var(--fg);vertical-align:-2px}
+.box .bar{display:flex;align-items:center;gap:6px}
+.send{width:28px;height:28px;padding:0}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}">
+<div class="canvas">
+<div class="ed" data-nocheck>
+  <div class="doc-tabs"><span class="doc-tab on"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>CalculatorService.cs</span><span class="doc-tab"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>ICalculatorService.cs</span></div>
+  <div class="code" aria-label="Editor"><sc-for list="{{code}}" as="l"><div class="ln {{l.cls}}"><span class="no">{{l.n}}</span><span><sc-for list="{{l.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span></div></sc-for></div>
+</div>
+
+<section class="tw chat" aria-label="AI Chat">
+  <div class="tw-cap active"><span class="title">AI Chat</span><span class="cb"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="cb"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+  <div class="toolbar bar" role="toolbar" aria-label="AI Chat">
+    <button class="tb" aria-label="New Chat" title="Start a new chat (Ctrl+N)"><svg class="i c-green" aria-hidden="true"><use href="#i-chat-add"></use></svg></button>
+    <span class="tb-sep"></span>
+    <button class="tb text" title="Choose the provider and model"><svg class="i c-purple" aria-hidden="true"><use href="#i-sparkle"></use></svg>Ollama · qwen2.5-coder:7b<svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button>
+    <span class="grow"></span>
+    <span class="sw on" title="Agent mode: the AI may read and search the workspace and build; every change shows in a preview first, and every command asks you first"><span class="track"></span>Agent</span>
+    <span class="tb-sep"></span>
+    <button class="tb" aria-label="Request Log" title="Request Log: what was sent, and when, in the Output window"><svg class="i c-orange" aria-hidden="true"><use href="#i-history"></use></svg></button>
+    <button class="tb" aria-label="Configure the provider" title="Configure the provider"><svg class="i c-blue" aria-hidden="true"><use href="#i-gear"></use></svg></button>
+  </div>
+
+  <div class="convo" role="log" aria-label="Conversation">
+    <div class="you">
+      <div class="bubble">Greet should reject an empty name. How do I report that to the client?</div>
+      <div class="sent"><span class="small muted">Sent:</span><span class="chip plain">Selection, CalculatorService.cs 21–22</span><span class="chip plain">Errors</span></div>
+    </div>
+
+    <div class="ai">
+      <span class="avatar" aria-hidden="true"><svg class="i md c-purple"><use href="#i-sparkle"></use></svg></span>
+      <div class="body">
+        <div class="who"><b>Assistant</b><span>qwen2.5-coder:7b · 14:32</span></div>
+        <div class="steps" aria-label="What the assistant did">
+          <span class="s"><svg class="i sm c-ok" aria-hidden="true"><use href="#i-check"></use></svg><span class="tool">read_file</span>ICalculatorService.cs → 54 lines</span>
+          <span class="s"><svg class="i sm c-ok" aria-hidden="true"><use href="#i-check"></use></svg><span class="tool">search</span>"FaultException" → CalculatorService.cs:18</span>
+        </div>
+        <p>Throw a typed fault, as <span class="ic">Divide</span> does, so the client gets a <span class="ic">CalculationFault</span> instead of a generic server error:</p>
+        <div class="cb-card">
+          <div class="cb-head">
+            <span class="lang">C#</span>
+            <button class="tb" aria-label="Copy the code" title="Copy"><svg class="i c-blue" aria-hidden="true"><use href="#i-copy"></use></svg></button>
+            <button class="tb" aria-label="Insert the code at the cursor" title="Insert at Cursor"><svg class="i c-blue" aria-hidden="true"><use href="#i-insert"></use></svg></button>
+            <button class="tb text" title="Apply the code after a preview"><svg class="i c-green" aria-hidden="true"><use href="#i-doc-check"></use></svg>Apply…</button>
+          </div>
+          <div class="code"><sc-for list="{{answer}}" as="l"><div class="ln"><span><sc-for list="{{l.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span></div></sc-for></div>
+        </div>
+        <p>Then add <span class="ic">[FaultContract(typeof(CalculationFault))]</span> to <span class="ic">Greet</span> in ICalculatorService.cs, or the fault isn't part of the contract and clients can't catch it by type.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="composer">
+    <div class="ctx" role="group" aria-label="What goes with your question">
+      <button class="tb text is-checked" aria-pressed="true" title="Send the selection"><svg class="i c-blue" aria-hidden="true"><use href="#i-insert"></use></svg>Selection</button>
+      <button class="tb text is-checked" aria-pressed="true" title="Send the current file"><svg class="i c-blue" aria-hidden="true"><use href="#i-doc-text"></use></svg>Current file</button>
+      <button class="tb text" aria-pressed="false" title="Send the other open files"><svg class="i c-blue" aria-hidden="true"><use href="#i-file"></use></svg>Open files</button>
+      <button class="tb text" aria-pressed="false" title="Send the errors and warnings of the open files"><svg class="i c-red" aria-hidden="true"><use href="#i-clear-all"></use></svg>Errors</button>
+      <button class="tb text" aria-pressed="false" title="Send the last build's output"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>Build output</button>
+      <button class="tb text" aria-pressed="false" title="Send the solution's projects and frameworks"><svg class="i c-purple" aria-hidden="true"><use href="#i-solution"></use></svg>Solution</button>
+    </div>
+    <div class="prev">Sent with your question: CalculatorService.cs (selection), CalculatorService.cs</div>
+    <div class="box">
+      <div class="txt" role="textbox" aria-multiline="true" aria-label="Question">Also add a test that Greet faults on an empty name<span class="caret"></span></div>
+      <div class="bar"><span class="small muted">Enter sends · Shift+Enter new line</span><span class="grow"></span><button class="btn primary icon send" aria-label="Send the question (Enter)" title="Send (Enter)"><svg class="i" aria-hidden="true"><use href="#i-send"></use></svg></button></div>
+    </div>
+  </div>
+  <div class="tw-tabs" role="tablist" aria-label="Right tool windows"><span class="on">AI Chat</span><span>Solution Explorer</span><span>Git Changes</span></div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const src = [
+      'using CoreWCF;',
+      '',
+      'namespace CalculatorService;',
+      '',
+      'public sealed class CalculatorService : ICalculatorService',
+      '{',
+      '    private static readonly Person[] s_people =',
+      '    [',
+      '        new() { Name = "Ada", Age = 36, Mood = Mood.Happy, Tags = ["math", "engines"] },',
+      '        new() { Name = "Alan", Age = 41, Mood = Mood.Calm, Tags = ["codes"] },',
+      '        new() { Name = "Grace", Age = 85, Mood = Mood.Grumpy, Tags = ["compilers", "navy"] },',
+      '    ];',
+      '',
+      '    public double Add(double a, double b) => a + b;',
+      '',
+      '    public double Divide(double a, double b) =>',
+      '        b == 0',
+      '            ? throw new FaultException<CalculationFault>(new CalculationFault { Operation = "Divide", ...',
+      '            : a / b;',
+      '',
+      '    public string Greet(Person person) =>',
+      '        $"Hello {person.Name}, {person.Age} and {person.Mood.ToString().ToLowerInvariant()}...";',
+      '',
+      '    public Person[] FindPeople(string prefix, int max) =>',
+      '        [.. s_people.Where(p => p.Name.StartsWith(prefix ?? string.Empty, ...)).Take(Math.Max(0, max))];',
+      '}'
+    ];
+    const code = src.map((s, i) => ({ n: i + 1, cls: i === 20 || i === 21 ? 'selected' : '', toks: s ? C.csharp(s) : [{ t: ' ', cls: '' }] }));
+    const ans = [
+      'public string Greet(Person person)',
+      '{',
+      '    if (string.IsNullOrWhiteSpace(person.Name))',
+      '    {',
+      '        var fault = new CalculationFault',
+      '        {',
+      '            Operation = "Greet",',
+      '            Problem = "The name is empty",',
+      '        };',
+      '        throw new FaultException<CalculationFault>(',
+      '            fault, new FaultReason(fault.Problem));',
+      '    }',
+      '',
+      '    return $"Hello {person.Name}, {person.Age}!";',
+      '}'
+    ];
+    const answer = ans.map((s) => ({ toks: s ? C.csharp(s) : [{ t: ' ', cls: '' }] }));
+    return { t, code, answer };
+  }
+}
+</script>
+</body>
+</html>

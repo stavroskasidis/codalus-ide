@@ -26,7 +26,7 @@ The history audit (section 6) found no secrets. A few tracked files are working 
   - block force pushes and deletion
   - `master` only takes merges from `develop` and hotfixes, so don't require linear history there
   - admins may bypass, if you want to keep committing directly at first
-  - **let the release workflow push to `develop`**: after a stable release it merges `master` back and bumps `VERSION` (add GitHub Actions to the bypass list, or the bump fails)
+  - **let the release workflow move `develop`**: after a stable release `pipeline.yml`'s `finish` job merges `master` back and bumps `VERSION` through a pull request it opens and merges itself, so turn on Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests". The workflow token's pull request starts no CI run, so a required check on `develop` blocks that merge: keep `develop`'s checks optional, or merge the release's pull request by hand
 - [ ] **GitHub Pages**: Settings → Pages → Source: **GitHub Actions**. `linux-repos.yml` then deploys the apt and dnf repositories after each release (it is skipped while the repository is private, because Pages needs a public repository on the free plan).
 - [ ] **Private vulnerability reporting**: Settings → Code security → enable. `SECURITY.md` and the issue templates link to it.
 - [ ] **Dependabot alerts and security updates**: on. Consider Dependabot version updates for NuGet and GitHub Actions.

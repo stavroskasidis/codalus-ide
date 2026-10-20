@@ -17,9 +17,13 @@ While AI assistance is on, the status bar shows **AI:** and the provider, or **A
 
 ## AI Chat
 
-Type a question and press `Enter` (`Shift+Enter` starts a new line). The answer streams in as the model writes it; **Stop** ends it.
+Type a question in the box at the bottom and press `Enter` or click **Send** (`Shift+Enter` starts a new line). The answer streams in as the model writes it; while it does, **Send** becomes **Stop**, which ends it. You can type your next question meanwhile, but it isn't sent until the answer ends (in agent mode, until the whole turn ends, tool steps included).
 
-**What goes with your question.** The buttons above the box say what the IDE attaches, and the line under them lists it before you send:
+**The conversation.** Your questions are on the right, each with what went with it under it: a chip for each part that was sent, **Not sent:** for a part that was left out (its tooltip says why), and how many secrets were redacted. The answers are on the left, beside the assistant's icon, with the model and the time: formatted text (headings, lists, `code` and links) and code blocks. You can select and copy any of it. A long conversation stays fast: only the part on screen is drawn. Before the first question, the window says what to do next: turn AI on, choose a provider, or ask.
+
+**The toolbar.** **New Chat**, the provider and model (click to change them), the **Agent** switch ([agent mode](#agent-mode)), the request log, and **Configure**.
+
+**What goes with your question.** The chips above the box say what the IDE attaches (click one to turn it on or off), and the line under them lists it before you send:
 - **Selection**: the text selected in the editor.
 - **Current file**: the active editor's whole file.
 - **Open files**: the other open editors.
@@ -27,9 +31,7 @@ Type a question and press `Enter` (`Shift+Enter` starts a new line). The answer 
 - **Build output**: the end of the last build's output.
 - **Solution**: the solution's projects, their target frameworks and output types.
 
-Each answer shows what was sent with its question, what was left out and why, and how many secrets were redacted.
-
-**Code in answers.** Under each code block:
+**Code in answers.** A code block is drawn in your editor's colors and font, and its header names its language (and the file, when the block names one) and has three buttons, ready once the answer is complete:
 - **Copy** copies it.
 - **Insert at Cursor** inserts it at the caret of the active editor.
 - **Apply…** shows the change in a preview first, then replaces the selection you asked about (indented like it), or the whole file when the block names that file (```` ```csharp path=src/App/Program.cs ````) or starts like it. Otherwise it inserts at the caret. Applying is one step in the editor's undo.
@@ -64,7 +66,7 @@ Where AI can help with something the IDE already shows, there's an action for it
 
 ## Agent mode
 
-Turn on **Agent** in AI Chat's toolbar to let the model work in steps: it reads and searches the workspace, looks at the Error List and the build output, builds, proposes edits and asks to run commands. Each step shows under your question as it happens (`⚙ read_file src/App/Program.cs → …`).
+Turn on the **Agent** switch in AI Chat's toolbar to let the model work in steps: it reads and searches the workspace, looks at the Error List and the build output, builds, proposes edits and asks to run commands. Each step shows in the answer as it happens, on a line of its own: an icon for how it stands (a check when it's done, a clock while it runs, an error when it failed or you refused it, a square when you stopped it) and one for what it does, the tool (`read_file`), the file it read or changed (click it to open the file), what it searched for or ran, and how it ended. Answers given in agent mode carry an **Agent** chip.
 
 What it can't do without you:
 - **Every change shows in the preview first.** **Apply** changes the file in the editor (unsaved, in undo), **Cancel** rejects it, and the model is told it was rejected.
@@ -104,6 +106,72 @@ AI agents that run outside the IDE (in a terminal, or another editor) can use wh
 
 Excluded files are left out, and text is redacted. Each call is logged in the AI Output channel. With the setting off (the default), or the IDE closed, every call answers with what to do.
 
+## External agents (ACP)
+
+AI Chat can also run a coding agent that is a program of its own, such as pi, Claude, Codex, Gemini CLI, GitHub Copilot, OpenCode or Goose, next to the built-in assistant. Codalus talks to it over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP, version 1): it starts the agent, shows its answers, plans and steps in the chat, and serves what the agent asks of the IDE (reading and writing files, running commands, asking your permission) with the same checks as agent mode.
+
+> **External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for.** An external agent calls its own model provider with its own account. What it reads (through the IDE or by itself) goes there, under that provider's terms, not through Codalus's AI boundary. The built-in assistant stays the default and keeps the full boundary. AI Chat shows this label whenever an external agent is chosen.
+
+### Setting one up
+
+**In one step.** In AI Chat, open the agent picker (after the provider in the toolbar) and choose **Add agent…**. It lists the agents Codalus knows, each with what it is, the exact command it would run and its pinned version; **installed** means the agent's own program is on your PATH, and **added** that it's in your settings already (choosing it just picks it). Choose one, read what will run, and choose **Add**: Codalus writes its entry to your user settings (never the workspace's) and picks it, which starts a new chat. Nothing is downloaded or run until you ask that chat something.
+
+| Agent | What runs | Version |
+|---|---|---|
+| pi | `npx -y pi-acp@0.0.34` | 0.0.34 |
+| Claude | `npx -y @agentclientprotocol/claude-agent-acp@0.93.0` | 0.93.0 |
+| Codex | `npx -y @agentclientprotocol/codex-acp@2.2.2` | 2.2.2 |
+| Gemini CLI | `npx -y @google/gemini-cli@0.64.0 --acp` | 0.64.0 |
+| GitHub Copilot | `npx -y @github/copilot@1.0.98 --acp` | 1.0.98 |
+| OpenCode | `opencode acp` (install OpenCode first) | tested with 1.19.3 |
+| goose | `goose acp` (install goose first) | tested with 1.55.0 |
+
+The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-10-19 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time the agent starts and runs it as you, with your account's access to your files, not only the folder's. The registry ships OpenCode and goose as programs to download, which Codalus doesn't do: install them yourself, and their entries run whatever version you installed (the table says which one was tested). An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. Sign in the way the agent says: Codalus doesn't see or keep its credentials. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`; another `.cmd` or `.bat` runs through `cmd.exe` only when its path and arguments have nothing `cmd.exe` would read differently.
+
+**By hand.** Add an entry to your user settings (**Tools > Options > AI: External Agents**, or `settings.json`); a workspace's settings can't add one. Each entry is the command that starts the agent in ACP mode, with its arguments and environment:
+
+```json
+"ai.agents": {
+  "pi": { "command": "npx", "args": ["-y", "pi-acp@0.0.34"] },
+  "claude": { "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp@0.93.0"] },
+  "my-agent": { "command": "/opt/my-agent/bin/my-agent", "args": ["--acp"] }
+}
+```
+
+Pin the version you've checked. `env` passes variables (`"env": { "ANTHROPIC_API_KEY": "…" }`), but a key there is in a file: prefer the agent's own sign-in, which keeps it in the agent's store.
+
+**Then**, turn on AI assistance, open a trusted solution or folder, and choose the agent in the picker (**Built-in** is the built-in assistant). Choosing another agent starts a new chat.
+
+While an external agent is chosen, the label shows above the question box. If AI assistance is off, no folder is open, or the folder isn't trusted, the chat says why under the label, and the agent doesn't start.
+
+### What you see
+
+- **The answer** is under the agent's name, with an **External agent** chip, and streams in as Markdown; the agent's **thinking** is folded under **Thinking**; its **plan** is a checklist above the steps.
+- **Steps** are the agent's tool calls, shown like the built-in agent's: an icon for how it stands and one for its kind, its title, and the files it works on as links that open the file at the line (only files in the workspace open). A step's details (the changes it reports, read-only, and a command's output, open while it runs) are under its chevron.
+- **Modes**: when the agent has modes (for example Ask and Code), a second picker in the toolbar switches them.
+- **Commands**: typing `/` offers the agent's slash commands; `Tab` or a click puts one in the box.
+- **Stop** asks the agent to stop (`session/cancel`), answers its open questions as cancelled, closes an open approval and stops its commands. **New Chat** stops the agent's process; each chat runs one process, which also stops when the folder closes and when the IDE exits.
+- If the agent crashes, the turn shows its last lines of output, and your next question starts it again.
+- If the agent needs you to sign in, Codalus shows the ways it offers and runs the one you choose. The agent manages its own sign-in: Codalus doesn't see or keep its credentials.
+
+### The safety model, and its limits
+
+What the agent asks of the IDE goes through the IDE's checks:
+- **Reading** (`fs/read_text_file`): the editor's text when the file is open (unsaved changes included), else the disk's. Only inside the folder: paths that leave it, links included, are refused, and so are files that are never sent (below). What it gets is redacted.
+- **Writing** (`fs/write_text_file`): every change shows in the preview first. **Apply** puts it in the editor (unsaved, one step in undo; the file opens if it isn't open), and **Reject** tells the agent you rejected it. The same paths are refused.
+- **Permissions**: when the agent asks before acting, the approval dialog shows the action, its kind, its input and its changes, with **Allow Once**, **Reject** and **Always Reject**. **Reject** is the default (Enter and Esc reject). There's no "always allow".
+- **Commands**: each one asks first with the exact command line, its folder and every environment variable the agent sets for it (secrets redacted), as agent mode's do, and runs for at most `ai.agent.commandTimeoutSeconds`. Variables that change what a command runs (`PATH`, `LD_*` and `DYLD_*`, `NODE_OPTIONS`, `GIT_*`, `NPM_CONFIG_*`, `DOTNET_*` and similar) are refused before you're asked. Its output is redacted before the agent reads it, and Stop kills it.
+- **The IDE's tools**: every agent gets `codalus mcp` (the solution, the open files, the Error List, the build output, and a build that asks first) through a pipe of its own that lives as long as the chat, for your user only, even when **MCP Server** is off.
+- **Only while it may run**: if AI assistance is turned off (by you, or for the workspace) or the folder stops being trusted, a running agent stops, and any request it sends meanwhile is refused. The same holds for its `codalus mcp` pipe, which also only shows files under the workspace.
+- **The log**: each prompt, request and tool call is a line of the *AI* Output channel (the agent, the method, the path or command, never the content).
+
+What Codalus can't check:
+- The agent can read and write files by itself, without asking the IDE. **Only changes it makes through `fs/write_text_file` are reviewed before they land**, and whether it uses it depends on the agent. A change it made itself shows read-only in its step, and an open editor reloads the file (asking first if you have unsaved changes).
+- Whatever the agent has, it can send to its provider. Keep files out of reach with `.codalusignore` and `ai.exclude` for what goes through the IDE, and with the agent's own settings for what it reads by itself.
+- Its commands run with your permissions once you allow them, like agent mode's.
+
+Not supported yet: MCP servers over HTTP for agents, the agent's forms (elicitation), signing in from a terminal, and resuming an earlier session. External agents don't run in remote windows (WSL, SSH, containers): the agent and its commands would run on this machine, not where the folder is, so the chat says why and nothing starts.
+
 ## What is never sent
 
 AI assistance has one gate that every request goes through:
@@ -139,7 +207,8 @@ AI assistance has one gate that every request goes through:
 | `ai.agent.maxSteps` | `25` | The most tool calls agent mode makes for one question |
 | `ai.agent.commandTimeoutSeconds` | `120` | How long an allowed command may run |
 | `ai.mcp.servers` | `{}` | MCP servers whose tools agent mode may use (user settings only) |
-| `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE |
+| `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE (external agents' own pipes don't need it) |
+| `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env" } }` (user settings only) |
 | `ai.openai.endpoint` | `https://api.openai.com/v1` | The OpenAI-compatible server |
 | `ai.ollama.endpoint` | `http://localhost:11434/v1` | Ollama's address |
 | `ai.anthropic.endpoint` | `https://api.anthropic.com` | Anthropic's API, or a gateway |

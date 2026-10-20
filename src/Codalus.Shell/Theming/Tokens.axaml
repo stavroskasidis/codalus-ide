@@ -52,7 +52,7 @@
       <SolidColorBrush x:Key="Shell.Link" Color="#006AB1" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
@@ -158,6 +158,59 @@
       <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="DockSeparatorBrush" Color="#CCCEDB" />
       <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#CCCEDB" />
+      <!-- The control set (M34h, docs/design/controls.md): Classic keeps its look: Light's blues. -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#FDFDFD" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#C2C4D0" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#EAF3FC" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#7EB4EA" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#CCE4F7" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#569DE5" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#0068B0" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#005A9E" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#DCEAF8" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#B3D3F2" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#C3DBF4" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#D5E8FA" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#007ACC" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#BDBFCC" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#8D90A0" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#646464" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#8A8A8A" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#EDEDEF" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#D7D8DF" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#6E7080" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#007ACC" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#E4E6EE" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#E8F1FB" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#F0F0F3" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#EBEBEF" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#FFE58F" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#E4E6EE" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#E3F2E6" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#FBE7E3" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#9A220B" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#FFF2CC" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#6E4B00" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#E1EEF9" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#005A9E" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#F2F2F5" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#611E1E1E" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#E1EEF9" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#F2F2F5" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">2</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">2</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">4</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="Dark">
@@ -303,6 +356,59 @@
       <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#1E1E1E" />
       <SolidColorBrush x:Key="DockSeparatorBrush" Color="#3F3F46" />
       <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#3F3F46" />
+      <!-- The control set (M34h, docs/design/controls.md): Classic Dark keeps its look: its grays, the accent's blue for pressed and checked. -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#333337" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#F1F1F1" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#46464C" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#3E3E42" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#5C5C63" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#2A4A6B" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#5AA8FF" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#2B7FE0" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#3E3E40" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#55555B" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#2A4A6B" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#1E3D5C" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#F1F1F1" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#4A4A50" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#6A6A72" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#A6A6A6" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#7A7A7A" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#2A2A2B" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#38383C" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#9A9AA2" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#323236" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#F1F1F1" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#2A2D2E" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#2A2A2C" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#2E2E31" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#653A0B" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#3F3F46" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#F1F1F1" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#1F3A28" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#8FDBA8" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#4A2420" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F8A08F" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#3D3412" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#E5C24A" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#1B3550" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#8CC8FF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#2A2A2C" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#8C000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#1E3A5C" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#F1F1F1" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#2A2A2C" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">2</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">2</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">4</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="{x:Static theming:ThemeService.Blue}">
@@ -409,6 +515,59 @@
       <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="DockSeparatorBrush" Color="#8E9BBC" />
       <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#8E9BBC" />
+      <!-- The control set (M34h, docs/design/controls.md): Classic Blue keeps its look: the yellow hover and border of its buttons and toolbars. -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#8E9BBC" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#FDF4BF" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#E5C365" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#FFE8A6" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#E5C365" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#0C62A8" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#0A5591" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#FDF4BF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#E5C365" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#FFE8A6" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#FFEFBB" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#E5C365" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#8E9BBC" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#5B6E99" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#4D5A73" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#7D8496" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#E9ECF4" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#C3CADB" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#5B6E99" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#0E70C0" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#DDE2EF" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#FEF7D9" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#EAEDF5" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#E2E6F0" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#FFE58F" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#DDE2EF" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#E3F2E6" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#FBE7E3" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#9A220B" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#FFF2CC" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#6E4B00" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#E1ECF8" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#0054A0" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#EEF0F6" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#731F2D54" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#DCE6F6" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#EEF0F6" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">2</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">2</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">4</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="{x:Static theming:ThemeService.HighContrast}">
@@ -601,6 +760,59 @@
       <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#000000" />
       <SolidColorBrush x:Key="DockSeparatorBrush" Color="#6FC3DF" />
       <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#6FC3DF" />
+      <!-- The control set (M34h, docs/design/controls.md): High Contrast: black controls with white borders, the orange focus color on hover. -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#F38518" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#0E4A7B" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#F38518" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#7CF3FF" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#F38518" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#0E4A7B" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#0E4A7B" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#F38518" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#A0A0A0" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#7A7A7A" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#3A3A3A" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B3000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">2</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">2</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">4</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">inset 0 0 0 1 #FFFFFF</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">1</Thickness>
     </ResourceDictionary>
 
     <!-- Harbor, Light (M45, docs/design/shell-themes.md). -->
@@ -774,6 +986,59 @@
       <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
+      <!-- The control set (M34h, docs/design/controls.md): the design's values (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#1B2645" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#AEBBD9" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#EDF1FA" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#8FA0C8" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#DCE4F6" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#6F84B8" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#244CA8" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#1E408F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#E0E6F6" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#C3CDE6" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#CFD9F1" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#D9E3F8" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#2B59C3" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#0E1735" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#AEBBD9" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#7F90BC" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#4E5873" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#7F889F" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#EBEFF8" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#D2DAEC" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#5D6A8C" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#2B59C3" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#E3E8F5" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#0E1735" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#EBF0FA" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#EEF1F9" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#E8ECF6" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#FFE7A3" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#0E1735" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#E1E7F5" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#1B2645" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#E2F1E6" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#FBE6E2" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#9A220B" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#FDF0CF" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#6B4900" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#E3EAFA" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#1D49B0" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#EBEFF8" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#6B1B2645" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#E1E9FA" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#0E1735" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#EEF1F9" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <!-- Harbor, Dark (M45, docs/design/shell-themes.md). -->
@@ -947,6 +1212,59 @@
       <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#0A1124" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#0A1124" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#0A1124" />
+      <!-- The control set (M34h, docs/design/controls.md): the design's values (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#1F2840" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#E3E8F5" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#34416A" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#273350" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#4C5D8E" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#1A2238" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#6E98FF" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#8AACFF" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#5A86F0" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#273350" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#384670" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#1E2A47" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#22345F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#6E98FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#34416A" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#4C5D8E" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#9AA5C2" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#6F7993" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#161C2C" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#262F48" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#8A96B6" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#6E98FF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#0A1124" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#232D45" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#E3E8F5" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#1E2740" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#1C2436" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#1F2840" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#5A4410" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#FFF4D6" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#273350" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#E3E8F5" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#173326" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#8FDBA8" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#3E2025" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F8A08F" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#352E13" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#E5C24A" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#1B2A4D" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#A9C6FF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#161D2C" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#99050810" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#21345F" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#1C2436" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <!-- Harbor, High contrast (M45, docs/design/shell-themes.md). -->
@@ -1140,6 +1458,59 @@
       <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#6CD2FF" />
       <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#6CD2FF" />
       <Color x:Key="SystemListMediumColor">#1A323D</Color>
+      <!-- The control set (M34h, docs/design/controls.md): the design's values (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#AEE6FF" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#9A9A9A" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#6E6E6E" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#5C5C5C" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#FFE66D" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#7CC7FF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B8000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">inset 0 0 0 1 #FFFFFF</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">1</Thickness>
     </ResourceDictionary>
 
     <!-- Graphite, Light (M45, docs/design/shell-themes.md). -->
@@ -1318,6 +1689,59 @@
       <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
+      <!-- The control set (M34h, docs/design/controls.md): derived from the family's own colors by the design's rules (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#C1C4C9" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#ECF3F3" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#9BAEB0" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#DAECEA" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#759294" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#0D6D64" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#0B5D56" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#E0EBEB" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#BBCBCE" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#D5ECE9" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#D4E5E4" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#0F7C72" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#062E2A" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#C1C4C9" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#94979C" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#555A63" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#868990" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#EDEEEF" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#DADBDD" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#696E76" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#0F7C72" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#E4E4E6" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#062E2A" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#E5EDEE" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#EDEEEF" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#EAEAEC" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#FFE7A3" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#E4E4E6" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#E2F1E6" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#FBE6E2" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#9A220B" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#FDF0CF" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#6B4900" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#E2EFEE" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#0B5CAD" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#EDEEEF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#6B1F2226" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#DBE8E8" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#062E2A" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#EDEEEF" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <!-- Graphite, Dark (M45, docs/design/shell-themes.md). -->
@@ -1496,6 +1920,59 @@
       <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#0B1F1C" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#0B1F1C" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#0B1F1C" />
+      <!-- The control set (M34h, docs/design/controls.md): derived from the family's own colors by the design's rules (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#202C2F" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#DDE0E5" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#2A3D41" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#213839" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#2A5C5B" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#1B2326" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#55C2B5" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#27A193" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#213839" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#224A49" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#1D2E2F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#1F3332" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#E8F4F2" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#2A3D41" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#2A5C5B" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#9A9FAA" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#6F737B" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#1A1B1E" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#26282E" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#888C96" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#0B1F1C" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#203133" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#DDE0E5" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#202A2D" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#1F2629" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#23262B" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#5A4410" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#FFF4D6" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#213839" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#DDE0E5" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#173326" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#8FDBA8" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#3E2025" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F8A08F" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#352E13" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#E5C24A" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#213738" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#7CC4FF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#1A1B1E" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#9908080A" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#1F3332" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#E8F4F2" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#1F2629" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <!-- Graphite, High contrast (M45, docs/design/shell-themes.md). -->
@@ -1694,6 +2171,59 @@
       <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#3FF2D2" />
       <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#3FF2D2" />
       <Color x:Key="SystemListMediumColor">#0F3A32</Color>
+      <!-- The control set (M34h, docs/design/controls.md): derived from the family's own colors by the design's rules (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#8CF7E4" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#9A9A9A" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#6E6E6E" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#5C5C5C" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#FFE66D" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#7CC7FF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B8000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">inset 0 0 0 1 #FFFFFF</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">1</Thickness>
     </ResourceDictionary>
 
     <!-- Daylight, Light (M45, docs/design/shell-themes.md). -->
@@ -1867,6 +2397,59 @@
       <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
+      <!-- The control set (M34h, docs/design/controls.md): derived from the family's own colors by the design's rules (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#CDCDD3" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#F6F4FB" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#B2ABC4" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#EFEBF9" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#9288AD" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#5E37AC" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#502F93" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#F0ECF9" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#D2CDE2" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#EFEAFA" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#E9E2F6" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#2A1660" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#CDCDD3" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#9C9CA2" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#5C5C66" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#8D8D94" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#F5F5F6" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#E2E2E3" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#707078" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#EBEBED" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#2A1660" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#F3F0FA" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#F5F5F6" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#F2F2F3" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#FFE7A3" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#EBEBED" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#E2F1E6" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#FBE6E2" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#9A220B" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#FDF0CF" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#6B4900" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#EDE8F8" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#5A2FB0" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#F5F5F6" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#6B1F1F24" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#EDE8F8" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#2A1660" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#F5F5F6" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <!-- Daylight, Dark (M45, docs/design/shell-themes.md). -->
@@ -2040,6 +2623,59 @@
       <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#160A33" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#160A33" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#160A33" />
+      <!-- The control set (M34h, docs/design/controls.md): derived from the family's own colors by the design's rules (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#2D283A" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#E9E8F0" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#423C56" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#38314B" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#5D5082" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#262330" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#A98BFF" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#BAA2FF" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#987DE6" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#38314B" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#493E66" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#302A3F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#332A4E" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#A98BFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#423C56" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#5D5082" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#A7A3B8" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#787586" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#1F1E26" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#2D2A36" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#938FA3" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#A98BFF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#160A33" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#312C41" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#E9E8F0" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#2B2737" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#262330" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#292732" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#5A4410" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#FFF4D6" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#38314B" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#E9E8F0" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#173326" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#8FDBA8" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#3E2025" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F8A08F" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#352E13" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#E5C24A" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#363049" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#C4AEFF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#1F1E26" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#990B0B0E" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#332A4E" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#262330" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <!-- Daylight, High contrast (M45, docs/design/shell-themes.md). -->
@@ -2233,6 +2869,59 @@
       <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#D2B3FF" />
       <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#D2B3FF" />
       <Color x:Key="SystemListMediumColor">#322B3D</Color>
+      <!-- The control set (M34h, docs/design/controls.md): derived from the family's own colors by the design's rules (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#E4D1FF" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#9A9A9A" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#6E6E6E" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#5C5C5C" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#FFE66D" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B8000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">inset 0 0 0 1 #FFFFFF</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">1</Thickness>
     </ResourceDictionary>
 
     <!-- Ember, Light (M45, docs/design/shell-themes.md). -->
@@ -2406,6 +3095,59 @@
       <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
+      <!-- The control set (M34h, docs/design/controls.md): derived from the family's own colors by the design's rules (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#CBC3BB" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#F8F2EC" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#BDA896" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#F5E7DA" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#A78A72" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#A24F10" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#8A440E" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#F4E9E0" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#D9C6B7" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#F6E4D3" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#F1E1D5" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#B85A12" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#4A2508" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#CBC3BB" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#9E968F" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#6B5E53" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#968C84" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#F2F0ED" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#E1DDD9" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#7D7168" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#B85A12" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#EAE6E3" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#4A2508" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#F5ECE5" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#F2F0ED" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#EFEDEA" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#FFE7A3" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#EAE6E3" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#E2F1E6" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#FBE6E2" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#9A220B" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#FDF0CF" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#6B4900" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#F6EBE3" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#A04E10" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#F2F0ED" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#6B2A211B" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#F3E6DC" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#4A2508" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#F2F0ED" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <!-- Ember, Dark (M45, docs/design/shell-themes.md). -->
@@ -2579,6 +3321,59 @@
       <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#1A0F05" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#1A0F05" />
       <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#1A0F05" />
+      <!-- The control set (M34h, docs/design/controls.md): derived from the family's own colors by the design's rules (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#2A2119" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#EBE5E0" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#413327" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#6A4A2C" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#1F1914" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#E08A3C" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#E6A163" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#CA7C36" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#533821" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#2D2218" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#30251A" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#E08A3C" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#413327" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#6A4A2C" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#A39A90" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#736C65" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#141312" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#24211E" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#8E867E" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#E08A3C" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#1A0F05" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#30251A" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#EBE5E0" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#271F18" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#201C17" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#211E1C" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#5A4410" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#FFF4D6" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#EBE5E0" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#173326" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#8FDBA8" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#3E2025" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F8A08F" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#352E13" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#E5C24A" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#38291C" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#F2B27A" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#141312" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#99060605" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#30251A" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#201C17" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
     </ResourceDictionary>
 
     <!-- Ember, High contrast (M45, docs/design/shell-themes.md). -->
@@ -2772,6 +3567,59 @@
       <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FFB547" />
       <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#FFB547" />
       <Color x:Key="SystemListMediumColor">#3D2B11</Color>
+      <!-- The control set (M34h, docs/design/controls.md): derived from the family's own colors by the design's rules (docs/design/controls.md) -->
+      <SolidColorBrush x:Key="Shell.Button" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Button.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Button.Hover" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Button.Hover.Border" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Button.Pressed.Border" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Accent.Hover" Color="#FFD391" />
+      <SolidColorBrush x:Key="Shell.Accent.Pressed" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Hover.Border" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Pressed" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Border" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Checked.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Input.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Input.Border.Hover" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Input.Placeholder" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Disabled.Foreground" Color="#9A9A9A" />
+      <SolidColorBrush x:Key="Shell.Disabled" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Disabled.Border" Color="#6E6E6E" />
+      <SolidColorBrush x:Key="Shell.Check.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Segment.Selected.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Selection.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Row.Hover" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Grid.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Grid.Rule" Color="#5C5C5C" />
+      <SolidColorBrush x:Key="Shell.Match.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Match.Background.Foreground" Color="#FFE66D" />
+      <SolidColorBrush x:Key="Shell.Badge" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Badge.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Status.Success" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Success.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Status.Error" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Status.Warning" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Warning.Foreground" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Status.Info" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Status.Info.Foreground" Color="#7CF0FF" />
+      <SolidColorBrush x:Key="Shell.Dialog.Footer" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B8000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
+      <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
+      <BoxShadows x:Key="Shell.Row.Hover.Outline">inset 0 0 0 1 #FFFFFF</BoxShadows>
+      <Thickness x:Key="Shell.Chip.BorderThickness">1</Thickness>
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 
@@ -2804,6 +3652,26 @@
   <Thickness x:Key="Shell.Padding.Row">0,1</Thickness>
   <CornerRadius x:Key="Shell.CornerRadius">3</CornerRadius>
   <CornerRadius x:Key="Shell.CornerRadius.Overlay">6</CornerRadius>
+  <!--
+    The control set (M34h, docs/design/controls.md): one height per context (28 px in dialogs, documents and pages,
+    24 px in tool windows and toolbars), a button's padding and the gap before its text, the focus ring (2 px in
+    Shell.Focus, 1 px outside the control: the ring's margin is their sum), the in-window dialog's padding and width, the
+    segmented control's and the view tabs' heights. Shell.Control.CornerRadius differs per family and sits in each theme.
+  -->
+  <x:Double x:Key="Shell.Size.Control">28</x:Double>
+  <x:Double x:Key="Shell.Size.Button.MinWidth">80</x:Double>
+  <Thickness x:Key="Shell.Padding.Button">12,0</Thickness>
+  <Thickness x:Key="Shell.Padding.ButtonCompact">8,0</Thickness>
+  <x:Double x:Key="Shell.Space.ButtonIcon">6</x:Double>
+  <Thickness x:Key="Shell.Focus.Thickness">2</Thickness>
+  <x:Double x:Key="Shell.Focus.Offset">1</x:Double>
+  <Thickness x:Key="Shell.Focus.Margin">-3</Thickness>
+  <Thickness x:Key="Shell.Padding.Dialog">20,16</Thickness>
+  <Thickness x:Key="Shell.Padding.DialogFooter">20,12</Thickness>
+  <x:Double x:Key="Shell.Size.Dialog.Width">520</x:Double>
+  <x:Double x:Key="Shell.Size.Dialog.MaxWidth">720</x:Double>
+  <x:Double x:Key="Shell.Size.Segment">24</x:Double>
+  <x:Double x:Key="Shell.Size.Tab">28</x:Double>
 
   <!-- Menu density (M34a): rows of about 24 px at 9 pt, as in a classic IDE, so the menus fit a 1080p screen. -->
   <Thickness x:Key="MenuFlyoutItemThemePadding">8,4,12,4</Thickness>

@@ -10,6 +10,7 @@
       <StackPanel Spacing="8">
         <Grid ColumnDefinitions="*,Auto">
           <TextBox x:Name="SearchBox"
+                   Classes="search"
                    Text="{Binding Search}"
                    PlaceholderText="{l:T keyboardShortcuts.searchByCommandIdOrKeys}"
                    AutomationProperties.Name="{l:T keyboardShortcuts.searchKeyboardShortcuts}" />
@@ -21,9 +22,9 @@
                   Command="{Binding OpenJsonCommand}" />
         </Grid>
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <Button Content="{l:T keyboardShortcuts.changeKeyBinding}" Command="{Binding ChangeCommand}" ToolTip.Tip="{l:T keyboardShortcuts.enterOrDoubleClick}" />
-          <Button Content="{l:T keyboardShortcuts.remove}" Command="{Binding RemoveCommand}" ToolTip.Tip="{l:T keyboardShortcuts.delete}" />
-          <Button Content="{l:T keyboardShortcuts.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T keyboardShortcuts.restoreTheDefaultKeyBinding}" />
+          <Button Classes="iconText" controls:ButtonIcon.Kind="keyboard" Content="{l:T keyboardShortcuts.changeKeyBinding}" Command="{Binding ChangeCommand}" ToolTip.Tip="{l:T keyboardShortcuts.enterOrDoubleClick}" />
+          <Button Classes="icon" controls:ButtonIcon.Kind="trash" Command="{Binding RemoveCommand}" ToolTip.Tip="{l:T keyboardShortcuts.delete}" AutomationProperties.Name="{l:T keyboardShortcuts.remove}" />
+          <Button Classes="icon" controls:ButtonIcon.Kind="reset" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T keyboardShortcuts.restoreTheDefaultKeyBinding}" AutomationProperties.Name="{l:T keyboardShortcuts.reset}" />
           <TextBlock Classes="muted" Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
         </StackPanel>
       </StackPanel>
@@ -59,9 +60,34 @@
              AutomationProperties.Name="{l:T keyboardShortcuts.keyboardShortcuts}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:KeybindingRowViewModel">
-          <Setter Property="Padding" Value="14,4" />
+          <Setter Property="Padding" Value="11,4,14,4" />
           <Setter Property="MinHeight" Value="0" />
+          <Setter Property="BorderThickness" Value="3,0,0,0" />
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+        <!--
+          M34h: the row under the pointer and the selected command in the theme's colors (Fluent's were a neutral gray):
+          Shell.Hover, and Shell.Selection with an accent bar on its left edge, as the maintainer asked for a bit of color.
+          The selected style comes last, so it wins over the hover on the selected row.
+        -->
+        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+          <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+        </Style>
+        <!-- The muted columns (When, Source) are 4.3:1 on Classic Light's and Dark's hover: the text's color there. -->
+        <Style Selector="ListBoxItem:pointerover TextBlock.muted">
+          <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+        </Style>
+        <Style Selector="ListBoxItem:selected TextBlock.muted">
+          <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+        </Style>
+        <Style Selector="ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+          <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
         </Style>
       </ListBox.Styles>
       <ListBox.ItemTemplate>

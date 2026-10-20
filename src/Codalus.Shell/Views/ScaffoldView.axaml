@@ -42,7 +42,7 @@
             <TextBlock Classes="muted" Text="{Binding SelectedRow.Description}" TextWrapping="Wrap" />
             <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ToolMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
               <TextBlock Classes="muted" FontSize="12" Text="{Binding ToolMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
-              <Button Grid.Column="1" Margin="8,0,0,0" Content="{l:T scaffold.install}" Command="{Binding InstallCommand}" IsVisible="{Binding NeedsTool}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T scaffold.installTheCodeGenerator}" />
+              <Button Classes="iconText" controls:ButtonIcon.Kind="download" Grid.Column="1" Margin="8,0,0,0" Content="{l:T scaffold.install}" Command="{Binding InstallCommand}" IsVisible="{Binding NeedsTool}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T scaffold.installTheCodeGenerator}" />
             </Grid>
             <ItemsControl ItemsSource="{Binding Fields}">
               <ItemsControl.DataTemplates>

@@ -1,6 +1,7 @@
 <local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
              xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
                    xmlns:vm="using:Codalus.Shell.ViewModels"
                    xmlns:local="using:Codalus.Shell.Views"
                    x:Class="Codalus.Shell.Views.TemplateManagerView"
@@ -11,16 +12,17 @@
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T templateManager.theDotnetNewTemplatePackagesInstalled}" />
       <Grid ColumnDefinitions="*,Auto">
         <TextBox x:Name="PackageBox" Text="{Binding Package}" PlaceholderText="{l:T templateManager.aPackageIdIdOrId}" AutomationProperties.Name="{l:T templateManager.templatePackageToInstall}" />
-        <Button Grid.Column="1" Margin="6,0,0,0" Content="{l:T templateManager.install}" Command="{Binding InstallCommand}" AutomationProperties.Name="{l:T templateManager.installTemplatePackage}" />
+        <Button Classes="iconText" controls:ButtonIcon.Kind="download" Grid.Column="1" Margin="6,0,0,0" Content="{l:T templateManager.install}" Command="{Binding InstallCommand}" AutomationProperties.Name="{l:T templateManager.installTemplatePackage}" />
       </Grid>
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <Button Content="{l:T templateManager.uninstall}" Command="{Binding UninstallCommand}" />
-        <Button Content="{l:T templateManager.checkForUpdates}" Command="{Binding CheckUpdatesCommand}" />
-        <Button Content="{l:T templateManager.updateAll}" Command="{Binding UpdateAllCommand}" />
-        <Button Content="{l:T templateManager.refresh}" Command="{Binding RefreshCommand}" />
-        <ProgressBar IsIndeterminate="True" Width="80" Height="2" MinHeight="2" VerticalAlignment="Center" IsVisible="{Binding IsBusy}" />
-        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Status}" />
-      </StackPanel>
+      <!-- A dock, not a horizontal stack: the status gets the width that's left and trims at the document's minimum size. -->
+      <DockPanel>
+        <Button DockPanel.Dock="Left" Margin="0,0,6,0" Classes="icon" controls:ButtonIcon.Kind="trash" Command="{Binding UninstallCommand}" ToolTip.Tip="{l:T templateManager.uninstall}" AutomationProperties.Name="{l:T templateManager.uninstall}" />
+        <Button DockPanel.Dock="Left" Margin="0,0,6,0" Classes="icon" controls:ButtonIcon.Kind="update" Command="{Binding CheckUpdatesCommand}" ToolTip.Tip="{l:T templateManager.checkForUpdates}" AutomationProperties.Name="{l:T templateManager.checkForUpdates}" />
+        <Button DockPanel.Dock="Left" Margin="0,0,6,0" Classes="iconText" controls:ButtonIcon.Kind="upload" Content="{l:T templateManager.updateAll}" Command="{Binding UpdateAllCommand}" />
+        <Button DockPanel.Dock="Left" Margin="0,0,6,0" Classes="icon" controls:ButtonIcon.Kind="refresh" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T templateManager.refresh}" AutomationProperties.Name="{l:T templateManager.refresh}" />
+        <ProgressBar DockPanel.Dock="Left" Margin="0,0,6,0" IsIndeterminate="True" Width="80" Height="2" MinHeight="2" VerticalAlignment="Center" IsVisible="{Binding IsBusy}" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" />
+      </DockPanel>
     </StackPanel>
     <TextBox DockPanel.Dock="Bottom" Height="110" Margin="0,8,0,0" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" Text="{Binding Output}"
              FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T templateManager.dotnetNewOutput}" />

@@ -8,7 +8,7 @@ namespace Codalus.Shell;
 /// <summary>
 /// The menu bar and the editor's context menu, in one place (M34a). Each top-level menu is a tree like a classic IDE's:
 /// a short first level of the common commands, and submenus (Edit → Go To ▸, IntelliSense ▸, Advanced ▸…) for the
-/// rest, so no menu needs scrolling at 1080p (<c>MenuLayoutTests</c> checks it). Feature files keep their own context
+/// rest, so no menu needs scrolling at 1080p (<c>UxPassTests</c> checks it). Feature files keep their own context
 /// menus (the Solution Explorer's, the Database Explorer's) and their tool windows' View entries
 /// (<see cref="ViewMenuEntry"/>). Plugins add to any of these locations, including the submenus.
 /// </summary>

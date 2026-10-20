@@ -2,6 +2,19 @@ using System.Text;
 
 namespace Codalus.Workbench.Output;
 
+/// <summary>Text appended to an <see cref="OutputChannel"/>: <see cref="Text"/> is null when the channel must be re-read.</summary>
+public sealed class OutputAppendedEventArgs(string? text, bool isError) : EventArgs
+{
+    /// <summary>The text appended, or null when the channel was cleared or trimmed and must be re-read.</summary>
+    public string? Text { get; } = text;
+
+    /// <summary>Whether the text came from a process's standard error (M34h: the Output window colors it as an error).</summary>
+    public bool IsError { get; } = isError;
+}
+
+/// <summary>A channel's text and the ranges of it that came from standard error, read together.</summary>
+public sealed record OutputSnapshot(string Text, IReadOnlyList<(int Start, int Length)> ErrorRanges);
+
 /// <summary>
 /// A named, append-only text channel in the Output window. Appends are thread-safe; the view polls
 /// <see cref="Version"/> or listens to <see cref="Appended"/> and batches UI updates.
@@ -14,6 +27,11 @@ public sealed class OutputChannel(string id, string name)
     private readonly Lock _gate = new();
     private readonly StringBuilder _text = new();
 
+    // The ranges that came from standard error, in positions counted from the channel's first character ever (so a trim
+    // only drops the ones before the new start); adjacent ranges merge, so a stream of error lines is one range.
+    private readonly List<(long Start, long End)> _errors = [];
+    private long _trimmed;
+
     public string Id { get; } = id;
 
     public string Name { get; } = name;
@@ -24,37 +42,69 @@ public sealed class OutputChannel(string id, string name)
     /// <summary>Text appended (or null when the channel was cleared or trimmed and must be re-read).</summary>
     public event EventHandler<string?>? Appended;
 
-    public void Append(string text)
+    /// <summary>As <see cref="Appended"/>, with whether the text came from standard error (M34h).</summary>
+    public event EventHandler<OutputAppendedEventArgs>? TextAppended;
+
+    public void Append(string text) => Append(text, isError: false);
+
+    public void AppendLine(string line) => Append(line + "\n");
+
+    /// <summary>Appends text a process wrote to standard error: the Output window shows it in the error color (M34h).</summary>
+    public void AppendError(string text) => Append(text, isError: true);
+
+    /// <summary>Appends a line a process wrote to standard error.</summary>
+    public void AppendErrorLine(string line) => AppendError(line + "\n");
+
+    private void Append(string text, bool isError)
     {
         bool trimmed;
         lock (_gate)
         {
+            if (isError && text.Length > 0)
+            {
+                var start = _trimmed + _text.Length;
+                var end = start + text.Length;
+                if (_errors.Count > 0 && _errors[^1].End == start)
+                {
+                    _errors[^1] = (_errors[^1].Start, end);
+                }
+                else
+                {
+                    _errors.Add((start, end));
+                }
+            }
+
             _text.Append(text);
             trimmed = _text.Length > MaxLength;
             if (trimmed)
             {
                 var cut = _text.Length - (MaxLength * 3 / 4);
                 var newline = _text.ToString(cut, Math.Min(4096, _text.Length - cut)).IndexOf('\n', StringComparison.Ordinal);
-                _text.Remove(0, cut + Math.Max(0, newline + 1));
+                var removed = cut + Math.Max(0, newline + 1);
+                _text.Remove(0, removed);
+                _trimmed += removed;
+                _errors.RemoveAll(r => r.End <= _trimmed);
             }
 
             Version++;
         }
 
         Appended?.Invoke(this, trimmed ? null : text);
+        TextAppended?.Invoke(this, new OutputAppendedEventArgs(trimmed ? null : text, isError));
     }
-
-    public void AppendLine(string line) => Append(line + "\n");
 
     public void Clear()
     {
         lock (_gate)
         {
+            _trimmed += _text.Length;
             _text.Clear();
+            _errors.Clear();
             Version++;
         }
 
         Appended?.Invoke(this, null);
+        TextAppended?.Invoke(this, new OutputAppendedEventArgs(null, isError: false));
     }
 
     public string GetText()
@@ -62,6 +112,22 @@ public sealed class OutputChannel(string id, string name)
         lock (_gate)
         {
             return _text.ToString();
+        }
+    }
+
+    /// <summary>The text and the ranges of it that came from standard error, as one read.</summary>
+    public OutputSnapshot GetSnapshot()
+    {
+        lock (_gate)
+        {
+            var ranges = new List<(int Start, int Length)>(_errors.Count);
+            foreach (var (start, end) in _errors)
+            {
+                var from = (int)Math.Max(0, start - _trimmed);
+                ranges.Add((from, (int)(end - _trimmed) - from));
+            }
+
+            return new OutputSnapshot(_text.ToString(), ranges);
         }
     }
 }

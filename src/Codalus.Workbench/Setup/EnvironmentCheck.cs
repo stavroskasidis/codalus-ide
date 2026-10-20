@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Codalus.Platform;
+using Codalus.Rpc;
 
 namespace Codalus.Workbench.Setup;
 
@@ -36,8 +37,17 @@ public sealed record ToolStatus(string Id, string Title, bool Required, ToolStat
     /// <summary>For SDKs whose .NET is older than the hosts' (M30b): the channel to install (<c>11.0</c>).</summary>
     public string? WantedChannel { get; init; }
 
+    /// <summary>What was found instead (M49, the IDE's runtime: the versions under each .NET root), for a message.</summary>
+    public string? Found { get; init; }
+
     public bool NeedsAttention => State != ToolState.Found;
 }
+
+/// <summary>
+/// The .NET root the IDE's processes use (M37, M49; <see cref="EnvironmentCheck.ChooseDotnetRoot"/>): whether it goes
+/// first on <c>PATH</c>, the variables to set, and a line for the log when something changes.
+/// </summary>
+public sealed record DotnetRootChoice(string Root, bool AddToPath, IReadOnlyList<KeyValuePair<string, string>> Variables, string? Log);
 
 /// <summary>Runs a program and gives its exit code and output (tests use a stand-in).</summary>
 public delegate Task<(int ExitCode, string Output)> ProcessRunner(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken cancellationToken);
@@ -58,6 +68,210 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     /// </summary>
     public string HostsRuntime { get; init; } = DefaultHostsRuntime();
 
+    /// <summary>
+    /// The frameworks the IDE's hosts ask for (M49, <see cref="IdeRuntime.Requirements"/>); when not set, the
+    /// <see cref="HostsRuntime"/> of <c>Microsoft.NETCore.App</c> with <c>rollForward</c> Major, as the hosts are built.
+    /// </summary>
+    public IReadOnlyList<FrameworkReference>? HostFrameworks { get; init; }
+
+    /// <summary>The versions of a framework under a .NET root (tests describe fake roots).</summary>
+    public Func<string, string, IReadOnlyList<FrameworkVersion>> InstalledFrameworks { get; init; } = (root, name) => HostRuntimeCheck.InstalledVersions(root, name);
+
+    /// <summary>How the .NET host picks the root of the IDE's app hosts (tests describe a machine).</summary>
+    public DotnetRootResolver? Roots { get; init; }
+
+    /// <summary>Whether a folder exists (a <c>DOTNET_ROOT</c> whose folder is gone is passed over; tests describe a machine).</summary>
+    public Func<string, bool> DirectoryExists { get; init; } = Directory.Exists;
+
+    private IReadOnlyList<FrameworkReference> Frameworks => HostFrameworks is { Count: > 0 } frameworks
+        ? frameworks
+        : [FrameworkReference.Create(FrameworkReference.NetCoreApp, FrameworkVersion.TryParse(HostsRuntime, out var version) ? version : FrameworkVersion.Parse($"{Environment.Version.Major}.0.0"), RollForwardPolicy.Major)];
+
+    private DotnetRootResolver Resolver => Roots ?? new DotnetRootResolver
+    {
+        OS = platform switch { PlatformKind.Windows => "windows", PlatformKind.MacOS => "macos", _ => "linux" },
+        ProcessEnvironment = environment,
+        FileExists = _exists,
+        DirectoryExists = DirectoryExists,
+    };
+
+    /// <summary>
+    /// The same folder: on Windows, '/' and '\\' are the same separator (a root from <c>Path.Combine</c> against one from a
+    /// variable) and case doesn't count; on macOS case doesn't count either.
+    /// </summary>
+    private static bool SameRoot(string a, string b)
+    {
+        static string Normal(string path) => System.IO.Path.TrimEndingDirectorySeparator(OperatingSystem.IsWindows() ? path.Replace('/', '\\') : path);
+        return string.Equals(Normal(a), Normal(b), OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// What the IDE's processes should use (M37, M49): the root <see cref="FindSdkRoot"/> picks, whether it goes on
+    /// <c>PATH</c>, and the variables that point the app hosts at it. Null when no folder has an SDK.
+    /// <list type="bullet">
+    /// <item>A root that isn't the <c>DOTNET_ROOT</c> or <c>PATH</c> one in use (an SDK only in <c>~/.dotnet</c>, a
+    /// Finder launch) becomes <c>DOTNET_ROOT</c> and goes first on <c>PATH</c>, as since M37.</item>
+    /// <item>When it is, the app hosts (which don't look on <c>PATH</c>) are pointed at it only when that helps: when it
+    /// has the hosts' runtime, or the root they'd use otherwise doesn't. A runtime-only install in the default or the
+    /// registered location (a distribution's <c>dotnet-runtime-11.0</c>, Microsoft's runtime package) keeps its hosts.</item>
+    /// </list>
+    /// </summary>
+    public DotnetRootChoice? ChooseDotnetRoot()
+    {
+        if (FindSdkRoot() is not { } root)
+        {
+            return null;
+        }
+
+        var exe = platform == PlatformKind.Windows ? "dotnet.exe" : "dotnet";
+        // A root that is already in use as it is: DOTNET_ROOT, or a real dotnet with SDKs first on the PATH.
+        var current = environment("DOTNET_ROOT") is { Length: > 0 } set ? set
+            : FindOnPath("dotnet") is { } onPath ? System.IO.Path.GetDirectoryName(onPath) : null;
+        if (current is null || !SameRoot(current, root) && !SameRoot(System.IO.Path.GetDirectoryName(RealPath(System.IO.Path.Combine(current, exe))) ?? string.Empty, root))
+        {
+            return new DotnetRootChoice(root, AddToPath: true, PointHostsAt(root), $"Using the .NET SDK in {root} (DOTNET_ROOT).");
+        }
+
+        var hostsRoot = HostsRoot();
+        if (!HostsCanUse(root))
+        {
+            // The x64 build on Windows on Arm with the native SDK in use: it stays the SDK's root, and the hosts, which
+            // can't load it, are pinned to the x64 .NET (DOTNET_ROOT_X64) unless the root they'd use has the runtime.
+            return (hostsRoot is null || !HasHostRuntime(hostsRoot)) && PointHostsAt(root) is { Count: > 1 } pinned
+                ? new DotnetRootChoice(root, AddToPath: false, pinned, $"The helper processes use the x64 .NET in {pinned[1].Value} ({pinned[1].Key}).")
+                : new DotnetRootChoice(root, AddToPath: false, [], null);
+        }
+
+        if ((hostsRoot is null || !SameRoot(hostsRoot, root)) && (HasHostRuntime(root) || hostsRoot is null || !HasHostRuntime(hostsRoot)))
+        {
+            return new DotnetRootChoice(root, AddToPath: false, PointHostsAt(root), $"The helper processes use the .NET in {root} (DOTNET_ROOT).");
+        }
+
+        return new DotnetRootChoice(root, AddToPath: false, [], null);
+    }
+
+    /// <summary>
+    /// The variables that make the IDE's processes use <paramref name="root"/>: <c>DOTNET_ROOT</c> (the SDK's, for
+    /// MSBuildLocator, and the app hosts'), and the architecture's own <c>DOTNET_ROOT_ARM64</c> (or <c>_X64</c>), which
+    /// the app host reads first:
+    /// <list type="bullet">
+    /// <item>set to <paramref name="root"/> when it is set elsewhere and that helps (the root has the hosts' runtime, or
+    /// the one it names doesn't): a working <c>DOTNET_ROOT_ARM64</c> is left as it is;</item>
+    /// <item>for an x64 process on Arm64 pointed at the native .NET (which it can't load), <c>DOTNET_ROOT_X64</c> pins the
+    /// hosts to the x64 .NET they'd use otherwise (<c>%ProgramFiles%\dotnet\x64</c>), when there is one.</item>
+    /// </list>
+    /// </summary>
+    public IReadOnlyList<KeyValuePair<string, string>> PointHostsAt(string root)
+    {
+        var variables = new List<KeyValuePair<string, string>> { new("DOTNET_ROOT", root) };
+        var byArch = environment(Resolver.ArchVariable) is { Length: > 0 } set ? set : null;
+        if (byArch is not null && !SameRoot(byArch, root) && HostsCanUse(root) && (HasHostRuntime(root) || !HasHostRuntime(byArch)))
+        {
+            variables.Add(new(Resolver.ArchVariable, root));
+        }
+        else if (!HostsCanUse(root) && (byArch is null || !DirectoryExists(byArch))
+            && Resolver.ForAppHost(name => name == "DOTNET_ROOT" ? null : environment(name)) is { } x64 && HostsCanUse(x64) && DirectoryExists(x64))
+        {
+            variables.Add(new(Resolver.ArchVariable, x64));
+        }
+
+        return variables;
+    }
+
+    /// <summary>
+    /// Whether the IDE's app hosts can run from <paramref name="root"/>: not the native .NET for an x64 process on Arm64
+    /// (the win-x64 build on Windows on Arm loads only an x64 hostfxr: <c>%ProgramFiles%\dotnet\x64</c>).
+    /// </summary>
+    public bool HostsCanUse(string root) => !(Resolver.EmulatedX64 && SameRoot(root, Resolver.NativeLocation));
+
+    /// <summary>An x64 process on Arm64: the installs it can use are x64 ones (winget's <c>--architecture x64</c>).</summary>
+    public bool EmulatedX64 => Resolver.EmulatedX64;
+
+    /// <summary>Whether every framework the IDE's hosts need resolves under <paramref name="root"/>, and the hosts can run from it.</summary>
+    public bool HasHostRuntime(string root) => HostsCanUse(root) && Frameworks.All(f => FrameworkResolver.Resolve(f, InstalledFrameworks(root, f.Name)) is not null);
+
+    /// <summary>The root the IDE's app hosts start with, as the .NET host picks it in this environment (<c>DOTNET_ROOT</c> first).</summary>
+    public string? HostsRoot() => Resolver.ForAppHost(environment);
+
+    /// <summary>
+    /// The IDE's own .NET runtime (M49): whether what its hosts ask for is installed under the root they'll use. When it
+    /// isn't, the row says what is, under every root that has any, and the channel whose SDK brings it.
+    /// </summary>
+    public ToolStatus HostRuntimeStatus() => RuntimeStatus(Frameworks, anyRoot: false);
+
+    /// <summary>
+    /// Whether another set of frameworks (M49: an update's hosts, from its signed feed) would run here, under a root
+    /// the updated IDE can give its hosts (<see cref="ChooseDotnetRoot"/>): the hosts' own root (kept when it has the
+    /// runtime), the <c>DOTNET_ROOT</c> or <c>PATH</c> root with SDKs, or an installers' folder with SDKs. A runtime-only
+    /// folder that isn't the hosts' doesn't count: nothing would point the hosts at it.
+    /// </summary>
+    public ToolStatus RuntimeStatusFor(IReadOnlyList<FrameworkReference> frameworks) => RuntimeStatus(frameworks, anyRoot: true);
+
+    /// <summary>The roots <see cref="ChooseDotnetRoot"/> could leave the hosts on: theirs, and the ones with SDKs.</summary>
+    private IEnumerable<string> SelectableRoots(string hostsRoot)
+    {
+        var exe = platform == PlatformKind.Windows ? "dotnet.exe" : "dotnet";
+        IEnumerable<string> sdkRoots = InstallerFolders().Where(c => _exists(System.IO.Path.Combine(c, exe)) && HasSdks(c));
+        return new[] { hostsRoot, CurrentSdkRoot() ?? string.Empty }.Concat(sdkRoots).Where(r => r.Length > 0 && HostsCanUse(r))
+            .Select(r => System.IO.Path.TrimEndingDirectorySeparator(r)).Distinct(StringComparer.Ordinal);
+    }
+
+    private ToolStatus RuntimeStatus(IReadOnlyList<FrameworkReference> frameworks, bool anyRoot)
+    {
+        const string NeededFor = "Codalus IDE's helper processes: plugins, builds, language services and debugging";
+        const string Title = ".NET runtime for Codalus IDE";
+        var root = HostsRoot() ?? string.Empty;
+        FrameworkVersion? Resolve(FrameworkReference reference, string folder) => folder.Length > 0 && HostsCanUse(folder) ? FrameworkResolver.Resolve(reference, InstalledFrameworks(folder, reference.Name)) : null;
+        var satisfied = frameworks.Count == 0 ? root : (anyRoot ? SelectableRoots(root) : [root]).FirstOrDefault(r => frameworks.All(f => Resolve(f, r) is not null));
+        if (satisfied is not null)
+        {
+            return new("dotnet-runtime", Title, true, ToolState.Found, NeededFor)
+            {
+                Version = frameworks.Count > 0 ? Resolve(frameworks[0], satisfied)!.Text : null,
+                Path = satisfied,
+                Detail = $"Its hosts ask for {string.Join(", ", frameworks)}.",
+            };
+        }
+
+        var missing = frameworks.First(f => Resolve(f, root) is null);
+        var found = string.Join("; ", RuntimeRoots(root)
+            .Select(r => (Root: r, Versions: InstalledFrameworks(r, missing.Name)))
+            .Where(r => r.Versions.Count > 0)
+            .Select(r => $"{FrameworkResolver.Describe(r.Versions)} in {r.Root}"));
+        if (found.Length == 0)
+        {
+            found = "none";
+        }
+
+        return new("dotnet-runtime", Title, true, ToolState.Missing, NeededFor)
+        {
+            Path = root.Length > 0 ? root : null,
+            WantedVersion = missing.Version.Text,
+            WantedChannel = IdeRuntime.Channel(missing),
+            Found = found,
+            Detail = $"Codalus IDE's helper processes need {missing}, which isn't installed{(root.Length > 0 ? " in " + root : string.Empty)} (found: {found}). The .NET {IdeRuntime.Channel(missing)} SDK brings it.",
+        };
+    }
+
+    /// <summary>The roots worth naming: the hosts' own, then where the installers put .NET.</summary>
+    private IEnumerable<string> RuntimeRoots(string hostsRoot) =>
+        new[] { hostsRoot }.Concat(InstallerFolders()).Where(r => r.Length > 0)
+            .Select(r => System.IO.Path.TrimEndingDirectorySeparator(r)).Distinct(StringComparer.Ordinal);
+
+    /// <summary>Where the installers put .NET on this OS.</summary>
+    private string[] InstallerFolders()
+    {
+        var home = environment("HOME") ?? environment("USERPROFILE") ?? string.Empty;
+        return platform switch
+        {
+            // The default location for this process's architecture first: Program Files' x64 folder for the x64 build on
+            // Windows on Arm, where the x64 .NET installs.
+            PlatformKind.Windows => [Resolver.DefaultLocation, System.IO.Path.Combine(environment("ProgramFiles") ?? @"C:\Program Files", "dotnet"), System.IO.Path.Combine(environment("LOCALAPPDATA") ?? string.Empty, "Microsoft", "dotnet")],
+            PlatformKind.MacOS => ["/usr/local/share/dotnet", System.IO.Path.Combine(home, ".dotnet")],
+            _ => [System.IO.Path.Combine(home, ".dotnet"), "/usr/share/dotnet", "/usr/lib/dotnet", "/usr/lib64/dotnet", "/usr/local/share/dotnet", "/snap/dotnet-sdk/current"],
+        };
+    }
+
     /// <summary>The runtime the IDE itself was built for, from its framework description (<c>.NET 11.0.0-rc.2…</c>).</summary>
     public static string DefaultHostsRuntime()
     {
@@ -74,6 +288,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         var tools = new List<ToolStatus>
         {
             dotnet,
+            HostRuntimeStatus(),
             Status("git", "Git", required: true, git, "Source control, and cloning repositories"),
         };
 
@@ -122,24 +337,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
 
         var newest = sdks[^1];
 
-        // The hosts run on the IDE's .NET or a newer one (M30b): SDKs of older versions alone can't start them.
-        var (runtimesCode, runtimesOutput) = await TryRunAsync(dotnet, ["--list-runtimes"], null, cancellationToken).ConfigureAwait(false);
-        var runtimes = runtimesCode == 0
-            ? runtimesOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(l => l.StartsWith("Microsoft.NETCore.App ", StringComparison.Ordinal)).Select(l => l.Split(' ')[1]).ToList()
-            : [];
-        if (runtimes.Count > 0 && !runtimes.Any(r => CompareVersions(r, HostsRuntime) >= 0))
-        {
-            var major = HostsRuntime.Split('.')[0];
-            return new("dotnet", ".NET SDK", true, ToolState.Mismatch, NeededFor)
-            {
-                Path = dotnet,
-                Version = newest,
-                WantedChannel = major + ".0",
-                Detail = $"Codalus IDE's helper processes need .NET {HostsRuntime} or later, which isn't installed (installed: {string.Join(", ", runtimes)}). Install the .NET {major} SDK.",
-            };
-        }
-
+        // The runtime the hosts need is a row of its own since M49 (HostRuntimeStatus): hostfxr's rules, the hosts' root.
         if (solutionFolder is not null && GlobalJson(solutionFolder) is { } globalJson)
         {
             // dotnet applies global.json's version and roll-forward rules; it fails when no SDK matches.
@@ -230,31 +428,31 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     /// A <c>dotnet</c> whose real folder has no <c>sdk/</c>, such as Homebrew's wrapper script, doesn't count: the build
     /// host's MSBuildLocator can't use it. Null when no folder has an SDK.
     /// </summary>
+    /// <remarks>
+    /// M49: a root with SDKs but without the runtime the IDE's hosts need (<see cref="HasHostRuntime"/>) gives way to an
+    /// installers' folder that has both: <c>/usr/local/share/dotnet</c> with only .NET 10 loses to a <c>~/.dotnet</c> with
+    /// the .NET 11 release candidate the hosts ask for. When no root has the runtime, the choice is as before, and Check
+    /// Environment offers it.
+    /// </remarks>
     public string? FindSdkRoot()
     {
         var exe = platform == PlatformKind.Windows ? "dotnet.exe" : "dotnet";
-        if (environment("DOTNET_ROOT") is { Length: > 0 } root && HasSdks(root))
+        var current = CurrentSdkRoot();
+        if (current is not null && HasHostRuntime(current))
         {
-            return root;
+            return current;
         }
-
-        if (FindOnPath("dotnet") is { } onPath && System.IO.Path.GetDirectoryName(RealPath(onPath)) is { } folder && HasSdks(folder))
-        {
-            return folder;
-        }
-
-        var home = environment("HOME") ?? environment("USERPROFILE") ?? string.Empty;
-        string[] candidates = platform switch
-        {
-            PlatformKind.Windows => [System.IO.Path.Combine(environment("ProgramFiles") ?? @"C:\Program Files", "dotnet"), System.IO.Path.Combine(environment("LOCALAPPDATA") ?? string.Empty, "Microsoft", "dotnet")],
-            PlatformKind.MacOS => ["/usr/local/share/dotnet", System.IO.Path.Combine(home, ".dotnet")],
-            _ => [System.IO.Path.Combine(home, ".dotnet"), "/usr/share/dotnet", "/usr/lib/dotnet", "/usr/lib64/dotnet", "/usr/local/share/dotnet", "/snap/dotnet-sdk/current"],
-        };
 
         // The folder whose newest SDK is the newest: a global.json is likelier to find what it asks for there.
-        return candidates.Where(c => _exists(System.IO.Path.Combine(c, exe)) && HasSdks(c))
-            .OrderByDescending(c => NewestSdk(c)).FirstOrDefault();
+        var candidates = InstallerFolders().Where(c => _exists(System.IO.Path.Combine(c, exe)) && HasSdks(c)).OrderByDescending(NewestSdk).ToList();
+        return candidates.FirstOrDefault(HasHostRuntime) ?? current ?? candidates.FirstOrDefault();
     }
+
+    /// <summary>The root in use when it has SDKs: <c>DOTNET_ROOT</c>, or the real folder of the <c>dotnet</c> on <c>PATH</c>.</summary>
+    private string? CurrentSdkRoot() =>
+        environment("DOTNET_ROOT") is { Length: > 0 } root && HasSdks(root) ? root
+        : FindOnPath("dotnet") is { } onPath && System.IO.Path.GetDirectoryName(RealPath(onPath)) is { } folder && HasSdks(folder) ? folder
+        : null;
 
     /// <summary>Whether a .NET root has at least one SDK (<c>sdk/&lt;version&gt;</c>).</summary>
     public Func<string, IReadOnlyList<string>> SdkVersions { get; init; } = folder =>
@@ -314,7 +512,13 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
             return new(ToolState.Missing, program, null);
         }
 
-        var line = output.Split('\n').FirstOrDefault(l => l.Contains(prefix, StringComparison.OrdinalIgnoreCase))?.Trim() ?? output.Trim();
+        // The tool's own version line; else a line that names a version (podman's docker emulation prints "podman version …"
+        // beside a notice), never the whole output.
+        var lines = output.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        var line = lines.FirstOrDefault(l => l.Contains(prefix, StringComparison.OrdinalIgnoreCase))
+            ?? lines.FirstOrDefault(l => l.Contains("version", StringComparison.OrdinalIgnoreCase))
+            ?? lines.FirstOrDefault()
+            ?? string.Empty;
         var at = line.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
         var version = at >= 0 ? line[(at + prefix.Length)..].Split(' ', ',', '(')[0] : line;
         return new(ToolState.Found, program, version.Length == 0 ? null : version);
@@ -387,8 +591,10 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         start.Environment["DOTNET_NOLOGO"] = "1";
         using var process = Process.Start(start) ?? throw new InvalidOperationException($"{program} didn't start.");
-        var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var error = process.StandardError.ReadToEndAsync(cancellationToken);
+        var output = new StringBuilder();
+        var error = new StringBuilder();
+        using var reading = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var reads = Task.WhenAll(ReadAllAsync(process.StandardOutput, output, reading.Token), ReadAllAsync(process.StandardError, error, reading.Token));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(limit);
         try
@@ -398,9 +604,52 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             process.Kill(entireProcessTree: true);
+            await reading.CancelAsync().ConfigureAwait(false);
             return (-1, $"{program} didn't answer within {limit.TotalSeconds:0} seconds.");
         }
 
-        return (process.ExitCode, await output.ConfigureAwait(false) + await error.ConfigureAwait(false));
+        // The program has ended, but a process it started can still hold its output open (a daemon it forks inherits the
+        // pipes, as adb's server can), and then the end of the output never comes. What the program wrote is in within
+        // moments, so the reads get that long, then let go. That process isn't killed: it outlives the program on purpose,
+        // and once the program has ended it is no longer in its tree.
+        if (await Task.WhenAny(reads, Task.Delay(OutputDrainLimit, cancellationToken)).ConfigureAwait(false) != reads)
+        {
+            await reading.CancelAsync().ConfigureAwait(false);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return (process.ExitCode, Text(output) + Text(error));
+
+        static string Text(StringBuilder text)
+        {
+            lock (text)
+            {
+                return text.ToString();
+            }
+        }
+    }
+
+    /// <summary>How long <see cref="RunProcessAsync(string, IReadOnlyList{string}, string?, TimeSpan, CancellationToken)"/> reads output after the program has ended.</summary>
+    internal static TimeSpan OutputDrainLimit { get; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>A reader's text, as it comes, until its end or <paramref name="cancellationToken"/>.</summary>
+    private static async Task ReadAllAsync(StreamReader reader, StringBuilder into, CancellationToken cancellationToken)
+    {
+        var buffer = new char[4096];
+        try
+        {
+            int read;
+            while ((read = await reader.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+            {
+                lock (into)
+                {
+                    into.Append(buffer, 0, read);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+        {
+            // Let go: the program has ended or been stopped, and what it wrote is in.
+        }
     }
 }

@@ -137,7 +137,12 @@ Content-Type: application/json
 GET {{host}}/api/todos/{{create.response.body.$.id}}
 ```
 
-- **Send a request:** click the green ▶ next to it, press `Ctrl+Alt+R` with the caret in it, or right-click → Send Request. The response appears in the **HTTP Response** window: status, time and size; the body, colored and formatted (JSON and XML indented); the headers; the request as sent, variables filled in; and the history of requests.
+- **Send a request:** click the green ▶ next to it, press `Ctrl+Alt+R` with the caret in it, or right-click → Send Request. The response appears in the **HTTP Response** window:
+  - the status as a colored chip (green for 2xx, amber for 3xx, red for 4xx, 5xx and a request that failed) with the HTTP version, the time and the size;
+  - the request's method and URL, with a link to it in its `.http` file;
+  - **Body**, **Headers** (with their count) and **Request** (as sent, variables filled in) as tabs. The body is colored; **Pretty** formats JSON and XML, **Raw** shows it as received, and the wrap button wraps long lines;
+  - **Send Again** sends the request again from its file; the toolbar copies the body, saves it to a file, or opens it in an editor;
+  - the **History** of requests, newest first, each with its method and status, its time and when it was sent. Select one to see it again; the clear button empties the history.
 - **Variables:**
   - `@name = value` lines (values can use other variables);
   - `{{$guid}}`, `{{$randomInt 1 100}}`, `{{$timestamp}}`, `{{$datetime iso8601}}`, `{{$localDatetime rfc1123}}` and `{{$processEnv NAME}}`;

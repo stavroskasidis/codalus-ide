@@ -1,10 +1,11 @@
+using System.Runtime.InteropServices;
 using Codalus.Platform;
 using Codalus.Workbench.Setup;
 
 namespace Codalus.Workbench.Tests;
 
 /// <summary>Environment setup (M37): what's found with stand-in tools, and the install plans on each OS. Nothing installs.</summary>
-public sealed class EnvironmentCheckTests : IDisposable
+public sealed partial class EnvironmentCheckTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("codalus-env-").FullName;
 
@@ -79,36 +80,18 @@ public sealed class EnvironmentCheckTests : IDisposable
         Assert.Contains("Microsoft.DotNet.SDK.9 ", InstallPlans.For(sdk, PlatformKind.Windows, _dir, true, null)!.Command, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData("10.0.12", false)]
-    [InlineData("11.0.0-rc.1.26425.128", false)]
-    [InlineData("11.0.0-rc.2.26504.105", true)]
-    [InlineData("11.0.0", true)]
-    [InlineData("11.0.3", true)]
-    [InlineData("12.0.0-preview.1.27101.1", true)]
-    public async Task Sdks_without_the_hosts_dotnet_are_a_mismatch_that_installs_the_hosts_channel(string runtime, bool enough)
+    [Fact]
+    public async Task Podmans_docker_emulation_shows_its_version_line_without_its_notice()
     {
-        // M30b: the hosts target the IDE's .NET (here a release candidate) and roll forward, so an older .NET alone
-        // can't start them, whatever SDKs it has. A Linux PATH on every OS: Windows' D:\… would split at its colon.
+        // podman-docker's docker prints podman's version and a notice: Check Environment's row showed both, cut off.
         const string bin = "/x/bin";
-        var check = new EnvironmentCheck(PlatformKind.Linux, Env(("PATH", bin), ("HOME", "/home/u")), (_, arguments, _, _) => Task.FromResult(string.Join(' ', arguments) switch
-        {
-            "--list-sdks" => (0, $"10.0.401 [/x/sdk]\n"),
-            "--list-runtimes" => (0, $"Microsoft.AspNetCore.App 10.0.12 [/x/shared/Microsoft.AspNetCore.App]\nMicrosoft.NETCore.App 10.0.12 [/x/shared/Microsoft.NETCore.App]\nMicrosoft.NETCore.App {runtime} [/x/shared/Microsoft.NETCore.App]\n"),
-            _ => (1, string.Empty),
-        }), path => path == Path.Combine(bin, "dotnet"))
-        {
-            HostsRuntime = "11.0.0-rc.2.26504.105",
-        };
+        var check = new EnvironmentCheck(PlatformKind.Linux, Env(("PATH", bin), ("HOME", "/home/u")), (program, arguments, _, _) => Task.FromResult(
+            Path.GetFileName(program) == "docker" && arguments is ["--version"]
+                ? (0, "podman version 4.9.3\nEmulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.\n")
+                : (1, string.Empty)), path => path == Path.Combine(bin, "docker"));
 
-        var sdk = (await check.CheckAsync(null, TestContext.Current.CancellationToken)).Single(t => t.Id == "dotnet");
-        Assert.Equal(enough ? ToolState.Found : ToolState.Mismatch, sdk.State);
-        if (!enough)
-        {
-            Assert.Equal("11.0", sdk.WantedChannel);
-            Assert.Contains(".NET 11.0.0-rc.2.26504.105 or later", sdk.Detail, StringComparison.Ordinal);
-            Assert.Contains("--channel 11.0 ", InstallPlans.For(sdk, PlatformKind.Linux, "/home/u", false, "ubuntu debian")!.Command, StringComparison.Ordinal);
-        }
+        var docker = (await check.CheckAsync(null, TestContext.Current.CancellationToken)).Single(t => t.Id == "docker");
+        Assert.Equal((ToolState.Found, "podman version 4.9.3"), (docker.State, docker.Version));
     }
 
     [Fact]
@@ -143,4 +126,121 @@ public sealed class EnvironmentCheckTests : IDisposable
         Assert.Equal("ubuntu debian", InstallPlans.LinuxDistribution(file));
         Assert.Null(InstallPlans.LinuxDistribution(Path.Combine(_dir, "none")));
     }
+
+    [Fact]
+    public async Task A_program_whose_child_keeps_its_output_open_still_returns_once_it_has_ended()
+    {
+        // A stand-in that prints, then leaves a process holding its standard output, as a tool that forks a daemon
+        // (adb's server) can: the end of the output never comes until that process ends. The run must not wait for it.
+        var started = DateTime.Now.AddSeconds(-1);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var (program, arguments) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", new[] { "/d", "/c", "echo hello& start /b ping -n 300 127.0.0.1" })
+            : ("/bin/sh", ["-c", "echo hello; sleep 300 & echo \"held by $!\""]);
+        var (code, output) = (-2, "");
+        try
+        {
+            // Not in the test's folder: the process left behind runs there until it is removed, and on Windows a process's
+            // working folder can't be deleted (Dispose).
+            (code, output) = await EnvironmentCheck.RunProcessAsync(program, arguments, AppContext.BaseDirectory, TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(30), $"Returned after {clock.Elapsed}: it waited for the process holding the output.");
+            Assert.Equal(0, code);
+            Assert.Contains("hello", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            // The test removes the process it left behind, and waits until it has gone.
+            foreach (var held in LeftBehind(output, started))
+            {
+                using (held)
+                {
+                    try
+                    {
+                        held.Kill();
+                        held.WaitForExit(TimeSpan.FromSeconds(10));
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // It has ended already.
+                    }
+                }
+            }
+        }
+
+        // Unix: the shell prints the background process's id. Windows: cmd can't, so the ping started since the test began
+        // whose parent has exited: `start /b` left it behind when its cmd ended. Every ping started since, as this test did,
+        // killed the pings of tests running beside it (AcpAgentTests' timeout command ended with exit code -1 in 0.7 s,
+        // HostRuntimeTests' stand-in hosts): theirs run under a cmd /c that waits for them.
+        static IEnumerable<System.Diagnostics.Process> LeftBehind(string output, DateTime started)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return System.Diagnostics.Process.GetProcessesByName("PING").Where(p => StartedSince(p, started) && Orphaned(p));
+            }
+
+            return System.Text.RegularExpressions.Regex.Match(output, @"held by (\d+)") is { Success: true } held
+                && int.TryParse(held.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture, out var id)
+                && Running(id) is { } process
+                    ? [process]
+                    : [];
+        }
+
+        static bool StartedSince(System.Diagnostics.Process process, DateTime started)
+        {
+            try
+            {
+                return process.StartTime >= started;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return false;
+            }
+        }
+
+        static System.Diagnostics.Process? Running(int id)
+        {
+            try
+            {
+                return System.Diagnostics.Process.GetProcessById(id);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+
+        // Its parent has exited: no process runs under the parent's id, or the one that does started after it (a reused id).
+        static bool Orphaned(System.Diagnostics.Process process)
+        {
+            try
+            {
+                if (NtQueryInformationProcess(process.Handle, 0, out var info, Marshal.SizeOf<ProcessBasicInformation>(), out _) != 0)
+                {
+                    return false;
+                }
+
+                using var parent = Running((int)info.InheritedFromUniqueProcessId);
+                return parent is null || parent.StartTime > process.StartTime;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return false;
+            }
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessBasicInformation
+    {
+        public nint ExitStatus;
+        public nint PebBaseAddress;
+        public nint AffinityMask;
+        public nint BasePriority;
+        public nint UniqueProcessId;
+        public nint InheritedFromUniqueProcessId;
+    }
+
+    // ProcessBasicInformation (0): the parent's id, which .NET doesn't expose on Windows.
+    [LibraryImport("ntdll.dll")]
+    private static partial int NtQueryInformationProcess(nint process, int informationClass, out ProcessBasicInformation information, int length, out int returned);
 }

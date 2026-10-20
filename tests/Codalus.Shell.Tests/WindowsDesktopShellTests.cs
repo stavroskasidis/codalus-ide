@@ -74,19 +74,11 @@ public sealed class WindowsDesktopShellTests
         await ShellFixture.PumpUntil(() => editor?.Controller is not null);
         Assert.Equal(ShellHost.XamlLanguageId, editor!.Model.LanguageId);
         var position = editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("Text=\"{Binding NewTitle,", StringComparison.Ordinal) + "Text=\"{Binding ".Length);
-        var completed = false;
-        for (var attempt = 0; attempt < 60 && !completed; attempt++)
-        {
-            var client = await f.Shell.Languages.ClientAsync(ShellHost.XamlLanguageId);
-            var completion = client is null ? null : await client.CompletionAsync(editor.Model.Uri, position, null, ShellFixture.RequestTimeout(60));
-            completed = completion?.Items.Any(i => i.Label == "AddCommand") == true;
-            if (!completed)
-            {
-                await Task.Delay(2000, TestContext.Current.CancellationToken);
-            }
-        }
-
-        Assert.True(completed, "The binding path completes the view model's members.");
+        await ShellFixture.RetryUntil(
+            "the WPF binding path {Binding NewTitle} to complete the view model's AddCommand",
+            async token => await f.Shell.Languages.ClientAsync(ShellHost.XamlLanguageId) is { } client ? await client.CompletionAsync(editor.Model.Uri, position, null, token) : null,
+            completion => completion?.Items.Any(i => i.Label == "AddCommand") == true,
+            ShellFixture.Describe);
 
         // Off Windows, Start says the app is Windows only, and builds nothing.
         f.Shell.SetStartupProject(WpfApp(folder));
@@ -170,13 +162,13 @@ public sealed class WindowsDesktopShellTests
             var model = Path.Combine(folder, "WpfApp", "ViewModels", "MainViewModel.cs");
             var line = Array.FindIndex(File.ReadAllLines(model), l => l.Contains("Items.Add(new TodoItem(\"Open the WPF fixture\"))", StringComparison.Ordinal)) + 1;
             f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(model, line));
-            f.Shell.Run("debug.start");
+            await f.RunAsync("debug.start");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 240, describe: () => DebugStates(f));
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line, describe: () => DebugStates(f));
             await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0, describe: () => DebugStates(f));
             Assert.Contains("MainViewModel", f.Shell.CallStack.Frames[0].Name, StringComparison.Ordinal);
             f.Shell.Debugger.Breakpoints.Clear();
-            f.Shell.Run("debug.stop");
+            await f.RunAsync("debug.stop");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
         }
 

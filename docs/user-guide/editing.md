@@ -2,7 +2,7 @@
 
 ## The editor
 
-- **Tabs and splits**: Window → Split Right (`Ctrl+\`) or Split Down opens another editor group. Window → Split shows two views of the same file. `Ctrl+Tab` switches documents: hold `Ctrl`, and each `Tab` (`Shift+Tab` back, or the arrow keys) moves through the open documents in the order you last used them; release `Ctrl` to switch (`Esc` stays). A quick `Ctrl+Tab` goes back to the document you used before. Next Document and Previous Document (`Ctrl+Alt+PageDown`, `Ctrl+Alt+PageUp`) go through them in tab order.
+- **Tabs and splits**: Window → Split Right (`Ctrl+\` in the VS Code scheme; the default scheme's `Ctrl+\`, `Ctrl+E` is the Error List) or Split Down opens another editor group. Window → Split shows two views of the same file. `Ctrl+Tab` switches documents: hold `Ctrl`, and each `Tab` (`Shift+Tab` back, or the arrow keys) moves through the open documents in the order you last used them; release `Ctrl` to switch (`Esc` stays). A quick `Ctrl+Tab` goes back to the document you used before. Next Document and Previous Document (`Ctrl+Alt+PageDown`, `Ctrl+Alt+PageUp`) go through them in tab order.
 - **Multiple carets**: `Ctrl+Alt+Click`, `Ctrl+Alt+Up/Down`, or `Shift+Alt+.` (next occurrence of the selection). `Shift+Alt`+drag selects a box.
 - **Folding**: regions, members, usings and comments fold from the margin, or with `Ctrl+M Ctrl+M`.
 - **The minimap** on the right shows the whole file; click or drag to scroll (setting **Text Editor → Minimap**).
@@ -92,12 +92,12 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 - **Find All** (`Enter`) lists the matches in the **Find Results** window and closes Find and Replace; **Append results** adds them under the earlier ones. **Find Next**, **Find Previous** and **Skip File** go through the matches one by one, opening each with the match selected, and leave the window open.
 - **Replace** replaces the current match and goes to the next. **Replace All** asks first, then replaces every match: open documents change in the editor, where you can undo and save, and the other files change on disk. Find Results then lists the changed lines.
 
-**Find Results** shows a line per match, grouped by file, with the matches emphasized and the file, line and column beside them. Double-click or `Enter` opens one; the arrows go to the previous and next; **Modify Find** opens Find and Replace again with the same search (it's off while the window shows references from Find All References).
+**Find Results** shows a line per match, grouped by file, with the file, line and column beside it. The line is drawn in the editor's colors for its language, in the current theme, with each match highlighted. A line above the results says what was searched (`Find all "Person", Match case, Whole word, Entire solution, "*.cs"`), and the status line below counts the matching lines and files and the files searched. Double-click or `Enter` opens a match; `F8` and `Shift+F8` (or the arrows on the toolbar) open the next and the previous; **Modify Find** opens Find and Replace again with the same search (it's off while the window shows references from Find All References).
 
 - **Search Find Results**, the box at the right of the toolbar, shows only the matches whose code or file name contains its text, under their files' headers; the headers' counts and the summary below count what's shown.
-- **Group by**: **File** (a header per file, the default), **Path and file** (a header per folder with its files under it), or **None**. Headers collapse and expand: click the chevron, double-click the header, or use `Left` and `Right`. Next and Previous skip what's collapsed.
-- **List View** shows the matches in one flat list with each file's full path in the File column; Group by doesn't apply while it's on.
-- **Keep Results** (the pin) keeps the current results: the next Find All opens a new page, **Find Results 2**, and so on, shown as tabs at the top of the window. A kept page stays until you close its tab; Modify Find on it brings back its own search. Closing the last page clears it.
+- **Tree** or **List**: Tree groups the matches by **Group by**: **File** (a header per file, the default), **Path and file** (a header per folder, below the folder searched or the solution's, with its files under it), or **None**. Each header shows its folder or file icon and how many matches it holds. Headers collapse and expand: click the chevron, double-click the header, or use `Left` and `Right`. Next and Previous skip what's collapsed. **List** shows the matches in one flat list with each file's full path in the File column.
+- **Keep Results** (the pin) keeps the current results: the next Find All opens a new page, **Find Results 2**, and so on, shown as tabs at the top of the window, each with its count. A kept page stays until you close its tab; Modify Find on it brings back its own search. Closing the last page clears it.
+- **Clear All** empties the page, and **Stop Searching** stops a search that is still running.
 
 ## Inline information
 

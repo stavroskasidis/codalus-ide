@@ -188,4 +188,34 @@ public sealed class CustomToolIntegrationTests : IAsyncLifetime
         var result = await builds.BuildAsync(BuildTargets.Build, null, Timeout());
         Assert.True(result.Succeeded, builds.Channel.GetText());
     }
+
+    [Fact]
+    public async Task An_output_another_process_has_open_is_written_once_it_is_closed()
+    {
+        // Windows denies the write while a reader holds the file without write sharing (the shell test's poll of the
+        // output did, on PR #74's run): the regenerated output was lost. FileShare.None denies it on every OS.
+        var tools = new CustomToolService(new ProjectItemService(_solutions), _templates);
+        await _solutions.OpenAsync(ItemsProject, trusted: true, restore: false, Timeout());
+        var deadline = DateTime.UtcNow + s_timeout;
+        while (_solutions.Progress is not { Completed: true } || _solutions.Projects.Count != 1)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "Timed out.");
+            await Task.Delay(25, TestContext.Current.CancellationToken);
+        }
+
+        // The ResX generator is quick: its write comes while the file is still open.
+        var resx = Path.Combine(ItemsDir, "Resources.resx");
+        File.WriteAllText(resx, File.ReadAllText(resx).Replace("</root>", "  <data name=\"WhileOpen\" xml:space=\"preserve\">\n    <value>Open</value>\n  </data>\n</root>", StringComparison.Ordinal));
+        var output = Path.Combine(ItemsDir, "Resources.Designer.cs");
+        Task<CustomToolResult> run;
+        using (new FileStream(output, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            run = tools.RunAsync(ItemsProject, resx, ResXGenerator.Internal, "Fixture.Items", "Fixture.Items", trusted: true, Timeout());
+            await Task.Delay(500, TestContext.Current.CancellationToken);
+        }
+
+        var generated = await run;
+        Assert.True(generated.Succeeded, string.Join("; ", generated.Diagnostics.Select(d => d.Message)));
+        Assert.Contains("internal static string WhileOpen {", File.ReadAllText(output), StringComparison.Ordinal);
+    }
 }

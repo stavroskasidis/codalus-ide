@@ -186,6 +186,17 @@ public sealed partial class ShellHost : IEditorServices
                 Workbench.Notifications.Error(Localizer.Format("msg.editor.theLanguageServiceKeepsCrashingAnd", "The {0} language service keeps crashing and was stopped. Reopen the solution to try again.", name));
             }
         });
+        Languages.StartFailed += (_, e) => Ui.Post(() =>
+        {
+            // M49: a host that couldn't start says why once; the IDE's missing runtime is the one runtime notification.
+            if (e.Error is Codalus.Rpc.HostRuntimeMissingException missing && ReportHostRuntimeMissing(missing))
+            {
+                return;
+            }
+
+            var name = Workbench.LanguageServers.Get(e.LanguageId)?.DisplayName ?? e.LanguageId;
+            Workbench.Notifications.Error(Localizer.Format("msg.editor.languageServiceCouldntStart", "The {0} language service couldn't start: {1}", name, e.Error.Message));
+        });
         Languages.HostRestarted += (_, _) => Ui.Post(RefreshEditors);
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnLanguageStatus(e.LanguageId, e.Status));
         Solutions.DesignTimeProgressChanged += (_, _) => Ui.Post(UpdateLanguageStatus);
@@ -196,6 +207,10 @@ public sealed partial class ShellHost : IEditorServices
         InitializeSync();
         InitializeColors(); // before ThemeChanged's subscribers: they read the customized theme
         Theme.Changed += (_, _) => ThemeChanged?.Invoke(this, EventArgs.Empty);
+
+        // Lines of code outside the editor (Find Results, the WCF Test Client's response) take the editor's colors (M34h).
+        Editor.CodeColors.Configure(Languages.LanguageIdOf, TextMate.GrammarFor, id => id is null || id == Theme.ActiveTheme ? EditorTheme : Editor.EditorTheme.For(id));
+        ThemeChanged += (_, _) => Editor.CodeColors.NotifyChanged();
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
         Layout.ActiveDocumentChanged += (_, _) => RememberActiveDocument();
@@ -667,7 +682,7 @@ public sealed partial class ShellHost : IEditorServices
         }
         else if (Uri.TryCreate(target, UriKind.Absolute, out var url) && url.Scheme is "http" or "https")
         {
-            ShellIntegration.OpenUrl(url);
+            OpenExternalUrl(url);
         }
     }
 
@@ -903,7 +918,7 @@ public sealed partial class ShellHost : IEditorServices
         {
             if (Uri.TryCreate(link, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
             {
-                ShellIntegration.OpenUrl(uri);
+                OpenExternalUrl(uri);
             }
             else if (link.StartsWith("command:", StringComparison.Ordinal))
             {
@@ -996,7 +1011,7 @@ public sealed partial class ShellHost : IEditorServices
     {
         if (Layout.ActiveDocument?.FilePath is { Length: > 0 } path && Window?.Clipboard is { } clipboard)
         {
-            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, path).ConfigureAwait(true);
+            await Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, path).ConfigureAwait(true);
         }
     }
 
@@ -1010,7 +1025,7 @@ public sealed partial class ShellHost : IEditorServices
 
         try
         {
-            Codalus.Platform.ShellIntegration.RevealInFileManager(path);
+            RevealPath(path);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {

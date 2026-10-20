@@ -65,7 +65,7 @@ public sealed class BlazorTests
 
             // The app can listen before dotnet watch watches, and dotnet watch drops a change saved before then: Apply
             // Code Changes saves once it watches.
-            f.Shell.Run("run.applyCodeChanges");
+            await f.RunAsync("run.applyCodeChanges");
             var page = string.Empty;
             try
             {
@@ -83,7 +83,7 @@ public sealed class BlazorTests
                     return page.Contains("<h1>Clicker</h1>", StringComparison.Ordinal);
                 }, seconds: 120);
             }
-            catch (Xunit.Sdk.TrueException)
+            catch (Xunit.Sdk.FailException)
             {
                 // Whether the edit was saved, whether dotnet watch saw it, and what it said.
                 Assert.Fail($"The edited page wasn't served (modified: {editor.Model.IsModified}; file: {(File.ReadAllText(counter).Contains("<h1>Clicker</h1>", StringComparison.Ordinal) ? "edited" : "not edited")}; "
