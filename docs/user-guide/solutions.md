@@ -15,6 +15,7 @@ The tree shows the solution, its solution folders, projects, project folders and
 |---|---|
 | Open a file in a preview tab (replaced by the next preview) | Single-click it. |
 | Keep a file open | Double-click it, or edit it. |
+| Pin a tab to the left of its group | The pin beside the tab's close button (on the selected or hovered tab), or **Window → Pin or Unpin Tab**. A pinned tab shows its pin upright; click it to unpin. |
 | Create a file or folder | Use the context menu. New C# files get the right namespace. |
 | Rename | Press `F2`. Renaming a project folder updates the solution and project references. |
 | Delete | Press `Delete`. Files go to the OS trash. |
