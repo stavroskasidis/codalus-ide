@@ -6,16 +6,17 @@ namespace Codalus.Projects.Tests;
 
 /// <summary>
 /// A minimal NuGet V3 feed over HTTP (service index, search, registrations, README template) for what a local feed
-/// can't express: deprecation, vulnerabilities, download counts. Serves one package, <c>Old.Package</c>. The SDK's NuGet
-/// (7.x) ignores the search endpoint of a plain-HTTP feed even with <c>allowInsecureConnections</c>, so only
-/// registrations and the README template are used from here; search stays covered by the local feed. The SDK's NuGet
-/// (7.x) ignores the search endpoint of a plain-HTTP feed even with <c>allowInsecureConnections</c>, so only
-/// registrations and the README template are used from here; search stays covered by the local feed.
+/// can't express: deprecation, vulnerabilities, download counts. Serves one package, <c>Old.Package</c>. NuGet uses none
+/// of the index's search types (it looks for <c>SearchQueryService/Versioned</c>, <c>/3.4.0</c> and <c>/3.0.0-beta</c>),
+/// so only registrations and the README template are used from here; search stays covered by the local feed. The index
+/// is at a path of its own: NuGet keeps a service index in its machine-wide HTTP cache for 30 minutes, keyed by the URL
+/// alone, and a loopback port comes back for later mock feeds, which would otherwise be answered by this index.
 /// </summary>
 internal sealed class MockNuGetServer : IDisposable
 {
     private readonly HttpListener _listener = new();
     private readonly CancellationTokenSource _stop = new();
+    private readonly string _index = "/" + Guid.NewGuid().ToString("N") + "/v3/index.json";
 
     public MockNuGetServer()
     {
@@ -28,7 +29,7 @@ internal sealed class MockNuGetServer : IDisposable
 
     public string BaseUrl { get; }
 
-    public string IndexUrl => BaseUrl + "v3/index.json";
+    public string IndexUrl => BaseUrl.TrimEnd('/') + _index;
 
     public int Requests { get; private set; }
 
@@ -57,7 +58,7 @@ internal sealed class MockNuGetServer : IDisposable
             var path = context.Request.Url!.AbsolutePath.ToLowerInvariant();
             var (status, body, type) = path switch
             {
-                "/v3/index.json" => (200, Index(), "application/json"),
+                _ when path == _index => (200, Index(), "application/json"),
                 "/search/query" => (200, Search(), "application/json"),
                 "/registration/old.package/index.json" => (200, Registration(), "application/json"),
                 "/flat/old.package/1.0.0/readme" => (200, "# Old.Package\n\nDeprecated; use **New.Package**.\n", "text/markdown"),
