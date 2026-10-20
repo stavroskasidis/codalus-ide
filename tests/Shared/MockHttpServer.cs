@@ -94,8 +94,9 @@ internal sealed class MockHttpServer : IAsyncDisposable
             {
                 client = await _listener.AcceptTcpClientAsync(_stop.Token).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException)
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException or InvalidOperationException)
             {
+                // InvalidOperationException ("Not listening"): disposed before the loop got here (macOS CI, run 39510353199).
                 return;
             }
 
@@ -232,7 +233,7 @@ internal sealed class MockHttpServer : IAsyncDisposable
         {
             await _accepting.ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException)
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException or InvalidOperationException)
         {
         }
 
