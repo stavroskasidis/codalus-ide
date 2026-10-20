@@ -4,7 +4,7 @@ Codalus IDE builds, runs and debugs your apps in containers with **your own Dock
 
 ## The container engine
 
-The engine is the **Containers → Container Engine** setting (`containers.tool`): `docker`, `podman`, or a command line such as `wsl -d Ubuntu --exec podman`. When it is empty, Codalus IDE uses `docker` if it is on your `PATH`, else `podman`. On Windows and macOS, Docker Desktop or a running Podman machine (`podman machine start`) is needed; the containers are Linux containers.
+The engine is the **Containers → Container Engine** setting (`containers.tool`): `docker`, `podman`, or a command line such as `wsl -d Ubuntu --exec podman`. When it is empty, Codalus IDE uses `docker` if it is on your `PATH`, else `podman`. Attach to a Process in a Container uses it too, unless you set `debug.containerTool`. On Windows and macOS, Docker Desktop or a running Podman machine (`podman machine start`) is needed; the containers are Linux containers.
 
 ## Add Docker Support
 
@@ -37,6 +37,8 @@ Compose files are checked against the Compose Specification's schema as you type
 - **Files**: browse its folders; a file opens as a local copy (changes aren't written back).
 
 Toolbar: Start, Stop, Restart, Remove, Open in Browser (its first published port), **Open Terminal** (a shell in the container, in the integrated terminal), and **Attach Debugger** (to a .NET process in it). Debug → **Attach to a Process in a Container…** does the same from the Debug menu.
+
+When no engine answers (Docker or Podman isn't installed, or its daemon or machine isn't running), the window and **Attach to a Process in a Container…** say so, and how to start or install one.
 
 ## .NET Aspire
 

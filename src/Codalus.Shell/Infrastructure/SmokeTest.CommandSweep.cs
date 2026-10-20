@@ -97,7 +97,6 @@ internal sealed partial class SmokeTest
     private static readonly Dictionary<string, (string Text, string Why)> s_sweepExpectedErrors = new(StringComparer.Ordinal)
     {
         ["git.continue"] = ("Resolve the conflicts first", "the GitMerge context leaves its conflict unresolved on purpose"),
-        ["containers.attach"] = ("isn't installed or isn't on the PATH", "no Docker or Podman on this machine, and the command says so"),
     };
 
     /// <summary>
