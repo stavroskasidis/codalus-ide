@@ -451,6 +451,7 @@ public abstract class SettingItemViewModel : ObservableObject
         _ when descriptor.Key == Theming.ThemeService.SettingKey => new ColorThemeSettingViewModel(descriptor, settings, scope),
         SettingType.Boolean => new BoolSettingViewModel(descriptor, settings, scope),
         SettingType.String when descriptor.Enum is { Count: > 0 } => new EnumSettingViewModel(descriptor, settings, scope),
+        SettingType.String when descriptor.Browse != SettingBrowse.None => new PathSettingViewModel(descriptor, settings, scope),
         _ => new TextSettingViewModel(descriptor, settings, scope),
     };
 
@@ -574,7 +575,7 @@ public sealed class EnumSettingViewModel : SettingItemViewModel
 }
 
 /// <summary>Strings, numbers and string arrays (one value per line); validated when committed.</summary>
-public sealed class TextSettingViewModel : SettingItemViewModel
+public class TextSettingViewModel : SettingItemViewModel
 {
     private string _text = string.Empty;
     private string _committed = string.Empty;
@@ -676,4 +677,11 @@ public sealed class TextSettingViewModel : SettingItemViewModel
         (null, { } max) => string.Create(CultureInfo.InvariantCulture, $" ≤ {max}"),
         _ => string.Empty,
     };
+}
+
+/// <summary>A path setting (<see cref="SettingDescriptor.Browse"/>): its text with a Browse button (<see cref="Controls.PathBox"/>).</summary>
+public sealed class PathSettingViewModel(SettingDescriptor descriptor, SettingsService settings, Func<SettingScope> scope) : TextSettingViewModel(descriptor, settings, scope)
+{
+    /// <summary>What Browse asks for.</summary>
+    public Controls.PathKind Kind => Descriptor.Browse == SettingBrowse.File ? Controls.PathKind.File : Controls.PathKind.Folder;
 }

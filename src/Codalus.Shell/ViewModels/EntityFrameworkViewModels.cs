@@ -588,6 +588,7 @@ public sealed class EfScaffoldViewModel : ObservableObject
             if (SetField(ref _project, value))
             {
                 OnPropertyChanged(nameof(ProjectName));
+                OnPropertyChanged(nameof(ProjectFolder));
                 OnPropertyChanged(nameof(SelectedProject));
                 RefreshConnections();
             }
@@ -595,6 +596,9 @@ public sealed class EfScaffoldViewModel : ObservableObject
     }
 
     public string ProjectName => _project is null ? string.Empty : Path.GetFileNameWithoutExtension(_project);
+
+    /// <summary>The project's folder, which <see cref="OutputDir"/> is relative to.</summary>
+    public string? ProjectFolder => _project is null ? null : Path.GetDirectoryName(_project);
 
     /// <summary>A connection string the project already has, copied into <see cref="ConnectionString"/> when picked.</summary>
     public EfConnectionChoice? KnownConnection

@@ -135,4 +135,4 @@ SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own p
 
 The built-in **Templates** plugin creates projects and solutions with `dotnet new` (File → New Project or New Solution, or the command palette).
 
-New Project asks for the template, the location, the name and, for templates that offer one, the target framework. The frameworks are those of the SDK the location uses, the template's default first. `dotnet new` runs in the location, so a `global.json` there picks the SDK.
+New Project asks for the template, the location, the name and, for templates that offer one, the target framework. Type the location, or click the folder button beside it (**Browse…**) to choose it in your OS's folder picker, which opens where the typed path is; every field for a path on your computer has that button, in dialogs, tool windows and Options. The frameworks are those of the SDK the location uses, the template's default first. `dotnet new` runs in the location, so a `global.json` there picks the SDK.
