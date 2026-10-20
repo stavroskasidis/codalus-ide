@@ -57,16 +57,16 @@ internal static class VariableTreeSupport
             var items = new List<Control>();
             if (canEdit(node))
             {
-                items.Add(Item("Edit Value", () => _ = EditAsync(node, setValue), "F2"));
+                items.Add(Item("Edit Value", "edit", () => _ = EditAsync(node, setValue), "F2"));
             }
 
-            items.Add(Item("Copy Value", () => _ = VariableActions.CopyText?.Invoke(node.Value)));
+            items.Add(Item("Copy Value", "copy", () => _ = VariableActions.CopyText?.Invoke(node.Value)));
             if (node.EvaluateName is { } expression)
             {
-                items.Add(Item("Copy Expression", () => _ = VariableActions.CopyText?.Invoke(expression)));
+                items.Add(Item("Copy Expression", "copy", () => _ = VariableActions.CopyText?.Invoke(expression)));
                 items.Add(new Separator());
-                items.Add(Item("Add Watch", () => _ = VariableActions.AddWatch?.Invoke(expression)));
-                items.Add(Item("QuickWatch", () => _ = VariableActions.QuickWatch?.Invoke(expression), "Shift+F9"));
+                items.Add(Item("Add Watch", "watch", () => _ = VariableActions.AddWatch?.Invoke(expression)));
+                items.Add(Item("QuickWatch", "watch", () => _ = VariableActions.QuickWatch?.Invoke(expression), "Shift+F9"));
             }
 
             var kinds = node.IsString ? Visualizers.Suggested(ViewModels.Visualizers.Unquote(node.Value))
@@ -76,12 +76,9 @@ internal static class VariableTreeSupport
             if (kinds.Count > 0 || plugins.Count > 0)
             {
                 items.Add(new Separator());
-                var view = new MenuItem { Header = "View" };
-                view.ItemsSource = kinds
-                    .Select(kind => Item(Visualizers.Title(kind), () => _ = VariableActions.Visualize?.Invoke(node, kind)))
-                    .Concat(plugins.Select(p => Item(p.Title, () => _ = VariableActions.VisualizeWithPlugin?.Invoke(node, p.Id))))
-                    .ToList();
-                items.Add(view);
+                items.Add(Controls.MenuEntry.Submenu("View", "window", kinds
+                    .Select(kind => Item(Visualizers.Title(kind), null, () => _ = VariableActions.Visualize?.Invoke(node, kind)))
+                    .Concat(plugins.Select(p => Item(p.Title, null, () => _ = VariableActions.VisualizeWithPlugin?.Invoke(node, p.Id))))));
             }
 
             new ContextMenu { ItemsSource = items }.Open(tree);
@@ -102,10 +99,5 @@ internal static class VariableTreeSupport
         }
     }
 
-    private static MenuItem Item(string header, Action action, string? gesture = null)
-    {
-        var item = new MenuItem { Header = header, InputGesture = gesture is null ? null : KeyGesture.Parse(gesture) };
-        item.Click += (_, _) => action();
-        return item;
-    }
+    private static MenuItem Item(string header, string? icon, Action action, string? keys = null) => Controls.MenuEntry.Create(header, icon, keys: keys, click: action);
 }

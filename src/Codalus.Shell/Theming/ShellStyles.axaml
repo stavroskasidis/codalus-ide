@@ -1052,6 +1052,30 @@
   <Style Selector="controls|Icon.accent-folder">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Folder}" />
   </Style>
+  <!--
+    Menus, one look (the maintainer's 0.5 review, as Visual Studio's; entries made by Controls/MenuEntry.cs): every entry
+    keeps the 16 px icon column, empty or not, so text starts at the same place in every menu and a menu without icons
+    doesn't look different; a check or radio mark takes the icon's place. Rows are 24 px with or without an icon, the
+    separators start where the text does, and a submenu's chevron is a small one. The menu bar's own titles have another
+    template, which these don't reach.
+  -->
+  <!-- The pseudo-classes make these style triggers, which win over the values Fluent's template sets. -->
+  <Style Selector="MenuItem:not(:toggle) /template/ ContentControl#PART_IconPresenter">
+    <Setter Property="IsVisible" Value="True" />
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Height" Value="16" />
+  </Style>
+  <Style Selector="MenuItem:toggle /template/ ContentControl#PART_ToggleIconPresenter">
+    <Setter Property="Grid.Column" Value="1" />
+  </Style>
+  <Style Selector="MenuItem:not(:empty) /template/ Path#PART_ChevronPath">
+    <Setter Property="Width" Value="5" />
+    <Setter Property="Height" Value="9" />
+  </Style>
+  <Style Selector="ContextMenu > Separator, MenuItem > Separator, MenuFlyoutPresenter > Separator">
+    <Setter Property="Margin" Value="28,3,0,3" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Border}" />
+  </Style>
   <!-- Disabled commands dim their icons, colored or not. -->
   <Style Selector="MenuItem:disabled controls|Icon">
     <Setter Property="Opacity" Value="0.4" />
