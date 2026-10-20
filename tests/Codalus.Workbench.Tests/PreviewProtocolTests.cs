@@ -176,22 +176,23 @@ public sealed class PreviewProtocolTests
     }
 
     [Fact]
-    public async Task An_answer_the_designer_holds_back_comes_when_the_update_is_sent_again_and_its_copy_is_dropped()
+    public async Task An_answer_the_designer_holds_back_comes_when_the_update_is_sent_again_and_the_copy_answers_it()
     {
-        // The stand-in designer answers with the XAML as the error, and holds back the first answer to "held" XAML until
-        // the next update comes (as Avalonia's designer can): the session sends the update again and takes the first
-        // answer, and the copy that follows (two seconds later, after the next update is sent) isn't the next update's.
+        // The stand-in designer answers with the XAML and how many times it has had it as the error, and holds back the
+        // first answer to "held" XAML until the next update comes (as Avalonia's designer can): the session sends the
+        // update again, and its answer is the copy's (two seconds after the held one), so no load is left running under
+        // the next update, and no copy's answer is taken as the next update's.
         var fake = Path.Combine(AcpAgentTests.Metadata("CodalusRepoRoot"), "tests", "Codalus.PreviewerHost.Fake", "bin", AcpAgentTests.Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-fake-previewer.dll");
         await using var session = await PreviewerSession.StartAsync(new PreviewerLaunch(fake, fake, Agent: null), 1, TimeSpan.FromSeconds(60), Ct);
 
         var held = await session.UpdateXamlAsync("<Window><!--held--></Window>", fake, "/Held.axaml", TimeSpan.FromSeconds(60), Ct);
-        Assert.Equal("<Window><!--held--></Window>", held.Error);
+        Assert.Equal("<Window><!--held--></Window>#2", held.Error);
         Assert.Contains("sent again", session.RecentOutput, StringComparison.Ordinal);
 
         var next = await session.UpdateXamlAsync("<Window>next</Window>", fake, "/Next.axaml", TimeSpan.FromSeconds(60), Ct);
-        Assert.Equal("<Window>next</Window>", next.Error);
+        Assert.Equal("<Window>next</Window>#1", next.Error);
         var last = await session.UpdateXamlAsync("<Window>last</Window>", fake, "/Last.axaml", TimeSpan.FromSeconds(60), Ct);
-        Assert.Equal("<Window>last</Window>", last.Error);
+        Assert.Equal("<Window>last</Window>#1", last.Error);
     }
 
     [Fact]
