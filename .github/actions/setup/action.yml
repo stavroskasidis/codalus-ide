@@ -8,7 +8,10 @@ inputs:
       Also the .NET 10 SDK, for the fixtures that still target net10.0 and the net10.0 half of samples/Testing (M30b)
     default: "false"
   nuget-cache:
-    description: Cache ~/.nuget/packages (only jobs that restore the solution, so a small job doesn't save a thin cache)
+    description: >-
+      Restore ~/.nuget/packages from the cache (only jobs that restore the solution). Nothing saves it here: one job per OS
+      saves it on develop with the outputs below (pull requests' copies evicted each other, and every job spent minutes
+      packing a cache that another job was already saving)
     default: "false"
   netcoredbg:
     description: The debugger (eng/get-netcoredbg.sh, pinned and checksummed) in .work/netcoredbg
@@ -19,6 +22,13 @@ inputs:
   display:
     description: An X server on Linux (Xvfb on :99, DISPLAY set for the job's later steps)
     default: "false"
+outputs:
+  nuget-cache-key:
+    description: The NuGet cache's key, for the job that saves it
+    value: ${{ steps.restore-nuget.outputs.cache-primary-key }}
+  nuget-cache-hit:
+    description: '"true" when the cache had that key exactly (nothing to save)'
+    value: ${{ steps.restore-nuget.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -36,7 +46,8 @@ runs:
           10.0.x
           11.0.100-rc.2.26504.105
     - if: inputs.nuget-cache == 'true'
-      uses: actions/cache@v4
+      id: restore-nuget
+      uses: actions/cache/restore@v4
       with:
         path: ~/.nuget/packages
         key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
