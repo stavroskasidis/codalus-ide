@@ -77,7 +77,6 @@ public sealed class PreviewerSession : IAsyncDisposable
     private bool _resultSeen;
     private long _updatesSent;
     private long _resultsReceived;
-    private long _answerFrom;
     private PreviewAgentConnection? _agent;
     private readonly TaskCompletionSource<PreviewAgentConnection> _agentConnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private double _scale = 1;
@@ -353,9 +352,11 @@ public sealed class PreviewerSession : IAsyncDisposable
                     case UpdateXamlResultMessage result:
                         lock (_gate)
                         {
-                            // The designer answers every update in order: an answer to an update sent before the
-                            // current one (sent again because its answer was late) is the earlier update's.
-                            if (++_resultsReceived < _answerFrom)
+                            // The designer answers every update in order, and the update's answer is the one to the
+                            // last copy sent: an earlier copy's (sent again because its answer was late) comes first,
+                            // and the designer loads the copy after it, so returning on it would leave a reload running
+                            // under the next request (a hit test on CI found no window).
+                            if (++_resultsReceived < _updatesSent)
                             {
                                 break;
                             }
@@ -434,7 +435,6 @@ public sealed class PreviewerSession : IAsyncDisposable
                 _pendingResult = result;
                 _pendingFrame = frame;
                 _resultSeen = false;
-                _answerFrom = _updatesSent + 1;
             }
 
             using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
@@ -454,8 +454,8 @@ public sealed class PreviewerSession : IAsyncDisposable
 
                     // Avalonia's designer queues what it sends for a worker that can miss its wake-up
                     // (TransportConnectionWrapper), so an answer can wait there until the designer sends anything else,
-                    // and after an error nothing else comes. Sending the update again sends its answer: the first that
-                    // comes is this update's, and the rest are dropped as they arrive.
+                    // and after an error nothing else comes. Sending the update again sends its answer, and the answer
+                    // to the copy is the update's (the designer has loaded it by then).
                     using var resend = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token);
                     resend.CancelAfter(s_resendAfter);
                     try

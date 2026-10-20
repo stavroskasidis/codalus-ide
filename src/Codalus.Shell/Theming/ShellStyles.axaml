@@ -11,6 +11,13 @@
     <ItemsPanelTemplate x:Key="DockDocumentTabStripHorizontalItemsPanel">
       <controls:DocumentTabPanel />
     </ItemsPanelTemplate>
+    <!-- The tab's close button: a 16 px square, as the pin beside it (Dock's was 14). -->
+    <x:Double x:Key="DockCloseButtonSize">16</x:Double>
+    <!--
+      Its glyph, Visual Studio's thin X: Dock stretches the geometry over the button less a 2 px margin (12 px), so the
+      geometry spans a 12-unit box (the two specks in its corners) with the X in its middle 8 units, about 1 px thick.
+    -->
+    <StreamGeometry x:Key="DockIconCloseGeometry">M0,0 L0.01,0 L0,0.01 Z M12,12 L11.99,12 L12,11.99 Z M2.75,2 L6,5.25 L9.25,2 L10,2.75 L6.75,6 L10,9.25 L9.25,10 L6,6.75 L2.75,10 L2,9.25 L5.25,6 L2,2.75 Z</StreamGeometry>
   </Styles.Resources>
 
   <Style Selector="Window">
@@ -32,7 +39,29 @@
         <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding TabToolTip}">
           <controls:Icon Kind="{Binding TabIcon}" IsVisible="{Binding HasTabIcon}" Width="14" Height="14" VerticalAlignment="Center" />
           <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
-          <controls:Icon Kind="pin" IsVisible="{Binding IsPinned}" Width="12" Height="12" VerticalAlignment="Center" AutomationProperties.Name="{l:T shellStyles.pinned}" />
+          <!--
+            The pin, beside Dock's close button as in Visual Studio: always on a pinned tab (upright), and on the hovered or
+            selected tab (lying down) to pin it. Its space is kept, so the tab doesn't change width on hover.
+          -->
+          <Panel Width="16" Height="16" VerticalAlignment="Center" IsVisible="{Binding PinCommand, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <Button Classes="tabPin" Command="{Binding PinCommand}"
+                    ToolTip.Tip="{l:T shellStyles.pinTab}" AutomationProperties.Name="{l:T shellStyles.pinTab}">
+              <Button.IsVisible>
+                <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                  <Binding Path="IsPinned" />
+                  <Binding Path="$parent[DocumentTabStripItem].IsPointerOver" />
+                  <Binding Path="$parent[DocumentTabStripItem].IsSelected" />
+                </MultiBinding>
+              </Button.IsVisible>
+              <!-- A chrome glyph in the tab's text color, as the close X beside it (the pin icon leans 45 degrees). -->
+              <Panel>
+                <controls:Icon Kind="pin" IsVisible="{Binding IsPinned}" Width="12" Height="12" RenderTransform="rotate(-45deg)"
+                               Foreground="{Binding $parent[Button].Foreground}" AutomationProperties.Name="{l:T shellStyles.pinned}" />
+                <controls:Icon Kind="pin" IsVisible="{Binding !IsPinned}" Width="12" Height="12" RenderTransform="rotate(45deg)"
+                               Foreground="{Binding $parent[Button].Foreground}" />
+              </Panel>
+            </Button>
+          </Panel>
         </StackPanel>
       </DataTemplate>
     </Setter>
@@ -111,6 +140,25 @@
   <Style Selector="DocumentTabStripItem:active:selected /template/ Border#PART_TabGutter">
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Tab.Active.IndicatorBrush}" />
   </Style>
+  <!--
+    The tab's pin and close buttons, as Visual Studio's: 16 px squares with a hover background, a thin 8 px glyph in the
+    tab's text color (Dock's close glyph was a heavy one).
+  -->
+  <Style Selector="Button.tabPin">
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="Foreground" Value="{Binding $parent[DocumentTabStripItem].Foreground}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.tabPin:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource DockTabCloseHoverBackgroundBrush}" />
+  </Style>
+
   <!--
     Document tabs fit the group (M34e): tabs that don't fit leave from the right, never a pinned or the selected one,
     instead of Dock's sideways scrolling that took pinned tabs out of view.
