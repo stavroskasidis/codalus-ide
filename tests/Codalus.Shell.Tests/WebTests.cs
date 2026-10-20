@@ -125,7 +125,7 @@ public sealed class WebTests
             var text = editor!.Model.Text.Text;
             var offset = text.IndexOf("Hello from the Web fixture", StringComparison.Ordinal);
             editor.Model.Text.Replace(offset, "Hello from the Web fixture".Length, "Hello from Hot Reload");
-            f.Shell.Run("run.applyCodeChanges");
+            await f.RunAsync("run.applyCodeChanges");
             await ShellFixture.PumpUntil(() => program.HotReload!.Applied >= 1 || program.HotReload.Restarts >= 1,
                 seconds: 120);
             var answer = string.Empty;

@@ -119,7 +119,7 @@ public sealed class PackageManagerTests
         var (folder, plain) = await OpenAsync(f);
         var props = Path.Combine(folder, "cpm", "Directory.Packages.props");
 
-        f.Shell.Run("packages.manageSolution");
+        await f.RunAsync("packages.manageSolution");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is PackageManagerDocument);
         var vm = ((PackageManagerDocument)f.Shell.Layout.ActiveDocument!).ViewModel;
         Assert.True(vm.IsSolution);
@@ -173,7 +173,7 @@ public sealed class PackageManagerTests
         await using var f = ShellFixture.Create();
         var (folder, _) = await OpenAsync(f);
 
-        f.Shell.Run("packages.sources");
+        await f.RunAsync("packages.sources");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is PackageSourcesDocument);
         var vm = ((PackageSourcesDocument)f.Shell.Layout.ActiveDocument!).ViewModel;
         await ShellFixture.PumpUntil(() => vm.Sources.Count == 2);

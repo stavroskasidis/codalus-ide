@@ -270,7 +270,7 @@ public sealed class FirstRunSetupTests
         await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.IsStartWindowOpen);
         f.Shell.StartWindowModel!.ContinueCommand.Execute(null);
         await ShellFixture.PumpUntil(() => !f.Shell.IsStartWindowOpen);
-        f.Shell.Run("help.setUp");
+        await f.RunAsync("help.setUp");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
         var model = f.Shell.SetupModel!;
         var window = f.Shell.SetupWindowView!;
@@ -506,7 +506,7 @@ public sealed class FirstRunSetupTests
         // Classic Blue (chosen in Options): the Classic card, no mode, a note on where Blue is; Next keeps it.
         await settings.SetAsync(ThemeService.SettingKey, "classic.blue", Workbench.Settings.SettingScope.User, CancellationToken.None);
         await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "blue");
-        f.Shell.Run("help.setUp");
+        await f.RunAsync("help.setUp");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
         var model = f.Shell.SetupModel!;
         Assert.Equal("classic", model.SelectedFamily);
@@ -538,7 +538,7 @@ public sealed class FirstRunSetupTests
         // A value from before the families ("dark", Classic Dark) shows as Classic Dark, and Next doesn't rewrite it.
         await settings.SetAsync(ThemeService.SettingKey, "dark", Workbench.Settings.SettingScope.User, CancellationToken.None);
         await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "dark");
-        f.Shell.Run("help.setUp");
+        await f.RunAsync("help.setUp");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
         model = f.Shell.SetupModel!;
         Assert.Equal("classic", model.SelectedFamily);

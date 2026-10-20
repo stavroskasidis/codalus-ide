@@ -43,7 +43,7 @@ The choice is saved with the solution, for you only, in `.codalus/state/` next t
 
 Debug → **Attach to Process on a Remote Machine** debugs a .NET program running elsewhere:
 - **SSH**: enter `user@host` (with `:port` if it isn't 22). Your own `ssh` is used, with your keys, agent and `~/.ssh/config`; passwords and passphrases are asked in a dialog.
-- **Docker or Podman container**: pick a running container. The `debug.containerTool` setting is the container command: `docker` (default), `podman`, or one inside WSL such as `wsl -d Ubuntu --exec podman`.
+- **Docker or Podman container**: pick a running container. It goes through the [Containers window's engine](containers.md#the-container-engine) (`containers.tool`, else `docker` if it's on your `PATH`, else `podman`). To attach through another one, set `debug.containerTool` to its command: `docker`, `podman`, or one inside WSL such as `wsl -d Ubuntu --exec podman`.
 - **WSL distribution** (Windows): pick a distribution.
 
 Then pick the process (.NET processes come first). The first time, Codalus IDE offers to copy the debugger (netcoredbg, about 15 MB) to the machine: into `~/.codalus/netcoredbg`, or `/tmp/.codalus/netcoredbg` in a container. The machine needs `tar` and `gzip`, but no internet access. Linux on x64 and Arm64, and macOS on Apple silicon, are supported.
@@ -164,7 +164,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
 - `debug.stepOverPropertiesAndOperators`: Step Into steps over property accessors and operators.
 - `debug.perfTips`: the PerfTips at the end of the current line.
 - `debug.console`: where a debugged console or web app's console is: `internalConsole` (the Debug Console), `integratedTerminal`, or `externalConsole` (a console window; Windows' default).
-- `debug.containerTool`: the container command for attaching in containers (`docker`, `podman`, …).
+- `debug.containerTool`: the container command for attaching in containers (`docker`, `podman`, …); empty (the default) uses the Containers window's engine.
 - `debug.sourceFileMap`: source folders of programs on other machines, as `"/folder/there=C:\\folder\\here"`.
 
 ## Known limitations

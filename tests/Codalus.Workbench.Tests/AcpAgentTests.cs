@@ -309,7 +309,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
             var (display, launch) = AcpTerminals.CommandLine(OperatingSystem.IsWindows() ? "ping -n 30 127.0.0.1" : "sleep 30", [], _root, null);
             var terminal = await terminals.StartAsync(display, launch, null, Ct);
             var status = await terminal.Exited.WaitAsync(TimeSpan.FromSeconds(30), Ct);
-            Assert.Equal((null, "SIGKILL"), (status.ExitCode, status.Signal));
+            Assert.True((status.ExitCode, status.Signal) == (null, "SIGKILL"), $"ended with exit code {status.ExitCode}, signal {status.Signal}, output: {terminal.Output.Text}");
             Assert.Contains("stopped the command after 1 seconds", terminal.Output.Text, StringComparison.Ordinal);
         }
 

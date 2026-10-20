@@ -189,7 +189,7 @@ public sealed class CodeSearchTests
         var search = f.Shell.CodeSearch;
 
         // Feature Search: the title row's search box, a command with its key, run from the window.
-        f.Shell.Run("workbench.action.featureSearch");
+        await f.RunAsync("workbench.action.featureSearch");
         await ShellFixture.PumpUntil(() => search is { IsOpen: true, IsFeatureTab: true }, describe: () => State(f));
         Assert.False(search.HasPreview);
         await SearchAsync(f, "open settings", () => search.Rows.Any(r => r.Feature?.Id == "workbench.openSettings"));

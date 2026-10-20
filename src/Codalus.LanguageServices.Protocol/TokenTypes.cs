@@ -23,6 +23,8 @@ public static class TokenTypes
         "razorComment", "razorCommentTransition", "razorCommentStar",
         "markupTagDelimiter", "markupElement", "markupAttribute", "markupAttributeQuote", "markupAttributeValue",
         "markupOperator", "markupComment", "markupCommentPunctuation",
+        // Roslyn's "xml doc comment - text" (the rest of a documentation comment stays xmlDocComment)
+        "xmlDocText",
     ];
 
     public static int IndexOf(string name)

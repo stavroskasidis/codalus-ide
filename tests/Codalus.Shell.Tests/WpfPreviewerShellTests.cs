@@ -39,7 +39,7 @@ public sealed class WpfPreviewerShellTests
 
         // Shift+F7's command: the previewer follows the .xaml editor and says why it doesn't render, before any build.
         var builds = f.Shell.Builds.LastBuild;
-        f.Shell.Run("xaml.showPreview");
+        await f.RunAsync("xaml.showPreview");
         var preview = f.Shell.XamlPreview;
         await ShellFixture.PumpUntil(() => preview.Status == PreviewService.WpfWindowsOnlyMessage, seconds: 60);
         Assert.Equal(path, f.Shell.PreviewedPath);

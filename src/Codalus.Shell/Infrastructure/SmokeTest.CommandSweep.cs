@@ -46,10 +46,17 @@ internal sealed partial class SmokeTest
 
     /// <summary>
     /// The longest the UI thread may stall in a command: 500 ms on a developer's machine. CI's hosted runners render in
-    /// software with no GPU (Xvfb on Linux), where opening a window took 530–670 ms: there the row keeps the stall and only
-    /// a real hang fails, as the benchmarks' budgets hold on the reference machine and are indicative on CI (ADR 0002).
+    /// software with no GPU (Xvfb on Linux), and only a command's first run there went past 500 ms: a cold first open of
+    /// its view or window (templates, styles, first layout and text shaping), 521 ms on Linux and 824 ms on macOS, while
+    /// its later runs stayed under 400 ms on every OS (four CI reports of 0.4.0, about 3,700 runs). On CI a first run may
+    /// stall up to 2 s and a later one up to 1 s; the benchmarks' budgets hold on the reference machine and are
+    /// indicative on CI (ADR 0002).
     /// </summary>
-    private static readonly TimeSpan s_sweepStallLimit = TimeSpan.FromMilliseconds(Environment.GetEnvironmentVariable("CI") == "true" ? 2000 : 500);
+    private static TimeSpan SweepStallLimit(bool firstRun) =>
+        TimeSpan.FromMilliseconds(Environment.GetEnvironmentVariable("CI") != "true" ? 500 : firstRun ? 2000 : 1000);
+
+    /// <summary>The commands that have run from an entry point (the next run of each is warm).</summary>
+    private readonly HashSet<string> _sweepRan = new(StringComparer.Ordinal);
 
     /// <summary>Commands the sweep never runs, and why: they leave the machine or the app (the report's skips).</summary>
     private static readonly Dictionary<string, string> s_sweepSkips = new(StringComparer.Ordinal)
@@ -97,7 +104,6 @@ internal sealed partial class SmokeTest
     private static readonly Dictionary<string, (string Text, string Why)> s_sweepExpectedErrors = new(StringComparer.Ordinal)
     {
         ["git.continue"] = ("Resolve the conflicts first", "the GitMerge context leaves its conflict unresolved on purpose"),
-        ["containers.attach"] = ("isn't installed or isn't on the PATH", "no Docker or Podman on this machine, and the command says so"),
     };
 
     /// <summary>
@@ -194,6 +200,16 @@ internal sealed partial class SmokeTest
     private int _sweepScreenshots;
     private bool _sweepDebugReopened;
     private SweepStallMonitor? _sweepStall;
+    private SweepContextWatch? _sweepContext;
+
+    /// <summary>
+    /// The longest the sweep waits, before an entry point, for the context to settle: the UI thread idle, no project
+    /// evaluation in progress, and the keys the command reads unchanged (a command's effects land a posted job later).
+    /// </summary>
+    private static readonly TimeSpan s_sweepSettleLimit = TimeSpan.FromSeconds(3);
+
+    /// <summary>Once it has settled, how long the sweep waits for a command it chose in this context to be enabled again.</summary>
+    private static readonly TimeSpan s_sweepEnabledWait = TimeSpan.FromSeconds(1);
 
     private async Task CommandSweepStepAsync()
     {
@@ -212,6 +228,7 @@ internal sealed partial class SmokeTest
         TaskScheduler.UnobservedTaskException += OnSweepUnobserved;
         MenuBase.OpenedEvent.AddClassHandler<ContextMenu>((menu, _) => _sweepContextMenu = menu);
         _sweepStall = new SweepStallMonitor();
+        _sweepContext = new SweepContextWatch(shell.Workbench.Context);
         try
         {
             shell.Trust.Trust(_sweepFolder);
@@ -310,6 +327,7 @@ internal sealed partial class SmokeTest
         finally
         {
             _sweepStall.Stop();
+            _sweepContext.Stop();
             Dispatcher.UIThread.UnhandledException -= OnSweepUnhandled;
             TaskScheduler.UnobservedTaskException -= OnSweepUnobserved;
             shell.Window = realWindow;
@@ -592,6 +610,9 @@ internal sealed partial class SmokeTest
     /// <summary>After a command: the scenario's context is back, or set up again (a command closed the editor or the solution).</summary>
     private async Task<bool> EnsureScenarioAsync()
     {
+        // What the command started lands first: set up on the tree as it was, the scenario selected a folder that the
+        // command's Exclude From Project then took away while the palette ran it again (0.4.0's release run).
+        await SettleSweepAsync().ConfigureAwait(true);
         if (_sweepScenario is SweepScenario.NoSolution)
         {
             return true;
@@ -718,7 +739,19 @@ internal sealed partial class SmokeTest
 
     private async Task SweepCommandAsync(CommandDescriptor command)
     {
+        // The keys its enablement reads (and the focus, which key bindings read): the context has settled when they stay.
+        var chosen = SweepContextWatch.Read(command.Enablement, shell.Workbench.Context);
+        _sweepContext!.Watch(chosen.Select(p => p.Key).Concat(["focusedView", "editorTextFocus"]));
+        var waited = false;
+        async Task<string?> ReadyAsync()
+        {
+            var problem = await SweepReadyAsync(command, chosen, wait: !waited).ConfigureAwait(true);
+            waited |= problem is not null;
+            return problem;
+        }
+
         // The menu: its items in the menus this context shows (checked), and one of them clicked.
+        var ready = await ReadyAsync().ConfigureAwait(true);
         var menuRules = shell.Workbench.Menus.Rules.Where(r => r.Command == command.Id && r.Submenu is null && r.Location != MenuLocations.CommandPalette).ToList();
         var shown = menuRules
             .Where(r => SweepableLocation(r.Location, _sweepScenario) && MenuVisible(r))
@@ -749,7 +782,7 @@ internal sealed partial class SmokeTest
             }
 
             var rule = shown[0];
-            await SweepRunAsync(command, "menu", rule.Location, () => ClickMenuAsync(command, rule, click: true, visible: true)).ConfigureAwait(true);
+            await SweepRunAsync(command, "menu", rule.Location, () => ClickMenuAsync(command, rule, click: true, visible: true), ready).ConfigureAwait(true);
             await EnsureScenarioAsync().ConfigureAwait(true);
         }
         else
@@ -760,6 +793,7 @@ internal sealed partial class SmokeTest
 
         // The key binding the window would dispatch here.
         var rules = shell.Workbench.Keybindings.EffectiveRules.Where(r => r.Command == command.Id).ToList();
+        ready = rules.Count > 0 ? await ReadyAsync().ConfigureAwait(true) : null;
         var applicable = rules.LastOrDefault(r => r.When.Evaluate(shell.Workbench.Context));
         if (rules.Count == 0)
         {
@@ -773,11 +807,12 @@ internal sealed partial class SmokeTest
         }
         else
         {
-            await SweepRunAsync(command, "key", applicable.Keys!.ToLabel(shell.Workbench.Platform), () => PressKeysAsync(applicable.Keys!)).ConfigureAwait(true);
+            await SweepRunAsync(command, "key", applicable.Keys!.ToLabel(shell.Workbench.Platform), () => PressKeysAsync(applicable.Keys!), ready).ConfigureAwait(true);
             await EnsureScenarioAsync().ConfigureAwait(true);
         }
 
         // The palette.
+        ready = command.ShowInPalette ? await ReadyAsync().ConfigureAwait(true) : null;
         if (!command.ShowInPalette)
         {
             Sweep(command.Id, "palette", "skip", "hidden from the palette");
@@ -786,9 +821,9 @@ internal sealed partial class SmokeTest
         {
             Sweep(command.Id, "palette", "skip", "the palette hides it in this context (commandPalette when-clause)");
         }
-        else if (!command.Enablement.Evaluate(shell.Workbench.Context))
+        else if (ready is not null)
         {
-            Sweep(command.Id, "palette", "skip", $"not enabled after its other entry points ran (enablement: {command.Enablement.Text})");
+            Sweep(command.Id, "palette", "skip", $"not enabled after its other entry points ran (enablement: {command.Enablement.Text}; {ready})");
         }
         else
         {
@@ -826,8 +861,43 @@ internal sealed partial class SmokeTest
     private static bool IsExplorer(SweepScenario scenario) =>
         scenario is SweepScenario.ExplorerSolution or SweepScenario.ExplorerProject or SweepScenario.ExplorerFolder or SweepScenario.ExplorerFile or SweepScenario.ExplorerOther;
 
-    /// <summary>Runs one entry point and records its row: the run, what it opened (closed again), errors and stalls.</summary>
-    private async Task SweepRunAsync(CommandDescriptor command, string entry, string? location, Func<Task<string?>> trigger)
+    /// <summary>Waits until what the last entry point started has reached the context, at most a few seconds.</summary>
+    private async Task SettleSweepAsync()
+    {
+        if (!await _sweepContext!.SettleAsync(() => shell.Solutions.Progress is { Completed: false }, s_sweepSettleLimit).ConfigureAwait(true))
+        {
+            SweepProgress($"(the context didn't settle within {s_sweepSettleLimit.TotalSeconds:0} s)");
+        }
+    }
+
+    /// <summary>
+    /// Before an entry point: once the context has settled, the command is enabled, as when the sweep chose it in this
+    /// context (waiting a moment for it with <paramref name="wait"/>). Null then; otherwise which keys its enablement reads
+    /// changed since the sweep chose it (<paramref name="chosen"/>).
+    /// </summary>
+    private async Task<string?> SweepReadyAsync(CommandDescriptor command, IReadOnlyList<KeyValuePair<string, object?>> chosen, bool wait)
+    {
+        await SettleSweepAsync().ConfigureAwait(true);
+        var clock = Stopwatch.StartNew();
+        while (!command.Enablement.Evaluate(shell.Workbench.Context))
+        {
+            if (!wait || clock.Elapsed >= s_sweepEnabledWait)
+            {
+                return $"not enabled once the context settled; {SweepContextWatch.Differences(command.Enablement, chosen, shell.Workbench.Context)}";
+            }
+
+            await Task.Delay(50).ConfigureAwait(true);
+            await SettleSweepAsync().ConfigureAwait(true);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Runs one entry point and records its row: the run, what it opened (closed again), errors and stalls.
+    /// <paramref name="notReady"/>: why the command wasn't enabled before it ran (<see cref="SweepReadyAsync"/>), added to a failure.
+    /// </summary>
+    private async Task SweepRunAsync(CommandDescriptor command, string entry, string? location, Func<Task<string?>> trigger, string? notReady = null)
     {
         var executed = new TaskCompletionSource<CommandExecutedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
         var others = new List<string>();
@@ -879,6 +949,7 @@ internal sealed partial class SmokeTest
         shell.Workbench.Commands.Executed += OnExecuted;
         shell.Workbench.Notifications.Added += OnNotification;
         var clock = Stopwatch.StartNew();
+        var enabled = SweepContextWatch.Read(command.Enablement, shell.Workbench.Context);
         _sweepStall!.Reset();
         string? problem = null;
         try
@@ -890,7 +961,8 @@ internal sealed partial class SmokeTest
                 CloseSweepOverlays(saw);
                 if (shell.StatusBar.DisplayMessage != status && shell.StatusBar.DisplayMessage?.Contains("is not available right now", StringComparison.Ordinal) == true)
                 {
-                    problem = $"it wasn't enabled when it ran ({shell.StatusBar.DisplayMessage})";
+                    // Which keys changed between the trigger and the run says what took it away (a recurrence explains itself).
+                    problem = $"it wasn't enabled when it ran ({shell.StatusBar.DisplayMessage}; {SweepContextWatch.Differences(command.Enablement, enabled, shell.Workbench.Context)})";
                     break;
                 }
 
@@ -964,15 +1036,22 @@ internal sealed partial class SmokeTest
             }
         }
 
-        if (problem is null && stall > s_sweepStallLimit.TotalMilliseconds)
+        var firstRun = _sweepRan.Add(command.Id);
+        var stallLimit = SweepStallLimit(firstRun);
+        if (problem is null && stall > stallLimit.TotalMilliseconds)
         {
-            problem = $"the UI thread stalled for {stall:0} ms";
+            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run)";
         }
 
         var unclosed = await CleanUpSweepAsync(before, saw).ConfigureAwait(true);
         if (problem is null && unclosed is not null)
         {
             problem = unclosed;
+        }
+
+        if (problem is not null && notReady is not null)
+        {
+            problem += $" (before it ran: {notReady})";
         }
 
         string? screenshot = null;
@@ -1407,7 +1486,12 @@ internal sealed partial class SmokeTest
                 saw.Add("a program ran");
             }
 
-            shell.StopRunning();
+            // The next command starts with it ended (its tree's end can take seconds, without holding the UI thread).
+            await shell.StopRunningAsync().ConfigureAwait(true);
+            for (var i = 0; i < 100 && shell.Runs.Running.Count > before.Running; i++)
+            {
+                await Task.Delay(50).ConfigureAwait(true);
+            }
         }
 
         if (_sweepScenario != SweepScenario.Debug && shell.Debugger.IsActive)
@@ -1713,7 +1797,7 @@ internal sealed partial class SmokeTest
     }
 
     /// <summary>Measures how long the UI thread takes to answer, every 20 ms, from a background thread: its longest wait is the stall.</summary>
-    private sealed class SweepStallMonitor
+    internal sealed class SweepStallMonitor
     {
         private volatile bool _stopped;
         private long _maxTicks;
