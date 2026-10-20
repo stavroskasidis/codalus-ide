@@ -177,8 +177,10 @@ public class UxPassTests
         Assert.All(CommandIcons.All, pair => Assert.True(IconSet.GetFilled(pair.Value.Kind) is not null || IconSet.Get(pair.Value.Kind) is not null, pair.Key));
         var listed = File.ReadAllLines(Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "Icons", "fluent-icons.txt"))
             .Concat(File.ReadAllLines(Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "Icons", "material-icons.txt"))).ToHashSet(StringComparer.Ordinal);
-        // The classic icons are eng/icons/classic-icons.py's, which writes the whole of Icons/Classic.
-        Assert.All(CompiledIcons.Names.Where(n => !n.StartsWith("classic-", StringComparison.Ordinal)), name => Assert.Contains(name, listed));
+        // The classic icons are eng/icons/classic-icons.py's, which writes the whole of Icons/Classic, and the code symbol
+        // icons eng/icons/symbol-icons.py's, which writes Icons/Symbols.
+        Assert.All(CompiledIcons.Names.Where(n => !n.StartsWith("classic-", StringComparison.Ordinal) && !n.StartsWith("symbol-", StringComparison.Ordinal)), name => Assert.Contains(name, listed));
+        Assert.Equal(IconSet.SymbolNames.Order(StringComparer.Ordinal), CompiledIcons.Names.Where(n => n.StartsWith("symbol-", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
     }
 
     [AvaloniaFact]

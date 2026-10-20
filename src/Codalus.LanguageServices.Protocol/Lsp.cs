@@ -227,6 +227,62 @@ public sealed record CompletionItem(string Label)
     public bool? Preselect { get; init; }
 
     public JsonElement? Data { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusGlyph</c>): the symbol's kind, finer than <see cref="Kind"/> (an extension method, a local or
+    /// a parameter, a delegate), as one of <see cref="SymbolGlyphs"/>. Sent in the list.
+    /// </summary>
+    [JsonPropertyName("codalusGlyph")]
+    public string? Glyph { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusDescription</c>): the item's description as classified text (the signature with its overload
+    /// count, then the documentation). Filled by <c>completionItem/resolve</c>, beside the Markdown <see cref="Documentation"/>.
+    /// </summary>
+    [JsonPropertyName("codalusDescription")]
+    public SymbolDescription? Description { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusMatchesTargetType</c>): the item's type converts to the type expected where it goes (an
+    /// argument, an assignment, a return value). Sent in the list; the list preselects such an item and filters by it.
+    /// </summary>
+    [JsonPropertyName("codalusMatchesTargetType")]
+    public bool? MatchesTargetType { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusSoftSelection</c>): while nothing is typed, this preselected item is selected softly (a
+    /// commit character doesn't commit it). Sent in the list.
+    /// </summary>
+    [JsonPropertyName("codalusSoftSelection")]
+    public bool? SoftSelection { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusEnterKeyRule</c>): whether Enter, after committing the item, also starts a new line:
+    /// <c>always</c>, or <c>afterFullyTypedWord</c> (when the whole name was typed); absent for never. Sent in the list.
+    /// </summary>
+    [JsonPropertyName("codalusEnterKeyRule")]
+    public string? EnterKeyRule { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusCommitCharacter</c>): on a <c>completionItem/resolve</c> request, the character typed to
+    /// commit the item (the server may change the edit for it: <c>List</c> rather than <c>List&lt;&gt;</c> before <c>&lt;</c>).
+    /// </summary>
+    [JsonPropertyName("codalusCommitCharacter")]
+    public string? CommitCharacter { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusIncludesCommitCharacter</c>): in a resolved item, the edit already inserts the commit
+    /// character, so the editor doesn't type it again.
+    /// </summary>
+    [JsonPropertyName("codalusIncludesCommitCharacter")]
+    public bool? IncludesCommitCharacter { get; init; }
+}
+
+/// <summary>Values of <see cref="CompletionItem.EnterKeyRule"/>.</summary>
+public static class EnterKeyRules
+{
+    public const string Always = "always";
+    public const string AfterFullyTypedWord = "afterFullyTypedWord";
 }
 
 public static class InsertTextFormat
@@ -244,7 +300,90 @@ public sealed record CompletionList(bool IsIncomplete, CompletionItem[] Items)
 
 // ------------------------------------------------------------------ hover, signature help
 
-public sealed record Hover(MarkupContent Contents, Range? Range);
+/// <summary>
+/// <see cref="Description"/> is an extension (<c>codalusDescription</c>): the same Quick Info as classified text, which
+/// clients that know it draw in the editor's colors; <see cref="Contents"/> stays Markdown for every other client.
+/// </summary>
+public sealed record Hover(MarkupContent Contents, Range? Range)
+{
+    [JsonPropertyName("codalusDescription")]
+    public SymbolDescription? Description { get; init; }
+}
+
+/// <summary>
+/// Extension: a run of classified text. <see cref="Kind"/> is a semantic token type of the legend (<see cref="TokenTypes"/>:
+/// <c>keyword</c>, <c>class</c>, <c>method</c>, <c>parameter</c>, <c>punctuation</c>…), <c>text</c> for plain text, or
+/// <c>lineBreak</c> between lines. In a signature, <see cref="Parameter"/> is the index of the parameter the run belongs to.
+/// </summary>
+public sealed record ClassifiedRun(string Text, string Kind)
+{
+    public const string PlainText = "text";
+
+    public const string LineBreak = "lineBreak";
+
+    public int? Parameter { get; init; }
+}
+
+/// <summary>
+/// Extension: one part of a symbol's documentation. <see cref="Kind"/> is one of <see cref="DescriptionSectionKinds"/>;
+/// <see cref="Text"/> is its body without a heading (clients write "Returns:" and the others themselves, once).
+/// </summary>
+public sealed record DescriptionSection(string Kind, ClassifiedRun[] Text);
+
+/// <summary>Extension: the kinds of <see cref="DescriptionSection"/>, in the order Quick Info shows them.</summary>
+public static class DescriptionSectionKinds
+{
+    public const string Summary = "summary";
+    public const string TypeParameters = "typeParameters";
+    public const string AnonymousTypes = "anonymousTypes";
+    public const string Usage = "usage";
+    public const string Returns = "returns";
+    public const string Value = "value";
+    public const string Exceptions = "exceptions";
+    public const string Remarks = "remarks";
+    public const string Captures = "captures";
+    public const string Nullability = "nullability";
+    public const string Other = "other";
+}
+
+/// <summary>
+/// Extension: a symbol's description as Quick Info and the completion list's tooltip show it. <see cref="Signature"/> is
+/// the classified declaration, with generic type arguments as the site uses them; <see cref="Overloads"/> is how many
+/// other overloads there are (the signature doesn't say it); <see cref="Glyph"/> is one of <see cref="SymbolGlyphs"/>.
+/// </summary>
+public sealed record SymbolDescription(ClassifiedRun[] Signature, DescriptionSection[] Sections)
+{
+    public string? Glyph { get; init; }
+
+    public int Overloads { get; init; }
+}
+
+/// <summary>Extension: the symbol kinds the C# service names, for icons and the completion list's filters.</summary>
+public static class SymbolGlyphs
+{
+    public const string Namespace = "namespace";
+    public const string Class = "class";
+    public const string Struct = "struct";
+    public const string Interface = "interface";
+    public const string Enum = "enum";
+    public const string EnumMember = "enumMember";
+    public const string Delegate = "delegate";
+    public const string Module = "module";
+    public const string TypeParameter = "typeParameter";
+    public const string Method = "method";
+    public const string ExtensionMethod = "extensionMethod";
+    public const string Property = "property";
+    public const string Field = "field";
+    public const string Event = "event";
+    public const string Constant = "constant";
+    public const string Local = "local";
+    public const string Parameter = "parameter";
+    public const string Keyword = "keyword";
+    public const string Snippet = "snippet";
+    public const string Operator = "operator";
+    public const string Label = "label";
+    public const string Text = "text";
+}
 
 public sealed record SignatureHelpContext(int TriggerKind, string? TriggerCharacter, bool IsRetrigger);
 
@@ -256,6 +395,13 @@ public sealed record ParameterInformation(string Label, MarkupContent? Documenta
 public sealed record SignatureInformation(string Label, MarkupContent? Documentation, ParameterInformation[] Parameters)
 {
     public int? ActiveParameter { get; init; }
+
+    /// <summary>
+    /// Extension (<c>codalusParts</c>): <see cref="Label"/> as classified runs, each parameter's runs marked with its
+    /// index, with generic type arguments substituted as the call site uses them. Clients without it use the label.
+    /// </summary>
+    [JsonPropertyName("codalusParts")]
+    public ClassifiedRun[]? Parts { get; init; }
 }
 
 public sealed record SignatureHelp(SignatureInformation[] Signatures, int ActiveSignature, int ActiveParameter);
