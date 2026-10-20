@@ -115,6 +115,8 @@ Programs started after you turn it on are covered. Turning it off removes the va
 
 ## While stopped
 
+Codalus IDE comes to the front when the program stops, even when the program's window or the browser had the focus, so `F10` and `F11` go to the debugger (in the browser, `F11` is its full screen).
+
 - **Stepping**: Step Over (`F10`), Step Into (`F11`), Step Out (`Shift+F11`), Continue (`F5`).
 - **The current statement** is highlighted, with a yellow arrow in the margin.
 - **PerfTips**: the time since the program was resumed appears in gray at the end of the current line, e.g. `≤ 12 ms elapsed`. It includes the debugger's own overhead, so use it to compare steps, not as a profiler. Turn it off with the `debug.perfTips` setting.

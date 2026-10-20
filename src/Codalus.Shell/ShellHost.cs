@@ -33,7 +33,7 @@ public interface IShellWindow
     /// <summary>Asks for a project file to add to the solution (null: cancelled).</summary>
     Task<string?> PickProjectAsync();
 
-    /// <summary>Shows and activates the window (another process asked this one to open something).</summary>
+    /// <summary>Shows and activates the window (another process asked this one to open something, or the debugger stopped).</summary>
     void BringToFront();
 
     /// <summary>Full screen (M23a): the window covers the screen, without its frame; false returns to how it was.</summary>

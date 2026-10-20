@@ -561,6 +561,9 @@ public sealed partial class ShellHost
 
     private async Task OnDebugStoppedAsync(StopInfo stop)
     {
+        // The IDE comes to the front where the program stopped, as F10 and F11 go to it (the browser or the program's
+        // window often has the focus: F11 there was the browser's full screen).
+        Window?.BringToFront();
         if (!_debugWindowsShown)
         {
             _debugWindowsShown = true;
