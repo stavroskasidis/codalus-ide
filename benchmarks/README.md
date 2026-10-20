@@ -50,6 +50,7 @@ The `shell` target is the published product shell in `artifacts/shell` (`CODALUS
   - *Input → display:* `SendInput` timestamps (QPC) are paired with the first **composed desktop frame** (DXGI Desktop Duplication, `LastPresentTime`) whose dirty or move rectangles touch the target window. Only rectangle metadata is read; pixels are never copied. This works identically for every rendering technology. It includes DWM composition but excludes scan-out (about half a refresh interval on average, the same for every target). PresentMon was evaluated first but rejected: Avalonia composes through DirectComposition and never presents a DXGI swap chain of its own, so per-process present pairing cannot measure it.
   - *Memory:* summed over the whole process tree (shell, language host, Electron helpers, JVM, ServiceHub…), as private and working-set bytes. `*_shell_*` is the root process alone.
 - **In-app (prototypes):** the prototypes write timestamped events (`CODALUS_BENCH_EVENTS`). These are comparable between the prototypes, but not with black-box numbers.
+- **`file_highlight_ms`:** from the launch to the first rendered frame with semantic tokens of the file (`BenchDriver`). An answer with no tokens (a language service that hasn't loaded the file yet) doesn't count; the editor asks again and the next answer's colors do. Until 2026-10-20 it counted, which gave the Mac's CI runners a second, faster mode of the metric.
 - **Statistics:** p50/p95/p99 use nearest rank. Every sample is kept in the JSON.
 
 ## Safety rules
