@@ -292,7 +292,18 @@ public sealed class HostingShellTests
         Directory.CreateDirectory(Path.Combine(folder, "assets"));
         File.WriteAllText(Path.Combine(folder, "assets", "logo.bin"), "version https://git-lfs.github.com/spec/v1\noid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393\nsize 2048\n");
         await f.Shell.Git.RefreshAsync();
-        await ShellFixture.PumpUntil(() => f.Shell.GitChanges.Changes.Any(r => r.Name == "logo.bin" && r.Badge == "LFS pointer"), seconds: 30);
+        await ShellFixture.PumpUntil(
+            () => f.Shell.GitChanges.Changes.Any(r => r.Name == "logo.bin" && r.Badge == "LFS pointer"),
+            seconds: 30,
+            describe: () =>
+            {
+                var lfs = f.Shell.GitChanges.Lfs;
+                var output = f.Shell.GitLog.GetText();
+                return $"Changes [{string.Join(", ", f.Shell.GitChanges.Changes.Select(r => $"{r.Status.RelativePath} {r.Status.Index}{r.Status.WorkTree} badge={r.Badge ?? "none"}"))}]; "
+                    + $"git status [{string.Join(", ", f.Shell.Git.Status?.Files.Select(s => $"{s.Index}{s.WorkTree} {s.RelativePath}") ?? ["no status"])}]; "
+                    + $"LFS used={lfs.IsUsed} installed={lfs.IsInstalled} files [{string.Join(", ", lfs.Files.Select(l => $"{l.RelativePath} pointer={l.IsPointer}"))}] locksError={lfs.LocksError ?? "none"}; "
+                    + $"Git output: {output[^Math.Min(2000, output.Length)..]}";
+            });
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("gitLfs"));
 
         // The Greetings project in a repository of its own.
