@@ -15,7 +15,8 @@ using Codalus.Shell.Infrastructure;
 namespace Codalus.Shell.Editor;
 
 /// <summary>
-/// The editor's inline information (M12a): inlay hints, CodeLens and inline diagnostics at the end of lines, the
+/// The editor's inline information (M12a): inlay hints, inline diagnostics at the end of lines, CodeLens on a row of its
+/// own above its line (the end of the line before, after a line break: the line itself keeps its height), the
 /// inheritance margin, indentation guides and bracket pair colors. Language-service data is requested for the viewport
 /// (debounced, cancellable) and kept in segments that follow edits until the next response. UI thread only.
 /// </summary>
@@ -289,8 +290,25 @@ public sealed class EditorInsights : IDisposable
     /// <summary>Inlay hints by document offset (tests).</summary>
     internal IReadOnlyList<(int Offset, string Label)> Hints => [.. _hints.Select(h => (h.StartOffset, h.Label))];
 
-    /// <summary>The end-of-line text of a one-based line: inline diagnostics and CodeLens (tests).</summary>
-    internal string? EndOfLineText(int line) => _generator.EndOfLine(_editor.Document.GetLineByNumber(line))?.Text;
+    /// <summary>The inline text of a one-based line: inline diagnostics, review comments and its CodeLens, above it or at its end (tests).</summary>
+    internal string? EndOfLineText(int line)
+    {
+        var documentLine = _editor.Document.GetLineByNumber(line);
+        var parts = new[] { _generator.EndOfLine(documentLine)?.Text, _generator.LensAbove(documentLine)?.Text }.OfType<string>().ToList();
+        return parts.Count == 0 ? null : string.Join("    ", parts);
+    }
+
+    /// <summary>The CodeLens row shown above a one-based line, or null (none, or at the line's end when the line before is folded away) (tests).</summary>
+    internal string? LensRowAbove(int line) => _generator.LensAbove(_editor.Document.GetLineByNumber(line))?.Text.Trim();
+
+    /// <summary>
+    /// A visual line's height without the CodeLens row that may end it (the next line's): what a line background covers.
+    /// </summary>
+    public static double CodeHeight(VisualLine line) =>
+        line.TextLines.Count > 1 && line.Elements.Count > 0 && line.Elements[^1] is LensRowElement ? line.Height - line.TextLines[^1].Height : line.Height;
+
+    /// <summary>Whether a document offset is inside a folded section (set by the controller, which owns the foldings).</summary>
+    internal Func<int, bool>? IsFoldedAway { get; set; }
 
     /// <summary>Raised when hints, lenses or the margin changed (tests).</summary>
     public event EventHandler? Updated;
@@ -803,7 +821,13 @@ public sealed class EditorInsights : IDisposable
         public ReviewSegment? Review { get; init; }
     }
 
-    /// <summary>Inserts the hints (zero-length elements) and the end-of-line text (diagnostic, lenses, review comments).</summary>
+    /// <summary>A line's CodeLens titles (<paramref name="Text"/>), and the indentation that lines them up with its code.</summary>
+    private sealed record LensRow(string Indent, string Text, LensSegment? Lens);
+
+    /// <summary>
+    /// Inserts the hints (zero-length elements) and, at the end of a line, its own end-of-line text (diagnostic, review
+    /// comments) and the next line's CodeLens on a row of its own after a line break.
+    /// </summary>
     private sealed class InlineGenerator(EditorInsights owner) : VisualLineElementGenerator
     {
         public EndOfLine? EndOfLine(DocumentLine line)
@@ -821,27 +845,66 @@ public sealed class EditorInsights : IDisposable
                 parts.Add(message);
             }
 
+            // A line's CodeLens goes above it; at its end only when there is no line before it to show it after.
             LensSegment? first = null;
-            if (owner.Options.CodeLens)
+            if (!CanShowAbove(line) && Lenses(line) is { } lens)
             {
-                var lenses = owner._lenses.FindOverlappingSegments(line.Offset, line.Length).Where(l => l.Title is not null && l.Title != "-").ToList();
-                var titles = lenses.Select(l => l.Title!).Concat(owner.ExtraLenses(line.LineNumber)).ToList();
-                if (titles.Count > 0)
-                {
-                    first = lenses.FirstOrDefault();
-                    parts.Add(string.Join("  |  ", titles));
-                }
+                first = lens.Lens;
+                parts.Add(lens.Text);
             }
 
             return parts.Count == 0 ? null : new EndOfLine("    " + string.Join("    ", parts), first) { Review = review };
         }
+
+        /// <summary>The CodeLens row shown above <paramref name="line"/> (after the end of the line before), or null.</summary>
+        public LensRow? LensAbove(DocumentLine line) => CanShowAbove(line) ? Lenses(line) : null;
+
+        private LensRow? Lenses(DocumentLine line)
+        {
+            if (!owner.Options.CodeLens)
+            {
+                return null;
+            }
+
+            var lenses = owner._lenses.FindOverlappingSegments(line.Offset, line.Length).Where(l => l.Title is not null && l.Title != "-").ToList();
+            var titles = lenses.Select(l => l.Title!).Concat(owner.ExtraLenses(line.LineNumber)).ToList();
+            if (titles.Count == 0)
+            {
+                return null;
+            }
+
+            // The code's indentation, tabs as the columns they take, so the row starts where the code does.
+            var indent = new System.Text.StringBuilder();
+            var tab = Math.Max(1, owner._editor.Options.IndentationSize);
+            foreach (var c in owner._editor.Document.GetText(line.Offset, line.Length))
+            {
+                if (c == ' ')
+                {
+                    indent.Append(' ');
+                }
+                else if (c == '\t')
+                {
+                    indent.Append(' ', tab - (indent.Length % tab));
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return new LensRow(indent.ToString(), string.Join("  |  ", titles), lenses.FirstOrDefault());
+        }
+
+        /// <summary>A line's CodeLens shows above it when the line before is there to end with it (not folded away).</summary>
+        private bool CanShowAbove(DocumentLine line) =>
+            line.PreviousLine is { } previous && owner.IsFoldedAway?.Invoke(previous.EndOffset) != true;
 
         public override int GetFirstInterestedOffset(int startOffset)
         {
             var line = CurrentContext.VisualLine.LastDocumentLine;
             var hint = owner._hints.FindFirstSegmentWithStartAfter(startOffset);
             var hintOffset = hint is not null && hint.StartOffset <= line.EndOffset ? hint.StartOffset : -1;
-            var eolOffset = startOffset <= line.EndOffset && EndOfLine(line) is not null ? line.EndOffset : -1;
+            var eolOffset = startOffset <= line.EndOffset && (EndOfLine(line) is not null || line.NextLine is { } next && LensAbove(next) is not null) ? line.EndOffset : -1;
             return hintOffset < 0 ? eolOffset : eolOffset < 0 ? hintOffset : Math.Min(hintOffset, eolOffset);
         }
 
@@ -850,25 +913,126 @@ public sealed class EditorInsights : IDisposable
             var line = CurrentContext.Document.GetLineByOffset(offset);
             var hint = owner._hints.FindFirstSegmentWithStartAfter(offset);
             var hintText = hint is not null && hint.StartOffset == offset ? hint.Text : null;
-            var eol = offset == line.EndOffset ? EndOfLine(line) : null;
-            if (hintText is null && eol is null)
+            var atEnd = offset == line.EndOffset;
+            var eol = atEnd ? EndOfLine(line) : null;
+            var below = atEnd && line.NextLine is { } next ? LensAbove(next) : null;
+            if (hintText is null && eol is null && below is null)
             {
                 return null;
             }
 
-            if (hintText is not null && eol is null)
+            if (hintText is not null && eol is null && below is null)
             {
                 return new InlineTextElement(hintText, owner.Brush("Shell.Editor.InlayHint.Foreground"), owner.Brush("Shell.Editor.InlayHint.Background"), null);
             }
 
-            var lens = eol!.Lens;
-            var color = eol.Review is not null ? owner.Brush("Shell.Info")
+            var text = (hintText ?? string.Empty) + (eol?.Text ?? string.Empty);
+            var color = eol?.Review is not null ? owner.Brush("Shell.Info")
                 : owner._diagnosticsByLine.ContainsKey(line.LineNumber) ? owner.Brush("Shell.Warning")
                 : owner.Brush("Shell.Editor.InlayHint.Foreground");
-            Action? click = eol.Review is { } review ? () => owner._services.ShowReviewThreads(review.Threads, owner._editor.TextArea)
-                : lens is null ? null
-                : () => owner.RunLens(lens);
-            return new InlineTextElement((hintText ?? string.Empty) + eol.Text, color, null, click);
+            Action? click = eol?.Review is { } review ? () => owner._services.ShowReviewThreads(review.Threads, owner._editor.TextArea)
+                : eol?.Lens is { } lens ? () => owner.RunLens(lens)
+                : null;
+            if (below is null)
+            {
+                return new InlineTextElement(text, color, null, click);
+            }
+
+            Action? lensClick = below.Lens is { } nextLens ? () => owner.RunLens(nextLens) : null;
+            return new LensRowElement(owner, text, color, click, below, lensClick);
+        }
+    }
+
+    /// <summary>
+    /// The end of a line's text and the next line's CodeLens row: the line's own end-of-line text (if any), a line break,
+    /// the next line's indentation and its CodeLens, smaller and muted. None of it is part of the document or takes the
+    /// caret; the next line itself keeps its height (no taller caret or selection), and the row clicks run its first lens.
+    /// </summary>
+    private sealed class LensRowElement : VisualLineElement
+    {
+        private readonly EditorInsights _owner;
+        private readonly string _text;
+        private readonly IBrush _color;
+        private readonly Action? _click;
+        private readonly LensRow _row;
+        private readonly Action? _lensClick;
+
+        public LensRowElement(EditorInsights owner, string text, IBrush color, Action? click, LensRow row, Action? lensClick)
+            : base(text.Length + 1 + row.Indent.Length + row.Text.Length, 0)
+        {
+            _owner = owner;
+            _text = text;
+            _color = color;
+            _click = click;
+            _row = row;
+            _lensClick = lensClick;
+        }
+
+        public override TextRun CreateTextRun(int startVisualColumn, ITextRunConstructionContext context)
+        {
+            var at = startVisualColumn - VisualColumn;
+            if (at < _text.Length)
+            {
+                return Run(_text[at..], _color, small: true);
+            }
+
+            if (at == _text.Length)
+            {
+                return new TextEndOfLine(1);
+            }
+
+            at -= _text.Length + 1;
+            return at < _row.Indent.Length
+                ? Run(_row.Indent[at..], _color, small: false)
+                : Run(_row.Text[(at - _row.Indent.Length)..], _owner.Brush("Shell.Editor.InlayHint.Foreground"), small: true);
+        }
+
+        private TextCharacters Run(string text, IBrush foreground, bool small)
+        {
+            var properties = new VisualLineElementTextRunProperties(TextRunProperties);
+            properties.SetForegroundBrush(foreground);
+            if (small)
+            {
+                properties.SetFontRenderingEmSize(TextRunProperties.FontRenderingEmSize * 0.9);
+            }
+
+            return new TextCharacters(text, properties);
+        }
+
+        public override int GetNextCaretPosition(int visualColumn, AvaloniaEdit.Document.LogicalDirection direction, CaretPositioningMode mode) => -1;
+
+        public override bool IsWhitespace(int visualColumn) => false;
+
+        /// <summary>The click that the pointer's row takes: the line's own text on the first, the CodeLens on the one below.</summary>
+        private Action? ClickAt(PointerEventArgs e)
+        {
+            var view = _owner._editor.TextArea.TextView;
+            var y = e.GetPosition(view).Y + view.ScrollOffset.Y;
+            if (view.GetVisualLineFromVisualTop(y) is not { } visualLine)
+            {
+                return null;
+            }
+
+            var textLine = visualLine.GetTextLineByVisualYPosition(y);
+            return visualLine.TextLines.IndexOf(textLine) > 0 ? _lensClick : _click;
+        }
+
+        protected override void OnQueryCursor(PointerEventArgs e)
+        {
+            if (ClickAt(e) is not null && e.Source is InputElement element)
+            {
+                element.Cursor = new Cursor(StandardCursorType.Hand);
+                e.Handled = true;
+            }
+        }
+
+        protected override void OnPointerPressed(PointerPressedEventArgs e)
+        {
+            if (e.GetCurrentPoint(null).Properties.IsLeftButtonPressed && ClickAt(e) is { } click)
+            {
+                click();
+                e.Handled = true;
+            }
         }
     }
 
