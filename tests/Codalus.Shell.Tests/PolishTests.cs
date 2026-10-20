@@ -431,6 +431,59 @@ public partial class PolishTests
     }
 
     [AvaloniaFact]
+    public async Task A_tab_has_a_pin_button_beside_its_thin_close_button()
+    {
+        // As Visual Studio's tabs: the pin beside the close button pins the tab (to the left of its group), and the close
+        // glyph is a thin X in a 16 px square.
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "tabs");
+        Directory.CreateDirectory(folder);
+        var files = Enumerable.Range(1, 3).Select(i => Path.Combine(folder, $"doc-{i}.txt")).ToList();
+        foreach (var file in files)
+        {
+            await File.WriteAllTextAsync(file, "text", TestContext.Current.CancellationToken);
+            await f.Shell.OpenFileAsync(file, preview: false);
+        }
+
+        ShellFixture.Pump();
+        var strip = f.Window.GetVisualDescendants().OfType<Dock.Avalonia.Controls.DocumentTabStrip>().Single(s => s.IsEffectivelyVisible);
+        var tabs = strip.GetVisualDescendants().OfType<Dock.Avalonia.Controls.DocumentTabStripItem>().ToList();
+        var selected = tabs.Single(t => t.IsSelected);
+        var pin = selected.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("tabPin"));
+        Assert.True(pin.IsEffectivelyVisible, "the selected tab shows its pin");
+        Assert.All(tabs.Where(t => !t.IsSelected), t => Assert.False(t.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("tabPin")).IsVisible));
+        var close = selected.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>().Single(p => p.Name == "PART_ClosePath");
+        Assert.Equal(new Rect(0, 0, 12, 12), close.Data!.Bounds); // ours: the X in the middle 8 of 12 units
+        Assert.Equal(16, close.FindAncestorOfType<Button>()!.Bounds.Width, 0);
+
+        var document = f.Shell.Layout.Documents.Single(d => d.FilePath == files[2]);
+        Assert.Same(document, f.Shell.Layout.ActiveDocument);
+        pin.Command!.Execute(null);
+        ShellFixture.Pump();
+        Assert.True(document.IsPinned);
+        Assert.Same(document, f.Shell.Layout.Documents.First());
+        // The moved tab is a new item: its pin stays shown while pinned and unpins it.
+        selected = strip.GetVisualDescendants().OfType<Dock.Avalonia.Controls.DocumentTabStripItem>().Single(t => t.IsSelected);
+        pin = selected.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("tabPin"));
+        Assert.True(pin.IsEffectivelyVisible);
+        if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
+        {
+            Directory.CreateDirectory(snapshots);
+            using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(f.Window);
+            frame!.Save(Path.Combine(snapshots, "document-tab-pin.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+
+        pin.Command!.Execute(null);
+        Assert.False(document.IsPinned);
+        if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is { Length: > 0 } unpinned)
+        {
+            ShellFixture.Pump();
+            using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(f.Window);
+            frame!.Save(Path.Combine(unpinned, "document-tab-unpinned.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Pinned_and_selected_document_tabs_stay_in_view_when_tabs_dont_fit()
     {
         // The Mac's review: with many documents open, the strip scrolled the pinned tab out of view.

@@ -304,6 +304,11 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         Activate();
+        if (OperatingSystem.IsWindows() && TryGetPlatformHandle() is { HandleDescriptor: "HWND" } handle)
+        {
+            // Activate alone only flashes the taskbar button while another program has the focus.
+            Codalus.Platform.WindowsForeground.Bring(handle.Handle);
+        }
     }
 
     public Task<string?> PickSolutionAsync() => PickAsync("Open Solution or Project", "Solutions, filters and projects", ["*.slnx", "*.sln", "*.slnf", "*.csproj", "*.fsproj", "*.vbproj"]);
