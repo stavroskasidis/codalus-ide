@@ -81,7 +81,7 @@ public class EditorTests
             }
             catch (Exception) when (f.Shell.Workbench.Output.GetOrCreate("codalus.languages", "Language Services").GetText().Contains("completion not shown", StringComparison.Ordinal))
             {
-                f.Shell.Run("editor.action.triggerSuggest");
+                await f.RunAsync("editor.action.triggerSuggest");
                 await ShellFixture.PumpUntil(() => program.CompletionWindow is { } w && w.CompletionList.CompletionData.Count > 0, seconds: 60);
             }
         }
@@ -104,7 +104,7 @@ public class EditorTests
 
         // F12 on Circle opens Shapes.cs at the class; Navigate Backward returns.
         MoveCaret(program, "new Circle", "new C".Length);
-        f.Shell.Run("editor.action.revealDefinition");
+        await f.RunAsync("editor.action.revealDefinition");
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Name == "Shapes.cs" && f.Shell.ActiveEditor.Controller is not null);
         var shapes = f.Shell.ActiveEditor!.Controller!;
         Assert.Contains("class Circle", shapes.Model.Text.GetText(shapes.Model.Text.GetLineByOffset(shapes.Editor.CaretOffset)), StringComparison.Ordinal);

@@ -31,13 +31,13 @@ public class EditingDepthTests
         // Duplicate a line, then move it up and down.
         editor.Editor.CaretOffset = text.Text.IndexOf("public double Radius", StringComparison.Ordinal);
         editor.Editor.TextArea.Focus();
-        f.Shell.Run("editor.action.duplicateSelection");
+        await f.RunAsync("editor.action.duplicateSelection");
         Assert.Equal(2, text.Text.Split("public double Radius").Length - 1);
         Assert.Equal(LineOf("public double Radius") + 1, editor.Caret.Line);
         var before = editor.Caret.Line;
-        f.Shell.Run("editor.action.moveLinesUpAction");
+        await f.RunAsync("editor.action.moveLinesUpAction");
         Assert.Equal(before - 1, editor.Caret.Line);
-        f.Shell.Run("editor.action.moveLinesDownAction");
+        await f.RunAsync("editor.action.moveLinesDownAction");
         Assert.Equal(before, editor.Caret.Line);
         editor.Editor.Undo();
         editor.Editor.Undo();
@@ -68,7 +68,7 @@ public class EditingDepthTests
         // Bookmarks: toggled on the caret's line, moved by an edit above, visited with Next.
         var circleLine = LineOf("public sealed class Circle");
         editor.Editor.CaretOffset = text.GetLineByNumber(circleLine).Offset;
-        f.Shell.Run("bookmarks.toggle");
+        await f.RunAsync("bookmarks.toggle");
         await ShellFixture.PumpUntil(() => editor.BookmarkMargin.Lines.SequenceEqual([circleLine]));
         text.Insert(0, "// moved\n");
         await ShellFixture.PumpUntil(() => f.Shell.Bookmarks.For(shapesPath).Single().Line == circleLine + 1);

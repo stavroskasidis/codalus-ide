@@ -287,13 +287,21 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
     /// <summary>
     /// Evaluates <paramref name="projects"/> in parallel, reporting each one as soon as it is done, then queues
-    /// their design-time builds.
+    /// their design-time builds. With <paramref name="reload"/>, their project files are read from disk again first.
     /// </summary>
-    private async Task EvaluateAsync(IReadOnlyList<string> projects, CancellationToken cancellationToken, DesignTimeMode designTime = DesignTimeMode.Always)
+    private async Task EvaluateAsync(IReadOnlyList<string> projects, CancellationToken cancellationToken, DesignTimeMode designTime = DesignTimeMode.Always, bool reload = false)
     {
         await _evaluationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (reload)
+            {
+                foreach (var project in projects)
+                {
+                    ProjectRootElement.TryOpen(project, _collection, preserveFormatting: true)?.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
+                }
+            }
+
             await EvaluateLockedAsync(projects, designTime, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -436,7 +444,14 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         return (configuration, platform.Replace(" ", string.Empty, StringComparison.Ordinal));
     }
 
-    public Task ReevaluateAsync(IReadOnlyList<string> projects) => Trusted ? EvaluateAsync(projects, _lifetime.Token) : Task.CompletedTask;
+    /// <summary>
+    /// Evaluates projects again after their files changed, reading them from disk first. Edits are made in collections of
+    /// their own (<see cref="_editCollection"/>, an item edit's), so <see cref="_collection"/>, which the evaluations
+    /// share, still held the file as it was: the evaluation found the project unchanged and sent nothing, and the shell
+    /// heard of the edit only from the watcher, a debounce after the edit's result (Exclude From Project's folder stayed
+    /// in the Solution Explorer, selected and in the project, for that long: the command sweep's palette run hit it).
+    /// </summary>
+    public Task ReevaluateAsync(IReadOnlyList<string> projects) => Trusted ? EvaluateAsync(projects, _lifetime.Token, reload: true) : Task.CompletedTask;
 
     // ------------------------------------------------------------------ design-time builds
 

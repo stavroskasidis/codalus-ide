@@ -109,7 +109,7 @@ public sealed class WinFormsDesignerDepthShellTests
 
         // Tab order mode: the labels (a group box's controls after its own index), clicks number each container from 0.
         f.Shell.Layout.OpenDocument(designer, focus: true);
-        f.Shell.Run("winforms.tabOrder");
+        await f.RunAsync("winforms.tabOrder");
         await ShellFixture.PumpUntil(() => designer.IsTabOrderMode);
         Assert.Equal("1", designer.TabOrderLabel(designer.Find("customerTextBox")!));
         Assert.Equal("5.0", designer.TabOrderLabel(designer.Find("standardRadioButton")!));

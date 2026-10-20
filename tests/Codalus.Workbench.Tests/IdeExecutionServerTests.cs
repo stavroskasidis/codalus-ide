@@ -13,6 +13,13 @@ public sealed class IdeExecutionServerTests
 {
     private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// How long disposal may take, and the orchestrator's read then, when the server doesn't wait for the socket: under the
+    /// 15 s after which the server leaves a teardown that doesn't finish behind, so a disposal that waited for the peer's
+    /// close (or a socket it never closed) fails, rather than passing on that fallback.
+    /// </summary>
+    private static readonly TimeSpan s_noWait = TimeSpan.FromSeconds(10);
+
     private sealed class FakeSession : IIdeRunSession
     {
         private readonly TaskCompletionSource<int?> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -65,7 +72,9 @@ public sealed class IdeExecutionServerTests
             using var created = await http.PutAsync("run_session", body, ct);
             Assert.Equal(System.Net.HttpStatusCode.Created, created.StatusCode);
 
-            // The orchestrator hears that the program runs, then keeps a read pending, as DCP does.
+            // The orchestrator hears that the program runs, then keeps a read pending, as DCP does. Its connection completes
+            // before the server registers the socket, and the session starts at once: the processRestarted it gets may have
+            // waited for the socket.
             var buffer = new byte[4096];
             using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
             wait.CancelAfter(s_timeout);
@@ -74,7 +83,7 @@ public sealed class IdeExecutionServerTests
             var pending = socket.ReceiveAsync(buffer, CancellationToken.None);
 
             // Disposing ends the session (its sessionTerminated races the teardown) and doesn't wait on the socket.
-            await server.DisposeAsync().AsTask().WaitAsync(s_timeout, ct);
+            await server.DisposeAsync().AsTask().WaitAsync(s_noWait, ct);
             Assert.Equal(1, session.Terminated);
 
             // The orchestrator's read ends: the server is gone.
@@ -82,7 +91,7 @@ public sealed class IdeExecutionServerTests
             {
                 while (true)
                 {
-                    var result = await pending.WaitAsync(s_timeout, ct);
+                    var result = await pending.WaitAsync(s_noWait, ct);
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
                         break;
@@ -101,7 +110,34 @@ public sealed class IdeExecutionServerTests
         }
         catch (Exception ex) when (ex is not Xunit.Sdk.XunitException)
         {
-            Assert.Fail(ex + "\n" + Log());
+            Assert.Fail($"{ex}\nServer: {server.DescribeState()}\n{Log()}");
+        }
+        finally
+        {
+            await server.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task A_notification_sent_before_the_orchestrator_listens_reaches_it_once_it_does()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var server = new IdeExecutionServer((_, _) => throw new InvalidOperationException("No runs here."));
+        server.Start();
+        try
+        {
+            await server.LogAsync("1", "first line", isError: false);
+            Assert.Contains("1 notification(s) waiting", server.DescribeState(), StringComparison.Ordinal);
+
+            using var socket = new ClientWebSocket();
+            socket.Options.SetRequestHeader("Authorization", "Bearer " + server.Token);
+            await socket.ConnectAsync(new Uri($"ws://localhost:{server.Port}/run_session/notify"), ct);
+            var buffer = new byte[4096];
+            var received = await socket.ReceiveAsync(buffer, ct).WaitAsync(s_timeout, ct);
+            var text = Encoding.UTF8.GetString(buffer, 0, received.Count);
+            Assert.Contains("\"serviceLogs\"", text, StringComparison.Ordinal);
+            Assert.Contains("first line", text, StringComparison.Ordinal);
+            Assert.Contains("0 notification(s) waiting", server.DescribeState(), StringComparison.Ordinal);
         }
         finally
         {

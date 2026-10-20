@@ -43,6 +43,35 @@ public class ShellHeadlessTests
         Assert.Empty(unnamed);
     }
 
+    /// <summary>
+    /// A document of another kind keeps the menu bar when the bar shows the same menus, and each menu's entries are made
+    /// as it opens: rebuilding the whole bar (about 600 entries) at each change of kind held the UI thread for 200 ms as
+    /// the WCF Test Client opened from the code editor.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Another_kind_of_document_keeps_the_menu_bar_and_a_menu_fills_as_it_opens()
+    {
+        if (PlatformInfo.Current == PlatformKind.MacOS)
+        {
+            return; // the global menu bar (NativeMenu)
+        }
+
+        await using var f = ShellFixture.Create();
+        var before = f.Window.MenuBar.Items.OfType<MenuItem>().ToList();
+        var kind = f.Shell.Workbench.Context.GetValue("activeDocumentKind");
+        f.Shell.OpenWcfTestClient();
+        ShellFixture.Pump();
+        Assert.NotEqual(kind, f.Shell.Workbench.Context.GetValue("activeDocumentKind"));
+        Assert.Equal(before, f.Window.MenuBar.Items.OfType<MenuItem>().ToList()); // the same items, not rebuilt
+
+        var tools = before.Single(m => AutomationProperties.GetName(m) == "Tools");
+        Assert.DoesNotContain(tools.Items.OfType<MenuItem>(), i => AutomationProperties.GetName(i) == "WCF Test Client");
+        tools.Open();
+        ShellFixture.Pump();
+        Assert.Contains(tools.Items.OfType<MenuItem>(), i => AutomationProperties.GetName(i) == "WCF Test Client");
+        tools.Close();
+    }
+
     [AvaloniaFact]
     public async Task The_command_palette_filters_and_runs_a_command_from_the_keyboard()
     {
@@ -283,7 +312,7 @@ public class ShellHeadlessTests
         }
 
         // The keyboard scheme from the plugin's quick pick (M23a).
-        f.Shell.Run("welcome.chooseKeyboardScheme");
+        await f.RunAsync("welcome.chooseKeyboardScheme");
         await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen, seconds: 30);
         f.Type("Emacs");
         f.Press(Key.Enter);
@@ -296,7 +325,7 @@ public class ShellHeadlessTests
         await ShellFixture.PumpUntil(() => TipShown() is { } next && next != firstTip, seconds: 30);
 
         // Get Started is the first-run setup (M46): Help → Get Started opens it.
-        f.Shell.Run("welcome.showOnboarding");
+        await f.RunAsync("welcome.showOnboarding");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
         await f.Shell.SetupModel!.FinishAsync(done: false);
         await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);

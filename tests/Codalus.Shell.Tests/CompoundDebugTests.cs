@@ -86,7 +86,7 @@ public sealed class CompoundDebugTests
 
             string ThreadName(StopInfo stop) => f.Shell.Debugger.Threads.FirstOrDefault(t => t.Id == stop.ThreadId)?.Name ?? "?";
 
-            f.Shell.Run("debug.start");
+            await f.RunAsync("debug.start");
 
             // 1. The server prerenders the page: netcoredbg stops in the component.
             var first = await NextStopAsync(null, 600);
@@ -158,7 +158,7 @@ public sealed class CompoundDebugTests
 
             // No solution: F5 on an open HTML file debugs it as a page (file URL, its folder as the web root).
             await f.Shell.OpenFileAsync(page, preview: false, null);
-            f.Shell.Run("debug.start");
+            await f.RunAsync("debug.start");
             try
             {
                 await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped && f.Shell.Debugger.Frames.Count > 0, seconds: 600);

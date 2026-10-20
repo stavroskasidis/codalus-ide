@@ -52,7 +52,7 @@ public sealed class HexViewerTests
             Assert.InRange(rows.FirstRow * 16, 0x12345 - rows.VisibleRows * 16, 0x12345); // scrolled into view
 
             // Reopen With Text Editor, and back with Open With Hex Viewer.
-            f.Shell.Run(ShellHost.ReopenWithTextEditorCommand);
+            await f.RunAsync(ShellHost.ReopenWithTextEditorCommand);
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == binary);
             f.Shell.OpenWithHexViewer();
             ShellFixture.Pump();

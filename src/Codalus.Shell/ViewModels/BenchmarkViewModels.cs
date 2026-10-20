@@ -187,7 +187,18 @@ public sealed class BenchmarksViewModel : ObservableObject
         Status = run.Results.Count == 0
             ? $"No results: BenchmarkDotNet exited with {run.ExitCode.ToString(CultureInfo.InvariantCulture)} (see the Output window)."
             : string.Create(CultureInfo.CurrentCulture, $"{run.Results.Count} benchmarks at {run.At.LocalDateTime:T} ({run.Job} job); ratios against each class's first. Select one for its history.");
-        SelectedResult = Results.Count > 0 ? Results[0] : null;
+        // The run is in the history now. Its first row can equal the selected one of the run before (a record: a Dry
+        // job's one iteration measured to the same tick, as Windows' 100 ns clock can), so setting it changes nothing
+        // and wouldn't reload the history: reload it then.
+        var first = Results.Count > 0 ? Results[0] : null;
+        if (Equals(_selectedResult, first))
+        {
+            LoadHistory(first?.Result.FullName);
+        }
+        else
+        {
+            SelectedResult = first;
+        }
     }
 
     private void LoadHistory(string? fullName)

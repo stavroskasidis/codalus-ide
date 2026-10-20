@@ -52,7 +52,7 @@
       <SolidColorBrush x:Key="Shell.Link" Color="#006AB1" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />

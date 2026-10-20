@@ -71,6 +71,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Codalus.Shell.Tests" />
+    <InternalsVisibleTo Include="Codalus.TargetFrameworks.Tests" />
   </ItemGroup>
 
   <!-- Icons (D24, M34a): Icons/Fluent and Icons/Material SVGs compiled into geometries at build time. -->
