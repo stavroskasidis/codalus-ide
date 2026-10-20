@@ -1215,6 +1215,120 @@
     <Setter Property="CornerRadius" Value="4" />
     <Setter Property="Padding" Value="8,6" />
   </Style>
+  <!--
+    IntelliSense (M49): the completion list, its description tooltip, signature help and Quick Info, as a classic IDE draws
+    them. A thin border on the overlay color with the family's control corners; the window manager adds the shadow (the
+    popups set WindowManagerAddShadowHint). Code inside takes the editor's own colors (ClassifiedInlines).
+  -->
+  <Style Selector="Border.intelliSense">
+    <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="Padding" Value="8,6" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="Border.intelliSense.completionPopup">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinWidth" Value="240" />
+    <Setter Property="MaxWidth" Value="560" />
+  </Style>
+  <Style Selector="Border.intelliSense.signatureHelp">
+    <Setter Property="Padding" Value="6,4" />
+  </Style>
+  <Style Selector="ListBox.completion">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="ListBox.completion ListBoxItem">
+    <Setter Property="Height" Value="{DynamicResource Shell.Size.Row}" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0,0,8,0" />
+    <Setter Property="Focusable" Value="False" />
+  </Style>
+  <Style Selector="ListBox.completion ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Row.Hover}" />
+  </Style>
+  <!-- The selection stays the active one though the list never has the focus (the editor keeps it), with an accent bar. -->
+  <Style Selector="ListBox.completion ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.completion ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <Style Selector="Border.completionAccent">
+    <Setter Property="Width" Value="3" />
+    <Setter Property="Margin" Value="0,0,4,0" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ListBox.completion ListBoxItem:selected Border.completionAccent">
+    <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+  </Style>
+  <Style Selector="ListBox.completion ListBoxItem:selected TextBlock.highlighted">
+    <Setter Property="controls:HighlightedText.MatchForeground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <Style Selector="ListBox.completion ListBoxItem:selected TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <!-- A soft selection (suggestion mode, or nothing typed yet: a commit character doesn't commit it) is an outline. -->
+  <Style Selector="ListBox.completion.soft ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.completion.soft ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="ListBox.completion.soft ListBoxItem:selected Border.completionAccent">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ListBox.completion.soft ListBoxItem:selected TextBlock.highlighted">
+    <Setter Property="controls:HighlightedText.MatchForeground" Value="{DynamicResource Shell.Match}" />
+  </Style>
+  <Style Selector="ListBox.completion.soft ListBoxItem:selected TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
+  <Style Selector="Border.completionFilters">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+    <Setter Property="Padding" Value="2" />
+  </Style>
+  <Style Selector="ToggleButton.completionFilter">
+    <Setter Property="Width" Value="22" />
+    <Setter Property="Height" Value="22" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="2" />
+  </Style>
+  <Style Selector="Border.intelliSense.completionTip">
+    <Setter Property="MaxWidth" Value="500" />
+  </Style>
+  <Style Selector="Button.signatureChevron">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="2" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.signatureChevron:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+  </Style>
+  <Style Selector="Border.quickInfoSeparator">
+    <Setter Property="Height" Value="1" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="Margin" Value="0,2" />
+  </Style>
+  <Style Selector="Button.quickInfoAction">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Link}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="2,1" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.quickInfoAction:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.quickInfoAction:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Link}" />
+  </Style>
 
   <!-- A running task in the status bar (M22a): a green bar on a light track, as the classic IDE shows it, and flat buttons. -->
   <Style Selector="ProgressBar#StatusProgress">

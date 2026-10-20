@@ -61,6 +61,10 @@ public sealed class VisualBasicLanguageTests(VisualBasicLanguageFixture vb) : IC
         var keywords = await LabelsAsync(Program, "Dim inventory", 0);
         Assert.Contains("Dim", keywords);
 
+        // Enter after committing an item also starts a new line in Visual Basic (Roslyn's default there; never in C#).
+        var dim = (await vb.Client.CompletionAsync(Uri(Program), vb.At(Program, "Dim inventory", 0), new CompletionContext(CompletionTriggerKind.Invoked, null), Ct)).Items.Single(i => i.Label == "Dim");
+        Assert.Equal(EnterKeyRules.Always, dim.EnterKeyRule);
+
         // Quick Info in Visual Basic's own syntax, with the documentation comment.
         var hover = await vb.Client.HoverAsync(Uri(Program), vb.At(Program, "formatter.Format", "formatter.For".Length), Ct);
         Assert.Contains("```vb\nFunction PriceFormatter.Format(name As String, price As Decimal) As String", hover?.Contents.Value, StringComparison.Ordinal);
@@ -131,7 +135,8 @@ public sealed class VisualBasicLanguageTests(VisualBasicLanguageFixture vb) : IC
         await vb.EditAsync(Inventory, "_products.Add(product)", "_products.Add(product)\n        _products.Insert(");
         var signature = await vb.Client.SignatureHelpAsync(Uri(Inventory), vb.At(Inventory, "_products.Insert(", "_products.Insert(".Length), new SignatureHelpContext(2, "(", false), Ct);
         Assert.NotNull(signature);
-        Assert.Contains(signature!.Signatures, s => s.Label == "Sub List(Of T).Insert(index As Integer, item As T)");
+        // The list's type argument is the call site's: List(Of Product), not List(Of T).
+        Assert.Contains(signature!.Signatures, s => s.Label == "Sub List(Of Product).Insert(index As Integer, item As Product)");
         await FreshAsync(Inventory);
     }
 

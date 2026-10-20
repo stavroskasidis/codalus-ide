@@ -41,6 +41,32 @@ public static class CommandIcons
         ["account"] = Blue,
         ["window"] = Blue,
 
+        // IntelliSense's code symbols (the completion list, Quick Info, signature help), as a classic IDE colors them:
+        // types orange, enums and events yellow, methods and delegates purple, data, variables and the rest blue.
+        ["symbol-class"] = Orange,
+        ["symbol-struct"] = Blue,
+        ["symbol-interface"] = Blue,
+        ["symbol-enum"] = Yellow,
+        ["symbol-enum-member"] = Blue,
+        ["symbol-delegate"] = Purple,
+        ["symbol-method"] = Purple,
+        ["symbol-extension-method"] = Purple,
+        ["symbol-property"] = Blue,
+        ["symbol-field"] = Blue,
+        ["symbol-event"] = Yellow,
+        ["symbol-constant"] = Blue,
+        ["symbol-local"] = Blue,
+        ["symbol-parameter"] = Blue,
+        ["symbol-namespace"] = Blue,
+        ["symbol-keyword"] = Blue,
+        ["symbol-snippet"] = Blue,
+        ["symbol-type-parameter"] = Orange,
+        ["symbol-operator"] = Blue,
+        ["symbol-module"] = Orange,
+        ["symbol-label"] = Blue,
+        ["symbol-text"] = Blue,
+        ["symbol-target-type"] = Blue,
+
         // The control set's views (M34h).
         ["add"] = Green,
         ["subtract"] = Red,

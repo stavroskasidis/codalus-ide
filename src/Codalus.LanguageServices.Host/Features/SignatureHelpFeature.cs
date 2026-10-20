@@ -21,6 +21,11 @@ internal static class SignatureHelpFeature
 
     private static readonly SymbolDisplayFormat s_typeFormat = SymbolDisplayFormat.MinimallyQualifiedFormat;
 
+    /// <summary>A method's containing type and name (with its type parameters), without its parameters: <c>Type&lt;A&gt;.Name&lt;T&gt;</c>.</summary>
+    private static readonly SymbolDisplayFormat s_nameFormat = SymbolDisplayFormat.MinimallyQualifiedFormat
+        .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType)
+        .WithParameterOptions(SymbolDisplayParameterOptions.None);
+
     public static SignatureHelpOptions Options => new(TriggerCharacters: ["(", ",", "["], RetriggerCharacters: [")", "]"]);
 
     public static async Task<SignatureHelp?> SignatureHelpAsync(Document document, int position, CancellationToken cancellationToken)
@@ -32,6 +37,30 @@ internal static class SignatureHelpFeature
             return null;
         }
 
+        if (FindCall(root, model, position, cancellationToken) is not { } call)
+        {
+            return null;
+        }
+
+        var signatures = call.Candidates.Select(c => Signature(c, model, position, call.ParameterIndex(c))).ToArray();
+        return new SignatureHelp(signatures, call.Active, signatures[call.Active].ActiveParameter ?? 0);
+    }
+
+    /// <summary>
+    /// The call whose argument list holds a position: its overloads, the active one (as signature help picks it: the one
+    /// the call binds to, else the first with enough parameters), and the argument's index and name.
+    /// </summary>
+    internal sealed record ActiveCall(List<IMethodSymbol> Candidates, int Active, int ArgumentIndex, string? Name)
+    {
+        public IMethodSymbol Method => Candidates[Active];
+
+        /// <summary>The parameter of <paramref name="method"/> the argument goes to (the params array for extra arguments).</summary>
+        public int ParameterIndex(IMethodSymbol method) => SignatureHelpFeature.ParameterIndex(method, ArgumentIndex, Name);
+    }
+
+    /// <summary>The innermost call whose argument list holds <paramref name="position"/>, or null (none, or no overloads).</summary>
+    internal static ActiveCall? FindCall(SyntaxNode root, SemanticModel model, int position, CancellationToken cancellationToken)
+    {
         var token = root.FindToken(Math.Max(0, position - 1));
         foreach (var node in token.Parent?.AncestorsAndSelf() ?? [])
         {
@@ -55,14 +84,13 @@ internal static class SignatureHelpFeature
             };
             var chosen = model.GetSymbolInfo(target.Node, cancellationToken).Symbol;
             var argumentCount = Math.Max(target.Arguments.Count, argumentIndex + 1);
-            var active = chosen is not null ? candidates.FindIndex(c => SymbolEqualityComparer.Default.Equals(c, chosen.OriginalDefinition) || SymbolEqualityComparer.Default.Equals(c, chosen)) : -1;
+            var active = chosen is IMethodSymbol picked ? candidates.FindIndex(c => SymbolEqualityComparer.Default.Equals(Definition(c), Definition(picked))) : -1;
             if (active < 0)
             {
                 active = Math.Max(0, candidates.FindIndex(c => c.Parameters.Length >= argumentCount || c.Parameters.LastOrDefault()?.IsParams == true));
             }
 
-            var signatures = candidates.Select(c => Signature(c, model, position, ParameterIndex(c, argumentIndex, name))).ToArray();
-            return new SignatureHelp(signatures, active, signatures[active].ActiveParameter ?? 0);
+            return new ActiveCall(candidates, active, argumentIndex, name);
         }
 
         return null;
@@ -121,10 +149,15 @@ internal static class SignatureHelpFeature
 
         return [.. symbols.OfType<IMethodSymbol>()
             .Where(m => model.IsAccessible(position, m) && !m.GetAttributes().Any(a => a.AttributeClass?.Name == "EditorBrowsableAttribute" && a.ConstructorArguments is [{ Value: 1 }]))
-            .Select(m => m.OriginalDefinition)
-            .Distinct<IMethodSymbol>(SymbolEqualityComparer.Default)
+            // The members as the receiver sees them (a generic base class's methods with its type arguments substituted,
+            // as Visual Studio shows them), one per declaration.
+            .GroupBy(Definition, SymbolEqualityComparer.Default)
+            .Select(g => g.First())
             .OrderBy(m => m.Parameters.Length)];
     }
+
+    /// <summary>The declaration a (possibly constructed or reduced) method comes from.</summary>
+    private static IMethodSymbol Definition(IMethodSymbol method) => (method.ReducedFrom ?? method).OriginalDefinition;
 
     private static int ParameterIndex(IMethodSymbol method, int argumentIndex, string? name)
     {
@@ -147,41 +180,87 @@ internal static class SignatureHelpFeature
 
     private static SignatureInformation Signature(IMethodSymbol method, SemanticModel model, int position, int activeParameter)
     {
+        // The signature as classified runs (the codalusParts extension), the parameters' marked with their index; the
+        // label is their text. The method is as the receiver sees it, so a generic base class's type arguments are the
+        // call site's (wsLayoutBuilderBase<MyPageModel, …>.AddTab, not wsLayoutBuilderBase<TModel, …>.AddTab).
         var indexer = method.AssociatedSymbol is IPropertySymbol { IsIndexer: true } property ? property : null;
-        string prefix;
+        var visualBasic = model.Language == LanguageNames.VisualBasic;
+        var runs = new List<ClassifiedRun>();
+        void Add(string text, string kind) => runs.Add(new ClassifiedRun(text, kind));
+        void AddParts(IEnumerable<SymbolDisplayPart> parts) => runs.AddRange(ClassifiedText.Runs(parts));
         if (indexer is not null)
         {
-            prefix = indexer.Type.ToMinimalDisplayString(model, position, s_typeFormat) + " this[";
+            AddParts(indexer.Type.ToMinimalDisplayParts(model, position, s_typeFormat));
+            Add(" ", ClassifiedRun.PlainText);
+            Add("this", "keyword");
+            Add("[", "punctuation");
         }
         else if (method.MethodKind == MethodKind.Constructor)
         {
-            prefix = model.Language == LanguageNames.VisualBasic
-                ? "Sub New("
-                : method.ContainingType.ToMinimalDisplayString(model, position, s_typeFormat) + "(";
+            if (visualBasic)
+            {
+                Add("Sub", "keyword");
+                Add(" ", ClassifiedRun.PlainText);
+                Add("New", "keyword");
+            }
+            else
+            {
+                AddParts(method.ContainingType.ToMinimalDisplayParts(model, position, s_typeFormat));
+            }
+
+            Add("(", "punctuation");
         }
-        else if (model.Language == LanguageNames.VisualBasic)
+        else if (visualBasic)
         {
             // Sub Name(…) or Function Name(…) As T, as Visual Basic writes it.
-            prefix = (method.ReturnsVoid ? "Sub " : "Function ") + method.ContainingType.ToMinimalDisplayString(model, position, s_typeFormat) + "." + method.Name + "(";
+            Add(method.ReturnsVoid ? "Sub" : "Function", "keyword");
+            Add(" ", ClassifiedRun.PlainText);
+            AddParts(method.ContainingType.ToMinimalDisplayParts(model, position, s_typeFormat));
+            Add(".", "punctuation");
+            Add(method.Name, method.IsExtensionMethod || method.ReducedFrom is not null ? "extensionMethod" : "method");
+            Add("(", "punctuation");
         }
         else
         {
-            var name = method.ToMinimalDisplayString(model, position, SymbolDisplayFormat.MinimallyQualifiedFormat
-                .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType)
-                .WithParameterOptions(SymbolDisplayParameterOptions.None));
-            name = name.EndsWith("()", StringComparison.Ordinal) ? name[..^2] : name;
-            prefix = method.ReturnType.ToMinimalDisplayString(model, position, s_typeFormat) + " " + name + "(";
+            AddParts(method.ReturnType.ToMinimalDisplayParts(model, position, s_typeFormat));
+            Add(" ", ClassifiedRun.PlainText);
+            AddParts(method.ToMinimalDisplayParts(model, position, s_nameFormat));
+            Add("(", "punctuation");
         }
 
-        var docs = Documentation(method);
-        var parameters = method.Parameters
-            .Select(p => new ParameterInformation(p.ToMinimalDisplayString(model, position, s_parameterFormat), docs.Parameters.TryGetValue(p.Name, out var doc) ? MarkupContent.Markdown(Markdown.Escape(doc)) : null))
-            .ToArray();
-        var label = prefix + string.Join(", ", parameters.Select(p => p.Label)) + (indexer is not null ? "]" : ")")
-            + (model.Language == LanguageNames.VisualBasic && !method.ReturnsVoid && method.MethodKind != MethodKind.Constructor ? " As " + method.ReturnType.ToMinimalDisplayString(model, position, s_typeFormat) : string.Empty);
+        var docs = Documentation(Definition(method));
+        var parameters = new ParameterInformation[method.Parameters.Length];
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            if (i > 0)
+            {
+                Add(",", "punctuation");
+                Add(" ", ClassifiedRun.PlainText);
+            }
+
+            var parameter = method.Parameters[i];
+            var index = i;
+            var parameterRuns = ClassifiedText.Runs(parameter.ToMinimalDisplayParts(model, position, s_parameterFormat)).Select(r => r with { Parameter = index }).ToArray();
+            runs.AddRange(parameterRuns);
+            parameters[i] = new ParameterInformation(
+                string.Concat(parameterRuns.Select(r => r.Text)),
+                docs.Parameters.TryGetValue(parameter.Name, out var doc) ? MarkupContent.Markdown(Markdown.Escape(doc)) : null);
+        }
+
+        Add(indexer is not null ? "]" : ")", "punctuation");
+        if (visualBasic && !method.ReturnsVoid && method.MethodKind != MethodKind.Constructor)
+        {
+            Add(" ", ClassifiedRun.PlainText);
+            Add("As", "keyword");
+            Add(" ", ClassifiedRun.PlainText);
+            AddParts(method.ReturnType.ToMinimalDisplayParts(model, position, s_typeFormat));
+        }
+
+        var label = string.Concat(runs.Select(r => r.Text));
         return new SignatureInformation(label, docs.Summary is { } summary ? MarkupContent.Markdown(Markdown.Escape(summary)) : null, parameters)
         {
             ActiveParameter = parameters.Length == 0 ? null : Math.Min(activeParameter, parameters.Length - 1),
+            Parts = [.. runs],
         };
     }
 
