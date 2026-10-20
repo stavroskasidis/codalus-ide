@@ -59,15 +59,28 @@ public sealed class DebugSessionsTests
         Assert.True(f.Shell.Runs.MultipleStartup);
         Assert.Equal(["Partner", "Debuggee"], f.Shell.Runs.StartupTargets.Select(t => Path.GetFileNameWithoutExtension(t.Project)));
 
-        // F5: both build and start; each stops at its breakpoint.
+        // F5: both build and start; each stops at its breakpoint. One stop shows at a time: when the second program
+        // reaches its breakpoint before the first stop is continued, its stop waits and shows as soon as Continue
+        // resumes the first program, so the session goes from Stopped to Stopped with a moment of Running between,
+        // too short to wait for (a macOS runner missed it and waited on the second stop). The stops are counted instead.
         f.Shell.Debugger.Breakpoints.Toggle(debuggee, Line(debuggee, "print"));
         f.Shell.Debugger.Breakpoints.Toggle(partner, Line(partner, "partner"));
+        var stopped = 0;
+        f.Shell.Debugger.Stopped += (_, _) => Interlocked.Increment(ref stopped);
         await f.RunAsync("debug.start");
         var stops = new List<string>();
         for (var i = 0; i < 2; i++)
         {
-            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 300);
-            stops.Add(Path.GetFileName(Path.GetDirectoryName(f.Shell.Debugger.SelectedFrame?.Source?.Path) ?? string.Empty));
+            var count = i + 1;
+            await ShellFixture.PumpUntil(() => Volatile.Read(ref stopped) >= count && f.Shell.Debugger.State == DebugState.Stopped, seconds: 300);
+            var program = Path.GetFileName(Path.GetDirectoryName(f.Shell.Debugger.SelectedFrame?.Source?.Path) ?? string.Empty);
+            stops.Add(program);
+
+            // The shell shows this stop, the second as well as the first: the editor opens at its program's line.
+            var source = Path.Combine(program, "Program.cs");
+            await ShellFixture.PumpUntil(
+                () => program.Length > 0 && f.Shell.ActiveEditor?.Model.Path.EndsWith(source, StringComparison.OrdinalIgnoreCase) == true,
+                describe: () => $"the editor to show {source} (active: {f.Shell.ActiveEditor?.Model.Path ?? "none"})");
             if (i == 0)
             {
                 // The Processes window lists both programs of the session.
@@ -79,11 +92,11 @@ public sealed class DebugSessionsTests
 
             await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("debugStopped"), true)); // the command's enablement
             await f.RunAsync("debug.continue");
-            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State != DebugState.Stopped || i == 1);
         }
 
         Assert.Equal(["Debuggee", "Partner"], stops.Order());
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
+        Assert.Equal(2, Volatile.Read(ref stopped)); // each program stopped once
         Assert.Contains("[Partner] The program has exited with code", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
         Assert.Contains("[Debuggee] The program has exited with code", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
 
