@@ -150,17 +150,42 @@ internal sealed class ShellFixture : IAsyncDisposable
     /// render timer also ticks on its own clock). The sticky scroll's band, laid out but not yet drawn, let the point over
     /// it through to the breakpoint margin under it (develop's macOS run of 0.4.0).
     /// </summary>
+    /// <remarks>
+    /// It returns only when the frame it waited for is also the last batch committed. A hit test mixes two states: the
+    /// visuals' transforms and bounds come from the last rendered frame, but which visuals there are (each one's
+    /// children, drawing and visibility) comes from the last commit. Jobs run while waiting can commit a newer batch
+    /// right after the awaited one is rendered (the headless render timer ticks inside them too; the render loop's own
+    /// batch-finished callback schedules the next commit), and that batch is not rendered yet: its new visuals have no
+    /// rendered bounds and are skipped with everything under them. Measured on the first Find widget open after a file
+    /// opens: 7 of 224 runs under CPU load returned with such a batch pending. So the frame counts only when this
+    /// method's own tick rendered it, before any job ran after it; otherwise it commits and waits again.
+    /// </remarks>
     public static void RenderFrame(Avalonia.Controls.TopLevel top)
     {
-        Dispatcher.UIThread.RunJobs();
-        top.UpdateLayout();
-        var batch = Avalonia.Rendering.Composition.ElementComposition.GetElementVisual(top)!.Compositor.RequestCompositionBatchCommitAsync();
+        var compositor = Avalonia.Rendering.Composition.ElementComposition.GetElementVisual(top)!.Compositor;
         var started = System.Diagnostics.Stopwatch.StartNew();
-        while (!batch.Rendered.IsCompleted)
+        while (true)
         {
-            Assert.True(started.Elapsed < TimeSpan.FromSeconds(10), "No frame was rendered in 10 s.");
-            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             Dispatcher.UIThread.RunJobs();
+            top.UpdateLayout();
+            var batch = compositor.RequestCompositionBatchCommitAsync();
+            while (true)
+            {
+                Assert.True(started.Elapsed < TimeSpan.FromSeconds(10), "No frame was rendered in 10 s.");
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                if (batch.Rendered.IsCompleted)
+                {
+                    // This tick rendered it, and no job has run since: nothing was committed after it.
+                    return;
+                }
+
+                Dispatcher.UIThread.RunJobs();
+                if (batch.Rendered.IsCompleted)
+                {
+                    // Rendered by a tick inside the jobs, which may then have committed a newer batch: render again.
+                    break;
+                }
+            }
         }
     }
 
