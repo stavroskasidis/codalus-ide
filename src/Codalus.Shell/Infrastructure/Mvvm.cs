@@ -44,17 +44,35 @@ public sealed class RelayCommand(Action<object?> execute, Func<object?, bool>? c
 /// <summary>Workbench services raise events on any thread; views marshal through these helpers.</summary>
 public static class Ui
 {
-    public static void Post(Action action)
+    private static int s_watchers;
+    private static string? s_runningJob;
+
+    /// <summary>
+    /// The job posted through <see cref="Post"/> that the UI thread is running, by the file and line that posted it, while
+    /// a stall monitor watches (the smoke test's command sweep): what a stall it measures was spent on. Null between jobs.
+    /// </summary>
+    internal static string? RunningJob => Volatile.Read(ref s_runningJob);
+
+    public static void Post(Action action, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
     {
         if (Dispatcher.UIThread.CheckAccess())
         {
             action();
+        }
+        else if (Volatile.Read(ref s_watchers) > 0)
+        {
+            Dispatcher.UIThread.Post(() => RunWatched(action, file, line));
         }
         else
         {
             Dispatcher.UIThread.Post(action);
         }
     }
+
+    /// <summary>Has posted jobs say what they are in <see cref="RunningJob"/> from now on, until <see cref="Unwatch"/>.</summary>
+    internal static void Watch() => Interlocked.Increment(ref s_watchers);
+
+    internal static void Unwatch() => Interlocked.Decrement(ref s_watchers);
 
     public static Task RunAsync(Action action) =>
         Dispatcher.UIThread.CheckAccess() ? RunInline(action) : Dispatcher.UIThread.InvokeAsync(action).GetTask();
@@ -69,5 +87,18 @@ public static class Ui
     {
         action();
         return Task.CompletedTask;
+    }
+
+    private static void RunWatched(Action action, string file, int line)
+    {
+        var outer = Interlocked.Exchange(ref s_runningJob, $"{Path.GetFileName(file)}:{line}");
+        try
+        {
+            action();
+        }
+        finally
+        {
+            Volatile.Write(ref s_runningJob, outer);
+        }
     }
 }
