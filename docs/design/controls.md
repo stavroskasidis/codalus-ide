@@ -277,6 +277,9 @@ The maintainer approved these on 2026-10-18, all as proposed ([D33](../roadmap.m
 
 ## The Windows Forms designer's menus (0.6)
 
+**Approved by the maintainer on 2026-10-21, as drawn (D40).**
+
+
 `WinFormsDesignerMenus.dc.html` is step 1 of #67's part 2: the context menus, Lock Controls, the context keys and the verbs are built only once the maintainer approves it, and the decision goes into the roadmap's [decision register](../roadmap.md#decision-register). Part 1, Type Here only on tool strips, is a fix that doesn't wait for it. Questions for the maintainer, each as drawn and with what was rejected:
 
 1. **Show Smart Tag stays**, the one entry the classic IDE's menu doesn't have: the panel's property tasks have no menu form, and the designer's verbs come first either way. It follows the primary selection and opens the menu alone when there are no verbs (a TextBox, whose smart tag has only Multiline). Rejected: dropping it for exact parity.
@@ -295,6 +298,9 @@ The maintainer approved these on 2026-10-18, all as proposed ([D33](../roadmap.m
 The icons are Fluent's own paths (MIT) from the pinned `@fluentui/svg-icons` 1.1.344: the files the plan adds (`position_to_front_20_regular` and `position_to_back_20_regular`, drawn at 16 px as the shell scales a 20 px design, since 1.1.344 has no 16 px ones, and `grid_16_regular`), the ones proposed above, and the ones the shell already compiles for these menus, so the shapes are the ones that would ship.
 
 ## The Properties window (0.6)
+
+**Approved by the maintainer on 2026-10-21, as drawn (D41).**
+
 
 `PropertiesWindow.dc.html` is step 1 of #68: the shell, the protocol and the designer host are built only once the maintainer approves it, and the decision goes into the roadmap's [decision register](../roadmap.md#decision-register). Questions for the maintainer, each as drawn and with what was rejected:
 
@@ -320,6 +326,9 @@ The icons are Fluent's own paths (MIT) from the pinned `@fluentui/svg-icons` 1.1
 20. **The date drop-down is drawn**: a month calendar with Today; picking a day keeps the time, and the cell still takes typing. A collection shows (Collection), and its "…" opens the collection editor. Rejected: deferring the date drop-down with a TODO(issue).
 
 ## Git Changes (0.6)
+
+**Approved by the maintainer on 2026-10-21, as drawn (D38), including the change to `ui-guidelines.md`'s button rules in question 1.**
+
 
 `GitChanges.dc.html` is step 2 of #23, the maintainer's follow-up after M34h: "Git panel folder actions + branch dropdown with context menu". The Git Changes window's folders get the menu a classic IDE has (Stage, Unstage, Discard, Stash, Add to .gitignore, View History, Reveal, Open in Terminal, Copy Path, Copy Relative Path, Expand and Collapse All), the menus of its files, conflicts and repository node are rebuilt from the same registered location in place of today's XAML ones, and its branch button becomes a drop-down that lists the branches, each with its own menu (Checkout, New Local Branch From…, Merge, Rebase, Push, Rename…, Delete, Compare with Current Branch, View History, Copy Branch Name). The titles, icons and keys are the ones the plan registers and `CommandIcons` and the key bindings give (Reveal in File Explorer, Finder or File Manager, as `explorer.reveal` names it). Nothing is built until the maintainer approves it, and the decision goes into the roadmap's [decision register](../roadmap.md#decision-register) as D38.
 
@@ -359,6 +368,9 @@ Questions for the maintainer, each as drawn and with what was rejected:
 The new 16 px drawings (merge, compare, rename, stash, upload, mention, expand-all, eye-off) are in the page's own sprite, as the designer menus' and the Properties window's are, so the other mockups don't change; discard, subtract, sync, pull-request and arrow-up-down are the shell's own stroke drawings (`Controls/Icon.cs`).
 
 ## NuGet's verified owner (0.6)
+
+**Approved by the maintainer on 2026-10-21, as drawn (D39).**
+
 
 `PackageManager.dc.html` is the design step of #78's item 4. nuget.org's search already says when a package's ID prefix is reserved for one of its owners (its `verified` field, which NuGet.Protocol reads as `PrefixReserved`); the build host will pass it on as `PackageSummary.Verified` only for results from https://api.nuget.org that can be nobody else's copy (questions 7, 9 and 10), and the package manager will show a badge after the ID. The protocol and host parts don't wait for this; the badge's UI is built only once the maintainer approves the design, and the decision goes into the roadmap's [decision register](../roadmap.md#decision-register) as D39.
 
