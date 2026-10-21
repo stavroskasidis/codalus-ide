@@ -829,7 +829,8 @@ public sealed class PropertyGridViewModel : ObservableObject
         foreach (var row in fresh)
         {
             PropertyRowViewModel keep;
-            if (byPath.TryGetValue(row.Path, out var existing) && existing.Kind == row.Kind && existing.Name == row.Name && !ReferenceEquals(existing, row))
+            // A row whose kind or editor changes (a value that gains a line break: no text box) is replaced, so its one editor is made again.
+            if (byPath.TryGetValue(row.Path, out var existing) && existing.Kind == row.Kind && existing.Name == row.Name && existing.ShowsTextBox == row.ShowsTextBox && !ReferenceEquals(existing, row))
             {
                 existing.Update(row);
                 existing.SetChildren(Merge(existing.Children, row.Children, depth + 1));

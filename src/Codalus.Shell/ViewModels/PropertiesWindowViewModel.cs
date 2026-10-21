@@ -267,6 +267,8 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<PropertyLinkViewModel> Links { get; } = [];
 
+    public bool HasLinks => Links.Count > 0;
+
     public ICommand AddMetadataCommand { get; }
 
     /// <summary>What is shown: "Program.cs File Properties", "App Project Properties"…</summary>
@@ -443,6 +445,7 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
             Links.Add(link);
         }
 
+        OnPropertyChanged(nameof(HasLinks));
         Message = message ?? (Categories.Count == 0 ? "No properties." : null);
         RaiseSourceState();
     }

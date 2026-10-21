@@ -1,0 +1,257 @@
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Avalonia.VisualTree;
+using Codalus.Shell.ViewModels;
+using Codalus.Shell.Views;
+using Codalus.Shell.Views.PropertyEditors;
+
+namespace Codalus.Shell.Tests;
+
+/// <summary>
+/// #68 (D41) on every OS, in the real main window: the Properties window's grid fed by a designer that isn't one (a
+/// fake <see cref="IDesignerPropertySource"/>), with keys pressed on the window so its key bindings run first. F4 and
+/// Alt+Down open the selected row's drop-down in the grid (F4 elsewhere still shows the window); the arrows move,
+/// expand and collapse; Enter commits and keeps the keyboard in the grid; Esc reverts; each row has one editor and no
+/// drop-down is made before one opens; the toolbar is in the classic IDE's order with Property Pages grayed for a
+/// component, and the component selector lists the form first.
+/// </summary>
+public sealed class PropertyGridViewTests
+{
+    /// <summary>A designer's selection without a designer: rows made again on each read, values changed by commits.</summary>
+    internal sealed class FakeSource : IDesignerPropertySource
+    {
+        private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal)
+        {
+            ["Text"] = "OK",
+            ["Enabled"] = "True",
+            ["Style"] = "Bold",
+            ["Font"] = "Segoe UI, 9pt",
+            ["Font.Name"] = "Segoe UI",
+            ["Font.Bold"] = "False",
+            ["Dock"] = "None",
+            ["TabIndex"] = "3",
+        };
+
+        public List<string> Commits { get; } = [];
+
+        public string PropertiesTitle => "button1 System.Windows.Forms.Button";
+
+        public bool HasEvents => true;
+
+        public string? Selected { get; set; } = "button1";
+
+        public bool HasOpenEditor { get; set; }
+
+        public IReadOnlyList<DesignerComponentChoice> ComponentChoices { get; } =
+            [new("Form1", "System.Windows.Forms.Form"), new("button1", "System.Windows.Forms.Button"), new("textBox1", "System.Windows.Forms.TextBox")];
+
+        public string? SelectedComponent => Selected;
+
+        public void SelectComponent(string name)
+        {
+            Selected = name;
+            Changed();
+        }
+
+        public event EventHandler? PropertiesChanged;
+
+        public void Changed() => PropertiesChanged?.Invoke(this, EventArgs.Empty);
+
+        private Func<string?, Task> Commit(string path) => text =>
+        {
+            Commits.Add($"{path}={text}");
+            _values[path] = text ?? string.Empty;
+            Changed();
+            return Task.CompletedTask;
+        };
+
+        private PropertyRowViewModel Row(string path, PropertyRowKind kind, string[]? options = null, IReadOnlyList<PropertyRowViewModel>? children = null) =>
+            new(path[(path.LastIndexOf('.') + 1)..], _values[path], kind, $"The {path}.", Commit(path), options?.Select(o => new PropertyOption(o, o)).ToList(), isSet: path == "Text")
+            {
+                Path = path,
+                Children = children ?? [],
+            };
+
+        public Task<IReadOnlyList<DesignerPropertyRow>> PropertyRowsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<DesignerPropertyRow>>(
+        [
+            new("Appearance", Row("Text", PropertyRowKind.Text)),
+            new("Appearance", Row("Style", PropertyRowKind.Flags, ["Bold", "Italic", "Underline"])),
+            new("Appearance", Row("Font", PropertyRowKind.Font, children:
+            [
+                Row("Font.Name", PropertyRowKind.Choice, ["Arial", "Segoe UI"]),
+                Row("Font.Bold", PropertyRowKind.Choice, ["True", "False"]),
+            ])),
+            new("Behavior", Row("Enabled", PropertyRowKind.Choice, ["True", "False"])),
+            new("Behavior", Row("TabIndex", PropertyRowKind.Text)),
+            new("Layout", Row("Dock", PropertyRowKind.Dock, ["None", "Top", "Bottom", "Left", "Right", "Fill"])),
+        ]);
+
+        public Task<IReadOnlyList<DesignerPropertyRow>> EventRowsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<DesignerPropertyRow>>([]);
+    }
+
+    internal static async Task<(ShellFixture Fixture, FakeSource Source, PropertiesWindowView View)> ShowAsync()
+    {
+        var f = ShellFixture.Create();
+        var source = new FakeSource();
+        f.Shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
+        f.Shell.PropertySource = source;
+        await ShellFixture.PumpUntil(() => f.Shell.PropertiesWindow.Grid.Find("Text") is not null && f.Window.GetVisualDescendants().OfType<PropertiesWindowView>().Any(v => v.IsEffectivelyVisible));
+        var view = f.Window.GetVisualDescendants().OfType<PropertiesWindowView>().First(v => v.IsEffectivelyVisible);
+        await ShellFixture.PumpUntil(() => Container(view, f.Shell.PropertiesWindow.Grid.Find("Text")!) is not null);
+        return (f, source, view);
+    }
+
+    internal static Control? Container(PropertiesWindowView view, object item) => view.Grid.GetVisualDescendants().OfType<ItemsControl>().First(i => i.Name == "Rows").ContainerFromItem(item);
+
+    internal static TextBox? Editor(PropertiesWindowView view, PropertyRowViewModel row) =>
+        Container(view, row)?.GetVisualDescendants().OfType<TextBox>().FirstOrDefault(t => t.Classes.Contains("editor"));
+
+    [AvaloniaFact]
+    public async Task F4_and_Alt_Down_open_the_drop_down_in_the_grid_and_F4_elsewhere_shows_the_window()
+    {
+        var (f, _, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+        var style = grid.Find("Style")!;
+        Assert.Empty(view.Grid.MadeDropDowns);
+        Editor(view, style)!.Focus();
+        ShellFixture.Pump();
+        Assert.Equal("properties", f.Shell.Workbench.Context.GetValue("focusedView"));
+        Assert.Same(style, grid.SelectedRow);
+
+        f.Press(Key.F4);
+        await ShellFixture.PumpUntil(() => view.Grid.OpenDropDownControl is FlagsDropDown);
+        Assert.Single(view.Grid.MadeDropDowns);
+        f.Press(Key.Escape);
+        await ShellFixture.PumpUntil(() => view.Grid.OpenDropDownControl is null);
+
+        f.Press(Key.Down, RawInputModifiers.Alt);
+        await ShellFixture.PumpUntil(() => view.Grid.OpenDropDownControl is FlagsDropDown);
+        f.Press(Key.Escape);
+        await ShellFixture.PumpUntil(() => view.Grid.OpenDropDownControl is null);
+
+        // Elsewhere F4 still shows the Properties window.
+        f.Shell.Layout.CloseToolWindow(PropertiesWindowViewModel.ToolWindowId);
+        f.Shell.Layout.ShowToolWindow("solutionExplorer", focus: true);
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Context.GetValue("focusedView") is "solutionExplorer");
+        f.Press(Key.F4);
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.IsVisible(PropertiesWindowViewModel.ToolWindowId));
+    }
+
+    [AvaloniaFact]
+    public async Task The_arrows_move_expand_and_collapse_and_Enter_commits_keeping_the_keyboard()
+    {
+        var (f, source, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+
+        // The grid has the keyboard on Font: Right expands it, Left collapses it.
+        grid.SelectedRow = grid.Find("Font");
+        view.Grid.FocusPrimary();
+        ShellFixture.Pump();
+        view.Grid.GetVisualDescendants().OfType<ItemsControl>().First(i => i.Name == "Rows").Focus();
+        ShellFixture.Pump();
+        f.Press(Key.Right);
+        Assert.True(grid.Find("Font")!.IsExpanded);
+        Assert.Contains(grid.Find("Font.Bold")!, grid.Items);
+        f.Press(Key.Left);
+        Assert.False(grid.Find("Font")!.IsExpanded);
+
+        // Down from the last Appearance row crosses Behavior's header.
+        grid.SelectedRow = grid.Find("Text");
+        f.Press(Key.Down);
+        Assert.Same(grid.Categories.Single(c => c.Title == "Behavior"), grid.SelectedItem);
+        f.Press(Key.Down);
+        Assert.Equal("Enabled", grid.SelectedRow?.Name);
+
+        // Typing in Text and Enter commits; the box keeps the keyboard; Up goes to the row above's editor.
+        var text = grid.Find("Text")!;
+        var box = Editor(view, text)!;
+        box.Focus();
+        box.SelectAll();
+        f.Type("Hello");
+        f.Press(Key.Enter);
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("Text=Hello") && grid.Find("Text")!.Value == "Hello");
+        Assert.Same(text, grid.Find("Text"));
+        Assert.True(Editor(view, text)!.IsFocused);
+        f.Press(Key.Up);
+        await ShellFixture.PumpUntil(() => grid.SelectedRow?.Name == "Style" && Editor(view, grid.SelectedRow!) is { IsFocused: true });
+
+        // Esc puts the value back in the box, nothing committed.
+        var style = Editor(view, grid.Find("Style")!)!;
+        style.SelectAll();
+        f.Type("Nope");
+        Assert.Equal("Nope", style.Text);
+        f.Press(Key.Escape);
+        Assert.Equal("Bold", style.Text);
+        Assert.DoesNotContain(source.Commits, c => c.StartsWith("Style=", StringComparison.Ordinal));
+    }
+
+    [AvaloniaFact]
+    public async Task Each_row_has_one_editor_its_expander_and_no_drop_down_until_one_opens()
+    {
+        var (f, source, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+        foreach (var row in grid.Items.OfType<PropertyRowViewModel>())
+        {
+            var cell = Container(view, row)!.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("valueCell"));
+            var editors = cell.GetVisualDescendants().OfType<Control>().Where(c => c.Classes.Contains("editor")).ToList();
+            Assert.True(editors.Count == 1, $"{row.Name}: {editors.Count} editors");
+            Assert.Equal(row.ShowsTextBox, editors[0] is TextBox);
+        }
+
+        var expander = Container(view, grid.Find("Font")!)!.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("expander"));
+        Assert.Equal("Expand Font", Avalonia.Automation.AutomationProperties.GetName(expander));
+        Assert.False(Container(view, grid.Find("Text")!)!.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("expander")).IsVisible);
+        Assert.Empty(view.Grid.MadeDropDowns);
+        Assert.Empty(f.Window.GetVisualDescendants().OfType<IPropertyDropDown>());
+
+        // Only the selected row shows its arrow; a choice's list commits the pick.
+        var enabled = grid.Find("Enabled")!;
+        bool ArrowShows(PropertyRowViewModel row) => Container(view, row)!.GetVisualDescendants().OfType<Button>().Any(b => b.Classes.Contains("dropDown") && b.IsEffectivelyVisible);
+        Assert.False(ArrowShows(enabled));
+        grid.SelectedRow = enabled;
+        ShellFixture.Pump();
+        Assert.True(ArrowShows(enabled));
+        Assert.False(ArrowShows(grid.Find("Dock")!));
+        grid.Toggle(grid.Find("Font")!);
+        NavigationDepthTests.Screenshot(f, "m68-properties-grid");
+        view.Grid.OpenDropDown(enabled);
+        var list = Assert.IsType<ChoiceDropDown>(view.Grid.OpenDropDownControl);
+        list.List.SelectedItem = enabled.Options.Single(o => o.Value == "False");
+        list.Pick();
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("Enabled=False") && view.Grid.OpenDropDownControl is null);
+
+        // A double-click on a bool's value cycles it.
+        grid.Find("Enabled")!.DoubleClick();
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("Enabled=True"));
+    }
+
+    [AvaloniaFact]
+    public async Task The_toolbar_is_the_classic_ides_and_the_selector_lists_the_form_first()
+    {
+        var (f, source, view) = await ShowAsync();
+        await using var _f = f;
+        var properties = f.Shell.PropertiesWindow;
+        var toolbar = view.GetVisualDescendants().OfType<Codalus.Shell.Controls.ToolbarPanel>().First();
+        var names = toolbar.Children.Where(c => c.IsVisible).Select(c => c is Border ? "|" : Avalonia.Automation.AutomationProperties.GetName(c)).ToList();
+        Assert.Equal(["Categorized", "Alphabetical", "|", "Properties", "Events", "|", "Property Pages"], names);
+        Assert.False(properties.PropertyPagesCommand.CanExecute(null));
+
+        Assert.Equal(["Form1", "button1", "textBox1"], properties.ComponentChoices.Select(c => c.Name));
+        Assert.Equal("button1", properties.SelectedComponent?.Name);
+        properties.SelectedComponent = properties.ComponentChoices[2];
+        Assert.Equal("textBox1", source.Selected);
+
+        // A multi-selection: blank. An editor panel open over the designer: no input.
+        source.Selected = null;
+        source.HasOpenEditor = true;
+        source.Changed();
+        await ShellFixture.PumpUntil(() => properties.SelectedComponent is null && !properties.IsInputEnabled && !properties.Grid.IsEnabled);
+        source.HasOpenEditor = false;
+        source.Changed();
+        await ShellFixture.PumpUntil(() => properties.IsInputEnabled && properties.Grid.IsEnabled);
+    }
+}
