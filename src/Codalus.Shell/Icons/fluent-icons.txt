@@ -5,6 +5,7 @@
 add_16_regular
 alert_16_regular
 alert_badge_16_regular
+apps_16_regular
 archive_16_regular
 arrow_clockwise_16_regular
 arrow_clockwise_dashes_16_regular
@@ -74,6 +75,7 @@ data_pie_16_regular
 database_16_regular
 database_arrow_up_16_regular
 delete_16_regular
+desktop_16_regular
 desktop_arrow_right_16_regular
 developer_board_16_regular
 dismiss_16_regular
@@ -114,6 +116,7 @@ keyboard_16_regular
 layout_cell_four_16_regular
 layout_column_two_16_regular
 layout_row_three_16_regular
+library_16_regular
 lightbulb_16_regular
 link_16_regular
 link_add_16_regular
@@ -153,6 +156,7 @@ save_multiple_16_regular
 search_16_regular
 select_all_on_16_regular
 send_16_regular
+server_16_regular
 settings_16_regular
 shield_checkmark_16_regular
 sparkle_16_regular
