@@ -261,6 +261,75 @@ public sealed partial class ShellHost
         }
     });
 
+    /// <summary>
+    /// Update Branch… (Git → Branches, the Git Changes window's ⋯ menu): brings a local branch up to date with its
+    /// upstream without checking it out and pulling (<see cref="GitService.UpdateBranchAsync"/>, fast-forward only).
+    /// <paramref name="branch"/> is a local branch's name or full ref; with none, a quick pick of the local branches that
+    /// have an upstream, the current one first.
+    /// </summary>
+    public Task UpdateBranchAsync(string? branch = null) => GitActionAsync(async () =>
+    {
+        // TODO(issue): Update on each branch's own menu in the Git Changes window's branch drop-down (D38, #23), passing
+        // the row's ref, once that drop-down is built.
+        var target = string.IsNullOrWhiteSpace(branch) ? null : branch.Trim();
+        if (target is null)
+        {
+            var branches = (await Git.BranchesAsync().ConfigureAwait(true))
+                .Where(b => b is { IsRemote: false, Upstream: not null })
+                .OrderByDescending(b => b.IsCurrent)
+                .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (branches.Count == 0)
+            {
+                StatusBar.ShowMessage(Localizer.Get("msg.git.noLocalBranchHasAnUpstream", "No local branch has an upstream branch to update from."), TimeSpan.FromSeconds(5));
+                return;
+            }
+
+            var items = branches.Select(b => new QuickPickItem(b.Name)
+            {
+                Tag = b.Name,
+                Detail = b.IsCurrent ? Localizer.Format("msg.git.currentBranchFrom", "current, from {0}", b.Upstream!) : Localizer.Format("msg.git.branchFrom", "from {0}", b.Upstream!),
+            }).ToList();
+            if (await Palette.ShowAsync(items, Localizer.Get("msg.git.updateWhichBranch", "Update which branch from its upstream?")).ConfigureAwait(true) is not { Tag: string picked })
+            {
+                return;
+            }
+
+            target = picked;
+        }
+
+        var name = target.StartsWith("refs/heads/", StringComparison.Ordinal) ? target["refs/heads/".Length..] : target;
+        GitBranchUpdate update;
+        StatusBar.ShowMessage(Localizer.Format("msg.git.updatingBranch", "Updating {0}…", name));
+        try
+        {
+            update = await Git.UpdateBranchAsync(target).ConfigureAwait(true);
+        }
+        finally
+        {
+            StatusBar.ClearMessage();
+        }
+
+        switch (update.Outcome)
+        {
+            case GitBranchUpdateOutcome.Updated:
+                StatusBar.ShowMessage(Localizer.Format("msg.git.updatedBranchFrom", "Updated {0} from {1}.", name, update.Upstream!), TimeSpan.FromSeconds(5));
+                break;
+            case GitBranchUpdateOutcome.UpToDate:
+                StatusBar.ShowMessage(Localizer.Format("msg.git.branchIsAlreadyUpToDateWith", "{0} is already up to date with {1}.", name, update.Upstream!), TimeSpan.FromSeconds(5));
+                break;
+            case GitBranchUpdateOutcome.Diverged:
+                Workbench.Notifications.Warning(Localizer.Format("msg.git.branchCantBeUpdatedDiverged", "{0} can't be updated from {1}: each has commits the other doesn't, so it can't be fast-forwarded. Check it out, then pull, merge or rebase it.", name, update.Upstream!));
+                break;
+            case GitBranchUpdateOutcome.NoUpstream:
+                Workbench.Notifications.Info(Localizer.Format("msg.git.branchHasNoUpstream", "{0} has no upstream branch to update from.", name));
+                break;
+            case GitBranchUpdateOutcome.CheckedOutElsewhere:
+                Workbench.Notifications.Warning(Localizer.Format("msg.git.branchIsCheckedOutInAnotherWorktree", "{0} is checked out in another worktree, {1}. Pull it there.", name, update.WorktreePath!));
+                break;
+        }
+    });
+
     public Task FetchAsync() => GitActionAsync(() => Git.FetchAsync(), "Fetching…");
 
     public Task PullAsync() => GitActionAsync(() => Git.PullAsync(), "Pulling…");

@@ -68,6 +68,16 @@ internal static partial class BuiltIns
         Add("git.switchBranch", "Switch Branch…", shell.SwitchBranchAsync);
         Add("git.createBranch", "Create Branch…", shell.CreateBranchAsync);
         Add("git.merge", "Merge Branch…", shell.MergeBranchAsync);
+
+        // A local branch's name or full ref as the argument; none: a quick pick of the branches that have an upstream.
+        commands.Register(
+            new CommandDescriptor("git.updateBranch", "Update Branch…", ContributionSource.Shell) { Category = "Git", Enablement = WhenClause.Parse("gitRepository") },
+            async (args, _) =>
+            {
+                var branch = args.Count > 0 && args[0].ValueKind == System.Text.Json.JsonValueKind.String ? args[0].GetString() : null;
+                await Infrastructure.Ui.RunAsync(() => shell.UpdateBranchAsync(branch)).ConfigureAwait(false);
+                return null;
+            });
         Add("git.abortMerge", "Abort Merge", shell.AbortMergeAsync, "gitMerging");
         Add("git.fetch", "Fetch", shell.FetchAsync);
         Add("git.pull", "Pull", shell.PullAsync);

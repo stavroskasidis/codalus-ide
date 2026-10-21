@@ -124,6 +124,7 @@ Git → Compare with Unmodified opens the active file's diff.
 
 - **The status bar's branch item** (or Git → Switch Branch) lists local and remote branches, and offers to create a new one. Switching to a remote branch creates a local branch that tracks it.
 - **Git → Merge Branch** merges another branch into the current one.
+- **Git → Branches → Update Branch…** (also in the Git Changes window's ⋯ menu) brings a branch up to date from its remote without checking it out and pulling. It lists the local branches that have an upstream, the current one first. It fetches only the branch you pick (its remote-tracking branch, `origin/feature`, moves too) and moves the branch only by a fast-forward, so the branch you're on, your files and your uncommitted changes don't change. Picking the current branch fast-forwards it with its files, as a pull would, without ever making a merge commit. When the branch has commits its upstream doesn't have, nothing changes and a notification says so: check it out, then pull, merge or rebase it. A branch checked out in another worktree is updated by a pull in that worktree.
 - **Git → Fetch, Pull, Push and Sync** (pull, then push). The first push of a new branch publishes it to `origin` (or your only remote) and sets its upstream.
 - **Credentials** come from your git credential helper (Git Credential Manager, the macOS keychain, …), or from you, in a dialog, when no helper answers ([above](#credentials-and-ssh-passphrases)).
 

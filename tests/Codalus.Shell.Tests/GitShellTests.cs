@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Codalus.Shell.Editor;
@@ -11,7 +12,7 @@ namespace Codalus.Shell.Tests;
 /// <summary>Git in the shell (ADR 0008) on a repository made from samples/BuildAndRun.</summary>
 public sealed class GitShellTests
 {
-    private static void Git(string directory, params string[] arguments)
+    private static string Git(string directory, params string[] arguments)
     {
         var start = new ProcessStartInfo("git") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         foreach (var argument in arguments)
@@ -20,9 +21,118 @@ public sealed class GitShellTests
         }
 
         using var process = Process.Start(start)!;
-        var error = process.StandardError.ReadToEnd();
+        var error = process.StandardError.ReadToEndAsync();
+        var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error.GetAwaiter().GetResult()}");
+        return output;
+    }
+
+    private static void Configure(string repository)
+    {
+        Git(repository, "config", "user.name", "Ada Tester");
+        Git(repository, "config", "user.email", "ada@example.com");
+        Git(repository, "config", "commit.gpgsign", "false");
+        Git(repository, "config", "core.autocrlf", "false");
+    }
+
+    private static void CommitFile(string repository, string file, string message)
+    {
+        File.WriteAllText(Path.Combine(repository, file), message + "\n");
+        Git(repository, "add", ".");
+        Git(repository, "commit", "-q", "-m", message);
+    }
+
+    /// <summary>
+    /// The user's request: Update, in the git branches menus, brings a branch up to date from its remote without checking
+    /// it out and pulling. Git → Branches and the Git Changes window's ⋯ menu offer Update Branch…; its quick pick lists
+    /// the local branches that have an upstream, the current one first, and picking one fast-forwards it while the
+    /// checked-out branch and its files stay as they are. With a branch as the argument (as a branch's own menu will
+    /// pass it) it says when there's nothing to do, no upstream, or a branch that has diverged. On a plain folder, so no
+    /// build or language host starts.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Update_branch_brings_a_branch_up_to_date_without_checking_it_out()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "repository");
+        var bare = Path.Combine(f.UserData, "remote.git");
+        var other = Path.Combine(f.UserData, "other");
+        Directory.CreateDirectory(folder);
+        Git(f.UserData, "init", "-q", "--bare", "-b", "main", bare);
+        Git(folder, "init", "-q", "-b", "main");
+        Configure(folder);
+        CommitFile(folder, "README.md", "initial");
+        Git(folder, "remote", "add", "origin", bare);
+        Git(folder, "push", "-q", "-u", "origin", "main");
+        Git(folder, "branch", "feature");
+        Git(folder, "push", "-q", "-u", "origin", "feature");
+        Git(folder, "branch", "local-only");
+        Git(f.UserData, "clone", "-q", "-b", "feature", bare, other);
+        Configure(other);
+        CommitFile(other, "feature.txt", "feature from the other clone");
+        Git(other, "push", "-q", "origin", "feature");
+        var tip = Git(other, "rev-parse", "HEAD").Trim();
+        var mainBefore = Git(folder, "rev-parse", "main").Trim();
+
+        f.Shell.Trust.Trust(folder);
+        await f.Shell.OpenFolderAsync(folder);
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "main" } && f.Shell.Workbench.Commands.IsEnabled("git.updateBranch"));
+
+        // Where it is: Git → Branches, after Switch and Create, and the Git Changes window's ⋯ menu.
+        Assert.Equal(
+            ["git.switchBranch", "git.createBranch", "git.updateBranch"],
+            f.Shell.Workbench.Menus.GetItems(BuiltIns.GitBranchesMenu).Where(i => i.Group == "1-branch").Select(i => i.Command));
+        Assert.Equal("Update Branch…", f.Shell.Workbench.Menus.GetItems(BuiltIns.GitBranchesMenu).Single(i => i.Command == "git.updateBranch").Title);
+        f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitChangesView>().Any());
+        var entry = f.Window.GetVisualDescendants().OfType<GitChangesView>().Single().GetVisualDescendants().OfType<Avalonia.Controls.Button>()
+            .Select(b => b.Flyout).OfType<Avalonia.Controls.MenuFlyout>()
+            .SelectMany(m => m.Items.OfType<Avalonia.Controls.MenuItem>())
+            .Single(i => i.Tag is "git.updateBranch");
+        Assert.Equal("Update Branch…", entry.Header);
+
+        var messages = new List<string>();
+        f.Shell.StatusBar.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(f.Shell.StatusBar.Message) && f.Shell.StatusBar.Message is { } message)
+            {
+                messages.Add(message);
+            }
+        };
+
+        // The quick pick: branches with an upstream, the current one first; local-only isn't offered.
+        await f.RunAsync("git.updateBranch");
+        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen && f.Shell.Palette.Rows.Count > 0);
+        Assert.Equal("Update which branch from its upstream?", f.Shell.Palette.Placeholder);
+        Assert.Equal(["main", "feature"], f.Shell.Palette.Rows.Select(r => r.Label));
+        Assert.Equal(["current, from origin/main", "from origin/feature"], f.Shell.Palette.Rows.Select(r => r.Detail));
+        f.Shell.Palette.Accept(f.Shell.Palette.Rows.Single(r => r.Label == "feature"));
+        await ShellFixture.PumpUntil(() => messages.Contains("Updated feature from origin/feature."), describe: () => string.Join(" | ", messages) + "; git log: " + f.Shell.GitLog.GetText());
+        Assert.Contains("Updating feature…", messages);
+        Assert.Equal(tip, Git(folder, "rev-parse", "refs/heads/feature").Trim());
+        Assert.Equal(mainBefore, Git(folder, "rev-parse", "HEAD").Trim());
+        Assert.Equal("main", f.Shell.Git.Status!.Branch);
+        Assert.False(File.Exists(Path.Combine(folder, "feature.txt")));
+
+        // By argument (a branch's full ref, as a branch's own menu passes it): nothing more to bring in.
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("refs/heads/feature"));
+        await ShellFixture.PumpUntil(() => messages.Contains("feature is already up to date with origin/feature."), describe: () => string.Join(" | ", messages));
+
+        // No upstream: said, and nothing runs.
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("local-only"));
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message == "local-only has no upstream branch to update from."));
+
+        // Diverged: a commit here that the remote doesn't have, and one there: feature stays where it is, and the warning says what to do.
+        var mine = Git(folder, "commit-tree", "feature^{tree}", "-p", "feature", "-m", "mine").Trim();
+        Git(folder, "update-ref", "refs/heads/feature", mine);
+        CommitFile(other, "more.txt", "more from the other clone");
+        Git(other, "push", "-q", "origin", "feature");
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("feature"));
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Severity == Workbench.Notifications.NotificationSeverity.Warning
+            && n.Message == "feature can't be updated from origin/feature: each has commits the other doesn't, so it can't be fast-forwarded. Check it out, then pull, merge or rebase it."),
+            describe: () => string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message)));
+        Assert.Equal(mine, Git(folder, "rev-parse", "refs/heads/feature").Trim());
     }
 
     [AvaloniaFact]
