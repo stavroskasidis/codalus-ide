@@ -280,6 +280,7 @@ public sealed partial class CodeEditorController
         set
         {
             _zoom = Math.Clamp(Math.Round(value, 2), 0.5, 4);
+            _hoverPopup.IsOpen = false; // placed against the text, which zooms under it
             ZoomChanged?.Invoke(this, EventArgs.Empty);
         }
     }

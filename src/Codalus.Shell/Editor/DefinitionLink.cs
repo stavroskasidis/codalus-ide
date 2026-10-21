@@ -39,7 +39,13 @@ internal sealed class DefinitionLink(TextEditor editor, Func<int, CancellationTo
     public event EventHandler? Changed;
 
     /// <summary>What the link is waiting for, for a test's failure message.</summary>
-    internal string State => $"link {Link?.ToString() ?? "none"}, asking for {_checking?.ToString() ?? "nothing"}, no link for {_noLink?.Word.ToString() ?? "nothing"}";
+    internal string State => $"link {Link?.ToString() ?? "none"}, asking for {_checking?.ToString() ?? "nothing"}, no link for {_noLink?.Word.ToString() ?? "nothing"}, {Requests} request(s)";
+
+    /// <summary>The symbol whose last answer wasn't a link (tests).</summary>
+    internal (int Start, int End)? Missed => _noLink?.Word;
+
+    /// <summary>The definition requests made (tests).</summary>
+    internal int Requests { get; private set; }
 
     /// <summary>The pointer moved over the text (view coordinates), or the modifier keys changed.</summary>
     public void Update(Point? pointer, KeyModifiers modifiers)
@@ -50,7 +56,7 @@ internal sealed class DefinitionLink(TextEditor editor, Func<int, CancellationTo
         }
 
         _modifiers = modifiers;
-        var word = IsLinkModifier(modifiers) && _pointer is { } at ? WordAt(at) : null;
+        var word = IsLinkModifier(modifiers) && _pointer is { } at ? IdentifierAt(editor, at) : null;
         if (word is null)
         {
             Clear();
@@ -80,12 +86,24 @@ internal sealed class DefinitionLink(TextEditor editor, Func<int, CancellationTo
     /// </summary>
     public void Recheck()
     {
-        if (Link is null && (_checking is not null || _noLink is not null))
+        if (Link is not null || (_checking is null && _noLink is null))
         {
-            _checking = null;
-            _noLink = null;
-            Update(null, _modifiers);
+            return;
         }
+
+        // The modifiers are the last pointer or key event's. They're current only while the pointer is on this text and
+        // the keyboard focus is in this editor, where Ctrl's release is seen: Ctrl let go in another window (or the editor
+        // hidden behind another document) would otherwise underline the symbol with Ctrl up. Then the next move asks.
+        var view = editor.TextArea.TextView;
+        if (!view.IsPointerOver || !editor.TextArea.IsKeyboardFocusWithin)
+        {
+            Clear();
+            return;
+        }
+
+        _checking = null;
+        _noLink = null;
+        Update(null, _modifiers);
     }
 
     /// <summary>Ctrl (Cmd on macOS) alone: Ctrl+Alt adds carets instead.</summary>
@@ -97,6 +115,7 @@ internal sealed class DefinitionLink(TextEditor editor, Func<int, CancellationTo
         _cts?.Cancel();
         _cts?.Dispose();
         var cts = _cts = new CancellationTokenSource();
+        Requests++;
         Location[]? locations = null;
         try
         {
@@ -125,8 +144,8 @@ internal sealed class DefinitionLink(TextEditor editor, Func<int, CancellationTo
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>The identifier under a point (view coordinates), when the point is on its text.</summary>
-    private (int Start, int End)? WordAt(Point point)
+    /// <summary>The identifier under a point (the text view's coordinates), when the point is on its text.</summary>
+    internal static (int Start, int End)? IdentifierAt(TextEditor editor, Point point)
     {
         var view = editor.TextArea.TextView;
         if (view.GetPosition(point + view.ScrollOffset) is not { } position)

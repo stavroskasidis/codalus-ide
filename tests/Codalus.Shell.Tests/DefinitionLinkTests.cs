@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using AvaloniaEdit;
@@ -57,7 +58,7 @@ public class DefinitionLinkTests
         public void Advance(TimeSpan by) => _ticks += by.Ticks;
     }
 
-    private sealed record Setup(Window Window, TextEditor Editor, DefinitionLink Link, Service Service, ManualTime Time) : IDisposable
+    private sealed record Setup(Window Window, TextEditor Editor, Button Elsewhere, DefinitionLink Link, Service Service, ManualTime Time) : IDisposable
     {
         /// <summary>A point (text view coordinates) on "Scale", <paramref name="into"/> characters in.</summary>
         public Avalonia.Point OnScale(int into)
@@ -66,6 +67,16 @@ public class DefinitionLinkTests
             var location = Editor.Document.GetLocation(Text.IndexOf("Scale(", StringComparison.Ordinal) + into);
             var visual = view.GetVisualPosition(new TextViewPosition(location), AvaloniaEdit.Rendering.VisualYPosition.LineMiddle) - view.ScrollOffset;
             return new Avalonia.Point(visual.X + 2, visual.Y);
+        }
+
+        /// <summary>The real pointer on "Scale" (as the link's last update says) and the keyboard focus in the editor.</summary>
+        public void PointerAndFocusOnScale()
+        {
+            Window.MouseMove(Avalonia.VisualExtensions.TranslatePoint(Editor.TextArea.TextView, OnScale(2), Window)!.Value, RawInputModifiers.Control);
+            Editor.TextArea.Focus();
+            ShellFixture.Pump();
+            Assert.True(Editor.TextArea.TextView.IsPointerOver);
+            Assert.True(Editor.TextArea.IsKeyboardFocusWithin);
         }
 
         public void Dispose()
@@ -78,14 +89,19 @@ public class DefinitionLinkTests
     private static Setup Show()
     {
         var editor = new TextEditor { Document = new TextDocument(Text), FontFamily = MarkdownRenderer.Monospace };
-        var window = new Window { Width = 900, Height = 600, Content = editor };
+        var elsewhere = new Button { Content = "Elsewhere", Width = 200 };
+        var panel = new DockPanel();
+        DockPanel.SetDock(elsewhere, Avalonia.Controls.Dock.Right);
+        panel.Children.Add(elsewhere);
+        panel.Children.Add(editor);
+        var window = new Window { Width = 900, Height = 600, Content = panel };
         window.Show();
         ShellFixture.Pump();
         var service = new Service();
         var time = new ManualTime();
         var link = new DefinitionLink(editor, service.DefinitionsAsync, time);
         editor.TextArea.TextView.LineTransformers.Add(link);
-        return new Setup(window, editor, link, service, time);
+        return new Setup(window, editor, elsewhere, link, service, time);
     }
 
     [AvaloniaTheory]
@@ -143,6 +159,7 @@ public class DefinitionLinkTests
     public void The_symbol_under_the_pointer_is_asked_again_when_the_service_loaded_the_projects()
     {
         using var s = Show();
+        s.PointerAndFocusOnScale();
         s.Link.Update(s.OnScale(2), KeyModifiers.Control);
         ShellFixture.Pump();
         s.Service.Answer([]);
@@ -170,5 +187,44 @@ public class DefinitionLinkTests
         s.Link.Recheck();
         ShellFixture.Pump();
         Assert.Equal(3, s.Service.Asked);
+    }
+
+    /// <summary>
+    /// The link's modifiers are the last pointer or key event's: with the keyboard focus elsewhere, Ctrl's release isn't
+    /// seen, and with the pointer off the text (another document over the editor) the pointer isn't there. The service's
+    /// refresh then doesn't ask, so no symbol is underlined with Ctrl up; the next move asks at once.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData("the keyboard focus elsewhere")]
+    [InlineData("the pointer off the text")]
+    public void The_symbol_is_not_asked_again_on_a_refresh_when_the_modifiers_may_be_stale(string state)
+    {
+        using var s = Show();
+        s.PointerAndFocusOnScale();
+        s.Link.Update(s.OnScale(2), KeyModifiers.Control);
+        ShellFixture.Pump();
+        s.Service.Answer([]);
+        ShellFixture.Pump();
+        Assert.Equal(s_scale, s.Link.Missed);
+        if (state == "the keyboard focus elsewhere")
+        {
+            s.Elsewhere.Focus();
+        }
+        else
+        {
+            s.Window.MouseMove(Avalonia.VisualExtensions.TranslatePoint(s.Elsewhere, new Avalonia.Point(10, 10), s.Window)!.Value, RawInputModifiers.Control);
+        }
+
+        ShellFixture.Pump();
+        s.Link.Recheck();
+        ShellFixture.Pump();
+        Assert.Equal(1, s.Service.Asked);
+        Assert.Null(s.Link.Missed);
+        Assert.Null(s.Link.Link);
+
+        // Forgotten: the next move on the symbol asks at once, without waiting for AskAgainAfter.
+        s.Link.Update(s.OnScale(3), KeyModifiers.Control);
+        ShellFixture.Pump();
+        Assert.Equal(2, s.Service.Asked);
     }
 }
