@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Properties window: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<!-- This page's own icons, in the style of controls.js's (16 px Fluent-style drawings, our own): the Properties window's
+     toolbar (type-hierarchy for Categorized, properties, events), Add Metadata's file-add, import, and the main
+     toolbar's arrows, undo and redo. The paths of properties, file-add, undo, redo and the arrows are the shell's own
+     stroke drawings (Controls/Icon.cs). -->
+<svg id="pw-sprite" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="i-type-hierarchy" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 2.8v10M2.6 3.2h2.2M2.6 8h2.2M2.6 12.8h2.2"/><rect x="6.6" y="1.8" width="7.6" height="2.8" rx=".7"/><path d="M6.8 8h7.2M6.8 12.8h7.2"/></g></symbol>
+  <symbol id="i-properties" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M2.5 2.5h11v11h-11zM2.5 6h11M2.5 9.75h11M6.5 2.5v11"/></symbol>
+  <symbol id="i-events" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M9.4 1.6 3.4 9.2h4.4l-1.2 5.2 6-7.6H8.2z"/></symbol>
+  <symbol id="i-file-add" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M3.5 1.5h6l3 3v10h-9zM9.5 1.5v3h3M8 7.5v5M5.5 10h5"/></symbol>
+  <symbol id="i-import" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M1.8 8h7.6M6.8 5.4 9.4 8l-2.6 2.6M6.6 4V2.8a1 1 0 0 1 1-1h5.6a1 1 0 0 1 1 1v10.4a1 1 0 0 1-1 1H7.6a1 1 0 0 1-1-1V12"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M13 8H3M7 4 3 8l4 4"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M3 8h10M9 4l4 4-4 4"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M4.5 6.5H10c2 0 3.5 1.5 3.5 3.5S12 13.5 10 13.5H6M7 4 4.5 6.5 7 9"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M11.5 6.5H6c-2 0-3.5 1.5-3.5 3.5S4 13.5 6 13.5h4M9 4l2.5 2.5L9 9"/></symbol>
+</svg>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:24px 20px 32px;display:flex;flex-direction:column;gap:18px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.lead{color:var(--muted);max-width:1200px}
+.navs{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.themes .lbl{color:var(--muted)}
+.frame{width:1280px}
+.prow{display:flex;justify-content:space-between;align-items:flex-start}
+.frame .prow{display:block}
+.pnl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pnl h2{font-size:13px;line-height:18px;margin:0;font-weight:600;color:var(--strong);display:flex;flex-direction:column}
+.pnl h2 .src{font-family:var(--mono);font-size:11px;line-height:16px;font-weight:400;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnl .cap{color:var(--muted);font-size:11px;line-height:15px;min-height:45px}
+.stage{position:relative}
+.frame .stage{overflow:hidden;background:var(--bg)}
+
+/* The main window's chrome (MainWindow.axaml: the menus in the title bar, the standard toolbar, the status bar). */
+.ide-title{position:absolute;left:0;top:0;right:0;height:30px;background:var(--title-bar);color:var(--title-bar-fg);display:flex;align-items:center;padding:0 4px;white-space:nowrap}
+.ide-title .m{padding:0 8px}
+.ide-title .search{margin-left:18px;width:230px;height:22px;border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;gap:6px;padding:0 8px}
+.ide-title .sol{margin-left:12px;height:20px;padding:0 8px;border-radius:var(--radius);background:var(--chip-info);color:var(--chip-info-fg);display:flex;align-items:center}
+.ide-tool{position:absolute;left:0;top:30px;right:0;height:32px;background:var(--toolbar);border-bottom:1px solid var(--toolbar-border);display:flex;align-items:center;gap:2px;padding:0 6px}
+.ide-tool .field{width:96px;margin:0 2px}
+.ide-status{position:absolute;left:0;right:0;bottom:0;height:24px;background:var(--accent);color:var(--accent-fg);display:flex;align-items:center;gap:16px;padding:0 10px}
+.ide-status svg.i{color:currentColor}
+
+/* The designer document (WinFormsDesignerView.cs): its toolbar, the surface, the component tray. */
+.dwrap{position:absolute;display:flex;flex-direction:column}
+.dwrap .doc-tabs{height:30px}
+.dwrap .doc-tab .x{margin-left:6px}
+.dwrap .doc{flex:1 1 auto;min-height:0}
+.dtb{display:flex;align-items:center;gap:2px;height:32px;padding:0 6px;flex:none;min-width:0}
+.dtb .status{color:var(--muted);margin-left:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.surf{position:relative;flex:1 1 auto;min-height:0;background:var(--editor)}
+.clip{position:absolute;inset:0;overflow:hidden}
+.trayb{height:34px;flex:none;border-top:1px solid var(--border);background:var(--panel);display:flex;align-items:center;padding:0 6px;overflow:hidden;white-space:nowrap}
+.trayb .tb{margin:2px;gap:4px;padding:0 6px 0 4px;flex:none}
+.ad{position:absolute;box-sizing:border-box}
+.ad.fr{border:1px solid var(--accent)}
+.ad.hd{background:var(--panel);border:1px solid var(--accent)}
+.ad.glyph{background:var(--panel);border:1px solid var(--accent)}
+.ad.glyph::after{content:"";position:absolute;left:3px;top:2px;border-left:5px solid var(--accent);border-top:3px solid transparent;border-bottom:3px solid transparent}
+/* The form: a stand-in for the bitmap the designer host draws, in Windows' own colors in every theme (data-nocheck). */
+.wf{position:absolute;font-family:"Segoe UI",Inter,system-ui,sans-serif;font-size:12px;line-height:15px;color:#000}
+.wf .w{position:absolute;box-sizing:border-box;white-space:nowrap}
+.w.f-frame{background:#F0F0F0;border:1px solid #8E8E8E;box-shadow:0 2px 8px rgba(0,0,0,.22)}
+.w.f-title{background:#FFFFFF}
+.w.f-ico{background:linear-gradient(#3A78C9 0 4px,#FFFFFF 4px);border:1px solid #3A78C9}
+.w.f-cap{display:flex;align-items:center}
+.w.f-closex{display:flex;align-items:center;justify-content:center;font-size:12px}
+.w.f-tb{background:#FFFFFF;border:1px solid #7A7A7A;padding:3px 4px}
+.w.f-ph{color:#6D6D6D}
+.w.f-cb{background:#E1E1E1;border:1px solid #ADADAD}
+.w.f-spin,.w.f-dtpb{background:#F0F0F0;border-left:1px solid #DADADA}
+.w.f-arr-d{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid #000}
+.w.f-arr-u{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:4px solid #000}
+.w.f-btn{background:#E1E1E1;border:1px solid #ADADAD;display:flex;align-items:center;justify-content:center}
+.w.f-flat{background:#4682B4;color:#FFFFFF;display:flex;align-items:center;justify-content:center}
+.w.f-chkb{background:#FFFFFF;border:1px solid #333333}
+.w.f-chkm{width:4px;height:8px;border:solid #000;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.w.f-radb{background:#FFFFFF;border:1px solid #333333;border-radius:50%}
+.w.f-radb.f-on::after{content:"";position:absolute;left:3px;top:3px;width:5px;height:5px;border-radius:50%;background:#000}
+.w.f-grp{border:1px solid #DCDCDC;border-radius:2px}
+.w.f-grpcap{background:#F0F0F0;padding:0 2px}
+.w.f-dash{border:1px dashed #9A9A9A}
+.w.f-dashv{border-left:1px dashed #9A9A9A}
+.w.f-split{border:1px solid #646464}
+.w.f-splitter{background:#F0F0F0}
+.w.f-lb{background:#FFFFFF;border:1px solid #828790;padding:1px 3px;white-space:pre-line}
+.w.f-notes{background:#FFFFE0;color:#6D6D6D;font-style:italic;padding:1px 4px;white-space:pre-line}
+.w.f-sb{background:#F0F0F0;border-left:1px solid #E3E3E3}
+.w.f-pic{background:radial-gradient(circle at 50% 50%,#F0A030 0 3px,#3A78C9 3.5px);border-radius:3px}
+
+/* Tool windows (Dock's ToolChromeControl: the caption, its menu, pin and close; the tabs of a docked group). */
+.tw{position:absolute;border-radius:0}
+.tw-cap .cb{width:20px;height:20px}
+.tw-cap .cb svg.i{width:12px;height:12px}
+.tw-tabs{flex:none;white-space:nowrap}
+.tw-tabs span{color:var(--tabs-fg)}
+.tw-tabs span.on{color:var(--tab-on-fg)}
+.se .row{height:22px;padding-left:4px}
+.se .row .ex{width:12px;height:12px;color:var(--fg);flex:none}
+.se .row .ex.none{visibility:hidden}
+
+/* The Properties window, proposed. */
+.pw{display:flex;flex-direction:column;overflow:hidden}
+.pw-head{padding:4px 6px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);flex:none}
+.pw-sel{height:24px;padding:0 6px;gap:4px}
+.pw-sel .value{display:flex;gap:6px;min-width:0}
+.pw-sel .nm{flex:none}
+.pw-sel .ty{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pw-title{height:24px;display:flex;align-items:center;gap:4px;padding-left:2px}
+.pw-tb{min-height:24px;padding:0;gap:2px}
+.pw-grid{position:relative;overflow:hidden;flex:none}
+.pw-rows{position:absolute;left:0;right:0}
+.pg-h,.pg-r{display:flex;align-items:stretch;height:22px;border-bottom:1px solid var(--rule);position:relative;white-space:nowrap}
+.pg-h{background:var(--toolbar);color:var(--fg);font-weight:600;align-items:center}
+.pg-h .t{padding-left:2px}
+.pg-h .gut{display:flex;align-items:center;justify-content:center}
+.pg-r .gut{width:16px;flex:none;background:var(--toolbar)}
+.pg-h .gut{width:16px;flex:none}
+.pg-r .ex{position:absolute;top:5px;width:12px;height:12px;color:var(--fg)}
+.pg-r .nc{flex:none;display:flex;align-items:center;min-width:0;overflow:hidden}
+.pg-r .vc{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:4px;padding:0 1px 0 6px;border-left:1px solid var(--rule)}
+.pg-r .v{flex:1 1 auto}
+.pg-r .v.set{font-weight:600}
+.pg-r .v.ro{color:var(--muted)}
+.pg-r.sel .nc{background:var(--sel);color:var(--sel-fg)}
+.pg-r.sel-i .nc{background:var(--sel-inactive);color:var(--sel-inactive-fg)}
+.pg-r.hover .nc,.pg-r.hover .vc{background:var(--row-hover)}
+.pg-r .vc.edit{background:var(--input);box-shadow:inset 0 0 0 1px var(--focus)}
+.pg-r .vc.edit .v{flex:0 1 auto}
+.caret2{width:1px;height:14px;background:var(--fg);flex:none;margin-left:-3px}
+.swatch{width:18px;height:12px;flex:none;border:1px solid var(--border);box-sizing:border-box}
+.vb{width:20px;height:20px;flex:none;display:inline-flex;align-items:center;justify-content:center;background:var(--btn);border:1px solid var(--btn-border);border-radius:var(--radius);color:var(--fg)}
+.vb.on{background:var(--btn-pressed);border-color:var(--btn-pressed-border)}
+.vb svg.i.sm{width:12px;height:12px}
+/* The arrow and the "…" are chrome in the text color, also on a selected row in High contrast (the selection is only the name's). */
+.cx .pg-r .vc .vb svg.i,.cx.kind-hc .pg-r[aria-selected="true"] .vc .vb svg.i{color:var(--fg)}
+.pg-r.sel .ex.in{color:var(--sel-fg)}
+.pg-r.sel-i .ex.in{color:var(--sel-inactive-fg)}
+.pw-sb{position:absolute;right:1px;width:3px;border-radius:2px;background:var(--muted);opacity:.55}
+.pw-links{flex:none;padding:4px 8px;border-top:1px solid var(--border);display:flex;flex-direction:column;align-items:flex-start;gap:0}
+.pw-links .btn.link{height:20px;min-height:20px}
+.pw-split{height:5px;flex:none;background:var(--toolbar);border-top:1px solid var(--border)}
+.pw-desc{height:76px;flex:none;padding:6px 8px;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.pw-desc .d{color:var(--muted);line-height:15px}
+
+/* Pop-ups: drop-downs and menus share the menus' look (6 px corners, the overlay's border and shadow). */
+.pop{position:absolute;z-index:20;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:6px;box-shadow:var(--shadow);color:var(--fg)}
+.kind-hc .pop{border-width:2px}
+.pop .tabs{padding:0 4px;height:28px}
+.pop .tab{padding:0 9px}
+.clist{position:relative;padding:4px;height:188px;overflow:hidden}
+.crow{display:flex;align-items:center;gap:8px;height:20px;padding:0 6px;border-radius:var(--radius);white-space:nowrap}
+.crow.sel{background:var(--sel);color:var(--sel-fg)}
+.crow.hover{background:var(--row-hover)}
+.crow .swatch{width:22px;height:12px}
+.clist .pw-sb{top:8px}
+.cgrid{display:grid;grid-template-columns:repeat(8,20px);gap:4px;padding:10px 10px 4px}
+.cgrid .cc{width:20px;height:20px;border:1px solid var(--border);box-sizing:border-box;border-radius:2px}
+.cgrid .cc.gap{margin-top:6px}
+.cgrid .cc.on{outline:2px solid var(--focus);outline-offset:1px}
+.cdef{display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px;border-top:1px solid var(--soft-border);margin-top:6px}
+.cdef .r{display:flex;align-items:center;gap:5px}
+.cdef .field{width:40px;padding:0 6px;margin-right:6px}
+.cdef .prev{width:28px;height:22px;border:1px solid var(--border);border-radius:2px;flex:none}
+.algrid{display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,28px);gap:4px;padding:8px}
+.alb{position:relative;border:1px solid var(--btn-border);border-radius:var(--radius);background:var(--btn);display:flex;padding:5px}
+.alb.on{background:var(--tb-checked);border-color:var(--tb-checked-border)}
+.alb .mk{width:14px;height:4px;border-radius:1px;background:var(--fg)}
+.ml{padding:8px}
+.ml .ta{height:78px;background:var(--input);border:1px solid var(--focus);box-shadow:inset 0 0 0 1px var(--focus);border-radius:var(--radius);padding:4px 6px;display:flex;align-items:flex-start}
+.hint{font-size:11px;line-height:14px;color:var(--muted);display:flex;gap:4px;align-items:center;margin-top:6px;flex-wrap:wrap}
+.keys{padding:10px;display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center}
+.keys .row2{display:flex;gap:10px;align-items:center}
+.keys .field{width:96px}
+.lst{padding:4px;position:relative}
+.lst .li{display:flex;align-items:center;gap:8px;height:22px;padding:0 8px;border-radius:var(--radius);white-space:nowrap}
+.lst .li.sel{background:var(--sel);color:var(--sel-fg)}
+.lst .li.sel .muted{color:inherit}
+.lst .li .muted{min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* Menus (ShellStyles.axaml: 24 px rows, the 16 px icon column on every entry, a check in its place). */
+.cm{min-width:150px;width:max-content;padding:4px}
+.cm .mi{gap:0;padding:0 12px 0 8px}
+.cm .mi .ic{width:16px;height:16px;flex:none;margin-right:8px;display:flex;align-items:center;justify-content:center}
+.cm .mi.is-disabled{color:var(--disabled-fg)}
+.cm .mi.is-disabled svg.i{opacity:.4}
+.cm .msep{margin:3px 0 3px 32px;background:var(--border)}
+.kind-hc .cm .mi.hover{background:var(--pressed)}
+
+/* The modal editors and the in-window dialog: the dialog's frame (DialogView.axaml). */
+.mpanel{position:absolute;z-index:16;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:8px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.fam-classic .mpanel{border-radius:6px}
+.kind-hc .mpanel{border-width:2px}
+.dh{display:flex;align-items:flex-start;gap:10px;padding:16px 12px 4px 20px}
+.dh .ttl{flex:1;min-width:0}
+.dh h3{margin:0;font-size:14px;line-height:20px;font-weight:600;color:var(--strong)}
+.dh .ctx{color:var(--muted);font-size:11px;line-height:16px;font-family:var(--mono)}
+.dh .glyph{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:var(--chip-err);flex:none;margin-top:-1px}
+.kind-hc .dh .glyph{background:transparent;border:1px solid var(--fg)}
+.dbody{padding:12px 20px 16px;display:flex;flex-direction:column;gap:8px}
+.dfoot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px;background:var(--dlg-footer);border-top:1px solid var(--soft-border);margin-top:auto}
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:15}
+.flab{color:var(--fg);font-weight:600;font-size:11px;line-height:14px;margin-bottom:4px}
+.fbox{background:var(--input);border:1px solid var(--input-border);border-radius:var(--radius);overflow:hidden}
+.fbox .li{height:20px;display:flex;align-items:center;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fbox .li.sel{background:var(--sel);color:var(--sel-fg)}
+.fcols{display:grid;grid-template-columns:168px 108px 64px;gap:12px}
+.fcols .field{margin-bottom:4px}
+.frow2{display:grid;grid-template-columns:120px 1fr;gap:12px;margin-top:4px}
+.sample{height:62px;display:flex;align-items:center;justify-content:center;background:var(--input);border:1px solid var(--input-border);border-radius:var(--radius);font-family:"Segoe UI",Inter,system-ui,sans-serif;font-size:12px;color:var(--editor-fg)}
+.chks{display:flex;flex-direction:column;gap:6px}
+.sta{height:150px;background:var(--input);border:1px solid var(--focus);box-shadow:inset 0 0 0 1px var(--focus);border-radius:var(--radius);padding:4px 6px;line-height:18px}
+.sta .ln{display:flex;align-items:center;white-space:pre}
+.rcols{display:grid;grid-template-columns:1fr 150px;gap:16px}
+.rgrp{display:flex;flex-direction:column;gap:6px}
+.rgrp .ind{padding-left:24px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.rgrp .btns{display:flex;gap:6px}
+.preview{height:150px;background:var(--input);border:1px solid var(--input-border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center}
+.dmsg{color:var(--fg);line-height:18px}
+
+/* The decisions at the bottom. */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);padding:14px 18px 16px;display:flex;flex-direction:column;gap:10px}
+.card h2{font-size:14px;line-height:20px;margin:0;font-weight:600;color:var(--strong)}
+.decide{display:grid;grid-template-columns:1fr 1fr;gap:14px 32px}
+.dq{display:flex;gap:10px;align-items:flex-start}
+.dq .n{flex:none;width:20px;height:20px;border-radius:10px;background:var(--badge);color:var(--badge-fg);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.kind-hc .dq .n{border:1px solid var(--soft-border)}
+.dq b{font-weight:600;color:var(--strong)}
+.dq .tag{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}; min-height: 100vh">
+<main class="{{mainCls}}">
+
+<sc-if value="{{sheet}}">
+<header>
+  <h1>Properties window: categories, expandable properties and their editors</h1>
+  <div class="lead">Task #68, the design before it is built: the Windows Forms designer's Properties window as the classic IDE's, at the tool window's 300 px, for placeOrderButton on samples/WindowsDesktop/WinFormsApp's OrderForm. Values are what the designer host reports for the fixture; set values are bold. Each panel is one state; the links under the themes open a state in the whole window. {{t.name}}, {{t.p.family}} family.</div>
+  <div class="navs">
+    <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
+    <nav class="themes" aria-label="States"><span class="lbl">In the window:</span><sc-for list="{{stateLinks}}" as="sl"><a href="?theme={{sl.theme}}&amp;state={{sl.q}}">{{sl.name}}</a></sc-for></nav>
+  </div>
+</header>
+</sc-if>
+
+<sc-for list="{{rows}}" as="row">
+<section class="prow">
+<sc-for list="{{row.items}}" as="s">
+<article class="pnl" style="width:{{s.w}}px" aria-label="{{s.title}}">
+  <sc-if value="{{sheet}}"><h2>{{s.title}}<span class="src">{{s.src}}</span></h2><div class="cap">{{s.cap}}</div></sc-if>
+  <div class="stage" style="width:{{s.w}}px;height:{{s.h}}px">
+
+    <sc-if value="{{s.chrome}}">
+      <div class="ide-title" role="menubar" aria-label="Menu bar">
+        <sc-for list="{{menus}}" as="m"><span class="m" role="menuitem">{{m}}</span></sc-for>
+        <span class="search"><svg class="i c-fg" aria-hidden="true"><use href="#i-search"></use></svg>Search (Ctrl+Q)</span>
+        <span class="sol">WinFormsApp</span>
+      </div>
+      <div class="ide-tool" role="toolbar" aria-label="Standard">
+        <button class="tb" aria-label="Navigate Backward (Ctrl+-)"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-left"></use></svg></button>
+        <button class="tb" aria-label="Navigate Forward (Ctrl+Shift+-)"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button>
+        <span class="tb-sep"></span>
+        <button class="tb" aria-label="Open Folder"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg></button>
+        <button class="tb" aria-label="Save (Ctrl+S)"><svg class="i c-blue" aria-hidden="true"><use href="#i-save"></use></svg></button>
+        <span class="tb-sep"></span>
+        <button class="tb" aria-label="Undo (Ctrl+Z)"><svg class="i c-blue" aria-hidden="true"><use href="#i-undo"></use></svg></button>
+        <button class="tb" aria-label="Redo (Ctrl+Y)"><svg class="i c-blue" aria-hidden="true"><use href="#i-redo"></use></svg></button>
+        <span class="tb-sep"></span>
+        <span class="field sm combo" role="combobox" aria-label="Configuration"><span class="value">Debug</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+        <span class="field sm combo" role="combobox" aria-label="Platform"><span class="value">Any CPU</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+        <button class="tb text" aria-label="Start WinFormsApp (F5)"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>WinFormsApp</button>
+      </div>
+      <div class="ide-status" role="status"><span>Ready</span><span class="grow"></span><span>OrderForm.cs [Design]</span><svg class="i" aria-hidden="true"><use href="#i-branch"></use></svg><span style="margin-left:-12px">main</span></div>
+    </sc-if>
+
+    <sc-for list="{{s.docs}}" as="d">
+      <div class="dwrap" style="{{d.style}}">
+        <div class="doc-tabs" role="tablist" aria-label="Open documents">
+          <span class="doc-tab on" role="tab" aria-selected="true"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>OrderForm.cs [Design]<svg class="i sm c-fg x" aria-hidden="true"><use href="#i-close"></use></svg></span>
+        </div>
+        <section class="doc" aria-label="OrderForm.cs [Design]">
+          <div class="dtb">
+            <button class="tb" aria-label="View Code (F7)" title="View Code (F7)"><svg class="i c-blue" aria-hidden="true"><use href="#i-code"></use></svg></button>
+            <button class="tb" aria-label="Load the form again (and restart the designer)" title="Load the form again (and restart the designer)"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+            <span class="status">OrderForm: drag from the Toolbox, select, move and resize; F7 shows the code.</span>
+          </div>
+          <div class="surf" role="img" aria-label="Design surface">
+            <div class="clip">
+              <div class="wf" data-nocheck aria-hidden="true" style="{{d.formStyle}}"><sc-for list="{{d.form}}" as="e"><div class="w {{e.cls}}" style="{{e.style}}">{{e.t}}</div></sc-for></div>
+              <sc-for list="{{d.adorn}}" as="e"><div class="ad {{e.cls}}" style="{{e.style}}"></div></sc-for>
+            </div>
+          </div>
+          <div class="trayb" role="list" aria-label="Component tray"><span class="tb text" role="listitem"><svg class="i c-blue" aria-hidden="true"><use href="#i-gear"></use></svg>orderToolTip</span></div>
+        </section>
+      </div>
+    </sc-for>
+
+    <sc-for list="{{s.explorers}}" as="x">
+      <section class="tw se" style="{{x.style}}" aria-label="Solution Explorer">
+        <div class="tw-cap {{x.capCls}}"><span class="title">Solution Explorer</span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-pin"></use></svg></span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+        <div role="tree" aria-label="Solution">
+          <sc-for list="{{x.rows}}" as="n"><div class="row {{n.cls}}" role="treeitem" aria-selected="{{n.selA}}" style="padding-left:{{n.ind}}px"><svg class="ex {{n.exCls}}" aria-hidden="true"><use href="#i-{{n.chev}}"></use></svg><svg class="i {{n.c}}" aria-hidden="true"><use href="#i-{{n.icon}}"></use></svg><span class="trim">{{n.t}}</span></div></sc-for>
+        </div>
+      </section>
+    </sc-for>
+
+    <sc-for list="{{s.wins}}" as="w">
+      <section class="tw pw" style="{{w.style}}" aria-label="Properties">
+        <div class="tw-cap {{w.capCls}}"><span class="title">Properties</span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-pin"></use></svg></span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+        <div class="pw-head">
+          <sc-if value="{{w.sel}}">
+            <div class="field sm combo pw-sel {{w.selCls}}" role="combobox" aria-label="Component" aria-expanded="{{w.selOpen}}" title="{{w.sel.name}} {{w.sel.type}}"><span class="value"><span class="nm">{{w.sel.name}}</span><span class="muted ty">{{w.sel.type}}</span></span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></div>
+          </sc-if>
+          <sc-if value="{{w.title}}">
+            <div class="pw-title"><span class="grow trim strong" title="{{w.title}}">{{w.title}}</span><sc-if value="{{w.addMeta}}"><button class="tb" aria-label="Add Metadata" title="Add Metadata…"><svg class="i c-green" aria-hidden="true"><use href="#i-file-add"></use></svg></button></sc-if></div>
+          </sc-if>
+          <div class="toolbar pw-tb" role="toolbar" aria-label="Properties window">
+            <button class="tb {{w.catCls}}" aria-pressed="{{w.catOn}}" aria-label="Categorized" title="Categorized"><svg class="i c-blue" aria-hidden="true"><use href="#i-type-hierarchy"></use></svg></button>
+            <button class="tb {{w.alphaCls}}" aria-pressed="{{w.alphaOn}}" aria-label="Alphabetical" title="Alphabetical"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-sort"></use></svg></button>
+            <button class="tb {{w.ppCls}}" aria-disabled="{{w.ppDis}}" aria-label="Property Pages" title="{{w.ppTip}}"><svg class="i c-blue" aria-hidden="true"><use href="#i-wrench"></use></svg></button>
+            <sc-if value="{{w.designer}}">
+              <span class="tb-sep"></span>
+              <button class="tb {{w.propCls}}" aria-pressed="{{w.propOn}}" aria-label="Properties" title="Properties"><svg class="i c-blue" aria-hidden="true"><use href="#i-properties"></use></svg></button>
+              <button class="tb {{w.evCls}}" aria-pressed="{{w.evOn}}" aria-label="Events" title="Events"><svg class="i c-yellow" aria-hidden="true"><use href="#i-events"></use></svg></button>
+            </sc-if>
+          </div>
+        </div>
+        <div class="pw-grid" role="treegrid" aria-label="Properties" style="height:{{w.gridH}}px">
+          <div class="pw-rows" style="top:{{w.top}}px">
+            <sc-for list="{{w.items}}" as="r">
+              <sc-if value="{{r.isHead}}"><div class="pg-h" role="row" aria-expanded="{{r.exp}}"><span class="gut"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-{{r.chev}}"></use></svg></span><span class="t trim">{{r.name}}</span></div></sc-if>
+              <sc-if value="{{r.isRow}}"><div class="pg-r {{r.cls}}" role="row" aria-level="{{r.level}}" aria-selected="{{r.selA}}">
+                <span class="gut"></span>
+                <sc-if value="{{r.chev}}"><svg class="ex {{r.chevIn}}" style="left:{{r.chevX}}px" aria-label="{{r.chevName}}"><use href="#i-{{r.chev}}"></use></svg></sc-if>
+                <span class="nc" style="width:{{w.nameCell}}px;padding-left:{{r.ind}}px"><span class="trim">{{r.name}}</span></span>
+                <span class="vc {{r.vcCls}}">
+                  <sc-if value="{{r.sw}}"><span class="swatch" style="background:{{r.sw}}"></span></sc-if>
+                  <span class="v trim {{r.vcls}}">{{r.value}}</span>
+                  <sc-if value="{{r.caret}}"><span class="caret2"></span><span class="grow"></span></sc-if>
+                  <sc-if value="{{r.drop}}"><span class="vb {{r.vbOn}}" role="button" aria-label="Open the drop-down (Alt+Down)" title="Alt+Down"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></sc-if>
+                  <sc-if value="{{r.more}}"><span class="vb {{r.vbOn}}" role="button" aria-label="Edit {{r.name}}…" title="Edit {{r.name}}…"><svg class="i c-fg" aria-hidden="true"><use href="#i-more"></use></svg></span></sc-if>
+                </span>
+              </div></sc-if>
+            </sc-for>
+          </div>
+          <sc-if value="{{w.sb}}"><div class="pw-sb" style="{{w.sb}}"></div></sc-if>
+        </div>
+        <sc-if value="{{w.links}}"><div class="pw-links"><sc-for list="{{w.links}}" as="lk"><button class="btn link">{{lk}}</button></sc-for></div></sc-if>
+        <div class="pw-split" role="separator" aria-orientation="horizontal" aria-label="The description's height"></div>
+        <div class="pw-desc" aria-live="polite"><span class="strong">{{w.descTitle}}</span><span class="d">{{w.desc}}</span></div>
+        <sc-if value="{{w.tabs}}"><div class="tw-tabs" role="tablist" aria-label="Docked windows"><span role="tab" aria-selected="false">Solution Explorer</span><span class="on" role="tab" aria-selected="true">Properties</span></div></sc-if>
+      </section>
+    </sc-for>
+
+    <sc-for list="{{s.pops}}" as="p">
+      <sc-if value="{{p.isScrim}}"><div class="scrim"></div></sc-if>
+
+      <sc-if value="{{p.isMenu}}"><div class="pop menu cm" role="menu" aria-label="{{p.label}}" style="{{p.style}}">
+        <sc-for list="{{p.rows}}" as="mr">
+          <sc-if value="{{mr.sep}}"><div class="msep" role="separator"></div></sc-if>
+          <sc-if value="{{mr.item}}"><div class="mi {{mr.cls}}" role="{{mr.role}}" aria-disabled="{{mr.dis}}" aria-checked="{{mr.checked}}"><span class="ic"><sc-if value="{{mr.i}}"><svg class="i {{mr.c}}" aria-hidden="true"><use href="#i-{{mr.i}}"></use></svg></sc-if></span><span>{{mr.t}}</span></div></sc-if>
+        </sc-for>
+      </div></sc-if>
+
+      <sc-if value="{{p.isColor}}"><div class="pop" role="dialog" aria-label="{{p.label}}" style="{{p.style}}">
+        <div class="tabs" role="tablist"><sc-for list="{{p.tabs}}" as="tb"><button class="tab {{tb.cls}}" role="tab" aria-selected="{{tb.on}}">{{tb.t}}</button></sc-for></div>
+        <sc-if value="{{p.list}}"><div class="clist" role="listbox" aria-label="{{p.label}}">
+          <sc-for list="{{p.list}}" as="ci"><div class="crow {{ci.cls}}" role="option" aria-selected="{{ci.selA}}"><span class="swatch" style="background:{{ci.c}}"></span><span>{{ci.n}}</span></div></sc-for>
+          <div class="pw-sb" style="{{p.sb}}"></div>
+        </div></sc-if>
+        <sc-if value="{{p.grid}}">
+          <div class="cgrid" role="grid" aria-label="Custom colors"><sc-for list="{{p.grid}}" as="cc"><span class="cc {{cc.cls}}" role="gridcell" aria-label="{{cc.n}}" title="{{cc.n}}" style="background:{{cc.c}}"></span></sc-for></div>
+          <div class="cdef" role="group" aria-label="Define Color"><div class="r"><span class="small strong grow">Define Color</span><span class="prev" style="background:#C4E1FF" aria-label="Preview"></span></div><div class="r"><span class="small">R</span><span class="field sm"><span class="value">196</span></span><span class="small">G</span><span class="field sm"><span class="value">225</span></span><span class="small">B</span><span class="field sm"><span class="value">255</span></span></div></div>
+        </sc-if>
+      </div></sc-if>
+
+      <sc-if value="{{p.isAlign}}"><div class="pop" role="radiogroup" aria-label="TextAlign" style="{{p.style}}">
+        <div class="algrid"><sc-for list="{{p.cells}}" as="al"><span class="alb {{al.cls}}" role="radio" aria-checked="{{al.on}}" aria-label="{{al.n}}" title="{{al.n}}" style="justify-content:{{al.jx}};align-items:{{al.jy}}"><span class="mk"></span></span></sc-for></div>
+      </div></sc-if>
+
+      <sc-if value="{{p.isMl}}"><div class="pop ml" role="dialog" aria-label="Text" style="{{p.style}}">
+        <div class="ta" role="textbox" aria-multiline="true" aria-label="Text"><span>{{p.text}}</span><span class="caret2" style="margin-left:0"></span></div>
+        <div class="hint"><span class="kbd-key">Enter</span>adds a line<span class="kbd-key">Ctrl+Enter</span>applies<span class="kbd-key">Esc</span>cancels</div>
+      </div></sc-if>
+
+      <sc-if value="{{p.isKeys}}"><div class="pop keys" role="dialog" aria-label="ShortcutKeys" style="{{p.style}}">
+        <span class="small">Modifiers:</span>
+        <span class="row2"><span class="chk on"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Ctrl</span><span class="chk"><span class="box"></span>Shift</span><span class="chk"><span class="box"></span>Alt</span></span>
+        <span class="small">Key:</span>
+        <span class="row2"><span class="field sm combo is-focus" role="combobox" aria-label="Key"><span class="value">N</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><button class="btn sm has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-reset"></use></svg>Reset</button></span>
+      </div></sc-if>
+
+      <sc-if value="{{p.isList}}"><div class="pop lst" role="listbox" aria-label="{{p.label}}" style="{{p.style}}">
+        <sc-for list="{{p.items}}" as="li"><div class="li {{li.cls}}" role="option" aria-selected="{{li.selA}}"><span>{{li.t}}</span><sc-if value="{{li.d}}"><span class="muted">{{li.d}}</span></sc-if></div></sc-for>
+        <div class="pw-sb" style="{{p.sb}}"></div>
+      </div></sc-if>
+
+      <sc-if value="{{p.isPanel}}"><div class="mpanel" role="dialog" aria-label="{{p.title}}" style="{{p.style}}">
+        <div class="dh">
+          <sc-if value="{{p.glyph}}"><span class="glyph"><svg class="i c-red" aria-hidden="true"><use href="#i-error"></use></svg></span></sc-if>
+          <div class="ttl"><h3>{{p.title}}</h3><div class="ctx">{{p.ctx}}</div></div>
+          <button class="btn subtle icon sm" aria-label="Close (Esc)" title="Close (Esc)"><svg class="i" aria-hidden="true"><use href="#i-close"></use></svg></button>
+        </div>
+        <div class="dbody">
+          <sc-if value="{{p.font}}">
+            <div class="fcols">
+              <div><div class="flab">Font</div><div class="field sm"><span class="value">Segoe UI</span></div><div class="fbox" role="listbox" aria-label="Font"><sc-for list="{{p.font.families}}" as="f"><div class="li {{f.cls}}" role="option" aria-selected="{{f.selA}}">{{f.t}}</div></sc-for></div></div>
+              <div><div class="flab">Font style</div><div class="field sm"><span class="value">Regular</span></div><div class="fbox" role="listbox" aria-label="Font style"><sc-for list="{{p.font.styles}}" as="f"><div class="li {{f.cls}}" role="option" aria-selected="{{f.selA}}">{{f.t}}</div></sc-for></div></div>
+              <div><div class="flab">Size</div><div class="field sm"><span class="value">9</span></div><div class="fbox" role="listbox" aria-label="Size"><sc-for list="{{p.font.sizes}}" as="f"><div class="li {{f.cls}}" role="option" aria-selected="{{f.selA}}">{{f.t}}</div></sc-for></div></div>
+            </div>
+            <div class="frow2">
+              <div><div class="flab">Effects</div><div class="chks"><span class="chk"><span class="box"></span>Strikeout</span><span class="chk"><span class="box"></span>Underline</span></div></div>
+              <div><div class="flab">Sample</div><div class="sample">AaBbYyZz</div></div>
+            </div>
+          </sc-if>
+          <sc-if value="{{p.strings}}">
+            <div class="muted">One item a line:</div>
+            <div class="sta" role="textbox" aria-multiline="true" aria-label="String Collection Editor"><div class="ln">Notes for the kitchen</div><div class="ln">(one per line)<span class="caret2" style="margin-left:1px"></span></div></div>
+          </sc-if>
+          <sc-if value="{{p.resource}}">
+            <div class="rcols">
+              <div class="rgrp" role="radiogroup" aria-label="Resource context">
+                <div class="flab">Resource context</div>
+                <span class="rad"><span class="dot"></span>Local resource</span>
+                <div class="ind"><div class="btns"><button class="btn sm has-icon is-disabled" aria-disabled="true"><svg class="i c-blue" aria-hidden="true"><use href="#i-import"></use></svg>Import…</button><button class="btn sm is-disabled" aria-disabled="true">Clear</button></div></div>
+                <span class="rad on"><span class="dot"></span>Project resource file</span>
+                <div class="ind" style="align-items:stretch">
+                  <span class="small muted mono">Properties/Resources.resx</span>
+                  <div class="fbox" role="listbox" aria-label="Project resources"><div class="li">(none)</div><div class="li sel" role="option" aria-selected="true">cart</div><div class="li">&#8203;</div><div class="li">&#8203;</div></div>
+                  <div class="btns"><button class="btn sm has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-import"></use></svg>Import…</button></div>
+                </div>
+              </div>
+              <div class="rgrp"><div class="flab">Preview</div>
+                <div class="preview" data-nocheck><svg width="64" height="64" viewBox="0 0 32 32" aria-label="cart.png"><path d="M3 5h4l3 14h15l3-10H9" fill="none" stroke="#2F6DB5" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/><rect x="11" y="11" width="14" height="6" rx="1" fill="#F0A030"/><circle cx="12.5" cy="24.5" r="2.3" fill="#2F6DB5"/><circle cx="23" cy="24.5" r="2.3" fill="#2F6DB5"/></svg></div>
+                <span class="small muted">cart.png · 32 × 32</span>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{p.invalid}}">
+            <div class="dmsg">Property value is not valid.</div>
+            <div class="dmsg">abc is not a valid value for Int32.</div>
+          </sc-if>
+        </div>
+        <div class="dfoot"><sc-for list="{{p.buttons}}" as="b"><button class="btn dlg {{b.cls}}">{{b.t}}</button></sc-for></div>
+      </div></sc-if>
+    </sc-for>
+  </div>
+</article>
+</sc-for>
+</section>
+</sc-for>
+
+<sc-if value="{{sheet}}">
+<section class="card" aria-labelledby="h-decide">
+  <h2 id="h-decide">For the maintainer to decide</h2>
+  <div class="decide">
+    <sc-for list="{{decisions}}" as="q">
+      <div class="dq"><span class="n">{{q.n}}</span><div><b>{{q.b}}</b> {{q.t}}<sc-if value="{{q.rej}}"><span class="tag">Rejected: {{q.rej}}</span></sc-if></div></div>
+    </sc-for>
+  </div>
+</section>
+</sc-if>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"state":{"editor":"enum","default":"All","options":["All","Color","Alignment","Font","Strings","Resource","Invalid","File"]},"$preview":{"width":1280,"height":3800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const STATES = ['Color', 'Alignment', 'Font', 'Strings', 'Resource', 'Invalid', 'File'];
+    const state = STATES.includes(this.props.state) ? this.props.state : 'All';
+    const sheet = state === 'All';
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+    const stateLinks = STATES.map((name) => ({ name, q: name, theme: encodeURIComponent(t.name) }));
+    const pos = (x, y, w, h) => `left:${x}px;top:${y}px;` + (w == null ? '' : `width:${w}px;`) + (h == null ? '' : `height:${h}px;`);
+
+    // ---------------------------------------------------------------- the properties, as the designer host reports them
+    // k: how the row is edited (Commit 5's kinds): text, choice, editable (a choice that takes typing), color, font,
+    // image, multiline, align (ContentAlignment), strings, keys (ShortcutKeys), anchor, dock, ro (read-only).
+    const R = (name, value, k, o = {}) => ({ name, value, k, ...o });
+    const set = { set: true };
+    const xy = (a, b, s) => [R('X', a, 'text', s), R('Y', b, 'text', s)];
+    const wh = (a, b, s) => [R('Width', a, 'text', s), R('Height', b, 'text', s)];
+    const sides = (v) => ['All', 'Left', 'Top', 'Right', 'Bottom'].map((n) => R(n, v, 'text'));
+    const fontKids = [R('Name', 'Segoe UI', 'choice'), R('Size', '9', 'text'), R('Unit', 'Point', 'choice'), R('Bold', 'False', 'choice'), R('GdiCharSet', '0', 'text'),
+      R('GdiVerticalFont', 'False', 'choice'), R('Italic', 'False', 'choice'), R('Strikeout', 'False', 'choice'), R('Underline', 'False', 'choice')];
+    const flatKids = [R('BorderColor', '', 'color', set), R('BorderSize', '0', 'text', set), R('CheckedBackColor', '', 'color', set), R('MouseDownBackColor', '', 'color', set), R('MouseOverBackColor', '', 'color', set)];
+    const button = [
+      { name: 'Accessibility', rows: [
+        R('AccessibleDescription', '', 'text', { desc: 'The description that will be reported to accessibility clients.' }),
+        R('AccessibleName', '', 'text', { desc: 'The name that will be reported to accessibility clients.' }),
+        R('AccessibleRole', 'Default', 'choice', { desc: 'The role that will be reported to accessibility clients.' })] },
+      { name: 'Appearance', rows: [
+        R('BackColor', 'SteelBlue', 'color', { set: true, sw: '#4682B4', desc: 'The background color of the component.' }),
+        R('BackgroundImage', '(none)', 'image', { desc: 'The background image used for the control.' }),
+        R('BackgroundImageLayout', 'Tile', 'choice', { desc: 'The background image layout used for the component.' }),
+        R('Cursor', 'Default', 'editable', { desc: 'The cursor that appears when the pointer moves over the control.' }),
+        R('FlatAppearance', '', 'ro', { set: true, kids: flatKids, desc: 'For buttons whose FlatStyle is FlatStyle.Flat, determines the appearance of the border and the colors used to indicate check state and mouse state.' }),
+        R('FlatStyle', 'Flat', 'choice', { set: true, desc: 'Determines the display of the control when users move the mouse over the control and click.' }),
+        R('Font', 'Segoe UI, 9pt', 'font', { kids: fontKids, desc: 'The font used to display text in the control.' }),
+        R('ForeColor', 'White', 'color', { set: true, sw: '#FFFFFF', desc: 'The foreground color of this component, which is used to display text.' }),
+        R('Image', '(none)', 'image', { desc: 'The image that will be displayed on the control.' }),
+        R('ImageAlign', 'MiddleCenter', 'align', { desc: 'The alignment of the image that will be displayed on the control.' }),
+        R('ImageIndex', '(none)', 'choice', { desc: 'The index of the image in the ImageList that will be displayed on the control.' }),
+        R('ImageKey', '(none)', 'choice', { desc: 'The key accessor for the image in the ImageList.' }),
+        R('ImageList', '(none)', 'choice', { desc: 'The ImageList to get the image to display in the control.' }),
+        R('RightToLeft', 'No', 'choice', { desc: 'Indicates whether the component should draw right-to-left for RTL languages.' }),
+        R('Text', '&Place order', 'multiline', { set: true, desc: 'The text associated with the control.' }),
+        R('TextAlign', 'MiddleCenter', 'align', { desc: 'The alignment of the text that will be displayed on the control.' }),
+        R('TextImageRelation', 'Overlay', 'choice', { desc: 'Specifies the relative location of the image to the text on the button.' }),
+        R('UseMnemonic', 'True', 'choice', { desc: 'If true, the first character preceded by an ampersand (&) will be used as the button\'s mnemonic key.' }),
+        R('UseVisualStyleBackColor', 'False', 'choice', { set: true, desc: 'Determines if the background is drawn using visual styles, if supported.' }),
+        R('UseWaitCursor', 'False', 'choice', { desc: 'When this property is true, the Cursor property of the control and its child controls is set to WaitCursor.' })] },
+      { name: 'Behavior', rows: [
+        R('AllowDrop', 'False', 'choice'), R('AutoEllipsis', 'False', 'choice'),
+        R('ContextMenuStrip', '(none)', 'choice', { desc: 'The shortcut menu to display when the user right-clicks the control.' }),
+        R('DialogResult', 'None', 'choice'), R('Enabled', 'True', 'choice'), R('TabIndex', '0', 'text', set), R('TabStop', 'True', 'choice'),
+        R('UseCompatibleTextRendering', 'False', 'choice'), R('Visible', 'True', 'choice')] },
+      { name: 'Data', rows: [
+        R('(DataBindings)', '', 'ro', { kids: [R('Tag', '(none)', 'choice'), R('Text', '(none)', 'choice')], desc: 'The data bindings for the control.' }),
+        R('Tag', '', 'text', { desc: 'User-defined data associated with the object.' })] },
+      { name: 'Design', rows: [R('(Name)', 'placeOrderButton', 'text', { set: true, desc: 'The name of the component in the code.' })] },
+      { name: 'Focus', rows: [R('CausesValidation', 'True', 'choice', { desc: 'Indicates whether this component raises validation events.' })] },
+      { name: 'Layout', rows: [
+        R('Anchor', 'Bottom, Right', 'anchor', { set: true, desc: 'Defines the edges of the container to which a certain control is bound.' }),
+        R('AutoSize', 'False', 'choice'), R('AutoSizeMode', 'GrowOnly', 'choice'), R('Dock', 'None', 'dock'),
+        R('Location', '196, 8', 'text', { set: true, kids: xy('196', '8', set), desc: 'The coordinates of the upper-left corner of the control relative to the upper-left corner of its container.' }),
+        R('Margin', '3, 3, 3, 3', 'text', { kids: sides('3'), desc: 'Specifies the space between this control and another control\'s margin.' }),
+        R('MaximumSize', '0, 0', 'text', { kids: wh('0', '0') }), R('MinimumSize', '0, 0', 'text', { kids: wh('0', '0') }),
+        R('Padding', '0, 0, 0, 0', 'text', { kids: sides('0'), desc: 'Specifies the interior spacing of a control.' }),
+        R('Size', '95, 23', 'text', { set: true, kids: wh('95', '23', set), desc: 'The size of the control in pixels.' })] }
+    ];
+    const textBox = [
+      { name: 'Accessibility', rows: [] },
+      { name: 'Appearance', rows: [
+        R('BackColor', '255, 255, 224', 'color', { set: true, sw: '#FFFFE0' }),
+        R('BorderStyle', 'Fixed3D', 'choice'), R('Cursor', 'IBeam', 'editable'),
+        R('Font', 'Segoe UI, 9pt, style=Italic', 'font', { set: true }),
+        R('ForeColor', 'GrayText', 'color', { set: true, sw: '#6D6D6D' }),
+        R('Lines', 'String[] Array', 'strings', { desc: 'The lines of text in a multiline edit, as an array of String values.' }),
+        R('RightToLeft', 'No', 'choice'), R('ScrollBars', 'Vertical', 'choice', set),
+        R('Text', 'Notes for the kitchen (one per line)', 'multiline', set),
+        R('TextAlign', 'Left', 'choice'), R('UseWaitCursor', 'False', 'choice')] },
+      { name: 'Behavior', rows: [] }, { name: 'Data', rows: [] }, { name: 'Design', rows: [] }, { name: 'Focus', rows: [] }, { name: 'Layout', rows: [] }
+    ];
+    const menuItem = [
+      { name: 'Accessibility', rows: [] }, { name: 'Appearance', rows: [] }, { name: 'Behavior', rows: [] }, { name: 'Data', rows: [] }, { name: 'Design', rows: [] }, { name: 'Layout', rows: [] },
+      { name: 'Misc', rows: [
+        R('ShortcutKeyDisplayString', '', 'text'),
+        R('ShortcutKeys', 'Ctrl+N', 'keys', { set: true, desc: 'The shortcut key associated with the menu item.' }),
+        R('ShowShortcutKeys', 'True', 'choice')] }
+    ];
+    const resxFile = [
+      { name: 'Advanced', rows: [
+        R('Build Action', 'EmbeddedResource', 'choice'), R('Copy to Output Directory', 'Do not copy', 'choice'),
+        R('Custom Tool', 'ResXFileCodeGenerator', 'text', { set: true, desc: 'The generator that makes a file from this one (TextTemplatingFileGenerator, ResXFileCodeGenerator…).' }),
+        R('Custom Tool Namespace', '', 'text')] },
+      { name: 'Misc', rows: [R('File Name', 'Resources.resx', 'text'), R('Full Path', 'C:\\src\\WinFormsApp\\Properties\\Resources.resx', 'ro'), R('Included By', 'A wildcard (default items)', 'ro')] },
+      { name: 'Metadata', rows: [R('LastGenOutput', 'Resources.Designer.cs', 'text', set)] }
+    ];
+    const project = [
+      { name: 'Misc', rows: [
+        R('Project File', 'WinFormsApp.csproj', 'ro', { desc: 'The project file.' }), R('Project Folder', 'C:\\src\\WinFormsApp', 'ro'), R('State', 'loaded', 'ro'),
+        R('Target Framework', 'net11.0-windows', 'ro'), R('Output Type', 'WinExe', 'ro'), R('Assembly Name', 'WinFormsApp', 'ro'),
+        R('Default Namespace', 'WinFormsApp', 'ro'), R('Version', '1.0.0', 'ro')] }
+    ];
+    const BUTTON = { name: 'placeOrderButton', type: 'System.Windows.Forms.Button' };
+
+    // ---------------------------------------------------------------- the Properties window
+    // Geometry: a 1 px border, the 24 px caption, the 61 px head (selector, toolbar), 22 px rows, a 5 px splitter and the
+    // 76 px description; names take 45 % of the width (NameColumnRatio), the first 16 px of it the categories' gutter.
+    const W = 300, CAP = 24, HEAD = 61, ROW = 22, SPLIT = 5, DESC = 76, TABS = 25, NAMEW = 134;
+    const DROP = ['choice', 'editable', 'color', 'multiline', 'align', 'keys', 'anchor', 'dock'];
+    const MORE = ['font', 'image', 'strings'];
+    const win = (o) => {
+      const items = [];
+      const at = {};
+      const open = o.open || [];
+      const exp = o.exp || [];
+      const rowItem = (r, depth, path, expd) => {
+        const sel = path === o.sel, hov = path === o.hover && !sel;
+        const show = sel || hov;
+        const editing = o.edit && o.edit.path === path;
+        return {
+          isRow: true, name: r.name, value: editing ? o.edit.text : r.value, path,
+          cls: [sel ? (o.blur ? 'sel-i' : 'sel') : '', hov ? 'hover' : ''].join(' '),
+          ind: 4 + depth * 16, chev: r.kids ? (expd ? 'chevron-down' : 'chevron-right') : '', chevX: depth * 16 + 2, chevIn: depth > 0 ? 'in' : '',
+          chevName: r.kids ? (expd ? 'Collapse ' : 'Expand ') + r.name : '',
+          sw: r.sw || '', vcls: [r.set ? 'set' : '', r.k === 'ro' ? 'ro' : ''].join(' '),
+          drop: show && DROP.includes(r.k), more: show && MORE.includes(r.k), vbOn: sel && o.popOpen ? 'on' : '',
+          caret: !!editing, vcCls: editing ? 'edit' : '', level: depth + 1, selA: String(sel), r
+        };
+      };
+      const walk = (rows, depth, prefix) => {
+        for (const r of rows) {
+          const path = prefix ? prefix + '.' + r.name : r.name;
+          const expd = !!r.kids && exp.includes(path);
+          at[path] = items.length;
+          items.push(rowItem(r, depth, path, expd));
+          if (expd) walk(r.kids, depth + 1, path);
+        }
+      };
+      if (o.alpha) {
+        walk(o.cats.flatMap((c) => c.rows).sort((a, b) => a.name.replace(/^\(/, '').localeCompare(b.name.replace(/^\(/, ''), 'en', { sensitivity: 'base' })), 0, '');
+      } else {
+        for (const c of o.cats) {
+          const isOpen = open.includes(c.name);
+          items.push({ isHead: true, name: c.name, chev: isOpen ? 'chevron-down' : 'chevron-right', exp: String(isOpen) });
+          if (isOpen) walk(c.rows, 0, '');
+        }
+      }
+      const links = o.links || [];
+      const linksH = links.length ? 9 + links.length * 20 : 0;
+      const gridH = o.h - 2 - CAP - HEAD - linksH - SPLIT - DESC - (o.tabs ? TABS : 0);
+      const skip = o.skip || 0;
+      const total = items.length * ROW;
+      const sb = total > gridH ? `top:${Math.round(skip * ROW / total * gridH) + 2}px;height:${Math.round(gridH * gridH / total) - 4}px` : '';
+      const selItem = items.find((i) => i.isRow && i.path === o.sel);
+      const designer = !!o.comp;
+      const rowTop = (path) => o.y + 1 + CAP + HEAD + (at[path] - skip) * ROW;
+      return {
+        rowTop,
+        cell: (path) => ({ x: o.x + 1 + NAMEW, y: rowTop(path), r: o.x + W - 2, b: rowTop(path) + ROW }),
+        w: {
+          style: pos(o.x, o.y, W, o.h), capCls: o.active ? 'active' : '',
+          sel: o.comp || null, selCls: o.selOpen ? 'is-open' : '', selOpen: String(!!o.selOpen),
+          title: o.title || '', addMeta: !!o.addMeta,
+          catCls: o.alpha ? '' : 'is-checked', catOn: String(!o.alpha), alphaCls: o.alpha ? 'is-checked' : '', alphaOn: String(!!o.alpha),
+          ppCls: o.pp ? '' : 'is-disabled', ppDis: String(!o.pp), ppTip: o.pp ? 'Property Pages' : 'Property Pages (projects and the solution)',
+          designer, propCls: 'is-checked', propOn: 'true', evCls: '', evOn: 'false',
+          gridH, top: -skip * ROW, items, sb, nameCell: NAMEW - 16, links: links.length ? links : null,
+          descTitle: o.descTitle ?? (selItem ? selItem.name : ''), desc: o.desc ?? (selItem ? selItem.r.desc || '' : ''),
+          tabs: !!o.tabs
+        }
+      };
+    };
+
+    // ---------------------------------------------------------------- the designer document and its form
+    const CX = 8, CY = 31;
+    const formOf = (caption, clientW, clientH, body) => {
+      const L = [];
+      const add = (cls, x, y, w, h, text) => L.push({ cls: cls.split(' ').map((k) => 'f-' + k).join(' '), style: pos(x, y, w, h), t: text || '' });
+      const c = (cls, x, y, w, h, text) => add(cls, x + CX, y + CY, w, h, text);
+      const FW = clientW + 2 * CX, FH = clientH + CY + CX;
+      add('frame', 0, 0, FW, FH); add('title', 1, 1, FW - 2, 30); add('ico', 10, 9, 14, 14); add('cap', 32, 1, 200, 30, caption); add('closex', FW - 46, 1, 45, 30, '✕');
+      body(c);
+      return { list: L, W: FW, H: FH };
+    };
+    const orderForm = formOf('New order', 384, 401, (c) => {
+      c('lbl', 12, 15, null, null, 'Customer:'); c('tb ph', 96, 12, 276, 23, 'Name or account number');
+      c('cb', 96, 41, 160, 23); c('arr-d', 242, 51);
+      c('tb', 262, 41, 110, 23, '1'); c('spin', 354, 42, 17, 21); c('arr-u', 358, 46); c('arr-d', 358, 54);
+      c('chkb', 96, 73, 13, 13); c('chkm', 101, 74); c('lbl', 113, 72, null, null, 'Gift wrap it');
+      c('grp', 12, 102, 360, 45); c('grpcap', 18, 95, null, null, 'Shipping');
+      c('radb on', 24, 120, 13, 13); c('lbl', 41, 119, null, null, 'Standard'); c('radb', 122, 120, 13, 13); c('lbl', 139, 119, null, null, 'Express');
+      c('dash', 12, 153, 360, 30); c('dashv', 96, 153, 1, 30); c('lbl', 15, 160, null, null, 'Date:');
+      c('tb', 99, 156, 270, 23, '10/21/2026'); c('dtpb', 351, 157, 17, 21); c('arr-d', 356, 166);
+      c('split', 12, 189, 360, 100); c('lb', 13, 190, 120, 98, 'historyListBox'); c('splitter', 133, 190, 4, 98);
+      c('notes', 137, 190, 234, 98, 'Notes for the kitchen\n(one per line)'); c('sb', 354, 190, 17, 98);
+      c('pic', 12, 299, 16, 16); c('lbl', 175, 301, null, null, '0'); c('btn', 242, 298, 75, 23, '+1');
+      c('dash', 0, 361, 384, 40); c('flat', 196, 369, 95, 23, 'Place order'); c('btn', 297, 369, 75, 23, 'Cancel');
+    });
+    const selection = (x, y, w, h, glyph) => {
+      const A = [];
+      const X0 = x - 1, Y0 = y - 1, FW = w + 2, FH = h + 2;
+      A.push({ cls: 'fr', style: pos(X0, Y0, FW, FH) });
+      const xs = [X0, X0 + Math.floor((FW - 1) / 2), X0 + FW - 1], ys = [Y0, Y0 + Math.floor((FH - 1) / 2), Y0 + FH - 1];
+      for (const [i, j] of [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1]]) A.push({ cls: 'hd', style: pos(xs[i] - 3, ys[j] - 3, 7, 7) });
+      if (glyph) A.push({ cls: 'glyph', style: pos(x + w + 4, y - 2, 12, 12) });
+      return A;
+    };
+    const BT = t.p.family === 'Classic' ? 2 : 1;
+    // A document at (x, y, w, h); the form at (fx, fy) on its surface; `target` is the selected control's client rectangle.
+    const doc = (x, y, w, h, fx, fy, target) => {
+      const surf = { x: x + 1, y: y + 30 + BT + 32, w: w - 2, h: h - 30 - BT - 32 - 34 - 1 };
+      const [tx, ty, tw, th, glyph] = target;
+      return {
+        surf,
+        d: { style: pos(x, y, w, h), formStyle: pos(fx, fy, orderForm.W, orderForm.H), form: orderForm.list, adorn: selection(fx + CX + tx, fy + CY + ty, tw, th, glyph) }
+      };
+    };
+    const PLACE = [196, 369, 95, 23, false], NOTES = [137, 190, 234, 98, false];
+    // h is the panel's natural height, only to center it: the panel sizes to its content.
+    const centered = (surf, w, h) => pos(surf.x + Math.round((surf.w - w) / 2), surf.y + Math.max(8, Math.round((surf.h - h) / 2)), w);
+
+    // ---------------------------------------------------------------- the pop-ups
+    const menuItem2 = (text, o = {}) => ({ item: true, t: text, i: o.check ? 'check' : (o.i || ''), c: o.check ? 'c-fg' : (o.c || ''), dis: o.dis ? 'true' : 'false',
+      checked: o.toggle ? String(!!o.check) : '', role: o.toggle ? 'menuitemcheckbox' : 'menuitem', cls: [o.dis ? 'is-disabled' : '', o.hover ? 'hover' : ''].join(' ') });
+    const rowMenu = (x, y, canReset, hover) => ({ isMenu: true, label: 'Property', style: pos(x, y),
+      rows: [menuItem2('Reset', { i: 'reset', c: 'c-blue', dis: !canReset, hover: hover === 'Reset' }), { sep: true }, menuItem2('Description', { toggle: true, check: true, hover: hover === 'Description' })] });
+
+    // The colors: Web is ordered as the classic editor orders it (alpha, then hue, saturation, brightness), System by name.
+    const ctx = document.createElement('canvas').getContext('2d');
+    const rgbOf = (name) => { ctx.fillStyle = '#000'; ctx.fillStyle = name; const h = ctx.fillStyle; return h.startsWith('#') ? [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16)) : null; };
+    const hsl = ([r, g, b]) => {
+      r /= 255; g /= 255; b /= 255;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+      if (mx === mn) return [0, 0, l];
+      const d = mx - mn, s = l <= 0.5 ? d / (mx + mn) : d / (2 - mx - mn);
+      let hh = r === mx ? (g - b) / d : g === mx ? 2 + (b - r) / d : 4 + (r - g) / d;
+      hh *= 60; if (hh < 0) hh += 360;
+      return [hh, s, l];
+    };
+    const WEB = ('AliceBlue AntiqueWhite Aqua Aquamarine Azure Beige Bisque Black BlanchedAlmond Blue BlueViolet Brown BurlyWood CadetBlue Chartreuse Chocolate Coral CornflowerBlue Cornsilk Crimson Cyan DarkBlue DarkCyan DarkGoldenrod DarkGray DarkGreen DarkKhaki DarkMagenta DarkOliveGreen DarkOrange DarkOrchid DarkRed DarkSalmon DarkSeaGreen DarkSlateBlue DarkSlateGray DarkTurquoise DarkViolet DeepPink DeepSkyBlue DimGray DodgerBlue Firebrick FloralWhite ForestGreen Fuchsia Gainsboro GhostWhite Gold Goldenrod Gray Green GreenYellow Honeydew HotPink IndianRed Indigo Ivory Khaki Lavender LavenderBlush LawnGreen LemonChiffon LightBlue LightCoral LightCyan LightGoldenrodYellow LightGray LightGreen LightPink LightSalmon LightSeaGreen LightSkyBlue LightSlateGray LightSteelBlue LightYellow Lime LimeGreen Linen Magenta Maroon MediumAquamarine MediumBlue MediumOrchid MediumPurple MediumSeaGreen MediumSlateBlue MediumSpringGreen MediumTurquoise MediumVioletRed MidnightBlue MintCream MistyRose Moccasin NavajoWhite Navy OldLace Olive OliveDrab Orange OrangeRed Orchid PaleGoldenrod PaleGreen PaleTurquoise PaleVioletRed PapayaWhip PeachPuff Peru Pink Plum PowderBlue Purple Red RosyBrown RoyalBlue SaddleBrown Salmon SandyBrown SeaGreen SeaShell Sienna Silver SkyBlue SlateBlue SlateGray Snow SpringGreen SteelBlue Tan Teal Thistle Tomato Turquoise Violet Wheat White WhiteSmoke Yellow YellowGreen').split(' ')
+      .map((n) => { const c = rgbOf(n); return { n, c: '#' + c.map((v) => v.toString(16).padStart(2, '0')).join(''), k: hsl(c) }; })
+      .sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2]);
+    WEB.unshift({ n: 'Transparent', c: 'transparent' });
+    const SYSTEM = [['ActiveBorder', '#B4B4B4'], ['ActiveCaption', '#99B4D1'], ['ActiveCaptionText', '#000000'], ['AppWorkspace', '#ABABAB'], ['ButtonFace', '#F0F0F0'], ['ButtonHighlight', '#FFFFFF'], ['ButtonShadow', '#A0A0A0'],
+      ['Control', '#F0F0F0'], ['ControlDark', '#A0A0A0'], ['ControlDarkDark', '#696969'], ['ControlLight', '#E3E3E3'], ['ControlLightLight', '#FFFFFF'], ['ControlText', '#000000'], ['Desktop', '#000000'],
+      ['GradientActiveCaption', '#B9D1EA'], ['GradientInactiveCaption', '#D7E4F2'], ['GrayText', '#6D6D6D'], ['Highlight', '#0078D7'], ['HighlightText', '#FFFFFF'], ['HotTrack', '#0066CC'],
+      ['InactiveBorder', '#F4F7FC'], ['InactiveCaption', '#BFCDDB'], ['InactiveCaptionText', '#000000'], ['Info', '#FFFFE1'], ['InfoText', '#000000'], ['Menu', '#F0F0F0'], ['MenuBar', '#F0F0F0'],
+      ['MenuHighlight', '#3399FF'], ['MenuText', '#000000'], ['ScrollBar', '#C8C8C8'], ['Window', '#FFFFFF'], ['WindowFrame', '#646464'], ['WindowText', '#000000']].map(([n, c]) => ({ n, c }));
+    const BASIC = ['FFFFFF', 'FFC0C0', 'FFE0C0', 'FFFFC0', 'C0FFC0', 'C0FFFF', 'C0C0FF', 'FFC0FF', 'E0E0E0', 'FF8080', 'FFC080', 'FFFF80', '80FF80', '80FFFF', '8080FF', 'FF80FF',
+      'C0C0C0', 'FF0000', 'FF8000', 'FFFF00', '00FF00', '00FFFF', '0000FF', 'FF00FF', '808080', 'C00000', 'C04000', 'C0C000', '00C000', '00C0C0', '0000C0', 'C000C0',
+      '404040', '800000', '804000', '808000', '008000', '008080', '000080', '800080', '000000', '400000', '804040', '404000', '004000', '004040', '000040', '400040'];
+    const listWindow = (all, first, count, selName, hoverName) => ({
+      list: all.slice(first, first + count).map((x) => ({ n: x.n, c: x.c, cls: x.n === selName ? 'sel' : x.n === hoverName ? 'hover' : '', selA: String(x.n === selName) })),
+      sb: `top:${8 + Math.round(first / all.length * 172)}px;height:${Math.round(count / all.length * 172)}px`
+    });
+    const colorPop = (x, y, tab, o = {}) => {
+      const tabs = ['Custom', 'Web', 'System'].map((n) => ({ t: n, cls: n === tab ? 'sel' : '', on: String(n === tab) }));
+      const p = { isColor: true, label: `BackColor: ${tab} colors`, style: pos(x, y, 214), tabs, list: null, grid: null, sb: '' };
+      if (tab === 'Web') {
+        const i = WEB.findIndex((c) => c.n === 'SteelBlue');
+        Object.assign(p, listWindow(WEB, i - 4, 9, 'SteelBlue', o.hover));
+      } else if (tab === 'System') {
+        Object.assign(p, listWindow(SYSTEM, 4, 9, null, 'Control'));
+      } else {
+        const cells = BASIC.map((h) => ({ c: '#' + h, n: `${parseInt(h.substr(0, 2), 16)}, ${parseInt(h.substr(2, 2), 16)}, ${parseInt(h.substr(4, 2), 16)}`, cls: '' }));
+        for (let i = 0; i < 16; i++) cells.push({ c: i === 0 ? '#C4E1FF' : '#FFFFFF', n: i === 0 ? '196, 225, 255' : 'Custom color (right-click to define)', cls: [i < 8 ? 'gap' : '', i === 0 ? 'on' : ''].join(' ') });
+        p.grid = cells;
+      }
+      return p;
+    };
+    const ALIGN = [['TopLeft', 'Top Left', 'flex-start', 'flex-start'], ['TopCenter', 'Top Center', 'center', 'flex-start'], ['TopRight', 'Top Right', 'flex-end', 'flex-start'],
+      ['MiddleLeft', 'Middle Left', 'flex-start', 'center'], ['MiddleCenter', 'Middle Center', 'center', 'center'], ['MiddleRight', 'Middle Right', 'flex-end', 'center'],
+      ['BottomLeft', 'Bottom Left', 'flex-start', 'flex-end'], ['BottomCenter', 'Bottom Center', 'center', 'flex-end'], ['BottomRight', 'Bottom Right', 'flex-end', 'flex-end']];
+    const alignPop = (x, y) => ({ isAlign: true, style: pos(x, y), cells: ALIGN.map(([v, n, jx, jy]) => ({ n, jx, jy, on: String(v === 'MiddleCenter'), cls: v === 'MiddleCenter' ? 'on' : '' })) });
+    const CURSORS = 'AppStarting Arrow Cross Default Hand Help HSplit IBeam No NoMove2D NoMoveHoriz NoMoveVert PanEast PanNE PanNorth PanNW PanSE PanSouth PanSW PanWest SizeAll SizeNESW SizeNS SizeNWSE SizeWE UpArrow VSplit WaitCursor'.split(' ');
+    const COMPONENTS = [['OrderForm', 'System.Windows.Forms.Form'], ['buttonPanel', 'System.Windows.Forms.Panel'], ['cancelButton', 'System.Windows.Forms.Button'], ['counterControl', 'WinFormsApp.Controls.CounterControl'],
+      ['customerLabel', 'System.Windows.Forms.Label'], ['customerTextBox', 'System.Windows.Forms.TextBox'], ['dateLabel', 'System.Windows.Forms.Label'], ['detailsTable', 'System.Windows.Forms.TableLayoutPanel'],
+      ['expressRadioButton', 'System.Windows.Forms.RadioButton'], ['giftCheckBox', 'System.Windows.Forms.CheckBox'], ['historyListBox', 'System.Windows.Forms.ListBox'], ['logoPictureBox', 'System.Windows.Forms.PictureBox'],
+      ['notesSplit', 'System.Windows.Forms.SplitContainer'], ['notesTextBox', 'System.Windows.Forms.TextBox'], ['orderDatePicker', 'System.Windows.Forms.DateTimePicker'], ['orderToolTip', 'System.Windows.Forms.ToolTip'],
+      ['placeOrderButton', 'System.Windows.Forms.Button'], ['productComboBox', 'System.Windows.Forms.ComboBox'], ['quantityUpDown', 'System.Windows.Forms.NumericUpDown'], ['shippingGroupBox', 'System.Windows.Forms.GroupBox'],
+      ['standardRadioButton', 'System.Windows.Forms.RadioButton']];
+    const listPop = (x, y, w, label, entries, first, count, sel) => ({
+      isList: true, label, style: pos(x, y, w),
+      items: entries.slice(first, first + count).map(([a, b]) => ({ t: a, d: b || '', cls: a === sel ? 'sel' : '', selA: String(a === sel) })),
+      sb: `top:${6 + Math.round(first / entries.length * (count * 22 - 4))}px;height:${Math.round(count / entries.length * (count * 22 - 4))}px`
+    });
+    const okCancel = [{ t: 'OK', cls: 'primary' }, { t: 'Cancel', cls: '' }];
+    const fontPanel = (style) => ({
+      isPanel: true, title: 'Font', ctx: 'placeOrderButton.Font', style, buttons: okCancel,
+      font: {
+        families: ['Consolas', 'Courier New', 'Georgia', 'Microsoft Sans Serif', 'Segoe UI', 'Segoe UI Semibold', 'Tahoma'].map((f) => ({ t: f, cls: f === 'Segoe UI' ? 'sel' : '', selA: String(f === 'Segoe UI') })),
+        styles: ['Regular', 'Italic', 'Bold', 'Bold Italic', '', '', ''].map((f) => ({ t: f || '​', cls: f === 'Regular' ? 'sel' : '', selA: String(f === 'Regular') })),
+        sizes: ['8', '9', '10', '11', '12', '14', '16'].map((f) => ({ t: f, cls: f === '9' ? 'sel' : '', selA: String(f === '9') }))
+      }
+    });
+    const stringsPanel = (style) => ({ isPanel: true, title: 'String Collection Editor', ctx: 'notesTextBox.Lines', style, buttons: okCancel, strings: true });
+    const resourcePanel = (style) => ({ isPanel: true, title: 'Select Resource', ctx: 'placeOrderButton.Image', style, buttons: okCancel, resource: true });
+    const invalidDialog = (style) => ({ isPanel: true, glyph: true, title: 'Properties Window', ctx: 'placeOrderButton · Location.X', style, buttons: [{ t: 'OK', cls: 'primary' }], invalid: true });
+    const FONT_W = 420, FONT_H = 384, STR_W = 400, STR_H = 300, RES_W = 470, RES_H = 386, DLG_W = 520;
+
+    // ---------------------------------------------------------------- the windows each state shows
+    const cfg = {
+      font: { comp: BUTTON, cats: button, open: ['Appearance'], exp: ['Font'], sel: 'Font' },
+      context: { comp: BUTTON, cats: button, open: ['Data', 'Design', 'Focus', 'Layout'], exp: ['(DataBindings)'], sel: '(Name)', popOpen: false },
+      color: { comp: BUTTON, cats: button, open: ['Appearance'], sel: 'BackColor', popOpen: true },
+      align: { comp: BUTTON, cats: button, open: ['Appearance'], sel: 'TextAlign', skip: 8, popOpen: true },
+      text: { comp: BUTTON, cats: button, open: ['Appearance'], sel: 'Text', skip: 8, popOpen: true },
+      keys: { comp: { name: 'newToolStripMenuItem', type: 'System.Windows.Forms.ToolStripMenuItem' }, cats: menuItem, open: ['Misc'], sel: 'ShortcutKeys', popOpen: true },
+      cursor: { comp: BUTTON, cats: button, open: ['Appearance'], sel: 'Cursor', edit: { path: 'Cursor', text: 'Default' }, popOpen: true },
+      image: { comp: BUTTON, cats: button, open: ['Appearance'], sel: 'Image', popOpen: true },
+      lines: { comp: { name: 'notesTextBox', type: 'System.Windows.Forms.TextBox' }, cats: textBox, open: ['Appearance'], sel: 'Lines', popOpen: true },
+      invalid: { comp: BUTTON, cats: button, open: ['Layout'], exp: ['Location'], sel: 'Location.X', edit: { path: 'Location.X', text: 'abc' },
+        descTitle: 'X', desc: 'The coordinates of the upper-left corner of the control relative to the upper-left corner of its container.' },
+      file: { title: 'Resources.resx File Properties', addMeta: true, cats: resxFile, open: ['Advanced', 'Metadata'], sel: 'Custom Tool', blur: true },
+      project: { title: 'WinFormsApp Project Properties', cats: project, open: ['Misc'], pp: true, links: ['Open Project Properties (Alt+Enter)'], descTitle: 'Project File', desc: 'The project file.' },
+      alpha: { comp: BUTTON, cats: button, alpha: true, sel: 'Text', blur: true }
+    };
+    const explorerRows = [
+      { t: "Solution 'WinFormsApp' (1 of 1 project)", icon: 'solution', c: 'c-purple', ind: 4, chev: 'chevron-down' },
+      { t: 'WinFormsApp', icon: 'cube', c: 'c-green', ind: 18, chev: 'chevron-down' },
+      { t: 'Dependencies', icon: 'layers', c: 'c-blue', ind: 32, chev: 'chevron-right' },
+      { t: 'Properties', icon: 'folder', c: 'c-folder', ind: 32, chev: 'chevron-down' },
+      { t: 'Resources.resx', icon: 'table', c: 'c-blue', ind: 46, chev: 'chevron-right', sel: true },
+      { t: 'Controls', icon: 'folder', c: 'c-folder', ind: 32, chev: 'chevron-right' },
+      { t: 'AboutForm.cs', icon: 'cs-file', c: '', ind: 32, chev: 'chevron-right' },
+      { t: 'InventoryForm.cs', icon: 'cs-file', c: '', ind: 32, chev: 'chevron-right' },
+      { t: 'MainForm.cs', icon: 'cs-file', c: '', ind: 32, chev: 'chevron-right' },
+      { t: 'OrderForm.cs', icon: 'cs-file', c: '', ind: 32, chev: 'chevron-right' },
+      { t: 'Program.cs', icon: 'cs-file', c: '', ind: 32, chev: 'chevron-right', none: true }
+    ].map((n) => ({ ...n, cls: n.sel ? 'sel' : '', selA: String(!!n.sel), exCls: n.none ? 'none' : '' }));
+
+    // Each state's drop-down or editor, placed against its window (a drop-down under its value cell, right-aligned).
+    const popsFor = (key, P, docInfo) => {
+      const dropAt = (path, w) => { const c = P.cell(path); return { x: c.r - w, y: c.b + 1 }; };
+      switch (key) {
+        case 'context': { const c = P.cell('(Name)'); return [rowMenu(c.x - 70, c.b - 6, false, 'Description')]; }
+        case 'color': { const p = dropAt('BackColor', 214); return [colorPop(p.x, p.y, 'Web')]; }
+        case 'align': { const p = dropAt('TextAlign', 146); return [alignPop(p.x, p.y)]; }
+        case 'text': { const p = dropAt('Text', 236); return [{ isMl: true, style: pos(p.x, p.y, 236), text: '&Place order' }]; }
+        case 'keys': { const p = dropAt('ShortcutKeys', 252); return [{ isKeys: true, style: pos(p.x, p.y, 252) }]; }
+        case 'cursor': { const c = P.cell('Cursor'); return [listPop(c.x - 1, c.b + 1, c.r - c.x + 2, 'Cursor', CURSORS.map((n) => [n]), 0, 10, 'Default')]; }
+        case 'font': return docInfo ? [fontPanel(centered(docInfo.surf, FONT_W, FONT_H))] : [];
+        case 'lines': return docInfo ? [stringsPanel(centered(docInfo.surf, STR_W, STR_H))] : [];
+        case 'image': return docInfo ? [resourcePanel(centered(docInfo.surf, RES_W, RES_H))] : [];
+        default: return [];
+      }
+    };
+
+    const rows = [];
+    let mainCls = 'sheet';
+    if (sheet) {
+      const item = (w, h, title, src, cap, build) => ({ w, h, title, src, cap, docs: [], explorers: [], wins: [], pops: [], ...build() });
+      const solo = (key, h, extra = {}) => () => { const P = win({ ...cfg[key], x: 0, y: 0, h, ...extra }); return { wins: [P.w], pops: popsFor(key, P) }; };
+      rows.push({ items: [
+        item(300, 760, '(a) Categorized, Font expanded', 'placeOrderButton · Button',
+          'Accessibility collapsed, Appearance open, Font open to its nine parts, indented 16 px. Values set in the code are bold. The selected row shows its "…"; a row under the pointer (Image) shows its own.',
+          solo('font', 760, { hover: 'Image' })),
+        item(300, 760, '(b) The other categories, and a row\'s menu', 'placeOrderButton · Button',
+          '(DataBindings) open to the bindable properties; Location, Margin, Padding and Size closed. Right-click: Reset, grayed for (Name), which can\'t be reset, and Description, which hides the pane below.',
+          solo('context', 760)),
+        item(300, 760, '(c) A color: its drop-down', 'BackColor · ColorEditor',
+          'The swatch, the text (still typed into) and the arrow. The drop-down opens on the tab that holds the value: SteelBlue is a web color, in the classic editor\'s order. Picking commits its name.',
+          solo('color', 760)),
+        item(300, 760, '(d) The other two tabs', 'Custom · System',
+          'Custom: the 48 basic colors and 16 slots for the session; a right-click on a slot defines it (R, G, B and a preview) and picking one commits "R, G, B". System: the system colors, by name.',
+          () => ({ pops: [colorPop(0, 0, 'Custom'), colorPop(0, 338, 'System')] }))
+      ] });
+      rows.push({ items: [
+        item(300, 560, '(e) ContentAlignment', 'TextAlign · ContentAlignmentEditor',
+          'Nine toggles, the current one checked; each is named for screen readers (Top Left…). Picking commits the value\'s name and closes it.',
+          solo('align', 560)),
+        item(300, 560, '(f) Multi-line text', 'Text · MultilineStringEditor',
+          'The cell keeps its one-line text box; the arrow opens a text box that takes Enter. It is written with CRLF line ends, as the classic editor writes them.',
+          solo('text', 560)),
+        item(300, 560, '(g) Shortcut keys', 'newToolStripMenuItem.ShortcutKeys · InventoryForm',
+          'Modifiers as check boxes, the key from KeysConverter\'s values, and Reset. It commits "Ctrl+N" as the cell shows it.',
+          solo('keys', 560)),
+        item(300, 560, '(h) A choice that takes typing', 'Cursor · CursorConverter',
+          'Its standard values aren\'t exclusive (ChoicesEditable), so the cell stays a text box with a list under it. An exclusive list (Font.Name, ContextMenuStrip) only picks.',
+          solo('cursor', 560))
+      ] });
+      const docStage = (key, title, src, cap, target) => item(612, 520, title, src, cap, () => {
+        const D = doc(0, 0, 612, 520, 16, -90, target);
+        return { docs: [D.d], pops: popsFor(key, null, D) };
+      });
+      rows.push({ items: [
+        docStage('font', '(i) The font editor', 'Font\'s "…" · FontEditor',
+          'A panel over the designer surface in the dialog\'s frame, as the collection editor is placed: the families from Font.Name\'s values, style, size, the effects and a sample. OK sends only what changed, in one undo step.', PLACE),
+        docStage('lines', '(j) String Collection Editor', 'notesTextBox.Lines · StringArrayEditor',
+          'One item a line, split on any line end; OK writes the array. A StringCollection (AutoCompleteCustomSource) opens the collection editor\'s text mode instead.', NOTES)
+      ] });
+      rows.push({ items: [
+        docStage('image', '(k) Select Resource', 'Image\'s "…" · ImageEditor',
+          'The form\'s own resources (Import…, Clear) or the project\'s Properties/Resources.resx with its images, and a preview. Here after Import… of cart.png into the project\'s resources.', PLACE),
+        item(612, 520, '(l) A value that isn\'t valid', 'Location.X = "abc" · Int32Converter',
+          'The in-window dialog with the converter\'s message. The cell keeps what was typed until OK, then shows 196 again, as the classic IDE does.', () => {
+            const D = doc(0, 0, 308, 520, 8, -200, PLACE);
+            const P = win({ ...cfg.invalid, x: 312, y: 0, h: 520, blur: true });
+            return { docs: [D.d], wins: [P.w], pops: [{ isScrim: true }, invalidDialog(pos(46, 64, DLG_W))] };
+          })
+      ] });
+      rows.push({ items: [
+        item(300, 440, '(m) A file in the Solution Explorer', 'Properties/Resources.resx',
+          'The same grid: Advanced, Misc and Metadata collapse; Categorized and Alphabetical work here too. Property Pages is grayed: a file has none, as in the classic IDE.',
+          solo('file', 440)),
+        item(300, 440, '(n) A project: nothing regresses', 'WinFormsApp.csproj',
+          'Property Pages is enabled for a project (it opens Project Properties) and for the solution (Configuration Manager); the link stays.',
+          solo('project', 440)),
+        item(300, 440, '(o) The component selector', 'IDesignerPropertySource.ComponentChoices',
+          'The form first, then its components by name, each with its type. Picking one selects it in the designer.',
+          () => { const P = win({ ...cfg.font, x: 0, y: 0, h: 440, selOpen: true, exp: [] }); return { wins: [P.w], pops: [listPop(6, 1 + CAP + 4 + 25, 288, 'Components', COMPONENTS, 0, 17, 'placeOrderButton')] }; }),
+        item(300, 440, '(p) Alphabetical', 'placeOrderButton · Button',
+          'One list without headers, sorted as today: a leading "(" is ignored, so (DataBindings) sorts under D and (Name) under N; sub-properties keep the converter\'s order.',
+          () => { const P = win({ ...cfg.alpha, x: 0, y: 0, h: 440, skip: 30 }); return { wins: [P.w] }; })
+      ] });
+    } else {
+      mainCls = 'frame';
+      const G = t.p.family === 'Classic' ? 4 : 6;
+      const top = 62 + G, bottom = 800 - 24 - G, rightX = 1280 - G - W;
+      const docW = rightX - G - G, docH = bottom - top;
+      const key = { Color: 'color', Alignment: 'align', Font: 'font', Strings: 'lines', Resource: 'image', Invalid: 'invalid', File: 'file' }[state];
+      const target = key === 'lines' ? NOTES : PLACE;
+      const D = doc(G, top, docW, docH, 16, 16, target);
+      const s = { w: 1280, h: 800, title: state, chrome: true, docs: [D.d], explorers: [], wins: [], pops: [] };
+      if (key === 'file') {
+        const seH = 300;
+        s.explorers.push({ style: pos(rightX, top, W, seH), rows: explorerRows, capCls: 'active' });
+        const P = win({ ...cfg.file, x: rightX, y: top + seH + G, h: docH - seH - G });
+        s.wins.push(P.w);
+      } else {
+        const modal = ['invalid', 'font', 'lines', 'image'].includes(key);
+        const P = win({ ...cfg[key], x: rightX, y: top, h: docH, tabs: true, active: !modal, blur: modal });
+        s.wins.push(P.w);
+        s.pops = key === 'invalid'
+          ? [{ isScrim: true }, invalidDialog(pos(Math.round((1280 - DLG_W) / 2), 250, DLG_W))]
+          : popsFor(key, P, D);
+      }
+      rows.push({ items: [s] });
+    }
+
+    const decisions = [
+      { n: 1, b: 'Sub-properties are sent eagerly, two levels deep,', t: 'with the properties (Font\'s nine, Padding\'s five, FlatAppearance\'s colors). Deeper levels would need a request per expansion, a later protocol change.', rej: 'a lazy designer/subProperties request now.' },
+      { n: 2, b: 'Modal editors are panels over the designer surface', t: '(i, j, k), placed as the M41b collection editor is (ADR 0073), in the in-window dialog\'s frame: title, the property they edit, the buttons in the OS\'s order. The collection editor takes the same frame later.', rej: 'the collection editor\'s plain panel; a dialog over the whole window.' },
+      { n: 3, b: 'Chevrons, not +/- boxes,', t: 'for categories and expandable rows, in the text color (chrome), in a 16 px gutter of the category color that runs down the rows, as the classic IDE\'s does.', rej: 'the classic IDE\'s boxed +/-; rows without the gutter.' },
+      { n: 4, b: 'Categorized and Alphabetical for every source,', t: 'the Solution Explorer\'s files and projects and plugins\' rows included (m, n). Alphabetical keeps today\'s sort, which ignores a leading "(" (p).', rej: 'the buttons only for a designer; (Name) and (DataBindings) first, as the classic IDE sorts them.' },
+      { n: 5, b: 'The component selector', t: 'replaces the title for a designer: the form first, then the components by name with their types (o); it is the only way to select a component the surface can\'t reach.', rej: 'keeping the title text.' },
+      { n: 6, b: '(DataBindings) is an expandable row in Data,', t: 'its children the bindable properties, as in the classic IDE; (Advanced), which opens a Windows Forms dialog, is left out.', rej: 'the flat "(DataBindings)" category shown today.' },
+      { n: 7, b: 'Property Pages is enabled only for projects and the solution,', t: 'grayed for files, folders and designer components (a component\'s ComponentEditor is a Windows Forms dialog the designer can\'t show).', rej: 'enabled everywhere, opening Project Properties.' },
+      { n: 8, b: 'Editors that are Windows Forms dialogs get no "…",', t: 'only the inline text (MaskedTextBox.Mask, a grid\'s cell styles); the description says why.', rej: 'a "…" that only says the editor is unavailable.' },
+      { n: 9, b: 'Modifiers, GenerateMember and Locked are deferred', t: '(TODO(issue)): they need a new edit of the field declaration and the resources. Design shows (Name) only.', rej: 'building them in this task.' },
+      { n: 10, b: 'The arrow and the "…" show on the selected row and under the pointer,', t: 'as in the classic IDE; F4 and Alt+Down open the drop-down from the keyboard.', rej: 'a button on every row (a column of arrows at 300 px).' },
+      { n: 11, b: 'Set values are bold in the value, not the name,', t: 'as the classic IDE marks them; read-only values (Full Path, a project\'s details) are muted, as the classic IDE grays them.', rej: 'today\'s bold names.' },
+      { n: 12, b: 'Rows are 22 px (Shell.Size.Row) with Shell.Grid.Rule lines,', t: 'one line between names and values that drags the 45 % split, and a 5 px splitter above a 76 px description (a title and three lines).', rej: 'today\'s 25 px rows with Shell.Border lines and no splitters.' },
+      { n: 13, b: 'Cursor is drawn in Appearance,', t: 'where Control.Cursor\'s category puts it; the plan\'s text put it in Behavior. Behavior\'s choice lists are ContextMenuStrip and DialogResult.', rej: 'moving it to Behavior, which the host would have to override.' },
+      { n: 14, b: 'The invalid-value dialog gets the error tile and the property as its context line', t: '(DialogRequest.Icon "error", Context "placeOrderButton · Location.X"), and the cell reverts after OK.', rej: 'the plan\'s plain request, and reverting before the dialog shows.' }
+    ];
+
+    return { t, sheet, mainCls, themes, stateLinks, rows, decisions, menus: ['File', 'Edit', 'View', 'Git', 'Project', 'Build', 'Debug', 'Format', 'Test', 'Analyze', 'Tools', 'Window', 'Help'] };
+  }
+}
+</script>
+</body>
+</html>

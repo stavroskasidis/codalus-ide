@@ -29,7 +29,16 @@ const PAGES = [
   { file: 'ChecklistDialog.dc.html', name: 'checklist-dialog-macos', query: 'os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
   { file: 'AiChat.dc.html', name: 'ai-chat', width: 1280, height: 800, themes: VIEW_THEMES },
   { file: 'Options.dc.html', name: 'options', width: 1280, height: 800, themes: VIEW_THEMES },
-  { file: 'WinFormsDesignerMenus.dc.html', name: 'winforms-designer-menus', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] }
+  { file: 'WinFormsDesignerMenus.dc.html', name: 'winforms-designer-menus', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-color', query: 'state=Color', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-font', query: 'state=Font', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-invalid', query: 'state=Invalid', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  // The window's other states, checked in every theme but not rendered: the sheet above shows each of them.
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-alignment', query: 'state=Alignment', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-strings', query: 'state=Strings', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-resource', query: 'state=Resource', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-file', query: 'state=File', width: 1280, height: 800, themes: [] }
 ];
 
 const slug = (s) => s.toLowerCase().replace(/\s+/g, '-');
