@@ -229,6 +229,31 @@ public class FindInFilesTests
         ControlSetTests.SetState(lookIn, ":pointerover");
         ControlSetTests.SetState(Parts(lookIn).Text, ":pointerover");
         ExpectOneField(lookIn, "Shell.Input.Border.Hover", 1);
+        ControlSetTests.SetState(lookIn, ":pointerover", false);
+        ControlSetTests.SetState(Parts(lookIn).Text, ":pointerover", false);
+
+        // Find what lists what was typed before (ComboBox.history), so its list has no check column; Look in and File
+        // types list choices, and the one in each's text has the check beside it, from the window's first opening.
+        Assert.Contains("history", combos[0].Classes);
+        Assert.DoesNotContain("history", combos[1].Classes);
+        Assert.DoesNotContain("history", combos[2].Classes);
+        var find = f.Shell.FindReplace;
+        find.QueryHistory.Add("Greet");
+        find.QueryHistory.Add("Person");
+        find.Query = "Greet";
+        ShellFixture.Pump();
+        var typed = ControlSetTests.OpenRows(combos[0]);
+        Assert.True(typed[0].IsSelected);
+        Assert.All(typed, r => Assert.False(ControlSetTests.Check(r).IsVisible));
+        combos[0].IsDropDownOpen = false;
+        ShellFixture.Pump();
+        foreach (var (choices, text) in new[] { (lookIn, find.LookIn), (combos[2], find.FileTypes) })
+        {
+            var rows = ControlSetTests.OpenRows(choices);
+            Assert.Equal(text, Assert.Single(rows, r => ControlSetTests.Check(r).IsVisible).Content);
+            choices.IsDropDownOpen = false;
+            ShellFixture.Pump();
+        }
     }
 
     [AvaloniaFact]

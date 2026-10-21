@@ -17,6 +17,7 @@ using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using ShapePath = Avalonia.Controls.Shapes.Path;
+using Side = Avalonia.Controls.Dock;
 
 namespace Codalus.Shell.Tests;
 
@@ -24,8 +25,9 @@ namespace Codalus.Shell.Tests;
 /// M34h: the control set (docs/design/controls.md). The default button's template draws the design's tokens in every
 /// state without a class; the segmented control moves its choice with the keyboard and names itself; the in-window
 /// dialog shows its buttons in the OS's order with one primary, and the checklist's Select all and count; a combo box's
-/// list checks the chosen row (except the navigation bar's and an editable box's); a tab strip has a hairline that the
-/// selected tab's underline covers; the whole set renders in every theme (with <c>CODALUS_UI_SNAPSHOTS</c>, the
+/// list checks the chosen row (except the navigation bar's and a history's); a tab strip has a hairline that the
+/// selected tab's underline covers, on whichever side the strip is; the TabControl theme is Fluent's template of the
+/// Avalonia in use; the whole set fits its page and renders in every theme (with <c>CODALUS_UI_SNAPSHOTS</c>, the
 /// pictures are saved there).
 /// </summary>
 public class ControlSetTests
@@ -236,7 +238,7 @@ public class ControlSetTests
     }
 
     /// <summary>Opens <paramref name="combo"/>'s list and returns its rows, realized in the popup.</summary>
-    private static List<ComboBoxItem> OpenRows(ComboBox combo)
+    internal static List<ComboBoxItem> OpenRows(ComboBox combo)
     {
         combo.IsDropDownOpen = true;
         for (var i = 0; i < 3; i++)
@@ -249,7 +251,7 @@ public class ControlSetTests
         return rows;
     }
 
-    private static ShapePath Check(ComboBoxItem row) => row.GetVisualDescendants().OfType<ShapePath>().Single(p => p.Name == "CheckGlyph");
+    internal static ShapePath Check(ComboBoxItem row) => row.GetVisualDescendants().OfType<ShapePath>().Single(p => p.Name == "CheckGlyph");
 
     [AvaloniaTheory]
     [InlineData("harbor.light")]
@@ -328,16 +330,19 @@ public class ControlSetTests
     }
 
     [AvaloniaFact]
-    public void Navigation_bar_and_editable_combo_lists_have_no_check_column()
+    public void Navigation_bar_and_history_lists_have_no_check_column_and_other_editable_lists_do()
     {
-        // The editor's member lists have no check, as the classic IDE's; an editable box's list is its history, where a
-        // check would only mark the entry that equals the typed text (docs/design/controls.md, "Where the build differs").
+        // The editor's member lists have no check, as the classic IDE's; a history (ComboBox.history: Find what,
+        // Replace with) lists what was typed before, where a check would only mark the entry that equals the typed text
+        // (docs/design/controls.md, "Where the build differs"). An editable box that lists choices (Look in's scopes,
+        // File types' presets, Counters' processes) checks the chosen one, as the design draws every list.
         var navigation = new ComboBox { ItemsSource = new[] { "Greeter", "Greet(Person person)" }, SelectedIndex = 1, Classes = { "navigationBar" }, Width = 200 };
-        var editable = new ComboBox { ItemsSource = new[] { "Person", "Greeter.Greet" }, SelectedIndex = 0, IsEditable = true, Width = 200 };
-        var window = Show(new StackPanel { Spacing = 8, Margin = new Thickness(20), Children = { navigation, editable } }, ThemeService.HarborLight);
+        var history = new ComboBox { ItemsSource = new[] { "Person", "Greeter.Greet" }, SelectedIndex = 0, IsEditable = true, Classes = { "history" }, Width = 200 };
+        var choices = new ComboBox { ItemsSource = new[] { "Entire solution", "Current project", "Open documents" }, IsEditable = true, Width = 200 };
+        var window = Show(new StackPanel { Spacing = 8, Margin = new Thickness(20), Children = { navigation, history, choices } }, ThemeService.HarborLight);
         try
         {
-            foreach (var (combo, padding) in new[] { (navigation, new Thickness(6, 3)), (editable, new Thickness(8, 3)) })
+            foreach (var (combo, padding) in new[] { (navigation, new Thickness(6, 3)), (history, new Thickness(8, 3)) })
             {
                 var rows = OpenRows(combo);
                 Assert.True(rows[combo.SelectedIndex].IsSelected);
@@ -346,6 +351,16 @@ public class ControlSetTests
                 combo.IsDropDownOpen = false;
                 ShellFixture.Pump();
             }
+
+            // The typed text that names a choice chooses it, and its row has the check in the 28 px column.
+            choices.Text = "Current project";
+            ShellFixture.Pump();
+            var choiceRows = OpenRows(choices);
+            Assert.Equal(1, choices.SelectedIndex);
+            Assert.Equal([false, true, false], choiceRows.Select(r => Check(r).IsVisible));
+            Assert.All(choiceRows, r => Assert.Equal(new Thickness(28, 3, 8, 3), r.Padding));
+            choices.IsDropDownOpen = false;
+            ShellFixture.Pump();
         }
         finally
         {
@@ -380,8 +395,9 @@ public class ControlSetTests
     [InlineData("ember.highContrast", "#8C8C8C")]
     public void A_tab_strip_has_a_hairline_that_the_selected_tab_covers(string theme, string? designed)
     {
-        // controls.css's .tabs: a 1 px line in the mockups' soft border under the strip, and the selected tab's 2 px accent
-        // underline over it. TabControls draw it in their control theme, a TabStrip used as tabs with Classes="viewTabs".
+        // controls.css's .tabs: a 1 px line in the mockups' soft border under the strip, and the selected tab's 2 px
+        // accent underline over it. TabControls draw it in their control theme, on the content's side wherever the
+        // strip is, a TabStrip used as tabs with Classes="viewTabs".
         var variant = ThemeService.VariantOf(theme);
         var rule = Token("Shell.ViewTabs.Rule", variant);
         if (designed is not null)
@@ -389,48 +405,93 @@ public class ControlSetTests
             Assert.Equal(Color.Parse(designed), rule);
         }
 
-        var top = new TabControl { Width = 400, Height = 90 };
-        var bottom = new TabControl { Width = 400, Height = 90, TabStripPlacement = Avalonia.Controls.Dock.Bottom };
-        foreach (var tabs in new[] { top, bottom })
+        TabControl Tabs(Side placement, double width, double height)
         {
+            var tabs = new TabControl { Width = width, Height = height, TabStripPlacement = placement };
             tabs.Items.Add(new TabItem { Header = "Body", Content = new TextBlock { Text = "{ }" } });
             tabs.Items.Add(new TabItem { Header = "Headers" });
             tabs.Items.Add(new TabItem { Header = "Request" });
             tabs.SelectedIndex = 0;
+            return tabs;
         }
 
+        var top = Tabs(Side.Top, 400, 90);
+        var bottom = Tabs(Side.Bottom, 400, 90);
+        var left = Tabs(Side.Left, 280, 130);
+        var right = Tabs(Side.Right, 280, 130);
         var strip = new TabStrip { Width = 400, Classes = { "viewTabs" }, HorizontalAlignment = HorizontalAlignment.Left };
         strip.Items.Add(new TabStripItem { Content = "Find Results 1" });
         strip.Items.Add(new TabStripItem { Content = "Find Results 2" });
         strip.SelectedIndex = 0;
-        var window = Show(new StackPanel { Spacing = 16, Margin = new Thickness(10), Children = { top, bottom, strip } }, variant, 600, 400);
+        var sides = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { left, right } };
+        var window = Show(new StackPanel { Spacing = 16, Margin = new Thickness(10), Children = { top, bottom, strip, sides } }, variant, 700, 560);
         try
         {
             using var frame = window.CaptureRenderedFrame()!;
             var accent = Token("Shell.Accent", variant);
-            void Expect(string what, Control line, Thickness thickness, IBrush? brush, Control selected, Control last, bool atTop)
-            {
-                Assert.True(thickness == (atTop ? new Thickness(0, 1, 0, 0) : new Thickness(0, 0, 0, 1)), $"{theme} {what}: the line is {thickness}");
-                Assert.True(rule == BrushColor(brush), $"{theme} {what}: the line is {BrushColor(brush)}, not Shell.ViewTabs.Rule's {rule}");
-                Assert.Equal(400, line.Bounds.Width);
-                var underline = Underline(selected, line);
-                Assert.True(atTop ? underline.Top == 0 : underline.Bottom == line.Bounds.Height, $"{theme} {what}: the underline is at {underline}, the line's {line.Bounds}");
 
-                // As drawn: the line's row is the rule past the last tab and the accent under the selected one.
-                var y = atTop ? 0.5 : line.Bounds.Height - 0.5;
-                var past = last.TranslatePoint(new Point(last.Bounds.Width + 20, 0), line)!.Value.X;
-                Assert.True(Pixel(frame, line, new Point(past, y), window) == rule, $"{theme} {what}: {Pixel(frame, line, new Point(past, y), window)} past the tabs");
-                Assert.True(Pixel(frame, line, new Point(underline.Center.X, y), window) == accent, $"{theme} {what}: {Pixel(frame, line, new Point(underline.Center.X, y), window)} under the selected tab");
+            // edge: the side of the strip the line is on, toward the content (a TabStrip's is its bottom).
+            void Expect(string what, Control line, Thickness thickness, IBrush? brush, Control selected, Control last, Side edge, double length)
+            {
+                var vertical = edge is Side.Left or Side.Right;
+                var expected = edge switch
+                {
+                    Side.Top => new Thickness(0, 1, 0, 0),
+                    Side.Left => new Thickness(1, 0, 0, 0),
+                    Side.Right => new Thickness(0, 0, 1, 0),
+                    _ => new Thickness(0, 0, 0, 1),
+                };
+                Assert.True(thickness == expected, $"{theme} {what}: the line is {thickness}, not {expected}");
+                Assert.True(rule == BrushColor(brush), $"{theme} {what}: the line is {BrushColor(brush)}, not Shell.ViewTabs.Rule's {rule}");
+                Assert.Equal(length, vertical ? line.Bounds.Height : line.Bounds.Width);
+
+                // The selected tab's underline: 2 px across, the tab's length along, on the line's edge.
+                var underline = Underline(selected, line);
+                Assert.True((vertical ? underline.Width : underline.Height) == 2, $"{theme} {what}: the underline is {underline}");
+                var onEdge = edge switch
+                {
+                    Side.Top => underline.Top == 0,
+                    Side.Left => underline.Left == 0,
+                    Side.Right => underline.Right == line.Bounds.Width,
+                    _ => underline.Bottom == line.Bounds.Height,
+                };
+                Assert.True(onEdge, $"{theme} {what}: the underline is at {underline}, the line's {line.Bounds}");
+
+                // As drawn: the line's row (or column) is the rule past the last tab and the accent beside the selected
+                // one.
+                var across = edge switch
+                {
+                    Side.Top or Side.Left => 0.5,
+                    Side.Right => line.Bounds.Width - 0.5,
+                    _ => line.Bounds.Height - 0.5,
+                };
+                Point At(double along) => vertical ? new Point(across, along) : new Point(along, across);
+                var past = vertical
+                    ? last.TranslatePoint(new Point(0, last.Bounds.Height + 20), line)!.Value.Y
+                    : last.TranslatePoint(new Point(last.Bounds.Width + 20, 0), line)!.Value.X;
+                var beside = vertical ? underline.Center.Y : underline.Center.X;
+                Assert.True(Pixel(frame, line, At(past), window) == rule, $"{theme} {what}: {Pixel(frame, line, At(past), window)} past the tabs");
+                Assert.True(Pixel(frame, line, At(beside), window) == accent, $"{theme} {what}: {Pixel(frame, line, At(beside), window)} beside the selected tab");
             }
 
-            foreach (var (tabs, atTop) in new[] { (top, false), (bottom, true) })
+            foreach (var (tabs, edge, name) in new[] { (top, Side.Bottom, "TabControl"), (bottom, Side.Top, "TabControl at the bottom"), (left, Side.Right, "TabControl at the left"), (right, Side.Left, "TabControl at the right") })
             {
                 var line = tabs.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_TabStrip");
-                Expect(atTop ? "TabControl at the bottom" : "TabControl", line, line.BorderThickness, line.BorderBrush, (Control)tabs.ContainerFromIndex(0)!, (Control)tabs.ContainerFromIndex(2)!, atTop);
+                var length = edge is Side.Left or Side.Right ? tabs.Bounds.Height : tabs.Bounds.Width;
+                Expect(name, line, line.BorderThickness, line.BorderBrush, (Control)tabs.ContainerFromIndex(0)!, (Control)tabs.ContainerFromIndex(2)!, edge, length);
             }
 
-            Expect("TabStrip.viewTabs", strip, strip.BorderThickness, strip.BorderBrush, (Control)strip.ContainerFromIndex(0)!, (Control)strip.ContainerFromIndex(1)!, atTop: false);
+            Expect("TabStrip.viewTabs", strip, strip.BorderThickness, strip.BorderBrush, (Control)strip.ContainerFromIndex(0)!, (Control)strip.ContainerFromIndex(1)!, Side.Bottom, 400);
             Assert.Equal(new Thickness(6, 0), strip.Padding);
+
+            // A side strip's tabs are one column, as wide as the widest, so the selected one reaches the line.
+            foreach (var tabs in new[] { left, right })
+            {
+                var items = Enumerable.Range(0, 3).Select(i => (Control)tabs.ContainerFromIndex(i)!).ToList();
+                Assert.Single(items.Select(i => i.Bounds.X).Distinct());
+                Assert.Single(items.Select(i => i.Bounds.Width).Distinct());
+                Assert.Contains(tabs.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "{ }" && t.IsEffectivelyVisible);
+            }
 
             // The page transition's host is kept from Fluent's template.
             Assert.Contains(top.GetVisualDescendants().OfType<ContentPresenter>(), p => p.Name == "PART_SelectedContentHost2");
@@ -440,6 +501,21 @@ public class ControlSetTests
         {
             window.Close();
         }
+    }
+
+    [Fact]
+    public void The_TabControl_theme_is_Fluents_template_of_the_Avalonia_in_use()
+    {
+        // Theming/Controls.axaml's TabControl theme is a copy of Fluent's template (Controls/TabControl.xaml) with the
+        // strip in a border that draws the line, and it replaces Fluent's for every TabControl in the shell. Nothing
+        // else ties the copy to Avalonia's version, so this does: when Avalonia moves, re-diff the theme against the
+        // new Fluent's TabControl.xaml, carry over what changed (a new part, a scroll host for the strip…), then update
+        // this.
+        const string copied = "12.1.3";
+        var fluent = typeof(Avalonia.Themes.Fluent.FluentTheme).Assembly;
+        var version = fluent.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().Single().InformationalVersion.Split('+')[0];
+        Assert.True(version == copied, $"Avalonia.Themes.Fluent is {version}, and Theming/Controls.axaml's TabControl theme is Fluent {copied}'s template: re-diff it against {version}'s Controls/TabControl.xaml, then update this test's version (and the theme's comment)");
     }
 
     [AvaloniaFact]
@@ -588,13 +664,18 @@ public class ControlSetTests
         var snapshots = Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS");
         foreach (var (id, variant) in ThemeService.Themes)
         {
-            var window = Show(new ScrollViewer { Content = ControlGallery.Build() }, variant, 1280, 1400);
+            // The smoke test's window (SmokeTest.ControlSet.cs): the whole page fits it, so the gallery's pictures show
+            // every section down to the dialog's footer without a scroll bar.
+            var scroll = new ScrollViewer { Content = ControlGallery.Build() };
+            var window = Show(scroll, variant, SmokeTest.ControlSetWidth, SmokeTest.ControlSetHeight);
             try
             {
                 for (var i = 0; i < 3; i++)
                 {
                     ShellFixture.Pump();
                 }
+
+                Assert.True(scroll.Extent.Height <= scroll.Viewport.Height, $"{id}: the control set is {scroll.Extent.Height} px tall, more than the gallery's {scroll.Viewport.Height} px window: raise SmokeTest.ControlSetHeight");
 
                 using var frame = window.CaptureRenderedFrame();
                 Assert.NotNull(frame);

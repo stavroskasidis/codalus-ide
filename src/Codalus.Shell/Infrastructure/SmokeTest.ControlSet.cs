@@ -12,14 +12,20 @@ namespace Codalus.Shell.Infrastructure;
 /// </summary>
 internal sealed partial class SmokeTest
 {
+    /// <summary>
+    /// The control set page's window: the whole page fits it, down to the dialog's footer (ControlSetTests checks it,
+    /// so a new row in <see cref="ControlGallery"/> that makes the page taller raises this).
+    /// </summary>
+    internal const double ControlSetWidth = 1280, ControlSetHeight = 1650;
+
     /// <summary>The control set's page in every theme, as <c>controls-set-{theme}.png</c>.</summary>
     private async Task GalleryControlSetAsync()
     {
         var page = new Window
         {
             Title = "Control set",
-            Width = 1280,
-            Height = 1400,
+            Width = ControlSetWidth,
+            Height = ControlSetHeight,
             Content = new ScrollViewer { Content = ControlGallery.Build() },
             ShowInTaskbar = false,
         };

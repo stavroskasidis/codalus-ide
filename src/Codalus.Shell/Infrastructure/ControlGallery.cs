@@ -29,8 +29,8 @@ internal static class ControlGallery
     /// <summary>
     /// A combo box whose template shows its list in place, in the popup's frame: the open list as the popup draws it
     /// (the popup is a window of its own, outside the picture). Its rows are the combo box's own ComboBoxItems, so the
-    /// list's styles apply to them as in the popup: the check beside the chosen row, and none in an editable combo box's
-    /// history. ComboBox requires a PART_Popup, which stays closed.
+    /// list's styles apply to them as in the popup: the check beside the chosen row, and none in a history's
+    /// (<c>ComboBox.history</c>). ComboBox requires a PART_Popup, which stays closed.
     /// </summary>
     private static readonly ControlTheme s_listInPlace = new(typeof(ComboBox))
     {
@@ -273,31 +273,41 @@ internal static class ControlGallery
         grid.Children.Add(Place(Labeled("Combo box, focused", focusedCombo), 2, 2));
         grid.Children.Add(Place(Labeled("Combo box, disabled", new ComboBox { ItemsSource = s_protocols, SelectedIndex = 0, Width = 140, IsEnabled = false }), 2, 3));
 
-        // Open: the chosen row has the check, the one under the pointer the hover; an editable box's list is its history,
-        // without the check column. Each spans two columns: the list is as wide as its longest row.
-        var open = Labeled("Combo box, open", OpenCombo(s_collectionTypes, selected: 1, hovered: 2, editable: false));
+        // Open: the chosen row has the check, the one under the pointer the hover; a history (an editable box of what
+        // was typed before, ComboBox.history: Find what) has no check column. Each spans two columns: the list is as
+        // wide as its longest row.
+        var open = Labeled("Combo box, open", OpenCombo(s_collectionTypes, selected: 1, hovered: 2, history: false));
         Grid.SetColumnSpan(open, 2);
         grid.Children.Add(Place(open, 3, 0));
-        var history = Labeled("Combo box, editable, open", OpenCombo(s_findHistory, selected: 0, hovered: -1, editable: true));
+        var history = Labeled("Combo box, history, open", OpenCombo(s_findHistory, selected: 0, hovered: -1, history: true));
         Grid.SetColumnSpan(history, 2);
         grid.Children.Add(Place(history, 3, 2));
         return grid;
     }
 
-    /// <summary>An open combo box: its field, focused, and its list under it (<see cref="s_listInPlace"/>).</summary>
-    private static StackPanel OpenCombo(string[] items, int selected, int hovered, bool editable)
+    /// <summary>
+    /// An open combo box: its field, focused, and its list under it (<see cref="s_listInPlace"/>); a history is
+    /// editable and takes the <c>history</c> class.
+    /// </summary>
+    private static StackPanel OpenCombo(string[] items, int selected, int hovered, bool history)
     {
-        var field = State(new ComboBox { ItemsSource = items, SelectedIndex = selected, IsEditable = editable, Width = 300, HorizontalAlignment = HorizontalAlignment.Left }, ":dropdownopen");
+        var field = State(new ComboBox { ItemsSource = items, SelectedIndex = selected, IsEditable = history, Width = 300, HorizontalAlignment = HorizontalAlignment.Left }, ":dropdownopen");
         var list = new ComboBox
         {
             ItemsSource = items,
             SelectedIndex = selected,
-            IsEditable = editable,
+            IsEditable = history,
             Theme = s_listInPlace,
             HorizontalAlignment = HorizontalAlignment.Left,
             IsHitTestVisible = false,
             Focusable = false,
         };
+        if (history)
+        {
+            field.Classes.Add("history");
+            list.Classes.Add("history");
+        }
+
         list.ContainerPrepared += (_, e) =>
         {
             if (e.Index == hovered)

@@ -34,23 +34,28 @@
         <TabStripItem Content="{l:T findReplace.replaceInFiles}" />
       </TabStrip>
       <StackPanel Spacing="8" Margin="14,4,14,14">
-        <ComboBox x:Name="QueryBox" IsEditable="True" Text="{Binding Query}" ItemsSource="{Binding QueryHistory}" HorizontalAlignment="Stretch"
+        <!-- Find what and Replace with list what was typed before: a history, without the check (ComboBox.history). -->
+        <ComboBox x:Name="QueryBox" Classes="history" IsEditable="True" Text="{Binding Query}" ItemsSource="{Binding QueryHistory}" HorizontalAlignment="Stretch"
                   PlaceholderText="{l:T findReplace.findWhat}" AutomationProperties.Name="{l:T findReplace.findWhat}" />
-        <ComboBox x:Name="ReplaceBox" IsEditable="True" Text="{Binding ReplaceWith}" ItemsSource="{Binding ReplaceHistory}" HorizontalAlignment="Stretch" IsVisible="{Binding IsReplace}"
+        <ComboBox x:Name="ReplaceBox" Classes="history" IsEditable="True" Text="{Binding ReplaceWith}" ItemsSource="{Binding ReplaceHistory}" HorizontalAlignment="Stretch" IsVisible="{Binding IsReplace}"
                   PlaceholderText="{l:T findReplace.replaceWith}" AutomationProperties.Name="{l:T findReplace.replaceWith}" />
         <StackPanel Spacing="2">
           <CheckBox Content="{l:T findReplace.matchCase}" IsChecked="{Binding MatchCase}" />
           <CheckBox Content="{l:T findReplace.matchWholeWord}" IsChecked="{Binding WholeWord}" />
           <CheckBox Content="{l:T findReplace.useRegularExpressions}" IsChecked="{Binding UseRegex}" />
         </StackPanel>
+        <!--
+          Look in and File types list choices (the scopes and folders, the presets), so the one in the text has the
+          check: the list is bound before the text, which an editable combo box matches to an item only when it changes.
+        -->
         <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" RowSpacing="8">
           <TextBlock Classes="label" Text="{l:T findReplace.lookIn}" />
-          <ComboBox Grid.Column="1" IsEditable="True" Text="{Binding LookIn}" ItemsSource="{Binding LookInOptions}" HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T findReplace.lookIn}" />
+          <ComboBox Grid.Column="1" IsEditable="True" ItemsSource="{Binding LookInOptions}" Text="{Binding LookIn}" HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T findReplace.lookIn}" />
           <!-- Browse, as beside every path field (Controls/PathBox.cs). -->
           <Button Grid.Column="2" Classes="icon" controls:ButtonIcon.Kind="folder-open" Margin="6,0,0,0" VerticalAlignment="Center" Command="{Binding BrowseCommand}"
                   ToolTip.Tip="{l:T findReplace.chooseAFolder}" AutomationProperties.Name="{l:T findReplace.chooseAFolder}" />
           <TextBlock Grid.Row="1" Classes="label" Text="{l:T findReplace.fileTypes}" />
-          <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" IsEditable="True" Text="{Binding FileTypes}" ItemsSource="{Binding FileTypeOptions}" HorizontalAlignment="Stretch"
+          <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" IsEditable="True" ItemsSource="{Binding FileTypeOptions}" Text="{Binding FileTypes}" HorizontalAlignment="Stretch"
                     ToolTip.Tip="{l:T findReplace.fileTypesTip}" AutomationProperties.Name="{l:T findReplace.fileTypes}" />
         </Grid>
         <CheckBox Content="{l:T findReplace.appendResults}" IsChecked="{Binding AppendResults}" IsVisible="{Binding IsFind}" />

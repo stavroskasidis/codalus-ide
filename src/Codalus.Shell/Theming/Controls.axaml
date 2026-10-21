@@ -717,8 +717,8 @@
     selection's text color. Fluent's template is one ContentPresenter, so a style couldn't add the mark. The check is a
     state mark like a check box's, not a command icon, so it has no palette color. The closed field shows the chosen item
     through its template, not through this container, so it has no check. ShellStyles.axaml opts two lists out on
-    purpose (docs/design/controls.md, "Where the build differs"): the editor's navigation bar and an editable combo box's
-    history; a style outranks this theme.
+    purpose (docs/design/controls.md, "Where the build differs"): the editor's navigation bar and a history
+    (ComboBox.history, Find and Replace's Find what and Replace with); a style outranks this theme.
   -->
   <ControlTheme x:Key="{x:Type ComboBoxItem}" TargetType="ComboBoxItem">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
@@ -789,8 +789,10 @@
     .tabs and .tab.sel::after). Fluent's template has nothing that could draw it, so this is Fluent 12.1.3's template
     (Avalonia.Themes.Fluent, Controls/TabControl.xaml) with one change: the ItemsPresenter sits in Border#PART_TabStrip,
     which draws the line, and reaches 1 px over it so the tabs are drawn on it. Both content hosts are kept
-    (PART_SelectedContentHost2 is the page transition's); keep the rest in step with Fluent's when Avalonia is upgraded.
-    At the bottom, left or right the line is on the content's side.
+    (PART_SelectedContentHost2 is the page transition's). At the bottom, left or right the line is on the content's side,
+    and ShellStyles.axaml puts the selected tab's underline there. Copied from 12.1.3: ControlSetTests fails when
+    Avalonia's version moves (The_TabControl_theme_is_Fluents_template_of_the_Avalonia_in_use), so an upgrade re-diffs
+    this against the new Fluent's TabControl.xaml, carries over what changed, and then updates the version there.
   -->
   <ControlTheme x:Key="{x:Type TabControl}" TargetType="TabControl">
     <Setter Property="Margin" Value="0" />
