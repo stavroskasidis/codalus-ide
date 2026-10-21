@@ -185,11 +185,7 @@ internal sealed class ShellSystemFonts : FontCollectionBase
         return true;
     }
 
-    /// <summary>
-    /// A copy of <paramref name="typeface"/>'s font file, or null when it can't be read. The stream Skia opens on the file
-    /// (the file mapped into memory, unmapped when the stream is finalized) is disposed only after the read, so it stays
-    /// alive through it.
-    /// </summary>
+    /// <summary>A copy of <paramref name="typeface"/>'s font file, or null when it can't be read.</summary>
     internal static MemoryStream? FontFile(IPlatformTypeface typeface)
     {
         SKTypeface skia;
@@ -203,14 +199,7 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             return typeface.TryGetStream(out var stream) ? stream as MemoryStream ?? Copy(stream) : null;
         }
 
-        using var asset = skia.OpenStream();
-        if (asset is null || asset.Length <= 0)
-        {
-            return null;
-        }
-
-        var bytes = new byte[asset.Length];
-        return asset.Read(bytes, bytes.Length) == bytes.Length ? new MemoryStream(bytes, writable: false) : null;
+        return FontFile(skia);
 
         static MemoryStream Copy(Stream stream)
         {
@@ -222,6 +211,24 @@ internal sealed class ShellSystemFonts : FontCollectionBase
                 return copy;
             }
         }
+    }
+
+    /// <summary>
+    /// A copy of <paramref name="skia"/>'s font file, or null when it can't be read. The stream Skia opens on the file
+    /// (the file mapped into memory, unmapped when the stream is finalized) is disposed only after the read, so it stays
+    /// alive through it; <paramref name="opened"/> sees it (tests).
+    /// </summary>
+    internal static MemoryStream? FontFile(SKTypeface skia, Action<SKStreamAsset>? opened = null)
+    {
+        using var asset = skia.OpenStream();
+        if (asset is null || asset.Length <= 0)
+        {
+            return null;
+        }
+
+        opened?.Invoke(asset);
+        var bytes = new byte[asset.Length];
+        return asset.Read(bytes, bytes.Length) == bytes.Length ? new MemoryStream(bytes, writable: false) : null;
     }
 
     [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_PlatformImpl")]

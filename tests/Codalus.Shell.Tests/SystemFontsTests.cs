@@ -1,6 +1,7 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Codalus.Shell.Infrastructure;
+using SkiaSharp;
 
 namespace Codalus.Shell.Tests;
 
@@ -54,35 +55,22 @@ public sealed class SystemFontsTests
     }
 
     [AvaloniaFact]
-    public void A_font_file_is_read_whole_while_collections_run()
+    public void A_font_file_is_copied_whole_and_its_stream_disposed_only_after_the_read()
     {
-        using var fonts = ShellSystemFonts.Create();
-        Assert.True(fonts.TryGetGlyphTypeface(FontManager.Current.DefaultFontFamily.Name, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out var face));
-        using var collecting = new CancellationTokenSource();
-        var collector = Task.Run(() =>
-        {
-            while (!collecting.IsCancellationRequested)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
-        });
-        try
-        {
-            long length = -1;
-            for (var i = 0; i < 50; i++)
-            {
-                using var file = ShellSystemFonts.FontFile(face.PlatformTypeface);
-                Assert.NotNull(file);
-                Assert.True(length < 0 || file.Length == length, $"Read {file.Length} bytes, then {length}.");
-                length = file.Length;
-            }
-        }
-        finally
-        {
-            collecting.Cancel();
-            collector.Wait();
-        }
+        using var skia = SKTypeface.FromFamilyName(FontManager.Current.DefaultFontFamily.Name);
+        SKStreamAsset? opened = null;
+
+        using var file = ShellSystemFonts.FontFile(skia, asset => opened = asset);
+
+        // Avalonia's copy leaves the stream to its finalizer, which a collection can run during the read, unmapping the
+        // file Skia copies from. Disposed when the copy returns, it was alive until then.
+        Assert.NotNull(file);
+        Assert.NotNull(opened);
+        Assert.Equal(IntPtr.Zero, opened.Handle);
+        using var copy = SKTypeface.FromStream(file);
+        Assert.NotNull(copy);
+        Assert.Equal(skia.FamilyName, copy.FamilyName);
+        Assert.Equal(skia.GlyphCount, copy.GlyphCount);
     }
 
     [AvaloniaFact]
