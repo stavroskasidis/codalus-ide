@@ -35,6 +35,7 @@ Constraints: MSBuild runs only in the build host, only for trusted folders (ADR 
 - Built-in templates are generated in the workbench (namespace from `RootNamespace` and the folder, the type name from the file name) and created with `fs/createFile`; templates that set item metadata (a `.tt`'s `Generator`) apply it with `items/set`.
 - A `dotnet new` item template is instantiated by the build host (`templates/instantiate`), only in trusted folders: its constraints (project capabilities) evaluate the project with MSBuild. The created files are found by comparing the folder before and after.
 - **Listing, installing, updating and uninstalling** template packages runs the `dotnet` CLI from the workbench (`TemplateService`), in a neutral folder: it runs no workspace code, and the template manager works without a solution. `DAEDALUS_TEMPLATE_HIVE` (tests) passes `--debug:custom-hive`, so tests never touch the user's templates.
+- **New Project** (project templates) is the shell's three-page wizard since 0.6.0, over the same `TemplateService` in the same neutral folder: [ADR 0082](0082-new-project-wizard.md).
 - **Export Template** copies a project (without `bin`, `obj`, `.vs`, `.daedalus` and `*.user`) or items into `<user data>/templates/<short name>/`, writes `.template.config/template.json` (`sourceName` the project or item name; for items a `namespace` parameter replacing the original namespace), and installs it with `dotnet new install <folder>`.
 
 **Folder mode: a folder workspace with an in-memory solution**

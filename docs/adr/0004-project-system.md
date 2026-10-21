@@ -38,6 +38,8 @@ Constraints:
 
 **Templates.** New Project and New Solution run `dotnet new` from a built-in plugin, using quick-pick and input-box APIs added to the plugin API. They shipped as 0.1.1, not 0.2.0: they are additive, and under the caret rules a 0.2.0 would have locked out `^0.1.0` plugins.
 
+*Amended by [ADR 0082](0082-new-project-wizard.md) (0.6.0):* New Project and New Solution are a wizard in the shell; `dotnet new` runs in a neutral folder with `--no-restore`, and a trusted solution restores through the build host once it opens; the Templates plugin is retired. The quick-pick and input-box APIs stay in the plugin API.
+
 ## Consequences
 
 - The tree appears from the solution file alone, so budget 4's first step doesn't depend on MSBuild's speed.

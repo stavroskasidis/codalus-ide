@@ -20,6 +20,10 @@ Some shortcuts belong to the operating system or the desktop, which takes them b
 - **Linux:** IBus and Fcitx switch input methods with Ctrl+Space (older setups) or Super+Space. If Ctrl+Space doesn't reach the editor, use Ctrl+J, or change the input method's trigger (`ibus-setup` → General → Next input method).
 - **Windows:** the Chinese, Japanese and Korean IMEs can toggle with Ctrl+Space; Ctrl+J works there.
 
+## New Project
+
+`Ctrl+Shift+N` (`⌘⇧N` on macOS) opens New Project. In it, `Alt+Right` and `Enter` go to the next page (Create on the last), `Alt+Left` goes back, `Esc` closes it (clearing the search first), `Alt+S` goes to the search and `Down` from there into the templates, and `Delete` removes the selected recent template. On macOS the `Alt` keys are `⌥`. [New projects and solutions](solutions.md#keys) has the access keys.
+
 ## Edit's clipboard keys
 
 Undo, Redo, Cut, Copy, Paste and Select All belong to the text controls (Ctrl+Z, Ctrl+Y, Ctrl+X, Ctrl+C, Ctrl+V, Ctrl+A; on macOS ⌘Z, ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A). The Edit menu shows them, and on macOS the global menu carries them as key equivalents, as Mac apps do, with Edit starting with them. They act on the focused text box, editor or terminal; elsewhere (the Solution Explorer) they run what the same keys do there.

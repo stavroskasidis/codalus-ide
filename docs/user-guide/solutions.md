@@ -134,6 +134,53 @@ SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own p
 
 ## New projects and solutions
 
-The built-in **Templates** plugin creates projects and solutions with `dotnet new` (File → New Project or New Solution, or the command palette).
+**File → New → Project…** (`Ctrl+Shift+N`, `⌘⇧N` on macOS), the start window's **Create a new project** and Solution Explorer's **Add → New Project…** open New Project: one window with three pages, **Back** and **Next** (**Create** on the last page). It's a window of its own over the IDE, which stays usable behind it; it asks everything it needs on its own pages.
 
-New Project asks for the template, the location, the name and, for templates that offer one, the target framework. Type the location, or click the folder button beside it (**Browse…**) to choose it in your OS's folder picker, which opens where the typed path is; every field for a path on your computer has that button, in dialogs, tool windows and Options. The frameworks are those of the SDK the location uses, the template's default first. `dotnet new` runs in the location, so a `global.json` there picks the SDK.
+### Create a new project
+
+- **Recent project templates** on the left, the ones you used last first. Right-click one to **Pin to List** (pinned ones stay at the top) or **Remove from List** (`Delete` removes the selected one).
+- **Search for templates** (`Alt+S`) matches template names first, then their short names (`console`, `webapi`), then descriptions and tags; the matched letters are bold. `Down` goes from the search box into the list, and `Esc` clears the search.
+- The **language**, **platform** and **project type** filters narrow the list; **Clear all** resets them and the search. They're remembered.
+- Each template shows its icon, its name, its description and its tags: its language, the platforms its projects run on and its kind of project. On Linux and macOS a template whose projects run only on Windows (WPF, Windows Forms, .NET Framework) has a **Windows only** tag: its projects build there but run on Windows.
+- A template comes in each language it exists in (Console App in C#, F# and Visual Basic are three rows).
+- Known template packs that aren't installed (the Avalonia and CoreWCF templates) are rows marked **Not installed**: select one and **Install** installs it from nuget.org with `dotnet new install`, in place, then selects its first template. **Install more templates…** opens Tools → Templates.
+
+`Enter`, a double-click or **Next** goes on with the selected template.
+
+### Configure your new project
+
+- **Project name** starts as the template's suggestion (`ConsoleApp1`), made unique in the location.
+- **Location**: type a folder, choose one of your recent locations from the field's drop-down (`Alt+Down`), or **Browse…**. It starts in your last location, else Environment → Templates → Default Location (`templates.defaultLocation`), else a `source/repos` folder in your home folder. `~` and environment variables are expanded.
+- **Solution**, with a solution or folder open: **Create new solution** (the default) or **Add to solution** (**Add to folder** with a folder open).
+- **Solution name** follows the project name until you change it.
+- **Place solution and project in the same directory** puts the solution file in the project's folder.
+- **Trust this location**: projects in a trusted folder are built and their packages restored ([Opening a solution](getting-started.md#opening-a-solution)). It's unchecked for a new folder, so the new solution opens showing only its structure until you trust it; check it to trust the folder now. Under a folder you trust already, it's checked and can't be changed.
+- **Project will be created in** shows the project's folder. A name Windows can't use (`CON`, characters like `?`), an existing folder or solution, or a path longer than Windows allows is shown in red and stops **Next**.
+
+Solution Explorer's **Add → New Project…** (on the solution or a solution folder, or Project → Add New Project…) adds the new project to the open solution, in the solution folder that was selected, with its location starting in the solution's folder.
+
+### Additional information
+
+- **Framework** lists the frameworks the template can target with the installed SDKs, each with its support: **Long Term Support**, **Standard Term Support**, **Preview** or **Out of support**. It starts on the newest released one, or the one you chose last for that template.
+- The template's own options follow, as the template describes them for an IDE: **Include sample pages**, **Use controllers**, **Do not use top-level statements**, **Interactive render mode**… An option that depends on another is disabled until it applies. Some templates have different options per framework (xUnit's **xUnit.net version** and **Test runner** come with .NET 11.0), so the page changes with the framework.
+- **Authentication type** (None, Individual Accounts, Microsoft identity platform, Windows) where the template has it. Individual Accounts and Microsoft identity platform need HTTPS, so **Configure for HTTPS** stays checked; Individual Accounts uses LocalDB on Windows and SQLite elsewhere; Microsoft identity platform gets placeholder settings in `appsettings.json` to fill in with your app registration.
+- **Enable container support** adds a Dockerfile ([Containers](containers.md)), and **Enlist in Aspire orchestration** adds `<Solution>.AppHost` and `<Solution>.ServiceDefaults` projects (or uses the solution's own AppHost when adding a project), references them and adds the project to the AppHost; it installs the Aspire templates from nuget.org first if they're missing. Both need a trusted location.
+- A template with nothing but a framework says so; one with nothing to ask (Blank Solution) has no third page.
+- If the location's `global.json` selects an SDK that can't build the chosen framework, a warning says so.
+
+**Create** writes the solution and the project with your default .NET SDK (`dotnet new`, without restoring), closes New Project and opens the solution with the project and the template's start file (`Program.cs`). A trusted solution restores its packages when it opens (Restore on open). If Create fails, the window stays open with the error, and **Show Output** shows `dotnet new`'s output.
+
+**File → New → Solution…** opens New Project on **Blank Solution**: a solution name, a location and trust.
+
+### Keys
+
+| Key | Does |
+|---|---|
+| `Alt+Right`, `Enter` | Next, or Create on the last page |
+| `Alt+Left` | Back (from the first page, back to the start window when it came from there) |
+| `Esc` | Close (clears the search first) |
+| `Alt+S`, `Down` | The search, then the templates |
+| `Delete` | Remove the selected recent template |
+| `Alt` + the underlined letter | The field or button: Pro**j**ect name, **L**ocation, S**o**lution, Solution na**m**e, **T**rust, **F**ramework, **B**ack, **N**ext, **C**reate |
+
+New Project remembers your recent templates and locations, the filters, the framework per template and the options a template asks to remember. Templates you made with **Export Template** are listed with the others.

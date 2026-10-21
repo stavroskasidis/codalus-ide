@@ -29,7 +29,7 @@ Two things Visual Basic editors sometimes do aren't offered:
 
 ## Projects
 
-- **New Project** lists the templates of every installed language. When a template exists in several (Console App, Class Library, xUnit…), it asks which language: C#, F# or Visual Basic.
+- **New Project** lists the templates of every installed language, each language's its own row with the language as its first tag (Console App in C#, F# and Visual Basic are three rows); the **Visual Basic** language filter shows VB's only ([New projects and solutions](solutions.md#new-projects-and-solutions)).
 - **Add New Item** offers VB's own Class, Module, Interface, Structure, Enum and Code File in a VB project, in the project's root namespace.
 - **Properties** (`Alt+Enter` on the project) has VB's options on the Application page: Option Explicit, Option Strict, Option Infer, Option Compare and the language version. The Build page has "Remove integer overflow checks", and conditional compilation constants are separated by commas (`DEBUG=-1,TRACE=-1`). Imports for the whole project are `Import` items in the project file (`<Import Include="System.Text" />`); edit them there.
 

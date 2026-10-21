@@ -2,6 +2,15 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.6.0
+
+- **New Project is the classic IDE's three-page wizard** ([user guide](docs/user-guide/solutions.md#new-projects-and-solutions)): File → New → Project (`Ctrl+Shift+N`), the start window's Create a new project, and Solution Explorer's Add → New Project… open one window instead of a row of pickers and prompts.
+  - **Create a new project** lists your recent templates (pin them, or remove them) and every installed template with its icon, description and tags, with search (`Alt+S`) and filters by language, platform and project type. A template whose projects run only on Windows says so on Linux and macOS, and a missing template pack (Avalonia, CoreWCF) installs in place.
+  - **Configure your new project** asks for the project name, the location (your recent locations, or Browse…), the solution name, whether to place the solution and project in the same directory, and whether to trust the location; with a solution or folder open you can add the project to it, and Add → New Project adds it in the selected solution folder.
+  - **Additional information** shows the framework, labeled Long Term Support, Standard Term Support or Preview, and the options of that framework's template, such as Include sample pages, Use controllers, Do not use top-level statements, Authentication type and Configure for HTTPS, plus Enable container support and Enlist in Aspire orchestration in a trusted location.
+  - **Create** makes the solution and the project, opens them and opens the template's start file; your recent templates, locations, filters and options are remembered. The window has the classic IDE's keys (`Alt+Left` and `Alt+Right`, `Enter`, `Esc`, access keys).
+  - Projects are now created with your default .NET SDK, and their packages restore when the trusted solution opens; a location whose `global.json` pins an SDK too old for the framework gets a warning. The built-in Templates plugin is gone: New Project is part of the IDE, with the same commands and the same `templates.defaultLocation` setting ([ADR 0082](docs/adr/0082-new-project-wizard.md)). A plugin can no longer redeclare a command or setting of the IDE's ([plugins.md](docs/plugins.md)).
+
 ## 0.5.0
 
 - **IntelliSense like a classic IDE's** ([user guide](docs/user-guide/editing.md#intellisense)): the completion list, parameter info and Quick Info show code in the editor's own colors, and generic types as you use them (`LayoutBuilderBase<PageModel, PageBuilder<PageModel>>.AddTab(…)`, not `LayoutBuilderBase<TModel, TBuilder>`).
