@@ -49,8 +49,12 @@ public sealed class LiveSession : IAsyncDisposable
         _agent = agent;
         _listener = new TcpListener(IPAddress.Loopback, 0);
         _listener.Start();
+        Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
         _ = AcceptAsync();
     }
+
+    /// <summary>The loopback port the app's agent connects to (kept after the session ends).</summary>
+    public int Port { get; }
 
     /// <summary>A session for the next run, or null without the agent (<see cref="PreviewService.ResolveAgent"/>).</summary>
     public static LiveSession? Start(string? agent = null) =>
@@ -72,7 +76,7 @@ public sealed class LiveSession : IAsyncDisposable
     /// </summary>
     public IReadOnlyDictionary<string, string> Environment(IReadOnlyDictionary<string, string>? existing)
     {
-        var port = ((IPEndPoint)_listener.LocalEndpoint).Port.ToString(CultureInfo.InvariantCulture);
+        var port = Port.ToString(CultureInfo.InvariantCulture);
         var hooks = existing?.GetValueOrDefault(PreviewerSession.StartupHooksVariable) ?? System.Environment.GetEnvironmentVariable(PreviewerSession.StartupHooksVariable);
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {

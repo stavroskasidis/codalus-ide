@@ -23,8 +23,10 @@ public sealed partial class ShellHost
 
     public LivePropertiesViewModel LiveProperties { get; private set; } = null!;
 
+    private LiveSession? _live;
+
     /// <summary>The live session of the last Avalonia app run (null before one, or with the setting off).</summary>
-    public LiveSession? Live { get; private set; }
+    public LiveSession? Live => Volatile.Read(ref _live);
 
     private void InitializeLiveTree()
     {
@@ -56,7 +58,10 @@ public sealed partial class ShellHost
             : null;
     }
 
-    /// <summary>An Avalonia or WPF app's plan gets its live agent and a new session for this run (any thread).</summary>
+    /// <summary>
+    /// An Avalonia or WPF app's plan that is about to start (<see cref="RunService.ProgramPlan"/>) gets its live agent and
+    /// a new session for this run, which replaces the last run's (any thread).
+    /// </summary>
     private LaunchPlan AddLiveAgent(RunInfo info, LaunchPlan plan)
     {
         if (!Workbench.Settings.GetBoolean(LiveVisualTreeSetting, true) || LiveAgentFor(info.Path) is not { } agent)
@@ -64,13 +69,14 @@ public sealed partial class ShellHost
             return plan;
         }
 
-        var previous = Live;
         if (LiveSession.Start(agent) is not { } session)
         {
             return plan;
         }
 
-        Live = session;
+        // Swapped atomically: of two starts at once, each ends the session it replaced, so none stays open outside Live
+        // (with a read, then a write, both ended the same old session and one of theirs was neither in Live nor ended).
+        var previous = Interlocked.Exchange(ref _live, session);
         session.Connected += (_, _) => Ui.Post(() => _ = LiveTree.RefreshAsync());
         session.Disconnected += (_, _) => Ui.Post(() =>
         {

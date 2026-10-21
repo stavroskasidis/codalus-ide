@@ -1,5 +1,11 @@
+using System.Collections.Concurrent;
+using System.Globalization;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using Codalus.Projects.Protocol;
 using Codalus.Shell.ViewModels;
+using Codalus.Workbench.Build;
+using Codalus.Workbench.Previewer;
 
 namespace Codalus.Shell.Tests;
 
@@ -24,20 +30,35 @@ public sealed class LiveTreeShellTests
         var app = Path.Combine(folder, "AvaloniaApp", "AvaloniaApp.csproj");
         f.Shell.SetStartupProject(app);
 
+        // Only the plan the start launches gets a live session (2026-10-21). The dev certificate check reads the plan
+        // beside the start; when its plan came last, its session replaced the launched one and stopped its listener, so
+        // the app's agent got "Connection refused" and Live waited for an app that never came. The gate puts the plans
+        // in that order whatever the build host's timing.
+        var gate = new PlanGate(f.Shell);
         await f.Shell.StartWithoutDebuggingAsync();
         try
         {
+            var connected = false;
             try
             {
-                await ShellFixture.PumpUntil(() => f.Shell.Live is { IsConnected: true }, seconds: 240);
+                // An agent that gave up ("Codalus previewer agent: …") won't come back: fail now, not in 4 minutes.
+                await ShellFixture.PumpUntil(() => (connected = f.Shell.Live is { IsConnected: true }) || Output(f, "Run").Contains("Codalus previewer agent:", StringComparison.Ordinal), seconds: 240);
             }
             catch (Xunit.Sdk.FailException)
             {
-                // Whether the app was built, started and is still running, and what it and the build said.
-                Assert.Fail($"The app's live agent didn't connect (session: {(f.Shell.Live is null ? "none" : "waiting")}; running: "
-                    + string.Join(", ", f.Shell.Runs.Running.Select(p => $"{p.Name} exited={p.HasExited}")) + ")\n"
-                    + string.Join("\n", f.Shell.Workbench.Output.Channels.Where(c => c.Name.StartsWith("Run", StringComparison.Ordinal) || c.Name.StartsWith("Build", StringComparison.Ordinal)).Select(c => $"--- {c.Name}\n{c.GetText()}")));
             }
+
+            if (!connected)
+            {
+                // Whether the app was built, started and is still running, which sessions the start made, and what the
+                // app and the build said.
+                Assert.Fail($"The app's live agent didn't connect (session: {(f.Shell.Live is { } live ? $"waiting on port {live.Port}" : "none")}; "
+                    + $"ProgramPlan calls: {gate.Calls} ({gate.Log}); running: "
+                    + string.Join(", ", f.Shell.Runs.Running.Select(p => $"{p.Name} exited={p.HasExited}")) + ")\n"
+                    + Output(f, "Run") + Output(f, "Build"));
+            }
+
+            Assert.True(gate.Calls == 1, $"One start, one plan through ProgramPlan, one live session; there were {gate.Calls}: {gate.Log}");
 
             var tree = f.Shell.LiveTree;
             try
@@ -81,6 +102,82 @@ public sealed class LiveTreeShellTests
         {
             f.Shell.Runs.StopAll();
             await ShellFixture.PumpUntil(() => f.Shell.Runs.Running.Count == 0, seconds: 60);
+        }
+    }
+
+    private static string Output(ShellFixture f, string prefix) =>
+        string.Concat(f.Shell.Workbench.Output.Channels.Where(c => c.Name.StartsWith(prefix, StringComparison.Ordinal)).Select(c => $"--- {c.Name}\n{c.GetText()}\n"));
+
+    /// <summary>
+    /// Counts the calls of the shell's <see cref="RunService.ProgramPlan"/> (the live agent) and orders two that overlap
+    /// as the dev certificate check's plan and the start's did when the app couldn't connect: the first call waits, before
+    /// it runs, until a second has run, and the second returns only after the first has, so the first one's session is
+    /// the last made, before the program starts. With one call it waits for the dev certificate check to end instead.
+    /// Calls come on the thread pool, after the build host's answers; one on the UI thread isn't held, as that would
+    /// hold up the check too.
+    /// </summary>
+    private sealed class PlanGate
+    {
+        private static readonly TimeSpan s_limit = TimeSpan.FromMinutes(2);
+        private readonly ShellHost _shell;
+        private readonly Func<RunInfo, LaunchPlan, LaunchPlan> _addLiveAgent;
+        private readonly TaskCompletionSource _secondRan = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _firstReturned = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly ConcurrentQueue<string> _log = new();
+        private int _calls;
+
+        public PlanGate(ShellHost shell)
+        {
+            _shell = shell;
+            _addLiveAgent = shell.Runs.ProgramPlan!;
+            shell.Runs.ProgramPlan = Plan;
+        }
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        /// <summary>Each call in the order it returned: the port of the session it made.</summary>
+        public string Log => string.Join("; ", _log);
+
+        private LaunchPlan Plan(RunInfo info, LaunchPlan plan)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                _log.Enqueue($"call {call} on the UI thread, not held");
+                return Record(call, _addLiveAgent(info, plan));
+            }
+
+            if (call == 1)
+            {
+                if (Task.WaitAny([_secondRan.Task, _shell.DevCertificateCheck], s_limit) < 0)
+                {
+                    _log.Enqueue("call 1 waited in vain");
+                }
+
+                try
+                {
+                    return Record(call, _addLiveAgent(info, plan));
+                }
+                finally
+                {
+                    _firstReturned.TrySetResult();
+                }
+            }
+
+            var result = Record(call, _addLiveAgent(info, plan));
+            _secondRan.TrySetResult();
+            if (call == 2 && !_firstReturned.Task.Wait(s_limit))
+            {
+                _log.Enqueue("call 2 waited in vain");
+            }
+
+            return result;
+        }
+
+        private LaunchPlan Record(int call, LaunchPlan plan)
+        {
+            _log.Enqueue($"call {call.ToString(CultureInfo.InvariantCulture)}: session port {plan.Environment.GetValueOrDefault(LiveSession.PortVariable, "none")}");
+            return plan;
         }
     }
 }

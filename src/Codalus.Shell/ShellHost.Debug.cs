@@ -258,7 +258,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        _ = OfferDevCertificateAsync(project);
+        DevCertificateCheck = OfferDevCertificateAsync(project);
         try
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
@@ -285,7 +285,7 @@ public sealed partial class ShellHost
                 return;
             }
 
-            var plan = await Runs.PlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
+            var plan = await Runs.LaunchPlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
             DebugLog.Clear();
             if (error is not null)
             {
