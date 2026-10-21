@@ -1,9 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Projects.Protocol;
@@ -126,6 +128,16 @@ public sealed class WinFormsDesignerToolboxShellTests
         Assert.Single(ItemButtons(), b => b.Classes.Contains("armed"));
         Assert.All(places, p => Assert.Equal(p.Value, p.Key.TranslatePoint(default, f.Window)));
         Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Click or drag on the form to add a CheckBox (Esc cancels).");
+
+        // The selection's colors while the Toolbox has the focus, the inactive selection's once the designer has it.
+        Color Background() => ((ISolidColorBrush)checkItem.GetVisualDescendants().OfType<ContentPresenter>().First(p => p.Name == "PART_ContentPresenter").Background!).Color;
+        Color Token(string key) => toolbox.TryFindResource(key, toolbox.ActualThemeVariant, out var found) && found is ISolidColorBrush brush ? brush.Color : default;
+        Assert.True(checkItem.IsFocused);
+        Assert.Equal(Token("Shell.Selection"), Background());
+        surface.Focus();
+        await SettleAsync();
+        Assert.Equal(Token("Shell.Selection.Inactive"), Background());
+        Assert.Equal("System.Windows.Forms.CheckBox", f.Shell.Toolbox.Armed?.Type);
         var pointer = ItemButtons().First(b => b.DataContext is ToolboxItemViewModel { IsPointer: true });
         var pointerCenter = CenterOf(pointer);
         f.Window.MouseDown(pointerCenter, MouseButton.Left);

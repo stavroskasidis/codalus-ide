@@ -779,7 +779,7 @@
     <Setter Property="BorderBrush" Value="Transparent" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
   </Style>
-  <Style Selector="UserControl.toolbox:not(:focus-within) Button.toolboxItem.armed /template/ ContentPresenter#PART_ContentPresenter, UserControl.toolbox:not(:focus-within) Button.toolboxItem.armed:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector=":is(UserControl).toolbox:not(:focus-within) Button.toolboxItem.armed /template/ ContentPresenter#PART_ContentPresenter, :is(UserControl).toolbox:not(:focus-within) Button.toolboxItem.armed:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.Selection.Inactive}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
   </Style>
