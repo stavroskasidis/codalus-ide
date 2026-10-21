@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Git Changes: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<!-- This page's own icons. The classic file and folder icons (cl-*) are the app's own pixel drawings
+     (src/Codalus.Shell/Icons/Classic), their outline in Shell.Icon.Outline and their badges in the palette, as
+     FileIcons colors them. The command icons are 16 px drawings in the style of Fluent UI System Icons (regular), our
+     own: the kinds the plan adds (merge, compare, rename, stash, upload, mention, expand-all, eye-off) and the shell's
+     own stroke drawings of discard, subtract, sync, pull-request and arrow-up-down (Controls/Icon.cs). -->
+<svg id="gc-sprite" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="i-cl-git" viewBox="0 0 16 16"><path fill="currentColor" d="M4 1H9V2H4ZM3 2H4V9H3ZM8 2H10V3H8ZM8 3H9V5H8ZM10 3H11V4H10ZM11 4H12V5H11ZM8 5H13V6H8ZM12 6H13V14H12ZM6 14H12V15H6Z"/><path fill="var(--ic-orange)" d="M0 10H1V13H0ZM4 10H5V12H4ZM3 12H4V13H3ZM0 13H3V14H0ZM0 14H1V15H0Z"/></symbol>
+  <symbol id="i-cl-csharp" viewBox="0 0 16 16"><path fill="currentColor" d="M2 4H5V5H2ZM9 4H10V6H9ZM12 4H13V6H12ZM1 5H3V6H1ZM4 5H6V6H4ZM1 6H2V10H1ZM5 6H6V7H5ZM7 6H15V7H7ZM9 7H10V9H9ZM12 7H13V9H12ZM5 9H6V10H5ZM7 9H15V10H7ZM1 10H3V11H1ZM4 10H6V11H4ZM9 10H10V12H9ZM12 10H13V12H12ZM2 11H5V12H2Z"/></symbol>
+  <symbol id="i-cl-document" viewBox="0 0 16 16"><path fill="currentColor" d="M4 1H9V2H4ZM3 2H4V14H3ZM8 2H10V3H8ZM8 3H9V5H8ZM10 3H11V4H10ZM11 4H12V5H11ZM8 5H13V6H8ZM12 6H13V14H12ZM4 14H12V15H4Z"/></symbol>
+  <symbol id="i-cl-markdown" viewBox="0 0 16 16"><path fill="currentColor" d="M4 1H9V2H4ZM3 2H4V9H3ZM8 2H10V3H8ZM8 3H9V5H8ZM10 3H11V4H10ZM11 4H12V5H11ZM8 5H13V6H8ZM12 6H13V14H12ZM0 10H1V11H0ZM4 10H5V11H4ZM8 10H9V13H8ZM0 11H2V12H0ZM3 11H5V12H3ZM0 12H1V15H0ZM2 12H3V13H2ZM4 12H5V15H4ZM6 12H7V13H6ZM10 12H11V13H10ZM7 13H10V14H7ZM8 14H9V15H8Z"/></symbol>
+  <symbol id="i-cl-json" viewBox="0 0 16 16"><path fill="currentColor" d="M5 1H10V2H5ZM4 2H5V7H4ZM9 2H11V3H9ZM9 3H10V5H9ZM11 3H12V4H11ZM12 4H13V5H12ZM9 5H14V6H9ZM13 6H14V14H13ZM2 8H4V9H2ZM6 8H8V9H6ZM2 9H3V11H2ZM7 9H8V11H7ZM1 11H3V12H1ZM7 11H9V12H7ZM2 12H3V14H2ZM7 12H8V14H7ZM2 14H4V15H2ZM6 14H8V15H6ZM10 14H13V15H10Z"/></symbol>
+  <symbol id="i-cl-powershell" viewBox="0 0 16 16"><path fill="currentColor" d="M4 1H9V2H4ZM3 2H4V9H3ZM8 2H10V3H8ZM8 3H9V5H8ZM10 3H11V4H10ZM11 4H12V5H11ZM8 5H13V6H8ZM12 6H13V14H12ZM6 14H12V15H6Z"/><path fill="var(--ic-blue)" d="M0 10H1V11H0ZM1 11H2V12H1ZM2 12H3V13H2ZM1 13H2V14H1ZM0 14H1V15H0ZM2 14H5V15H2Z"/></symbol>
+  <symbol id="i-cl-console" viewBox="0 0 16 16"><path fill="currentColor" d="M4 1H9V2H4ZM3 2H4V9H3ZM8 2H10V3H8ZM8 3H9V5H8ZM10 3H11V4H10ZM11 4H12V5H11ZM8 5H13V6H8ZM12 6H13V14H12ZM6 14H12V15H6ZM0 10H1V11H0ZM1 11H2V12H1ZM2 12H3V13H2ZM1 13H2V14H1ZM0 14H1V15H0ZM2 14H5V15H2Z"/></symbol>
+  <symbol id="i-cl-solution" viewBox="0 0 16 16"><path fill="currentColor" d="M5 1H15V2H5ZM4 2H5V4H4ZM15 2H16V4H15ZM4 4H16V5H4ZM4 5H5V7H4ZM15 5H16V12H15ZM8 12H15V13H8Z"/><path fill="var(--ic-purple)" d="M3 8H4V9H3ZM2 9H3V10H2ZM4 9H5V10H4ZM1 10H2V11H1ZM5 10H6V11H5ZM0 11H1V12H0ZM6 11H7V12H6ZM1 12H2V13H1ZM5 12H6V13H5ZM2 13H3V14H2ZM4 13H5V14H4ZM3 14H4V15H3Z"/></symbol>
+  <symbol id="i-cl-folder" viewBox="0 0 16 16"><path fill="currentColor" d="M2 2H7V3H2ZM1 3H3V4H1ZM6 3H8V4H6ZM1 4H2V6H1ZM7 4H14V5H7ZM6 5H8V6H6ZM13 5H15V6H13ZM1 6H7V7H1ZM14 6H15V12H14ZM1 7H2V12H1ZM1 12H3V13H1ZM13 12H15V13H13ZM2 13H14V14H2Z"/></symbol>
+  <symbol id="i-cl-folder-open" viewBox="0 0 16 16"><path fill="currentColor" d="M2 2H7V3H2ZM1 3H3V4H1ZM6 3H8V4H6ZM1 4H2V11H1ZM7 4H12V5H7ZM11 5H12V6H11ZM5 6H16V7H5ZM4 7H5V9H4ZM14 7H15V9H14ZM3 9H4V11H3ZM13 9H14V11H13ZM1 11H3V13H1ZM12 11H13V13H12ZM2 13H12V14H2Z"/></symbol>
+  <symbol id="i-cl-folder-properties" viewBox="0 0 16 16"><path fill="currentColor" d="M9 3H10V5H9ZM12 3H13V5H12ZM9 5H13V6H9ZM8 6H11V7H8ZM7 7H9V8H7ZM6 8H8V9H6ZM5 9H7V10H5ZM4 10H6V11H4ZM3 11H5V12H3ZM3 12H4V13H3Z"/></symbol>
+  <symbol id="i-merge" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="3.4" r="1.6"/><circle cx="4.5" cy="12.6" r="1.6"/><circle cx="11.6" cy="9.4" r="1.6"/><path d="M4.5 5v6M4.5 5.6c0 2.4 2.2 3.8 5.5 3.8"/></g></symbol>
+  <symbol id="i-compare" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.4" cy="12.6" r="1.5"/><circle cx="11.6" cy="3.4" r="1.5"/><path d="M4.4 11.1V5.6a1.8 1.8 0 0 1 1.8-1.8h2.6M7.4 2.3l1.5 1.5-1.5 1.5M11.6 4.9v5.5a1.8 1.8 0 0 1-1.8 1.8H7.2M8.6 10.7l-1.5 1.5 1.5 1.5"/></g></symbol>
+  <symbol id="i-rename" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M8.4 4.6H3a1.2 1.2 0 0 0-1.2 1.2v4.4A1.2 1.2 0 0 0 3 11.4h5.4M13.4 4.6h.2a.8.8 0 0 1 .8.8v5.2a.8.8 0 0 1-.8.8h-.2"/><path d="M11 2.2v11.6M9.6 2.2h2.8M9.6 13.8h2.8M4.4 8h2.2"/></g></symbol>
+  <symbol id="i-stash" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.4" width="12.4" height="3.4" rx=".9"/><path d="M2.8 5.8v6.8a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1V5.8M6.3 8.6h3.4"/></g></symbol>
+  <symbol id="i-discard" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M3 5.5H10C12 5.5 13.5 7 13.5 9C13.5 11 12 12.5 10 12.5H5M5.5 3 3 5.5 5.5 8"/></symbol>
+  <symbol id="i-subtract" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M3.5 8H12.5"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M3 2.4h10M8 13.6V5.4M4.6 8.8 8 5.4l3.4 3.4"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M13 8A5 5 0 0 1 3.76 10.65M3 8A5 5 0 0 1 12.24 5.35M12.5 2.5V5.5H9.5M3.5 13.5V10.5H6.5"/></symbol>
+  <symbol id="i-pull-request" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="12.5" r="1.5"/><path d="M4 5V11M12 11V6C12 4.75 11.25 4 10 4H7M8.5 2.5 7 4 8.5 5.5"/></g></symbol>
+  <symbol id="i-arrow-up-down" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M5 13.5V2.5M2.5 5 5 2.5 7.5 5M11 2.5V13.5M8.5 11 11 13.5 13.5 11"/></symbol>
+  <symbol id="i-mention" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" d="M6.4 2.4 5 13.6M11 2.4 9.6 13.6M2.8 5.8h10.6M2.6 10.2h10.6"/></symbol>
+  <symbol id="i-expand-all" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M4 6.2 8 2.6l4 3.6M4 9.8l4 3.6 4-3.6"/></symbol>
+  <symbol id="i-collapse-all" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M4 2.6 8 6.2l4-3.6M4 13.4l4-3.6 4 3.6"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 4.1A6.6 6.6 0 0 1 8 3.8c3.9 0 6.2 4.2 6.2 4.2a11 11 0 0 1-1.7 2.2M10.4 11.6A6.3 6.3 0 0 1 8 12.2C4.1 12.2 1.8 8 1.8 8a11.4 11.4 0 0 1 2.4-2.9"/><path d="M6.6 6.6a2 2 0 0 0 2.8 2.8M2.4 2.4l11.2 11.2"/></g></symbol>
+</svg>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:24px 20px 32px;display:flex;flex-direction:column;gap:18px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.lead{color:var(--muted);max-width:1220px}
+.navs{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.themes .lbl{color:var(--muted)}
+.sec{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.sec h2{font-size:16px;line-height:22px;margin:0;font-weight:600;color:var(--strong)}
+.frame{width:1280px}
+.prow{display:flex;gap:20px;align-items:flex-start}
+.frame .prow{display:block}
+.pnl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pnl h3{font-size:13px;line-height:18px;margin:0;font-weight:600;color:var(--strong);display:flex;flex-direction:column}
+.pnl h3 .src{font-family:var(--mono);font-size:11px;line-height:16px;font-weight:400;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnl .cap{color:var(--muted);font-size:11px;line-height:15px;min-height:45px}
+.stage{position:relative;overflow:hidden;background:var(--bg)}
+
+/* The main window's chrome (MainWindow.axaml: the menus in the title bar, the standard toolbar, the status bar). */
+.ide-title{position:absolute;left:0;top:0;right:0;height:30px;background:var(--title-bar);color:var(--title-bar-fg);display:flex;align-items:center;padding:0 4px;white-space:nowrap}
+.ide-title .m{padding:0 8px}
+.ide-title .search{margin-left:18px;width:230px;height:22px;border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;gap:6px;padding:0 8px}
+.ide-title .sol{margin-left:12px;height:20px;padding:0 8px;border-radius:var(--radius);background:var(--chip-info);color:var(--chip-info-fg);display:flex;align-items:center}
+.ide-tool{position:absolute;left:0;top:30px;right:0;height:32px;background:var(--toolbar);border-bottom:1px solid var(--toolbar-border);display:flex;align-items:center;gap:2px;padding:0 6px}
+.ide-tool .field{width:96px;margin:0 2px}
+.ide-status,.sbar{display:flex;align-items:center;gap:16px;padding:0 10px;height:24px;background:var(--accent);color:var(--accent-fg);white-space:nowrap}
+.ide-status{position:absolute;left:0;right:0;bottom:0}
+.ide-status svg.i,.sbar svg.i{color:currentColor}
+.strip-l{font-size:11px;line-height:15px;color:var(--muted);margin-top:2px}
+
+/* The editor (a C# document) and the Compare with Current Branch document. */
+.ed{position:absolute;display:flex;flex-direction:column}
+.ed .doc-tabs{height:30px;overflow:hidden}
+.ed .doc{flex:1 1 auto;min-height:0;overflow:hidden}
+.ed .code{flex:1;padding:6px 0;overflow:hidden}
+.ed .code .ln{height:19px}
+.cmp{display:flex;flex-direction:column;flex:1;min-height:0}
+.cmp-h{display:flex;align-items:center;gap:6px;height:36px;padding:0 6px 0 10px;border-bottom:1px solid var(--soft-border);flex:none;white-space:nowrap}
+.cmp-h .ttl{font-weight:600;color:var(--strong)}
+.cmp-t{position:relative;flex:1;min-height:0}
+.cmp-hint{flex:none;padding:6px 10px;border-top:1px solid var(--soft-border);font-size:11px;line-height:15px;color:var(--muted)}
+
+/* Tool windows (Dock's ToolChromeControl: the caption with its menu, pin and close; the tabs of a docked group). */
+.tw{position:absolute;border-radius:0}
+.tw-cap .cb{width:20px;height:20px}
+.tw-cap .cb svg.i{width:12px;height:12px}
+.tw-tabs{flex:none;white-space:nowrap}
+.tw-tabs span{color:var(--tabs-fg)}
+.tw-tabs span.on{color:var(--tab-on-fg)}
+
+/* Git Changes (GitChangesView.axaml): the branch row, outgoing and incoming, the message, Commit, then the scrolled
+   sections. Every line has a fixed height here, so the pop-ups can be placed against the rows. */
+.gc{overflow:hidden}
+.gc-body{position:relative;flex:1 1 auto;min-height:0;overflow:hidden}
+.gc-r1,.gc-r2,.gc-msg,.gc-commit,.gc-banner{position:absolute;left:6px;right:6px}
+.gc-r1{display:flex;align-items:center;gap:4px;height:28px}
+.gc-branch{flex:1 1 auto;min-width:0;justify-content:flex-start;gap:6px;padding-right:8px}
+.gc-branch .chev{margin-right:0}
+.gc-acts{display:flex;flex:none}
+.gc-r2{display:flex;align-items:center;gap:8px;height:24px;white-space:nowrap}
+.gc-r2 .tb.text{padding:0 4px 0 2px;gap:4px}
+.gc-msg{height:84px;background:var(--input);border:1px solid var(--input-border);border-radius:var(--radius)}
+.gc-msg .txt{display:block;padding:6px 8px;line-height:16px}
+.gc-msg .txt.ph{color:var(--placeholder)}
+.gc-msg .bar{position:absolute;left:0;right:0;bottom:0;height:28px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;align-items:center;padding-right:4px}
+.gc-commit{display:flex;align-items:center;gap:12px;height:28px}
+.gc-split{display:inline-flex;align-items:stretch;height:28px;border:1px solid var(--btn-border);border-radius:var(--radius);background:var(--btn);color:var(--btn-fg);flex:none}
+.gc-split .m{display:flex;align-items:center;padding:0 12px}
+.gc-split .a{display:flex;align-items:center;padding:0 6px;border-left:1px solid var(--btn-border)}
+.gc-split .chev{width:12px;height:12px;color:var(--muted)}
+.gc-banner{height:56px;background:var(--hover);color:var(--hover-fg);border-radius:3px;padding:4px 6px;display:flex;flex-direction:column;gap:4px}
+.gc-banner .btns{display:flex;gap:6px}
+.gc-banner .btn{height:28px}
+.gc-scroll{position:absolute;left:0;right:0;bottom:0;overflow:hidden}
+.gc-l{position:absolute;left:4px;right:4px;display:flex;align-items:center;white-space:nowrap;min-width:0}
+.gc-head{height:24px;gap:6px;padding-left:2px}
+.gc-head .b{font-weight:600}
+.gc-head .tb{min-width:24px}
+.gc-empty{height:24px;padding:0 4px 0 24px;align-items:flex-start;padding-top:2px}
+.gc-link{height:22px;padding-left:24px}
+.gc-filter{height:30px;padding:2px 2px 4px}
+.gc-filter .field{flex:1}
+.gc-row{height:24px;gap:0;padding-right:0}
+.gc-row .ind{flex:none}
+.gc-row .ex{width:20px;flex:none;display:flex;align-items:center;justify-content:center}
+.gc-row .ex svg.i{width:12px;height:12px}
+.gc-row>svg.i{margin-right:6px}
+.gc-row .nm{flex:0 1 auto}
+.gc-row .old,.gc-row .cnt{margin-left:8px;flex:none;font-size:11px}
+.gc-row .acts{display:flex;gap:2px;flex:none;margin-left:6px}
+.gc-row .acts .tb{min-width:24px}
+.gc-row .lt{width:18px;flex:none;text-align:right}
+.gc-row.hover{background:var(--row-hover);color:var(--hover-fg)}
+.gc-row.sel{background:var(--sel);color:var(--sel-fg)}
+.gc-row.sel .muted{color:inherit}
+.gc-row.kfocus{box-shadow:inset 0 0 0 1px var(--focus)}
+
+/* Pop-ups share the menus' look (6 px corners, the overlay's border and shadow). */
+.pop{position:absolute;z-index:20;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:6px;box-shadow:var(--shadow);color:var(--fg)}
+/* The branch drop-down's flyout (GitBranchPickerView): the search box, the grouped list of 24 px rows, New Branch…. */
+.fly{display:flex;flex-direction:column;overflow:hidden}
+.fly-s{padding:6px;flex:none}
+.fly-s .field{width:100%}
+.fly-ban{margin:0 6px 6px;height:40px;padding:4px 8px;border-radius:3px;background:var(--hover);color:var(--hover-fg);display:flex;gap:6px;align-items:flex-start;font-size:11px;line-height:15px;flex:none;white-space:normal}
+.fly-ban svg.i{margin-top:0}
+.fly-l{flex:none;padding:0 4px 4px}
+.fly-h{height:24px;display:flex;align-items:flex-end;padding:0 6px 4px;font-size:11px;line-height:14px;font-weight:600;color:var(--muted)}
+.fly-r{height:24px;display:flex;align-items:center;gap:6px;padding:0 4px 0 6px;border-radius:var(--radius);white-space:nowrap}
+.fly-r .ck{width:16px;height:16px;flex:none;display:flex}
+.fly-r .nm{flex:0 1 auto}
+.fly-r.cur .nm{font-weight:600}
+.fly-r .det{color:var(--muted);flex:none}
+.fly-r.hover{background:var(--row-hover);color:var(--hover-fg)}
+.fly-r.sel{background:var(--sel);color:var(--sel-fg)}
+.fly-r.sel .det{color:inherit}
+.fly-r.kfocus{box-shadow:inset 0 0 0 1px var(--focus)}
+.fly-r.sel .hl{background:transparent;color:inherit;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:2px}
+.fly-chip{display:inline-flex;align-items:center;gap:3px;height:16px;padding:0 6px;border-radius:8px;background:var(--badge);color:var(--badge-fg);font-size:11px;line-height:16px;flex:none}
+.kind-hc .fly-chip{border:1px solid var(--soft-border)}
+.fly-chip svg.i{width:12px;height:12px}
+.fly-more{width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius);flex:none}
+.fly-more.on{background:var(--tb-hover);border:1px solid var(--tb-hover-border)}
+/* A chip and a pressed ⋯ keep their own colors on a High contrast selection (whose icons turn black). */
+.cx.kind-hc .fly-r.sel .fly-chip svg.i{color:var(--badge-fg)}
+.cx.kind-hc .fly-r.sel .fly-more.on svg.i{color:var(--fg)}
+/* On a selected row an icon under 3:1 takes the selection's text color (controls.md): Classic Blue's green too. */
+.th-classic-blue .sel[aria-selected="true"] svg.c-green{color:var(--sel-fg)}
+.fly-empty{height:72px;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--muted)}
+.fly-f{border-top:1px solid var(--soft-border);padding:4px;flex:none}
+.fly-f .btn{width:100%;justify-content:flex-start}
+/* Menus (ShellStyles.axaml: 24 px rows, the 16 px icon column on every entry, the shortcut muted on the right). */
+.cm{width:max-content;min-width:160px}
+.cm .mi{gap:0;padding:0 12px 0 8px}
+.cm .mi .ic{width:16px;height:16px;flex:none;margin-right:8px;display:flex;align-items:center;justify-content:center}
+.cm .mi .tx{flex:1 1 auto;white-space:nowrap}
+.cm .mi .sc{margin-left:auto;padding-left:32px;font-size:12px;color:var(--muted)}
+.cm .msep{margin:3px 0 3px 32px;background:var(--border)}
+.kind-hc .cm .mi.hover{background:var(--pressed)}
+.tip{position:absolute;z-index:30;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:4px;box-shadow:var(--shadow);padding:3px 8px;font-size:12px;line-height:16px;white-space:nowrap;color:var(--fg)}
+
+/* The in-window dialog (DialogView.axaml): the warning tile of a dangerous request, the title, its context line. */
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:15}
+.wdlg{position:absolute;z-index:16;width:520px;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:8px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.fam-classic .wdlg{border-radius:6px}
+.kind-hc .wdlg{border-width:2px}
+.dh{display:flex;align-items:flex-start;gap:10px;padding:16px 12px 4px 20px}
+.dh .ttl{flex:1;min-width:0}
+.dh h4{margin:0;font-size:14px;line-height:20px;font-weight:600;color:var(--strong)}
+.dh .ctx{color:var(--muted);font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh .glyph{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:var(--chip-warn);flex:none;margin-top:-1px}
+.kind-hc .dh .glyph{background:transparent;border:1px solid var(--fg)}
+.dbody{padding:12px 20px 18px;display:flex;flex-direction:column;gap:8px}
+.dmsg{color:var(--fg);line-height:18px}
+.dnote{color:var(--fg);line-height:18px}
+.dbox{background:var(--editor);color:var(--editor-fg);border:1px solid var(--input-border);border-radius:var(--radius);padding:4px 0;font-family:var(--mono);font-size:12px}
+.dbox .dl{display:flex;gap:10px;height:18px;align-items:center;padding:0 8px 0 9px;white-space:nowrap}
+.dbox .dl .lt{width:10px;flex:none}
+.dbody .field-msg{margin-top:-4px}
+.dfoot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px;background:var(--dlg-footer);border-top:1px solid var(--soft-border)}
+
+/* The decisions at the bottom. */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);padding:14px 18px 16px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.card h2{font-size:14px;line-height:20px;margin:0;font-weight:600;color:var(--strong)}
+.decide{display:grid;grid-template-columns:1fr 1fr;gap:14px 32px}
+.dq{display:flex;gap:10px;align-items:flex-start}
+.dq .n{flex:none;width:20px;height:20px;border-radius:10px;background:var(--badge);color:var(--badge-fg);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.kind-hc .dq .n{border:1px solid var(--soft-border)}
+.dq b{font-weight:600;color:var(--strong)}
+.dq .tag{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+</style>
+</helmet>
+<div class="{{t.cls}} {{themeCls}}" style="{{t.vars}}; min-height: 100vh">
+<main class="{{mainCls}}">
+
+<sc-if value="{{sheet}}">
+<header>
+  <h1>Git Changes: folder actions and the branch drop-down</h1>
+  <div class="lead">Task #23, the design before it is built (D38): the Git Changes window's folder menu and the branch drop-down with each branch's menu, as the classic IDE has them, in the repository states the plan lists. samples/BuildAndRun on main, one commit ahead of origin, with ten changes and two staged files; Git Changes docked right at 400 px. Each panel is one state; the links under the themes open a state in the whole window. {{t.name}}, {{t.p.family}} family, {{os}}.</div>
+  <div class="navs">
+    <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}&amp;os={{os}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
+    <nav class="themes" aria-label="Operating system"><span class="lbl">Paths, Reveal and shortcuts on:</span><sc-for list="{{oses}}" as="o"><a href="?theme={{themeQ}}&amp;os={{o.name}}" class="{{o.cls}}">{{o.name}}</a></sc-for></nav>
+    <nav class="themes" aria-label="States"><span class="lbl">In the window:</span><sc-for list="{{stateLinks}}" as="sl"><a href="?theme={{themeQ}}&amp;os={{os}}&amp;state={{sl.q}}">{{sl.q}}</a></sc-for></nav>
+  </div>
+</header>
+</sc-if>
+
+<sc-for list="{{sections}}" as="sec">
+<sc-if value="{{sheet}}"><div class="sec"><h2>{{sec.title}}</h2><div class="lead">{{sec.lead}}</div></div></sc-if>
+<sc-for list="{{sec.rows}}" as="row">
+<section class="prow">
+<sc-for list="{{row.items}}" as="s">
+<article class="pnl" style="width:{{s.w}}px" aria-label="{{s.title}}">
+  <sc-if value="{{sheet}}"><h3>{{s.title}}<span class="src">{{s.src}}</span></h3><div class="cap">{{s.cap}}</div></sc-if>
+  <div class="stage" style="width:{{s.w}}px;height:{{s.h}}px">
+
+    <sc-if value="{{s.chrome}}">
+      <div class="ide-title" role="menubar" aria-label="Menu bar">
+        <sc-for list="{{menus}}" as="mn"><span class="m" role="menuitem">{{mn}}</span></sc-for>
+        <span class="search"><svg class="i c-fg" aria-hidden="true"><use href="#i-search"></use></svg>Search ({{searchKey}})</span>
+        <span class="sol">BuildAndRun</span>
+      </div>
+      <div class="ide-tool" role="toolbar" aria-label="Standard">
+        <button class="tb" aria-label="Open Folder"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg></button>
+        <button class="tb" aria-label="Save"><svg class="i c-blue" aria-hidden="true"><use href="#i-save"></use></svg></button>
+        <span class="tb-sep"></span>
+        <span class="field sm combo" role="combobox" aria-label="Configuration"><span class="value">Debug</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+        <span class="field sm combo" role="combobox" aria-label="Platform"><span class="value">Any CPU</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+        <button class="tb text" aria-label="Start Hello"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>Hello</button>
+      </div>
+      <div class="ide-status" role="status"><span>{{s.status}}</span><span class="grow"></span><span>{{s.statusDoc}}</span><svg class="i" aria-hidden="true"><use href="#i-branch"></use></svg><span style="margin-left:-12px">{{s.statusBranch}}</span></div>
+    </sc-if>
+
+    <sc-for list="{{s.eds}}" as="e">
+      <div class="ed" style="{{e.style}}">
+        <div class="doc-tabs" role="tablist" aria-label="Open documents">
+          <sc-for list="{{e.tabs}}" as="tb"><span class="doc-tab {{tb.cls}}" role="tab" aria-selected="{{tb.on}}"><svg class="i md {{tb.c}}" aria-hidden="true"><use href="#i-{{tb.i}}"></use></svg>{{tb.t}}</span></sc-for>
+        </div>
+        <section class="doc" aria-label="{{e.label}}">
+          <sc-if value="{{e.code}}">
+            <div class="code"><sc-for list="{{e.code}}" as="ln"><div class="ln"><span class="no">{{ln.n}}</span><span><sc-for list="{{ln.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span></div></sc-for></div>
+          </sc-if>
+          <sc-if value="{{e.cmp}}">
+            <div class="cmp">
+              <div class="cmp-h">
+                <svg class="i c-blue" aria-hidden="true"><use href="#i-compare"></use></svg><span class="ttl">{{e.cmp.title}}</span><span class="muted">· {{e.cmp.count}}</span><span class="grow"></span>
+                <span class="seg" role="radiogroup" aria-label="View"><button class="on" role="radio" aria-checked="true"><svg class="i" aria-hidden="true"><use href="#i-tree"></use></svg>Tree</button><button role="radio" aria-checked="false"><svg class="i c-blue" aria-hidden="true"><use href="#i-list"></use></svg>List</button></span>
+                <button class="tb" aria-label="Refresh" title="Refresh"><svg class="i c-green" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+              </div>
+              <div class="cmp-t" role="tree" aria-label="Files">
+                <sc-for list="{{e.cmp.rows}}" as="l">
+                  <div class="gc-l gc-row {{l.cls}}" style="top:{{l.y}}px" role="treeitem" aria-level="{{l.lvl}}" aria-selected="{{l.selA}}" aria-label="{{l.acc}}">
+                    <span class="ind" style="width:{{l.ind}}px"></span>
+                    <span class="ex"><sc-if value="{{l.chev}}"><svg class="i c-fg" aria-hidden="true"><use href="#i-{{l.chev}}"></use></svg></sc-if></span>
+                    <svg class="i {{l.c}}" aria-hidden="true"><use href="#i-{{l.icon}}"></use></svg>
+                    <span class="nm trim">{{l.t}}</span>
+                    <sc-if value="{{l.old}}"><span class="old muted">{{l.old}}</span></sc-if>
+                    <span class="grow"></span>
+                    <span class="lt" title="{{l.desc}}">{{l.letter}}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div class="cmp-hint">{{e.cmp.hint}}</div>
+            </div>
+          </sc-if>
+        </section>
+      </div>
+    </sc-for>
+
+    <sc-for list="{{s.panes}}" as="g">
+      <section class="tw gc" style="{{g.style}}" aria-label="Git Changes">
+        <div class="tw-cap {{g.capCls}}"><span class="title">Git Changes</span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-pin"></use></svg></span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+        <div class="gc-body">
+          <div class="gc-r1" style="top:6px">
+            <span class="btn has-icon gc-branch {{g.btnCls}}" role="button" aria-haspopup="true" aria-expanded="{{g.openA}}" aria-label="{{g.branchAcc}}" title="Switch branch"><svg class="i c-orange" aria-hidden="true"><use href="#i-branch"></use></svg><span class="trim">{{g.branch}}</span><span class="grow"></span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+            <span class="gc-acts">
+              <button class="tb" aria-label="Fetch" title="Fetch"><svg class="i c-orange" aria-hidden="true"><use href="#i-arrow-down"></use></svg></button>
+              <button class="tb" aria-label="Pull" title="Pull"><svg class="i c-orange" aria-hidden="true"><use href="#i-download"></use></svg></button>
+              <button class="tb" aria-label="Push" title="Push"><svg class="i c-orange" aria-hidden="true"><use href="#i-upload"></use></svg></button>
+              <button class="tb" aria-label="Sync" title="Sync (pull, then push)"><svg class="i c-orange" aria-hidden="true"><use href="#i-sync"></use></svg></button>
+              <button class="tb" aria-label="More actions" title="More actions"><svg class="i c-fg" aria-hidden="true"><use href="#i-more"></use></svg></button>
+            </span>
+          </div>
+          <div class="gc-r2" style="top:40px">
+            <button class="tb text" aria-label="{{g.ioTip}}" title="{{g.ioTip}}"><svg class="i c-blue" aria-hidden="true"><use href="#i-arrow-up-down"></use></svg>{{g.io}}</button>
+            <span class="btn link">View all commits</span>
+            <sc-if value="{{g.publish}}"><span class="btn link">Publish branch</span></sc-if>
+            <span class="grow"></span>
+            <button class="tb" aria-label="Create a pull request" title="Create a pull request"><svg class="i c-orange" aria-hidden="true"><use href="#i-pull-request"></use></svg></button>
+          </div>
+          <div class="gc-msg" style="top:70px" role="textbox" aria-multiline="true" aria-label="Commit message">
+            <span class="txt {{g.msgCls}}">{{g.msg}}</span>
+            <div class="bar"><button class="tb" aria-label="Mention an issue or work item (#)" title="Mention an issue or work item (#)"><svg class="i c-blue" aria-hidden="true"><use href="#i-mention"></use></svg></button></div>
+          </div>
+          <div class="gc-commit" style="top:160px">
+            <span class="gc-split" role="button" aria-label="{{g.commit}}" title="Commit ({{g.commitKey}})"><span class="m">{{g.commit}}</span><span class="a"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></span>
+            <span class="chk"><span class="box"></span>Amend</span>
+          </div>
+          <sc-if value="{{g.banner}}">
+            <div class="gc-banner" style="top:194px" role="status"><span>{{g.banner}}</span><div class="btns"><span class="btn primary" role="button">Continue</span><span class="btn" role="button">Abort</span></div></div>
+          </sc-if>
+          <div class="gc-scroll" style="top:{{g.scrollTop}}px">
+            <sc-for list="{{g.lines}}" as="l">
+              <sc-if value="{{l.isHead}}"><div class="gc-l gc-head" style="top:{{l.y}}px" role="button" aria-expanded="true" aria-label="{{l.title}}"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg><span class="b">{{l.title}}</span><span class="grow"></span><sc-for list="{{l.btns}}" as="b"><span class="tb" role="button" aria-label="{{b.t}}" title="{{b.t}}"><svg class="i {{b.c}}" aria-hidden="true"><use href="#i-{{b.i}}"></use></svg></span></sc-for></div></sc-if>
+              <sc-if value="{{l.isEmpty}}"><div class="gc-l gc-empty muted" style="top:{{l.y}}px">{{l.text}}</div></sc-if>
+              <sc-if value="{{l.isLink}}"><div class="gc-l gc-link" style="top:{{l.y}}px"><span class="btn link is-disabled" aria-disabled="true">{{l.text}}</span></div></sc-if>
+              <sc-if value="{{l.isFilter}}"><div class="gc-l gc-filter" style="top:{{l.y}}px"><span class="field sm is-focus" role="textbox" aria-label="Filter files"><span class="value">{{l.text}}</span><span class="caret" style="margin-left:0"></span></span></div></sc-if>
+              <sc-if value="{{l.isRow}}"><div class="gc-l gc-row {{l.cls}}" style="top:{{l.y}}px" role="treeitem" aria-level="{{l.lvl}}" aria-selected="{{l.selA}}" aria-label="{{l.acc}}">
+                <span class="ind" style="width:{{l.ind}}px"></span>
+                <span class="ex"><sc-if value="{{l.chev}}"><svg class="i c-fg" aria-hidden="true"><use href="#i-{{l.chev}}"></use></svg></sc-if></span>
+                <svg class="i {{l.c}}" aria-hidden="true"><use href="#i-{{l.icon}}"></use></svg>
+                <span class="nm trim">{{l.t}}</span>
+                <sc-if value="{{l.count}}"><span class="cnt muted">{{l.count}}</span></sc-if>
+                <span class="grow"></span>
+                <sc-if value="{{l.acts}}"><span class="acts"><sc-for list="{{l.acts}}" as="a"><span class="tb {{a.cls}}" role="button" aria-label="{{a.t}}"><svg class="i {{a.c}}" aria-hidden="true"><use href="#i-{{a.i}}"></use></svg></span></sc-for></span></sc-if>
+                <span class="lt" title="{{l.desc}}">{{l.letter}}</span>
+              </div></sc-if>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{g.tabs}}"><div class="tw-tabs" role="tablist" aria-label="Docked windows"><span role="tab" aria-selected="false">Solution Explorer</span><span class="on" role="tab" aria-selected="true">Git Changes</span></div></sc-if>
+      </section>
+    </sc-for>
+
+    <sc-if value="{{s.scrim}}"><div class="scrim"></div></sc-if>
+
+    <sc-for list="{{s.flys}}" as="f">
+      <div class="pop fly" style="{{f.style}}" role="dialog" aria-label="Branches">
+        <div class="fly-s">
+          <span class="field sm is-focus" role="searchbox" aria-label="Search branches"><svg class="i lead" aria-hidden="true"><use href="#i-search"></use></svg>
+            <sc-if value="{{f.q}}"><span class="value">{{f.q}}</span><span class="caret"></span><span class="grow"></span><span class="kbd">{{f.count}}</span><span class="clear" role="button" aria-label="Clear"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></sc-if>
+            <sc-if value="{{f.noQ}}"><span class="caret" style="margin-left:0"></span><span class="ph">Search branches</span></sc-if>
+          </span>
+        </div>
+        <sc-if value="{{f.banner}}"><div class="fly-ban" role="status"><svg class="i c-info" aria-hidden="true"><use href="#i-info"></use></svg><span>{{f.banner}}</span></div></sc-if>
+        <div class="fly-l" role="listbox" aria-label="Branches">
+          <sc-for list="{{f.rows}}" as="r">
+            <sc-if value="{{r.isHead}}"><div class="fly-h" role="presentation">{{r.t}}</div></sc-if>
+            <sc-if value="{{r.isRow}}"><div class="fly-r {{r.cls}}" role="option" aria-selected="{{r.selA}}" aria-label="{{r.acc}}">
+              <span class="ck"><sc-if value="{{r.cur}}"><svg class="i c-fg" aria-hidden="true"><use href="#i-check"></use></svg></sc-if></span>
+              <svg class="i c-orange" aria-hidden="true"><use href="#i-branch"></use></svg>
+              <span class="nm trim"><sc-for list="{{r.parts}}" as="np"><span class="{{np.cls}}">{{np.t}}</span></sc-for></span>
+              <sc-if value="{{r.det}}"><span class="det">{{r.det}}</span></sc-if>
+              <span class="grow"></span>
+              <sc-if value="{{r.wt}}"><span class="fly-chip" title="{{r.wtTip}}"><svg class="i c-orange" aria-hidden="true"><use href="#i-worktree"></use></svg>worktree</span></sc-if>
+              <sc-if value="{{r.track}}"><span class="fly-chip" title="{{r.trackName}}">{{r.track}}</span></sc-if>
+              <sc-if value="{{r.more}}"><span class="fly-more {{r.moreCls}}" role="button" aria-label="Branch actions (Shift+F10)" title="Branch actions (Shift+F10)"><svg class="i c-fg" aria-hidden="true"><use href="#i-more"></use></svg></span></sc-if>
+            </div></sc-if>
+            <sc-if value="{{r.isEmpty}}"><div class="fly-empty" role="status"><svg class="i lead muted" aria-hidden="true"><use href="#i-search"></use></svg><span>{{r.t}}</span></div></sc-if>
+          </sc-for>
+        </div>
+        <div class="fly-f"><span class="btn subtle sm has-icon" role="button"><svg class="i c-orange" aria-hidden="true"><use href="#i-branch"></use></svg>New Branch…</span></div>
+      </div>
+    </sc-for>
+
+    <sc-for list="{{s.dlgs}}" as="d">
+      <div class="wdlg" role="dialog" aria-label="{{d.title}}" style="{{d.style}}">
+        <div class="dh">
+          <sc-if value="{{d.tile}}"><span class="glyph"><svg class="i" aria-hidden="true"><use href="#i-warning"></use></svg></span></sc-if>
+          <div class="ttl"><h4>{{d.title}}</h4><sc-if value="{{d.ctx}}"><div class="ctx">{{d.ctx}}</div></sc-if></div>
+          <span class="btn subtle icon sm" role="button" aria-label="Close (Esc)" title="Close (Esc)"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span>
+        </div>
+        <div class="dbody">
+          <div class="dmsg">{{d.msg}}</div>
+          <sc-if value="{{d.input}}">
+            <span class="field is-focus {{d.inCls}}" role="textbox" aria-label="{{d.title}}"><span class="value">{{d.input}}</span><span class="caret" style="margin-left:0"></span></span>
+            <sc-if value="{{d.error}}"><div class="field-msg error-text"><svg class="i sm c-error" aria-hidden="true"><use href="#i-error"></use></svg><span>{{d.error}}</span></div></sc-if>
+          </sc-if>
+          <sc-if value="{{d.choice}}"><span class="chk"><span class="box"></span>{{d.choice}}</span></sc-if>
+          <sc-for list="{{d.notes}}" as="nt"><div class="dnote">{{nt}}</div></sc-for>
+          <sc-if value="{{d.details}}"><div class="dbox" role="list" aria-label="Files"><sc-for list="{{d.details}}" as="dl"><div class="dl" role="listitem"><span class="lt">{{dl.l}}</span><span>{{dl.t}}</span></div></sc-for></div></sc-if>
+        </div>
+        <div class="dfoot"><sc-for list="{{d.buttons}}" as="bt"><span class="btn dlg {{bt.cls}}" role="button" aria-disabled="{{bt.dis}}">{{bt.t}}</span></sc-for></div>
+      </div>
+    </sc-for>
+
+    <sc-for list="{{s.menus}}" as="m">
+      <div class="pop menu cm" role="menu" aria-label="{{m.label}}" style="{{m.style}}">
+        <sc-for list="{{m.rows}}" as="mr">
+          <sc-if value="{{mr.sep}}"><div class="msep" role="separator"></div></sc-if>
+          <sc-if value="{{mr.item}}"><div class="mi {{mr.cls}}" role="menuitem"><span class="ic"><sc-if value="{{mr.i}}"><svg class="i {{mr.c}}" aria-hidden="true"><use href="#i-{{mr.i}}"></use></svg></sc-if></span><span class="tx">{{mr.t}}</span><sc-if value="{{mr.k}}"><span class="sc">{{mr.k}}</span></sc-if></div></sc-if>
+        </sc-for>
+      </div>
+    </sc-for>
+
+    <sc-for list="{{s.tips}}" as="tp"><div class="tip" role="tooltip" style="{{tp.style}}">{{tp.t}}</div></sc-for>
+  </div>
+  <sc-if value="{{s.strip}}"><div class="strip-l">{{s.stripLabel}}</div><div class="sbar" role="status" style="width:{{s.w}}px"><span>{{s.strip}}</span><span class="grow"></span><svg class="i" aria-hidden="true"><use href="#i-branch"></use></svg><span style="margin-left:-12px">main</span></div></sc-if>
+</article>
+</sc-for>
+</section>
+</sc-for>
+</sc-for>
+
+<sc-if value="{{sheet}}">
+<section class="card" aria-labelledby="h-decide">
+  <h2 id="h-decide">For the maintainer to decide (D38)</h2>
+  <div class="decide">
+    <sc-for list="{{decisions}}" as="q">
+      <div class="dq"><span class="n">{{q.n}}</span><div><b>{{q.b}}</b> {{q.t}}<sc-if value="{{q.rej}}"><span class="tag">Rejected: {{q.rej}}</span></sc-if></div></div>
+    </sc-for>
+  </div>
+</section>
+</sc-if>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"state":{"editor":"enum","default":"all","options":["all","changes","folder","staged-folder","deleted-folder","untracked-folder","filtered","discard","discard-filtered","rename","delete","delete-unmerged","delete-remote","compare","branches","search","nomatch","branch-menu","current-menu","remote-menu","worktree","worktree-enter","detached","operation","unborn","noremote","narrow"]},"os":{"editor":"enum","default":"Windows","options":["Windows","macOS","Linux"]},"$preview":{"width":1280,"height":7600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const OSES = ['Windows', 'macOS', 'Linux'];
+    const os = OSES.includes(this.props.os) ? this.props.os : 'Windows';
+    const STATES = ['changes', 'folder', 'staged-folder', 'deleted-folder', 'untracked-folder', 'filtered',
+      'discard', 'discard-filtered', 'rename', 'delete', 'delete-unmerged', 'delete-remote', 'compare',
+      'branches', 'search', 'nomatch', 'branch-menu', 'current-menu', 'remote-menu', 'worktree', 'worktree-enter',
+      'detached', 'operation', 'unborn', 'noremote', 'narrow'];
+    const state = STATES.includes(this.props.state) ? this.props.state : 'all';
+    const sheet = state === 'all';
+    const themeQ = encodeURIComponent(t.name);
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+    const oses = OSES.map((name) => ({ name, cls: name === os ? 'on' : '' }));
+    const stateLinks = STATES.map((q) => ({ q }));
+    const pos = (x, y, w, h) => `left:${x}px;top:${y}px;` + (w == null ? '' : `width:${w}px;`) + (h == null ? '' : `height:${h}px;`);
+    const G = t.p.family === 'Classic' ? 4 : 6;
+
+    // ---------------------------------------------------------------- the operating system: paths, Reveal's title, keys
+    const mac = os === 'macOS';
+    const SEP = os === 'Windows' ? '\\' : '/';
+    const HOME = { Windows: 'C:\\src', macOS: '/Users/dev/src', Linux: '/home/dev/src' }[os];
+    const ROOT = HOME + SEP + 'BuildAndRun';
+    const WORKTREE = HOME + SEP + 'BuildAndRun-release';
+    const path = (...parts) => parts.join(SEP);
+    const REVEAL = { Windows: 'Reveal in File Explorer', macOS: 'Reveal in Finder', Linux: 'Reveal in File Manager' }[os];
+    const KEY = { history: mac ? '⌘0 ⌘H' : 'Ctrl+0 Ctrl+H', del: mac ? '⌘⌫' : 'Delete', rename: 'F2', commit: 'Ctrl+Enter', search: mac ? '⌃Q' : 'Ctrl+Q' };
+    // The dialog's buttons: the request lists them primary first (Windows, Linux); macOS shows them reversed.
+    const buttons = (list, def, disabled) => {
+      const b = list.map((x) => ({ t: x, cls: x === def ? (disabled ? 'primary is-disabled' : 'primary') : '', dis: String(x === def && !!disabled) }));
+      return mac ? b.reverse() : b;
+    };
+
+    // ---------------------------------------------------------------- the change tree (BuildTree: folders first, compacted)
+    const ROW = 24;
+    const DESC = { M: 'modified', A: 'added', D: 'deleted', R: 'renamed', U: 'untracked', '!': 'conflict' };
+    const fileIcon = (name) => name.endsWith('.cs') ? ['cl-csharp', 'c-green'] : name.endsWith('.md') ? ['cl-markdown', 'c-outline']
+      : name.endsWith('.json') ? ['cl-json', 'c-outline'] : name.endsWith('.ps1') ? ['cl-powershell', 'c-outline']
+      : name.endsWith('.sh') ? ['cl-console', 'c-outline'] : name.endsWith('.slnx') ? ['cl-solution', 'c-outline'] : ['cl-document', 'c-outline'];
+    const node = (lvl, text, o = {}) => {
+      const file = !!o.letter;
+      const [icon, c] = o.icon || (file ? fileIcon(text) : [o.open ? 'cl-folder-open' : 'cl-folder', 'c-folder']);
+      const acc = file ? `${text}, ${DESC[o.letter]}${o.staged ? ', staged' : ''}`
+        : o.repo ? `${text}, repository, ${o.files} changed files` : `${text}, folder, ${o.files} changed file${o.files === 1 ? '' : 's'}`;
+      return { isRow: true, h: ROW, key: o.key || text, lvl: lvl + 1, ind: lvl * 16, chev: file ? '' : (o.open ? 'chevron-down' : 'chevron-right'), icon, c, t: text,
+        letter: file ? o.letter : '', desc: file ? DESC[o.letter] : '', count: o.count || '', old: o.old || '', acc, folder: !file, section: o.section };
+    };
+    const repoNode = (files, section) => node(0, ROOT, { icon: ['cl-git', 'c-outline'], open: true, key: 'repo', repo: true, files, section });
+    const GREETINGS = [['Farewell.cs', 'U'], ['Greeter.cs', 'M'], ['GreeterOptions.cs', 'M'], ['Greetings.csproj', 'M'], ['Salutation.cs', 'M']];
+    const changesRows = (open = {}) => {
+      const ex = { notes: false, greetings: true, tools: false, ...open };
+      const R = [repoNode(10)];
+      R.push(node(1, 'notes', { open: ex.notes, key: 'notes', files: 2 }));
+      if (ex.notes) R.push(node(2, 'ideas.md', { letter: 'U' }), node(2, 'todo.md', { letter: 'U' }));
+      R.push(node(1, path('src', 'Greetings'), { open: ex.greetings, key: 'greetings', files: 5 }));
+      if (ex.greetings) GREETINGS.forEach(([n, l]) => R.push(node(2, n, { letter: l })));
+      R.push(node(1, 'tools', { open: ex.tools, key: 'tools', files: 2 }));
+      if (ex.tools) R.push(node(2, 'setup.ps1', { letter: 'D' }), node(2, 'setup.sh', { letter: 'D' }));
+      R.push(node(1, 'README.md', { letter: 'M' }));
+      return R;
+    };
+    const filteredRows = () => [repoNode(10), node(1, path('src', 'Greetings'), { open: true, key: 'greetings', files: 5, count: '2 of 5 files' }),
+      node(2, 'Greeter.cs', { letter: 'M' }), node(2, 'GreeterOptions.cs', { letter: 'M' })];
+    const stagedRows = () => [repoNode(2), node(1, path('src', 'Hello'), { open: true, key: 'hello', files: 2 }),
+      node(2, 'Properties', { open: true, icon: ['cl-folder-properties', 'c-outline'], files: 1 }),
+      node(3, 'launchSettings.json', { letter: 'M', staged: true }), node(2, 'Program.cs', { letter: 'M', staged: true })];
+
+    // ---------------------------------------------------------------- the Git Changes window
+    const CAP = 24;
+    const headL = (title, btns = []) => ({ isHead: true, h: 24, title, btns });
+    const emptyL = (text) => ({ isEmpty: true, h: 24, text });
+    const linkL = (text) => ({ isLink: true, h: 22, text });
+    const filterL = (text) => ({ isFilter: true, h: 30, text });
+    const STAGE_ACT = { i: 'add', c: 'c-green', t: 'Stage' };
+    const DISCARD_ACT = { i: 'discard', c: 'c-red', t: 'Discard changes' };
+    const UNSTAGE_ACT = { i: 'subtract', c: 'c-red', t: 'Unstage' };
+    const pane = (rect, o = {}) => {
+      const [x, y, w, h] = rect;
+      const mark = (rows, section) => rows.map((r) => {
+        const hover = o.hover === section + ':' + r.key, sel = o.sel === section + ':' + r.key;
+        const acts = hover && r.folder && r.key !== 'repo' ? (section === 'staged' ? [UNSTAGE_ACT] : [STAGE_ACT, DISCARD_ACT]).map((a) => ({ ...a, cls: o.hoverAct === a.i ? 'is-hover' : '' })) : null;
+        return { ...r, section, cls: [hover ? 'hover' : '', sel ? 'sel' : '', sel && o.kfocus ? 'kfocus' : ''].join(' '), selA: String(sel), acts };
+      });
+      const blocks = [[headL('Related Items')], [emptyL('There are no items mentioned in the commit.')]];
+      if (o.filter) blocks.push([filterL(o.filter)]);
+      if (o.conflicts) blocks.push([headL(`Merge Conflicts (${o.conflicts.count})`), ...mark(o.conflicts.rows, 'conflicts')]);
+      if (o.staged) blocks.push([headL(`Staged Changes (${o.staged.count})`, [{ i: 'subtract', c: 'c-red', t: 'Unstage All' }]), ...mark(o.staged.rows, 'staged')]);
+      blocks.push([headL(o.changes.count ? `Changes (${o.changes.count})` : 'Changes', [{ i: 'add', c: 'c-green', t: 'Stage All' }, { i: 'more', c: 'c-fg', t: 'More actions' }])]);
+      blocks.push(o.changes.rows.length ? mark(o.changes.rows, 'changes') : [emptyL('There are no unstaged changes in the working directory.')]);
+      blocks.push([headL('Stashes (0)')], [linkL('Drop All'), emptyL('There are no stashed changes.')]);
+      const lines = [];
+      let ly = 0;
+      blocks.forEach((b, i) => { if (i) ly += 2; b.forEach((l) => { lines.push({ ...l, y: ly }); ly += l.h; }); });
+      const scrollTop = o.banner ? 254 : 192;
+      const btnW = w - 12 - 4 - 5 * 24;
+      const P = {
+        g: {
+          style: pos(x, y, w, h), capCls: o.inactive ? '' : 'active', tabs: !!o.tabs,
+          branch: o.branch || 'main', branchAcc: `Branch: ${o.branch || 'main'}`, btnCls: o.open ? 'is-pressed' : '', openA: String(!!o.open),
+          io: o.io || '1 / 0', ioTip: o.ioTip || '1 outgoing / 0 incoming (tracking origin/main)', publish: !!o.publish,
+          msg: o.msg === '' ? 'Enter a message <Required>' : (o.msg || 'Add farewells to the greeter'), msgCls: o.msg === '' ? 'ph' : '',
+          commit: o.commit || 'Commit Staged', commitKey: KEY.commit, banner: o.banner || '', scrollTop, lines
+        },
+        // A row's place in the stage: its top, and the pane's left and width.
+        row: (key) => { const l = lines.find((r) => r.isRow && (r.section + ':' + r.key) === key); return { x, w, y: y + CAP + scrollTop + l.y }; },
+        act: (key, i) => { const r = P.row(key); const n = i === 'add' ? 2 : 1; return { x: x + w - 4 - 18 - n * 24 - (n - 1) * 2 + (i === 'add' ? 0 : 0), y: r.y }; },
+        // The branch drop-down's right edge (the button's) and the flyout's top.
+        flyRight: x + 6 + btnW, flyTop: y + CAP + 6 + 28 + 2
+      };
+      return P;
+    };
+    const BASE = { staged: { count: 2, rows: stagedRows() }, changes: { count: 10, rows: changesRows() } };
+
+    // ---------------------------------------------------------------- menus
+    const mi = (t, o = {}) => ({ item: true, t, i: o.i || '', c: o.c || '', k: o.k || '', cls: o.hover ? 'hover' : '' });
+    const SEPR = { sep: true };
+    const join = (groups, hover) => {
+      const rows = [];
+      groups.map((g) => g.filter(Boolean)).filter((g) => g.length).forEach((g, i) => { if (i) rows.push(SEPR); rows.push(...g); });
+      return rows.map((r) => (r.item && r.t === hover ? { ...r, cls: 'hover' } : r));
+    };
+    const menuH = (rows) => 2 + 8 + rows.reduce((hh, r) => hh + (r.sep ? 7 : 24), 0);
+    // gitChanges/context: the folder's entries, hidden when they don't apply (groups 2-stage, 3-history, 4-path, 5-tree).
+    const folderMenu = (o) => join([
+      [o.section !== 'staged' && mi('Stage', { i: 'add', c: 'c-green' }), o.section === 'staged' && mi('Unstage', { i: 'subtract', c: 'c-red' }),
+        o.section === 'changes' && mi('Discard Changes…', { i: 'discard', c: 'c-red' }), mi('Stash Changes…', { i: 'stash', c: 'c-orange' }),
+        o.allUntracked && mi('Add to .gitignore', { i: 'eye-off', c: 'c-blue' })],
+      [mi('View History', { i: 'history', c: 'c-orange' })],
+      [o.exists !== false && mi(REVEAL, { i: 'folder-open', c: 'c-folder' }), o.exists !== false && mi('Open in Terminal', { i: 'terminal', c: 'c-blue' }),
+        mi('Copy Path', { i: 'copy', c: 'c-blue' }), mi('Copy Relative Path', { i: 'copy', c: 'c-blue' })],
+      [mi('Expand All', { i: 'expand-all', c: 'c-blue' }), mi('Collapse All', { i: 'collapse-all', c: 'c-blue' })]
+    ], o.hover);
+    // gitChanges/branch: 1-checkout, 2-integrate, 3-manage, 4-inspect, with the titles titleFor gives.
+    const branchMenu = (o) => {
+      if (o.unborn) return join([[mi('Copy Branch Name', { i: 'copy', c: 'c-blue' })]], o.hover);
+      const local = o.kind !== 'remote';
+      const shown = !o.current && !o.worktree && !o.operation;
+      return join([
+        [shown && mi('Checkout', { i: 'branch', c: 'c-orange' }), mi('New Local Branch From…', { i: 'branch', c: 'c-orange' })],
+        !o.current && !o.operation ? [mi(o.detached ? `Merge '${o.name}' into HEAD` : `Merge '${o.name}' into '${o.cur}'`, { i: 'merge', c: 'c-orange' }),
+          mi(o.detached ? `Rebase HEAD onto '${o.name}'` : `Rebase '${o.cur}' onto '${o.name}'`, { i: 'arrow-sort', c: 'c-orange' })] : [],
+        [local && o.hasRemote && mi('Push', { i: 'upload', c: 'c-orange' }), local && mi('Rename…', { i: 'rename', c: 'c-blue', k: KEY.rename }),
+          shown && mi(local ? 'Delete' : 'Delete from origin…', { i: 'trash', c: 'c-red', k: KEY.del })],
+        [!o.current && mi(o.detached ? 'Compare with HEAD' : 'Compare with Current Branch', { i: 'compare', c: 'c-blue' }),
+          mi('View History', { i: 'history', c: 'c-orange', k: KEY.history }), mi('Copy Branch Name', { i: 'copy', c: 'c-blue' })]
+      ], o.hover);
+    };
+    // A context menu opens at the pointer, and above it when there's no room below.
+    const menuAt = (label, rows, px, py, H) => {
+      const mh = menuH(rows);
+      return { label, rows, style: pos(px, py + mh > H ? py - mh : py) };
+    };
+
+    // ---------------------------------------------------------------- the branch drop-down (GitBranchPickerView)
+    const FLY_W = 340;
+    const LOCAL = [
+      { name: 'main', cur: true, track: '↑1', trackName: '1 to push' },
+      { name: 'feature/sign-in', track: '↑2 ↓1', trackName: '2 to push, 1 to pull' },
+      { name: 'release/0.6' }
+    ];
+    const ORIGIN = ['feature/sign-in', 'fix/null-greeting', 'main', 'release/0.6'];
+    const flyout = (P, o = {}) => {
+      const right = P.flyRight, top = P.flyTop, left = right - FLY_W;
+      const q = (o.q || '').toLowerCase();
+      const parts = (name) => {
+        const i = q ? name.toLowerCase().indexOf(q) : -1;
+        return i < 0 ? [{ t: name, cls: '' }] : [{ t: name.slice(0, i), cls: '' }, { t: name.slice(i, i + q.length), cls: 'hl' }, { t: name.slice(i + q.length), cls: '' }].filter((x) => x.t);
+      };
+      const local = (o.local || LOCAL).filter((b) => !q || b.name.toLowerCase().includes(q));
+      const remote = o.noRemote ? [] : ORIGIN.filter((n) => !q || n.toLowerCase().includes(q));
+      const rows = [];
+      const rowOf = (key, b, remoteName) => {
+        const cur = !!b.cur && !o.detached;
+        const sel = o.sel === key, hover = o.hover === key;
+        const wt = o.worktree === b.name && !remoteName;
+        const track = o.noRemote || remoteName ? '' : (b.track || '');
+        const acc = [remoteName ? `${b.name} on ${remoteName}` : b.name, cur ? 'current branch' : '', b.det || '', track ? b.trackName : '', wt ? `checked out in ${WORKTREE}` : ''].filter(Boolean).join(', ');
+        return { isRow: true, key, cur, parts: parts(b.name), det: b.det || '', wt, wtTip: `Checked out in ${WORKTREE}`, track, trackName: b.trackName || '',
+          more: sel || hover, moreCls: o.moreOn === key ? 'on' : '', cls: [cur ? 'cur' : '', sel ? 'sel' : '', hover ? 'hover' : '', sel && o.kfocus ? 'kfocus' : ''].join(' '), selA: String(sel), acc };
+      };
+      if (local.length) { rows.push({ isHead: true, t: 'Local branches' }); local.forEach((b) => rows.push(rowOf('l:' + b.name, b))); }
+      if (remote.length) { rows.push({ isHead: true, t: 'origin' }); remote.forEach((n) => rows.push(rowOf('r:' + n, { name: n }, 'origin'))); }
+      if (!rows.length) rows.push({ isEmpty: true, t: `No branches match “${o.q}”.` });
+      let ry = 1 + 36 + (o.banner ? 46 : 0);
+      const at = {};
+      rows.forEach((r) => { at[r.key] = ry; ry += r.isEmpty ? 72 : 24; });
+      const total = 1 + 36 + (o.banner ? 46 : 0) + rows.reduce((hh, r) => hh + (r.isEmpty ? 72 : 24), 0) + 4 + 33 + 1;
+      const count = local.length + remote.length;
+      return {
+        f: { style: pos(left, top, FLY_W, total), q: o.q || '', noQ: !o.q, count: `${count} of ${LOCAL.length + ORIGIN.length}`, banner: o.banner || '', rows },
+        left, top, right, h: total,
+        // The pointer on a row's name: where its context menu opens.
+        point: (key) => ({ x: left + 112, y: top + at[key] + 14 }),
+        row: (key) => ({ y: top + at[key] })
+      };
+    };
+
+    // ---------------------------------------------------------------- the editor and the Compare document
+    const GREETER = [
+      'namespace Greetings;', '', 'public static class Greeter', '{',
+      '    public static string Greet(string name, GreeterOptions? options = null) =>',
+      '        $"{options?.Salutation ?? "Hello"} from {name}";', '}'
+    ];
+    const editor = (rect, o = {}) => ({
+      style: pos(...rect), label: o.cmp ? 'feature/sign-in ↔ main' : 'Greeter.cs',
+      tabs: o.cmp
+        ? [{ t: 'feature/sign-in ↔ main', i: 'compare', c: 'c-blue', cls: 'on', on: 'true' }]
+        : [{ t: 'Greeter.cs', i: 'cl-csharp', c: 'c-green', cls: 'on', on: 'true' }],
+      code: o.cmp ? null : GREETER.map((src, i) => ({ n: i + 1, toks: C.csharp(src) })),
+      cmp: o.cmp ? compareDoc() : null
+    });
+    const compareDoc = () => {
+      const rows = [
+        node(0, ROOT, { icon: ['cl-git', 'c-outline'], open: true, repo: true, files: 5 }),
+        node(1, 'src', { open: true, files: 4 }), node(2, 'Greetings', { open: true, files: 3 }),
+        node(3, 'Greeter.cs', { letter: 'M' }), node(3, 'SignIn.cs', { letter: 'A' }), node(3, 'TokenStore.cs', { letter: 'R', old: '← Tokens.cs' }),
+        node(2, 'Hello', { open: true, files: 1 }), node(3, 'Program.cs', { letter: 'M' }),
+        node(1, 'tools', { open: true, files: 1 }), node(2, 'setup.sh', { letter: 'D' })
+      ].map((r, i) => ({ ...r, y: 4 + i * ROW, cls: r.t === 'SignIn.cs' ? 'sel' : '', selA: String(r.t === 'SignIn.cs') }));
+      return { title: 'feature/sign-in ↔ main', count: '5 files', rows,
+        hint: 'Letters say what feature/sign-in changes from main, tip to tip. Enter or double-click opens a file\'s diff: main on the left, feature/sign-in on the right.' };
+    };
+
+    // ---------------------------------------------------------------- the dialogs
+    const DLG_W = 520;
+    const dialogs = {
+      discard: { tile: true, title: `Discard changes in ${path('src', 'Greetings')}?`, ctx: `${ROOT} · Changes`,
+        msg: 'The unstaged changes to these 5 files will be lost. This can\'t be undone.', notes: ['1 untracked file will be deleted.'],
+        details: GREETINGS.map(([n, l]) => ({ l, t: n })), buttons: buttons(['Discard', 'Cancel'], 'Cancel') },
+      'discard-filtered': { tile: true, title: `Discard changes in ${path('src', 'Greetings')}?`, ctx: `${ROOT} · Changes · filtered by “Greeter”`,
+        msg: 'The unstaged changes to these 2 files will be lost. This can\'t be undone.', notes: ['3 more files under this folder are hidden by the filter and won\'t change.'],
+        details: [{ l: 'M', t: 'Greeter.cs' }, { l: 'M', t: 'GreeterOptions.cs' }], buttons: buttons(['Discard', 'Cancel'], 'Cancel') },
+      rename: { title: 'Rename Branch', msg: 'A new name for feature/sign-in:', input: 'release/0.6', inCls: 'is-error', error: 'A branch with that name exists.',
+        buttons: buttons(['Rename', 'Cancel'], 'Rename', true) },
+      delete: { tile: true, title: 'Delete feature/sign-in?', ctx: 'Local branch · tracks origin/feature/sign-in',
+        msg: 'The branch is deleted from this repository.', choice: 'Also delete origin/feature/sign-in on the server',
+        buttons: buttons(['Delete', 'Cancel'], 'Cancel') },
+      'delete-unmerged': { tile: true, title: 'feature/sign-in isn\'t merged', ctx: 'Compared with origin/feature/sign-in, the branch it tracks',
+        msg: 'feature/sign-in has commits that aren\'t in origin/feature/sign-in. Deleting it loses them unless another branch or a tag has them.',
+        buttons: buttons(['Delete', 'Cancel'], 'Cancel') },
+      'delete-remote': { tile: true, title: 'Delete origin/fix/null-greeting from origin?', ctx: 'Remote branch · no local branch tracks it',
+        msg: 'This deletes it on the server for everyone.', buttons: buttons(['Delete', 'Cancel'], 'Cancel') }
+    };
+
+    // ---------------------------------------------------------------- the states, drawn into a stage of any size
+    const GEO = {
+      tree: { w: 400, h: 780, pane: [0, 0, 400, 780] },
+      branch: { w: 610, h: 490, ed: [0, 0, 210 - G, 490], pane: [210, 0, 400, 490] },
+      narrow: { w: 610, h: 490, ed: [0, 0, 330 - G, 490], pane: [330, 0, 280, 490] },
+      dialog: { w: 610, h: 350, ed: [0, 0, 210 - G, 350], pane: [210, 0, 400, 350] },
+      compare: { w: 1240, h: 400, ed: [0, 0, 840 - G, 400], pane: [840, 0, 400, 400] }
+    };
+    const inWindow = (pw) => {
+      const top = 62 + G, bottom = 800 - 24 - G, px = 1280 - G - pw;
+      return { w: 1280, h: 800, chrome: true, ed: [G, top, px - 2 * G, bottom - top], pane: [px, top, pw, bottom - top] };
+    };
+    const kindOf = (key) => ['changes', 'folder', 'staged-folder', 'deleted-folder', 'untracked-folder', 'filtered'].includes(key) ? 'tree'
+      : key === 'compare' ? 'compare' : key === 'narrow' ? 'narrow' : dialogs[key] ? 'dialog' : 'branch';
+
+    const scene = (key, geo) => {
+      const s = { w: geo.w, h: geo.h, chrome: !!geo.chrome, status: 'Ready', statusDoc: 'Greeter.cs', statusBranch: 'main', eds: [], panes: [], flys: [], dlgs: [], menus: [], tips: [], scrim: false, strip: '' };
+      const H = geo.h;
+      const win = !!geo.chrome;
+      if (geo.ed) s.eds.push(editor(geo.ed, { cmp: key === 'compare' }));
+      const paneOpts = { ...BASE, tabs: win };
+      const branchOpen = { ...paneOpts, open: true, inactive: false };
+      let P;
+      switch (key) {
+        case 'changes': {
+          P = pane(geo.pane, { ...paneOpts, hover: 'changes:greetings', hoverAct: 'discard' });
+          // A tooltip stays inside the window: right-aligned to the button at the window's edge.
+          const a = P.act('changes:greetings', 'discard');
+          s.tips.push({ t: 'Discard changes', style: `right:${geo.w - (a.x + 24) + 2}px;top:${a.y + 28}px;` });
+          break;
+        }
+        case 'folder': {
+          P = pane(geo.pane, { ...paneOpts, sel: 'changes:greetings' });
+          const r = P.row('changes:greetings');
+          s.menus.push(menuAt(path('src', 'Greetings'), folderMenu({ section: 'changes', hover: REVEAL }), r.x + 150, r.y + 14, H));
+          break;
+        }
+        case 'staged-folder': {
+          P = pane(geo.pane, { ...paneOpts, sel: 'staged:hello' });
+          const r = P.row('staged:hello');
+          s.menus.push(menuAt(path('src', 'Hello'), folderMenu({ section: 'staged', hover: 'Unstage' }), r.x + 130, r.y + 14, H));
+          break;
+        }
+        case 'deleted-folder': {
+          P = pane(geo.pane, { ...paneOpts, changes: { count: 10, rows: changesRows({ greetings: false, tools: true }) }, sel: 'changes:tools' });
+          const r = P.row('changes:tools');
+          s.menus.push(menuAt('tools', folderMenu({ section: 'changes', exists: false }), r.x + 110, r.y + 14, H));
+          break;
+        }
+        case 'untracked-folder': {
+          P = pane(geo.pane, { ...paneOpts, changes: { count: 10, rows: changesRows({ greetings: false, notes: true }) }, sel: 'changes:notes' });
+          const r = P.row('changes:notes');
+          s.menus.push(menuAt('notes', folderMenu({ section: 'changes', allUntracked: true, hover: 'Add to .gitignore' }), r.x + 110, r.y + 14, H));
+          break;
+        }
+        case 'filtered': {
+          P = pane(geo.pane, { ...paneOpts, filter: 'Greeter', staged: { count: 2, rows: [] }, changes: { count: 10, rows: filteredRows() }, hover: 'changes:greetings', hoverAct: 'add' });
+          const a = P.act('changes:greetings', 'add');
+          s.tips.push({ t: 'Stage', style: pos(a.x - 6, a.y + 28) });
+          break;
+        }
+        case 'compare': {
+          P = pane(geo.pane, { ...paneOpts, inactive: true });
+          s.statusDoc = 'feature/sign-in ↔ main';
+          break;
+        }
+        default: {
+          if (dialogs[key]) {
+            P = pane(geo.pane, { ...paneOpts, inactive: true, sel: key.startsWith('discard') ? 'changes:greetings' : '',
+              ...(key === 'discard-filtered' ? { filter: 'Greeter', staged: { count: 2, rows: [] }, changes: { count: 10, rows: filteredRows() } } : {}) });
+            s.scrim = true;
+            s.dlgs.push({ ...dialogs[key], style: pos(Math.round((geo.w - DLG_W) / 2), win ? 150 : 28) });
+            break;
+          }
+          // The branch drop-down's states.
+          const o = { ...branchOpen };
+          const fo = {};
+          let menu = null;
+          switch (key) {
+            case 'branches': Object.assign(fo, { hover: 'l:feature/sign-in' }); break;
+            case 'search': Object.assign(fo, { q: 'sign' }); break;
+            case 'nomatch': Object.assign(fo, { q: 'zzz' }); break;
+            case 'branch-menu': Object.assign(fo, { sel: 'l:feature/sign-in' }); menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', cur: 'main', hasRemote: true, hover: 'Rebase \'main\' onto \'feature/sign-in\'' } }; break;
+            case 'current-menu': Object.assign(fo, { sel: 'l:main' }); menu = { key: 'l:main', o: { name: 'main', cur: 'main', current: true, hasRemote: true } }; break;
+            case 'remote-menu': Object.assign(fo, { sel: 'r:fix/null-greeting' }); menu = { key: 'r:fix/null-greeting', o: { kind: 'remote', name: 'origin/fix/null-greeting', cur: 'main', hasRemote: true, hover: 'Checkout' } }; break;
+            case 'worktree': Object.assign(fo, { sel: 'l:release/0.6', worktree: 'release/0.6', moreOn: 'l:release/0.6' }); menu = { key: 'l:release/0.6', more: true, o: { name: 'release/0.6', cur: 'main', worktree: true, hasRemote: true } }; break;
+            case 'worktree-enter': Object.assign(fo, { sel: 'l:release/0.6', kfocus: true, worktree: 'release/0.6' }); break;
+            case 'detached':
+              Object.assign(o, { branch: '(detached at 1a2b3c4)', io: '0 / 0', ioTip: 'The branch isn\'t published: push it to create its remote branch.', publish: true });
+              Object.assign(fo, { sel: 'l:feature/sign-in', detached: true });
+              menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', detached: true, hasRemote: true } };
+              break;
+            case 'operation':
+              Object.assign(o, { banner: 'A merge is in progress. Resolve the conflicts, then Continue.', msg: 'Merge branch \'feature/sign-in\'',
+                conflicts: { count: 1, rows: [repoNode(1), node(1, path('src', 'Greetings'), { open: true, files: 1 }), node(2, 'Greeter.cs', { letter: '!' })] },
+                staged: { count: 1, rows: [repoNode(1), node(1, 'README.md', { letter: 'M', staged: true })] }, changes: { count: 0, rows: [] } });
+              Object.assign(fo, { sel: 'l:feature/sign-in', banner: 'A merge is in progress: Checkout, Merge, Rebase and Delete are back once it is committed or aborted.' });
+              menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', cur: 'main', operation: true, hasRemote: true } };
+              break;
+            case 'unborn':
+              Object.assign(o, { io: '0 / 0', ioTip: 'The branch isn\'t published: push it to create its remote branch.', publish: true, msg: 'Initial commit', commit: 'Commit All', staged: null,
+                changes: { count: 7, rows: [repoNode(7), node(1, 'src', { open: false, files: 5 }), node(1, 'BuildAndRun.slnx', { letter: 'U' }), node(1, 'README.md', { letter: 'U' })] } });
+              Object.assign(fo, { sel: 'l:main', local: [{ name: 'main', cur: true, det: 'No commits yet' }], noRemote: true });
+              menu = { key: 'l:main', o: { unborn: true } };
+              break;
+            case 'noremote':
+              Object.assign(o, { io: '0 / 0', ioTip: 'The branch isn\'t published: push it to create its remote branch.', publish: true });
+              Object.assign(fo, { sel: 'l:feature/sign-in', noRemote: true });
+              menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', cur: 'main', hasRemote: false } };
+              break;
+            default: break;
+          }
+          P = pane(geo.pane, o);
+          const F = flyout(P, fo);
+          s.flys.push(F.f);
+          if (menu && menu.more) {
+            // From ⋯: under the button, its right edge on the button's.
+            const r = F.row(menu.key);
+            s.menus.push({ label: menu.o.name, rows: branchMenu(menu.o), style: `right:${geo.w - (F.right - 9)}px;top:${r.y + 23}px;` });
+          } else if (menu) {
+            const pt = F.point(menu.key);
+            s.menus.push(menuAt(menu.o.name || 'main', branchMenu(menu.o), pt.x, pt.y, H));
+          }
+          if (key === 'worktree-enter') {
+            const r = F.row('l:release/0.6');
+            s.tips.push({ t: `Checked out in ${WORKTREE}`, style: pos(F.right - 150, r.y + 26) });
+            const msgText = `release/0.6 is checked out in ${WORKTREE}.`;
+            if (win) s.status = msgText; else { s.strip = msgText; s.stripLabel = 'The status bar after Enter:'; }
+          }
+          if (key === 'detached') s.statusBranch = '(detached at 1a2b3c4)';
+        }
+      }
+      s.panes.push(P.g);
+      return s;
+    };
+
+    // ---------------------------------------------------------------- the sheet, or one state in the whole window
+    const CAPS = {
+      changes: ['(a) Hover buttons on a folder, now with Discard', `${path('src', 'Greetings')} · Changes`,
+        'Under the pointer a folder in Changes shows Stage and Discard changes (CanDiscard: it has unstaged files); a staged folder shows Unstage. They run the menu\'s commands, on the files shown.'],
+      folder: ['(b) A folder\'s menu in Changes', `${path('src', 'Greetings')} · gitChanges/context`,
+        'Right-click, Shift+F10 or the Menu key, and above the pointer when there\'s no room below. Reveal is File Explorer, Finder or File Manager by OS. Add to .gitignore is hidden: the folder has tracked files.'],
+      'staged-folder': ['(c) A staged folder', `${path('src', 'Hello')} · Staged Changes`,
+        'Unstage instead of Stage, and no Discard (it acts on unstaged changes). Stash takes the folder\'s staged and unstaged changes.'],
+      'deleted-folder': ['(d) A folder whose files are all deleted', 'tools · 2 deleted',
+        'The folder isn\'t on disk, so Reveal and Open in Terminal are hidden; Copy Path still copies the path it had.'],
+      'untracked-folder': ['(e) A folder of untracked files', 'notes · 2 untracked',
+        'Every file under it is untracked, so Add to .gitignore shows; it ignores the folder. Stash includes the untracked files.'],
+      filtered: ['(f) With a filter', 'Filter files: Greeter',
+        'The folder row says how many of its files the filter shows. Its hover buttons and its menu act on those two; a command called without the third argument acts on the whole folder.'],
+      discard: ['(g) Discard Changes… on a folder', 'danger dialog · Enter is Cancel',
+        'It lists exactly the files it acts on (the first 10, then "and N more") and says how many untracked files it deletes. Discard is named for what it does.'],
+      'discard-filtered': ['(h) The same, with the filter on', 'shownOnly · 2 of 5 files',
+        'Only the two files shown change, and the dialog says how many the filter hides.'],
+      rename: ['(i) Rename… (F2) to a name that exists', 'git.renameBranch · check-ref-format',
+        'The current name to edit; git\'s own check of the name, and a name another branch has, as the error under the box. Rename waits for a valid name.'],
+      delete: ['(j) Delete', 'git.deleteBranch · the first confirmation',
+        'One confirmation; when the branch has an upstream, deleting it too is an unchecked check box here.'],
+      'delete-unmerged': ['(k) A branch that isn\'t merged', 'git\'s rule: the upstream, else HEAD',
+        'A second dialog names what git compares with: origin/feature/sign-in here, main for a branch without an upstream. Delete then runs git branch -D.'],
+      'delete-remote': ['(l) Delete from origin…', 'origin/fix/null-greeting',
+        'A remote branch\'s own confirmation (git push origin --delete): it deletes the branch on the server for everyone.'],
+      compare: ['(m) Compare with Current Branch', 'feature/sign-in ↔ main · GitCompareDocument',
+        'A document with the files that differ, tip to tip, as a tree (or a list) with name-status letters; a rename shows its old name. Refresh runs the comparison again.'],
+      branches: ['(n) The branch drop-down', 'BranchPicker · DropDownButton',
+        'The search box has the focus. Local branches, the current one first in bold with a check, then each remote\'s. Ahead/behind chips fade in after the names; the row under the pointer shows ⋯.'],
+      search: ['(o) Searching', 'sign · 2 of 7',
+        'Filtering in memory; an empty group hides, and Up and Down skip the headers. Delete, Backspace and F2 edit the text here: they act on branches only in the list.'],
+      nomatch: ['(p) Nothing matches', 'zzz', 'One sentence; New Branch… stays at the bottom.'],
+      'branch-menu': ['(q) A branch\'s menu', 'feature/sign-in · gitChanges/branch',
+        'Right-click, ⋯, Shift+F10 or the Menu key; the flyout stays open under it. The titles name the branches; F2 renames and Delete deletes.'],
+      'current-menu': ['(r) The current branch', 'main', 'No Checkout, Merge, Rebase, Delete or Compare.'],
+      'remote-menu': ['(s) A remote branch', 'origin/fix/null-greeting',
+        'Checkout makes a local branch that tracks it (a remote branch that has a local one switches to that). Delete from origin… instead of Delete; no Push or Rename.'],
+      worktree: ['(t) A branch checked out in another worktree', 'release/0.6 · worktree', 'The worktree chip on the row, and its menu from ⋯, under the button: Checkout and Delete are hidden.'],
+      'worktree-enter': ['(u) Enter on that branch', 'release/0.6', 'The chip\'s tooltip names the folder, and Enter says where the branch is checked out instead of trying.'],
+      detached: ['(v) A detached HEAD', '(detached at 1a2b3c4)', 'The button shows the commit, and no row has the check. Merge and Rebase name HEAD, and Compare compares with it.'],
+      operation: ['(w) A merge in progress', 'gitOperation · the window\'s banner',
+        'The flyout repeats the banner. Checkout, Merge, Rebase and Delete are hidden until the merge is committed or aborted.'],
+      unborn: ['(x) A repository with no commits', 'git init', 'The current name with "No commits yet", no remote group, and only Copy Branch Name.'],
+      noremote: ['(y) No remote', 'git remote: none', 'No remote group, no chips and no Push; the window keeps its Publish branch link.'],
+      narrow: ['(z) The narrowest pane', '280 px · Shell.Size.ToolWindowMinWidth', 'The flyout keeps its 340 px, right-aligned to the button, and opens over the editor.']
+    };
+    const panel = (key) => {
+      const s = scene(key, GEO[kindOf(key)]);
+      const [title, src, cap] = CAPS[key];
+      return { ...s, title, src, cap };
+    };
+    const SECTIONS = [
+      { title: 'The change tree: hover buttons and the folder menu', lead: 'The menu is built from gitChanges/context with the row\'s keys, scoped to that menu (gitChangeKind, gitChangeSection, gitChangeAllUntracked, gitChangeExists). Entries that don\'t apply are hidden.',
+        rows: [['changes', 'folder', 'staged-folder'], ['deleted-folder', 'untracked-folder', 'filtered']] },
+      { title: 'Confirmations, and Compare with Current Branch', lead: 'In-window dialogs over the dimmed window. Discard and Delete always ask, with Enter on Cancel.',
+        rows: [['discard', 'discard-filtered'], ['rename', 'delete'], ['delete-unmerged', 'delete-remote'], ['compare']] },
+      { title: 'The branch drop-down and its menu', lead: 'The branch button becomes a drop-down; its flyout lists the branches and each row has the menu of gitChanges/branch, with the branch\'s keys (gitBranchKind, gitBranchIsCurrent, gitBranchHasUpstream, gitBranchInOtherWorktree, gitHasRemote) and the global gitOperation.',
+        rows: [['branches', 'search'], ['nomatch', 'branch-menu'], ['current-menu', 'remote-menu'], ['worktree', 'worktree-enter'], ['detached', 'operation'], ['unborn', 'noremote'], ['narrow']] }
+    ];
+    let sections, mainCls = 'sheet';
+    if (sheet) {
+      sections = SECTIONS.map((sec) => ({ ...sec, rows: sec.rows.map((keys) => ({ items: keys.map(panel) })) }));
+    } else {
+      mainCls = 'frame';
+      const s = scene(state, inWindow(state === 'narrow' ? 280 : 400));
+      sections = [{ rows: [{ items: [{ ...s, title: state }] }] }];
+    }
+
+    const decisions = [
+      { n: 1, b: 'Discard and Delete keep Enter on Cancel.', t: 'Cancel is the dialog\'s default, so it carries the accent; Discard and Delete are plain buttons named for the action, first on Windows and Linux, last on macOS, as Drop Stash and Reset already are.', rej: 'the accent on Discard or Delete while Enter stays on Cancel (DialogView draws the default as its primary); a red button, a new token.' },
+      { n: 2, b: 'Menu folder actions act on the files the window shows;', t: 'with a filter, only those, and the confirmation counts the hidden ones (h). A command called without the third argument acts on the whole folder.', rej: 'the whole folder from the menu too, whatever the filter shows.' },
+      { n: 3, b: 'Entries that don\'t apply are hidden, and the row or a banner says why', t: '(the worktree chip, the merge banner, "No commits yet").', rej: 'grayed entries with a reason (a menu rule can only hide; per-rule enablement would be a plugin-manifest change).' },
+      { n: 4, b: 'Branch names stay whole,', t: 'one row each (feature/sign-in), the current branch first, then by name; remote branches under their remote\'s header without the prefix, those with a local branch included.', rej: 'folders for each "/" as the classic IDE nests them; hiding remote branches that have a local one, as the Switch Branch quick pick does.' },
+      { n: 5, b: 'Titles name the branches,', t: 'as the classic IDE\'s do: "Merge \'feature/sign-in\' into \'main\'", "Rebase \'main\' onto \'feature/sign-in\'", HEAD when detached, and Compare with HEAD then.', rej: 'static titles (Merge into Current Branch).' },
+      { n: 6, b: 'A ⋯ button on the row under the pointer or selected', t: 'opens the same menu as right-click, Shift+F10 and the Menu key.', rej: 'no button: the menu from right-click and the keyboard only.' },
+      { n: 7, b: 'Checkout of a remote branch that has a local branch switches to the local one;', t: 'without one it creates a local branch that tracks it.', rej: 'asking whether to reset the local branch to the remote one.' },
+      { n: 8, b: 'Deleting the upstream is offered once, in the first confirmation,', t: 'as one unchecked check box whenever the branch has an upstream (j); the second dialog only warns (k). A remote branch has its own Delete from origin….', rej: 'the plan\'s choice in the second dialog only, which a merged branch never sees; DialogView\'s checklist (Select all, 0 of 1) for one choice.' },
+      { n: 9, b: 'Compare is tip to tip, from the current branch to the other:', t: 'SignIn.cs, new on feature/sign-in, is A, and a file\'s diff shows main on the left (m).', rej: 'from the merge base (the branch\'s own changes only); the plan\'s HEAD on the right, which marks the branch\'s new files D.' },
+      { n: 10, b: 'Two entries get icons the code doesn\'t give them:', t: 'Add to .gitignore an eye-off in blue (explorer.addToGitignore has none, so the plan\'s "its icon" is none), and Rebase the ⋯ menu\'s arrow-sort in Git orange (git.rebase has no CommandIcons entry).', rej: 'the only entries of their menus without an icon.' },
+      { n: 11, b: 'An empty repository shows only Copy Branch Name (x).', t: 'The plan\'s rules would also show New Local Branch From…, Rename… and View History there; they need a key for an unborn HEAD (gitHeadUnborn).', rej: 'showing them and letting git fail.' },
+      { n: 12, b: 'Copy Path stays on a folder that\'s no longer on disk (d);', t: 'only Reveal and Open in Terminal need it to exist.', rej: 'hiding Copy Path with them, as the plan\'s rule (gitChangeExists on all three) would.' },
+      { n: 13, b: 'View History keeps git.history\'s shortcut label', t: `(${KEY.history}), as MenuBuilder shows a command\'s binding; the shortcut opens the repository's history, not the branch's. The Delete key reads "Delete", not "Del".`, rej: 'no label on entries that pass arguments (a MenuBuilder change).' },
+      { n: 14, b: 'The flyout is 340 px, right-aligned to the button,', t: 'over the editor at 280 px (z); the button stays today\'s 28 px with the branch icon in Git orange.', rej: 'a 24 px compact button; a flyout as wide as the pane.' },
+      { n: 15, b: 'A folder row shows "2 of 5 files" only while a filter hides some (f).', t: 'Accessible names give every folder its count.', rej: 'a count on every folder row.' }
+    ];
+
+    return { t, themeCls: 'th-' + t.name.toLowerCase().replace(/\s+/g, '-'), os, sheet, mainCls, themes, oses, stateLinks, themeQ, sections, decisions, searchKey: KEY.search,
+      // On macOS the menus are the system's menu bar (MenuBuilder hides the window's).
+      menus: mac ? [] : ['File', 'Edit', 'View', 'Git', 'Project', 'Build', 'Debug', 'Test', 'Analyze', 'Tools', 'Window', 'Help'] };
+  }
+}
+</script>
+</body>
+</html>

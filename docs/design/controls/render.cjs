@@ -38,7 +38,16 @@ const PAGES = [
   { file: 'PropertiesWindow.dc.html', name: 'properties-window-alignment', query: 'state=Alignment', width: 1280, height: 800, themes: [] },
   { file: 'PropertiesWindow.dc.html', name: 'properties-window-strings', query: 'state=Strings', width: 1280, height: 800, themes: [] },
   { file: 'PropertiesWindow.dc.html', name: 'properties-window-resource', query: 'state=Resource', width: 1280, height: 800, themes: [] },
-  { file: 'PropertiesWindow.dc.html', name: 'properties-window-file', query: 'state=File', width: 1280, height: 800, themes: [] }
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-file', query: 'state=File', width: 1280, height: 800, themes: [] },
+  { file: 'GitChanges.dc.html', name: 'git-changes', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-folder', query: 'state=folder', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-branch-menu', query: 'state=branch-menu', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-delete-unmerged', query: 'state=delete-unmerged', width: 1280, height: 800, themes: ['Classic Light'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-folder-macos', query: 'state=folder&os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
+  // The other states in the whole window, checked in every theme but not rendered: the sheet above shows each of them.
+  ...['changes', 'staged-folder', 'deleted-folder', 'untracked-folder', 'filtered', 'discard', 'discard-filtered', 'rename', 'delete', 'delete-remote',
+    'compare', 'branches', 'search', 'nomatch', 'current-menu', 'remote-menu', 'worktree', 'worktree-enter', 'detached', 'operation', 'unborn', 'noremote', 'narrow']
+    .map((state) => ({ file: 'GitChanges.dc.html', name: `git-changes-${state}`, query: `state=${state}`, width: 1280, height: 800, themes: [] }))
 ];
 
 const slug = (s) => s.toLowerCase().replace(/\s+/g, '-');
