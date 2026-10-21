@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
@@ -81,6 +82,18 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly NextEditSuggestions _nextEdit;
     private SignatureHelpPopup? _signature;
     private Point _hoverPoint;
+
+    /// <summary>The symbol Quick Info describes, when the pointer opened it on one: the pointer on it keeps Quick Info.</summary>
+    private (int Start, int End)? _quickInfoSymbol;
+
+    /// <summary>The closest the pointer came to Quick Info since it opened (null: not measured yet).</summary>
+    private double? _quickInfoClosest;
+
+    /// <summary>The text view's scroll offset when Quick Info opened: Quick Info is placed against the text.</summary>
+    private Vector _quickInfoScroll;
+
+    /// <summary>Quick Info's last decisions (asked, refused and why, opened, closed and why), for a test's failure message.</summary>
+    private readonly Queue<string> _quickInfoTrace = new();
     private DocumentOptions? _documentOptions;
     private readonly bool _attached;
     private bool _disposed;
@@ -110,7 +123,7 @@ public sealed partial class CodeEditorController : IDisposable
         var view = editor.TextArea.TextView;
         view.LineTransformers.Add(_colorizer);
         view.LineTransformers.Add(_markers);
-        _link = new DefinitionLink(editor, () => Model, () => Client);
+        _link = new DefinitionLink(editor, DefinitionsAtAsync);
         view.LineTransformers.Add(_link);
         view.BackgroundRenderers.Add(_highlights);
         view.BackgroundRenderers.Add(_markers);
@@ -156,6 +169,7 @@ public sealed partial class CodeEditorController : IDisposable
         _nextEdit = new NextEditSuggestions(editor, () => Model, () => services.AiNextEdit, () => _completion is not null || _inline.IsVisible, () => ResourceBrush("Shell.Info"));
         _hoverTimer = new DispatcherTimer { Interval = s_hoverDelay };
         _hoverTimer.Tick += OnHoverTimer;
+        _hoverPopup.Closed += OnQuickInfoClosed;
 
         ApplyOptions();
         ApplyTheme();
@@ -168,6 +182,7 @@ public sealed partial class CodeEditorController : IDisposable
         Model.PropertyChanged += OnModelPropertyChanged;
         document.Changing += OnDocumentChanging;
         view.ScrollOffsetChanged += OnViewChanged;
+        view.ScrollOffsetChanged += OnViewScrolled;
         view.VisualLinesChanged += OnViewChanged;
         editor.TextArea.Caret.PositionChanged += OnCaretChanged;
         editor.TextArea.SelectionChanged += OnCaretChanged;
@@ -288,6 +303,10 @@ public sealed partial class CodeEditorController : IDisposable
     public event EventHandler? TokensApplied;
 
     private LanguageHostClient? Client => _services.Client(Model);
+
+    /// <summary>The definitions of the symbol at an offset, for the Ctrl+hover link; null without a language service.</summary>
+    private async Task<Codalus.LanguageServices.Protocol.Location[]?> DefinitionsAtAsync(int offset, CancellationToken cancellationToken) =>
+        Client is { } client ? await client.DefinitionAsync(Model.Uri, Model.PositionAt(offset), cancellationToken).ConfigureAwait(true) : null;
 
     private CancellationTokenSource Restart(ref CancellationTokenSource? cts)
     {
@@ -486,6 +505,9 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>Requests everything again: after the language service (re)started, or the document was reloaded.</summary>
     public void RefreshAll()
     {
+        // A symbol under the Ctrl+hover pointer that the service didn't know may be known now.
+        _link.Recheck();
+
         // Highlighting the visible lines first; folding (a walk of the whole file), options and the insights (CodeLens,
         // inlay hints and document symbols, whose answers for a 100k-line file are megabytes the service computes beside
         // the first classification) when it's done.
@@ -1537,9 +1559,14 @@ public sealed partial class CodeEditorController : IDisposable
     {
         var point = e.GetPosition(Editor.TextArea.TextView);
         _link.Update(point, e.KeyModifiers);
-        if (_hoverPopup.IsOpen && Math.Abs(point.X - _hoverPoint.X) + Math.Abs(point.Y - _hoverPoint.Y) < 8)
+        if (_hoverPopup.IsOpen && KeepsQuickInfo(point))
         {
             return;
+        }
+
+        if (_hoverPopup.IsOpen)
+        {
+            TraceQuickInfo($"the pointer moved away, to {point}");
         }
 
         _hoverPoint = point;
@@ -1548,8 +1575,90 @@ public sealed partial class CodeEditorController : IDisposable
         _hoverTimer.Start();
     }
 
+    /// <summary>What Quick Info did lately and why, oldest first (tests).</summary>
+    internal string QuickInfoTrace => string.Join("; ", _quickInfoTrace);
+
+    private void TraceQuickInfo(string what)
+    {
+        if (_quickInfoTrace.Count == 12)
+        {
+            _quickInfoTrace.Dequeue();
+        }
+
+        _quickInfoTrace.Enqueue($"{Environment.TickCount64 % 1_000_000} {what}");
+    }
+
+    private void OnQuickInfoClosed(object? sender, EventArgs e) => TraceQuickInfo("closed");
+
+    /// <summary>
+    /// Whether a pointer move over the text leaves Quick Info open: near where it opened, on the symbol it describes, or on
+    /// its way to it. Quick Info opens just below the pointer, so the way to a button at its far right (a data tip's Pin to
+    /// source) runs along the text above its top edge: while the pointer gets no more than a few pixels farther from Quick
+    /// Info than it has been (as VS Code), it's heading there. Any other move closes Quick Info, and it's asked for where
+    /// the pointer stops.
+    /// </summary>
+    private bool KeepsQuickInfo(Point point)
+    {
+        if (Math.Abs(point.X - _hoverPoint.X) + Math.Abs(point.Y - _hoverPoint.Y) < 8
+            || (_quickInfoSymbol is { } symbol && DefinitionLink.IdentifierAt(Editor, point) == symbol))
+        {
+            return true;
+        }
+
+        if (QuickInfoBounds() is not { } bounds)
+        {
+            return false;
+        }
+
+        var closest = _quickInfoClosest ?? DistanceTo(bounds, _hoverPoint);
+        var distance = DistanceTo(bounds, point);
+        if (distance > closest + 4)
+        {
+            return false;
+        }
+
+        _quickInfoClosest = Math.Min(closest, distance);
+        return true;
+    }
+
+    /// <summary>Quick Info's bounds in the text view's coordinates, once it's laid out (its own window, or the window's overlay).</summary>
+    private Rect? QuickInfoBounds()
+    {
+        if (_hoverPopup.Child is not { Bounds.Width: > 0, Bounds.Height: > 0 } child || TopLevel.GetTopLevel(child) is null)
+        {
+            return null;
+        }
+
+        return new Rect(Editor.TextArea.TextView.PointToClient(child.PointToScreen(default)), child.Bounds.Size);
+    }
+
+    private static double DistanceTo(Rect rect, Point point)
+    {
+        var dx = Math.Max(Math.Max(rect.Left - point.X, 0), point.X - rect.Right);
+        var dy = Math.Max(Math.Max(rect.Top - point.Y, 0), point.Y - rect.Bottom);
+        return Math.Sqrt((dx * dx) + (dy * dy));
+    }
+
+    /// <summary>
+    /// Quick Info is placed against the text: when the text scrolls under it (the wheel reaches the text while it's open),
+    /// it would describe whatever is there now, so it closes.
+    /// </summary>
+    private void OnViewScrolled(object? sender, EventArgs e)
+    {
+        if (_hoverPopup.IsOpen && (Editor.TextArea.TextView.ScrollOffset - _quickInfoScroll).Length > 0.5)
+        {
+            TraceQuickInfo($"the text scrolled from {_quickInfoScroll} to {Editor.TextArea.TextView.ScrollOffset}");
+            _hoverPopup.IsOpen = false;
+        }
+    }
+
     private void OnPointerExited(object? sender, PointerEventArgs e)
     {
+        if (_hoverTimer.IsEnabled)
+        {
+            TraceQuickInfo("the pointer left the text before Quick Info was asked for");
+        }
+
         _hoverTimer.Stop();
         _link.Clear();
     }
@@ -1560,11 +1669,13 @@ public sealed partial class CodeEditorController : IDisposable
         var view = Editor.TextArea.TextView;
         if (view.GetPosition(_hoverPoint + view.ScrollOffset) is not { } position)
         {
+            TraceQuickInfo($"no text at {_hoverPoint}");
             return;
         }
 
         var offset = Model.Text.GetOffset(position.Location);
-        _ = ShowQuickInfoAsync(offset, _hoverPoint);
+        TraceQuickInfo($"asked at {offset} ({_hoverPoint})");
+        _ = ShowQuickInfoAsync(offset, _hoverPoint, DefinitionLink.IdentifierAt(Editor, _hoverPoint));
     }
 
     /// <summary>Quick Info at the caret (Ctrl+K Ctrl+I).</summary>
@@ -1575,7 +1686,8 @@ public sealed partial class CodeEditorController : IDisposable
         _ = ShowQuickInfoAsync(Editor.CaretOffset, location);
     }
 
-    private async Task ShowQuickInfoAsync(int offset, Point at)
+    /// <param name="symbol">The symbol under the pointer that asked for Quick Info: the pointer on it keeps Quick Info open.</param>
+    private async Task ShowQuickInfoAsync(int offset, Point at, (int Start, int End)? symbol = null)
     {
         var cancellationToken = Restart(ref _hoverCts).Token;
         try
@@ -1583,6 +1695,7 @@ public sealed partial class CodeEditorController : IDisposable
             // Not while the completion list or signature help is open: they say what Quick Info would.
             if (IsIntelliSenseOpen)
             {
+                TraceQuickInfo("not shown: the completion list or parameter info is open");
                 return;
             }
 
@@ -1602,6 +1715,7 @@ public sealed partial class CodeEditorController : IDisposable
             var hasSymbol = hover?.Description is { } described && (described.Signature.Length > 0 || described.Sections.Length > 0) || hover?.Contents.Value is { Length: > 0 };
             if (cancellationToken.IsCancellationRequested || _disposed || IsIntelliSenseOpen || (!hasSymbol && diagnostics.Count == 0 && dataTip is null))
             {
+                TraceQuickInfo($"not shown at {offset}: cancelled {cancellationToken.IsCancellationRequested}, IntelliSense {IsIntelliSenseOpen}, symbol {hasSymbol}, diagnostics {diagnostics.Count} of {_markers.Segments.Count()}, data tip {dataTip is not null}");
                 return;
             }
 
@@ -1622,6 +1736,7 @@ public sealed partial class CodeEditorController : IDisposable
 
             if (!CanShowPopups)
             {
+                TraceQuickInfo("not shown: the editor isn't showing");
                 return; // a document opened over the editor while Quick Info was asked for
             }
 
@@ -1633,14 +1748,26 @@ public sealed partial class CodeEditorController : IDisposable
             };
             _hoverPopup.WindowManagerAddShadowHint = true;
             _hoverPopup.PlacementTarget = Editor.TextArea.TextView;
+
+            // Light dismiss covers the window with a layer that takes the pointer while Quick Info is open. Over the text it
+            // lets the pointer through: the text view keeps the pointer (no PointerExited, which took the Ctrl+hover link
+            // away) and its moves, so moving away closes Quick Info (KeepsQuickInfo), a click (Ctrl+click) goes to the text,
+            // and the wheel scrolls it (OnViewScrolled closes Quick Info). The layer lets through only to the element's
+            // descendants, so it's the text view's presenter (the text and nothing else).
+            _hoverPopup.OverlayInputPassThroughElement = Editor.TextArea.TextView.GetVisualParent() as IInputElement ?? Editor.TextArea;
             _hoverPopup.Placement = PlacementMode.AnchorAndGravity;
             _hoverPopup.PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft;
             _hoverPopup.PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight;
             _hoverPopup.PlacementRect = new Rect(at.X, at.Y + 4, 1, 1);
+            _quickInfoSymbol = symbol;
+            _quickInfoClosest = null;
+            _quickInfoScroll = Editor.TextArea.TextView.ScrollOffset;
             _hoverPopup.IsOpen = true;
+            TraceQuickInfo(_hoverPopup.IsOpen ? $"opened at {at}" : "didn't open");
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            TraceQuickInfo($"failed: {ex.GetType().Name}");
             Report(ex);
         }
     }
@@ -2060,9 +2187,11 @@ public sealed partial class CodeEditorController : IDisposable
         _services.Debugger.Stopped -= OnDebuggerStopped;
         PinLayer.Detach();
         view.ScrollOffsetChanged -= OnViewChanged;
+        view.ScrollOffsetChanged -= OnViewScrolled;
         view.VisualLinesChanged -= OnViewChanged;
         view.PointerMoved -= OnPointerMoved;
         view.PointerExited -= OnPointerExited;
+        _hoverPopup.Closed -= OnQuickInfoClosed;
         view.PointerPressed -= OnPointerPressed;
         Editor.TextArea.Caret.PositionChanged -= OnCaretChanged;
         Editor.TextArea.SelectionChanged -= OnCaretChanged;

@@ -46,6 +46,7 @@ The completion list, parameter info and Quick Info show code in the editor's own
   - Under a line, each error or warning there: its code links to its documentation.
   - **Fix** (`Alt+.`) applies the top fix. **Other Fixes** (`Alt+Enter`) opens the quick actions there. **Add to Chat** asks AI Chat about the error, with the code around it; it shows only while AI assistance is on.
   - It doesn't open while the completion list or parameter info is open.
+  - It stays open while the pointer is on the symbol or on its way to it, so its buttons are in reach. Moving the pointer elsewhere, scrolling or zooming closes it, and a click in the code acts where you click (`Ctrl+Click` goes to the definition).
 - The C# Interactive window has the same completion list and parameter info. Other languages' servers get them too, with plain-text signatures.
 
 ## Other languages

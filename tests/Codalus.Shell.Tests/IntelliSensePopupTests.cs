@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -738,6 +739,148 @@ public class IntelliSensePopupTests
         editor.Editor.CaretOffset = 3;
         editor.ShowQuickInfoAtCaret();
         await ShellFixture.PumpUntil(() => editor.IsQuickInfoOpen);
+    }
+
+    /// <summary>
+    /// Quick Info lets the pointer through to the text, and stays open on the way to it: across the text above its top edge
+    /// to its far right (where a data tip's Pin to source is), and while the pointer stays on the symbol it describes.
+    /// Moving away closes it, and so do zooming and scrolling the text under it (the wheel reaches the text while it's open).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Quick_info_stays_open_on_the_way_to_it_and_closes_when_the_pointer_leaves_or_the_text_scrolls()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1400;
+        f.Window.Height = 900;
+        var path = Path.Combine(f.UserData, "notes.txt");
+        var text = string.Join("\n", Enumerable.Range(0, 200).Select(i => i == 5 ? "an alphabetical soup" : $"line {i}"));
+        await File.WriteAllTextAsync(path, text, TestContext.Current.CancellationToken);
+        var document = await f.Shell.OpenFileAsync(path);
+        Assert.NotNull(document);
+        await ShellFixture.PumpUntil(() => document.Controller is not null);
+        var editor = document.Controller!;
+        var word = text.IndexOf("alphabetical", StringComparison.Ordinal);
+        var column = word - text.LastIndexOf('\n', word) - 1;
+        f.Shell.Languages.Diagnostics.Set(path, "plaintext", null,
+        [
+            new Diagnostic(new LanguageServices.Protocol.Range(new Position(5, column), new Position(5, column + "alphabetical".Length)), DiagnosticSeverity.Warning, "TXT002", "notes",
+                "Spelling: 'alphabetical' is spelled correctly, and this message goes on long enough to make Quick Info about as wide as it gets."),
+        ]);
+        await ShellFixture.PumpUntil(() => editor.Markers.Segments.Any());
+        var view = editor.Editor.TextArea.TextView;
+
+        // A point on the text (window coordinates), a document offset's character in, or lines above it.
+        Point At(int offset, int linesUp = 0)
+        {
+            ShellFixture.RenderFrame(f.Window);
+            var visual = view.GetVisualPosition(new TextViewPosition(editor.Model.Text.GetLocation(offset)), AvaloniaEdit.Rendering.VisualYPosition.LineMiddle) - view.ScrollOffset;
+            return view.TranslatePoint(new Point(visual.X + 2, visual.Y - (linesUp * view.DefaultLineHeight)), f.Window)!.Value;
+        }
+
+        // What is under a point of the window, from the element hit up through its parents (a failure message).
+        string Under(Point point)
+        {
+            var parts = new List<string>();
+            for (var visual = f.Window.InputHitTest(point) as Visual; visual is not null && parts.Count < 14; visual = visual.GetVisualParent())
+            {
+                parts.Add($"{visual.GetType().Name}{((visual as Control)?.Name is { Length: > 0 } name ? "#" + name : "")}@{visual.Bounds}");
+            }
+
+            return parts.Count > 0 ? string.Join(" < ", parts) : "nothing";
+        }
+
+        // The tool windows can still be arriving when the document has opened: on Windows CI a tree docked at the left moved
+        // the text after the test had read where the word was, and the hover went to the tree. Wait until the text stays
+        // put; every point is also read just before the move that uses it.
+        var placed = view.TranslatePoint(default, f.Window);
+        var still = System.Diagnostics.Stopwatch.StartNew();
+        await ShellFixture.PumpUntil(() =>
+        {
+            var now = view.TranslatePoint(default, f.Window);
+            if (now != placed)
+            {
+                placed = now;
+                still.Restart();
+            }
+
+            return still.Elapsed >= TimeSpan.FromSeconds(1);
+        }, describe: () => $"the text keeps moving: at {placed}");
+
+        // The pointer rests on a document offset's character until Quick Info opens: where it rests and Quick Info's bounds
+        // (window coordinates).
+        async Task<(Point At, Rect QuickInfo)> HoverAsync(int offset)
+        {
+            Assert.False(editor.IsQuickInfoOpen);
+            f.Window.MouseMove(At(word, linesUp: 3)); // from elsewhere: a move to where the pointer is may not count
+            var at = At(offset);
+            f.Window.MouseMove(at);
+            await ShellFixture.PumpUntil(() => editor.IsQuickInfoOpen && editor.HoverPopup.Child is { Bounds.Width: > 0 }, describe: () =>
+                $"Quick Info: {editor.QuickInfoTrace}; open {editor.IsQuickInfoOpen}, its size {editor.HoverPopup.Child?.Bounds.Size}; pointer at {at}, over the text {view.IsPointerOver}; "
+                + $"the text at {view.TranslatePoint(default, f.Window)}, {view.Bounds.Size}; under the pointer {Under(at)}; toasts: {string.Join(", ", f.Shell.Notifications.Toasts.Select(t => t.Message))}; "
+                + $"scroll {view.ScrollOffset}; diagnostics {editor.Markers.Segments.Count()}; focus {f.Window.FocusManager?.GetFocusedElement()?.GetType().Name}");
+            ShellFixture.Pump();
+            var child = editor.HoverPopup.Child!;
+            return (at, new Rect(f.Window.PointToClient(child.PointToScreen(default)), child.Bounds.Size));
+        }
+
+        // On the way to its far right, across the text above its top edge, past the word: still open (it closed 8 pixels
+        // from where it opened).
+        var (start, quickInfo) = await HoverAsync(word + 10);
+        Assert.True(quickInfo.Top > start.Y && quickInfo.Width > 300, $"Quick Info at {quickInfo}, opened at {start}");
+        var target = new Point(quickInfo.Right - 12, quickInfo.Top + 8);
+        var furthest = 0.0;
+        for (var step = 1; step <= 20; step++)
+        {
+            var point = start + ((target - start) * (step / 20.0));
+            if (point.Y >= quickInfo.Top - 1)
+            {
+                break; // over Quick Info from here
+            }
+
+            ShellFixture.RenderFrame(f.Window);
+            f.Window.MouseMove(point);
+            ShellFixture.Pump();
+            Assert.True(editor.IsQuickInfoOpen, $"closed at {point}, on the way from {start} to {target} (Quick Info at {quickInfo})");
+            furthest = point.X - start.X;
+        }
+
+        Assert.True(furthest > 50, $"the way over the text went only {furthest} px right");
+
+        // On it (its own window on this platform, or the window's overlay): open, and the pointer on it.
+        var host = TopLevel.GetTopLevel(editor.HoverPopup.Child)!;
+        ShellFixture.RenderFrame(host);
+        host.MouseMove(host == f.Window ? target : host.PointToClient(f.Window.PointToScreen(target)));
+        ShellFixture.Pump();
+        Assert.True(editor.IsQuickInfoOpen);
+        Assert.True(editor.HoverPopup.Child!.IsPointerOver);
+
+        // Away from it, over the lines above: closed.
+        f.Window.MouseMove(At(word + 10, linesUp: 3));
+        ShellFixture.Pump();
+        Assert.False(editor.IsQuickInfoOpen);
+
+        // Along the symbol, away from Quick Info's left edge: open; off the symbol that way: closed.
+        await HoverAsync(word + 10);
+        f.Window.MouseMove(At(word + 1));
+        ShellFixture.Pump();
+        Assert.True(editor.IsQuickInfoOpen);
+        f.Window.MouseMove(At(word - 2));
+        ShellFixture.Pump();
+        Assert.False(editor.IsQuickInfoOpen);
+
+        // Ctrl+wheel zooms the text under it: closed.
+        (start, _) = await HoverAsync(word + 10);
+        f.Window.MouseWheel(start, new Vector(0, 1), Avalonia.Input.RawInputModifiers.Control);
+        ShellFixture.Pump();
+        Assert.True(editor.Zoom > 1);
+        Assert.False(editor.IsQuickInfoOpen);
+        editor.Zoom = 1;
+
+        // The wheel scrolls the text under it: closed.
+        (start, _) = await HoverAsync(word + 10);
+        f.Window.MouseWheel(start, new Vector(0, -1));
+        await ShellFixture.PumpUntil(() => view.ScrollOffset.Y > 0);
+        Assert.False(editor.IsQuickInfoOpen);
     }
 
     [AvaloniaFact]
