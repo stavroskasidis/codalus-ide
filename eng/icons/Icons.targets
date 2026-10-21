@@ -1,7 +1,8 @@
 <Project>
   <!--
     Compiles the shell's icons into C# geometries before the compiler runs (D24, M34a): Fluent UI System Icons
-    (Icons/Fluent/*.svg, commands), the classic file icons (Icons/Classic/*.svg, drawn by classic-icons.py) and Material
+    (Icons/Fluent/*.svg, commands), the classic file icons (Icons/Classic/*.svg, drawn by classic-icons.py), the code
+    symbol icons of IntelliSense (Icons/Symbols/*.svg, drawn by symbol-icons.py) and Material
     Icon Theme (Icons/Material/*.svg, the alternative file icons). The task is inline C#
     (RoslynCodeTaskFactory), so it builds with the SDK on every OS and needs no tool.
   -->
@@ -12,7 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <IconSvg Include="$(MSBuildProjectDirectory)/Icons/Fluent/*.svg;$(MSBuildProjectDirectory)/Icons/Material/*.svg;$(MSBuildProjectDirectory)/Icons/Classic/*.svg" />
+    <IconSvg Include="$(MSBuildProjectDirectory)/Icons/Fluent/*.svg;$(MSBuildProjectDirectory)/Icons/Material/*.svg;$(MSBuildProjectDirectory)/Icons/Classic/*.svg;$(MSBuildProjectDirectory)/Icons/Symbols/*.svg" />
     <!-- Shown in the IDE, not compiled. -->
     <None Remove="@(IconSvg)" />
   </ItemGroup>

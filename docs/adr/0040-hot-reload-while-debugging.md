@@ -46,3 +46,11 @@ The deltas themselves come from Roslyn: `Compilation.EmitDifference` against a b
 - Users choose between Hot Reload and the debugger for a run, as today. An edit made while debugging is not applied, and the editor doesn't pretend it is.
 - The future implementation is bounded: Roslyn's delta service is the same one `dotnet watch` uses. netcoredbg already contains the runtime side. The missing piece is a protocol request.
 - Programs started in the integrated terminal (ADR 0039) are attached to, so they are covered by netcoredbg's "attached process" limit. Hot Reload while debugging would apply to programs launched with the Debug Console.
+
+## Update 2026-10-20: Blazor WebAssembly while debugging
+
+The maintainer asked for Hot Reload while debugging a Blazor app (0.5). A Blazor WebAssembly app's components run in the browser's .NET runtime, debugged through the dev server's debugging proxy and vscode-js-debug (ADR 0026), not under netcoredbg, so the refusal above doesn't reach them.
+
+- **What was tried:** the dev server of a WebAssembly debug session under `dotnet watch run` instead of `dotnet run`, an edit to a method the page runs every half second, then a breakpoint in it. `dotnet watch` reported "C# and Razor changes applied", the page's console "Applying managed code updates.", and the breakpoint stopped in the changed method with the changed value (`BlazorWasmTests.Hot_reload_applies_an_edit_to_the_app_while_it_is_debugged`).
+- **Decision:** Start Debugging runs a Blazor WebAssembly app's dev server under `dotnet watch` when the setting `debug.hotReload` is on (the default) and the project supports Hot Reload; Apply Code Changes and the toolbar's Hot Reload button work during the session, and the status bar follows it as for Start with Hot Reload.
+- **Unchanged:** programs netcoredbg launches or attaches to, a Blazor Web App's server among them, still can't take Hot Reload's updates; the path through the debugger above stays the way to them.

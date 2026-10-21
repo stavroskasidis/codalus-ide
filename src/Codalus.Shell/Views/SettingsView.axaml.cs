@@ -6,7 +6,7 @@ using Codalus.Shell.ViewModels;
 
 namespace Codalus.Shell.Views;
 
-/// <summary>The Settings UI. Text values are written when the field loses focus or on Enter.</summary>
+/// <summary>The Settings UI. Text values are written when the field loses focus, on Enter, or when a path is browsed for.</summary>
 public sealed partial class SettingsView : UserControl, IPaneView
 {
     public SettingsView()
@@ -14,6 +14,7 @@ public sealed partial class SettingsView : UserControl, IPaneView
         InitializeComponent();
         AddHandler(LostFocusEvent, (_, e) => Commit(e.Source), RoutingStrategies.Bubble);
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
+        AddHandler(PathBox.BrowsedEvent, (_, e) => Commit((e.Source as PathBox)?.TextBox), RoutingStrategies.Bubble);
     }
 
     public void FocusPrimary() => SearchBox.Focus();

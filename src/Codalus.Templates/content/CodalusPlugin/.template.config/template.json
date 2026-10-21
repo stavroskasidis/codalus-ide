@@ -21,7 +21,7 @@
       "type": "parameter",
       "datatype": "text",
       "description": "The version of the Codalus.Plugins.Abstractions and Codalus.Plugins.Testing packages.",
-      "defaultValue": "1.0.0",
+      "defaultValue": "1.1.0",
       "replaces": "0.0.0-codalus-version"
     },
     "skipTests": {

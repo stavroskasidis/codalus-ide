@@ -34,6 +34,15 @@ public sealed record DialogRequest(string Title, string Message, IReadOnlyList<s
     /// <summary>The input is a secret: masked as it is typed (askpass's passwords and passphrases, M13b).</summary>
     public bool IsPassword { get; init; }
 
+    /// <summary>
+    /// The input is a path on this computer: a Browse button beside it opens the OS's folder or file picker where the
+    /// typed path is, as a <see cref="Controls.PathBox"/> does (the maintainer's 0.5 review); null: no button.
+    /// </summary>
+    public Controls.PathKind? Browse { get; init; }
+
+    /// <summary>The folder a relative path in the input is read from, and a browsed one inside it written relative to (a project's), or null.</summary>
+    public string? BrowseFolder { get; init; }
+
     /// <summary>The header's icon (an <see cref="Controls.Icon"/> kind, in the command's color on a tile; M34h); null: a dangerous one gets the warning icon, others none.</summary>
     public string? Icon { get; init; }
 
@@ -128,6 +137,7 @@ public sealed class DialogViewModel : ObservableObject
                 OnPropertyChanged(nameof(Title));
                 OnPropertyChanged(nameof(Message));
                 OnPropertyChanged(nameof(HasInput));
+                OnPropertyChanged(nameof(CanBrowse));
                 OnPropertyChanged(nameof(PasswordChar));
                 OnPropertyChanged(nameof(Details));
                 OnPropertyChanged(nameof(HasDetails));
@@ -188,6 +198,12 @@ public sealed class DialogViewModel : ObservableObject
     public string Message => _request?.Message ?? string.Empty;
 
     public bool HasInput => _request?.Input is not null;
+
+    /// <summary>The input is a path, with a Browse button (<see cref="DialogRequest.Browse"/>).</summary>
+    public bool CanBrowse => HasInput && _request?.Browse is not null;
+
+    /// <summary>Asks for the path in place of the OS's picker (tests): the kind and the folder to start in.</summary>
+    internal Func<Controls.PathKind, string?, Task<string?>>? Picker { get; set; }
 
     /// <summary>The input's mask: a dot for passwords and passphrases (askpass, M13b), none otherwise.</summary>
     public char PasswordChar => _request?.IsPassword == true ? '●' : '\0';
@@ -407,9 +423,9 @@ public sealed class DialogViewModel : ObservableObject
     public async Task<bool> ConfirmAsync(string title, string message, string action, bool danger = false) =>
         (await ShowAsync(new DialogRequest(title, message, [action, "Cancel"]) { IsDanger = danger }).ConfigureAwait(true)).Button == action;
 
-    public async Task<string?> InputAsync(string title, string message, string initial, Func<string, string?>? validate = null, (int, int)? selection = null)
+    public async Task<string?> InputAsync(string title, string message, string initial, Func<string, string?>? validate = null, (int, int)? selection = null, Controls.PathKind? browse = null, string? browseFolder = null)
     {
-        var result = await ShowAsync(new DialogRequest(title, message, ["OK", "Cancel"]) { Input = initial, Validate = validate, InputSelection = selection }).ConfigureAwait(true);
+        var result = await ShowAsync(new DialogRequest(title, message, ["OK", "Cancel"]) { Input = initial, Validate = validate, InputSelection = selection, Browse = browse, BrowseFolder = browseFolder }).ConfigureAwait(true);
         return result.Button == "OK" ? result.Input : null;
     }
 }

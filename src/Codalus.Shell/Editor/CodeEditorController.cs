@@ -5,7 +5,6 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Threading;
 using AvaloniaEdit;
-using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
 using AvaloniaEdit.Folding;
@@ -15,6 +14,7 @@ using Codalus.LanguageServices.Client;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Rpc;
 using Codalus.Shell.Controls;
+using Codalus.Shell.Editor.IntelliSense;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Debugging;
 using Codalus.Workbench.Git;
@@ -46,6 +46,7 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly Popup _hoverPopup;
     private readonly SemanticColorizer _colorizer = new();
     private readonly DiagnosticMarkers _markers;
+    private readonly DefinitionLink _link;
     private readonly HighlightRenderer _highlights;
     private readonly FoldingManager _folding;
     private readonly SearchPanel _search;
@@ -75,10 +76,10 @@ public sealed partial class CodeEditorController : IDisposable
     private CancellationTokenSource? _completionCts;
     private CancellationTokenSource? _signatureCts;
     private CancellationTokenSource? _hoverCts;
-    private CompletionWindow? _completion;
+    private CompletionPopup? _completion;
     private readonly InlineSuggestions _inline;
     private readonly NextEditSuggestions _nextEdit;
-    private OverloadInsightWindow? _signature;
+    private SignatureHelpPopup? _signature;
     private Point _hoverPoint;
     private DocumentOptions? _documentOptions;
     private readonly bool _attached;
@@ -97,6 +98,9 @@ public sealed partial class CodeEditorController : IDisposable
         _dockable = dockable;
         _services = services;
         _hoverPopup = hoverPopup;
+
+        // Closed, Quick Info lets go of its content: nothing in it (a link's tooltip) opens against a closed popup.
+        _hoverPopup.Closed += OnHoverClosed;
         var document = Model.Text;
         _markers = new DiagnosticMarkers(document);
         _highlights = new HighlightRenderer(document);
@@ -106,6 +110,8 @@ public sealed partial class CodeEditorController : IDisposable
         var view = editor.TextArea.TextView;
         view.LineTransformers.Add(_colorizer);
         view.LineTransformers.Add(_markers);
+        _link = new DefinitionLink(editor, () => Model, () => Client);
+        view.LineTransformers.Add(_link);
         view.BackgroundRenderers.Add(_highlights);
         view.BackgroundRenderers.Add(_markers);
         _breakpointMargin = new BreakpointMargin(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine, relocate: attach)
@@ -143,6 +149,7 @@ public sealed partial class CodeEditorController : IDisposable
         _insights = new EditorInsights(editor, () => Model, () => Client, services);
         editor.TextArea.LeftMargins.Insert(2, _insights.Margin);
         _folding = FoldingManager.Install(editor.TextArea);
+        _insights.IsFoldedAway = offset => _folding.GetFoldingsContaining(offset).Any(f => f.IsFolded && f.StartOffset < offset && offset < f.EndOffset);
         _search = SearchPanel.Install(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
         _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush);
@@ -168,6 +175,7 @@ public sealed partial class CodeEditorController : IDisposable
         editor.TextArea.TextEntered += OnTextEntered;
         // Tunnel: with extra carets, Backspace/Delete/Enter must be seen before AvaloniaEdit handles them.
         editor.TextArea.AddHandler(InputElement.KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        editor.TextArea.AddHandler(InputElement.KeyUpEvent, OnKeyUp, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         editor.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         view.PointerMoved += OnPointerMoved;
         view.PointerExited += OnPointerExited;
@@ -245,6 +253,9 @@ public sealed partial class CodeEditorController : IDisposable
 
     public DiagnosticMarkers Markers => _markers;
 
+    /// <summary>The Ctrl+hover link to a symbol's definition (tests).</summary>
+    internal DefinitionLink Link => _link;
+
     public HighlightRenderer Highlights => _highlights;
 
     public FoldingManager Folding => _folding;
@@ -255,9 +266,9 @@ public sealed partial class CodeEditorController : IDisposable
 
     public bool IsCompletionOpen => _completion is not null;
 
-    internal CompletionWindow? CompletionWindow => _completion;
+    internal CompletionPopup? CompletionWindow => _completion;
 
-    internal OverloadInsightWindow? SignatureWindow => _signature;
+    internal SignatureHelpPopup? SignatureWindow => _signature;
 
     public bool IsSignatureHelpOpen => _signature is not null;
 
@@ -293,6 +304,37 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>The editor options of the document's language (its <c>"[languageId]"</c> settings over the general ones).</summary>
     private EditorOptions Options => _services.Options.For(Model.LanguageId);
 
+    /// <summary>
+    /// The glyph margins (breakpoints, bookmarks, run and test glyphs, the inheritance margin) left of the line numbers,
+    /// the change bar, coverage and folding right of them, as in Visual Studio: AvaloniaEdit puts its line numbers (and the
+    /// line after them) first whenever they're turned on.
+    /// </summary>
+    private void OrderMargins()
+    {
+        var margins = Editor.TextArea.LeftMargins;
+        var numbers = margins.OfType<LineNumberMargin>().FirstOrDefault();
+        if (numbers is null)
+        {
+            return;
+        }
+
+        var at = margins.IndexOf(numbers);
+        var separator = at + 1 < margins.Count && margins[at + 1] is Avalonia.Controls.Shapes.Line line ? line : null;
+        margins.Remove(numbers);
+        if (separator is not null)
+        {
+            margins.Remove(separator);
+        }
+
+        var before = margins.IndexOf(_gitMargin);
+        before = before < 0 ? margins.Count : before;
+        margins.Insert(before, numbers);
+        if (separator is not null)
+        {
+            margins.Insert(before + 1, separator);
+        }
+    }
+
     private void ApplyOptions()
     {
         var options = Options;
@@ -309,6 +351,7 @@ public sealed partial class CodeEditorController : IDisposable
         editorOptions.AllowScrollBelowDocument = true;
         Editor.WordWrap = options.WordWrap;
         Editor.ShowLineNumbers = options.LineNumbers;
+        OrderMargins();
     }
 
     private void OnThemeChanged(object? sender, EventArgs e) => ApplyTheme();
@@ -836,6 +879,15 @@ public sealed partial class CodeEditorController : IDisposable
             return;
         }
 
+        // A commit character ("(", ".", ";", Space…) commits the completion list's selected item, then is typed, unless
+        // the item's edit typed it already.
+        if (_completion is { } completion && e.Text is { Length: 1 } committing && !e.Handled && Editor.SelectionLength == 0
+            && (committing[0] != ' ' || Options.CommitOnSpace) && completion.CommitsOn(committing[0]) && completion.CommitWith(committing[0]))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Typing the closing character of an auto-closed pair moves over it.
         if (e.Text is { Length: 1 } typed && Options.AutoClosingBrackets && Editor.SelectionLength == 0
             && Editor.CaretOffset < Model.Text.TextLength && Model.Text.GetCharAt(Editor.CaretOffset) == typed[0]
@@ -988,7 +1040,7 @@ public sealed partial class CodeEditorController : IDisposable
             return;
         }
 
-        var window = new CompletionWindow(Editor.TextArea) { StartOffset = start, EndOffset = caret, CloseAutomatically = true };
+        var window = NewCompletionPopup(start, caret);
         foreach (var word in words)
         {
             window.CompletionList.CompletionData.Add(new CompletionData(
@@ -997,15 +1049,7 @@ public sealed partial class CodeEditorController : IDisposable
                 (data, segment) => document.Replace(segment.Offset, segment.Length, data.Item.Label)));
         }
 
-        window.Closed += (_, _) =>
-        {
-            if (_completion == window)
-            {
-                _completion = null;
-            }
-        };
-        _completion = window;
-        window.Show();
+        OpenCompletion(window);
         window.CompletionList.SelectItem(prefix);
     }
 
@@ -1221,34 +1265,29 @@ public sealed partial class CodeEditorController : IDisposable
                 return; // the caret moved away meanwhile
             }
 
-            var window = new CompletionWindow(Editor.TextArea)
-            {
-                StartOffset = start,
-                EndOffset = caret,
-                CloseWhenCaretAtBeginning = triggerCharacter is null || triggerCharacter == ".",
-                CloseAutomatically = true,
-            };
+            var window = NewCompletionPopup(start, caret);
+            window.CloseWhenCaretAtBeginning = triggerCharacter is null || triggerCharacter == ".";
             Task<LanguageServices.Protocol.CompletionItem> Resolve(LanguageServices.Protocol.CompletionItem item) =>
                 item.Data is null && item.Kind == CompletionItemKind.Snippet && item.InsertTextFormat == InsertTextFormat.Snippet
                     ? Task.FromResult(item) // our snippets: nothing to resolve
                     : embedded is not null && embeddedItems.Contains(item)
                         ? embedded.Client.ResolveCompletionAsync(item, CancellationToken.None)
                         : client.ResolveCompletionAsync(item, CancellationToken.None);
+            // Commit characters: the item's, else the server's for every item (LSP); none for our snippets, nor for the
+            // embedded HTML server's items unless they name theirs.
+            var allCommitCharacters = CommitCharacterSet(client.Capabilities?.CompletionProvider?.AllCommitCharacters);
             foreach (var item in list.Items.OrderBy(i => i.SortText ?? i.Label, StringComparer.Ordinal).Concat(SnippetItems(triggerCharacter)))
             {
-                window.CompletionList.CompletionData.Add(new CompletionData(item, Resolve, Commit));
+                var ours = item.Data is null && item.Kind == CompletionItemKind.Snippet && item.InsertTextFormat == InsertTextFormat.Snippet;
+                var fromEmbedded = embedded is not null && embeddedItems.Contains(item);
+                window.CompletionList.CompletionData.Add(new CompletionData(item, Resolve, Commit)
+                {
+                    CommitCharacters = ours ? new HashSet<char>() : item.CommitCharacters is { } own ? CommitCharacterSet(own) : fromEmbedded ? new HashSet<char>() : allCommitCharacters,
+                    ResolveForCommit = ours || fromEmbedded || item.Data is null ? null : i => client.ResolveCompletionAsync(i, CancellationToken.None),
+                });
             }
 
-            window.CompletionList.SelectionChanged += (_, _) => (window.CompletionList.SelectedItem as CompletionData)?.Resolve();
-            window.Closed += (_, _) =>
-            {
-                if (_completion == window)
-                {
-                    _completion = null;
-                }
-            };
-            _completion = window;
-            window.Show();
+            OpenCompletion(window);
             void Select()
             {
                 // Filters by the typed text and picks the best match (CompletionData.Priority breaks ties).
@@ -1336,9 +1375,13 @@ public sealed partial class CodeEditorController : IDisposable
     private Func<string, string?> SnippetVariables(Workbench.Languages.LanguageConfiguration? configuration) =>
         SnippetEngine.Variables(Model.Path, Editor.TextArea, configuration?.LineComment, configuration?.BlockComment is { } block ? (block.Start, block.End) : null);
 
+    /// <summary>A server's commit characters (single characters only) as a set.</summary>
+    private static HashSet<char> CommitCharacterSet(string[]? characters) => [.. (characters ?? []).Where(c => c.Length == 1).Select(c => c[0])];
+
     private void Commit(CompletionData data, ISegment segment)
     {
         var resolved = data.ResolvedWithin(TimeSpan.FromMilliseconds(300));
+        data.IncludedCommitCharacter = data.CommitCharacter is not null && resolved?.IncludesCommitCharacter == true;
         if ((resolved ?? data.Item) is { InsertTextFormat: InsertTextFormat.Snippet } snippet)
         {
             // A snippet (ours, or a server's): its text goes through the snippet engine, with tab stops (M12b).
@@ -1412,27 +1455,18 @@ public sealed partial class CodeEditorController : IDisposable
 
             if (help is null || help.Signatures.Length == 0)
             {
-                _signature?.Close();
+                _signature?.Hide();
                 return;
             }
 
             if (_signature is { } open)
             {
-                var keep = open.Provider?.SelectedIndex ?? 0;
-                open.Provider = new SignatureProvider(help) { SelectedIndex = help.Signatures.Length > keep && retrigger && triggerCharacter is null ? keep : help.ActiveSignature };
+                open.Update(help, keepSelection: retrigger && triggerCharacter is null);
+                LayoutPopups();
                 return;
             }
 
-            var window = new OverloadInsightWindow(Editor.TextArea) { Provider = new SignatureProvider(help) };
-            window.Closed += (_, _) =>
-            {
-                if (_signature == window)
-                {
-                    _signature = null;
-                }
-            };
-            _signature = window;
-            window.Show();
+            OpenSignature(new SignatureHelpPopup(Editor.TextArea, help, () => _colorizer.Theme));
         }
         catch (Exception ex) when (IsTransient(ex))
         {
@@ -1440,9 +1474,32 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
+    private void OnKeyUp(object? sender, KeyEventArgs e) => _link.Update(null, LinkModifiers(e, pressed: false));
+
+    /// <summary>The modifiers after a key event: a Ctrl or Cmd key's own event may not count itself yet.</summary>
+    private static KeyModifiers LinkModifiers(KeyEventArgs e, bool pressed)
+    {
+        var own = e.Key switch
+        {
+            Key.LeftCtrl or Key.RightCtrl => KeyModifiers.Control,
+            Key.LWin or Key.RWin => KeyModifiers.Meta,
+            _ => KeyModifiers.None,
+        };
+        return pressed ? e.KeyModifiers | own : e.KeyModifiers & ~own;
+    }
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         TrackCopy(e);
+        _link.Update(null, LinkModifiers(e, pressed: true));
+
+        // The completion list and signature help take their keys first (the arrows, Enter, Tab, Escape).
+        if (HandlePopupKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (SnippetEngine.HandleKey(Editor.TextArea, e))
         {
             e.Handled = true;
@@ -1479,6 +1536,7 @@ public sealed partial class CodeEditorController : IDisposable
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
         var point = e.GetPosition(Editor.TextArea.TextView);
+        _link.Update(point, e.KeyModifiers);
         if (_hoverPopup.IsOpen && Math.Abs(point.X - _hoverPoint.X) + Math.Abs(point.Y - _hoverPoint.Y) < 8)
         {
             return;
@@ -1490,7 +1548,11 @@ public sealed partial class CodeEditorController : IDisposable
         _hoverTimer.Start();
     }
 
-    private void OnPointerExited(object? sender, PointerEventArgs e) => _hoverTimer.Stop();
+    private void OnPointerExited(object? sender, PointerEventArgs e)
+    {
+        _hoverTimer.Stop();
+        _link.Clear();
+    }
 
     private void OnHoverTimer(object? sender, EventArgs e)
     {
@@ -1518,48 +1580,58 @@ public sealed partial class CodeEditorController : IDisposable
         var cancellationToken = Restart(ref _hoverCts).Token;
         try
         {
-            var parts = new List<string>();
-            foreach (var diagnostic in _markers.At(offset))
+            // Not while the completion list or signature help is open: they say what Quick Info would.
+            if (IsIntelliSenseOpen)
             {
-                parts.Add($"**{diagnostic.Code}**: {Escape(diagnostic.Message)}");
+                return;
             }
 
+            var diagnostics = _markers.At(offset);
             var dataTip = await DataTipAsync(offset, cancellationToken).ConfigureAwait(true);
+            Hover? hover = null;
             if (dataTip is null && Client is { } client)
             {
-                var hover = await client.HoverAsync(Model.Uri, Model.PositionAt(offset), cancellationToken).ConfigureAwait(true);
+                hover = await client.HoverAsync(Model.Uri, Model.PositionAt(offset), cancellationToken).ConfigureAwait(true);
                 if (hover?.Contents.Value is not { Length: > 0 } && Model.LanguageId == ShellHost.RazorLanguageId
                     && await _services.EmbeddedAsync(Model, Math.Min(offset + 1, Model.Text.TextLength)).ConfigureAwait(true) is { } embedded)
                 {
                     hover = await embedded.Client.HoverAsync(embedded.Uri, Model.PositionAt(offset), cancellationToken).ConfigureAwait(true);
                 }
-
-                if (hover?.Contents.Value is { Length: > 0 } markdown)
-                {
-                    parts.Insert(0, markdown);
-                }
             }
 
-            if (cancellationToken.IsCancellationRequested || _disposed || (parts.Count == 0 && dataTip is null))
+            var hasSymbol = hover?.Description is { } described && (described.Signature.Length > 0 || described.Sections.Length > 0) || hover?.Contents.Value is { Length: > 0 };
+            if (cancellationToken.IsCancellationRequested || _disposed || IsIntelliSenseOpen || (!hasSymbol && diagnostics.Count == 0 && dataTip is null))
             {
                 return;
             }
 
-            Control content = parts.Count > 0 ? MarkdownRenderer.Render(string.Join("\n\n---\n\n", parts), _services.OpenLink) : new Panel();
+            Control content;
             if (dataTip is not null)
             {
                 // The data tip is a tree that expands and edits values (ADR 0021); diagnostics stay above it.
                 var tip = new Views.DataTipView { DataContext = dataTip };
                 LastDataTip = dataTip;
-                content = parts.Count > 0 ? new StackPanel { Spacing = 6, Children = { content, tip } } : tip;
+                content = diagnostics.Count > 0 ? new StackPanel { Spacing = 6, Children = { QuickInfo(null, null, diagnostics), tip } } : tip;
+            }
+            else
+            {
+                // A symbol's classified description (the C# service), else the server's Markdown, then the diagnostics.
+                var markdown = hover?.Description is null && hover?.Contents.Value is { Length: > 0 } text ? MarkdownRenderer.Render(text, _services.OpenLink) : null;
+                content = QuickInfo(hover?.Description, markdown, diagnostics);
+            }
+
+            if (!CanShowPopups)
+            {
+                return; // a document opened over the editor while Quick Info was asked for
             }
 
             _hoverPopup.Child = new Border
             {
-                Classes = { "editorHover" },
+                Classes = { "editorHover", "intelliSense" },
                 MaxWidth = 640,
                 Child = content,
             };
+            _hoverPopup.WindowManagerAddShadowHint = true;
             _hoverPopup.PlacementTarget = Editor.TextArea.TextView;
             _hoverPopup.Placement = PlacementMode.AnchorAndGravity;
             _hoverPopup.PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft;
@@ -1821,7 +1893,7 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    private static string Escape(string text) => text.Replace("*", "\\*", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal).Replace("`", "\\`", StringComparison.Ordinal);
+    private void OnHoverClosed(object? sender, EventArgs e) => _hoverPopup.Child = null;
 
     // ------------------------------------------------------------------ navigation
 
@@ -1852,6 +1924,7 @@ public sealed partial class CodeEditorController : IDisposable
         else if (primaryModifier)
         {
             // Ctrl+Click: Go to Definition.
+            _link.Clear();
             Editor.CaretOffset = offset;
             _ = GoToDefinitionAsync();
             e.Handled = true;
@@ -1921,6 +1994,8 @@ public sealed partial class CodeEditorController : IDisposable
         }
 
         _disposed = true;
+        CloseIntelliSense();
+        _hoverPopup.Closed -= OnHoverClosed;
         _textMate?.Dispose();
         _insights.Dispose();
         _inline.Dispose();
@@ -1963,6 +2038,8 @@ public sealed partial class CodeEditorController : IDisposable
         var view = Editor.TextArea.TextView;
         view.LineTransformers.Remove(_colorizer);
         view.LineTransformers.Remove(_markers);
+        view.LineTransformers.Remove(_link);
+        _link.Dispose();
         view.BackgroundRenderers.Remove(_highlights);
         view.BackgroundRenderers.Remove(_markers);
         view.BackgroundRenderers.Remove(_debugLines);
@@ -1992,6 +2069,7 @@ public sealed partial class CodeEditorController : IDisposable
         Editor.TextArea.TextEntering -= OnTextEntering;
         Editor.TextArea.TextEntered -= OnTextEntered;
         Editor.TextArea.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
+        Editor.TextArea.RemoveHandler(InputElement.KeyUpEvent, OnKeyUp);
     }
 }
 

@@ -303,8 +303,8 @@ public sealed partial class ShellHost
         var menu = new ContextMenu();
         MenuItem Item(string header, string icon, Action action)
         {
-            var item = new MenuItem { Header = header, Icon = new Icon { Kind = icon }, IsEnabled = !Tests.IsRunning || header.StartsWith("Show", StringComparison.Ordinal) };
-            item.Click += (_, _) => action();
+            var item = Controls.MenuEntry.Create(header, icon, click: action);
+            item.IsEnabled = !Tests.IsRunning || header.StartsWith("Show", StringComparison.Ordinal);
             return item;
         }
 

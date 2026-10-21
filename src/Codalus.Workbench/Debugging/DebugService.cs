@@ -393,7 +393,7 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     private async Task<bool> StartPartAgainAsync(LaunchPart part, IDebugAdapter adapter, Exception ex, int attempt, CancellationToken cancellationToken)
     {
-        if (!IsStartupTimeout(ex) || cancellationToken.IsCancellationRequested)
+        if (!IsStartupTimeout(ex, LocalAdapter(adapter) is not null) || cancellationToken.IsCancellationRequested)
         {
             return false;
         }
@@ -781,15 +781,24 @@ public sealed class DebugService : IAsyncDisposable
     internal const int StartupAttempts = 3;
 
     /// <summary>
-    /// netcoredbg's answer to <c>configurationDone</c> when the program's runtime didn't report to it within 5 seconds
-    /// of the launch or attach (<see cref="DebugAdapter.IsStartupTimeout"/>). On a loaded machine the runtime can take
-    /// longer (the first Windows runs: a VSTest test host attached to, Visual Basic, F# and C# programs launched).
-    /// A program on this machine that still runs gets more time first (<see cref="DebugAdapter.ConfigurationDoneAsync"/>):
-    /// netcoredbg debugs it once its runtime reports. Otherwise (the program ended before its runtime started, or it
-    /// runs on another machine) it is ended (or detached from) and the session starts again; a program joining a
+    /// Whether a failed start is made again: netcoredbg gave up on it (<see cref="DebugAdapter.IsStartupTimeout"/>),
+    /// answering the request that carries the start (<c>configurationDone</c>, or a later <c>attach</c>) when the
+    /// program's runtime didn't report within its 5 seconds, or with its command timeout when the start ran past its
+    /// 15 seconds (it goes on starting). On a loaded machine both happen (the first Windows runs: a VSTest test host
+    /// attached to, Visual Basic, F# and C# programs launched; PR #97's: the packaged WinUI app attached to). A program
+    /// on this machine that still runs gets more time first (<see cref="DebugAdapter.ConfigurationDoneAsync"/>):
+    /// netcoredbg debugs it once its runtime reports. Otherwise (the program ended before its runtime started, or
+    /// netcoredbg couldn't take it up) it is ended (or detached from) and the session starts again; a program joining a
     /// multi-program session (a later startup project) starts again in its place.
+    /// <para>
+    /// For an adapter on another machine (not <paramref name="local"/>: an SSH, container or WSL transport) only the
+    /// 5-second answer is: nothing here waits for its program, so after the command timeout a start made again would
+    /// leave behind there the program netcoredbg is still starting, and wait out the 15 seconds again each time.
+    /// </para>
     /// </summary>
-    internal static bool IsStartupTimeout(Exception ex) => DebugAdapter.IsStartupTimeout(ex);
+    /// <param name="local">The adapter runs on this machine (<see cref="LocalAdapter"/>).</param>
+    internal static bool IsStartupTimeout(Exception ex, bool local) =>
+        DebugAdapter.IsStartupTimeout(ex) && (local || !DebugAdapter.IsCommandTimeout(ex));
 
     /// <summary>
     /// One start of the session: the adapter, the launch or attach, the configuration. False when netcoredbg timed out
@@ -852,7 +861,7 @@ public sealed class DebugService : IAsyncDisposable
 
             return true;
         }
-        catch (DapException ex) when (!lastAttempt && adapter is not null && IsStartupTimeout(ex) && !cancellationToken.IsCancellationRequested && CanStartAgain(attached, processes))
+        catch (DapException ex) when (!lastAttempt && adapter is not null && IsStartupTimeout(ex, LocalAdapter(adapter) is not null) && !cancellationToken.IsCancellationRequested && CanStartAgain(attached, processes))
         {
             // Its events and its end are no longer the session's: the next attempt's adapter takes over.
             Volatile.Write(ref abandoned.Value, true);
@@ -864,7 +873,7 @@ public sealed class DebugService : IAsyncDisposable
         {
             if (adapter is not null)
             {
-                if (attached || !IsStartupTimeout(ex) || !KillWithProgram(adapter))
+                if (attached || !IsStartupTimeout(ex, LocalAdapter(adapter) is not null) || !KillWithProgram(adapter))
                 {
                     await adapter.DisconnectAsync(terminateDebuggee: !attached, CancellationToken.None).ConfigureAwait(false);
                 }
@@ -962,14 +971,23 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     private static bool KillWithProgram(IDebugAdapter adapter)
     {
-        var inner = adapter is CompoundDebugAdapter compound ? compound.Primary : adapter;
-        if ((inner is PathMappingDebugAdapter mapped ? mapped.Inner : inner) is DebugAdapter { Transport: null } local)
+        if (LocalAdapter(adapter) is { } local)
         {
             local.Kill();
             return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The netcoredbg on this machine behind <paramref name="adapter"/> (a multi-program session's first program's,
+    /// past a path mapping); null for one on another machine, which always has a transport, or another kind of adapter.
+    /// </summary>
+    private static DebugAdapter? LocalAdapter(IDebugAdapter adapter)
+    {
+        var inner = adapter is CompoundDebugAdapter compound ? compound.Primary : adapter;
+        return (inner is PathMappingDebugAdapter mapped ? mapped.Inner : inner) is DebugAdapter { Transport: null } local ? local : null;
     }
 
     /// <summary>Ends the session: terminates a launched program, detaches from an attached one.</summary>

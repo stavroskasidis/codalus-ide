@@ -92,6 +92,7 @@ internal static class ServiceReferences
     public static bool Set(string projectPath, ServiceReferenceParams parameters, bool create)
     {
         var type = ItemType(parameters.Kind);
+        using var gate = StringCacheGate.Enter();
         using var collection = new ProjectCollection();
         var xml = ProjectRootElement.Open(projectPath, collection, preserveFormatting: true);
         xml.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
@@ -134,6 +135,7 @@ internal static class ServiceReferences
     /// <summary>Removes the item; returns whether the project file changed.</summary>
     public static bool Remove(string projectPath, string kind, string file)
     {
+        using var gate = StringCacheGate.Enter();
         using var collection = new ProjectCollection();
         var xml = ProjectRootElement.Open(projectPath, collection, preserveFormatting: true);
         xml.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
@@ -159,6 +161,7 @@ internal static class ServiceReferences
     /// </summary>
     public static bool MarkPrivate(string projectPath, string id)
     {
+        using var gate = StringCacheGate.Enter();
         using var collection = new ProjectCollection();
         var xml = ProjectRootElement.Open(projectPath, collection, preserveFormatting: true);
         xml.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);

@@ -22,6 +22,7 @@ public sealed class EditorOptions : ObservableObject
     public const string RulersKey = "editor.rulers";
     public const string HighlightCurrentLineKey = "editor.highlightCurrentLine";
     public const string FormatOnTypeKey = "editor.formatOnType";
+    public const string CommitOnSpaceKey = "editor.completion.commitOnSpace";
     public const string AutoClosingBracketsKey = "editor.autoClosingBrackets";
     public const string InlayParameterNamesKey = "editor.inlayHints.parameterNames";
     public const string InlayTypesKey = "editor.inlayHints.types";
@@ -115,6 +116,9 @@ public sealed class EditorOptions : ObservableObject
 
     public bool FormatOnType { get; private set; }
 
+    /// <summary>Space commits the completion list's selected item, as the other commit characters do (a classic IDE's default).</summary>
+    public bool CommitOnSpace { get; private set; } = true;
+
     /// <summary>Insert the closing bracket or quote of the language's pairs (ADR 0016).</summary>
     public bool AutoClosingBrackets { get; private set; }
 
@@ -172,6 +176,7 @@ public sealed class EditorOptions : ObservableObject
         RenderWhitespace = settings.GetString(RenderWhitespaceKey, "none") == "all";
         HighlightCurrentLine = settings.GetBoolean(HighlightCurrentLineKey, true);
         FormatOnType = settings.GetBoolean(FormatOnTypeKey, true);
+        CommitOnSpace = settings.GetBoolean(CommitOnSpaceKey, true);
         AutoClosingBrackets = settings.GetBoolean(AutoClosingBracketsKey, true);
         Rulers = [.. settings.GetStrings(RulersKey).Select(r => int.TryParse(r, NumberStyles.Integer, CultureInfo.InvariantCulture, out var column) ? column : 0).Where(c => c > 0)];
     }
@@ -199,6 +204,23 @@ public interface IEditorServices
     void AskAiAboutException(string description)
     {
     }
+
+    /// <summary>The key a command is bound to now, as menus show it (<c>Alt+Enter</c>), or null.</summary>
+    string? KeyLabel(string commandId) => null;
+
+    /// <summary>The context keys key bindings test while the completion list (<c>suggestWidgetVisible</c>) or signature help (<c>parameterHintsVisible</c>) is open.</summary>
+    void SetIntelliSenseContext(bool completionOpen, bool signatureHelpOpen)
+    {
+    }
+
+    /// <summary>Quick Info's Fix: applies the top code fix (or refactoring) for a diagnostic in an editor.</summary>
+    Task ApplyTopFixAsync(CodeEditorController editor, Diagnostic diagnostic) => Task.CompletedTask;
+
+    /// <summary>Quick Info's Other Fixes: the code actions menu at a diagnostic.</summary>
+    Task ShowCodeActionsAtAsync(CodeEditorController editor, Diagnostic diagnostic) => Task.CompletedTask;
+
+    /// <summary>Quick Info's Add to Chat: sends a diagnostic and the code around it to AI Chat (AI on only).</summary>
+    Task AddDiagnosticToChatAsync(CodeEditorController editor, Diagnostic diagnostic) => Task.CompletedTask;
 
     EditorOptions Options { get; }
 

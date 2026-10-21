@@ -261,7 +261,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        _ = OfferDevCertificateAsync(project);
+        DevCertificateCheck = OfferDevCertificateAsync(project);
         try
         {
             if (Remote is { } remote)

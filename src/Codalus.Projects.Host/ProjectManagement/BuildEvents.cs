@@ -16,6 +16,7 @@ internal static class BuildEvents
 
     public static BuildEventsResult Get(string path)
     {
+        using var gate = StringCacheGate.Enter();
         using var collection = new ProjectCollection();
         var xml = ProjectRootElement.Open(path, collection, preserveFormatting: true);
         xml.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
@@ -26,6 +27,7 @@ internal static class BuildEvents
     /// <summary>Writes the events; returns whether the project file changed.</summary>
     public static bool Set(string path, string? preBuild, string? postBuild, string? runPostBuildEvent)
     {
+        using var gate = StringCacheGate.Enter();
         using var collection = new ProjectCollection();
         var xml = ProjectRootElement.Open(path, collection, preserveFormatting: true);
         xml.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);

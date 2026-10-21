@@ -53,6 +53,7 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
             Description = "The Android SDK's folder. Empty: ANDROID_HOME, then the usual folders (Android Studio's).",
             Scope = SettingScope.User,
             Order = 1,
+            Browse = SettingBrowse.Folder,
         },
         SettingDescriptor.Create(JdkSetting, "\"\"", SettingType.String, source) with
         {
@@ -61,6 +62,7 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
             Description = "The JDK's folder for Android builds (JDK 17 or later). Empty: JAVA_HOME, then the usual folders.",
             Scope = SettingScope.User,
             Order = 2,
+            Browse = SettingBrowse.Folder,
         },
     ];
 

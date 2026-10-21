@@ -13,6 +13,8 @@ name: Pipeline
 # smoke), the packages installed and smoke-tested on every platform (packages), and for a stable release also the
 # benchmarks and the apt, dnf and zypper repositories built and installed from with the site exported (site,
 # pages.yml with deploy: false). Only when all of them pass is anything published; otherwise the tag goes.
+# A run stops at its first failed job, which cancels the rest (ADR 0028, 2026-10-20). A develop → master pull request skips
+# test and smoke when develop's own run passed on its head (gate).
 # Manual dispatch runs the branch's pipeline as a dry run by default (everything built and tested, nothing published).
 # The target framework matrix (M33) is compat.yml, by hand.
 on:
@@ -112,11 +114,41 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v${{ steps.plan.outputs.version }}" -f sha="$GITHUB_SHA" > /dev/null
 
+  # A develop → master pull request (a release) whose head already passed develop's own run, on a commit that has all
+  # of master, skips test and smoke: the release run on master runs them again before anything is published (the
+  # maintainer's decision, 2026-10-20: the same tree tested twice held up every release by about 50 minutes).
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - id: check
+        if: github.event_name == 'pull_request' && github.base_ref == 'master' && github.head_ref == 'develop'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          passed="$(gh run list -R "$GITHUB_REPOSITORY" --workflow pipeline.yml --branch develop --event push --commit "$HEAD_SHA" --status success --json databaseId --jq length)"
+          behind="$(gh api "repos/$GITHUB_REPOSITORY/compare/master...$HEAD_SHA" --jq .behind_by)"
+          if [[ "$passed" -gt 0 && "$behind" == 0 ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Develop's run passed on ${HEAD_SHA::7}, which has all of master: test and smoke run again in the release run on master, not here." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   # The tests in three shards per OS on separate runners at the same time (eng/ci-test.sh): the Shell tests in two
   # halves (they take 15 to 25 minutes on their own) and every other project. With the smoke test on a runner of its
   # own, a run takes as long as its longest job, not the sum of them (it took 55 minutes on Windows).
   test:
     name: test (${{ matrix.os }}, ${{ matrix.shard }})
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
+    permissions:
+      contents: read
+      actions: write # stopping the run at its first failure
     strategy:
       fail-fast: false
       matrix:
@@ -127,7 +159,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # The display is for tests that run real windowed apps (the Live Visual Tree's Avalonia app).
-      - uses: ./.github/actions/setup
+      - id: setup
+        uses: ./.github/actions/setup
         with:
           extra-sdks: true
           nuget-cache: true
@@ -136,6 +169,13 @@ jobs:
           display: true
       - run: dotnet restore Codalus.slnx
       - run: dotnet build Codalus.slnx -c Release --no-restore
+      - name: Save the NuGet cache (develop, one job per OS)
+        # The others shard restores every project, as the rest do. Pull requests only restore what develop saved.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && matrix.shard == 'others' && steps.setup.outputs.nuget-cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ steps.setup.outputs.nuget-cache-key }}
       - name: Stack traces for a hang (dotnet-stack)
         # The test watchdog prints a hanging test's stacks with it (tests/Shared/TestWatchdog.cs, eng/ci-test.sh).
         run: dotnet tool install -g dotnet-stack || true
@@ -173,12 +213,27 @@ jobs:
           path: artifacts/test-results/
           retention-days: 14
           if-no-files-found: ignore
+      - name: Stop the run at its first failure
+        # The run fails either way: its other jobs stop and free their runners (macOS ones are scarce), and a release's
+        # tag still goes (untag runs in a cancelled run too). This job may then show as cancelled: the error names it.
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::error::test (${{ matrix.os }}, ${{ matrix.shard }}) failed: the run's other jobs are cancelled."
+          gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" || true
 
   # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the in-process
   # headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform). On a runner
   # of its own (it needs the machine to itself), alongside the tests.
   smoke:
     name: smoke (${{ matrix.os }})
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
+    permissions:
+      contents: read
+      actions: write # stopping the run at its first failure
     strategy:
       fail-fast: false
       matrix:
@@ -218,12 +273,25 @@ jobs:
           path: artifacts/smoke-test/
           retention-days: 14
           if-no-files-found: ignore
+      - name: Stop the run at its first failure
+        # The run fails either way: its other jobs stop and free their runners (macOS ones are scarce), and a release's
+        # tag still goes (untag runs in a cancelled run too). This job may then show as cancelled: the error names it.
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::error::smoke (${{ matrix.os }}) failed: the run's other jobs are cancelled."
+          gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" || true
 
   # The installers on every platform (eng/package.sh), installed the way users would and the installed app
   # smoke-tested (eng/smoke-test.sh --packages), then uploaded for publish.
   packages:
     needs: plan
     if: needs.plan.outputs.kind != ''
+    permissions:
+      contents: read
+      actions: write # stopping the run at its first failure
     strategy:
       fail-fast: false
       matrix:
@@ -311,6 +379,16 @@ jobs:
           name: packages-${{ matrix.rid }}
           path: artifacts/packages/
           if-no-files-found: error
+      - name: Stop the run at its first failure
+        # The run fails either way: its other jobs stop and free their runners (macOS ones are scarce), and a release's
+        # tag still goes (untag runs in a cancelled run too). This job may then show as cancelled: the error names it.
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::error::packages (${{ matrix.rid }}) failed: the run's other jobs are cancelled."
+          gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" || true
 
   # Self-update end to end (M32): version N and N+1 of the installer, N installed, a tampered feed refused, then N
   # updated to N+1 through a signed local feed. It builds its own test installers (eng/test-update.sh), so it runs
@@ -318,6 +396,9 @@ jobs:
   update:
     needs: plan
     if: needs.plan.outputs.kind != ''
+    permissions:
+      contents: read
+      actions: write # stopping the run at its first failure
     strategy:
       fail-fast: false
       matrix:
@@ -343,6 +424,16 @@ jobs:
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
           bash eng/test-update.sh "$RUNNER_TEMP/update-test"
+      - name: Stop the run at its first failure
+        # The run fails either way: its other jobs stop and free their runners (macOS ones are scarce), and a release's
+        # tag still goes (untag runs in a cancelled run too). This job may then show as cancelled: the error names it.
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::error::update (${{ matrix.rid }}) failed: the run's other jobs are cancelled."
+          gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" || true
 
   # The benchmarks on GitHub-hosted runners, a gate of every stable release (and on a dispatch that asks). These are
   # GPU-less VMs, so the numbers are indicative only; authoritative numbers come from reference hardware
@@ -354,7 +445,7 @@ jobs:
     if: needs.plan.outputs.kind == 'stable' || inputs.benchmarks
     permissions:
       contents: read
-      actions: read # earlier runs' results, the regression baseline
+      actions: write # earlier runs' results (the regression baseline), and stopping the run at its first failure
     strategy:
       fail-fast: false
       matrix:
@@ -446,6 +537,16 @@ jobs:
         with:
           name: bench-results-${{ runner.os }}
           path: ci-results/
+      - name: Stop the run at its first failure
+        # The run fails either way: its other jobs stop and free their runners (macOS ones are scarce), and a release's
+        # tag still goes (untag runs in a cancelled run too). This job may then show as cancelled: the error names it.
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::error::benchmarks (${{ matrix.os }}) failed: the run's other jobs are cancelled."
+          gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" || true
 
   # A stable release's apt, dnf and zypper repositories and site, built from its own packages and checked; the pages
   # job deploys them once the release is published.

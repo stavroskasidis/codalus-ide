@@ -56,6 +56,10 @@
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E5EBF1" />
       <!-- Icons in the Visual Studio palette (the maintainer's rule: every icon is colored), at least 3:1 against menus, toolbars and panels; command families are palette colors. -->
@@ -254,6 +258,10 @@
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#2B91AF" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#482727" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3E3E42" />
       <!-- Icons in the Visual Studio palette (every icon is colored); command families are palette colors. -->
@@ -658,6 +666,10 @@
       <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved (High contrast: the outline only), a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#0E4A7B" />
       <!-- High Contrast keeps icons monochrome: shape carries the meaning, not color. -->
@@ -862,6 +874,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFF1B8" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E0E6F6" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
@@ -1088,6 +1104,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3D3514" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#40242F" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#273350" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
@@ -1314,6 +1334,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#2E2600" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved (High contrast: the outline only), a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#1A323D" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
@@ -1560,6 +1584,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFF1B8" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E0EBEB" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
@@ -1791,6 +1819,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3D3514" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#452528" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#213839" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
@@ -2022,6 +2054,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#2E2600" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved (High contrast: the outline only), a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#0F3A32" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
@@ -2273,6 +2309,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFF3BF" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#F0ECF9" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
@@ -2499,6 +2539,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3D3514" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#4B2930" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#38314B" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
@@ -2725,6 +2769,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#2E2600" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved (High contrast: the outline only), a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#322B3D" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
@@ -2971,6 +3019,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFF0BF" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#F4E9E0" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
@@ -3197,6 +3249,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3B3112" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#43201E" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3A2A1C" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
@@ -3423,6 +3479,10 @@
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3D3300" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved (High contrast: the outline only), a solid outline once resolved. -->
+      <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3D2B11" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />

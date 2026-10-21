@@ -15,9 +15,9 @@ Language services run out of process and speak **LSP 3.17** over **stdio** (JSON
 | `initialize` / `initialized` / `shutdown` / `exit` | `initializationOptions` take the same settings as `workspace/didChangeConfiguration`. |
 | `textDocument/didOpen`, `didChange`, `didClose`, `didSave` | Incremental sync (`textDocumentSync: 2`). URIs are `file://` URIs. |
 | `workspace/didChangeConfiguration` | `{settings: {analysisScope: "openDocuments" \| "currentProject" \| "solution", analysisProject: "<project file>", sourceLink: "true" \| "false"}}`. With `currentProject`, analyzers run in every file of the `analysisProject` project only. `sourceLink` allows downloading library sources through Source Link (M12a). |
-| `textDocument/completion`, `completionItem/resolve` | The list sets `itemDefaults.editRange` (the span being completed). Items carry no edit; `resolve` fills `textEdit`, `additionalTextEdits` (e.g. an added `using`) and `documentation`. Items in a list in suggestion mode have empty `commitCharacters`. The client announces `snippetSupport`: items with `insertTextFormat: 2` expand as snippets (M12b). |
-| `textDocument/hover` | Markdown: the signature in a `csharp` code block, then documentation. |
-| `textDocument/signatureHelp` | Parameter labels are substrings of the signature label. |
+| `textDocument/completion`, `completionItem/resolve` | The list sets `itemDefaults.editRange` (the span being completed). Items carry no edit; `resolve` fills `textEdit`, `additionalTextEdits` (e.g. an added `using`) and `documentation`. Items in a list in suggestion mode have empty `commitCharacters`. The client announces `snippetSupport`: items with `insertTextFormat: 2` expand as snippets (M12b). Items carry `codalusGlyph` and `resolve` fills `codalusDescription` too ([classified text](#classified-text-intellisense)). |
+| `textDocument/hover` | Markdown: the signature in a `csharp` code block (with its overload count), then the documentation, each section's heading ("Returns:") once. Also `codalusDescription`, the same as [classified text](#classified-text-intellisense). |
+| `textDocument/signatureHelp` | Parameter labels are substrings of the signature label. The members are as the call site sees them: a generic type's type arguments are substituted (`LayoutBuilderBase<PageModel, PageBuilder<PageModel>>.AddTab(…)`, not `LayoutBuilderBase<TModel, TBuilder>`). Each signature also has `codalusParts` ([classified text](#classified-text-intellisense)). |
 | `textDocument/definition`, `textDocument/implementation` | `Location[]`. Definitions in source-generated files use `codalus-generated:` URIs; symbols defined in referenced assemblies point into a decompiled document (`codalus-metadata:` URI). |
 | `textDocument/documentHighlight` | Definitions are `Write`, references `Read`. |
 | `textDocument/foldingRange` | `startCharacter` is the end of the first line (the fold hides the rest); `kind` is `region`, `imports`, `comment` or absent; `collapsedText` labels regions and comments. |
@@ -37,6 +37,25 @@ Language services run out of process and speak **LSP 3.17** over **stdio** (JSON
 | `window/logMessage` (server → client) | Analyzer load failures, analyzer exceptions, project problems. |
 
 Shapes narrowed from LSP's unions (documented on the C# types): `documentation` is always `MarkupContent`, parameter labels are strings, diagnostic codes are strings.
+
+### Classified text (IntelliSense)
+
+The C# service adds properties to three LSP results so the editor draws signatures and documentation in its own syntax colors, and to completion items for commit characters and target type matches ([ADR 0081](adr/0081-intellisense-popups.md)). Other clients ignore them and use the standard fields; other servers don't send them, and the editor then falls back to the label and Markdown.
+
+| Property | On | Shape |
+|---|---|---|
+| `codalusParts` | `SignatureInformation` | `ClassifiedRun[]`: the label as runs. The runs of parameter *i* have `parameter: i`, and their text is that parameter's `label`. Generic type arguments are the call site's. |
+| `codalusDescription` | `Hover`, a resolved `CompletionItem` | `{signature: ClassifiedRun[], sections: [{kind, text: ClassifiedRun[]}], glyph?, overloads}`. `signature` is the declaration without its overload count, which is `overloads`. `kind` is `summary`, `typeParameters`, `anonymousTypes`, `usage`, `returns`, `value`, `exceptions`, `remarks`, `captures`, `nullability` or `other`. A section's `text` has no heading: the client writes "Returns:" and the others, once. |
+| `codalusGlyph` | `CompletionItem` (in the list) | The symbol's kind, finer than LSP's `kind`: `namespace`, `class`, `struct`, `interface`, `enum`, `enumMember`, `delegate`, `module`, `typeParameter`, `method`, `extensionMethod`, `property`, `field`, `event`, `constant`, `local`, `parameter`, `keyword`, `snippet`, `operator`, `label` or `text`. The completion list's icons and filters use it. |
+| `codalusMatchesTargetType` | `CompletionItem` (in the list) | `true` when the item's type (a variable's or member's type, a method's return type) converts implicitly to the type expected where it goes: an argument (the active overload's parameter, as signature help picks it), the target of an assignment or initializer, a return value or expression body, an operand of `==` or `!=`. The list prefers such items and has a filter for them. C# only. |
+| `codalusSoftSelection` | `CompletionItem` (in the list) | `true` on a preselected item that Roslyn doesn't select hard (its `SelectionBehavior` isn't `HardSelection`): while nothing is typed, it is selected softly, so a commit character doesn't commit it. |
+| `codalusEnterKeyRule` | `CompletionItem` (in the list) | `always` or `afterFullyTypedWord`: whether Enter, after committing the item, also starts a new line (Roslyn's `EnterKeyRule`: the item's, else the language's, which is never for C# and always for Visual Basic). Absent: never. |
+| `codalusCommitCharacter` | `CompletionItem` sent to `completionItem/resolve` | The character typed to commit the item. The server computes the edit for it (Roslyn's `GetChangeAsync(…, commitCharacter)`) and leaves out the description. |
+| `codalusIncludesCommitCharacter` | resolved `CompletionItem` | `true` when the edit already inserts the commit character, so the editor doesn't type it again. |
+
+The C# service's list sets `commitCharacters` on an item only when Roslyn's `CommitCharacterRules` change the defaults (`allCommitCharacters`), and to `[]` on every item in suggestion mode (a new name, a lambda's parameter), where typing commits nothing.
+
+A `ClassifiedRun` is `{text, kind, parameter?}`. `kind` is a [semantic token type](#semantic-token-legend) name, `text` for plain text, or `lineBreak` between lines. The editor colors each run as it colors that token type in code.
 
 ## Extensions
 

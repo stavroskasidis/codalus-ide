@@ -100,7 +100,7 @@ public class EditorTests
         MoveCaret(program, "Geometry.Scale(circle, 3)", "Geometry.Scale(circle,".Length);
         program.ShowSignatureHelp();
         await ShellFixture.PumpUntil(() => program.SignatureWindow is not null);
-        Assert.Equal(2, program.SignatureWindow!.Provider!.Count);
+        Assert.Equal(2, program.SignatureWindow!.Count);
 
         // F12 on Circle opens Shapes.cs at the class; Navigate Backward returns.
         MoveCaret(program, "new Circle", "new C".Length);
@@ -173,7 +173,11 @@ public class EditorTests
         int? sentWhenApplied = null;
         editor.TokensApplied += (_, _) => sentWhenApplied ??= editor.TokenRequests;
         await ShellFixture.PumpUntil(() => editor.TokenRequests > 0 || editor.Colorizer.HasTokens, seconds: 60);
-        var sent = editor.TokenRequests;
+
+        // Colors already applied (a fast machine): they must be the first request's. A later request (the server's
+        // refresh) may have gone out since; on CI the count read here was 2 after the first request's colors had come
+        // (Expected 2, Actual 1).
+        var sent = sentWhenApplied is null ? editor.TokenRequests : 1;
         for (var i = 0; i < 20 && !editor.Colorizer.HasTokens; i++)
         {
             editor.Editor.TextArea.TextView.Redraw();

@@ -17,7 +17,7 @@ On Windows, **.NET Framework** programs (and their tests) are debugged by Codalu
 | Restart | `Ctrl+Shift+F5` |
 | Break All | `Ctrl+Alt+Break` (`⌘⌥P` on macOS) |
 
-**Break All** stops every thread, and the Call Stack shows the first thread running code of your own (or, when no thread is, the first that has managed frames). When no thread is running .NET code at all (a program that is still starting, or one running only native code), the Call Stack shows **[External Code]**: continue, and Break All again shows the program's code once it runs. Choose another thread in the Call Stack's thread list or the Threads window.
+**Break All** stops every thread, and the Call Stack shows the first thread running code of your own (or, when no thread is, the first that has managed frames). When no thread is running .NET code at all (a program that is still starting, or one running only native code), the Call Stack shows **[External Code]**: continue, and Break All again shows the program's code once it runs. Choose another thread in the Call Stack's thread list or the Threads window. Pressed while the debugger is still attaching to a program on this machine (one that is slow to attach to, such as a packaged WinUI app starting on a busy machine), Break All waits until the debugger has attached, up to a minute, then stops the program.
 
 The program's output and the debugger's messages appear in the **Debug Console**.
 
@@ -35,6 +35,7 @@ F5 then builds the solution once and starts the projects in that order. Those se
 - the Call Stack, Threads and Debug Location toolbar name each thread after its program (`Partner: Main Thread`);
 - the Processes window lists every program;
 - each program stops at its own breakpoints, and the others keep running;
+- Break All stops every program except a later one that is still starting, which keeps running (Break All waits for the first program to be attached to, as above);
 - the session ends when the last program ends.
 
 The choice is saved with the solution, for you only, in `.codalus/state/` next to it (not in the solution file; see [What a solution reopens with](solutions.md#what-a-solution-reopens-with)).
@@ -92,7 +93,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
 
 ## Breakpoints
 
-- **Add or remove**: click in the margin left of the line numbers, or press `F9` on the line. `Ctrl+F9` enables or disables it.
+- **Add or remove**: click in the margin left of the line numbers (with the pointer over it, a faint circle shows the line a click adds one to), or press `F9` on the line. `Ctrl+F9` enables or disables it.
 - **How they look**: red circles. Disabled breakpoints, and those that haven't bound to code yet, are hollow. A dot marks a condition or hit count; a diamond marks a logpoint.
 - **Conditions and actions**: Debug → Breakpoint Conditions and Actions sets them on the caret's line, or right-click the breakpoint in the margin:
   - **Condition**: a C# expression; the debugger breaks only when it is true.
@@ -114,6 +115,8 @@ Programs started after you turn it on are covered. Turning it off removes the va
 - **Run to Click**: while paused, `Ctrl`+click a line in the breakpoint margin.
 
 ## While stopped
+
+Codalus IDE comes to the front when the program stops, even when the program's window or the browser had the focus, so `F10` and `F11` go to the debugger (in the browser, `F11` is its full screen).
 
 - **Stepping**: Step Over (`F10`), Step Into (`F11`), Step Out (`Shift+F11`), Continue (`F5`).
 - **The current statement** is highlighted, with a yellow arrow in the margin.
@@ -172,7 +175,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
 Blazor WebAssembly apps, and the pages of ASP.NET Core apps, are debugged in the browser (see [Web development](web.md#debugging-the-server-and-the-page-together)). There, function breakpoints, the Modules window and the .NET exception settings don't apply.
 
 These come from netcoredbg:
-- no Edit and Continue, and no hot reload while debugging: the .NET runtime refuses Hot Reload's updates while a debugger is attached, so Start with Hot Reload and Start Debugging are separate runs (see [ADR 0040](../adr/0040-hot-reload-while-debugging.md))
+- no Edit and Continue, and no hot reload while debugging a program netcoredbg runs: the .NET runtime refuses Hot Reload's updates while a debugger is attached, so Start with Hot Reload and Start Debugging are separate runs (see [ADR 0040](../adr/0040-hot-reload-while-debugging.md)). A Blazor WebAssembly app is the exception: it runs in the browser, and Hot Reload applies edits to it while you debug ([Web development](web.md#hot-reload)).
 - no data breakpoints
 - no Set Next Statement and no Step Into Specific
 - no Memory, Disassembly or Registers windows

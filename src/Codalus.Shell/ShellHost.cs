@@ -33,7 +33,7 @@ public interface IShellWindow
     /// <summary>Asks for a project file to add to the solution (null: cancelled).</summary>
     Task<string?> PickProjectAsync();
 
-    /// <summary>Shows and activates the window (another process asked this one to open something).</summary>
+    /// <summary>Shows and activates the window (another process asked this one to open something, or the debugger stopped).</summary>
     void BringToFront();
 
     /// <summary>Full screen (M23a): the window covers the screen, without its frame; false returns to how it was.</summary>
@@ -76,7 +76,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
         UseUserDotnet();
-        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings()]);
+        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.GitSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>

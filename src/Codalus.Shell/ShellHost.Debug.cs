@@ -258,7 +258,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        _ = OfferDevCertificateAsync(project);
+        DevCertificateCheck = OfferDevCertificateAsync(project);
         try
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
@@ -285,7 +285,7 @@ public sealed partial class ShellHost
                 return;
             }
 
-            var plan = await Runs.PlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
+            var plan = await Runs.LaunchPlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
             DebugLog.Clear();
             if (error is not null)
             {
@@ -561,6 +561,9 @@ public sealed partial class ShellHost
 
     private async Task OnDebugStoppedAsync(StopInfo stop)
     {
+        // The IDE comes to the front where the program stopped, as F10 and F11 go to it (the browser or the program's
+        // window often has the focus: F11 there was the browser's full screen).
+        Window?.BringToFront();
         if (!_debugWindowsShown)
         {
             _debugWindowsShown = true;

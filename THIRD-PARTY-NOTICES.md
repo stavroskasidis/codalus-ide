@@ -19,7 +19,7 @@ Last verified: 2026-10-17 (M43b: the desktop-CLR debugger adapter in the debug c
 | Microsoft.TestPlatform.TranslationLayer, Microsoft.TestPlatform.ObjectModel (transitive) | 18.10.1 | MIT | .NET test plugin (VSTest through the SDK's vstest.console) |
 | Microsoft.Build (compile-time only; MSBuild comes from the installed SDK) | 17.11.48 | MIT | build host |
 | Microsoft.VisualStudio.SolutionPersistence | 1.0.52 | MIT | build host (reads and writes .sln/.slnx) |
-| Microsoft.Build.Framework, Microsoft.NET.StringTools (compile-time only; MSBuild comes from the installed SDK) | 17.11.48 / 18.4.0 | MIT | build host |
+| Microsoft.Build.Framework, Microsoft.NET.StringTools (compile-time only; MSBuild comes from the installed SDK) | 17.11.48 / 18.4.0 | MIT | build host (the build host tests also run StringTools, to check the gate around its string cache) |
 | NuGet.Protocol, NuGet.Credentials and their dependencies NuGet.Packaging, .Configuration, .Versioning, .Common, .Frameworks (compile-time only; NuGet comes from the installed SDK) | 6.11.2 | Apache-2.0 | build host (package management) |
 | Avalonia, Avalonia.Desktop, Avalonia.Themes.Fluent, Avalonia.Skia, Avalonia.Win32 / .X11 / .Native, Avalonia.Headless(.XUnit) | 12.1.3 | MIT | shell, UI tests |
 | Avalonia.AvaloniaEdit | 12.0.0 | MIT | shell (editor, Output) |

@@ -89,6 +89,7 @@ internal static partial class BuiltIns
                 Category = "Settings Sync",
                 Description = "Where your settings, keyboard shortcuts, snippets and saved layouts sync: a folder (one a cloud drive syncs) or a Git repository's URL (a gist's clone URL works). Empty: sync is off. Each profile has its own.",
                 Scope = SettingScope.User,
+                Browse = SettingBrowse.Folder,
             },
             SettingDescriptor.Create(ShellHost.SyncIgnoredSetting, "[]", SettingType.StringArray, shell) with
             {

@@ -31,6 +31,19 @@ public static class SettingTypes
     };
 }
 
+/// <summary>What a path setting's Browse button asks for (<see cref="SettingDescriptor.Browse"/>).</summary>
+public enum SettingBrowse
+{
+    /// <summary>Not a path: no Browse button.</summary>
+    None,
+
+    /// <summary>An existing folder.</summary>
+    Folder,
+
+    /// <summary>An existing file.</summary>
+    File,
+}
+
 public enum SettingScope
 {
     /// <summary>Only in the user's settings.json.</summary>
@@ -69,6 +82,9 @@ public sealed record SettingDescriptor(string Key, SettingType Type, JsonElement
     public SettingScope Scope { get; init; } = SettingScope.Workspace;
 
     public int Order { get; init; }
+
+    /// <summary>The value is a path on this computer: the Settings UI puts a Browse button beside it (the maintainer's 0.5 review).</summary>
+    public SettingBrowse Browse { get; init; }
 
     public string DisplayCategory => Category ?? (Key.LastIndexOf('.') is var i and > 0 ? Key[..i] : "General");
 

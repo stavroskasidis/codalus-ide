@@ -24,8 +24,8 @@
         <controls:Icon Kind="export" />
         <SplitButton.Flyout>
           <MenuFlyout Placement="BottomEdgeAlignedLeft">
-            <MenuItem Header="{l:T counters.exportCsv}" Command="{Binding ExportCsvCommand}" />
-            <MenuItem Header="{l:T counters.exportJson}" Command="{Binding ExportJsonCommand}" />
+            <MenuItem controls:MenuEntry.Icon="export" Header="{l:T counters.exportCsv}" Command="{Binding ExportCsvCommand}" />
+            <MenuItem controls:MenuEntry.Icon="export" Header="{l:T counters.exportJson}" Command="{Binding ExportJsonCommand}" />
           </MenuFlyout>
         </SplitButton.Flyout>
       </SplitButton>

@@ -4,7 +4,7 @@
   "displayName": "Templates",
   "publisher": "codalus",
   "description": "New projects and solutions from dotnet new templates.",
-  "engines": { "codalus": "^1.0.0" },
+  "engines": { "codalus": "^1.1.0" },
   "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.Templates.dll" },
   "contributes": {
     "commands": [

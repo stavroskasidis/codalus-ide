@@ -176,6 +176,7 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
     {
         _b.OnRequest("fail", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (_, _) => throw new InvalidOperationException("boom"));
         _b.OnRequest("coded", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (_, _) => throw new JsonRpcHandlerException(-33000, "plugin not found"));
+        _b.OnRequest("detailed", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (_, _) => throw new JsonRpcHandlerException(-33001, "Handle is not initialized.") { Details = "System.InvalidOperationException: Handle is not initialized.\n   at Somewhere()" });
         _a.Start();
         _b.Start();
 
@@ -187,6 +188,13 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
         Assert.Equal(JsonRpcConnection.InternalError, failed.Code);
         Assert.Equal("boom", failed.Message);
         Assert.Equal(-33000, coded.Code);
+        Assert.Null(coded.Details);
+
+        // The error's data (a string): the full exception behind a bug, shown with the remote exception.
+        var detailed = await Assert.ThrowsAsync<JsonRpcRemoteException>(() => _a.InvokeAsync("detailed", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout()));
+        Assert.Equal("Handle is not initialized.", detailed.Message);
+        Assert.Equal("System.InvalidOperationException: Handle is not initialized.\n   at Somewhere()", detailed.Details);
+        Assert.Contains("at Somewhere()", detailed.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

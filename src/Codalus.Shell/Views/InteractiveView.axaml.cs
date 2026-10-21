@@ -6,10 +6,10 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
-using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using Codalus.Shell.Controls;
 using Codalus.Shell.Editor;
+using Codalus.Shell.Editor.IntelliSense;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Output;
 using LspCompletionItem = Codalus.LanguageServices.Protocol.CompletionItem;
@@ -30,8 +30,8 @@ public sealed partial class InteractiveView : UserControl, IPaneView
     private OutputChannel? _channel;
     private int _flushScheduled;
     private bool _syncing;
-    private CompletionWindow? _completion;
-    private OverloadInsightWindow? _signature;
+    private CompletionPopup? _completion;
+    private SignatureHelpPopup? _signature;
     private int _tokensGeneration;
     private int _completionGeneration;
     private int _signatureGeneration;
@@ -64,7 +64,7 @@ public sealed partial class InteractiveView : UserControl, IPaneView
     /// <summary>The input editor (for tests).</summary>
     internal AvaloniaEdit.TextEditor Input => InputEditor;
 
-    internal CompletionWindow? CompletionWindow => _completion;
+    internal CompletionPopup? CompletionWindow => _completion;
 
     public void FocusPrimary() => InputEditor.TextArea.Focus();
 
@@ -186,6 +186,24 @@ public sealed partial class InteractiveView : UserControl, IPaneView
             return;
         }
 
+        // The completion list's keys, then signature help's (Up and Down through the overloads), Escape closing them.
+        if (e.KeyModifiers == KeyModifiers.None)
+        {
+            if (_completion is { } completion && (e.Key == Key.Escape ? CloseCompletion(completion) : completion.CompletionList.HandleKey(e.Key)))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (_completion is null && _signature is { } signature
+                && (e.Key == Key.Escape ? CloseSignature(signature) : e.Key is Key.Up or Key.Down && signature.ChangeIndex(e.Key == Key.Up ? -1 : 1)))
+            {
+                ArrangePopups();
+                e.Handled = true;
+                return;
+            }
+        }
+
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
         var alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
@@ -284,12 +302,12 @@ public sealed partial class InteractiveView : UserControl, IPaneView
                 return;
             }
 
-            var window = new CompletionWindow(InputEditor.TextArea)
+            // The editor's IntelliSense popups: the list below the line, signature help above it.
+            var window = new CompletionPopup(InputEditor.TextArea, () => _colorizer.Theme, _ => null)
             {
                 StartOffset = result.Start,
                 EndOffset = InputEditor.CaretOffset,
                 CloseWhenCaretAtBeginning = true,
-                CloseAutomatically = true,
             };
             foreach (var item in result.Items)
             {
@@ -301,10 +319,19 @@ public sealed partial class InteractiveView : UserControl, IPaneView
                 if (_completion == window)
                 {
                     _completion = null;
+                    ArrangePopups();
                 }
             };
+            window.CompletionList.BuildFilters();
+            window.CompletionList.Refresh();
             _completion = window;
-            window.Show();
+            if (!window.Show())
+            {
+                _completion = null; // the window isn't showing
+                return;
+            }
+
+            ArrangePopups();
             if (InputEditor.CaretOffset > result.Start)
             {
                 window.CompletionList.SelectItem(InputEditor.Document.GetText(result.Start, InputEditor.CaretOffset - result.Start));
@@ -347,24 +374,46 @@ public sealed partial class InteractiveView : UserControl, IPaneView
 
             if (_signature is { } open)
             {
-                open.Provider = new SignatureProvider(help);
+                open.Update(help, keepSelection: false);
+                ArrangePopups();
                 return;
             }
 
-            var window = new OverloadInsightWindow(InputEditor.TextArea) { Provider = new SignatureProvider(help) };
+            var window = new SignatureHelpPopup(InputEditor.TextArea, help, () => _colorizer.Theme);
             window.Closed += (_, _) =>
             {
                 if (_signature == window)
                 {
                     _signature = null;
+                    ArrangePopups();
                 }
             };
             _signature = window;
-            window.Show();
+            if (!window.Show())
+            {
+                _signature = null;
+                return;
+            }
+
+            ArrangePopups();
         }
         catch (Exception ex) when (IsTransient(ex))
         {
         }
+    }
+
+    private void ArrangePopups() => IntelliSenseLayout.Arrange(InputEditor.TextArea, _completion, _signature);
+
+    private static bool CloseCompletion(CompletionPopup completion)
+    {
+        completion.Hide();
+        return true;
+    }
+
+    private static bool CloseSignature(SignatureHelpPopup signature)
+    {
+        signature.Hide();
+        return true;
     }
 
     /// <summary>A timeout for one request of a kind; <see cref="IsCurrent"/> tells whether a newer one of that kind superseded it.</summary>

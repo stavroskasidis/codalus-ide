@@ -1,174 +1,103 @@
-using System.ComponentModel;
-using Avalonia.Controls;
-using Avalonia.Controls.Documents;
-using Avalonia.Media;
-using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
-using AvaloniaEdit.Editing;
 using Codalus.LanguageServices.Protocol;
+using Codalus.Shell.Editor.IntelliSense;
 using LspCompletionItem = Codalus.LanguageServices.Protocol.CompletionItem;
 
 namespace Codalus.Shell.Editor;
 
 /// <summary>
-/// One completion item in AvaloniaEdit's completion window. Filtering uses <see cref="Text"/> (the filter text);
-/// committing applies the resolved edit (prefetched while the item is selected) and any additional edits.
+/// One item of the completion list. Filtering uses <see cref="Text"/> (the filter text); committing applies the resolved
+/// edit (prefetched while the item is selected) and any additional edits.
 /// </summary>
-internal sealed class CompletionData(LspCompletionItem item, Func<LspCompletionItem, Task<LspCompletionItem>> resolve, Action<CompletionData, ISegment> commit) : ICompletionData
+public sealed class CompletionData(LspCompletionItem item, Func<LspCompletionItem, Task<LspCompletionItem>> resolve, Action<CompletionData, ISegment> commit)
 {
     private Task<LspCompletionItem>? _resolved;
 
     public LspCompletionItem Item { get; } = item;
 
-    public Avalonia.Media.IImage? Image => null;
-
+    /// <summary>The text typed text is matched against.</summary>
     public string Text => Item.FilterText ?? Item.Label;
 
-    public object Content => new TextBlock
-    {
-        Inlines =
-        [
-            new Run(KindGlyph(Item.Kind)) { Foreground = KindBrush(Item.Kind), FontWeight = FontWeight.Bold },
-            new Run(" " + Item.Label),
-            new Run(Item.Detail is null ? string.Empty : "  " + Item.Detail) { Foreground = Brushes.Gray },
-        ],
-    };
+    /// <summary>The text the list shows.</summary>
+    public string Label => Item.Label;
 
-    public object? Description => _resolved is { IsCompletedSuccessfully: true, Result.Documentation.Value: { Length: > 0 } doc }
-        ? new TextBlock { Text = PlainText(doc), TextWrapping = TextWrapping.Wrap, MaxWidth = 480 }
-        : null;
+    /// <summary>The symbol's kind (<see cref="Codalus.LanguageServices.Protocol.SymbolGlyphs"/>).</summary>
+    public string Glyph { get; } = SymbolKinds.GlyphOf(item);
+
+    /// <summary>The icon of the item's kind.</summary>
+    public string Icon => SymbolKinds.IconOf(Glyph);
+
+    /// <summary>The filter the item belongs to, or null.</summary>
+    public string? Filter => SymbolKinds.FilterOf(Glyph);
+
+    /// <summary>The characters of <see cref="Label"/> the typed text matched (drawn bold), set by the list's filtering.</summary>
+    public IReadOnlyList<int> Matches { get; internal set; } = [];
 
     /// <summary>
-    /// Breaks ties between equally good matches of the typed text: the server's preselected item first, then the
-    /// shorter name (after "Con", Console before ConcurrentExclusiveSchedulerPair, as a classic IDE picks; M34a).
+    /// Breaks ties between equally good matches of the typed text: the server's preselected item first, then an item of
+    /// the type expected there (a local or parameter before a member), then the shorter name (after "Con", Console before
+    /// ConcurrentExclusiveSchedulerPair, as a classic IDE picks; M34a).
     /// </summary>
-    public double Priority => Item.Preselect == true ? 1 : 0.5 / (1 + Text.Length);
+    public double Priority => Item.Preselect == true ? 1
+        : MatchesTargetType ? 0.6 + (Glyph is SymbolGlyphs.Local or SymbolGlyphs.Parameter ? 0.2 : 0) + (0.1 / (1 + Text.Length))
+        : 0.5 / (1 + Text.Length);
+
+    /// <summary>The item's type matches the one expected where it goes (the server's <c>codalusMatchesTargetType</c>).</summary>
+    public bool MatchesTargetType => Item.MatchesTargetType == true;
+
+    /// <summary>
+    /// The characters that commit the item when typed (then are typed themselves): the item's, else the server's for every
+    /// item; none for words and our snippets.
+    /// </summary>
+    public IReadOnlySet<char> CommitCharacters { get; init; } = new HashSet<char>();
+
+    /// <summary>
+    /// Resolves the item for the character that commits it (<c>codalusCommitCharacter</c>): set for the C# service's
+    /// items, whose edit may depend on it.
+    /// </summary>
+    public Func<LspCompletionItem, Task<LspCompletionItem>>? ResolveForCommit { get; init; }
+
+    /// <summary>The character being typed that commits the item, while it's committed that way.</summary>
+    public char? CommitCharacter { get; set; }
+
+    /// <summary>The committed edit already typed <see cref="CommitCharacter"/> (the server said so).</summary>
+    public bool IncludedCommitCharacter { get; set; }
 
     /// <summary>Starts resolving (description and edits) in the background.</summary>
     public Task<LspCompletionItem> Resolve() => _resolved ??= resolve(Item);
 
-    /// <summary>The resolved item if it arrives within <paramref name="timeout"/>, else null.</summary>
+    /// <summary>The resolved item once it has arrived, else null.</summary>
+    public LspCompletionItem? Resolved => _resolved is { IsCompletedSuccessfully: true } task ? task.Result : null;
+
+    /// <summary>
+    /// The resolved item if it arrives within <paramref name="timeout"/>, else null. While a typed character commits it,
+    /// the server resolves it again for that character (its edit may change: <c>List</c> before <c>&lt;</c>), falling back
+    /// to the edit resolved already.
+    /// </summary>
     public LspCompletionItem? ResolvedWithin(TimeSpan timeout)
     {
-        var task = Resolve();
-        try
+        if (CommitCharacter is { } typed && ResolveForCommit is { } resolveForCommit)
         {
-            return task.Wait(timeout) ? task.Result : null;
+            return Wait(resolveForCommit(Item with { CommitCharacter = typed.ToString() }), timeout) ?? Wait(Resolve(), TimeSpan.Zero);
         }
-        catch (AggregateException)
+
+        return Wait(Resolve(), timeout);
+
+        static LspCompletionItem? Wait(Task<LspCompletionItem> task, TimeSpan timeout)
         {
-            return null;
-        }
-    }
-
-    public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs) => commit(this, completionSegment);
-
-    /// <summary>Markdown without code fences (the completion tooltip is plain text).</summary>
-    private static string PlainText(string markdown) =>
-        string.Join('\n', markdown.Split('\n').Where(l => !l.StartsWith("```", StringComparison.Ordinal))).Replace("\\", string.Empty, StringComparison.Ordinal).Trim();
-
-    private static string KindGlyph(int? kind) => kind switch
-    {
-        CompletionItemKind.Method or CompletionItemKind.Function or CompletionItemKind.Constructor => "ƒ",
-        CompletionItemKind.Property => "◆",
-        CompletionItemKind.Field or CompletionItemKind.Variable => "▪",
-        CompletionItemKind.Class or CompletionItemKind.Struct => "◼",
-        CompletionItemKind.Interface => "◻",
-        CompletionItemKind.Enum or CompletionItemKind.EnumMember or CompletionItemKind.Constant => "≡",
-        CompletionItemKind.Event => "⚡",
-        CompletionItemKind.Keyword => "k",
-        CompletionItemKind.Module => "{}",
-        CompletionItemKind.Snippet => "⎘",
-        CompletionItemKind.TypeParameter => "T",
-        _ => "·",
-    };
-
-    private static IBrush KindBrush(int? kind) => kind switch
-    {
-        CompletionItemKind.Method or CompletionItemKind.Function or CompletionItemKind.Constructor => Brushes.MediumPurple,
-        CompletionItemKind.Property or CompletionItemKind.Field or CompletionItemKind.Variable => Brushes.SteelBlue,
-        CompletionItemKind.Class or CompletionItemKind.Struct or CompletionItemKind.Interface or CompletionItemKind.TypeParameter => Brushes.Orange,
-        CompletionItemKind.Enum or CompletionItemKind.EnumMember or CompletionItemKind.Constant => Brushes.Goldenrod,
-        _ => Brushes.Gray,
-    };
-}
-
-/// <summary>Signature help in AvaloniaEdit's overload window: the signature with the active parameter in bold.</summary>
-internal sealed class SignatureProvider : IOverloadProvider
-{
-    private readonly SignatureHelp _help;
-    private int _selectedIndex;
-
-    public SignatureProvider(SignatureHelp help)
-    {
-        _help = help;
-        _selectedIndex = Math.Clamp(help.ActiveSignature, 0, Math.Max(0, help.Signatures.Length - 1));
-    }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    public int SelectedIndex
-    {
-        get => _selectedIndex;
-        set
-        {
-            _selectedIndex = Math.Clamp(value, 0, Math.Max(0, _help.Signatures.Length - 1));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedIndex)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentIndexText)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentHeader)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentContent)));
-        }
-    }
-
-    public int Count => _help.Signatures.Length;
-
-    public string? CurrentIndexText => Count > 1 ? $"{SelectedIndex + 1} of {Count}" : null;
-
-    public object? CurrentHeader
-    {
-        get
-        {
-            var signature = _help.Signatures[SelectedIndex];
-            var active = signature.ActiveParameter ?? _help.ActiveParameter;
-            var block = new TextBlock();
-            var label = signature.Label;
-            var position = 0;
-            for (var i = 0; i < signature.Parameters.Length; i++)
+            try
             {
-                var index = label.IndexOf(signature.Parameters[i].Label, position, StringComparison.Ordinal);
-                if (index < 0)
-                {
-                    continue;
-                }
-
-                block.Inlines!.Add(new Run(label[position..index]));
-                block.Inlines.Add(new Run(signature.Parameters[i].Label) { FontWeight = i == active ? FontWeight.Bold : FontWeight.Normal });
-                position = index + signature.Parameters[i].Label.Length;
+                return task.Wait(timeout) ? task.Result : null;
             }
-
-            block.Inlines!.Add(new Run(label[position..]));
-            return block;
+            catch (AggregateException)
+            {
+                return null;
+            }
         }
     }
 
-    public object? CurrentContent
-    {
-        get
-        {
-            var signature = _help.Signatures[SelectedIndex];
-            var active = signature.ActiveParameter ?? _help.ActiveParameter;
-            var parts = new List<string>();
-            if (signature.Documentation?.Value is { Length: > 0 } doc)
-            {
-                parts.Add(doc.Replace("\\", string.Empty, StringComparison.Ordinal));
-            }
+    /// <summary>Commits the item over <paramref name="segment"/> (the typed text).</summary>
+    public void Complete(ISegment segment) => commit(this, segment);
 
-            if (active >= 0 && active < signature.Parameters.Length && signature.Parameters[active].Documentation?.Value is { Length: > 0 } parameter)
-            {
-                parts.Add(signature.Parameters[active].Label.Split(' ').Last() + ": " + parameter.Replace("\\", string.Empty, StringComparison.Ordinal));
-            }
-
-            return parts.Count == 0 ? null : new TextBlock { Text = string.Join('\n', parts), TextWrapping = TextWrapping.Wrap, MaxWidth = 520 };
-        }
-    }
+    public override string ToString() => Label;
 }

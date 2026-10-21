@@ -40,11 +40,11 @@
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" Background="Transparent">
               <Grid.ContextMenu>
                 <ContextMenu>
-                  <MenuItem Header="{l:T start.open}" Command="{Binding OpenCommand}" />
-                  <MenuItem Header="{l:T start.openInNewWindow}" Command="{Binding OpenInNewWindowCommand}" />
-                  <MenuItem Header="{Binding PinTitle}" Command="{Binding PinCommand}" />
-                  <MenuItem Header="{l:T start.copyPath}" Command="{Binding CopyPathCommand}" />
-                  <MenuItem Header="{l:T start.removeFromList}" Command="{Binding RemoveCommand}" />
+                  <MenuItem controls:MenuEntry.Icon="folder-open" Header="{l:T start.open}" Command="{Binding OpenCommand}" />
+                  <MenuItem controls:MenuEntry.Icon="window-new" Header="{l:T start.openInNewWindow}" Command="{Binding OpenInNewWindowCommand}" />
+                  <MenuItem controls:MenuEntry.Icon="pin" Header="{Binding PinTitle}" Command="{Binding PinCommand}" />
+                  <MenuItem controls:MenuEntry.Icon="copy" Header="{l:T start.copyPath}" Command="{Binding CopyPathCommand}" />
+                  <MenuItem controls:MenuEntry.Icon="close" Header="{l:T start.removeFromList}" Command="{Binding RemoveCommand}" />
                 </ContextMenu>
               </Grid.ContextMenu>
               <controls:Icon Kind="{Binding Icon}" Width="16" Height="16" VerticalAlignment="Top" Margin="0,3,10,0" />

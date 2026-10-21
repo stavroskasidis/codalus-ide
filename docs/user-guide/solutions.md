@@ -4,7 +4,7 @@ Codalus IDE opens `.sln` and `.slnx` solutions and SDK-style projects (`.csproj`
 
 ## Solution Explorer
 
-The tree shows the solution, its solution folders, projects, project folders and files (nested files, like `Form.Designer.cs`, sit under their parents). Each project also has its **Dependencies**:
+The tree shows the solution, its solution folders, projects, project folders and files (nested files, like `Form.Designer.cs`, sit under their parents). Folders come before files, each sorted by name with `_` before letters; a project's `Properties` (`My Project` in Visual Basic) and `wwwroot` folders come first. Each project also has its **Dependencies**:
 - frameworks
 - packages, each with the packages it brings in under it, and theirs under them (once the project is restored)
 - projects
@@ -15,6 +15,7 @@ The tree shows the solution, its solution folders, projects, project folders and
 |---|---|
 | Open a file in a preview tab (replaced by the next preview) | Single-click it. |
 | Keep a file open | Double-click it, or edit it. |
+| Pin a tab to the left of its group | The pin beside the tab's close button (on the selected or hovered tab), or **Window → Pin or Unpin Tab**. A pinned tab shows its pin upright; click it to unpin. |
 | Create a file or folder | Use the context menu. New C# files get the right namespace. |
 | Rename | Press `F2`. Renaming a project folder updates the solution and project references. |
 | Delete | Press `Delete`. Files go to the OS trash. |
@@ -135,4 +136,4 @@ SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own p
 
 The built-in **Templates** plugin creates projects and solutions with `dotnet new` (File → New Project or New Solution, or the command palette).
 
-New Project asks for the template, the location, the name and, for templates that offer one, the target framework. The frameworks are those of the SDK the location uses, the template's default first. `dotnet new` runs in the location, so a `global.json` there picks the SDK.
+New Project asks for the template, the location, the name and, for templates that offer one, the target framework. Type the location, or click the folder button beside it (**Browse…**) to choose it in your OS's folder picker, which opens where the typed path is; every field for a path on your computer has that button, in dialogs, tool windows and Options. The frameworks are those of the SDK the location uses, the template's default first. `dotnet new` runs in the location, so a `global.json` there picks the SDK.
