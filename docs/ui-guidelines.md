@@ -130,7 +130,7 @@ The design's layout differences between the families, as values each theme sets 
 
 ## The control set
 
-One look for every button, field, choice, tab and row (M34h, D33): the design and its pictures are [`design/controls.md`](design/controls.md), approved on 2026-10-18. The shell's control themes (`Theming/Controls.axaml`: `Button`, `ToggleButton`, `DropDownButton`, `CheckBox`, `RadioButton`, `ToggleSwitch`, `SegmentedControl`) and `ShellStyles.axaml` (text and combo boxes, split buttons, tabs, rows, chips) draw the set, so a plain control has the look already: a view picks a kind with a class and never sets colors, heights or corners on a control itself. `ControlSetTests` checks the states, and the smoke test's gallery photographs the whole set in every theme (`controls-*`, `Infrastructure/ControlGallery.cs`).
+One look for every button, field, choice, tab and row (M34h, D33): the design and its pictures are [`design/controls.md`](design/controls.md), approved on 2026-10-18. The shell's control themes (`Theming/Controls.axaml`: `Button`, `ToggleButton`, `DropDownButton`, `CheckBox`, `RadioButton`, `ToggleSwitch`, `SegmentedControl`, `ComboBoxItem`, `TabControl`) and `ShellStyles.axaml` (text and combo boxes, split buttons, tabs, rows, chips) draw the set, so a plain control has the look already: a view picks a kind with a class and never sets colors, heights or corners on a control itself. `ControlSetTests` checks the states, and the smoke test's gallery photographs the whole set in every theme (`controls-*`, `Infrastructure/ControlGallery.cs`).
 
 ### Which button
 
@@ -179,7 +179,7 @@ Patterns the views use (M34h):
 - Placeholders are `Shell.Input.Placeholder`, the muted text at full opacity; a placeholder names what goes in the box.
 - **A path on this computer** is typed or browsed for: `<controls:PathBox Text="{Binding Folder}" AutomationProperties.Name="{l:T …}"/>` is the text box with the Browse button beside it (the `folder-open` icon, "Browse…"), which opens the OS's folder picker (`Kind="File"` for a file, `Patterns="*.db;*.sqlite"` to filter) where the typed path is. `BaseFolder` reads a relative path from a folder and writes a choice inside it relative to it (a project's publish folder). The input dialog has the same button (`DialogRequest.Browse`, `BrowseFolder`), plugins' input boxes with `InputBoxOptions.Browse`, and settings with `SettingDescriptor.Browse`. `PathBoxTests` fails on a `TextBox` bound to a path-like name; a path in a container or on another machine stays a text box.
 - Search boxes: `<TextBox Classes="search" PlaceholderText="{l:T …}"/>` has its search icon, and a clear button once there is text; in a toolbar it takes the rest of the row. A match count goes in its `InnerRightContent`.
-- Combo boxes: the field with a 12 px chevron; focused from the keyboard or open, the focus edge.
+- Combo boxes: the field with a 12 px chevron; focused from the keyboard or open, the focus edge. The open list has 24 px rows with a 16 px check column, so every row's text starts at the same place, and the check beside the chosen row (`ComboBoxItem`'s control theme). Two lists have no check column, on purpose: the editor's navigation bar (`ComboBox.navigationBar`) and an editable combo box's (`IsEditable="True"`: its list is a history, where a check would only mark the entry that equals the typed text).
 - **Check box** in lists, forms and dialogs that commit with OK, and for Options' booleans: the title is the check box's own label, once. **Radio buttons** for one of a few choices that need descriptions. **Switch** (`ToggleSwitch`, its label as `Content`) only for an on/off that takes effect at once and has its own place: AI Chat's Agent mode.
 - **Chip toggles** for the parts that go with something, each on or off, in a wrapping row (AI Chat's context: Selection, Current file, Errors…): `<ToggleButton Classes="chip" controls:ButtonIcon.Kind="document-text" Content="{l:T …}"/>`, a 22 px pill with a 12 px icon, checked in the toolbar's checked tint with its accent edge (M34h).
 - **A composer** (`Border.composer`, M34h): one field that holds a multi-line text box and its own row of actions under the text (a hint, the primary Send), with the text box's border and its focus edge around both; the text box inside is bare.
@@ -193,7 +193,7 @@ Patterns the views use (M34h):
   ```
 
   It is a list underneath: Tab reaches the chosen segment, the arrow keys, Home and End move the choice, and there is always one. It can bind `ItemsSource` and `SelectedItem` too.
-- **Tabs** inside a view (`TabControl`, 28 px) switch between different content (Body, Headers, Request): muted until selected, the selected one bold with a 2 px accent underline; a count goes in a `Border.badge` in the header (`<StackPanel Orientation="Horizontal" Spacing="6"><TextBlock …/><Border Classes="badge"><TextBlock Text="{Binding Count}"/></Border></StackPanel>`), which takes the accent on the selected tab.
+- **Tabs** inside a view (`TabControl`, 28 px) switch between different content (Body, Headers, Request): muted until selected, the selected one bold with a 2 px accent underline; a count goes in a `Border.badge` in the header (`<StackPanel Orientation="Horizontal" Spacing="6"><TextBlock …/><Border Classes="badge"><TextBlock Text="{Binding Count}"/></Border></StackPanel>`), which takes the accent on the selected tab. A 1 px line in `Shell.ViewTabs.Rule` runs under the strip and the selected tab's underline covers it: a `TabControl` draws it on its own (on top for `TabStripPlacement="Bottom"`). A `TabStrip` used as tabs (pages bound to a list, or tabs that drive a view model's index) takes `<TabStrip Classes="viewTabs" …>` for the same tabs and line, with 6 px of padding at its ends, and no item styles of its own. When the strip shares its row with other tools (HTTP Response's body tools), the row draws the line instead, across the tools too: `<Border BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.ViewTabs.Rule}" Padding="6,0">` around the row, and `BorderThickness="0" Padding="0"` on the strip; the tabs still reach over the row's line.
 
 ### Menus
 
@@ -237,6 +237,7 @@ Colors (every theme; the values are in [`design/controls.md`](design/controls.md
 | `Shell.Selection.Inactive`, `.Foreground` | A list's selection without the focus |
 | `Shell.Row.Hover` (and `Shell.Row.Hover.Outline`, High contrast's) | A row under the pointer |
 | `Shell.Grid.Header`, `Shell.Grid.Rule` | Column headers; row separators |
+| `Shell.ViewTabs.Rule` | The line under a tab strip inside a view (decorative, no contrast pair) |
 | `Shell.Match.Background`, `.Foreground` | A find match in result text |
 | `Shell.Badge`, `.Foreground` | Count badges, neutral chips |
 | `Shell.Status.Success`, `.Error`, `.Warning`, `.Info` (each with `.Foreground`) | Chips |

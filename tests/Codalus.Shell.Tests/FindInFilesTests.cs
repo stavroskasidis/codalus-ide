@@ -212,6 +212,18 @@ public class FindInFilesTests
         Assert.True(Parts(combos[0]).Text.IsFocused);
         ExpectOneField(combos[0], "Shell.Focus", 2);
 
+        // Find in Files and Replace in Files are tabs inside a view (TabStrip.viewTabs): 28 px, the hairline across the
+        // window under them, covered by the selected tab's underline.
+        var modes = view.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.TabStrip>().Single(t => t.Name == "ModeTabs");
+        var frame = view.GetVisualDescendants().OfType<Avalonia.Controls.Border>().Single(b => b.Name == "Frame");
+        Assert.Contains("viewTabs", modes.Classes);
+        Assert.Equal(new Avalonia.Thickness(0, 0, 0, 1), modes.BorderThickness);
+        Assert.Equal(ControlSetTests.Token("Shell.ViewTabs.Rule", variant), ControlSetTests.BrushColor(modes.BorderBrush));
+        Assert.Equal(frame.Bounds.Width - frame.BorderThickness.Left - frame.BorderThickness.Right, modes.Bounds.Width);
+        var mode = (Avalonia.Controls.Control)modes.ContainerFromIndex(modes.SelectedIndex)!;
+        Assert.Equal(28, mode.Bounds.Height);
+        Assert.Equal(modes.Bounds.Height, ControlSetTests.Underline(mode, modes).Bottom);
+
         // Look in under the pointer, over its text: the field's border takes the hover color all around.
         var lookIn = combos[1];
         ControlSetTests.SetState(lookIn, ":pointerover");

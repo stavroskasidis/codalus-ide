@@ -7,6 +7,8 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
@@ -14,14 +16,17 @@ using Codalus.Shell.Infrastructure;
 using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
+using ShapePath = Avalonia.Controls.Shapes.Path;
 
 namespace Codalus.Shell.Tests;
 
 /// <summary>
 /// M34h: the control set (docs/design/controls.md). The default button's template draws the design's tokens in every
 /// state without a class; the segmented control moves its choice with the keyboard and names itself; the in-window
-/// dialog shows its buttons in the OS's order with one primary, and the checklist's Select all and count; the whole set
-/// renders in every theme (with <c>CODALUS_UI_SNAPSHOTS</c>, the pictures are saved there).
+/// dialog shows its buttons in the OS's order with one primary, and the checklist's Select all and count; a combo box's
+/// list checks the chosen row (except the navigation bar's and an editable box's); a tab strip has a hairline that the
+/// selected tab's underline covers; the whole set renders in every theme (with <c>CODALUS_UI_SNAPSHOTS</c>, the
+/// pictures are saved there).
 /// </summary>
 public class ControlSetTests
 {
@@ -223,6 +228,213 @@ public class ControlSetTests
             SetState(query, ":pointerover");
             SetState(textBox, ":pointerover");
             Expect("Shell.Focus", 2, "focus and hover");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>Opens <paramref name="combo"/>'s list and returns its rows, realized in the popup.</summary>
+    private static List<ComboBoxItem> OpenRows(ComboBox combo)
+    {
+        combo.IsDropDownOpen = true;
+        for (var i = 0; i < 3; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        var rows = Enumerable.Range(0, combo.ItemCount).Select(combo.ContainerFromIndex).OfType<ComboBoxItem>().ToList();
+        Assert.True(rows.Count == combo.ItemCount, $"{rows.Count} of {combo.ItemCount} rows realized");
+        return rows;
+    }
+
+    private static ShapePath Check(ComboBoxItem row) => row.GetVisualDescendants().OfType<ShapePath>().Single(p => p.Name == "CheckGlyph");
+
+    [AvaloniaTheory]
+    [InlineData("harbor.light")]
+    [InlineData("dark")]
+    [InlineData("highContrast")]
+    [InlineData("ember.highContrast")]
+    public void A_combo_boxs_list_marks_the_chosen_item_with_a_check(string theme)
+    {
+        // The design's open combo box (Controls.dc.html): a check column on every row, the check beside the chosen one.
+        var variant = ThemeService.VariantOf(theme);
+        var combo = new ComboBox { ItemsSource = new[] { "Debug", "Release", "Staging" }, SelectedIndex = 1, Width = 200 };
+        var window = Show(new StackPanel { Margin = new Thickness(20), Children = { combo } }, variant);
+        try
+        {
+            var rows = OpenRows(combo);
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                var check = Check(row);
+                Assert.True(check.IsVisible == (i == 1), $"{theme}: row {i}'s check is {(check.IsVisible ? "shown" : "hidden")}");
+                Assert.Equal(24, row.Bounds.Height);
+
+                // The column is kept on every row, checked or not: the text starts 28 px in.
+                var text = row.GetVisualDescendants().OfType<TextBlock>().Single();
+                Assert.Equal(28, text.TranslatePoint(default, row)!.Value.X);
+            }
+
+            // The check: 16 px, 6 px in from the row's edge.
+            Assert.Equal(new Rect(6, 4, 16, 16), new Rect(Check(rows[1]).TranslatePoint(default, rows[1])!.Value, Check(rows[1]).Bounds.Size));
+
+            // The chosen row in the selection's colors, its check in the selection's text color.
+            var presenter = rows[1].GetVisualDescendants().OfType<ContentPresenter>().First(p => p.Name == "PART_ContentPresenter");
+            Assert.Equal(Token("Shell.Selection", variant), BrushColor(presenter.Background));
+            Assert.Equal(Token("Shell.Selection.Foreground", variant), BrushColor(presenter.Foreground));
+            Assert.Equal(Token("Shell.Selection.Foreground", variant), BrushColor(Check(rows[1]).Stroke));
+
+            // The closed field shows the choice through its template, without a check.
+            Assert.Equal("Release", combo.SelectionBoxItem);
+            Assert.DoesNotContain(combo.GetVisualDescendants().OfType<ShapePath>(), p => p.Name == "CheckGlyph");
+
+            // Another choice moves the check.
+            combo.SelectedIndex = 2;
+            ShellFixture.Pump();
+            Assert.False(Check(rows[1]).IsVisible);
+            Assert.True(Check(rows[2]).IsVisible);
+        }
+        finally
+        {
+            combo.IsDropDownOpen = false;
+            ShellFixture.Pump();
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void A_combo_boxs_check_is_on_the_right_from_right_to_left()
+    {
+        var row = new ComboBoxItem { Content = "Release", IsSelected = true };
+        var frame = new Border { Width = 200, HorizontalAlignment = HorizontalAlignment.Left, Child = new StackPanel { FlowDirection = FlowDirection.RightToLeft, Children = { row } } };
+        var window = Show(frame, ThemeService.HarborLight);
+        try
+        {
+            var check = Check(row);
+            Assert.True(check.IsVisible);
+            var middle = check.TranslatePoint(new Point(check.Bounds.Width / 2, check.Bounds.Height / 2), frame)!.Value.X;
+            Assert.Equal(200 - 6 - 8, middle);
+            // The text ends 28 px from the right (a text block keeps its own direction, so take both of its edges).
+            var text = row.GetVisualDescendants().OfType<TextBlock>().Single();
+            var edges = new[] { text.TranslatePoint(default, frame)!.Value.X, text.TranslatePoint(new Point(text.Bounds.Width, 0), frame)!.Value.X };
+            Assert.Equal(200 - 28, edges.Max());
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void Navigation_bar_and_editable_combo_lists_have_no_check_column()
+    {
+        // The editor's member lists have no check, as the classic IDE's; an editable box's list is its history, where a
+        // check would only mark the entry that equals the typed text (docs/design/controls.md, "Where the build differs").
+        var navigation = new ComboBox { ItemsSource = new[] { "Greeter", "Greet(Person person)" }, SelectedIndex = 1, Classes = { "navigationBar" }, Width = 200 };
+        var editable = new ComboBox { ItemsSource = new[] { "Person", "Greeter.Greet" }, SelectedIndex = 0, IsEditable = true, Width = 200 };
+        var window = Show(new StackPanel { Spacing = 8, Margin = new Thickness(20), Children = { navigation, editable } }, ThemeService.HarborLight);
+        try
+        {
+            foreach (var (combo, padding) in new[] { (navigation, new Thickness(6, 3)), (editable, new Thickness(8, 3)) })
+            {
+                var rows = OpenRows(combo);
+                Assert.True(rows[combo.SelectedIndex].IsSelected);
+                Assert.All(rows, r => Assert.False(Check(r).IsVisible));
+                Assert.All(rows, r => Assert.Equal(padding, r.Padding));
+                combo.IsDropDownOpen = false;
+                ShellFixture.Pump();
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>The selected tab's underline, in <paramref name="relativeTo"/>'s coordinates.</summary>
+    internal static Rect Underline(Control tab, Visual relativeTo)
+    {
+        var pipe = tab.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_SelectedPipe");
+        Assert.True(pipe.IsVisible, "the selected tab shows its underline");
+        return new Rect(pipe.TranslatePoint(default, relativeTo)!.Value, pipe.Bounds.Size);
+    }
+
+    /// <summary>The color of the frame's pixel under a point of <paramref name="visual"/>.</summary>
+    private static Color Pixel(WriteableBitmap frame, Visual visual, Point point, TopLevel top)
+    {
+        var at = visual.TranslatePoint(point, top)!.Value * top.RenderScaling;
+        using var buffer = frame.Lock();
+        var offset = ((int)at.Y * buffer.RowBytes) + ((int)at.X * 4);
+        var (b0, b1, b2, b3) = (System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset), System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + 1),
+            System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + 2), System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + 3));
+        return buffer.Format == PixelFormat.Rgba8888 ? Color.FromArgb(b3, b0, b1, b2) : Color.FromArgb(b3, b2, b1, b0);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("harbor.light", null)]
+    [InlineData("dark", null)]
+    [InlineData("highContrast", "#6FC3DF")]
+    [InlineData("harbor.highContrast", "#8C8C8C")]
+    [InlineData("ember.highContrast", "#8C8C8C")]
+    public void A_tab_strip_has_a_hairline_that_the_selected_tab_covers(string theme, string? designed)
+    {
+        // controls.css's .tabs: a 1 px line in the mockups' soft border under the strip, and the selected tab's 2 px accent
+        // underline over it. TabControls draw it in their control theme, a TabStrip used as tabs with Classes="viewTabs".
+        var variant = ThemeService.VariantOf(theme);
+        var rule = Token("Shell.ViewTabs.Rule", variant);
+        if (designed is not null)
+        {
+            Assert.Equal(Color.Parse(designed), rule);
+        }
+
+        var top = new TabControl { Width = 400, Height = 90 };
+        var bottom = new TabControl { Width = 400, Height = 90, TabStripPlacement = Avalonia.Controls.Dock.Bottom };
+        foreach (var tabs in new[] { top, bottom })
+        {
+            tabs.Items.Add(new TabItem { Header = "Body", Content = new TextBlock { Text = "{ }" } });
+            tabs.Items.Add(new TabItem { Header = "Headers" });
+            tabs.Items.Add(new TabItem { Header = "Request" });
+            tabs.SelectedIndex = 0;
+        }
+
+        var strip = new TabStrip { Width = 400, Classes = { "viewTabs" }, HorizontalAlignment = HorizontalAlignment.Left };
+        strip.Items.Add(new TabStripItem { Content = "Find Results 1" });
+        strip.Items.Add(new TabStripItem { Content = "Find Results 2" });
+        strip.SelectedIndex = 0;
+        var window = Show(new StackPanel { Spacing = 16, Margin = new Thickness(10), Children = { top, bottom, strip } }, variant, 600, 400);
+        try
+        {
+            using var frame = window.CaptureRenderedFrame()!;
+            var accent = Token("Shell.Accent", variant);
+            void Expect(string what, Control line, Thickness thickness, IBrush? brush, Control selected, Control last, bool atTop)
+            {
+                Assert.True(thickness == (atTop ? new Thickness(0, 1, 0, 0) : new Thickness(0, 0, 0, 1)), $"{theme} {what}: the line is {thickness}");
+                Assert.True(rule == BrushColor(brush), $"{theme} {what}: the line is {BrushColor(brush)}, not Shell.ViewTabs.Rule's {rule}");
+                Assert.Equal(400, line.Bounds.Width);
+                var underline = Underline(selected, line);
+                Assert.True(atTop ? underline.Top == 0 : underline.Bottom == line.Bounds.Height, $"{theme} {what}: the underline is at {underline}, the line's {line.Bounds}");
+
+                // As drawn: the line's row is the rule past the last tab and the accent under the selected one.
+                var y = atTop ? 0.5 : line.Bounds.Height - 0.5;
+                var past = last.TranslatePoint(new Point(last.Bounds.Width + 20, 0), line)!.Value.X;
+                Assert.True(Pixel(frame, line, new Point(past, y), window) == rule, $"{theme} {what}: {Pixel(frame, line, new Point(past, y), window)} past the tabs");
+                Assert.True(Pixel(frame, line, new Point(underline.Center.X, y), window) == accent, $"{theme} {what}: {Pixel(frame, line, new Point(underline.Center.X, y), window)} under the selected tab");
+            }
+
+            foreach (var (tabs, atTop) in new[] { (top, false), (bottom, true) })
+            {
+                var line = tabs.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_TabStrip");
+                Expect(atTop ? "TabControl at the bottom" : "TabControl", line, line.BorderThickness, line.BorderBrush, (Control)tabs.ContainerFromIndex(0)!, (Control)tabs.ContainerFromIndex(2)!, atTop);
+            }
+
+            Expect("TabStrip.viewTabs", strip, strip.BorderThickness, strip.BorderBrush, (Control)strip.ContainerFromIndex(0)!, (Control)strip.ContainerFromIndex(1)!, atTop: false);
+            Assert.Equal(new Thickness(6, 0), strip.Padding);
+
+            // The page transition's host is kept from Fluent's template.
+            Assert.Contains(top.GetVisualDescendants().OfType<ContentPresenter>(), p => p.Name == "PART_SelectedContentHost2");
+            Assert.Contains(top.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "{ }" && t.IsEffectivelyVisible);
         }
         finally
         {

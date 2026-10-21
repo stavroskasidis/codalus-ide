@@ -1,8 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Codalus.Shell.Controls;
 
 namespace Codalus.Shell.Infrastructure;
@@ -19,6 +23,38 @@ internal static class ControlGallery
     private static readonly string[] s_configurations = ["Debug", "Release"];
     private static readonly string[] s_lengths = ["Short", "Medium"];
     private static readonly string[] s_protocols = ["gRPC"];
+    private static readonly string[] s_collectionTypes = ["System.Array", "System.Collections.Generic.List`1", "System.Collections.ObjectModel.Collection`1"];
+    private static readonly string[] s_findHistory = ["Person", "Greeter.Greet"];
+
+    /// <summary>
+    /// A combo box whose template shows its list in place, in the popup's frame: the open list as the popup draws it
+    /// (the popup is a window of its own, outside the picture). Its rows are the combo box's own ComboBoxItems, so the
+    /// list's styles apply to them as in the popup: the check beside the chosen row, and none in an editable combo box's
+    /// history. ComboBox requires a PART_Popup, which stays closed.
+    /// </summary>
+    private static readonly ControlTheme s_listInPlace = new(typeof(ComboBox))
+    {
+        Setters =
+        {
+            new Setter(TemplatedControl.TemplateProperty, new FuncControlTemplate<ComboBox>((_, scope) => new Panel
+            {
+                Children =
+                {
+                    new Border
+                    {
+                        Padding = new Thickness(4),
+                        BorderThickness = new Thickness(1),
+                        MinWidth = 300,
+                        Child = new ItemsPresenter { Name = "PART_ItemsPresenter" }.RegisterInNameScope(scope),
+                        [!Border.BackgroundProperty] = new DynamicResourceExtension("Shell.Overlay"),
+                        [!Border.BorderBrushProperty] = new DynamicResourceExtension("Shell.Overlay.Border"),
+                        [!Border.CornerRadiusProperty] = new DynamicResourceExtension("Shell.CornerRadius.Overlay"),
+                    },
+                    new Popup { Name = "PART_Popup" }.RegisterInNameScope(scope),
+                },
+            })),
+        },
+    };
 
     public static Control Build()
     {
@@ -40,7 +76,7 @@ internal static class ControlGallery
         return new Border
         {
             Child = page,
-            [!Border.BackgroundProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("Shell.Panel"),
+            [!Border.BackgroundProperty] = new DynamicResourceExtension("Shell.Panel"),
         };
     }
 
@@ -187,8 +223,8 @@ internal static class ControlGallery
             Child = bar,
             Padding = new Thickness(4, 2),
             BorderThickness = new Thickness(0, 0, 0, 1),
-            [!Border.BackgroundProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("Shell.Toolbar"),
-            [!Border.BorderBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("Shell.Toolbar.Border"),
+            [!Border.BackgroundProperty] = new DynamicResourceExtension("Shell.Toolbar"),
+            [!Border.BorderBrushProperty] = new DynamicResourceExtension("Shell.Toolbar.Border"),
         };
     }
 
@@ -207,9 +243,11 @@ internal static class ControlGallery
             grid.ColumnDefinitions.Add(new ColumnDefinition(230, GridUnitType.Pixel));
         }
 
-        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        for (var r = 0; r < 4; r++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        }
+
         grid.Children.Add(Place(Labeled("Placeholder", new TextBox { PlaceholderText = "http://localhost:5000/Service.svc?wsdl" }), 0, 0));
         grid.Children.Add(Place(Labeled("Hover", State(new TextBox { PlaceholderText = "http://localhost:5000/Service.svc?wsdl" }, ":pointerover")), 0, 1));
         grid.Children.Add(Place(Labeled("Focused", State(new TextBox { Text = "http://localhost:5280/CalculatorService.svc" }, ":focus")), 0, 2));
@@ -234,7 +272,41 @@ internal static class ControlGallery
         var focusedCombo = State(new ComboBox { ItemsSource = s_lengths, SelectedIndex = 0, Width = 140 }, ":focus-visible");
         grid.Children.Add(Place(Labeled("Combo box, focused", focusedCombo), 2, 2));
         grid.Children.Add(Place(Labeled("Combo box, disabled", new ComboBox { ItemsSource = s_protocols, SelectedIndex = 0, Width = 140, IsEnabled = false }), 2, 3));
+
+        // Open: the chosen row has the check, the one under the pointer the hover; an editable box's list is its history,
+        // without the check column. Each spans two columns: the list is as wide as its longest row.
+        var open = Labeled("Combo box, open", OpenCombo(s_collectionTypes, selected: 1, hovered: 2, editable: false));
+        Grid.SetColumnSpan(open, 2);
+        grid.Children.Add(Place(open, 3, 0));
+        var history = Labeled("Combo box, editable, open", OpenCombo(s_findHistory, selected: 0, hovered: -1, editable: true));
+        Grid.SetColumnSpan(history, 2);
+        grid.Children.Add(Place(history, 3, 2));
         return grid;
+    }
+
+    /// <summary>An open combo box: its field, focused, and its list under it (<see cref="s_listInPlace"/>).</summary>
+    private static StackPanel OpenCombo(string[] items, int selected, int hovered, bool editable)
+    {
+        var field = State(new ComboBox { ItemsSource = items, SelectedIndex = selected, IsEditable = editable, Width = 300, HorizontalAlignment = HorizontalAlignment.Left }, ":dropdownopen");
+        var list = new ComboBox
+        {
+            ItemsSource = items,
+            SelectedIndex = selected,
+            IsEditable = editable,
+            Theme = s_listInPlace,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            IsHitTestVisible = false,
+            Focusable = false,
+        };
+        list.ContainerPrepared += (_, e) =>
+        {
+            if (e.Index == hovered)
+            {
+                State(e.Container, ":pointerover");
+            }
+        };
+        AutomationName(list, "List");
+        return new StackPanel { Spacing = 2, Children = { field, list } };
     }
 
     private static StackPanel Labeled(string label, Control control)
@@ -278,7 +350,9 @@ internal static class ControlGallery
 
     private static StackPanel SegmentsAndTabs()
     {
+        var rows = new StackPanel { Spacing = 14 };
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 24 };
+        rows.Children.Add(row);
         var segments = new SegmentedControl { SelectedIndex = 0 };
         segments.Items.Add(new SegmentedControlItem { Content = "Form" });
         segments.Items.Add(new SegmentedControlItem { Content = "XML" });
@@ -308,7 +382,39 @@ internal static class ControlGallery
         tabs.Items.Add(new TabItem { Header = "Timeline", IsEnabled = false });
         tabs.SelectedIndex = 0;
         row.Children.Add(tabs);
-        return row;
+
+        // A TabStrip used as tabs (TabStrip.viewTabs): Find Results' kept pages, each with its count and close button;
+        // and a strip at the bottom (the data editor's results), its line and underline on top.
+        var second = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 24 };
+        rows.Children.Add(second);
+        var pages = new TabStrip { Width = 420, VerticalAlignment = VerticalAlignment.Top };
+        pages.Classes.Add("viewTabs");
+        pages.Items.Add(Page("Find Results 1", "12"));
+        pages.Items.Add(Page("Find Results 2", "3"));
+        pages.SelectedIndex = 1;
+        AutomationName(pages, "Find Results pages");
+        second.Children.Add(pages);
+        var bottom = new TabControl { Width = 420, Height = 70, TabStripPlacement = Avalonia.Controls.Dock.Bottom };
+        bottom.Items.Add(new TabItem { Header = "Results", Content = new TextBlock { Text = "3 rows", Margin = new Thickness(8) } });
+        bottom.Items.Add(new TabItem { Header = "Messages" });
+        bottom.SelectedIndex = 0;
+        second.Children.Add(bottom);
+        return rows;
+    }
+
+    private static TabStripItem Page(string header, string count)
+    {
+        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        content.Children.Add(new TextBlock { Text = header, VerticalAlignment = VerticalAlignment.Center });
+        var badge = new Border { Child = new TextBlock { Text = count } };
+        badge.Classes.Add("badge");
+        content.Children.Add(badge);
+        var close = new Button { Width = 16, Height = 16, MinWidth = 16, MinHeight = 16, Padding = default, VerticalAlignment = VerticalAlignment.Center };
+        close.Classes.Add("subtle");
+        close.Content = new Icon { Kind = "close", Width = 12, Height = 12, [!Icon.ForegroundProperty] = new DynamicResourceExtension("Shell.MutedForeground") };
+        AutomationName(close, "Close these results");
+        content.Children.Add(close);
+        return new TabStripItem { Content = content, Padding = new Thickness(10, 0, 6, 0) };
     }
 
     private static StackPanel ListsAndChips()
@@ -354,7 +460,7 @@ internal static class ControlGallery
     {
         Child = child,
         BorderThickness = new Thickness(1),
-        [!Border.BorderBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("Shell.Border"),
+        [!Border.BorderBrushProperty] = new DynamicResourceExtension("Shell.Border"),
     };
 
     private static StackPanel EmptyAndFooter()

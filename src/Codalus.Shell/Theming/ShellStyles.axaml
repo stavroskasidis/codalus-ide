@@ -251,10 +251,10 @@
 
   <!--
     The control set (M34h, docs/design/controls.md): what Fluent's templates draw for fields, choices, tabs and rows,
-    restyled from the Shell.* tokens; the buttons, check boxes, radio buttons, switches and the segmented control have
-    their own control themes (Theming/Controls.axaml). A style outranks Fluent's control theme in any state, and a style
-    with a class or a state outranks what a template sets, so each state is restated here. docs/ui-guidelines.md lists
-    the classes.
+    restyled from the Shell.* tokens; the buttons, check boxes, radio buttons, switches, the segmented control, a combo
+    box list's rows and the TabControl have their own control themes (Theming/Controls.axaml). A style outranks Fluent's
+    control theme in any state, and a style with a class or a state outranks what a template sets, so each state is
+    restated here. docs/ui-guidelines.md lists the classes.
   -->
 
   <!-- The primary button's icon is drawn in the accent's text, as its label. -->
@@ -359,7 +359,8 @@
 
   <!--
     Combo boxes: the field with a 12 px chevron; open or focused from the keyboard, the field keeps the focus edge. The
-    list's rows are 24 px, the chosen one in the selection's colors.
+    list's rows (24 px, a check beside the chosen one in the selection's colors) are ComboBoxItem's control theme in
+    Theming/Controls.axaml; the navigation bar's and an editable combo box's lists opt out of the check below.
   -->
   <Style Selector="ComboBox">
     <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
@@ -433,23 +434,22 @@
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
     <Setter Property="Padding" Value="4,0" />
   </Style>
-  <Style Selector="ComboBoxItem">
-    <Setter Property="MinHeight" Value="24" />
+  <!--
+    An editable combo box's list is its history (Find and Replace's Find what, Replace with, Look in and File types;
+    Counters' process box): a check there would only mark the entry that equals the typed text, so its rows have no
+    check column (docs/design/controls.md, "Where the build differs").
+  -->
+  <Style Selector="ComboBox[IsEditable=True] ComboBoxItem">
     <Setter Property="Padding" Value="8,3" />
-    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
   </Style>
-  <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
-    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
-  </Style>
-  <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
-    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  <Style Selector="ComboBox[IsEditable=True] ComboBoxItem /template/ Path#CheckGlyph">
+    <Setter Property="IsVisible" Value="False" />
   </Style>
 
   <!--
     Tabs inside a view (TabControl, 28 px): different content (Body, Headers, Request), not a view switch (that is a
-    SegmentedControl). Muted until selected; the selected one bold with a 2 px accent underline. Counts go in a
+    SegmentedControl). Muted until selected; the selected one bold with a 2 px accent underline, which covers the strip's
+    hairline in Shell.ViewTabs.Rule (TabControl's control theme draws it, in Theming/Controls.axaml). Counts go in a
     Border.badge in the header, which takes the accent on the selected tab.
   -->
   <Style Selector="TabItem">
@@ -477,10 +477,61 @@
     <Setter Property="CornerRadius" Value="1" />
     <Setter Property="VerticalAlignment" Value="Bottom" />
   </Style>
+  <!-- A strip at the bottom (the data editor's results) has its line on top, so the underline goes there. -->
+  <Style Selector="TabItem[TabStripPlacement=Bottom]:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="VerticalAlignment" Value="Top" />
+  </Style>
   <Style Selector="TabItem:disabled /template/ Border#PART_LayoutRoot">
     <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
   </Style>
   <Style Selector="TabItem:selected Border.badge">
+    <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.AccentForeground}" />
+  </Style>
+  <!--
+    A TabStrip used as tabs inside a view (Find Results' pages, HTTP Response's Body, Headers and Request, Find and
+    Replace's and Code Search's two kinds): Classes="viewTabs" draws the TabItems' look and the hairline under the strip,
+    6 px of padding at its ends, and no item styles of its own in the view. A row the strip shares with other tools
+    (HTTP Response's, Code Search's) draws the line itself, across the row, in Shell.ViewTabs.Rule; its strip takes
+    BorderThickness="0" Padding="0", and the tabs still reach 1 px over the row's line.
+  -->
+  <Style Selector="TabStrip.viewTabs">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.ViewTabs.Rule}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="Padding" Value="6,0" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs /template/ ItemsPresenter#PART_ItemsPresenter">
+    <Setter Property="Margin" Value="0,0,0,-1" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem">
+    <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing}" />
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+    <Setter Property="FontWeight" Value="Normal" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Tab}" />
+    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:pointerover /template/ Border#PART_LayoutRoot, TabStrip.viewTabs TabStripItem:pressed /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+    <Setter Property="Height" Value="2" />
+    <Setter Property="Margin" Value="-4,0,-4,0" />
+    <Setter Property="CornerRadius" Value="1" />
+    <Setter Property="VerticalAlignment" Value="Bottom" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:disabled /template/ Border#PART_LayoutRoot">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:selected Border.badge">
     <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
     <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.AccentForeground}" />
   </Style>
@@ -1040,10 +1091,14 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
     <Setter Property="Opacity" Value="1" />
   </Style>
+  <!-- Its member lists have no check column, as the classic IDE's don't (docs/design/controls.md, "Where the build differs"). -->
   <Style Selector="ComboBox.navigationBar ComboBoxItem">
     <Setter Property="MinHeight" Value="0" />
     <Setter Property="Padding" Value="6,3" />
     <Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar ComboBoxItem /template/ Path#CheckGlyph">
+    <Setter Property="IsVisible" Value="False" />
   </Style>
 
   <Style Selector="controls|Icon.start">

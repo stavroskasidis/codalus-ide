@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.6.0
+
+- **Combo box lists check the chosen item, and tabs have a line under them**, as the control set's design draws them: an open combo box's list shows a check beside the item that's chosen, and every item's text starts after the check's column, so the list lines up. The editor's navigation bar and the lists of combo boxes you type in (their history, such as Find and Replace's Find what, Look in and File types) keep their lists without it. Every row of tabs inside a window or document (Find Results' pages, HTTP Response's Body, Headers and Request, a profiling report, Containers, Find and Replace and Code Search) has a thin line under it, which the selected tab's underline covers. Find and Replace's and Code Search's tabs now look like the others: the body's text size, 28 px, the accent underline.
+
 ## 0.5.0
 
 - **IntelliSense like a classic IDE's** ([user guide](docs/user-guide/editing.md#intellisense)): in C# and Visual Basic, the completion list, parameter info and Quick Info show code in the editor's own colors, and generic types as you use them (`LayoutBuilderBase<PageModel, PageBuilder<PageModel>>.AddTab(…)`, not `LayoutBuilderBase<TModel, TBuilder>`). Other languages get the same popups, in plain text.

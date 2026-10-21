@@ -56,6 +56,17 @@ public sealed class CodeSearchTests
         await SearchAsync(f, "Shapes", () => search.Rows.Any(r => r.Name == "Shapes.cs"));
         Assert.True(f.Window.FindDescendantOfType<CodeSearchView>()!.IsEffectivelyVisible);
 
+        // The two kinds are tabs inside a view (TabStrip.viewTabs): the row draws their hairline, under the window's
+        // buttons too, and the chosen kind's underline covers it.
+        var view = f.Window.FindDescendantOfType<CodeSearchView>()!;
+        var band = view.GetVisualDescendants().OfType<Avalonia.Controls.Border>().Single(b => b.Name == "TitleBand");
+        var kinds = view.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.TabStrip>().Single(t => t.Name == "KindTabs");
+        Assert.Equal(new Avalonia.Thickness(0, 0, 0, 1), band.BorderThickness);
+        Assert.Equal(ControlSetTests.Token("Shell.ViewTabs.Rule", view.ActualThemeVariant), ControlSetTests.BrushColor(band.BorderBrush));
+        Assert.Contains("viewTabs", kinds.Classes);
+        var kind = (Avalonia.Controls.Control)kinds.ContainerFromIndex(kinds.SelectedIndex)!;
+        Assert.Equal(band.Bounds.Height, ControlSetTests.Underline(kind, band).Bottom);
+
         // Complete once the C# host has indexed the solution; the open window's results refresh by themselves.
         await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 2 }, seconds: 180, describe: () => $"C# {f.Shell.Languages.Status(ShellHost.CSharpLanguageId)}; {State(f)}");
         await ShellFixture.PumpUntil(() => f.Shell.CodeSearchIndex.IsComplete && !search.IsIncomplete && search.Rows.Any(r => r.Name == "Shapes.cs"), seconds: 60, describe: () => $"index complete {f.Shell.CodeSearchIndex.IsComplete}, {f.Shell.CodeSearchIndex.SymbolCount} symbols; {State(f)}");

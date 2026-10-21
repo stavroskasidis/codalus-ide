@@ -10,12 +10,6 @@
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="Margin" Value="0,0,10,0" />
     </Style>
-    <!-- Body-sized tab headers, like the shell's TabItems, not Fluent's 24 pt. -->
-    <Style Selector="TabStripItem">
-      <Setter Property="FontSize" Value="14" />
-      <Setter Property="MinHeight" Value="30" />
-      <Setter Property="Padding" Value="8,4" />
-    </Style>
     <Style Selector="CheckBox">
       <Setter Property="MinHeight" Value="26" />
     </Style>
@@ -34,7 +28,8 @@
           <controls:Icon Kind="close" />
         </Button>
       </Grid>
-      <TabStrip DockPanel.Dock="Top" SelectedIndex="{Binding TabIndex}" Margin="6,0,6,4" AutomationProperties.Name="{l:T findReplace.mode}">
+      <!-- Different fields for each (Replace with, Replace All), so tabs inside a view, with their hairline. -->
+      <TabStrip x:Name="ModeTabs" Classes="viewTabs" DockPanel.Dock="Top" SelectedIndex="{Binding TabIndex}" Margin="0,0,0,4" AutomationProperties.Name="{l:T findReplace.mode}">
         <TabStripItem Content="{l:T findReplace.findInFiles}" />
         <TabStripItem Content="{l:T findReplace.replaceInFiles}" />
       </TabStrip>
