@@ -122,7 +122,7 @@ A control or component with designer tasks shows a small arrow at its top right 
 
 ### Menus and tool strips
 
-Select a menu strip, a tool strip, a status strip or a context menu strip to edit it on the form: **Type Here** at its end adds an item. In a menu, type the item's text (`&File`; a `-` makes a separator); in a tool strip or a status strip, choose the item's type (a button, a label, a combo box, a drop-down button…). Items are named as in Visual Studio (`fileToolStripMenuItem`, `toolStripButton1`). Only these strips have **Type Here**: a list box's, combo box's, domain up-down's or list view's items are edited in its **Items** [collection editor](#collections) or with its smart tag's **Edit Items…**.
+Select a menu strip, a tool strip, a status strip or a context menu strip to edit it on the form: **Type Here** at its end adds an item. In a menu, type the item's text (`&File`; a `-` makes a separator); in a tool strip or a status strip, choose the item's type (a button, a label, a combo box, a drop-down button…). Items are named as in Visual Studio (`fileToolStripMenuItem`, `toolStripButton1`). Only these strips have **Type Here**: a list box's, combo box's, domain up-down's or list view's items are edited in its **Items** [collection editor](#collections) (a list box's, combo box's and list view's smart tag also has **Edit Items…**).
 - Select a menu item to open its drop-down, with its own **Type Here**; `Enter` or a click on the selected item edits its text in place.
 - `Ctrl`+arrows move the selected item among its siblings; `Delete` deletes it (and its drop-down's items).
 - An item's properties are in the Properties window; its items are also in the **Items** collection editor.

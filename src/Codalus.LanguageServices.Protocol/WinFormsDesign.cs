@@ -144,6 +144,9 @@ public static class DesignerCollections
     public const string Locals = "locals";
     public const string Images = "images";
 
+    /// <summary>A new menu item's type: what typed text in a menu's Type Here makes.</summary>
+    public const string MenuItemType = Forms + "ToolStripMenuItem";
+
     private const string Forms = "System.Windows.Forms.";
 
     private static readonly string[] s_menuItems = [Forms + "ToolStripMenuItem", Forms + "ToolStripComboBox", Forms + "ToolStripTextBox", Forms + "ToolStripSeparator"];
@@ -181,9 +184,6 @@ public static class DesignerCollections
         new(Forms + "DataGridView", "Columns", Components, "AddRange", Forms + "DataGridViewColumn", s_columns),
         new(Forms + "ImageList", "Images", Images, "SetKeyName", null, ["System.Drawing.Image"]),
     ];
-
-    /// <summary>A new menu item's type: what typed text in a menu's Type Here makes.</summary>
-    public const string MenuItemType = Forms + "ToolStripMenuItem";
 
     public static DesignerCollectionInfo? Find(string key) => All.FirstOrDefault(c => c.Key == key);
 
