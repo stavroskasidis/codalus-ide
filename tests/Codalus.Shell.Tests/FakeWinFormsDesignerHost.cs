@@ -206,7 +206,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             Collections = CollectionsOf(t.Value),
             DefaultEvent = t.Value.EndsWith("Timer", StringComparison.Ordinal) ? "Tick" : null,
         }));
-        return new DesignerRenderResult(new DesignerFrame(Png, 400, 450), [.. views], []);
+        return new DesignerRenderResult(new DesignerFrame(Png, 400 + FrameExtra, 450 + FrameExtra), [.. views], []);
     }
 
     public Task<DesignerRenderResult> RenderAsync(CancellationToken cancellationToken) => Task.FromResult(Render());
@@ -560,6 +560,9 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     }
 
     public void Restart() => Restarted?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>How much wider and taller than the form its frame is drawn (#66: the surface beside the form, where nothing drops).</summary>
+    public int FrameExtra { get; set; }
 
     /// <summary>Whether a build replaced the output this host loaded (#66): the designer starts a new host to show it.</summary>
     public bool Outdated { get; set; }

@@ -953,7 +953,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
             if (_host is not { } host || _designerCode is null || _model is null)
             {
-                Status = Localizer.Get("msg.winFormsDesigner.notReady", "The designer isn't running, so the change wasn't made: see the Windows Forms Designer output, or click Refresh.");
+                Status = Localizer.Get("msg.winFormsDesigner.notReady", "The designer isn't running, so the change wasn't made: see the Windows Forms Designer output, or click Load the form again on the designer's toolbar.");
                 return;
             }
 
@@ -1691,6 +1691,11 @@ public sealed record ToolboxItemViewModel(string Name, string Type, string Categ
     public string? Description { get; init; }
 
     public string ToolTip => IsPointer ? Name : Description is { } description ? $"{Type}\n{description}" : Type;
+
+    /// <summary>What the item does, for a screen reader (#66): the Pointer only cancels the armed item; the others are added, armed or dragged.</summary>
+    public string HelpText => IsPointer
+        ? Localizer.Get("msg.toolbox.pointerHelp", "Click it, or press Enter or Space, to cancel the armed item: a click on the form then selects.")
+        : Localizer.Get("msg.toolbox.itemHelp", "Double-click it or press Enter to add it to the form. Click it or press Space, then click or drag on the form. Or drag it onto the form.");
 }
 
 public sealed class ToolboxCategoryViewModel(string title, IReadOnlyList<ToolboxItemViewModel> items) : ObservableObject

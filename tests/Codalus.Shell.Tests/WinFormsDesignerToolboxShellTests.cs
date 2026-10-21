@@ -1,10 +1,12 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Codalus.LanguageServices.Protocol;
@@ -139,6 +141,8 @@ public sealed class WinFormsDesignerToolboxShellTests
         Assert.Equal(Token("Shell.Selection.Inactive"), Background());
         Assert.Equal("System.Windows.Forms.CheckBox", f.Shell.Toolbox.Armed?.Type);
         var pointer = ItemButtons().First(b => b.DataContext is ToolboxItemViewModel { IsPointer: true });
+        Assert.Equal("Click it, or press Enter or Space, to cancel the armed item: a click on the form then selects.", AutomationProperties.GetHelpText(pointer));
+        Assert.StartsWith("Double-click it or press Enter to add it to the form.", AutomationProperties.GetHelpText(checkItem), StringComparison.Ordinal);
         var pointerCenter = CenterOf(pointer);
         f.Window.MouseDown(pointerCenter, MouseButton.Left);
         f.Window.MouseUp(pointerCenter, MouseButton.Left);
@@ -147,15 +151,28 @@ public sealed class WinFormsDesignerToolboxShellTests
         Assert.DoesNotContain("armed", checkItem.Classes);
         Assert.DoesNotContain(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.StartsWith("Click or drag on the form", StringComparison.Ordinal) == true);
 
-        // C: drops that create nothing: in tab order mode, and off the form (beside it, on the surface's margin).
+        // C: drops that create nothing: in tab order mode, and on the surface beside the form (its frame drawn wider than
+        // the form): the surface's own handler gets the drag and refuses it.
         var data = new DataTransfer();
         data.Add(DataTransferItem.Create(Views.WinFormsDesignerView.ToolboxFormat, "System.Windows.Forms.Label"));
         designer.IsTabOrderMode = true;
         Drop(surface.TranslatePoint(new Point(56, 331), f.Window)!.Value, data);
         await SettleAsync();
         designer.IsTabOrderMode = false;
-        Drop(surface.TranslatePoint(new Point(-8, 200), f.Window)!.Value, data);
+        host.FrameExtra = 40;
+        await designer.ReloadAsync(restartHost: false);
+        await ShellFixture.PumpUntil(() => surface.Bounds.Width >= 440, seconds: 30, () => $"the wider frame: {surface.Bounds}");
+        ShellFixture.RenderFrame(f.Window);
+        var beside = new Point(420, 200);
+        Assert.Null(designer.HitTest(beside.X, beside.Y));
+        var overs = new List<DragDropEffects>();
+        void OnOver(object? sender, DragEventArgs e) => overs.Add(e.DragEffects);
+        surface.AddHandler(DragDrop.DragOverEvent, OnOver, RoutingStrategies.Bubble, handledEventsToo: true);
+        Drop(surface.TranslatePoint(beside, f.Window)!.Value, data);
         await SettleAsync();
+        surface.RemoveHandler(DragDrop.DragOverEvent, OnOver);
+        Assert.NotEmpty(overs);
+        Assert.All(overs, effects => Assert.Equal(DragDropEffects.None, effects));
         Assert.Single(host.Creates);
 
         // D: the tray takes a component (a Timer), not a control.
@@ -173,22 +190,24 @@ public sealed class WinFormsDesignerToolboxShellTests
         Assert.Equal(2, host.Creates.Count);
 
         // E: a double-click on the CheckBox with placeOrderButton selected adds checkBox1 into buttonPanel at its default place,
-        // selected, nothing armed, the designer active and its surface focused. Both presses land on the same item.
+        // selected, nothing armed, the designer active and its surface focused. The two presses come back to back (within
+        // the double-click time even on a slow machine: nothing renders between them), and the item is still under them after.
         designer.SetSelection(["placeOrderButton"], notify: true);
         await Task.Delay(600, TestContext.Current.CancellationToken);
         checkItem = await ItemAsync("System.Windows.Forms.CheckBox");
         checkCenter = CenterOf(checkItem);
+        Assert.Same(checkItem, ItemAt(checkCenter));
         f.Window.MouseDown(checkCenter, MouseButton.Left);
         f.Window.MouseUp(checkCenter, MouseButton.Left);
-        ShellFixture.RenderFrame(f.Window);
-        ShellFixture.Pump();
-        Assert.Same(checkItem, ItemAt(checkCenter));
-        Assert.Equal("System.Windows.Forms.CheckBox", f.Shell.Toolbox.Armed?.Type);
+        var armedByTheFirstClick = f.Shell.Toolbox.Armed?.Type;
         f.Window.MouseDown(checkCenter, MouseButton.Left);
         f.Window.MouseUp(checkCenter, MouseButton.Left);
         await ShellFixture.PumpUntil(() => host.Creates.Count == 3 && designer.Selection is ["checkBox1"], seconds: 30,
             () => $"the double-click's create ({host.Creates.Count} creates, armed {f.Shell.Toolbox.Armed?.Name ?? "nothing"}): {designer.Status}");
         await SettleAsync();
+        Assert.Equal("System.Windows.Forms.CheckBox", armedByTheFirstClick);
+        ShellFixture.RenderFrame(f.Window);
+        Assert.Equal(checkItem.DataContext, ItemAt(checkCenter)?.DataContext); // the first click's arming didn't move the list
         var added = host.Creates[2];
         Assert.Equal(("System.Windows.Forms.CheckBox", "checkBox1", true, root.ClientX, root.ClientY), (added.Type, added.Name, added.AtDefaultLocation, added.X, added.Y));
         Assert.Equal(["placeOrderButton"], added.Selected);

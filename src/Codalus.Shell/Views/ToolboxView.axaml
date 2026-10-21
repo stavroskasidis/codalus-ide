@@ -26,7 +26,7 @@
                     <DataTemplate x:DataType="vm:ToolboxItemViewModel">
                       <Button Classes="toolbar toolboxItem" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,2" Click="OnItemClicked"
                               AttachedToVisualTree="OnItemAttached" DataContextChanged="OnItemDataContextChanged" ToolTip.Tip="{Binding ToolTip}"
-                              AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{l:T toolbox.itemHelp}">
+                              AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{Binding HelpText}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                           <controls:Icon Kind="{Binding Icon}" />
                           <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
