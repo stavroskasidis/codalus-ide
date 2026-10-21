@@ -30,6 +30,36 @@ internal sealed class TextResourceManager : ComponentResourceManager
 
     public bool IsEmpty => _texts.Count == 0;
 
+    private IReadOnlyDictionary<string, object?>? _metadata;
+
+    /// <summary>
+    /// The default resources' design-time metadata (#67: <c>name.Locked</c>), read from its text once; empty without one.
+    /// A build's compiled resources have none.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?> Metadata()
+    {
+        if (_metadata is not null)
+        {
+            return _metadata;
+        }
+
+        var metadata = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (_texts.TryGetValue(string.Empty, out var text))
+        {
+            using var reader = new ResXResourceReader(new StringReader(text)) { BasePath = _basePath };
+            var entries = reader.GetMetadataEnumerator();
+            while (entries.MoveNext())
+            {
+                if (entries.Key is string key)
+                {
+                    metadata[key] = entries.Value;
+                }
+            }
+        }
+
+        return _metadata = metadata;
+    }
+
     /// <summary>A culture's resource set (empty name: the default resources), or null when the form has none for it.</summary>
     public ResourceSet? Set(string culture)
     {

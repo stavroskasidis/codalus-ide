@@ -8,7 +8,8 @@ namespace Codalus.Shell.Tests;
 /// A designer host that runs on any OS (M41a, M41b): it lays the model's controls out from their Location and Size,
 /// draws a blank frame, and answers changes as Windows Forms' designer would for what the tests use: properties
 /// (Text, Location, Size, TabIndex, Dock, Anchor), extender properties (a tool tip), data bindings, images, the
-/// z-order, collections (a strip's or menu item's items, a list's items), smart tags, and a localizable form's resources.
+/// z-order, collections (a strip's or menu item's items, a list's items), smart tags and verbs, a localizable form's
+/// resources, a split container's panels, and the control designers' Locked as the default .resx's metadata (#67).
 /// </summary>
 internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
 {
@@ -26,7 +27,11 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     private readonly Dictionary<(string Component, string Provider), string> _toolTips = [];
     private readonly Dictionary<(string Component, string Property), string> _bindings = [];
     private readonly Dictionary<string, List<string>> _parts = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _locked = new(StringComparer.Ordinal);
     private string _root = "Form1";
+
+    /// <summary>A Locked metadata entry as the classic IDE writes it (and the real host, through ResXResourceWriter).</summary>
+    public const string BooleanType = "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
 
     public int Loads { get; private set; }
 
@@ -60,6 +65,16 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         _toolTips.Clear();
         _bindings.Clear();
         _parts.Clear();
+        _locked.Clear();
+        if (parameters.Resources.FirstOrDefault(r => r.Culture.Length == 0) is { } resources)
+        {
+            // The control designers' Locked, as the classic IDE keeps it: name.Locked ($this.Locked) metadata.
+            foreach (System.Text.RegularExpressions.Match locked in System.Text.RegularExpressions.Regex.Matches(resources.Text, "<metadata name=\"([^\"]+)\\.Locked\"[^>]*>\\s*<value>True</value>"))
+            {
+                _locked.Add(locked.Groups[1].Value == "$this" ? _root : locked.Groups[1].Value);
+            }
+        }
+
         var statements = parameters.Model.Statements;
         foreach (var call in statements.Where(s => s.Kind == DesignerStatementKinds.Call && s.Member?.EndsWith("Controls.Add", StringComparison.Ordinal) == true))
         {
@@ -169,7 +184,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
 
     private DesignerRenderResult Render()
     {
-        var views = new List<DesignerComponentView> { new(_root, Forms + "Form", null, 0, 0, 400, 450) { IsControl = true, IsContainer = true, ClientX = 8, ClientY = 31, DefaultEvent = "Load", Collections = null } };
+        var views = new List<DesignerComponentView> { new(_root, Forms + "Form", null, 0, 0, 400, 450) { IsControl = true, IsContainer = true, ClientX = 8, ClientY = 31, DefaultEvent = "Load", Collections = null, Locked = _locked.Contains(_root) } };
         void Add(string parentName)
         {
             var parent = views.First(v => v.Name == parentName);
@@ -192,6 +207,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                     Collections = CollectionsOf(control.Type),
                     Text = control.Text,
                     InTray = simple.EndsWith("Strip", StringComparison.Ordinal),
+                    Locked = _locked.Contains(name),
                 });
                 Add(name);
                 AddParts(name);
@@ -286,6 +302,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         var simple = parameters.Type[(parameters.Type.LastIndexOf('.') + 1)..];
         if (s_components.Contains(simple))
         {
+            // A tray component has no Locked (a context menu strip's designer isn't a control designer).
             _tray[parameters.Name] = parameters.Type;
             // Not a control on the form (a context menu has no parent): its creation takes the form's components, as the real host's does for an IContainer constructor.
             var component = new DesignerCreated(parameters.Name, parameters.Type, simple is "Timer" or "ToolTip" or "ErrorProvider" or "ImageList" or "BindingSource" or "ContextMenuStrip" ? [DesignerValue.ReferenceTo("components")] : [], null, null, null, []);
@@ -329,6 +346,26 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         var localized = new List<DesignerLocalized>();
         foreach (var edit in parameters.Edits)
         {
+            if (edit.Property == "Locked" && edit.Provider is null)
+            {
+                // The control designers' design-time Locked (#67): metadata in the default resources, never code; a component
+                // without one (a tray component, an item, a part) is skipped, as the real host skips it.
+                var name = edit.Component.Length == 0 ? _root : edit.Component;
+                if (name != _root && !_controls.ContainsKey(name))
+                {
+                    continue;
+                }
+
+                var locked = string.Equals(edit.Text, "True", StringComparison.OrdinalIgnoreCase) && !edit.Reset;
+                if (locked != _locked.Contains(name))
+                {
+                    _ = locked ? _locked.Add(name) : _locked.Remove(name);
+                    resources.Add(new DesignerResourceEntry((name == _root ? "$this" : name) + ".Locked", locked ? new DesignerResource { Type = BooleanType, Text = "True" } : null) { Metadata = true });
+                }
+
+                continue;
+            }
+
             if (edit.Component.Length == 0 && edit.Property == "Localizable")
             {
                 resources.Add(new DesignerResourceEntry("$this.Localizable", new DesignerResource { Type = "System.Boolean, mscorlib", Text = edit.Text ?? "False" }) { Metadata = true });
@@ -469,6 +506,11 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             rows.Add(new("Localizable", "Design", "System.Boolean", LastLoad?.Localizable == true ? "True" : "False") { Editor = DesignerEditors.Boolean, StandardValues = ["True", "False"] });
         }
 
+        if (name.Length == 0 || control is not null)
+        {
+            rows.Add(new("Locked", "Design", "System.Boolean", _locked.Contains(name.Length == 0 ? _root : name) ? "True" : "False") { Editor = DesignerEditors.Boolean, StandardValues = ["True", "False"] });
+        }
+
         if (control is null)
         {
             return Task.FromResult(new DesignerPropertiesResult([.. rows]));
@@ -590,7 +632,24 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         });
     }
 
-    public Task<DesignerActionsResult> ActionsAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken)
+    /// <summary>Held, every designer/actions request waits for it (#67: an answer that comes after the selection moved on).</summary>
+    public TaskCompletionSource? ActionsGate { get; set; }
+
+    /// <summary>How many designer/actions requests this host answered (#67: the verbs fetched ahead).</summary>
+    public int ActionsCalls { get; private set; }
+
+    public async Task<DesignerActionsResult> ActionsAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken)
+    {
+        if (ActionsGate is { } gate)
+        {
+            await gate.Task.WaitAsync(cancellationToken);
+        }
+
+        ActionsCalls++;
+        return Actions(parameters);
+    }
+
+    private DesignerActionsResult Actions(DesignerComponentsParams parameters)
     {
         var name = parameters.Components.FirstOrDefault() ?? string.Empty;
         var type = _controls.TryGetValue(name, out var control) ? control.Type : string.Empty;
@@ -603,7 +662,20 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             items.Add(new(DesignerActionKinds.Method, "ChooseDataSource", "Choose Data Source...") { Unavailable = true });
         }
 
-        return Task.FromResult(new DesignerActionsResult([.. items]));
+        // The context menu's verbs, as the real host lists them: a list box's Edit Items... (an action method marked
+        // IncludeAsDesignerVerb), a tab control's designer verbs (Remove Tab disabled without a tab page).
+        List<DesignerActionItem> verbs = [];
+        if (type.EndsWith("ListBox", StringComparison.Ordinal))
+        {
+            verbs.Add(new(DesignerActionKinds.Method, "EditItems", "Edit Items...") { Collection = Forms + "ListBox:Items" });
+        }
+        else if (type.EndsWith("TabControl", StringComparison.Ordinal))
+        {
+            verbs.Add(new(DesignerActionKinds.Method, "verb:Add Tab", "Add Tab"));
+            verbs.Add(new(DesignerActionKinds.Method, "verb:Remove Tab", "Remove Tab") { Unavailable = Children(name).Count == 0 });
+        }
+
+        return new DesignerActionsResult([.. items]) { Verbs = [.. verbs] };
     }
 
     public Task<DesignerChangeResult> InvokeActionAsync(DesignerInvokeActionParams parameters, CancellationToken cancellationToken)

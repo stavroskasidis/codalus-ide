@@ -126,6 +126,33 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Contains("\"restacked\":2", restacked, StringComparison.Ordinal);
         Assert.Equal(2, JsonSerializer.Deserialize(restacked, json.DesignerRenderResult)!.Frame!.Restacked);
         Assert.Equal(0, JsonSerializer.Deserialize("{\"frame\":{\"png\":\"iVBORw0KGgo=\",\"width\":300,\"height\":200},\"components\":[],\"errors\":[]}", json.DesignerRenderResult)!.Frame!.Restacked);
+
+        // #67: a component's Locked (null: it has none that can be set), and the context menu's verbs; an older host's
+        // render and actions, without them, read as none.
+        var locks = JsonSerializer.Serialize(new DesignerRenderResult(null,
+        [
+            new DesignerComponentView("Form1", "System.Windows.Forms.Form", null, 0, 0, 300, 200) { Locked = true },
+            new DesignerComponentView("button1", "System.Windows.Forms.Button", "Form1", 10, 10, 75, 23) { Locked = false },
+            new DesignerComponentView("timer1", "System.Windows.Forms.Timer", null, 0, 0, 0, 0) { InTray = true },
+        ], []), json.DesignerRenderResult);
+        Assert.Equal([true, false, null], JsonSerializer.Deserialize(locks, json.DesignerRenderResult)!.Components.Select(c => c.Locked));
+        Assert.Null(JsonSerializer.Deserialize("{\"frame\":null,\"components\":[{\"name\":\"Form1\",\"type\":\"Form\",\"x\":0,\"y\":0,\"width\":1,\"height\":1}],\"errors\":[]}", json.DesignerRenderResult)!.Components[0].Locked);
+        var verbs = new DesignerActionsResult([new DesignerActionItem(DesignerActionKinds.Method, "DockInParent", "Dock in Parent Container")])
+        {
+            Verbs =
+            [
+                new DesignerActionItem(DesignerActionKinds.Method, "verb:Add Tab", "Add Tab"),
+                new DesignerActionItem(DesignerActionKinds.Method, "verb:Remove Tab", "Remove Tab") { Unavailable = true },
+                new DesignerActionItem(DesignerActionKinds.Method, "EditItems", "Edit Items...") { Collection = "System.Windows.Forms.ListBox:Items" },
+            ],
+        };
+        var actionsBack = JsonSerializer.Deserialize(JsonSerializer.Serialize(verbs, json.DesignerActionsResult), json.DesignerActionsResult)!;
+        Assert.Equal(["Add Tab", "Remove Tab", "Edit Items..."], actionsBack.Verbs.Select(v => v.DisplayName));
+        Assert.Equal(["verb:Add Tab", "verb:Remove Tab", "EditItems"], actionsBack.Verbs.Select(v => v.Member));
+        Assert.True(actionsBack.Verbs[1].Unavailable);
+        Assert.Equal("System.Windows.Forms.ListBox:Items", actionsBack.Verbs[2].Collection);
+        Assert.Single(actionsBack.Items);
+        Assert.Empty(JsonSerializer.Deserialize("{\"items\":[]}", json.DesignerActionsResult)!.Verbs);
         Assert.Equal(31, back.Render.Components[0].ClientY);
         Assert.Equal("button1", back.Created!.Properties[0].Value.Value);
         Assert.Equal(["label1"], back.Removed);

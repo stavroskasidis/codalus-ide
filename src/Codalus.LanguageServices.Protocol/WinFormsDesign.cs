@@ -136,6 +136,34 @@ public sealed record DesignerCollectionInfo(string OwnerType, string Property, s
     public string Key => OwnerType + ":" + Property;
 }
 
+/// <summary>A form's resource file as the designer starts one (M41b, #67).</summary>
+public static class DesignerResx
+{
+    /// <summary>
+    /// An empty resource file, as the classic IDE's designer starts a form's or a culture's: the C# host creates a missing
+    /// one from it, and the IDE writes it before an edit of a form that has no default .resx (Lock Controls' metadata), so
+    /// the edit goes to a file the designer holds and undoes with it.
+    /// </summary>
+    public const string Empty = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <root>
+          <resheader name="resmimetype">
+            <value>text/microsoft-resx</value>
+          </resheader>
+          <resheader name="version">
+            <value>2.0</value>
+          </resheader>
+          <resheader name="reader">
+            <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+          </resheader>
+          <resheader name="writer">
+            <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+          </resheader>
+        </root>
+
+        """;
+}
+
 /// <summary>The collections Visual Studio's designer has editors for, by the type that declares them (M41b).</summary>
 public static class DesignerCollections
 {

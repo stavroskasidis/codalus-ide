@@ -161,6 +161,14 @@ public sealed record DesignerComponentView(string Name, string Type, string? Par
     /// parent (a context menu), and, as in Visual Studio, a menu, tool or status strip.
     /// </summary>
     public bool InTray { get; init; }
+
+    /// <summary>
+    /// Its designer's design-time <c>Locked</c> (#67: the default .resx's <c>name.Locked</c> metadata, <c>$this.Locked</c>
+    /// for the root): a locked control doesn't move or resize on the surface. Null when it has none that can be set (a
+    /// tray component, a context menu strip, a tool strip item, a part, a read-only one): Lock Controls leaves it out, as
+    /// the classic IDE does. A host older than #67 sends none.
+    /// </summary>
+    public bool? Locked { get; init; }
 }
 
 /// <summary>The surface after a load or a change: its frame, its components (in z-order, front first, parents before children), and what went wrong.</summary>
@@ -354,7 +362,16 @@ public sealed record DesignerActionItem(string Kind, string Member, string Displ
     public bool Unavailable { get; init; }
 }
 
-public sealed record DesignerActionsResult(DesignerActionItem[] Items);
+public sealed record DesignerActionsResult(DesignerActionItem[] Items)
+{
+    /// <summary>
+    /// The context menu's verbs (#67), as the classic IDE lists them for one component: the action methods marked
+    /// <c>IncludeAsDesignerVerb</c>, then the designer's <c>Verbs</c>, merged by their text (ignoring case, the later one
+    /// kept), each as a method item (a disabled verb is <see cref="DesignerActionItem.Unavailable"/>). None for an
+    /// inherited read-only component, or from a host older than #67.
+    /// </summary>
+    public DesignerActionItem[] Verbs { get; init; } = [];
+}
 
 /// <summary>A smart tag's method to run, or its property to set to <see cref="Text"/> (through the property's converter).</summary>
 public sealed record DesignerInvokeActionParams(string Component, string Member)
