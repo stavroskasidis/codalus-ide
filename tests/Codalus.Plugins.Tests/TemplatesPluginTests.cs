@@ -173,9 +173,17 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
             return Task.FromResult<int?>(items.ToList().FindIndex(i => i.Description == wanted));
         }
 
-        public Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken)
+        /// <summary>The inputs that had a Browse button, and what it browses for.</summary>
+        public Dictionary<string, string> Browse { get; } = [];
+
+        public Task<string?> InputAsync(string title, string? prompt, string? value, string? browse, string source, CancellationToken cancellationToken)
         {
             Asked.Add(title);
+            if (browse is not null)
+            {
+                Browse[title] = browse;
+            }
+
             return Task.FromResult<string?>(answers.Dequeue());
         }
     }
@@ -205,6 +213,7 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
         Assert.Equal(project, result!.Value.GetString());
         Assert.True(File.Exists(Path.Combine(location, "Hello.App", "Program.cs")));
         Assert.Equal(["Select a project template", "Select the language", "Location", "Project name", "Project name", "Target framework"], prompts.Asked); // the invalid name was asked again
+        Assert.Equal(new Dictionary<string, string> { ["Location"] = "folder" }, prompts.Browse); // the location has Browse, the name doesn't
         Assert.Contains("<TargetFramework>net10.0</TargetFramework>", File.ReadAllText(project), StringComparison.Ordinal);
     }
 

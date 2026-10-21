@@ -11,6 +11,16 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class HotReloadRestartTests
 {
+    /// <summary>How long the stand-in takes to end the first session's process tree.</summary>
+    private static readonly TimeSpan s_treeEnding = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// The longest the UI thread may stall: half the tree's ending, so ending it on the UI thread (the bug) always fails,
+    /// and a busy runner's pause doesn't. A macOS runner stalled 767 ms once while three test jobs shared it, with no tree
+    /// ended on the UI thread (develop run 39492777973).
+    /// </summary>
+    private static readonly TimeSpan s_mostStall = s_treeEnding / 2;
+
     [AvaloniaFact]
     public async Task Stopping_a_slow_ending_session_and_starting_again_keeps_the_UI_thread_free()
     {
@@ -39,7 +49,7 @@ public sealed class HotReloadRestartTests
         f.Shell.Runs.KillTree = process =>
         {
             treeEnding.Set();
-            Thread.Sleep(3000);
+            Thread.Sleep(s_treeEnding);
             process.Kill(entireProcessTree: true);
         };
 
@@ -68,7 +78,7 @@ public sealed class HotReloadRestartTests
             await ShellFixture.PumpUntil(() => first.HasExited, seconds: 30);
             Assert.False(second.HasExited);
             Assert.Same(second, f.Shell.HotReloadProgram);
-            Assert.True(stall.MaxMilliseconds < 500, $"The UI thread stalled for {stall.MaxMilliseconds:0} ms (the GC paused {stall.GcPauseOfMaxMilliseconds:0} ms of it; it ran {stall.JobOfMax ?? "unsampled"}).");
+            Assert.True(stall.MaxMilliseconds < s_mostStall.TotalMilliseconds, $"The UI thread stalled for {stall.MaxMilliseconds:0} ms (the GC paused {stall.GcPauseOfMaxMilliseconds:0} ms of it; it ran {stall.JobOfMax ?? "unsampled"}).");
         }
         finally
         {

@@ -50,7 +50,8 @@ public sealed record ShowQuickPickParams(string PluginId, QuickPickItemDto[] Ite
 /// <summary>The index of the chosen item, or null when cancelled.</summary>
 public sealed record ShowQuickPickResult(int? Index);
 
-public sealed record ShowInputBoxParams(string PluginId, string Title, string? Prompt, string? Value);
+/// <param name="Browse">The text is a path, with a Browse button: <c>folder</c> or <c>file</c>; null: none (API 1.1).</param>
+public sealed record ShowInputBoxParams(string PluginId, string Title, string? Prompt, string? Value, string? Browse = null);
 
 /// <summary>The entered text, or null when cancelled.</summary>
 public sealed record ShowInputBoxResult(string? Value);

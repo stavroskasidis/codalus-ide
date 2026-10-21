@@ -51,9 +51,9 @@
         <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" RowSpacing="8">
           <TextBlock Classes="label" Text="{l:T findReplace.lookIn}" />
           <ComboBox Grid.Column="1" IsEditable="True" Text="{Binding LookIn}" ItemsSource="{Binding LookInOptions}" HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T findReplace.lookIn}" />
-          <Button Grid.Column="2" Classes="toolbar" Margin="6,0,0,0" Command="{Binding BrowseCommand}" ToolTip.Tip="{l:T findReplace.chooseAFolder}" AutomationProperties.Name="{l:T findReplace.chooseAFolder}">
-            <controls:Icon Kind="folder-open" />
-          </Button>
+          <!-- Browse, as beside every path field (Controls/PathBox.cs). -->
+          <Button Grid.Column="2" Classes="icon" controls:ButtonIcon.Kind="folder-open" Margin="6,0,0,0" VerticalAlignment="Center" Command="{Binding BrowseCommand}"
+                  ToolTip.Tip="{l:T findReplace.chooseAFolder}" AutomationProperties.Name="{l:T findReplace.chooseAFolder}" />
           <TextBlock Grid.Row="1" Classes="label" Text="{l:T findReplace.fileTypes}" />
           <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" IsEditable="True" Text="{Binding FileTypes}" ItemsSource="{Binding FileTypeOptions}" HorizontalAlignment="Stretch"
                     ToolTip.Tip="{l:T findReplace.fileTypesTip}" AutomationProperties.Name="{l:T findReplace.fileTypes}" />

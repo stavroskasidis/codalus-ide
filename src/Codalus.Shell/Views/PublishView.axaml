@@ -32,7 +32,7 @@
       <CheckBox Content="{l:T publish.nativeAotANativeExecutableNo}" IsChecked="{Binding NativeAot}" AutomationProperties.Name="{l:T publish.nativeAot}" />
       <Grid ColumnDefinitions="200,*" IsVisible="{Binding IsFolder}">
         <TextBlock Text="{l:T publish.folder}" VerticalAlignment="Center" />
-        <TextBox Grid.Column="1" Text="{Binding Folder}" AutomationProperties.Name="{l:T publish.publishFolderRelativeToTheProject}" />
+        <controls:PathBox Grid.Column="1" Text="{Binding Folder}" BaseFolder="{Binding ProjectFolder}" AutomationProperties.Name="{l:T publish.publishFolderRelativeToTheProject}" />
       </Grid>
       <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" IsVisible="{Binding IsContainer}">
         <TextBlock Text="{l:T publish.registry}" VerticalAlignment="Center" />

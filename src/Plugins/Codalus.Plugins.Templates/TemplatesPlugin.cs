@@ -195,7 +195,7 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
     {
         var configured = Context.Settings.GetValue("templates.defaultLocation", string.Empty);
         var initial = configured.Length > 0 ? configured : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos");
-        var location = await Context.Window.ShowInputBoxAsync(new InputBoxOptions("Location") { Prompt = "The folder to create it in.", Value = initial }, cancellationToken).ConfigureAwait(false);
+        var location = await Context.Window.ShowInputBoxAsync(new InputBoxOptions("Location") { Prompt = "The folder to create it in.", Value = initial, Browse = InputBoxBrowse.Folder }, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(location))
         {
             return null;

@@ -201,7 +201,12 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
     {
         var result = await _server.RequestAsync(
             PluginMethods.ShowInputBox,
-            new ShowInputBoxParams(Id, options.Title, options.Prompt, options.Value),
+            new ShowInputBoxParams(Id, options.Title, options.Prompt, options.Value, options.Browse switch
+            {
+                InputBoxBrowse.Folder => "folder",
+                InputBoxBrowse.File => "file",
+                _ => null,
+            }),
             PluginJsonContext.Default.ShowInputBoxParams,
             PluginJsonContext.Default.ShowInputBoxResult,
             cancellationToken).ConfigureAwait(false);

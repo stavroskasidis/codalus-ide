@@ -10,7 +10,7 @@ public static class PluginApi
     /// only add to the API and a member goes away only after a major version, deprecated first with the
     /// <see cref="DeprecationDiagnostic"/> warning (ADR 0003, docs/plugins.md#changelog).
     /// </summary>
-    public const string Version = "1.0.0";
+    public const string Version = "1.1.0";
 
     /// <summary>The diagnostic id of deprecated API members (<c>[Obsolete(..., DiagnosticId = "CODALUS0001")]</c>).</summary>
     public const string DeprecationDiagnostic = "CODALUS0001";
@@ -376,6 +376,25 @@ public sealed record InputBoxOptions(string Title)
 
     /// <summary>The initial text.</summary>
     public string? Value { get; init; }
+
+    /// <summary>
+    /// The text is a path on the user's computer: a Browse button beside the box opens the OS's folder or file picker
+    /// where the typed path is, and puts the choice in the box. Since API 1.1.0.
+    /// </summary>
+    public InputBoxBrowse Browse { get; init; }
+}
+
+/// <summary>What the Browse button of an <see cref="InputBoxOptions"/> asks for. Since API 1.1.0.</summary>
+public enum InputBoxBrowse
+{
+    /// <summary>No Browse button: the text isn't a path.</summary>
+    None,
+
+    /// <summary>An existing folder.</summary>
+    Folder,
+
+    /// <summary>An existing file.</summary>
+    File,
 }
 
 /// <summary>What a task reports: a message, and how far it is (0 to 100). A null keeps the previous value.</summary>

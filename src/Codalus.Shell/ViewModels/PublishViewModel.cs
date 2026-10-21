@@ -38,6 +38,9 @@ public sealed class PublishViewModel : ObservableObject
 
     public string ProjectName => Path.GetFileNameWithoutExtension(Project);
 
+    /// <summary>The project's folder, which the publish folder is relative to.</summary>
+    public string? ProjectFolder => Path.GetDirectoryName(Project);
+
     public IReadOnlyList<string> Frameworks { get; }
 
     public IReadOnlyList<string> Configurations { get; } = ["Release", "Debug"];
