@@ -10,6 +10,13 @@ namespace Codalus.Workbench.Node;
 /// </summary>
 public sealed class JsDebug(NodeRuntime node, string cacheFolder, HttpClient? http = null) : IDisposable
 {
+    /// <summary>
+    /// The pinned release. On every bump, check that js-debug's browser launcher still skips its navigation when the
+    /// launch has <c>skipNavigateForTest</c> (<c>finishLaunch</c> in <c>browserLauncher.ts</c>, an undocumented test hook):
+    /// <c>JsDebugAdapter</c> sets it behind the Blazor WebAssembly debugging proxy and opens the page itself, after the
+    /// proxy's handshake. Without the hook js-debug opens the page at once again, and the race that avoids is back
+    /// (<c>BrowserDebugTests</c>' stand-in proxy fails then).
+    /// </summary>
     public const string Version = "1.140.0";
 
     /// <summary>The SHA-256 of <c>js-debug-dap-v1.140.0.tar.gz</c>, pinned when the version was chosen.</summary>

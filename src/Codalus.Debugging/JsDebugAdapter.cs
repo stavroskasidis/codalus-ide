@@ -33,6 +33,9 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
     private Session? _active;
     private int _nextId;
 
+    /// <summary>The page <see cref="LaunchAsync"/> left blank, until a child opens it.</summary>
+    private string? _navigateTo;
+
     private JsDebugAdapter(Process server, int port, string adapterId, TcpClient client)
     {
         _server = server;
@@ -158,9 +161,31 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
         }
     }
 
-    /// <summary>Launches the browser (<c>launch</c> on the launch session). The page's child session follows.</summary>
-    public Task LaunchAsync(BrowserLaunchArguments arguments, CancellationToken cancellationToken) =>
-        _launch.Connection.RequestAsync("launch", arguments, Json.BrowserLaunchArguments, cancellationToken);
+    /// <summary>
+    /// Launches the browser (<c>launch</c> on the launch session). The page's child session follows. Behind the Blazor
+    /// WebAssembly debugging proxy (an <c>inspectUri</c>), the page stays blank until that session has started, and
+    /// <see cref="OpenPageAsync"/> opens it.
+    /// </summary>
+    public Task LaunchAsync(BrowserLaunchArguments arguments, CancellationToken cancellationToken)
+    {
+        if (arguments.InspectUri is not null)
+        {
+            // The proxy sets globalThis.dotnetDebugger for the page's next documents when the browser reports the page
+            // attached, and the page's .NET runtime pauses for the proxy at its start only where it's set. Without that
+            // pause the proxy never learns that the runtime is ready, and no C# breakpoint binds. js-debug opens the
+            // page right after attaching, and on a loaded machine the app's document came before the proxy's handshake
+            // had finished (BlazorWasmTests and the smoke step, under load). js-debug still gets the url: the inspectUri
+            // and its path mapping use it.
+            lock (_gate)
+            {
+                _navigateTo = arguments.Url;
+            }
+
+            arguments = arguments with { SkipNavigateForTest = true };
+        }
+
+        return _launch.Connection.RequestAsync("launch", arguments, Json.BrowserLaunchArguments, cancellationToken);
+    }
 
     // ------------------------------------------------------------------ sessions
 
@@ -182,6 +207,9 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
         public Dictionary<int, int> Ids { get; } = [];
 
         public TaskCompletionSource Initialized { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>js-debug answered its start (<c>launch</c> or <c>attach</c>). Read and written under the adapter's gate.</summary>
+        public bool Started { get; set; }
     }
 
     private async Task OnLaunchEventAsync(DapEvent e)
@@ -236,6 +264,10 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
             await ReplayAsync(session).ConfigureAwait(false);
             await session.Connection.RequestAsync("configurationDone", new EmptyArguments(), Json.EmptyArguments).ConfigureAwait(false);
             await started.ConfigureAwait(false);
+            lock (_gate)
+            {
+                session.Started = true;
+            }
         }
         catch (Exception ex) when (ex is SocketException or IOException or DapException or DapConnectionLostException or ObjectDisposedException)
         {
@@ -243,7 +275,58 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
             if (child is not null)
             {
                 Remove(child);
+                child = null;
             }
+        }
+
+        await OpenPageAsync(child).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Opens the page <see cref="LaunchAsync"/> left blank, once, through <paramref name="started"/>, a child whose start
+    /// js-debug has answered. js-debug answers it after the browser has answered the page session's <c>Debugger.enable</c>,
+    /// so after the proxy's first handshake step, which went out before it; the proxy sends the second step (the flag for
+    /// new documents) as soon as it reads that answer. So the flag is registered before this navigation reaches the
+    /// browser, and the breakpoints sent while the page was blank carry over to its document. When the child's attach
+    /// failed (null), another started child opens the page, or one still starting does once it has; with none, the Debug
+    /// Console says the page couldn't be opened.
+    /// </summary>
+    private async Task OpenPageAsync(Session? started)
+    {
+        string? url;
+        lock (_gate)
+        {
+            started ??= _children.FirstOrDefault(c => c.Started);
+            if (started is null && _children.Count > 0)
+            {
+                return;
+            }
+
+            url = _navigateTo;
+            _navigateTo = null;
+        }
+
+        if (url is null)
+        {
+            return;
+        }
+
+        if (started is null)
+        {
+            Log?.Invoke(this, $"The page {url} couldn't be opened: the browser's page couldn't be attached.");
+            return;
+        }
+
+        try
+        {
+            // location.replace: about:blank stays out of the page's history. JsonEncodedText makes the url a string
+            // literal without reflection (Native AOT).
+            await started.Connection.RequestAsync(
+                "evaluate", new EvaluateArguments($"location.replace(\"{JsonEncodedText.Encode(url)}\")", null, "repl"), Json.EvaluateArguments, Json.EvaluateResponse).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is SocketException or IOException or DapException or DapConnectionLostException or ObjectDisposedException)
+        {
+            Log?.Invoke(this, $"The page {url} couldn't be opened: {ex.Message}");
         }
     }
 
