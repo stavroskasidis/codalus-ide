@@ -8,212 +8,6 @@ using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
 
-/// <summary>How a row of the Properties window is edited.</summary>
-public enum PropertyRowKind
-{
-    ReadOnly,
-    Text,
-    Choice,
-
-    /// <summary>Flags of an enum (a Windows Forms control's Anchor): a toggle per flag (M41a).</summary>
-    Flags,
-
-    /// <summary>A color as text (<c>Red</c>, <c>255, 128, 0</c>) with a swatch (M41a).</summary>
-    Color,
-
-    /// <summary>A Windows Forms control's Dock: Visual Studio's picker (Top, Left, Fill, Right, Bottom around, None below; M41b).</summary>
-    Dock,
-
-    /// <summary>A Windows Forms control's Anchor: Visual Studio's picker (a bar to each edge to toggle; M41b).</summary>
-    Anchor,
-}
-
-/// <summary>A flag of a <see cref="PropertyRowKind.Flags"/> row.</summary>
-public sealed class FlagOptionViewModel(string name, bool isChecked, Action changed) : ObservableObject
-{
-    private bool _isChecked = isChecked;
-
-    public string Name { get; } = name;
-
-    public bool IsChecked
-    {
-        get => _isChecked;
-        set
-        {
-            if (SetField(ref _isChecked, value))
-            {
-                changed();
-            }
-        }
-    }
-}
-
-/// <summary>One row of the Properties window: a name, a value and how it is edited.</summary>
-public sealed class PropertyRowViewModel : ObservableObject
-{
-    private readonly Func<string?, Task>? _commit;
-    private readonly string _value;
-    private string _text;
-
-    public PropertyRowViewModel(string name, string value, PropertyRowKind kind, string description, Func<string?, Task>? commit = null, IReadOnlyList<PropertyOption>? options = null, bool isSet = false)
-    {
-        Name = name;
-        _value = value;
-        _text = value;
-        Kind = commit is null ? PropertyRowKind.ReadOnly : kind;
-        Description = description;
-        _commit = commit;
-        IsSet = isSet;
-        Options = [.. options ?? []];
-        if (Kind == PropertyRowKind.Choice && !Options.Any(o => string.Equals(o.Value, value, StringComparison.OrdinalIgnoreCase)))
-        {
-            Options.Add(new PropertyOption(value, value.Length == 0 ? "(none)" : value));
-        }
-
-        if (Kind is PropertyRowKind.Flags or PropertyRowKind.Anchor)
-        {
-            var set = value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            Flags = [.. Options.Select(o => new FlagOptionViewModel(o.Value, set.Contains(o.Value), CommitFlags))];
-        }
-
-        DockCommand = new RelayCommand(dock => _ = dock is string style && _commit is not null ? _commit(style) : Task.CompletedTask);
-    }
-
-    /// <summary>The Dock picker's buttons (their parameter is the dock style).</summary>
-    public ICommand DockCommand { get; }
-
-    public bool IsDock => Kind == PropertyRowKind.Dock;
-
-    public bool IsAnchor => Kind == PropertyRowKind.Anchor;
-
-    /// <summary>The Anchor picker's bars.</summary>
-    public FlagOptionViewModel? AnchorTop => Flags.FirstOrDefault(f => f.Name == "Top");
-
-    public FlagOptionViewModel? AnchorBottom => Flags.FirstOrDefault(f => f.Name == "Bottom");
-
-    public FlagOptionViewModel? AnchorLeft => Flags.FirstOrDefault(f => f.Name == "Left");
-
-    public FlagOptionViewModel? AnchorRight => Flags.FirstOrDefault(f => f.Name == "Right");
-
-    /// <summary>Whether a Dock picker's button is the current value.</summary>
-    public bool IsDocked(string dock) => string.Equals(_value, dock, StringComparison.OrdinalIgnoreCase);
-
-    public bool DockTop => IsDocked("Top");
-
-    public bool DockBottom => IsDocked("Bottom");
-
-    public bool DockLeft => IsDocked("Left");
-
-    public bool DockRight => IsDocked("Right");
-
-    public bool DockFill => IsDocked("Fill");
-
-    public bool DockNone => IsDocked("None");
-
-    /// <summary>The toggles of a <see cref="PropertyRowKind.Flags"/> row.</summary>
-    public IReadOnlyList<FlagOptionViewModel> Flags { get; } = [];
-
-    public bool IsFlags => Kind == PropertyRowKind.Flags;
-
-    /// <summary>The value shown on a picker's button (Dock, Anchor).</summary>
-    public bool IsPicker => Kind is PropertyRowKind.Dock or PropertyRowKind.Anchor;
-
-    public bool IsColor => Kind == PropertyRowKind.Color;
-
-    /// <summary>A text box edits the value (text and color rows).</summary>
-    public bool IsTextEditor => Kind is PropertyRowKind.Text or PropertyRowKind.Color;
-
-    /// <summary>A color row's swatch, when its text names or spells a color.</summary>
-    public Avalonia.Media.IBrush? Swatch => Kind == PropertyRowKind.Color && ParseColor(_value) is { } color ? new Avalonia.Media.SolidColorBrush(color) : null;
-
-    /// <summary>A command next to the value (the Events view's Go to or create the handler), or null.</summary>
-    public ICommand? Action { get; init; }
-
-    public string ActionTitle { get; init; } = string.Empty;
-
-    public bool HasAction => Action is not null;
-
-    /// <summary>The action button's icon (the Events view's go-to; an image's import; a collection's editor).</summary>
-    public string ActionIcon { get; init; } = "go-to";
-
-    /// <summary>A second command next to the value (an image imported into the project's resources), or null.</summary>
-    public ICommand? SecondaryAction { get; init; }
-
-    public string SecondaryActionTitle { get; init; } = string.Empty;
-
-    public bool HasSecondaryAction => SecondaryAction is not null;
-
-    private void CommitFlags()
-    {
-        var text = string.Join(", ", Flags.Where(f => f.IsChecked).Select(f => f.Name));
-        _ = _commit?.Invoke(text.Length == 0 ? "None" : text);
-    }
-
-    /// <summary><c>Red</c>, <c>#FF8000</c>, <c>255, 128, 0</c> or <c>128, 255, 128, 0</c>, as a color; null otherwise (a system color's name).</summary>
-    internal static Avalonia.Media.Color? ParseColor(string text)
-    {
-        var parts = text.Split(',', StringSplitOptions.TrimEntries);
-        if (parts.Length is 3 or 4 && parts.All(p => byte.TryParse(p, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _)))
-        {
-            var bytes = parts.Select(p => byte.Parse(p, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
-            return bytes.Length == 3 ? Avalonia.Media.Color.FromRgb(bytes[0], bytes[1], bytes[2]) : Avalonia.Media.Color.FromArgb(bytes[0], bytes[1], bytes[2], bytes[3]);
-        }
-
-        return text.Length > 0 && Avalonia.Media.Color.TryParse(text, out var named) ? named : null;
-    }
-
-    public string Name { get; }
-
-    public string Description { get; }
-
-    /// <summary>The trimmed name's tooltip: the whole name, and the description when there is one (M34g: rows without one had none).</summary>
-    public string NameToolTip => string.IsNullOrEmpty(Description) ? Name : $"{Name}: {Description}";
-
-    public PropertyRowKind Kind { get; }
-
-    public bool IsReadOnly => Kind == PropertyRowKind.ReadOnly;
-
-    public bool IsText => Kind == PropertyRowKind.Text;
-
-    public bool IsChoice => Kind == PropertyRowKind.Choice;
-
-    /// <summary>Set in the project file (shown in bold, as a classic IDE's property grid does for non-default values).</summary>
-    public bool IsSet { get; }
-
-    public string Value => _value;
-
-    public List<PropertyOption> Options { get; }
-
-    public string AccessibleName => $"{Name}: {(Kind == PropertyRowKind.Choice ? SelectedOption?.Label : _value)}";
-
-    /// <summary>The text editor's value, committed when the box loses focus.</summary>
-    public string Text
-    {
-        get => _text;
-        set
-        {
-            if (SetField(ref _text, value ?? string.Empty) && _text != _value && _commit is not null)
-            {
-                _ = _commit(_text);
-            }
-        }
-    }
-
-    public PropertyOption? SelectedOption
-    {
-        get => Options.FirstOrDefault(o => string.Equals(o.Value, _value, StringComparison.OrdinalIgnoreCase));
-        set
-        {
-            if (value is not null && !string.Equals(value.Value, _value, StringComparison.OrdinalIgnoreCase) && _commit is not null)
-            {
-                _ = _commit(value.Value);
-            }
-        }
-    }
-}
-
-public sealed record PropertyCategoryViewModel(string Title, IReadOnlyList<PropertyRowViewModel> Rows);
-
 /// <summary>A row a designer gives the Properties window, with its category.</summary>
 public sealed record DesignerPropertyRow(string Category, PropertyRowViewModel Row);
 
@@ -233,9 +27,24 @@ public interface IDesignerPropertySource
 
     Task<IReadOnlyList<DesignerPropertyRow>> EventRowsAsync(CancellationToken cancellationToken);
 
+    /// <summary>The component selector's entries (#68): the form first, then its components by name, each with its type.</summary>
+    IReadOnlyList<DesignerComponentChoice> ComponentChoices { get; }
+
+    /// <summary>The one selected component's name, or null (nothing, or several: the selector is blank).</summary>
+    string? SelectedComponent { get; }
+
+    /// <summary>Selects a component in the designer (the component selector).</summary>
+    void SelectComponent(string name);
+
+    /// <summary>An editor panel is open over the designer (#68, D41 question 2): the Properties window shows the component but takes no input.</summary>
+    bool HasOpenEditor { get; }
+
     /// <summary>The selection or its values changed.</summary>
     event EventHandler? PropertiesChanged;
 }
+
+/// <summary>An entry of the Properties window's component selector: a component's name and its type, shown muted.</summary>
+public sealed record DesignerComponentChoice(string Name, string Type);
 
 /// <summary>A command shown under the grid (Project Properties, Configuration Manager, Include In Project…).</summary>
 public sealed record PropertyLinkViewModel(string Title, ICommand Command);
@@ -264,7 +73,6 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
     private string _title = "Properties";
     private string? _message = "Select an item in the Solution Explorer.";
     private bool _isLoading;
-    private PropertyRowViewModel? _selectedRow;
     private ExplorerNode? _node;
     private bool _refreshQueued;
     private IDesignerPropertySource? _source;
@@ -288,8 +96,94 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         CategorizedCommand = new RelayCommand(() => Alphabetical = false);
         AlphabeticalCommand = new RelayCommand(() => Alphabetical = true);
         PropertiesCommand = new RelayCommand(() => ShowEvents = false);
-        EventsCommand = new RelayCommand(() => ShowEvents = true);
+        EventsCommand = new RelayCommand(() => ShowEvents = true, () => _source?.HasEvents ?? false);
+        PropertyPagesCommand = new RelayCommand(OpenPropertyPages, () => CanOpenPropertyPages);
+        Grid.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(PropertyGridViewModel.SelectedItem))
+            {
+                OnPropertyChanged(nameof(SelectedRow));
+                OnPropertyChanged(nameof(Description));
+                OnPropertyChanged(nameof(DescriptionTitle));
+            }
+        };
+        Grid.ValueRejected += (_, e) => _ = ShowRejectedAsync(_shell.Dialogs, Grid, e);
     }
+
+    /// <summary>The property grid (#68): categories that collapse, rows with parts, one editor per row.</summary>
+    public PropertyGridViewModel Grid { get; } = new();
+
+    /// <summary>
+    /// The invalid-value dialog (#68, D41 question 14): the converter's message under "Property value is not valid.", the
+    /// component and property as its context. OK, the default, goes back to the cell with the typed text selected, to
+    /// correct it; Cancel puts the old value back.
+    /// </summary>
+    internal static async Task ShowRejectedAsync(DialogViewModel dialogs, PropertyGridViewModel grid, PropertyValueRejectedEventArgs e)
+    {
+        var ok = Localizer.Get("msg.propertyGrid.ok", "OK");
+        var cancel = Localizer.Get("msg.propertyGrid.cancel", "Cancel");
+        var result = await dialogs.ShowAsync(new DialogRequest(
+            Localizer.Get("msg.propertyGrid.invalidTitle", "Properties Window"),
+            Localizer.Format("msg.propertyGrid.invalidMessage", "Property value is not valid.\n\n{0}", e.Error),
+            [ok, cancel])
+        {
+            Icon = "error",
+            DefaultButton = ok,
+            Context = grid.Context is { Length: > 0 } context ? $"{context} · {e.Row.Path}" : e.Row.Path,
+        }).ConfigureAwait(true);
+        var row = grid.Find(e.Row.Path) ?? e.Row;
+        grid.SelectedItem = grid.Items.Contains(row) ? row : grid.SelectedItem;
+        if (result.Button == ok)
+        {
+            grid.RequestEdit(row);
+        }
+        else
+        {
+            row.RevertText();
+        }
+    }
+
+    /// <summary>Property Pages (#68, D41 question 7): a project's properties, or the solution's Configuration Manager; grayed for files, folders and designer components, as in the classic IDE.</summary>
+    public ICommand PropertyPagesCommand { get; }
+
+    private bool CanOpenPropertyPages => _source is null && _node switch
+    {
+        { Kind: ExplorerNodeKind.Project, Path: not null } => true,
+        { Kind: ExplorerNodeKind.Solution } => _shell.Solutions.Solution is { IsFolder: false } solution && solution.Format != SolutionFormats.Project,
+        _ => false,
+    };
+
+    private void OpenPropertyPages()
+    {
+        switch (_node)
+        {
+            case { Kind: ExplorerNodeKind.Project, Path: { } project }:
+                _shell.OpenProjectProperties(project);
+                break;
+            case { Kind: ExplorerNodeKind.Solution }:
+                _shell.OpenConfigurationManager();
+                break;
+        }
+    }
+
+    /// <summary>The component selector's entries (a designer's selection), the form first.</summary>
+    public IReadOnlyList<DesignerComponentChoice> ComponentChoices => _source?.ComponentChoices ?? [];
+
+    /// <summary>The selector's entry: the one selected component, or null for several (blank). Setting it selects that component in the designer.</summary>
+    public DesignerComponentChoice? SelectedComponent
+    {
+        get => _source?.SelectedComponent is { } name ? ComponentChoices.FirstOrDefault(c => c.Name == name) : null;
+        set
+        {
+            if (value is not null && _source is { } source && value.Name != source.SelectedComponent)
+            {
+                source.SelectComponent(value.Name);
+            }
+        }
+    }
+
+    /// <summary>The window takes input (not while an editor panel is open over the designer, D41 question 2).</summary>
+    public bool IsInputEnabled => _source is not { HasOpenEditor: true };
 
     public ICommand CategorizedCommand { get; }
 
@@ -299,7 +193,7 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
 
     public ICommand EventsCommand { get; }
 
-    /// <summary>A designer's selection is shown (M41a): the Categorized, Alphabetical, Properties and Events buttons show.</summary>
+    /// <summary>A designer's selection is shown (M41a): the Properties and Events buttons and the component selector show.</summary>
     public bool HasDesignerSource => _source is not null;
 
     /// <summary>The designer's events rather than its properties.</summary>
@@ -315,7 +209,7 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>The designer's properties sorted by name rather than by category.</summary>
+    /// <summary>The properties sorted by name rather than by category (#68: for every source, the Solution Explorer's too).</summary>
     public bool Alphabetical
     {
         get => _alphabetical;
@@ -348,12 +242,28 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         }
 
         OnPropertyChanged(nameof(HasDesignerSource));
+        RaiseSourceState();
         QueueRefresh();
     }
 
-    private void OnSourceChanged(object? sender, EventArgs e) => QueueRefresh();
+    private void OnSourceChanged(object? sender, EventArgs e)
+    {
+        Ui.Post(RaiseSourceState);
+        QueueRefresh();
+    }
 
-    public ObservableCollection<PropertyCategoryViewModel> Categories { get; } = [];
+    private void RaiseSourceState()
+    {
+        OnPropertyChanged(nameof(ComponentChoices));
+        OnPropertyChanged(nameof(SelectedComponent));
+        OnPropertyChanged(nameof(IsInputEnabled));
+        Grid.IsEnabled = IsInputEnabled;
+        ((RelayCommand)EventsCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)PropertyPagesCommand).RaiseCanExecuteChanged();
+    }
+
+    /// <summary>The categories shown (the grid's).</summary>
+    public ObservableCollection<PropertyCategoryViewModel> Categories => Grid.Categories;
 
     public ObservableCollection<PropertyLinkViewModel> Links { get; } = [];
 
@@ -389,20 +299,13 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
 
     public PropertyRowViewModel? SelectedRow
     {
-        get => _selectedRow;
-        set
-        {
-            if (SetField(ref _selectedRow, value))
-            {
-                OnPropertyChanged(nameof(Description));
-                OnPropertyChanged(nameof(DescriptionTitle));
-            }
-        }
+        get => Grid.SelectedRow;
+        set => Grid.SelectedRow = value;
     }
 
-    public string DescriptionTitle => _selectedRow?.Name ?? string.Empty;
+    public string DescriptionTitle => Grid.DescriptionTitle;
 
-    public string Description => _selectedRow?.Description ?? string.Empty;
+    public string Description => Grid.Description;
 
     private bool CanAddMetadata => _node is { Kind: ExplorerNodeKind.File, IsExcluded: false, ProjectPath: not null } && _shell.Solutions.Solution is { Trusted: true };
 
@@ -450,6 +353,7 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
 
         _node = _shell.Explorer.Selected?.Node;
         ((RelayCommand)AddMetadataCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)PropertyPagesCommand).RaiseCanExecuteChanged();
         if (_node is not { } node)
         {
             Show("Properties", [], [], "Select an item in the Solution Explorer.");
@@ -498,12 +402,12 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            List<PropertyCategoryViewModel> categories = _alphabetical
-                ? [new PropertyCategoryViewModel(events ? Localizer.Get("msg.propertiesWindowViewModel.events", "Events") : Localizer.Get("msg.propertiesWindowViewModel.properties", "Properties"),
-                    [.. rows.Select(r => r.Row).OrderBy(r => r.Name.TrimStart('('), StringComparer.OrdinalIgnoreCase)])]
-                : [.. rows.GroupBy(r => r.Category.Length == 0 ? "Misc" : r.Category).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-                    .Select(g => new PropertyCategoryViewModel(g.Key, [.. g.Select(r => r.Row).OrderBy(r => r.Name.TrimStart('('), StringComparer.OrdinalIgnoreCase)]))];
-            Show(source.PropertiesTitle, categories, [], rows.Count == 0 ? Localizer.Get("msg.propertiesWindowViewModel.noSelection", "Select a component in the designer.") : null);
+            // Sorted as the classic IDE sorts (D41 question 4): ordinal, ignoring case, so "(" comes first: (DataBindings) and (Name) lead.
+            List<PropertyCategoryViewModel> categories = [.. rows.GroupBy(r => r.Category.Length == 0 ? "Misc" : r.Category).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new PropertyCategoryViewModel(g.Key, [.. g.Select(r => r.Row).OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)]))];
+            Grid.Context = source.SelectedComponent;
+            Show(source.PropertiesTitle, categories, [], rows.Count == 0 ? Localizer.Get("msg.propertiesWindowViewModel.noSelection", "Select a component in the designer.") : null,
+                events ? Localizer.Get("msg.propertiesWindowViewModel.events", "Events") : null);
         }
         catch (OperationCanceledException)
         {
@@ -524,16 +428,15 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void Show(string title, IReadOnlyList<PropertyCategoryViewModel> categories, IReadOnlyList<PropertyLinkViewModel> links, string? message)
+    private void Show(string title, IReadOnlyList<PropertyCategoryViewModel> categories, IReadOnlyList<PropertyLinkViewModel> links, string? message, string? alphabeticalTitle = null)
     {
-        var selected = _selectedRow?.Name;
         Title = title;
-        Categories.Clear();
-        foreach (var category in categories.Where(c => c.Rows.Count > 0))
+        if (_source is null)
         {
-            Categories.Add(category);
+            Grid.Context = null;
         }
 
+        Grid.Show(categories, _alphabetical, alphabeticalTitle);
         Links.Clear();
         foreach (var link in links)
         {
@@ -541,7 +444,7 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         }
 
         Message = message ?? (Categories.Count == 0 ? "No properties." : null);
-        SelectedRow = Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == selected);
+        RaiseSourceState();
     }
 
     private async Task<(string Title, List<PropertyCategoryViewModel> Categories, List<PropertyLinkViewModel> Links)> DescribeAsync(ExplorerNode node, CancellationToken cancellationToken)

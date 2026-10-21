@@ -748,7 +748,14 @@ public sealed partial class WinFormsDesignerDocument
     public DesignerCollectionEditorViewModel? CollectionEditor
     {
         get => _collectionEditor;
-        private set => SetProperty(ref _collectionEditor, value);
+        private set
+        {
+            if (SetProperty(ref _collectionEditor, value))
+            {
+                // The Properties window takes no input while the editor is open, and reads the values again when it closes (#68).
+                PropertiesChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
     }
 
     /// <summary>Opens a collection's editor (Items, Columns, TabPages, ColumnStyles, a strip's items, an image list's images).</summary>

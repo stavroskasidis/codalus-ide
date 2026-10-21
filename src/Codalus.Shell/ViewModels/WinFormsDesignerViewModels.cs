@@ -1686,6 +1686,23 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         _ => Localizer.Format("msg.winFormsDesigner.selectedCount", "{0} components", _selection.Count),
     };
 
+    /// <summary>The component selector's entries (#68): the form first, then its components by name (a part, such as a split container's panel, isn't one).</summary>
+    public IReadOnlyList<DesignerComponentChoice> ComponentChoices =>
+        [.. _components.Take(1).Concat(_components.Skip(1).Where(c => !c.IsPart).OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)).Select(c => new DesignerComponentChoice(c.Name, c.Type))];
+
+    public string? SelectedComponent => _selection.Count == 1 ? _selection[0] : null;
+
+    public void SelectComponent(string name)
+    {
+        if (Find(name) is not null)
+        {
+            SetSelection([name], notify: true);
+        }
+    }
+
+    /// <summary>An editor panel is open over the surface (#68): the Properties window takes no input meanwhile.</summary>
+    public bool HasOpenEditor => _collectionEditor is not null;
+
     public async Task<IReadOnlyList<DesignerPropertyRow>> PropertyRowsAsync(CancellationToken cancellationToken)
     {
         if (_host is not { } host || _selection.Count == 0)
