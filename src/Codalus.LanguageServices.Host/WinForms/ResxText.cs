@@ -17,7 +17,7 @@ namespace Codalus.LanguageServices.Host.WinForms;
 /// </summary>
 internal sealed partial class ResxText
 {
-    /// <summary>An empty resource file, as Visual Studio's designer starts a form's culture's (<see cref="DesignerResx.Empty"/>).</summary>
+    /// <summary>An empty resource file, as the classic IDE's designer starts a form's culture's (<see cref="DesignerResx.Empty"/>).</summary>
     public const string Empty = DesignerResx.Empty;
 
     private static readonly string[] s_records = ["Name", "Type", "Parent", "ZOrder"];

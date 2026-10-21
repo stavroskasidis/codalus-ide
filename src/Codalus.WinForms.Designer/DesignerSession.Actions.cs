@@ -10,7 +10,7 @@ namespace Codalus.WinForms.Designer;
 /// <summary>
 /// Smart tags (M41b, ADR 0073): a component's designer actions, from its designer's <c>DesignerActionList</c>s and its
 /// verbs, for the IDE's panel, and (#67) the verbs of its context menu, as the classic IDE's <c>MenuCommandService</c>
-/// lists them. A property sets the action list's property, a method runs, as Visual Studio's panel does, and the
+/// lists them. A property sets the action list's property, a method runs, as the classic IDE's panel does, and the
 /// state's difference writes what they did (a docking, a new tab page, a tool strip's standard items). A method that
 /// would open one of Windows Forms' dialogs (the ones whose names end with "…") opens the IDE's own editor instead (a
 /// collection's, an image import), or says it isn't available.

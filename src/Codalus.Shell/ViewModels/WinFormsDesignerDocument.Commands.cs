@@ -249,6 +249,7 @@ public sealed partial class WinFormsDesignerDocument
     /// A form without a default .resx gets one before an edit of it (#67: Lock Controls' <c>Locked</c> metadata): the
     /// empty one the C# host would create, in the designer file's line endings, held before the write, so the edit
     /// changes a model the designer holds and undoes with it. A new culture's .resx keeps the C# host's creation.
+    /// TODO(issue): the same for a new culture's .resx, whose first edit doesn't undo with the designer's step today.
     /// </summary>
     private async Task EnsureDefaultResourcesAsync(IReadOnlyList<DesignerEdit> edits)
     {

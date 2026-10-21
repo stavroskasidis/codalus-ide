@@ -92,12 +92,12 @@ Running or debugging a WPF app loads a small agent into it (a .NET startup hook)
 On Windows, a form's or user control's `.cs` file opens in the **Windows Forms designer**: double-click it in Solution Explorer (it has a form icon) or open it. **View Code** (`F7`) shows its code, and **View Designer** (`Shift+F7`, or the Solution Explorer's and the editor's context menu) shows the designer again. The `.Designer.cs` file itself opens as code. To open forms as code by default, turn **Open Forms in the Designer** off (Settings → Windows Forms, `windowsForms.openInDesigner`).
 
 The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply. A form you open while its project is still loading opens in the designer too; once the project has loaded, the designer reads it again.
-- **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent, `Ctrl+A` everything on the form.
+- **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent (for a control in a split container, that panel). `Ctrl+A` (or Edit → **Select All**) selects every component of the form, as the classic IDE does: the controls inside containers and the [component tray](#the-component-tray)'s components too.
 - **Move** the selected controls by dragging them; dropped on a panel, a group box, a tab page or a split container's panel, a control moves into it. The arrow keys move them a pixel, `Shift`+arrows resize them.
 - **Resize** the selected control with its grab handles (the form from its right and bottom ones).
 - **Snap lines** show while you move or resize a control, as in Visual Studio: its edges line up with its neighbours' (blue), its text with theirs (a magenta baseline: a label with its text box), and it keeps their margins and the form's padding (dashed: 12 pixels from the form's edge, 6 between two controls). Hold `Alt` to move freely.
-- **Delete**, **Cut** (`Ctrl+X`), **Copy** (`Ctrl+C`), **Paste** (`Ctrl+V`, into the selected container, a little lower and to the right, with new names) and **Duplicate** (`Ctrl+D`). Deleting a container deletes what's inside. Pasted controls keep their items, tool tips and data bindings; their event handlers stay hooked up when you paste into the same form (in another form the handlers aren't there, so they're left out).
-- **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Y`) are the designer file's own: the designer's changes are edits of `.Designer.cs`, so they undo in the code view too, and the designer loads the form again from the code.
+- **Delete**, **Cut** (`Ctrl+X`), **Copy** (`Ctrl+C`), **Paste** (`Ctrl+V`) and **Duplicate** (`Ctrl+D`), also from the Edit menu and the [context menu](#the-context-menu-and-locked-controls). Paste puts the copies into the selected container, or into the container of the selected control (a group box, a panel, a split container's panel), else the form, a little lower and to the right, with new names, as the classic IDE does. Deleting a container deletes what's inside. Pasted controls keep their items, tool tips and data bindings; their event handlers stay hooked up when you paste into the same form (in another form the handlers aren't there, so they're left out).
+- **Undo** (`Ctrl+Z`, or Edit → Undo) and **Redo** (`Ctrl+Y`) are the designer file's own: the designer's changes are edits of `.Designer.cs`, so they undo in the code view too, and the designer loads the form again from the code.
 - **Double-click** a control to go to its default event's handler (a button's `Click`, a form's `Load`), written in the form's code file when it doesn't exist yet.
 - A docked control shows its dock, and an anchored one (other than top and left) lines to the edges it's anchored to.
 
@@ -105,14 +105,30 @@ The designer draws the form with your app's own .NET and Windows Forms, as Visua
 
 **Building while a form is open.** The designer runs on a copy of your build output (in your temp folder), as the classic IDE does, so you can build while a form is open. After a build that changes your app, the designer loads the form again on the new build, so your own controls show their changes; a designer that isn't the active tab does it when you switch to it. While it loads again, the form takes no clicks or drops; changes you make in the Properties window, or with a Toolbox double-click or `Enter`, apply once it's back; your unsaved changes and the selection stay. A designer you open while a build runs waits for the build to finish (closing it stops the wait). When the designer can't start (your project doesn't build yet, or a file of the output is in use), the status line says why, and it starts after your next successful build, or when you switch to it after a build outside the IDE; **Load the form again** on the designer's toolbar tries at once. The copy goes when you close the form or exit; a publish folder or another build's output inside your output folder (a `dotnet publish -r win-x64` folder) isn't copied.
 
+### The context menu and locked controls
+
+Right-click a control (or press `Shift+F10` or the Menu key) for the classic IDE's context menu:
+- the control's own commands from its Windows Forms designer, first (a tab control's **Add Tab** and **Remove Tab**, a list box's **Edit Items...**), with **Show Smart Tag** (`Shift+Alt+F10`) when it has [smart tag tasks](#smart-tags);
+- **View Code** (`F7`), **Bring to Front**, **Send to Back**, **Align to Grid**, **Lock Controls**;
+- **Select '_parent_'**, which selects the control's container (`Select 'shippingGroupBox'`, `Select 'OrderForm'`);
+- **Cut**, **Copy**, **Paste**, **Delete**, and **Properties** (`F4`).
+
+Entries that don't apply are grayed, as in the classic IDE: with the form selected there's nothing to cut, copy, delete, order or align; **Paste** is grayed until you copy something; a component that isn't a control (a timer in the tray) grays the commands for controls. A command its designer turns off is grayed too (**Remove Tab** when there are no tab pages). Two or more selected controls have no commands of their own. A menu or tool strip's item gets the same menu for now, with **Select** naming its strip.
+
+A component in the tray has **View Code**, **Cut**, **Copy**, **Paste**, **Delete**, **Rename** (`F2`), **Line Up Icons** and **Properties**; the tray's background has **Paste** and **Line Up Icons**.
+
+**Lock Controls** (in the context menu, and at the bottom of the Format menu) locks every control of the form, so a drag, the arrow keys and the grab handles can't move or resize them by mistake. A locked control shows a small lock on its top-left corner and no grab handles; its smart tag stays. **Lock Controls** is checked while the form or any control on it is locked, and choosing it then unlocks them all. A control's **Locked** property (Properties window, Design) locks it alone. The Properties window still changes a locked control's location and size, and **Bring to Front**, **Send to Back**, cut, copy and delete still work on it. Locks are kept in the form's `.resx`, as the classic IDE keeps them (`button1.Locked`), not in the code, and undo takes them back; a form without a `.resx` gets one.
+
 ### The Format menu and tab order
 
-With the designer active, the **Format** menu (and the surface's context menu) lines up the selected controls against the primary selection (the one with white grab handles), as Visual Studio's does:
+With the designer active, the **Format** menu lines up the selected controls against the primary selection (the one with white grab handles), as the classic IDE's does:
 - **Align**: Lefts, Centers, Rights, Tops, Middles, Bottoms, and to Grid (8 pixels);
 - **Make Same Size**: Width, Height, both, and Size to Grid;
 - **Horizontal Spacing** and **Vertical Spacing**: Make Equal, Increase, Decrease, Remove;
 - **Center in Form**: Horizontally, Vertically;
 - **Order**: **Bring to Front** and **Send to Back**, which change the order of the parent's `Controls.Add` (its z-order). Controls that overlap are drawn in that order, the front one over the others, as your app shows them.
+
+The primary selection stays the reference even when it's locked; locked controls themselves aren't moved or resized. The entries are grayed when the selection doesn't suit them, as in the classic IDE: Lefts to Bottoms and Make Same Size need two controls or more, the spacing commands two or more in one container, and a selection with a component that isn't a control (or the form) grays the commands for controls. **Align to Grid** and **Size to Grid** stay available whatever the snap lines do. **Lock Controls** is at the bottom (see [above](#the-context-menu-and-locked-controls)).
 
 View → **Tab Order** numbers every control with its `TabIndex` (a group box's controls as `5.0`, `5.1`…). Click the controls in the order the `Tab` key should visit them: each container counts from 0. `Esc` or View → Tab Order again ends it.
 
@@ -131,7 +147,7 @@ The items are written as Visual Studio writes them: their fields, creations and 
 
 ### The component tray
 
-Components that don't show on the form (a timer, a tool tip, a binding source, an image list, an error provider, and the form's menu and tool strips) are in the **component tray** under it, with their icons. Click one to select it; `F2` (or its context menu's **Rename**) renames it in place; `Delete` deletes it; drag one to move it among the others, or **Line Up Icons** to arrange them in rows. The arrangement is kept in the form's `.resx` (Visual Studio's `TrayLocation`), so both IDEs show the same order.
+Components that don't show on the form (a timer, a tool tip, a binding source, an image list, an error provider, and the form's menu and tool strips) are in the **component tray** under it, with their icons. Click one to select it; `F2` (or its [context menu](#the-context-menu-and-locked-controls)'s **Rename**) renames it in place; `Delete` deletes it; drag one to move it among the others, or **Line Up Icons** to arrange them in rows. The arrangement is kept in the form's `.resx` (the classic IDE's `TrayLocation`), so both IDEs show the same order.
 
 ### Collections
 
@@ -183,6 +199,7 @@ With the designer active, the **Properties** window (`F4`) shows the selected co
 - Not yet: Visual Studio's Data Sources window (bind through a `BindingSource` instead), complex data binding's designer (a grid's `DataSource` is an ordinary property), the component designer (a class that is a component but not a control opens as code), and a design surface for WPF (its XAML Previewer shows the window, and selects both ways).
 - Smart tag tasks and collection items that open one of Windows Forms' own dialogs (a data grid view's **Add Column…**, a binding source's data source wizard) aren't available; set those properties in the Properties window.
 - The designer runs your code (your controls' constructors), so it works only in folders you trust.
+- A menu or tool strip item's own context menu (Convert To, Insert, Set Image…, Edit DropDownItems…) isn't there yet: it gets the form's menu. Copy and paste work within Codalus IDE only (not through the system clipboard), and bringing several controls to the front is one undo step each.
 - No outline or snap lines show while you drag an item from the Toolbox over the form (they show once it's there, when you move it), and a control dropped on a flow layout panel isn't inserted at the point you drop it.
 - The copies of your build output live in your temp folder's `codalus-winformsdesigner` folder and are removed when the designer closes (or, after a crash, the next time a designer starts). A file another program holds open in your output (a LocalDB database, your running app's log) isn't copied, which the **Windows Forms Designer** output lists. At design time your controls see the copy's folder as theirs (`AppContext.BaseDirectory`, `Assembly.Location`).
 

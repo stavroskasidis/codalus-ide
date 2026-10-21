@@ -69,6 +69,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 {
     public const string DocumentKind = "winformsDesigner";
 
+    // TODO(issue): the OS clipboard, so components paste into another instance of the IDE, as the classic IDE's do (#67's gaps).
     private static List<DesignerClipboardEntry> s_clipboard = [];
 
     private readonly ShellHost _shell;

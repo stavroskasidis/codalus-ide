@@ -320,6 +320,8 @@ internal sealed partial class DesignerSession : IDisposable
     }
 
     /// <summary>What a statement or a reference names: the root (empty), a component, a local, or <c>components</c>.</summary>
+    // TODO(issue): resolve a part's name (notesSplit.Panel1), so the Properties window shows a split container's panel
+    // (#68); its properties must then reach the state difference too.
     private object? Target(string name)
     {
         if (name.Length == 0 || name == _className)

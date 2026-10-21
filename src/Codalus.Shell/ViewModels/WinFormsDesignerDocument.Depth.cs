@@ -623,6 +623,7 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>Format → Order: Bring to Front (the first of its parent's controls) or Send to Back (the last), written as <c>Controls.Add</c>'s order.</summary>
     public async Task OrderAsync(bool front)
     {
+        // TODO(issue): one undo step for two or more controls brought to the front or sent to the back (one each today).
         var views = Orderable();
         foreach (var view in front ? Enumerable.Reverse(views) : views)
         {
