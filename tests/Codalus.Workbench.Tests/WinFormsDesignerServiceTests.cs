@@ -160,6 +160,27 @@ public sealed class WinFormsDesignerServiceTests
     }
 
     [Fact]
+    public void Only_tool_strips_items_take_Type_Here()
+    {
+        // #67: a strip is a component whose Items hold tool strip items, by the collection table, not by type names.
+        const string Forms = "System.Windows.Forms.";
+        foreach (var strip in new[] { "MenuStrip", "ToolStrip", "StatusStrip", "ContextMenuStrip" })
+        {
+            Assert.True(DesignerCollections.IsStripItems(Forms + strip + ":Items"), strip);
+        }
+
+        foreach (var key in new[] { "ListBox:Items", "ComboBox:Items", "DomainUpDown:Items", "ListView:Items", "ListView:Columns", "ToolStripDropDownItem:DropDownItems", "TabControl:TabPages", "DataGridView:Columns" })
+        {
+            Assert.False(DesignerCollections.IsStripItems(Forms + key), key);
+        }
+
+        Assert.False(DesignerCollections.IsStripItems("Contoso.FilmStrip:Items"));
+        Assert.False(DesignerCollections.IsStripItems("Items"));
+        Assert.Equal(Forms + "ToolStripMenuItem", DesignerCollections.MenuItemType);
+        Assert.Equal(DesignerCollections.MenuItemType, DesignerCollections.Find(Forms + "MenuStrip:Items")!.ItemTypes[0]);
+    }
+
+    [Fact]
     public async Task A_designer_host_that_isnt_there_fails_to_start_with_the_reason()
     {
         // A project folder that's gone: the process can't start, and the designer says why (no hang, no crash).
