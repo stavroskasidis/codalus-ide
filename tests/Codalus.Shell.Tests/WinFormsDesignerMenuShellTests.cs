@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Codalus.Shell.ViewModels;
 using static Codalus.Shell.Tests.WinFormsDesignerTestHost;
 
@@ -6,7 +7,8 @@ namespace Codalus.Shell.Tests;
 
 /// <summary>
 /// The Windows Forms designer's menus and tool strips on the surface (#67) in the headless shell with a fake designer
-/// host (any OS), on samples/WindowsDesktop's Windows Forms app: which components show a strip's Type Here.
+/// host (any OS), on samples/WindowsDesktop's Windows Forms app: which components show a strip's Type Here, and the
+/// classic IDE's commands: Edit's on a focused designer, Select All, and paste into the nearest container.
 /// </summary>
 public sealed class WinFormsDesignerMenuShellTests
 {
@@ -89,5 +91,62 @@ public sealed class WinFormsDesignerMenuShellTests
         Assert.Equal(["copyToolStripMenuItem"], panel.Rows.Select(r => r.Item));
         Assert.True(panel.TypeHere.CanType);
         Assert.Equal(0, inventoryHost.SetCollectionCalls);
+    }
+
+    /// <summary>
+    /// Edit → Copy, Paste, Cut, Undo and Select All act on a focused designer, as in the classic IDE (#67): before, they
+    /// looked for a text box or an editor and did nothing. Paste goes into the nearest container of the primary selection
+    /// (the classic IDE's nearest drag client): a selected panel itself, a control's group box, a split container's
+    /// panel; Select All takes every component but the form and the split container's panels, the tray's too.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Edit_menu_commands_act_on_a_focused_designer_and_paste_goes_into_the_nearest_container()
+    {
+        var (f, app, hosts) = await OpenAsync();
+        await using var _ = f;
+        var designer = await DesignAsync(f, Path.Combine(app, "OrderForm.cs"));
+        var host = Assert.Single(hosts);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.WinFormsDesignerView>().Any(v => v.IsEffectivelyVisible));
+        var view = f.Window.GetVisualDescendants().OfType<Views.WinFormsDesignerView>().First(v => v.IsEffectivelyVisible);
+        view.FocusPrimary();
+        await ShellFixture.PumpUntil(() => view.Surface.IsFocused);
+
+        // The split container's first panel holds the list box, as the real host reports it.
+        Assert.Equal("notesSplit.Panel1", designer.Find("historyListBox")!.Parent);
+        Assert.True(designer.Find("notesSplit.Panel1") is { IsPart: true, IsContainer: true });
+
+        async Task PasteIntoAsync(string selected, string expected)
+        {
+            designer.SetSelection(["customerTextBox"], notify: true);
+            await f.ExecuteAsync("edit.copy");
+            designer.SetSelection([selected], notify: true);
+            var loads = host.Loads;
+            await f.ExecuteAsync("edit.paste");
+            await ShellFixture.PumpUntil(() => Code(designer).Contains(expected, StringComparison.Ordinal) && host.Loads > loads, seconds: 30);
+        }
+
+        await PasteIntoAsync("buttonPanel", "buttonPanel.Controls.Add(customerTextBox1);");
+        await PasteIntoAsync("standardRadioButton", "shippingGroupBox.Controls.Add(customerTextBox2);");
+        await PasteIntoAsync("historyListBox", "notesSplit.Panel1.Controls.Add(customerTextBox3);");
+        await PasteIntoAsync("orderToolTip", "            Controls.Add(customerTextBox4);");
+
+        // Cut, then Undo, in the designer.
+        designer.SetSelection(["giftCheckBox"], notify: true);
+        var before = Code(designer);
+        await f.ExecuteAsync("edit.cut");
+        await ShellFixture.PumpUntil(() => !Code(designer).Contains("giftCheckBox", StringComparison.Ordinal), seconds: 30);
+        await f.ExecuteAsync("edit.undo");
+        await ShellFixture.PumpUntil(() => Code(designer) == before, seconds: 30);
+
+        // Select All: every component of the form but the form itself and the panels, the tray's and the nested ones too.
+        await ShellFixture.PumpUntil(() => designer.Find("giftCheckBox") is not null, seconds: 30);
+        await f.ExecuteAsync("edit.selectAll");
+        Assert.Contains("orderToolTip", designer.Selection);
+        Assert.Contains("standardRadioButton", designer.Selection);
+        Assert.Contains("historyListBox", designer.Selection);
+        Assert.Contains("customerTextBox3", designer.Selection);
+        Assert.DoesNotContain(designer.Root!.Name, designer.Selection);
+        Assert.DoesNotContain("notesSplit.Panel1", designer.Selection);
+        Assert.Equal(designer.Components.Count(c => c != designer.Root && !c.IsPart), designer.Selection.Count);
     }
 }

@@ -25,6 +25,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     private readonly Dictionary<string, string> _tray = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Component, string Provider), string> _toolTips = [];
     private readonly Dictionary<(string Component, string Property), string> _bindings = [];
+    private readonly Dictionary<string, List<string>> _parts = new(StringComparer.Ordinal);
     private string _root = "Form1";
 
     public int Loads { get; private set; }
@@ -58,10 +59,28 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         _tray.Clear();
         _toolTips.Clear();
         _bindings.Clear();
+        _parts.Clear();
         var statements = parameters.Model.Statements;
         foreach (var call in statements.Where(s => s.Kind == DesignerStatementKinds.Call && s.Member?.EndsWith("Controls.Add", StringComparison.Ordinal) == true))
         {
-            Children(call.Target.Length == 0 ? _root : call.Target).Add(call.Arguments![0].Value!);
+            // A split container's panel holds its controls as the real host has it (#67): notesSplit.Panel1, a part.
+            var target = call.Target.Length == 0 ? _root : call.Target;
+            if (call.Member!.Length > "Controls.Add".Length && call.Member[..^".Controls.Add".Length] is { Length: > 0 } part)
+            {
+                if (!_parts.TryGetValue(target, out var parts))
+                {
+                    _parts[target] = parts = [];
+                }
+
+                if (!parts.Contains(part))
+                {
+                    parts.Add(part);
+                }
+
+                target += "." + part;
+            }
+
+            Children(target).Add(call.Arguments![0].Value!);
         }
 
         foreach (var call in statements.Where(s => s.Kind == DesignerStatementKinds.Call && s.Member is "Items.AddRange" or "DropDownItems.AddRange"))
@@ -115,6 +134,14 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         return Task.FromResult(Render());
     }
 
+    /// <summary>Whether <paramref name="name"/> is a split container's panel (<c>notesSplit.Panel1</c>).</summary>
+    private bool IsPartName(string name) =>
+        name.LastIndexOf('.') is var dot and > 0 && _parts.TryGetValue(name[..dot], out var parts) && parts.Contains(name[(dot + 1)..]);
+
+    /// <summary>A parent as the code says it: <c>notesSplit.Panel1</c> is notesSplit's Panel1.</summary>
+    private (string? Parent, string? Path) Split(string? parent) =>
+        parent is not null && IsPartName(parent) ? (parent[..parent.LastIndexOf('.')], parent[(parent.LastIndexOf('.') + 1)..]) : (parent, null);
+
     private List<string> Children(string parent)
     {
         if (!_children.TryGetValue(parent, out var list))
@@ -167,6 +194,32 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                     InTray = simple.EndsWith("Strip", StringComparison.Ordinal),
                 });
                 Add(name);
+                AddParts(name);
+            }
+        }
+
+        // A split container's panels, as the real host reports them: parts that hold controls, the owner's halves, with
+        // the owner's client origin (so their controls keep the coordinates the fake gave them before it had panels).
+        void AddParts(string owner)
+        {
+            if (!_parts.TryGetValue(owner, out var parts))
+            {
+                return;
+            }
+
+            var view = views.First(v => v.Name == owner);
+            for (var i = 0; i < parts.Count; i++)
+            {
+                var width = view.Width / parts.Count;
+                views.Add(new DesignerComponentView(owner + "." + parts[i], Forms + "SplitterPanel", owner, view.X + (i * width), view.Y, width, view.Height)
+                {
+                    IsControl = true,
+                    IsContainer = true,
+                    IsPart = true,
+                    ClientX = view.ClientX,
+                    ClientY = view.ClientY,
+                });
+                Add(owner + "." + parts[i]);
             }
         }
 
@@ -249,14 +302,15 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         }
         else
         {
-            parent = parameters.Parent is { } named && _controls.ContainsKey(named) ? named : _root;
+            parent = parameters.Parent is { } named && (_controls.ContainsKey(named) || IsPartName(named)) ? named : _root;
             var view = Render().Components.First(v => v.Name == parent);
             (x, y) = ((int)(parameters.X - view.ClientX), (int)(parameters.Y - view.ClientY));
         }
 
         _controls[parameters.Name] = new Control(parameters.Type, parent, x, y, 75, 23, parameters.Name, 11, "None", "Top, Left");
         Children(parent).Insert(0, parameters.Name);
-        var created = new DesignerCreated(parameters.Name, parameters.Type, [], parent == _root ? string.Empty : parent, null, null,
+        var (createdParent, createdPath) = Split(parent == _root ? string.Empty : parent);
+        var created = new DesignerCreated(parameters.Name, parameters.Type, [], createdParent, createdPath, null,
         [
             new("Location", DesignerValue.NewOf("System.Drawing.Point", DesignerValue.Int(x), DesignerValue.Int(y))),
             new("Name", DesignerValue.String(parameters.Name)),
@@ -367,12 +421,14 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         var parent = parameters.Parent ?? _root;
         Children(parent).Insert(0, parameters.Component);
         _controls[parameters.Component] = control with { Parent = parent };
-        return Task.FromResult(new DesignerChangeResult([], Render()) { Reparented = new DesignerReparented(parameters.Component, parameters.Parent, null, null) });
+        var (owner, path) = Split(parameters.Parent);
+        return Task.FromResult(new DesignerChangeResult([], Render()) { Reparented = new DesignerReparented(parameters.Component, owner, path, null) });
     }
 
     public Task<DesignerChangeResult> DeleteAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken)
     {
-        var removed = parameters.Components.Concat(_controls.Where(c => parameters.Components.Contains(c.Value.Parent)).Select(c => c.Key)).ToList();
+        bool Inside(string? parent) => parent is not null && (parameters.Components.Contains(parent) || parameters.Components.Any(c => parent.StartsWith(c + ".", StringComparison.Ordinal)));
+        var removed = parameters.Components.Concat(_controls.Where(c => Inside(c.Value.Parent)).Select(c => c.Key)).ToList();
         var collections = new List<DesignerCollectionChange>();
         foreach (var name in removed)
         {
