@@ -85,10 +85,10 @@
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
           <Button x:Name="BackButton" Classes="dialog" Content="{l:T newProject.back}" Command="{Binding BackCommand}" ToolTip.Tip="{Binding BackToolTip}" />
           <Button x:Name="NextButton" Classes="dialog accent" Content="{l:T newProject.next}" Command="{Binding NextCommand}" IsVisible="{Binding IsNextVisible}"
-                  ToolTip.Tip="{l:T newProject.nextTip}" />
+                  ToolTip.Tip="{Binding NextToolTip}" />
           <Button x:Name="InstallButton" Classes="dialog accent" Content="{l:T newProject.install}" Command="{Binding InstallCommand}" IsVisible="{Binding IsInstallVisible}" />
           <Button x:Name="CreateButton" Classes="dialog accent" Content="{l:T newProject.create}" Command="{Binding CreateCommand}" IsVisible="{Binding IsCreateVisible}"
-                  ToolTip.Tip="{l:T newProject.createTip}" />
+                  ToolTip.Tip="{Binding CreateToolTip}" />
           <Button x:Name="CancelButton" Classes="dialog" Content="{l:T newProject.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding IsCreating}" />
         </StackPanel>
         <Panel VerticalAlignment="Center">
@@ -97,8 +97,8 @@
             <Button x:Name="InstallMoreButton" Classes="link" Content="{l:T newProject.installMoreTemplates}" Command="{Binding InstallMoreCommand}" />
           </WrapPanel>
           <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding ShowPageHint}" VerticalAlignment="Center">
-            <Border Classes="kbd"><TextBlock Text="{l:T newProject.keyAltLeft}" /></Border>
-            <Border Classes="kbd"><TextBlock Text="{l:T newProject.keyAltRight}" /></Border>
+            <Border Classes="kbd"><TextBlock Text="{Binding BackKey}" /></Border>
+            <Border Classes="kbd"><TextBlock Text="{Binding NextKey}" /></Border>
             <TextBlock Classes="muted small" Text="{l:T newProject.hintMoveBetweenPages}" VerticalAlignment="Center" Margin="2,0,0,0" />
           </StackPanel>
           <DockPanel IsVisible="{Binding IsCreating}" VerticalAlignment="Center">

@@ -48,7 +48,11 @@ public sealed class NewProjectWizardTests
         return new CliResult(0, "The template was created successfully.");
     }
 
-    /// <summary>The shell's New Project on the recorded templates and the stand-in CLI.</summary>
+    /// <summary>
+    /// The shell's New Project on the recorded templates and the stand-in CLI, as off Windows and macOS on every OS (the
+    /// Windows only tags, Alt+arrows), with its location in the fixture's folder: never the user's own source/repos,
+    /// where a BlazorApp1 of their own would stop Next.
+    /// </summary>
     private static RecordedCli UseRecordedTemplates(ShellFixture f, TemplateTestData data)
     {
         var cli = RecordedCli.Sdk11();
@@ -56,6 +60,9 @@ public sealed class NewProjectWizardTests
         f.Shell.ProjectTemplates = new ProjectTemplateCatalog(cli, new FixedCacheLocator(data.Cache11), () => new DateOnly(2026, 10, 21));
         f.Shell.NewProjectCli = cli;
         f.Shell.NewProjects = new NewProjectService(cli, new PathRules(IsWindows: false, LongPathsEnabled: true));
+        f.Shell.NewProjectIsWindows = false;
+        f.Shell.NewProjectIsMacOS = false;
+        f.Shell.NewProjectHistory.AddRecentLocation(Directory.CreateDirectory(Path.Combine(f.UserData, "repos")).FullName);
         return cli;
     }
 
@@ -216,7 +223,9 @@ public sealed class NewProjectWizardTests
         var (model, window) = await OpenedAsync(f);
         var list = Named<ListBox>(window, "TemplateList");
 
-        // Template rows: the icon in its kind's color, the name, the description, the tags; Windows only off Windows; a pack.
+        // Template rows: the icon in its kind's color, the name, the description, the tags; Windows only off Windows (the
+        // fixture's wizard is off Windows on every OS); a pack.
+        Assert.False(model.IsWindows);
         var wpf = model.Templates.Single(r => r.Id == "dotnet:Microsoft.Common.WPF|C#");
         list.ScrollIntoView(wpf);
         ShellFixture.Pump();
@@ -320,6 +329,69 @@ public sealed class NewProjectWizardTests
         model.Search = "blazor";
         ShellFixture.Pump();
         Assert.Same(model.SelectedTemplate, list.SelectedItem);
+        model.Cancel();
+        Assert.Null(await command);
+    }
+
+    [AvaloniaFact]
+    public async Task Enter_in_the_search_goes_on_with_what_the_search_shows()
+    {
+        await using var f = ShellFixture.Create();
+        using var data = new TemplateTestData();
+        UseRecordedTemplates(f, data);
+        var command = f.Shell.Workbench.Commands.ExecuteAsync("templates.newProject", TestContext.Current.CancellationToken);
+        var (model, window) = await OpenedAsync(f);
+        Named<ListBox>(window, "TemplateList").SelectedItem = model.Templates.Single(r => r.Id == "dotnet:Microsoft.Common.Console|C#");
+        ShellFixture.Pump();
+        Assert.Equal("Console App", model.SelectedTemplate!.Name);
+
+        // Typed and Enter at once (the search waits for more typing): Enter takes the best match of "blazor", not the
+        // Console App it hid.
+        model.SearchDelay = TimeSpan.FromSeconds(30);
+        var search = Named<TextBox>(window, "SearchBox");
+        search.Focus();
+        window.KeyTextInput("blazor");
+        Press(window, Key.Enter);
+        await ShellFixture.PumpUntil(() => model.Page == NewProjectPage.Configure, describe: () => $"page {model.Page}, chosen {model.SelectedTemplate?.Name}");
+        Assert.Equal("Blazor Web App", model.SelectedTemplate!.Name);
+        model.Cancel();
+        Assert.Null(await command);
+    }
+
+    [AvaloniaFact]
+    public async Task On_macOS_option_arrows_stay_in_the_text_boxes_and_command_brackets_move_between_pages()
+    {
+        await using var f = ShellFixture.Create();
+        using var data = new TemplateTestData();
+        UseRecordedTemplates(f, data);
+        f.Shell.NewProjectIsMacOS = true;
+        var command = f.Shell.Workbench.Commands.ExecuteAsync("templates.newProject", TestContext.Current.CancellationToken);
+        var (model, window) = await OpenedAsync(f);
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "⌘[");
+        Named<ListBox>(window, "TemplateList").SelectedItem = model.Templates.Single(r => r.Id == "dotnet:Microsoft.Common.Console|C#");
+        await model.WaitForTemplateAsync();
+        Press(window, Key.OemCloseBrackets, RawInputModifiers.Meta); // ⌘]
+        Assert.Equal(NewProjectPage.Configure, model.Page);
+        await ShellFixture.PumpUntil(() => model.CanGoNext);
+
+        // ⌥← and ⌥→ in the project name are the text box's (a word back, a word on): the page stays.
+        var name = Named<TextBox>(window, "ProjectNameBox");
+        await ShellFixture.PumpUntil(() => name.IsFocused, describe: () => $"focused: {Focused(window)}");
+        Press(window, Key.Left, RawInputModifiers.Alt);
+        Press(window, Key.Right, RawInputModifiers.Alt);
+        Assert.Equal(NewProjectPage.Configure, model.Page);
+        window.LocationField.TextBox.Focus();
+        Press(window, Key.Left, RawInputModifiers.Alt);
+        Assert.Equal(NewProjectPage.Configure, model.Page);
+
+        // ⌘] and ⌘[ move between pages from anywhere; ⌥← still does outside a text box.
+        Press(window, Key.OemCloseBrackets, RawInputModifiers.Meta);
+        Assert.Equal(NewProjectPage.Additional, model.Page);
+        Press(window, Key.OemOpenBrackets, RawInputModifiers.Meta);
+        Assert.Equal(NewProjectPage.Configure, model.Page);
+        Named<CheckBox>(window, "TrustBox").Focus();
+        Press(window, Key.Left, RawInputModifiers.Alt);
+        Assert.Equal(NewProjectPage.Choose, model.Page);
         model.Cancel();
         Assert.Null(await command);
     }

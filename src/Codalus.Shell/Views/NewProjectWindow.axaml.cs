@@ -12,7 +12,8 @@ namespace Codalus.Shell.Views;
 
 /// <summary>
 /// New Project's window (0.6.0, ADR 0082): the three pages of <see cref="NewProjectViewModel"/>. Keys, as the classic
-/// IDE's wizard: Alt+Left is Back, Alt+Right (and Enter) Next or Create; Escape closes (or clears the search first, and
+/// IDE's wizard: Alt+Left is Back, Alt+Right (and Enter) Next or Create (on macOS ⌘[ and ⌘] too, and ⌥← and ⌥→ stay
+/// the text boxes' word moves while one has the focus); Escape closes (or clears the search first, and
 /// leaves an open drop-down to close itself); Alt+S goes to the search and Down from it into the templates; Enter or a
 /// double-click on a template goes on; Delete removes a recent template. Each page focuses its first field when it
 /// opens (the project name with its text selected); Tab follows the reading order; the labels' access keys focus their
@@ -133,6 +134,16 @@ public sealed partial class NewProjectWindow : Window
         || this.GetVisualDescendants().OfType<ComboBox>().Any(c => c.IsDropDownOpen)
         || FocusManager?.GetFocusedElement() is MenuItem;
 
+    /// <summary>Next (or Create) once the chosen template has been read: a template read from its help takes a moment.</summary>
+    private static async Task GoOnAsync(NewProjectViewModel model)
+    {
+        await model.WaitForTemplateAsync().ConfigureAwait(true);
+        await model.GoForwardAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>On macOS ⌥← and ⌥→ move the caret by word in a text box: the wizard leaves them to it (⌘[ and ⌘] go back and on).</summary>
+    private static bool IsWordMove(NewProjectViewModel model, IInputElement? focused) => model.IsMacOS && focused is TextBox;
+
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
         if (_model is not { } model)
@@ -155,11 +166,13 @@ public sealed partial class NewProjectWindow : Window
 
                 e.Handled = true;
                 break;
-            case Key.Left when e.KeyModifiers == KeyModifiers.Alt:
+            case Key.Left when e.KeyModifiers == KeyModifiers.Alt && !IsWordMove(model, focused):
+            case Key.OemOpenBrackets when e.KeyModifiers == KeyModifiers.Meta && model.IsMacOS:
                 model.GoBack();
                 e.Handled = true;
                 break;
-            case Key.Right when e.KeyModifiers == KeyModifiers.Alt:
+            case Key.Right when e.KeyModifiers == KeyModifiers.Alt && !IsWordMove(model, focused):
+            case Key.OemCloseBrackets when e.KeyModifiers == KeyModifiers.Meta && model.IsMacOS:
                 _ = model.GoForwardAsync();
                 e.Handled = true;
                 break;
@@ -181,13 +194,19 @@ public sealed partial class NewProjectWindow : Window
                 break;
             // A focused button presses itself; a check box or a combo box leaves Enter to the wizard.
             case Key.Enter when e.KeyModifiers == KeyModifiers.None && focused is not Button or Avalonia.Controls.Primitives.ToggleButton && !IsPopupOpen():
-                // From the search box, Enter takes the best match.
-                if (model.IsChoosePage && model.SelectedTemplate is null && model.Templates.Count > 0)
+                // From the search box, Enter takes the best match of what's typed, unless a row it shows is chosen.
+                if (model.IsChoosePage && ReferenceEquals(focused, SearchBox))
+                {
+                    model.ApplyPendingSearch();
+                }
+
+                if (model.IsChoosePage && model.Templates.Count > 0
+                    && (model.SelectedTemplate is not { } chosen || !(model.Templates.Contains(chosen) || model.RecentTemplates.Contains(chosen))))
                 {
                     model.SelectedTemplate = model.Templates[0];
                 }
 
-                _ = model.GoForwardAsync();
+                _ = GoOnAsync(model);
                 e.Handled = true;
                 break;
         }

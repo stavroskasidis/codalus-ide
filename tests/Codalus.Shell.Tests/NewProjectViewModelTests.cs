@@ -76,7 +76,7 @@ public sealed class NewProjectViewModelTests : IDisposable
         return new CliResult(0, $"The template was created successfully. ({string.Join(' ', args)})");
     }
 
-    private NewProjectViewModel Model(NewProjectContext? context = null)
+    private NewProjectViewModel Model(NewProjectContext? context = null, Func<NewProjectServices, NewProjectServices>? adjust = null)
     {
         var services = new NewProjectServices
         {
@@ -90,7 +90,7 @@ public sealed class NewProjectViewModelTests : IDisposable
             ShowOutput = _output.Add,
             BackToStartWindow = () => _backToStart++,
         };
-        var model = new NewProjectViewModel(services, context ?? new NewProjectContext { IsWindows = false })
+        var model = new NewProjectViewModel(adjust?.Invoke(services) ?? services, context ?? new NewProjectContext { IsWindows = false, IsMacOS = false })
         {
             SearchDelay = TimeSpan.Zero,
             ValidationDelay = TimeSpan.Zero,
@@ -201,8 +201,17 @@ public sealed class NewProjectViewModelTests : IDisposable
         Assert.Equal("Sol", model.SolutionName);
         model.SameDirectory = true;
         Assert.False(model.IsSolutionNameEnabled);
+        Assert.Equal("Hello2", model.SolutionName); // the disabled box shows the name Create uses
+        Assert.Equal("Hello2", model.Request().SolutionName);
         Assert.Equal($"Project will be created in \"{Path.Combine(Location, "Hello2")}{Path.DirectorySeparatorChar}\"", model.CreatedIn);
+        var shown = new List<string?>();
+        model.PropertyChanged += (_, e) => shown.Add(e.PropertyName == nameof(model.SolutionName) ? model.SolutionName : null);
+        model.ProjectName = "Hello4";
+        Assert.Contains("Hello4", shown);
+        model.SolutionName = "Ignored"; // what the disabled box may send back
         model.SameDirectory = false;
+        Assert.Equal("Sol", model.SolutionName); // the name typed comes back
+        model.ProjectName = "Hello2";
 
         // A reserved name stops Next; a fixed one lets it go on, once the disk check has run.
         model.ProjectName = "CON";
@@ -249,7 +258,10 @@ public sealed class NewProjectViewModelTests : IDisposable
         model.Finished += (_, completion) => (finished, done) = (completion, true);
         await model.LoadAsync();
         Assert.True(model.CanGoBack);
-        Assert.Equal("Back to the start window (Alt+Left)", model.BackToolTip);
+        Assert.Equal("Back to the start window (Alt+←)", model.BackToolTip);
+        Assert.Equal(("Alt+←", "Alt+→", "Next (Alt+→)"), (model.BackKey, model.NextKey, model.NextToolTip));
+        var mac = Model(new NewProjectContext { FromStartWindow = true, IsWindows = false, IsMacOS = true });
+        Assert.Equal(("⌘[", "⌘]", "Back to the start window (⌘[)", "Create (⌘])"), (mac.BackKey, mac.NextKey, mac.BackToolTip, mac.CreateToolTip));
         model.GoBack();
         Assert.True(done);
         Assert.Null(finished);
@@ -275,6 +287,29 @@ public sealed class NewProjectViewModelTests : IDisposable
         Assert.False(runner.IsEnabled); // (XUnitVersion == v3)
         version.SymbolValue = "v3";
         Assert.True(runner.IsEnabled);
+
+        // Back to fix the name, then Next again: the framework, its member's options and their values are as they were.
+        model.GoBack();
+        Assert.Equal(NewProjectPage.Configure, model.Page);
+        model.ProjectName = "Tests";
+        await SettleAsync(model);
+        await model.GoForwardAsync();
+        Assert.Equal(NewProjectPage.Additional, model.Page);
+        Assert.Equal("net11.0", model.SelectedFramework!.Moniker);
+        Assert.Equal("net11.0", model.Request().Framework);
+        Assert.Equal("v3", model.Options.Single(o => o.Name == "XUnitVersion").SymbolValue);
+        Assert.True(model.Options.Single(o => o.Name == "TestRunner").IsEnabled);
+
+        // Another template, then this one again: the framework starts over (the remembered one, else the default).
+        model.GoBack();
+        model.GoBack();
+        await SelectAsync(model, "dotnet:Microsoft.Common.Console|C#");
+        await SelectAsync(model, "dotnet:Microsoft.Test.xUnit|C#");
+        await model.GoForwardAsync();
+        await SettleAsync(model);
+        await model.GoForwardAsync();
+        Assert.Equal("net10.0", model.SelectedFramework!.Moniker);
+        model.SelectedFramework = model.Frameworks.Single(f => f.Moniker == "net11.0");
 
         // Back to 10.0: its member has neither option, and the values don't reach the CLI.
         model.SelectedFramework = model.Frameworks.Single(f => f.Moniker == "net10.0");
@@ -551,6 +586,210 @@ public sealed class NewProjectViewModelTests : IDisposable
         Assert.Null(completion);
         model.Cancel();
         Assert.Equal(1, finished); // once
+    }
+
+    [AvaloniaFact]
+    public async Task A_search_that_hides_the_chosen_template_leaves_nothing_chosen()
+    {
+        History.AddRecentTemplate("dotnet:Microsoft.Common.Console|C#");
+        var model = Model();
+        await model.LoadAsync();
+        await SelectAsync(model, "dotnet:Microsoft.Common.Console|C#");
+        Assert.True(model.CanGoNext);
+
+        // "blazor" hides Console App: Next (and Enter) don't go on with a row nobody sees.
+        model.Search = "blazor";
+        Assert.DoesNotContain(model.Templates, r => r.Id == "dotnet:Microsoft.Common.Console|C#");
+        Assert.Null(model.SelectedTemplate);
+        Assert.False(model.CanGoNext);
+
+        // A search that keeps it keeps it; a recent template stays chosen, since the recent list shows it.
+        model.Search = string.Empty;
+        await SelectAsync(model, "dotnet:Microsoft.Common.Console|C#");
+        model.Search = "console";
+        Assert.Equal("dotnet:Microsoft.Common.Console|C#", model.SelectedTemplate!.Id);
+        model.SelectedTemplate = model.RecentTemplates[0];
+        model.Search = "blazor";
+        Assert.Same(model.RecentTemplates[0], model.SelectedTemplate);
+        Assert.True(model.CanGoNext);
+    }
+
+    [AvaloniaFact]
+    public async Task Searching_and_loading_write_the_history_only_when_a_filter_changes()
+    {
+        var model = Model();
+        var writes = 0;
+        History.Changed += (_, _) => writes++;
+        await model.LoadAsync();
+        foreach (var text in new[] { "c", "co", "con", "cons", "conso", "consol", "console", string.Empty })
+        {
+            model.Search = text;
+        }
+
+        model.ClearAllCommand.Execute(null);
+        Assert.Equal(0, writes);
+        model.SelectedLanguage = model.Languages.Single(l => l.Value == "C#");
+        Assert.Equal(1, writes);
+        Assert.Equal("C#", History.LanguageFilter);
+    }
+
+    [AvaloniaFact]
+    public async Task A_step_that_runs_out_of_time_says_so()
+    {
+        // Not the user's Cancel: a CLI limit (a pack download that stalls, a post action waiting for input).
+        _cli.Fallback = args => args is ["new", "sln", ..] ? StandInDotnet(args) : throw new OperationCanceledException();
+        var model = Model();
+        var finished = false;
+        model.Finished += (_, _) => finished = true;
+        await model.LoadAsync();
+        await SelectAsync(model, "dotnet:Microsoft.Common.Console|C#");
+        await model.GoForwardAsync();
+        model.TrustLocation = true;
+        await SettleAsync(model);
+        await model.GoForwardAsync();
+        await model.GoForwardAsync();
+
+        Assert.False(finished);
+        Assert.Equal("Couldn't create the project: dotnet didn't finish in time and was stopped.", model.CreateError);
+        Assert.True(model.ShowOutputCommand.CanExecute(null));
+        Assert.Empty(_trusted); // nothing was made, so nothing was trusted
+        Assert.False(Directory.Exists(Path.Combine(Location, "ConsoleApp1")));
+    }
+
+    [AvaloniaFact]
+    public async Task Trust_this_location_trusts_only_what_create_made_and_says_why_it_couldnt()
+    {
+        // A location that can't be made (here a file is in the way; elsewhere a folder the user can't write).
+        var blocked = Path.Combine(_root, "blocked");
+        File.WriteAllText(blocked, "a file");
+        var model = Model();
+        var finished = false;
+        model.Finished += (_, _) => finished = true;
+        await model.LoadAsync();
+        await SelectAsync(model, "dotnet:Microsoft.Common.Console|C#");
+        await model.GoForwardAsync();
+        model.Location = Path.Combine(blocked, "apps");
+        model.TrustLocation = true;
+        await SettleAsync(model);
+        await model.GoForwardAsync();
+        await model.GoForwardAsync();
+        Assert.False(finished);
+        Assert.False(model.IsCreating);
+        Assert.StartsWith("Couldn't create the project: ", model.CreateError, StringComparison.Ordinal);
+        Assert.Empty(_trusted);
+
+        // A trust store that can't be written: the project is made, and opens untrusted.
+        NewProjectCompletion? completion = null;
+        var denied = Model(adjust: services => new NewProjectServices
+        {
+            Catalog = services.Catalog,
+            Creator = services.Creator,
+            History = services.History,
+            Cli = services.Cli,
+            IsTrusted = services.IsTrusted,
+            Trust = _ => throw new UnauthorizedAccessException("The trust store is read-only."),
+            Rules = services.Rules,
+            ShowOutput = services.ShowOutput,
+        });
+        denied.Finished += (_, c) => completion = c;
+        await denied.LoadAsync();
+        await SelectAsync(denied, "dotnet:Microsoft.Common.Console|C#");
+        await denied.GoForwardAsync();
+        denied.TrustLocation = true;
+        await SettleAsync(denied);
+        await denied.GoForwardAsync();
+        await denied.GoForwardAsync();
+        Assert.NotNull(completion);
+        Assert.False(completion.Trusted);
+        Assert.Contains(_output, o => o.Contains("The trust store is read-only.", StringComparison.Ordinal));
+    }
+
+    [AvaloniaFact]
+    public async Task Failures_reading_installing_and_checking_say_so()
+    {
+        // The templates couldn't be read: the empty list says why.
+        var broken = new RecordedCli { Fallback = _ => throw new InvalidOperationException("dotnet did not start.") };
+        var unread = Model(adjust: services => new NewProjectServices
+        {
+            Catalog = new ProjectTemplateCatalog(broken, new FixedCacheLocator(_data.Cache11)),
+            Creator = services.Creator,
+            History = services.History,
+            Cli = services.Cli,
+            IsTrusted = services.IsTrusted,
+            Trust = services.Trust,
+        });
+        await unread.LoadAsync();
+        Assert.True(unread.IsEmpty);
+        Assert.Equal("Couldn't read the templates: dotnet did not start.", unread.LoadError);
+
+        // A pack install that stopped (a limit, not a Cancel): its row says so.
+        var install = Model(adjust: services => new NewProjectServices
+        {
+            Catalog = services.Catalog,
+            Creator = services.Creator,
+            History = services.History,
+            Cli = new StoppedInstallCli(_cli),
+            IsTrusted = services.IsTrusted,
+            Trust = services.Trust,
+        });
+        await install.LoadAsync();
+        await SelectAsync(install, "pack:Avalonia.Templates");
+        await install.GoForwardAsync();
+        Assert.Equal("Couldn't install Avalonia.Templates: dotnet didn't finish in time and was stopped.", install.SelectedTemplate!.InstallError);
+        Assert.False(install.SelectedTemplate.IsInstalling);
+
+        // A disk check that fails: Next waits for nothing, and the page says why.
+        var check = Model(adjust: services => new NewProjectServices
+        {
+            Catalog = services.Catalog,
+            Creator = services.Creator,
+            History = services.History,
+            Cli = services.Cli,
+            IsTrusted = _ => throw new UnauthorizedAccessException("Access to the path is denied."),
+            Trust = services.Trust,
+        });
+        await check.LoadAsync();
+        await SelectAsync(check, "dotnet:Microsoft.Common.Console|C#");
+        await check.GoForwardAsync();
+        await SettleAsync(check);
+        Assert.False(check.IsValidating);
+        Assert.Equal("Couldn't check the location: Access to the path is denied. Choose another name or location.", check.TargetError);
+        Assert.False(check.CanGoNext);
+    }
+
+    [AvaloniaFact]
+    public async Task Another_workspace_in_the_main_window_stops_the_offer_to_add_to_the_old_one()
+    {
+        var solution = Path.Combine(_root, "Open");
+        var model = Model(new NewProjectContext { Workspace = NewProjectWorkspace.Solution, WorkspacePath = Path.Combine(solution, "Open.slnx"), WorkspaceDirectory = solution, WorkspaceName = "Open", IsWindows = false });
+        await model.LoadAsync();
+        await SelectAsync(model, "dotnet:Microsoft.Common.Console|C#");
+        await model.GoForwardAsync();
+        model.SelectedSolutionChoice = model.SolutionChoices[1];
+        Assert.Equal("Adds the project to the solution \"Open\".", model.AddsTo);
+
+        model.OnWorkspaceChanged();
+        Assert.True(model.CreatesSolution);
+        Assert.Equal(["Create new solution"], model.SolutionChoices.Select(c => c.Label));
+        Assert.False(model.ShowSolutionChoice);
+        Assert.Null(model.AddsTo);
+        Assert.Equal(Location, model.Location); // the new solution's default location again
+    }
+
+    /// <summary>The recorded CLI, with an install that stops without the user's Cancel.</summary>
+    private sealed class StoppedInstallCli(RecordedCli inner) : ITemplateCli
+    {
+        public string? Hive => inner.Hive;
+
+        public event EventHandler? Changed
+        {
+            add => inner.Changed += value;
+            remove => inner.Changed -= value;
+        }
+
+        public Task<CliResult> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken) => inner.RunAsync(args, cancellationToken);
+
+        public Task<(bool Succeeded, string Output)> InstallAsync(string package, CancellationToken cancellationToken) => throw new OperationCanceledException();
     }
 
     [Fact]

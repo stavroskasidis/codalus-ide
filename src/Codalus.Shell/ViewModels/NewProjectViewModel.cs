@@ -67,6 +67,9 @@ public sealed record NewProjectContext
     public string? DefaultLocationSetting { get; init; }
 
     public bool IsWindows { get; init; } = OperatingSystem.IsWindows();
+
+    /// <summary>On macOS ⌥← and ⌥→ move by word in text boxes, so the pages go back and forward with ⌘[ and ⌘].</summary>
+    public bool IsMacOS { get; init; } = OperatingSystem.IsMacOS();
 }
 
 /// <summary>The services New Project works with (the shell's; tests stand in for the CLI and the catalog).</summary>
@@ -99,7 +102,11 @@ public sealed class NewProjectServices
 }
 
 /// <summary>A finished Create: what was asked and what was made. The shell opens it in the main window.</summary>
-public sealed record NewProjectCompletion(NewProjectRequest Request, NewProjectPlan Plan, NewProjectResult Result, bool Trusted, string? SolutionFolderId);
+public sealed record NewProjectCompletion(NewProjectRequest Request, NewProjectPlan Plan, NewProjectResult Result, bool Trusted, string? SolutionFolderId)
+{
+    /// <summary>The open solution or folder the project goes into (null for a new solution): the shell adds it only while that one is open.</summary>
+    public string? WorkspacePath { get; init; }
+}
 
 /// <summary>
 /// New Project (ADR 0082): the classic IDE's three-page wizard. <b>Create a new project</b> lists recent templates and
@@ -128,6 +135,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
     private NewProjectTemplateRow? _selectedTemplate;
     private bool _isLoadingTemplate;
     private CancellationTokenSource? _searchDelay;
+    private bool _searchPending;
     private bool _startedOnTemplate;
 
     private string _projectName = string.Empty;
@@ -224,6 +232,8 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
 
     internal bool IsWindows => _context.IsWindows;
 
+    internal bool IsMacOS => _context.IsMacOS;
+
     public bool IsAddMode => _context.Mode == NewProjectMode.Add;
 
     public string WindowTitle => IsAddMode ? Localizer.Get("msg.newProject.windowTitleAdd", "Add New Project") : Localizer.Get("msg.newProject.windowTitle", "New Project");
@@ -319,6 +329,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
             if (value is not null && SetField(ref _language, value))
             {
                 ApplyFilter();
+                RememberFilters();
             }
         }
     }
@@ -332,6 +343,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
             if (value is not null && SetField(ref _platform, value))
             {
                 ApplyFilter();
+                RememberFilters();
             }
         }
     }
@@ -345,6 +357,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
             if (value is not null && SetField(ref _projectType, value))
             {
                 ApplyFilter();
+                RememberFilters();
             }
         }
     }
@@ -399,6 +412,12 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
             RebuildLanguages();
             RefreshRecent();
             ApplyFilter();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or OperationCanceledException or System.ComponentModel.Win32Exception)
+        {
+            // The list stays as it was (empty the first time) and says why, rather than "No templates match your search." alone.
+            LoadError = Localizer.Format("msg.newProject.loadFailed", "Couldn't read the templates: {0}", ex.Message);
+            OnPropertyChanged(nameof(IsEmpty));
         }
         finally
         {
@@ -483,6 +502,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         }
 
         var cts = _searchDelay = new CancellationTokenSource();
+        _searchPending = true;
         _ = Task.Delay(SearchDelay, cts.Token).ContinueWith(
             t =>
             {
@@ -502,6 +522,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
     /// </summary>
     internal void ApplyFilter()
     {
+        _searchPending = false;
         var search = _search.Trim();
         var keep = _selectedTemplate?.Id;
         var matches = new List<(ProjectTemplateGroup Group, int Rank)>();
@@ -545,9 +566,22 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
                 _selectedTemplate = again;
                 OnPropertyChanged(nameof(SelectedTemplate));
             }
+            else if (Page == NewProjectPage.Choose && _selectedTemplate is { IsRecent: false })
+            {
+                // The search or a filter hid the chosen template: Next and Enter don't go on with a row nobody sees.
+                SelectedTemplate = null;
+            }
         }
+    }
 
-        _services.History.SetFilters(_language?.Value, _platform?.Value, _projectType?.Value);
+    /// <summary>The search as typed now, without waiting for more typing (Enter in the search box).</summary>
+    internal void ApplyPendingSearch()
+    {
+        if (_searchPending)
+        {
+            _searchDelay?.Cancel();
+            ApplyFilter();
+        }
     }
 
     private bool PassesFilters(ProjectTemplateGroup group) =>
@@ -628,7 +662,11 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         OnPropertyChanged(nameof(SelectedPlatform));
         OnPropertyChanged(nameof(SelectedProjectType));
         ApplyFilter();
+        RememberFilters();
     }
+
+    /// <summary>The filters for the next New Project (a filter changed; the history writes nothing when none did).</summary>
+    private void RememberFilters() => _services.History.SetFilters(_language?.Value, _platform?.Value, _projectType?.Value);
 
     /// <summary>The selected row's group, with its member read from its help when the cache had none.</summary>
     private ProjectTemplateGroup? Group => _selectedTemplate is { } row ? _completed.GetValueOrDefault(row.Id) ?? row.Group : null;
@@ -712,6 +750,11 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
             var prefix = TemplatePacks.Known.FirstOrDefault(p => p.Package == package)?.Prefix;
             SelectedTemplate = Templates.FirstOrDefault(r => prefix is not null && r.Group.Kind == ProjectTemplateKind.DotnetNew && r.Group.ShortName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or OperationCanceledException or System.ComponentModel.Win32Exception)
+        {
+            // Nothing cancels an install but a limit or a CLI that didn't start: the row says so, it doesn't just stop.
+            row.InstallError = Localizer.Format("msg.newProject.installFailed", "Couldn't install {0}: {1}", package, ex is OperationCanceledException ? TimedOut : ex.Message);
+        }
         finally
         {
             row.IsInstalling = false;
@@ -740,6 +783,10 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
                 if (!_solutionNameEdited)
                 {
                     _solutionName = value;
+                }
+
+                if (!_solutionNameEdited || UsesProjectNameForSolution)
+                {
                     OnPropertyChanged(nameof(SolutionName));
                 }
 
@@ -784,6 +831,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
 
                 OnPropertyChanged(nameof(CreatesSolution));
                 OnPropertyChanged(nameof(IsSolutionNameEnabled));
+                OnPropertyChanged(nameof(SolutionName));
                 OnPropertyChanged(nameof(ShowSolutionName));
                 OnPropertyChanged(nameof(ShowSameDirectory));
                 OnPropertyChanged(nameof(ShowTrust));
@@ -801,18 +849,25 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
 
     public bool ShowSolutionName => CreatesSolution;
 
+    /// <summary>
+    /// The solution's name: the project's while Place solution and project in the same directory is checked (the box is
+    /// disabled then and shows the name Create uses), else the one typed, which comes back when the box is unchecked.
+    /// </summary>
     public string SolutionName
     {
-        get => _solutionName;
+        get => UsesProjectNameForSolution ? _projectName : _solutionName;
         set
         {
-            if (SetField(ref _solutionName, value ?? string.Empty))
+            // The disabled box shows the project's name: nothing it sends back replaces the name typed before.
+            if (!UsesProjectNameForSolution && SetField(ref _solutionName, value ?? string.Empty))
             {
                 _solutionNameEdited = _solutionName != _projectName;
                 OnConfigureChanged();
             }
         }
     }
+
+    private bool UsesProjectNameForSolution => _sameDirectory && CreatesSolution && !IsBlankSolution;
 
     /// <summary>The solution name follows the project's with the same directory, and there's none to name when adding.</summary>
     public bool IsSolutionNameEnabled => IsBlankSolution || (CreatesSolution && !_sameDirectory);
@@ -827,6 +882,8 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
             if (SetField(ref _sameDirectory, value))
             {
                 OnPropertyChanged(nameof(IsSolutionNameEnabled));
+                OnPropertyChanged(nameof(SolutionName));
+                OnPropertyChanged(nameof(AspireDescription));
                 OnConfigureChanged();
             }
         }
@@ -1058,9 +1115,18 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
             LocationTrusted = trusted;
             IsValidating = false;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             // A newer check runs.
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException or InvalidOperationException)
+        {
+            // The trust store or the disk couldn't be read: say so, rather than leave Next waiting for a check that ended.
+            if (!token.IsCancellationRequested)
+            {
+                TargetError = Localizer.Format("msg.newProject.folderUnreadable", "Couldn't check the location: {0} Choose another name or location.", ex.Message);
+                IsValidating = false;
+            }
         }
     }
 
@@ -1206,8 +1272,11 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
 
     private void EnterAdditional()
     {
+        // Back and Next again keep the framework chosen on this page; the first time, the remembered or default one.
         var group = Group!;
-        var moniker = group.DefaultFramework(_services.History.Framework(group.Id));
+        var moniker = _framework is { } chosen && group.Frameworks.Any(f => f.Moniker == chosen.Moniker)
+            ? chosen.Moniker
+            : group.DefaultFramework(_services.History.Framework(group.Id));
         _framework = group.Frameworks.FirstOrDefault(f => f.Moniker == moniker);
         OnPropertyChanged(nameof(Frameworks));
         OnPropertyChanged(nameof(ShowFramework));
@@ -1389,8 +1458,18 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
     public bool CanGoBack => !_isCreating && (Page != NewProjectPage.Choose || (_context.FromStartWindow && !IsAddMode));
 
     public string BackToolTip => Page == NewProjectPage.Choose && _context.FromStartWindow
-        ? Localizer.Get("msg.newProject.backToStartWindow", "Back to the start window (Alt+Left)")
-        : Localizer.Get("newProject.backTip", "Back (Alt+Left)");
+        ? Localizer.Format("msg.newProject.backToStartWindow", "Back to the start window ({0})", BackKey)
+        : Localizer.Format("newProject.backTip", "Back ({0})", BackKey);
+
+    public string NextToolTip => Localizer.Format("newProject.nextTip", "Next ({0})", NextKey);
+
+    public string CreateToolTip => Localizer.Format("newProject.createTip", "Create ({0})", NextKey);
+
+    /// <summary>The key that goes back a page: ⌘[ on macOS, where ⌥← moves the caret by word in a text box; else Alt+←.</summary>
+    public string BackKey => IsMacOS ? Localizer.Get("newProject.keyBackMac", "⌘[") : Localizer.Get("newProject.keyAltLeft", "Alt+←");
+
+    /// <summary>The key that goes on (Next, or Create on the last page): ⌘] on macOS; else Alt+→.</summary>
+    public string NextKey => IsMacOS ? Localizer.Get("newProject.keyNextMac", "⌘]") : Localizer.Get("newProject.keyAltRight", "Alt+→");
 
     public bool CanGoNext => !_isCreating && Page switch
     {
@@ -1545,35 +1624,40 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         var cts = _create = new CancellationTokenSource();
         try
         {
-            // The disk checks once more, now: the location may have changed since they ran.
+            // The disk checks once more, now: the location may have changed since they ran (and Aspire's folders count now).
             var error = await Task.Run(() => plan.ValidateTarget(_services.Rules), cts.Token).ConfigureAwait(true);
             if (error is not null)
             {
                 TargetError = error;
+                CreateError = error; // the page with the check may not be this one
                 return;
-            }
-
-            var location = plan.Location!;
-            var trusted = CreatesSolution ? request.TrustLocation || _locationTrusted : _context.WorkspaceTrusted;
-            if (request.TrustLocation)
-            {
-                Directory.CreateDirectory(location);
-                _services.Trust(location);
             }
 
             var progress = new Progress<string>(status => CreateStatus = status);
             var result = await _services.Creator.CreateAsync(plan, progress, cts.Token).ConfigureAwait(true);
+
+            // Trusted only once the files are there: a failed or cancelled Create leaves no trusted folder behind.
+            var trusted = CreatesSolution ? _locationTrusted || (request.TrustLocation && TrustCreatedLocation(plan.Location!)) : _context.WorkspaceTrusted;
             Remember(request, plan);
-            Finish(new NewProjectCompletion(request, plan, result, trusted, IsAddMode || SolutionMode == SolutionMode.AddToSolution ? _context.SolutionFolderId : null));
+            Finish(new NewProjectCompletion(request, plan, result, trusted, IsAddMode || SolutionMode == SolutionMode.AddToSolution ? _context.SolutionFolderId : null)
+            {
+                WorkspacePath = CreatesSolution ? null : _context.WorkspacePath,
+            });
         }
         catch (NewProjectException ex)
         {
             CreateError = Localizer.Format("msg.newProject.createFailed", "Couldn't create the project: {0}", ex.Message);
             _createLog = ex.Log;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
             // Cancel while creating: back to the page, the folders it made removed.
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Not the user's Cancel (a limit ran out) or a disk error: said on the page, with what there is to show.
+            CreateError = Localizer.Format("msg.newProject.createFailed", "Couldn't create the project: {0}", ex is OperationCanceledException ? TimedOut : ex.Message);
+            _createLog = ex.ToString();
         }
         finally
         {
@@ -1582,6 +1666,24 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
             cts.Dispose();
             IsCreating = false;
             RefreshCommands();
+        }
+    }
+
+    /// <summary>A step that stopped without the user's Cancel.</summary>
+    private static string TimedOut => Localizer.Get("msg.newProject.timedOut", "dotnet didn't finish in time and was stopped.");
+
+    /// <summary>Trust this location, once Create has made it; a trust store that can't be written leaves it untrusted.</summary>
+    private bool TrustCreatedLocation(string location)
+    {
+        try
+        {
+            _services.Trust(location);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _services.ShowOutput?.Invoke(Localizer.Format("msg.newProject.trustFailed", "Couldn't trust {0}: {1}", location, ex.Message));
+            return false;
         }
     }
 
@@ -1656,6 +1758,27 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         }
 
         (_validation, _warning, _searchDelay) = (null, null, null);
+    }
+
+    /// <summary>
+    /// The main window, which stays usable behind the wizard, opened another workspace or closed this one: adding to the
+    /// workspace this wizard opened with isn't offered any more, and a wizard that was going to add creates a new solution
+    /// instead. (Add New Project closes instead; a Create that is running finds out in the main window.)
+    /// </summary>
+    internal void OnWorkspaceChanged()
+    {
+        if (IsAddMode || _finished || _isCreating || SolutionChoices.FirstOrDefault(c => c.Mode == SolutionMode.CreateNew) is not { } create)
+        {
+            return;
+        }
+
+        SelectedSolutionChoice = create;
+        foreach (var choice in SolutionChoices.Where(c => c.Mode != SolutionMode.CreateNew).ToList())
+        {
+            SolutionChoices.Remove(choice);
+        }
+
+        OnPropertyChanged(nameof(ShowSolutionChoice));
     }
 
     /// <summary>The window was closed from outside (its close button, the solution closing in add mode).</summary>
