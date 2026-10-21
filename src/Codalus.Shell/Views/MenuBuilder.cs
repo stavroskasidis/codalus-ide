@@ -134,9 +134,10 @@ internal static class MenuBuilder
 
     /// <summary>
     /// A context menu of <paramref name="location"/>'s items, or null when none is visible. <paramref name="commandFor"/>
-    /// makes each entry's command (the editor passes the document and caret).
+    /// makes each entry's command (the editor passes the document and caret); <paramref name="titleFor"/> gives an entry a
+    /// title of the moment (the Windows Forms designer's "Select 'groupBox1'"), or null to keep its own.
     /// </summary>
-    public static ContextMenu? Context(ShellHost shell, string location, Func<string, ICommand>? commandFor = null)
+    public static ContextMenu? Context(ShellHost shell, string location, Func<string, ICommand>? commandFor = null, Func<string, string?>? titleFor = null)
     {
         if (shell.Workbench.Menus.GetItems(location).Count == 0)
         {
@@ -144,7 +145,7 @@ internal static class MenuBuilder
         }
 
         var menu = new ContextMenu();
-        Fill(menu.Items, location, shell, commandFor ?? (c => shell.CommandFor(c)));
+        Fill(menu.Items, location, shell, commandFor ?? (c => shell.CommandFor(c)), titleFor);
         return menu;
     }
 
@@ -181,7 +182,7 @@ internal static class MenuBuilder
         return string.Join('\n', shown);
     }
 
-    private static void Fill(ItemCollection items, string location, ShellHost shell, Func<string, ICommand> commandFor)
+    private static void Fill(ItemCollection items, string location, ShellHost shell, Func<string, ICommand> commandFor, Func<string, string?>? titleFor = null)
     {
         items.Clear();
         string? group = null;
@@ -197,15 +198,19 @@ internal static class MenuBuilder
             {
                 var child = new MenuItem { Header = item.Title };
                 AutomationProperties.SetName(child, item.Title);
-                Fill(child.Items, submenu, shell, commandFor);
+                Fill(child.Items, submenu, shell, commandFor, titleFor);
                 items.Add(child);
                 continue;
             }
 
-            items.Add(Entry(item, shell, commandFor(item.Command)));
+            items.Add(Entry(titleFor?.Invoke(item.Command) is { } title ? item with { Title = title } : item, shell, commandFor(item.Command)));
         }
     }
 
+    /// <summary>
+    /// An entry: its icon, title, shortcut and tooltip. A check entry has no icon, checked or not: the check takes the icon's
+    /// column (ui-guidelines.md's menus; the designer's Lock Controls, D40).
+    /// </summary>
     private static MenuItem Entry(Workbench.Menus.MenuItem item, ShellHost shell, ICommand command)
     {
         var entry = new MenuItem
@@ -213,8 +218,14 @@ internal static class MenuBuilder
             Header = Controls.MenuEntry.Header(item.Title, item.KeyLabel),
             IsEnabled = item.Enabled,
             Command = command,
-            Icon = CommandIcons.Create(item.Command, id => shell.Workbench.ToolWindows.Find(id)?.Icon),
+            Icon = item.IsChecked is null ? CommandIcons.Create(item.Command, id => shell.Workbench.ToolWindows.Find(id)?.Icon) : null,
         };
+        if (item.IsChecked is { } isChecked)
+        {
+            entry.ToggleType = MenuItemToggleType.CheckBox;
+            entry.IsChecked = isChecked;
+        }
+
         AutomationProperties.SetName(entry, item.Title);
         if (item.KeyLabel is { } accelerator)
         {
@@ -285,6 +296,10 @@ internal static class MenuBuilder
 
                 // The native menu can only show single-chord gestures.
                 Gesture = binding is { Chords.Count: 1 } ? KeyMapper.ToGesture(binding.Chords[0]) : null,
+
+                // A check entry (Format → Lock Controls) as macOS draws one.
+                ToggleType = item.IsChecked is null ? MenuItemToggleType.None : MenuItemToggleType.CheckBox,
+                IsChecked = item.IsChecked == true,
             });
         }
     }
