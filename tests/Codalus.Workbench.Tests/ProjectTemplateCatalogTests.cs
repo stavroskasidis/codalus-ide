@@ -361,7 +361,9 @@ public sealed class ProjectTemplateCatalogSdkTests : IDisposable
     {
         Directory.CreateDirectory(_hive);
         var cli = new TemplateService(hive: _hive, workingDirectory: _hive);
-        var catalog = new ProjectTemplateCatalog(cli);
+
+        // A fixed day: the SDKs here may carry .NET 8 and 9 members, whose support ends on 2026-11-10.
+        var catalog = new ProjectTemplateCatalog(cli, today: () => new DateOnly(2026, 10, 21));
         var rows = await catalog.LoadAsync(TestContext.Current.CancellationToken);
         Assert.True(catalog.Source == "cache", $"Read from {catalog.Source}: {catalog.LoadError}");
         Assert.StartsWith(_hive, catalog.CacheFile, StringComparison.Ordinal);
