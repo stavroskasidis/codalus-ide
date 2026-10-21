@@ -316,6 +316,13 @@ public sealed class PluginManager : IAsyncDisposable
                 continue;
             }
 
+            // The IDE's own commands stay its own (ADR 0082): a plugin's menus and keys may run them, not replace them.
+            if (_workbench.Commands.Find(command.Id) is { } existing && existing.Source == ContributionSource.Shell)
+            {
+                PluginLog.AppendLine($"[{plugin.Id}] declares {command.Id}, which Codalus IDE owns; ignored.");
+                continue;
+            }
+
             var descriptor = new CommandDescriptor(command.Id, command.Title, source)
             {
                 Category = command.Category ?? plugin.DisplayName,
@@ -368,6 +375,12 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 if (SettingTypes.Parse(setting.Type) is not { } type)
                 {
+                    continue;
+                }
+
+                if (_workbench.Settings.Find(key) is { } owned && owned.Source == ContributionSource.Shell)
+                {
+                    PluginLog.AppendLine($"[{plugin.Id}] declares the setting {key}, which Codalus IDE owns; ignored.");
                     continue;
                 }
 
