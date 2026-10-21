@@ -32,8 +32,10 @@ public sealed record TemplateExportRequest(
 /// packages and their updates, install and uninstall, and Export Template. It runs the <c>dotnet</c> CLI in a neutral
 /// folder: listing and installing run no workspace code. Instantiating a template into a project is the build host's
 /// (<c>templates/instantiate</c>). With a hive (<c>CODALUS_TEMPLATE_HIVE</c>, tests) the CLI uses its own settings folder.
+/// It is also New Project's CLI (<see cref="ITemplateCli"/>, ADR 0082): listing templates and creating projects run here,
+/// in the same neutral folder, so both use the same SDK.
 /// </summary>
-public sealed partial class TemplateService
+public sealed partial class TemplateService : ITemplateCli
 {
     public const string HiveVariable = "CODALUS_TEMPLATE_HIVE";
 
@@ -53,6 +55,19 @@ public sealed partial class TemplateService
 
     /// <summary>The installed template packages changed (install, uninstall, update, export).</summary>
     public event EventHandler? Changed;
+
+    /// <inheritdoc/>
+    public string? Hive => _hive;
+
+    /// <summary>The folder every command runs in (the shell's state folder): no workspace's <c>global.json</c> applies there.</summary>
+    public string WorkingDirectory => Directory.Exists(_workingDirectory) ? _workingDirectory : Path.GetTempPath();
+
+    /// <inheritdoc/>
+    async Task<CliResult> ITemplateCli.RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
+    {
+        var (exitCode, output) = await RunAsync(args, cancellationToken).ConfigureAwait(false);
+        return new CliResult(exitCode, output);
+    }
 
     // ------------------------------------------------------------------ item templates
 
@@ -388,6 +403,10 @@ public sealed partial class TemplateService
 
     // ------------------------------------------------------------------ the CLI
 
+    /// <summary>
+    /// Runs <c>dotnet &lt;args&gt;</c> in <see cref="WorkingDirectory"/>, in English. The hive goes on <c>dotnet new</c>
+    /// commands only, once: this is its only owner (callers never pass <c>--debug:custom-hive</c>).
+    /// </summary>
     private async Task<(int ExitCode, string Output)> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo(_dotnet())
@@ -396,14 +415,14 @@ public sealed partial class TemplateService
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WorkingDirectory = Directory.Exists(_workingDirectory) ? _workingDirectory : Path.GetTempPath(),
+            WorkingDirectory = WorkingDirectory,
         };
         foreach (var arg in args)
         {
             start.ArgumentList.Add(arg);
         }
 
-        if (_hive is not null)
+        if (_hive is not null && args.Count > 0 && args[0] == "new")
         {
             start.ArgumentList.Add("--debug:custom-hive");
             start.ArgumentList.Add(_hive);

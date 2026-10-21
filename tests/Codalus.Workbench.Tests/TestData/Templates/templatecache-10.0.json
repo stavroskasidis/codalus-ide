@@ -1,0 +1,974 @@
+{
+ "Version": "1.0.0.7",
+ "Locale": "",
+ "TemplateInfo": [
+  {
+   "Parameters": [
+    {
+     "Documentation": "The default name symbol",
+     "Name": "name",
+     "Priority": 3,
+     "Precedence": {
+      "PrecedenceDefinition": 3,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "Company.ConsoleApplication1",
+     "DataType": "string",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "The default name symbol",
+     "DisplayName": null,
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": null,
+     "Name": "language",
+     "Priority": 3,
+     "Precedence": {
+      "PrecedenceDefinition": 3,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "C#",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "C#": {
+       "DisplayName": "",
+       "Description": ""
+      }
+     },
+     "Description": null,
+     "DisplayName": null,
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": null,
+     "Name": "type",
+     "Priority": 3,
+     "Precedence": {
+      "PrecedenceDefinition": 3,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "project",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "project": {
+       "DisplayName": "",
+       "Description": ""
+      }
+     },
+     "Description": null,
+     "DisplayName": null,
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Overrides the target framework",
+     "Name": "TargetFrameworkOverride",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "",
+     "DataType": "string",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "Overrides the target framework",
+     "DisplayName": "Target framework override",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "The target framework for the project.",
+     "Name": "Framework",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "net10.0",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "net10.0": {
+       "DisplayName": ".NET 10.0",
+       "Description": "Target net10.0"
+      }
+     },
+     "Description": "The target framework for the project.",
+     "DisplayName": "Framework",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Sets the LangVersion property in the created project file",
+     "Name": "langVersion",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "",
+     "DataType": "text",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "Sets the LangVersion property in the created project file",
+     "DisplayName": "Language version",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "If specified, skips the automatic restore of the project on create.",
+     "Name": "skipRestore",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "If specified, skips the automatic restore of the project on create.",
+     "DisplayName": "Skip restore",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Whether to generate an explicit Program class and Main method instead of top-level statements.",
+     "Name": "UseProgramMain",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Whether to generate an explicit Program class and Main method instead of top-level statements.",
+     "DisplayName": "Do not use _top-level statements",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Whether to enable the project for publishing as native AOT.",
+     "Name": "NativeAot",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Whether to enable the project for publishing as native AOT.",
+     "DisplayName": "Enable _native AOT publish",
+     "AllowMultipleValues": false
+    }
+   ],
+   "MountPointUri": "{packages}/microsoft.dotnet.common.projecttemplates.10.0.10.0.401.nupkg",
+   "Author": "Microsoft",
+   "Classifications": [
+    "Common",
+    "Console"
+   ],
+   "DefaultName": "ConsoleApp1",
+   "Description": "A project for creating a command-line application that can run on .NET on Windows, Linux and macOS",
+   "Identity": "Microsoft.Common.Console.CSharp.10.0",
+   "GeneratorId": "0c434df7-e2cb-4dee-b216-d7c58c8eb4b3",
+   "GroupIdentity": "Microsoft.Common.Console",
+   "Precedence": 12000,
+   "Name": "Console App",
+   "ShortNameList": [
+    "console"
+   ],
+   "PreferDefaultName": false,
+   "ConfigPlace": "/content/ConsoleApplication-CSharp/.template.config/template.json",
+   "LocaleConfigPlace": null,
+   "HostConfigPlace": "/content/ConsoleApplication-CSharp/.template.config/dotnetcli.host.json",
+   "BaselineInfo": {},
+   "TagsCollection": {
+    "language": "C#",
+    "type": "project"
+   },
+   "HostData": "{\"$schema\":\"http://json.schemastore.org/dotnetcli.host\",\"symbolInfo\":{\"TargetFrameworkOverride\":{\"isHidden\":\"true\",\"longName\":\"target-framework-override\",\"shortName\":\"\"},\"Framework\":{\"longName\":\"framework\"},\"skipRestore\":{\"longName\":\"no-restore\",\"shortName\":\"\"},\"langVersion\":{\"longName\":\"langVersion\",\"shortName\":\"\"},\"UseProgramMain\":{\"longName\":\"use-program-main\",\"shortName\":\"\"},\"NativeAot\":{\"longName\":\"aot\",\"shortName\":\"\"}},\"usageExamples\":[\"\"]}",
+   "PostActions": [
+    "210d431b-a78b-4d2f-b762-4ed3e3ea9025",
+    "84c0da21-51c8-4541-9940-6ca19af04ee6"
+   ],
+   "Constraints": []
+  },
+  {
+   "Parameters": [
+    {
+     "Documentation": "The default name symbol",
+     "Name": "name",
+     "Priority": 3,
+     "Precedence": {
+      "PrecedenceDefinition": 3,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "Company.TestProject1",
+     "DataType": "string",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "The default name symbol",
+     "DisplayName": null,
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": null,
+     "Name": "language",
+     "Priority": 3,
+     "Precedence": {
+      "PrecedenceDefinition": 3,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "C#",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "C#": {
+       "DisplayName": "",
+       "Description": ""
+      }
+     },
+     "Description": null,
+     "DisplayName": null,
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": null,
+     "Name": "type",
+     "Priority": 3,
+     "Precedence": {
+      "PrecedenceDefinition": 3,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "project",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "project": {
+       "DisplayName": "",
+       "Description": ""
+      }
+     },
+     "Description": null,
+     "DisplayName": null,
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Overrides the target framework",
+     "Name": "TargetFrameworkOverride",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "",
+     "DataType": "string",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "Overrides the target framework",
+     "DisplayName": "Target framework override",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "The target framework for the project.",
+     "Name": "Framework",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "net10.0",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "net10.0": {
+       "DisplayName": "",
+       "Description": "Target net10.0"
+      }
+     },
+     "Description": "The target framework for the project.",
+     "DisplayName": "Framework",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Whether or not to enable packaging (via \"dotnet pack\") for the project.",
+     "Name": "EnablePack",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Whether or not to enable packaging (via \"dotnet pack\") for the project.",
+     "DisplayName": "Enable pack",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "If specified, skips the automatic restore of the project on create.",
+     "Name": "skipRestore",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "If specified, skips the automatic restore of the project on create.",
+     "DisplayName": "Skip restore",
+     "AllowMultipleValues": false
+    }
+   ],
+   "MountPointUri": "{packages}/microsoft.dotnet.common.projecttemplates.10.0.10.0.401.nupkg",
+   "Author": "Microsoft",
+   "Classifications": [
+    "Test",
+    "xUnit",
+    "Desktop",
+    "Web"
+   ],
+   "DefaultName": "TestProject1",
+   "Description": "A project that contains xUnit.net tests that can run on .NET on Windows, Linux and macOS",
+   "Identity": "Microsoft.Test.xUnit.CSharp.10.0",
+   "GeneratorId": "0c434df7-e2cb-4dee-b216-d7c58c8eb4b3",
+   "GroupIdentity": "Microsoft.Test.xUnit",
+   "Precedence": 12000,
+   "Name": "xUnit Test Project",
+   "ShortNameList": [
+    "xunit"
+   ],
+   "PreferDefaultName": false,
+   "ConfigPlace": "/content/XUnit-CSharp/.template.config/template.json",
+   "LocaleConfigPlace": null,
+   "HostConfigPlace": "/content/XUnit-CSharp/.template.config/dotnetcli.host.json",
+   "BaselineInfo": {},
+   "TagsCollection": {
+    "language": "C#",
+    "type": "project"
+   },
+   "HostData": "{\"$schema\":\"http://json.schemastore.org/dotnetcli.host\",\"symbolInfo\":{\"TargetFrameworkOverride\":{\"isHidden\":\"true\",\"longName\":\"target-framework-override\",\"shortName\":\"\"},\"Framework\":{\"longName\":\"framework\"},\"EnablePack\":{\"shortName\":\"p\",\"longName\":\"enable-pack\"},\"skipRestore\":{\"longName\":\"no-restore\",\"shortName\":\"\"}},\"usageExamples\":[\"\"]}",
+   "PostActions": [
+    "210d431b-a78b-4d2f-b762-4ed3e3ea9025",
+    "84c0da21-51c8-4541-9940-6ca19af04ee6"
+   ],
+   "Constraints": []
+  },
+  {
+   "Parameters": [
+    {
+     "Documentation": "The default name symbol",
+     "Name": "name",
+     "Priority": 3,
+     "Precedence": {
+      "PrecedenceDefinition": 3,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "BlazorWebCSharp.1",
+     "DataType": "string",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "The default name symbol",
+     "DisplayName": null,
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": null,
+     "Name": "language",
+     "Priority": 3,
+     "Precedence": {
+      "PrecedenceDefinition": 3,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "C#",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "C#": {
+       "DisplayName": "",
+       "Description": ""
+      }
+     },
+     "Description": null,
+     "DisplayName": null,
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": null,
+     "Name": "type",
+     "Priority": 3,
+     "Precedence": {
+      "PrecedenceDefinition": 3,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "project",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "project": {
+       "DisplayName": "",
+       "Description": ""
+      }
+     },
+     "Description": null,
+     "DisplayName": null,
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "The target framework for the project.",
+     "Name": "Framework",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "net10.0",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "net10.0": {
+       "DisplayName": "",
+       "Description": "Target net10.0"
+      }
+     },
+     "Description": "The target framework for the project.",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "The ID to use for secrets (use with Individual auth).",
+     "Name": "UserSecretsId",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "aspnet-BlazorWebCSharp.1-53bc9b9d-9d6a-45d4-8429-2a2761773502",
+     "DataType": "string",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "The ID to use for secrets (use with Individual auth).",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "If specified, skips the automatic restore of the project on create.",
+     "Name": "skipRestore",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "If specified, skips the automatic restore of the project on create.",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Whether to exclude launchSettings.json from the generated template.",
+     "Name": "ExcludeLaunchSettings",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Whether to exclude launchSettings.json from the generated template.",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Port number to use for the HTTP endpoint in launchSettings.json.",
+     "Name": "kestrelHttpPort",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "0",
+     "DataType": "integer",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "Port number to use for the HTTP endpoint in launchSettings.json.",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Port number to use for the HTTPS endpoint in launchSettings.json. This option is only applicable when the parameter no-https is not used (no-https will be ignored if Individual auth is used).",
+     "Name": "kestrelHttpsPort",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "0",
+     "DataType": "integer",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "Port number to use for the HTTPS endpoint in launchSettings.json. This option is only applicable when the parameter no-https is not used (no-https will be ignored if Individual auth is used).",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Port number to use for the IIS Express HTTP endpoint in launchSettings.json.",
+     "Name": "iisHttpPort",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "0",
+     "DataType": "integer",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "Port number to use for the IIS Express HTTP endpoint in launchSettings.json.",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Port number to use for the IIS Express HTTPS endpoint in launchSettings.json. This option is only applicable when the parameter no-https is not used (no-https will be ignored if Individual auth is used).",
+     "Name": "iisHttpsPort",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "0",
+     "DataType": "integer",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": null,
+     "Description": "Port number to use for the IIS Express HTTPS endpoint in launchSettings.json. This option is only applicable when the parameter no-https is not used (no-https will be ignored if Individual auth is used).",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Chooses which interactive render mode to use for interactive components",
+     "Name": "InteractivityPlatform",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "Server",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "None": {
+       "DisplayName": "None",
+       "Description": "No interactivity (static server rendering only)"
+      },
+      "Server": {
+       "DisplayName": "Server",
+       "Description": "Runs on the server"
+      },
+      "WebAssembly": {
+       "DisplayName": "WebAssembly",
+       "Description": "Runs in the browser using WebAssembly"
+      },
+      "Auto": {
+       "DisplayName": "Auto (Server and WebAssembly)",
+       "Description": "Uses Server while downloading WebAssembly assets, then uses WebAssembly"
+      }
+     },
+     "Description": "Chooses which interactive render mode to use for interactive components",
+     "DisplayName": "_Interactive render mode",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Chooses which components will have interactive rendering enabled",
+     "Name": "InteractivityLocation",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 4,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": "(InteractivityPlatform != \"None\")",
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "InteractivePerPage",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "InteractivePerPage": {
+       "DisplayName": "Per page/component",
+       "Description": "Interactivity is applied on a per-page or per-component basis"
+      },
+      "InteractiveGlobal": {
+       "DisplayName": "Global",
+       "Description": "Interactivity is applied at the root level"
+      }
+     },
+     "Description": "Chooses which components will have interactive rendering enabled",
+     "DisplayName": "Interactivity _location",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Configures whether to add sample pages and styling to demonstrate basic usage patterns.",
+     "Name": "IncludeSampleContent",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "true",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Configures whether to add sample pages and styling to demonstrate basic usage patterns.",
+     "DisplayName": "Include _sample pages",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Configures whether to omit sample pages and styling that demonstrate basic usage patterns.",
+     "Name": "Empty",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Configures whether to omit sample pages and styling that demonstrate basic usage patterns.",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "The type of authentication to use",
+     "Name": "auth",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "None",
+     "DataType": "choice",
+     "DefaultIfOptionWithoutValue": null,
+     "Choices": {
+      "None": {
+       "DisplayName": "",
+       "Description": "No authentication"
+      },
+      "Individual": {
+       "DisplayName": "",
+       "Description": "Individual authentication"
+      }
+     },
+     "Description": "The type of authentication to use",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Whether to use LocalDB instead of SQLite. This option only applies if --auth Individual is specified.",
+     "Name": "UseLocalDB",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Whether to use LocalDB instead of SQLite. This option only applies if --auth Individual is specified.",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Configures whether to make every page interactive by applying an interactive render mode at the top level. If false, pages will use static server rendering by default, and can be marked interactive on a per-page or per-component basis.",
+     "Name": "AllInteractive",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 4,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": "(InteractivityPlatform != \"None\")",
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Configures whether to make every page interactive by applying an interactive render mode at the top level. If false, pages will use static server rendering by default, and can be marked interactive on a per-page or per-component basis.",
+     "DisplayName": "_Enable interactive rendering globally throughout the site",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Whether to turn off HTTPS. This option only applies if Individual isn't used for --auth.",
+     "Name": "NoHttps",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Whether to turn off HTTPS. This option only applies if Individual isn't used for --auth.",
+     "DisplayName": "",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Whether to generate an explicit Program class and Main method instead of top-level statements.",
+     "Name": "UseProgramMain",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Whether to generate an explicit Program class and Main method instead of top-level statements.",
+     "DisplayName": "Do not use _top-level statements",
+     "AllowMultipleValues": false
+    },
+    {
+     "Documentation": "Whether to combine the project name with the .dev.localhost TLD in the application URL for local development, e.g. https://myapp.dev.localhost:12345.",
+     "Name": "LocalhostTld",
+     "Priority": 2,
+     "Precedence": {
+      "PrecedenceDefinition": 2,
+      "IsRequiredCondition": null,
+      "IsEnabledCondition": null,
+      "IsRequired": false,
+      "CanBeRequired": false
+     },
+     "Type": "parameter",
+     "IsName": false,
+     "DefaultValue": "false",
+     "DataType": "bool",
+     "DefaultIfOptionWithoutValue": "true",
+     "Choices": null,
+     "Description": "Whether to combine the project name with the .dev.localhost TLD in the application URL for local development, e.g. https://myapp.dev.localhost:12345.",
+     "DisplayName": "Use the .dev.localhost TLD in the application URL",
+     "AllowMultipleValues": false
+    }
+   ],
+   "MountPointUri": "{packages}/microsoft.dotnet.web.projecttemplates.10.0.10.0.12.nupkg",
+   "Author": "Microsoft",
+   "Classifications": [
+    "Web",
+    "Blazor",
+    "WebAssembly"
+   ],
+   "DefaultName": "BlazorApp",
+   "Description": "A project template for creating a Blazor web app that supports both server-side rendering and client interactivity. This template can be used for web apps with rich dynamic user interfaces (UIs).",
+   "Identity": "Microsoft.Web.Blazor.CSharp.10.0",
+   "GeneratorId": "0c434df7-e2cb-4dee-b216-d7c58c8eb4b3",
+   "GroupIdentity": "Microsoft.Web.Blazor",
+   "Precedence": 10000,
+   "Name": "Blazor Web App",
+   "ShortNameList": [
+    "blazor"
+   ],
+   "PreferDefaultName": false,
+   "ConfigPlace": "/content/BlazorWeb-CSharp/.template.config/template.json",
+   "LocaleConfigPlace": null,
+   "HostConfigPlace": "/content/BlazorWeb-CSharp/.template.config/dotnetcli.host.json",
+   "BaselineInfo": {},
+   "TagsCollection": {
+    "language": "C#",
+    "type": "project"
+   },
+   "HostData": "{\"$schema\":\"https://json.schemastore.org/dotnetcli.host\",\"symbolInfo\":{\"skipRestore\":{\"longName\":\"no-restore\",\"shortName\":\"\"},\"InteractivityPlatform\":{\"longName\":\"interactivity\",\"shortName\":\"int\"},\"AllInteractive\":{\"longName\":\"all-interactive\"},\"InteractivityLocation\":{\"isHidden\":true},\"Empty\":{\"longName\":\"empty\"},\"IncludeSampleContent\":{\"isHidden\":true},\"UseLocalDB\":{\"longName\":\"use-local-db\"},\"Framework\":{\"longName\":\"framework\"},\"kestrelHttpPort\":{\"isHidden\":true},\"kestrelHttpsPort\":{\"isHidden\":true},\"iisHttpPort\":{\"isHidden\":true},\"iisHttpsPort\":{\"isHidden\":true},\"ExcludeLaunchSettings\":{\"longName\":\"exclude-launch-settings\",\"shortName\":\"\"},\"UserSecretsId\":{\"isHidden\":true},\"NoHttps\":{\"longName\":\"no-https\",\"shortName\":\"\"},\"UseProgramMain\":{\"longName\":\"use-program-main\",\"shortName\":\"\"},\"LocalhostTld\":{\"longName\":\"localhost-tld\",\"shortName\":\"\"}},\"usageExamples\":[\"-int auto --auth individual --use-local-db\"]}",
+   "PostActions": [
+    "210d431b-a78b-4d2f-b762-4ed3e3ea9025"
+   ],
+   "Constraints": []
+  }
+ ],
+ "MountPointsInfo": {
+  "{packages}/microsoft.dotnet.common.projecttemplates.10.0.10.0.401.nupkg": "2026-10-14T22:56:29.4848633+00:00",
+  "{packages}/microsoft.dotnet.web.projecttemplates.10.0.10.0.12.nupkg": "2026-10-14T22:56:29.5565189+00:00"
+ }
+}

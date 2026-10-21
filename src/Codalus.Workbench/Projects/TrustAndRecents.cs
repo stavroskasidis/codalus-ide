@@ -223,6 +223,7 @@ internal sealed record RecentStateEntry(string Path, DateTimeOffset LastOpened, 
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(TrustState))]
 [JsonSerializable(typeof(RecentState))]
+[JsonSerializable(typeof(NewProjectState))]
 internal sealed partial class StateJsonContext : JsonSerializerContext;
 
 /// <summary>Small JSON state files: unreadable files count as empty, writes are atomic.</summary>

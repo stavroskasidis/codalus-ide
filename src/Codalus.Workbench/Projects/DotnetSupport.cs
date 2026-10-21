@@ -1,11 +1,12 @@
 using System.Globalization;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Workbench.Projects;
 
 /// <summary>
-/// The support lifecycle of .NET versions, for the SDK status (M9, M30): the end-of-support date of each channel,
-/// pinned from Microsoft's release index (<c>releases-index.json</c>). Each new .NET release adds its row
-/// (<c>docs/release/dotnet-upgrade.md</c>).
+/// The support lifecycle of .NET versions, for the SDK status (M9, M30) and New Project's framework labels (ADR 0082):
+/// the end-of-support date of each channel, pinned from Microsoft's release index (<c>releases-index.json</c>). Each new
+/// .NET release adds its row (<c>docs/release/dotnet-upgrade.md</c>).
 /// </summary>
 public static class DotnetSupport
 {
@@ -57,5 +58,53 @@ public static class DotnetSupport
         return end < today
             ? ($"Out of support since {date} (.NET {channel})", true)
             : ($"Supported until {date} (.NET {channel} {kind})", false);
+    }
+
+    /// <summary>
+    /// A target framework as New Project lists it (ADR 0082): <c>net10.0</c> → ".NET 10.0 (Long Term Support)", a
+    /// Standard Term Support or out-of-support channel likewise, a channel whose only templates are prerelease
+    /// (<paramref name="preview"/>) → "(Preview)"; <c>netstandard2.1</c> → ".NET Standard 2.1", <c>net48</c> → ".NET
+    /// Framework 4.8". A channel the table doesn't know yet has no support label.
+    /// </summary>
+    public static string FrameworkLabel(string moniker, bool preview, DateOnly today)
+    {
+        var (kind, version) = FrameworkOrder.Key(moniker);
+        if (kind == 1)
+        {
+            return Localizer.Format("templates.framework.netStandard", ".NET Standard {0}", version.ToString(2));
+        }
+
+        if (kind == 2)
+        {
+            return Localizer.Format("templates.framework.netFramework", ".NET Framework {0}", version.Build > 0 ? version.ToString(3) : version.ToString(2));
+        }
+
+        if (kind != 0)
+        {
+            return moniker;
+        }
+
+        var channel = version.ToString(2);
+        var name = moniker.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase)
+            ? Localizer.Format("templates.framework.netCore", ".NET Core {0}", channel)
+            : Localizer.Format("templates.framework.dotnet", ".NET {0}", channel);
+        if (preview)
+        {
+            return Localizer.Format("templates.framework.preview", "{0} (Preview)", name);
+        }
+
+        if (!s_channels.TryGetValue(channel, out var info))
+        {
+            return name;
+        }
+
+        if (info.EndOfSupport is { } end && end < today)
+        {
+            return Localizer.Format("templates.framework.outOfSupport", "{0} (Out of support)", name);
+        }
+
+        return info.Lts
+            ? Localizer.Format("templates.framework.lts", "{0} (Long Term Support)", name)
+            : Localizer.Format("templates.framework.sts", "{0} (Standard Term Support)", name);
     }
 }
