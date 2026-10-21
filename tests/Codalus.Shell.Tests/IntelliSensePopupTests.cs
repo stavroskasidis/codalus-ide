@@ -789,12 +789,30 @@ public class IntelliSensePopupTests
             return parts.Count > 0 ? string.Join(" < ", parts) : "nothing";
         }
 
-        // The pointer rests on the word until Quick Info opens: its bounds (window coordinates).
-        async Task<Rect> HoverAsync(Point at)
+        // The tool windows can still be arriving when the document has opened: on Windows CI a tree docked at the left moved
+        // the text after the test had read where the word was, and the hover went to the tree. Wait until the text stays
+        // put; every point is also read just before the move that uses it.
+        var placed = view.TranslatePoint(default, f.Window);
+        var still = System.Diagnostics.Stopwatch.StartNew();
+        await ShellFixture.PumpUntil(() =>
+        {
+            var now = view.TranslatePoint(default, f.Window);
+            if (now != placed)
+            {
+                placed = now;
+                still.Restart();
+            }
+
+            return still.Elapsed >= TimeSpan.FromSeconds(1);
+        }, describe: () => $"the text keeps moving: at {placed}");
+
+        // The pointer rests on a document offset's character until Quick Info opens: where it rests and Quick Info's bounds
+        // (window coordinates).
+        async Task<(Point At, Rect QuickInfo)> HoverAsync(int offset)
         {
             Assert.False(editor.IsQuickInfoOpen);
             f.Window.MouseMove(At(word, linesUp: 3)); // from elsewhere: a move to where the pointer is may not count
-            ShellFixture.RenderFrame(f.Window);
+            var at = At(offset);
             f.Window.MouseMove(at);
             await ShellFixture.PumpUntil(() => editor.IsQuickInfoOpen && editor.HoverPopup.Child is { Bounds.Width: > 0 }, describe: () =>
                 $"Quick Info: {editor.QuickInfoTrace}; open {editor.IsQuickInfoOpen}, its size {editor.HoverPopup.Child?.Bounds.Size}; pointer at {at}, over the text {view.IsPointerOver}; "
@@ -802,13 +820,12 @@ public class IntelliSensePopupTests
                 + $"scroll {view.ScrollOffset}; diagnostics {editor.Markers.Segments.Count()}; focus {f.Window.FocusManager?.GetFocusedElement()?.GetType().Name}");
             ShellFixture.Pump();
             var child = editor.HoverPopup.Child!;
-            return new Rect(f.Window.PointToClient(child.PointToScreen(default)), child.Bounds.Size);
+            return (at, new Rect(f.Window.PointToClient(child.PointToScreen(default)), child.Bounds.Size));
         }
 
         // On the way to its far right, across the text above its top edge, past the word: still open (it closed 8 pixels
         // from where it opened).
-        var start = At(word + 10);
-        var quickInfo = await HoverAsync(start);
+        var (start, quickInfo) = await HoverAsync(word + 10);
         Assert.True(quickInfo.Top > start.Y && quickInfo.Width > 300, $"Quick Info at {quickInfo}, opened at {start}");
         var target = new Point(quickInfo.Right - 12, quickInfo.Top + 8);
         var furthest = 0.0;
@@ -843,7 +860,7 @@ public class IntelliSensePopupTests
         Assert.False(editor.IsQuickInfoOpen);
 
         // Along the symbol, away from Quick Info's left edge: open; off the symbol that way: closed.
-        await HoverAsync(start);
+        await HoverAsync(word + 10);
         f.Window.MouseMove(At(word + 1));
         ShellFixture.Pump();
         Assert.True(editor.IsQuickInfoOpen);
@@ -852,7 +869,7 @@ public class IntelliSensePopupTests
         Assert.False(editor.IsQuickInfoOpen);
 
         // Ctrl+wheel zooms the text under it: closed.
-        await HoverAsync(start);
+        (start, _) = await HoverAsync(word + 10);
         f.Window.MouseWheel(start, new Vector(0, 1), Avalonia.Input.RawInputModifiers.Control);
         ShellFixture.Pump();
         Assert.True(editor.Zoom > 1);
@@ -860,8 +877,7 @@ public class IntelliSensePopupTests
         editor.Zoom = 1;
 
         // The wheel scrolls the text under it: closed.
-        start = At(word + 10);
-        await HoverAsync(start);
+        (start, _) = await HoverAsync(word + 10);
         f.Window.MouseWheel(start, new Vector(0, -1));
         await ShellFixture.PumpUntil(() => view.ScrollOffset.Y > 0);
         Assert.False(editor.IsQuickInfoOpen);
