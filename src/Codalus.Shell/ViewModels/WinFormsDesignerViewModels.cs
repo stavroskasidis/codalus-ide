@@ -85,9 +85,6 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     private IWinFormsDesignerHost? _host;
     private WinFormsDesignerTarget? _target;
     private WinFormsReadResult? _read;
-
-    /// <summary>The C# host's last read of the form (tests).</summary>
-    internal WinFormsReadResult? LastRead => _read;
     private DesignerModel? _model;
     private int _expectedVersion = -1;
     private CancellationTokenSource? _reload;
@@ -174,6 +171,9 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     /// <summary>How many controls the host drew again in the last frame because they overlap a sibling (#78; tests and the smoke test).</summary>
     internal int FrameRestacked { get; private set; }
+
+    /// <summary>The C# host's last read of the form (tests).</summary>
+    internal WinFormsReadResult? LastRead => _read;
 
     /// <summary>The surface's components: the root first, then controls (front first, parents before children), then non-visual components.</summary>
     public IReadOnlyList<DesignerComponentView> Components => _components;
@@ -302,10 +302,18 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         _hostFailure = new HostFailure(_shell.Builds.LastBuild?.Number ?? 0, Task.Run(() => WinFormsDesignerService.OutputStamp(target)));
     }
 
-    /// <summary>Reads the model from the code. Code it can't read: the first time, the file opens as code with the reason (as Visual Studio does); later, the designer says so.</summary>
-    private async Task<bool> ReadAsync(bool closeOnProblem)
+    /// <summary>
+    /// Reads the model from the code. Code it can't read: the first time, the file opens as code with the reason (as the
+    /// classic IDE does); later, the designer says so. <paramref name="quiet"/>: the status says nothing while it reads (a
+    /// read again in the background keeps what the status said, such as why the host didn't start).
+    /// </summary>
+    private async Task<bool> ReadAsync(bool closeOnProblem, bool quiet = false)
     {
-        Status = Localizer.Format("msg.winFormsDesigner.reading", "Reading {0}…", System.IO.Path.GetFileName(DesignerPath));
+        if (!quiet)
+        {
+            Status = Localizer.Format("msg.winFormsDesigner.reading", "Reading {0}…", System.IO.Path.GetFileName(DesignerPath));
+        }
+
         var client = await _shell.Languages.ClientAsync(ShellHost.CSharpLanguageId).ConfigureAwait(true)
             ?? throw new PreviewerException(Localizer.Get("msg.winFormsDesigner.noCSharp", "The C# language service isn't available: the designer reads the form through it."));
         var version = _designerCode!.Version;
@@ -399,6 +407,18 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     /// <summary>The designer's newest request for the Toolbox's project items (tests).</summary>
     internal Task ToolboxLoad => _toolboxLoad;
+
+    /// <summary>Waits until what holds or waits for the designer's gate now (a start, a reload, a read again, a change) is done (tests).</summary>
+    internal async Task WhenIdleAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        await _gate.WaitAsync().ConfigureAwait(true);
+        ReleaseGate();
+    }
 
     /// <summary>
     /// Asks the C# host for the project's own controls and components, for the Toolbox: when the designer has started,
@@ -594,25 +614,27 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// Files before the C# host had the project, or before the restore) is read again and loads again on its host. It
     /// never starts a host: a start in progress holds the gate (and then loads the new model), and a start that failed
     /// starts again after the next build (<see cref="ReloadIfOutdatedAsync"/>), so a project that doesn't build isn't
-    /// built again on every load. A complete read returns at once.
+    /// built again on every load. Only a complete read returns at once: a first read still on its way (it holds the
+    /// gate) may have been made before the projects loaded, so it's waited for and read again if it's partial.
     /// </summary>
-    internal Task ReadAgainIfPartialAsync() => _disposed || _read is not { IsPartial: true } ? Task.CompletedTask : ReadAgainCoreAsync();
+    internal Task ReadAgainIfPartialAsync() => _disposed || _read is { IsPartial: false } ? Task.CompletedTask : ReadAgainCoreAsync();
 
     private async Task ReadAgainCoreAsync()
     {
         await _gate.WaitAsync().ConfigureAwait(true);
         try
         {
+            // Nothing read (the first read hasn't started, and will be made with the projects loaded, or it failed), or complete.
             if (_disposed || _designerCode is null || _read is not { IsPartial: true })
             {
                 return;
             }
 
             _shell.WinFormsDesignerLog.AppendLine($"The C# service loaded the projects: reading {System.IO.Path.GetFileName(CodePath)} again (its last read lacked the project's types).");
-            var status = Status;
 
-            // A form that turns out not to be designable says why in the status and stays open.
-            if (!await ReadAsync(closeOnProblem: false).ConfigureAwait(true) || _disposed)
+            // Quietly: without a host (its start failed) the status keeps the failure's reason. A form that turns out not to
+            // be designable says why in the status and stays open.
+            if (!await ReadAsync(closeOnProblem: false, quiet: true).ConfigureAwait(true) || _disposed)
             {
                 return;
             }
@@ -620,11 +642,6 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             if (_host is not null)
             {
                 await LoadFormAsync().ConfigureAwait(true);
-            }
-            else
-            {
-                // No host (its start failed): the failure's reason stays.
-                Status = status;
             }
 
             _ = LoadToolboxAsync();

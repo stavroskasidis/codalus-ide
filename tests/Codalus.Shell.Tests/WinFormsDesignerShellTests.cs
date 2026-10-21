@@ -137,6 +137,53 @@ public sealed class WinFormsDesignerShellTests
             + $"C# {status?.State ?? "not running"} with {status?.Projects ?? 0} project(s); Toolbox: {string.Join(", ", categories)}). Windows Forms Designer log:\n{f.Shell.WinFormsDesignerLog.GetText()}";
     }
 
+    /// <summary>
+    /// Waits until the designer's form was read with all of its project's types and whatever that read loads is done
+    /// (#76): off Windows, a form opened before the restore is read without Windows Forms, then read again and loaded
+    /// again on its host once the C# service has loaded the restored inputs. A test that counts loads counts from here.
+    /// </summary>
+    internal static async Task WhenReadCompleteAsync(ShellFixture f, WinFormsDesignerDocument designer)
+    {
+        await ShellFixture.PumpUntil(() => designer.LastRead is { IsPartial: false }, seconds: 300,
+            () => DescribeToolbox(f, $"a complete read of {Path.GetFileName(designer.CodePath)} (the last one {(designer.LastRead is { } read ? $"partial: {read.IsPartial}" : "not there")})"));
+        await designer.WhenIdleAsync();
+    }
+
+    /// <summary>
+    /// Restores the solution and waits for the C# service to load the restored inputs: loading, then ready, once the
+    /// restore succeeded and the compiler inputs reference Windows Forms (the turn on which a designer's read from before
+    /// the restore is read again, and the Toolbox asks again).
+    /// </summary>
+    private static async Task RestoreAndWaitForReloadAsync(ShellFixture f, Func<string, string> describe)
+    {
+        var reload = 0; // 1: loading with the restored inputs, 2: ready after it
+        void OnStatus(object? sender, (string LanguageId, WorkspaceStatusParams Status) e)
+        {
+            if (e.LanguageId == ShellHost.CSharpLanguageId && f.Shell.Solutions.RestoreState == "succeeded" && f.Shell.Solutions.CompilerInputs.Values.Any(ReferencesWindowsForms))
+            {
+                if (e.Status.State == WorkspaceStates.Loading)
+                {
+                    Interlocked.CompareExchange(ref reload, 1, 0);
+                }
+                else if (e.Status.State == WorkspaceStates.Ready)
+                {
+                    Interlocked.CompareExchange(ref reload, 2, 1);
+                }
+            }
+        }
+
+        f.Shell.Languages.StatusChanged += OnStatus;
+        try
+        {
+            await f.Shell.Solutions.RestoreAsync(null, CancellationToken.None);
+            await ShellFixture.PumpUntil(() => Volatile.Read(ref reload) == 2, seconds: 300, () => describe("the C# service to load the restored inputs (loading, then ready)"));
+        }
+        finally
+        {
+            f.Shell.Languages.StatusChanged -= OnStatus;
+        }
+    }
+
     private static Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, int x, int y)
     {
         using var buffer = frame.Lock();
@@ -208,6 +255,11 @@ public sealed class WinFormsDesignerShellTests
         await ShellFixture.PumpUntil(() => f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType), seconds: 300, () => DescribeToolbox(f));
         Assert.Contains(f.Shell.Toolbox.Categories, c => c.Title == "WinFormsApp Components");
         var buttonItem = f.Shell.Toolbox.Items.First(i => i.Type == "System.Windows.Forms.Button");
+
+        // A form opened before the restore was read without Windows Forms (#76): once restored, it's read again and loads
+        // again on its host. The loads below are counted from there.
+        await WhenReadCompleteAsync(f, designer);
+        var loads = host.Loads;
         f.Shell.Toolbox.Filter = "Combo";
         Assert.All(f.Shell.Toolbox.Items, i => Assert.Contains("Combo", i.Name, StringComparison.Ordinal));
         f.Shell.Toolbox.Filter = string.Empty;
@@ -223,7 +275,7 @@ public sealed class WinFormsDesignerShellTests
         Assert.Contains("        private Button button1;\n", code.Text.Text, StringComparison.Ordinal);
         Assert.True(designer.IsModified);
         Assert.Equal(["button1"], designer.Selection);
-        Assert.Equal(1, host.Loads); // the designer host already shows it: no reload for its own edit
+        Assert.Equal(loads, host.Loads); // the designer host already shows it: no reload for its own edit
 
         // The Properties window follows the designer's selection: Text set there is code.
         f.Shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
@@ -244,10 +296,10 @@ public sealed class WinFormsDesignerShellTests
 
         // Undo: the designer file's own undo stack, and the form loaded again from the code.
         designer.Undo();
-        await ShellFixture.PumpUntil(() => !code.Text.Text.Contains("\"Hello\"", StringComparison.Ordinal) && host.Loads == 2, seconds: 30);
+        await ShellFixture.PumpUntil(() => !code.Text.Text.Contains("\"Hello\"", StringComparison.Ordinal) && host.Loads == loads + 1, seconds: 30);
         Assert.Contains("button1.Text = \"button1\";", code.Text.Text, StringComparison.Ordinal);
         designer.Redo();
-        await ShellFixture.PumpUntil(() => code.Text.Text.Contains("\"Hello\"", StringComparison.Ordinal) && host.Loads == 3, seconds: 30);
+        await ShellFixture.PumpUntil(() => code.Text.Text.Contains("\"Hello\"", StringComparison.Ordinal) && host.Loads == loads + 2, seconds: 30);
 
         // The Events view: the button's events; its action writes the handler in the code file and shows it.
         properties.ShowEvents = true;
@@ -351,33 +403,7 @@ public sealed class WinFormsDesignerShellTests
 
         // The restore brings the reference pack: the design-time build after it references Windows Forms, and the C#
         // service loads it (loading, then ready).
-        var reload = 0; // 1: loading with the restored inputs, 2: ready after it
-        void OnStatus(object? sender, (string LanguageId, WorkspaceStatusParams Status) e)
-        {
-            if (e.LanguageId == ShellHost.CSharpLanguageId && f.Shell.Solutions.RestoreState == "succeeded" && f.Shell.Solutions.CompilerInputs.Values.Any(ReferencesWindowsForms))
-            {
-                if (e.Status.State == WorkspaceStates.Loading)
-                {
-                    Interlocked.CompareExchange(ref reload, 1, 0);
-                }
-                else if (e.Status.State == WorkspaceStates.Ready)
-                {
-                    Interlocked.CompareExchange(ref reload, 2, 1);
-                }
-            }
-        }
-
-        f.Shell.Languages.StatusChanged += OnStatus;
-        try
-        {
-            await f.Shell.Solutions.RestoreAsync(null, CancellationToken.None);
-            await ShellFixture.PumpUntil(() => Volatile.Read(ref reload) == 2, seconds: 300,
-                () => DescribeToolbox(f, "the C# service to load the restored inputs (loading, then ready)"));
-        }
-        finally
-        {
-            f.Shell.Languages.StatusChanged -= OnStatus;
-        }
+        await RestoreAndWaitForReloadAsync(f, waitingFor => DescribeToolbox(f, waitingFor));
 
         await ShellFixture.PumpUntil(() => f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType), seconds: 60, () => DescribeToolbox(f));
         Assert.Contains(f.Shell.Toolbox.Categories, c => c.Title == "WinFormsApp Components");
@@ -460,7 +486,8 @@ public sealed class WinFormsDesignerShellTests
     /// only the designer file, alone in Miscellaneous Files with no base type, so the form "isn't a form": the designer
     /// closed and the code opened. The host now reads it with the code file's part, says the read was partial, and the
     /// designer reads it again on each loading → ready of the C# service (the project arrives before the restore, and
-    /// again after it), holding its gate behind a start still running, without ever starting a host of its own.
+    /// again after it), also when that comes while its first read is still on its way, holding its gate behind a start
+    /// still running, without ever starting a host of its own.
     /// </summary>
     [AvaloniaFact]
     public async Task A_form_opened_before_the_CSharp_service_has_its_project_with_its_code_closed_opens_in_the_designer_and_reads_again_once_loaded()
@@ -484,6 +511,33 @@ public sealed class WinFormsDesignerShellTests
         {
             await f.Shell.OpenSolutionAsync(Path.Combine(folder, "WinFormsApp.slnx"));
             await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 240);
+
+            // The C# service loads (loading, then ready) while the designer's first read is on its way: the read was made
+            // in Miscellaneous Files, so it's read again once it has landed. Sent when the designer says it's reading,
+            // before the C# host's answer.
+            var inFlight = false;
+            void OnDesignerChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+            {
+                if (!inFlight && sender is WinFormsDesignerDocument { LastRead: null } reading && e.PropertyName == nameof(WinFormsDesignerDocument.Status)
+                    && reading.Status.StartsWith("Reading ", StringComparison.Ordinal))
+                {
+                    inFlight = true;
+                    f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Loading, 1, 0));
+                    f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0));
+                }
+            }
+
+            void OnActiveDocument(object? sender, Docking.ShellDocument? document)
+            {
+                if (document is WinFormsDesignerDocument opened)
+                {
+                    opened.PropertyChanged -= OnDesignerChanged;
+                    opened.PropertyChanged += OnDesignerChanged;
+                }
+            }
+
+            f.Shell.Layout.ActiveDocumentChanged += OnActiveDocument;
+
             // The form opens (from Solution Explorer, with its code closed) while the C# host has no project: it reads
             // the designer file from Miscellaneous Files, with the code file's part, and the designer stays.
             var form = Path.Combine(folder, "WinFormsApp", "OrderForm.cs");
@@ -497,66 +551,49 @@ public sealed class WinFormsDesignerShellTests
 
             await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>().SingleOrDefault()?.LastRead is not null && Volatile.Read(ref starts) == 1, seconds: 120,
                 () => Describe("the form read and the designer host starting"));
+            f.Shell.Layout.ActiveDocumentChanged -= OnActiveDocument;
             var designer = Assert.Single(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>());
+            designer.PropertyChanged -= OnDesignerChanged;
+            Assert.True(inFlight, Describe("loading, then ready, sent while the first read was on its way"));
             Assert.Equal(form, designer.CodePath);
             Assert.False(f.Shell.HasEditorFor(form));
             Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("isn't a form", StringComparison.Ordinal));
             Assert.True(designer.LastRead is { IsDesignable: true, IsPartial: true, Project: null, Model.BaseType: "System.Windows.Forms.Form" }, Describe("a partial read"));
             Assert.Equal(0, f.Shell.Languages.Status(ShellHost.CSharpLanguageId)?.Projects ?? 0);
 
-            // The C# service loads (loading, then ready) while the host still starts: the read again waits for the start
-            // (the designer's gate) and loads on that host; no second host.
+            // The C# service loads again while the host still starts. Each read again waits for the start (the designer's
+            // gate) and loads on that host: the first read, then one load for each read again; no second host.
             f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Loading, 1, 0));
             f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0));
             startHeld.SetResult();
             Assert.Null(await opening);
             await ShellFixture.PumpUntil(() => designer.FrameCount > 0, seconds: 120, () => Describe("a frame"));
-            await ShellFixture.PumpUntil(() => hosts.Count == 1 && hosts[0].Loads == 2, seconds: 60, () => Describe("the read again loaded on the first host"));
+            await ShellFixture.PumpUntil(() => hosts.Count == 1 && hosts[0].Loads == 3, seconds: 60, () => Describe("both reads again loaded on the first host"));
+            await designer.WhenIdleAsync();
+            Assert.Equal(3, hosts[0].Loads);
             Assert.Single(hosts);
             Assert.Equal(1, Volatile.Read(ref starts));
             Assert.Equal("System.Windows.Forms.Form", hosts[0].Model!.BaseType);
             Assert.Contains("reading OrderForm.cs again", f.Shell.WinFormsDesignerLog.GetText(), StringComparison.Ordinal);
 
-            // The C# host gets the project (before the restore): the form is read again, now in its project. Off Windows
-            // the compilation still lacks Windows Forms (its reference pack comes with the restore), so it's still partial.
+            // The C# host gets the project (before the restore): the form is read again, now in its project. It's still
+            // partial when the design-time build's compilation lacks Windows Forms (off Windows its reference pack comes
+            // with the restore).
             held = false;
             gate.Release();
             await ShellFixture.PumpUntil(() => designer.LastRead?.Project is { } read && Path.GetFileName(read) == "WinFormsApp.csproj", seconds: 300, () => Describe("a read in the project"));
-            Assert.True(designer.LastRead!.IsPartial == !OperatingSystem.IsWindows(), Describe($"a read that's partial {(OperatingSystem.IsWindows() ? "no more (Windows has the reference pack)" : "still (no Windows Forms before the restore)")}"));
+            var withForms = f.Shell.Solutions.CompilerInputs.Values.Any(ReferencesWindowsForms);
+            Assert.True(designer.LastRead!.IsPartial == !withForms, Describe($"a read that's {(withForms ? "complete (the compilation has Windows Forms)" : "still partial (no Windows Forms before the restore)")}"));
 
-            // The restore: the C# service loads the restored inputs (loading, then ready) and the form is read again,
-            // complete, through the compilation; a complete read isn't read again (on Windows it already was).
+            // The restore: the C# service loads the restored inputs (loading, then ready). A partial read is read again,
+            // complete, through the compilation, and loads again; a complete read isn't read again.
             await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: WorkspaceStates.Ready, Projects: 1 }, seconds: 300, () => Describe("the C# service ready"));
+            await designer.WhenIdleAsync();
             var loads = hosts[0].Loads;
-            var reload = 0; // 1: loading with the restored inputs, 2: ready after it
-            void OnStatus(object? sender, (string LanguageId, WorkspaceStatusParams Status) e)
+            await RestoreAndWaitForReloadAsync(f, Describe);
+            if (withForms)
             {
-                if (e.LanguageId == ShellHost.CSharpLanguageId && f.Shell.Solutions.RestoreState == "succeeded" && f.Shell.Solutions.CompilerInputs.Values.Any(ReferencesWindowsForms))
-                {
-                    if (e.Status.State == WorkspaceStates.Loading)
-                    {
-                        Interlocked.CompareExchange(ref reload, 1, 0);
-                    }
-                    else if (e.Status.State == WorkspaceStates.Ready)
-                    {
-                        Interlocked.CompareExchange(ref reload, 2, 1);
-                    }
-                }
-            }
-
-            f.Shell.Languages.StatusChanged += OnStatus;
-            try
-            {
-                await f.Shell.Solutions.RestoreAsync(null, CancellationToken.None);
-                await ShellFixture.PumpUntil(() => Volatile.Read(ref reload) == 2, seconds: 300, () => Describe("the C# service to load the restored inputs (loading, then ready)"));
-            }
-            finally
-            {
-                f.Shell.Languages.StatusChanged -= OnStatus;
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
+                await designer.WhenIdleAsync();
                 Assert.Equal(loads, hosts[0].Loads);
             }
             else
@@ -568,12 +605,15 @@ public sealed class WinFormsDesignerShellTests
             Assert.Equal(CounterControlType, designer.LastRead!.Model!.Components.Single(c => c.Name == "counterControl").Type);
 
             // Loading, then ready, again: a complete read returns at once, nothing loads.
+            await designer.WhenIdleAsync();
             loads = hosts[0].Loads;
             f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Loading, 1, 0));
             f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0));
-            Assert.Equal(loads, hosts[0].Loads);
             Assert.True(designer.ReadAgainIfPartialAsync().IsCompleted);
             await ShellFixture.PumpUntil(() => f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType), seconds: 60, () => DescribeToolbox(f));
+            await designer.ToolboxLoad;
+            await designer.WhenIdleAsync();
+            Assert.Equal(loads, hosts[0].Loads);
             Assert.Single(hosts);
         }
         finally
@@ -583,6 +623,81 @@ public sealed class WinFormsDesignerShellTests
             {
                 gate.Release();
             }
+        }
+    }
+
+    /// <summary>
+    /// #76: a read again never starts a host and never closes the designer. A designer whose host failed to start is read
+    /// again when the C# service has loaded the projects, keeps the failure's reason and starts nothing (the next build
+    /// starts it, #66); a read again that finds the form no longer designable (its code changed meanwhile) says why and
+    /// the designer stays open, without opening the code.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_form_read_again_starts_no_host_and_stays_open_when_no_longer_designable()
+    {
+        await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.RestoreOnOpenSetting, false, SettingScope.User, CancellationToken.None);
+        var folder = f.CopySample("WindowsDesktop");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        var hosts = new List<FakeWinFormsDesignerHost>();
+        var attempts = 0;
+        const string Failure = "The designer didn't start: copying WinFormsApp.dll failed: The process cannot access the file because it is being used by another process.";
+        UseFakeDesignerHost(f, hosts, starting: () =>
+        {
+            Interlocked.Increment(ref attempts);
+            return Task.FromException(new Codalus.Workbench.Previewer.PreviewerException(Failure));
+        });
+        var gate = f.Shell.Languages.FlushGate;
+        await gate.WaitAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await f.Shell.OpenSolutionAsync(Path.Combine(folder, "WinFormsApp.slnx"));
+            await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 240);
+
+            // The form opens with its code closed while the C# host has no project (a partial read), and its host fails to start.
+            var form = Path.Combine(folder, "WinFormsApp", "OrderForm.cs");
+            Assert.Null(await f.Shell.OpenFileAsync(form));
+            var designer = Assert.Single(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>());
+            await designer.WhenIdleAsync();
+            string Describe(string what) => $"{what}: \"{designer.Status}\", last read {designer.LastRead}, attempts {Volatile.Read(ref attempts)}, hosts {hosts.Count}\n{f.Shell.WinFormsDesignerLog.GetText()}";
+            Assert.True(designer.LastRead is { IsDesignable: true, IsPartial: true }, Describe("a partial read"));
+            Assert.Equal(Failure, designer.Status);
+            Assert.Null(designer.Host);
+            Assert.Equal(1, Volatile.Read(ref attempts));
+            var first = designer.LastRead;
+
+            // The C# service loads (loading, then ready): the form is read again, the host isn't started, the reason stays.
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Loading, 1, 0));
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0));
+            Assert.Equal(Failure, designer.Status); // no "Reading…" over the reason while it reads
+            await designer.WhenIdleAsync();
+            Assert.NotSame(first, designer.LastRead);
+            Assert.True(designer.LastRead is { IsDesignable: true, IsPartial: true }, Describe("a partial read again"));
+            Assert.Contains("reading OrderForm.cs again", f.Shell.WinFormsDesignerLog.GetText(), StringComparison.Ordinal);
+            Assert.Equal(Failure, designer.Status);
+            Assert.Null(designer.Host);
+            Assert.Equal(1, Volatile.Read(ref attempts));
+            Assert.Empty(hosts);
+
+            // The code changes on disk (the base is no form now): the next read again says why, and the designer stays open.
+            var code = await File.ReadAllTextAsync(form, TestContext.Current.CancellationToken);
+            Assert.Contains("partial class OrderForm : Form", code, StringComparison.Ordinal);
+            await File.WriteAllTextAsync(form, code.Replace("partial class OrderForm : Form", "partial class OrderForm : System.IO.MemoryStream", StringComparison.Ordinal), TestContext.Current.CancellationToken);
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Loading, 1, 0));
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0));
+            await designer.WhenIdleAsync();
+            Assert.True(designer.LastRead is { Model: null, Problem: not null }, Describe("a read that isn't designable"));
+            Assert.Equal(designer.LastRead!.Problem, designer.Status);
+            Assert.Contains(designer, f.Shell.Layout.Documents);
+            Assert.False(f.Shell.HasEditorFor(form));
+            Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Message == designer.LastRead.Problem);
+            Assert.Null(designer.Host);
+            Assert.Equal(1, Volatile.Read(ref attempts));
+            Assert.Empty(hosts);
+        }
+        finally
+        {
+            gate.Release();
         }
     }
 

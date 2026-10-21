@@ -296,6 +296,8 @@ public sealed class WinFormsDesignerToolboxShellTests
         Assert.Null(await f.Shell.OpenFileAsync(form));
         var designer = Assert.Single(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>());
         await ShellFixture.PumpUntil(() => designer.FrameCount > 0, seconds: 120, () => $"a frame: {designer.Status}\n{f.Shell.WinFormsDesignerLog.GetText()}");
+        // A form opened before the restore is read again and loads again once restored (#76): the loads below come after.
+        await WinFormsDesignerShellTests.WhenReadCompleteAsync(f, designer);
         var host1 = Assert.Single(hosts);
         designer.SetSelection(["placeOrderButton"], notify: true);
 
