@@ -325,6 +325,135 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task Break_all_leaves_out_a_program_still_starting_and_pauses_the_others()
+    {
+        // A program joining the session (a later startup project, or one whose start is made again in its place) isn't
+        // attached yet, and netcoredbg's Break All waits until it is (DebugAdapter.PauseAsync, up to a minute). Waiting
+        // for it held up the next program's pause, and stopped the joining one once attached, after the session may have
+        // gone on.
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var configured = new TaskCompletionSource();
+        var attached = new TaskCompletionSource();
+        var joining = new FakeAdapter([new DapThread(1, "Main Thread")]) { ConfigurationDoneGate = configured.Task, PauseGate = attached.Task };
+        var last = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        await using var compound = new CompoundDebugAdapter(first, "App", independent: true);
+        var log = new List<string>();
+        compound.Log += (_, line) =>
+        {
+            lock (log)
+            {
+                log.Add(line);
+            }
+        };
+        var adding = compound.AddAsync(joining, "Worker", _ => Task.CompletedTask, Ct);
+        await WaitAsync(() => Requested(joining, "configurationDone"));
+        await compound.AddAsync(last, "Api", _ => Task.CompletedTask, Ct);
+
+        await compound.PauseAsync(0, Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct);
+
+        Assert.True(Requested(first, "pause 0"));
+        Assert.True(Requested(last, "pause 0"));
+        Assert.False(Requested(joining, "pause 0"));
+        lock (log)
+        {
+            Assert.Contains("[Worker] Not paused: it's still starting.", log);
+        }
+
+        // Once it joined, Break All pauses it too.
+        configured.SetResult();
+        attached.SetResult();
+        await adding;
+        await compound.PauseAsync(0, Ct);
+        Assert.True(Requested(joining, "pause 0"));
+    }
+
+    [Fact]
+    public async Task Break_all_and_the_threads_leave_out_a_program_whose_attach_goes_on_after_its_configuration()
+    {
+        // A program in the terminal or a console window is attached to only after configurationDone (DebugService's held
+        // launch), and that attach can wait a minute more for netcoredbg (DebugAdapter.AttachAsync). Break All meanwhile
+        // waited for it, then stopped it once attached, after the user may have continued the others.
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var launched = new TaskCompletionSource();
+        var attached = new TaskCompletionSource();
+        var joining = new FakeAdapter([new DapThread(1, "Main Thread")]) { PauseGate = attached.Task };
+        await using var compound = new CompoundDebugAdapter(first, "App", independent: true);
+        var log = new List<string>();
+        compound.Log += (_, line) =>
+        {
+            lock (log)
+            {
+                log.Add(line);
+            }
+        };
+        var adding = compound.AddAsync(joining, "Worker", _ => launched.Task, Ct);
+        await WaitAsync(() => Requested(joining, "configurationDone"));
+
+        await compound.PauseAsync(0, Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct);
+
+        Assert.True(Requested(first, "pause 0"));
+        Assert.False(Requested(joining, "pause 0"));
+        lock (log)
+        {
+            Assert.Contains("[Worker] Not paused: it's still starting.", log);
+        }
+
+        Assert.Equal([new DapThread(M, "App: Main Thread")], await compound.ThreadsAsync(Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct));
+        Assert.False(Requested(joining, "threads"));
+
+        // Once its attach is answered, it has joined: Break All pauses it too.
+        launched.SetResult();
+        attached.SetResult();
+        await adding;
+        await compound.PauseAsync(0, Ct);
+        Assert.True(Requested(joining, "pause 0"));
+    }
+
+    [Fact]
+    public async Task Break_all_waits_for_the_first_program_to_be_attached_to()
+    {
+        // The first program starts with the session, and no other program has joined yet: as in a session of one program,
+        // Break All waits until netcoredbg has attached to it (DebugAdapter.PauseAsync, up to a minute), then stops it.
+        var attached = new TaskCompletionSource();
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]) { PauseGate = attached.Task };
+        await using var compound = new CompoundDebugAdapter(first, "App", independent: true);
+
+        var pausing = compound.PauseAsync(0, Ct);
+        await Task.Delay(100, Ct);
+        Assert.False(pausing.IsCompleted);
+
+        attached.SetResult();
+        await pausing.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        Assert.True(Requested(first, "pause 0"));
+    }
+
+    [Fact]
+    public async Task Break_all_goes_on_past_a_program_whose_adapter_ended_meanwhile()
+    {
+        // A program ending as Break All reaches it: its adapter's connection closes before the session sees it end.
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]) { PauseError = new DapConnectionLostException("The debug adapter ended.") };
+        var second = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        await using var compound = new CompoundDebugAdapter(first, "App", independent: true);
+        var log = new List<string>();
+        compound.Log += (_, line) =>
+        {
+            lock (log)
+            {
+                log.Add(line);
+            }
+        };
+        await compound.AddAsync(second, "Worker", _ => Task.CompletedTask, Ct);
+
+        await compound.PauseAsync(0, Ct);
+
+        Assert.True(Requested(second, "pause 0"));
+        lock (log)
+        {
+            Assert.Contains("[App] Pause failed: The debug adapter ended.", log);
+        }
+    }
+
+    [Fact]
     public async Task A_start_made_again_keeps_the_programs_place_and_drops_the_abandoned_attempt()
     {
         var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
@@ -399,6 +528,12 @@ public sealed class CompoundDebugAdapterTests
         /// <summary><c>configurationDone</c> fails with this message (netcoredbg didn't see the runtime start in time).</summary>
         public string? ConfigurationDoneError { get; init; }
 
+        /// <summary>A pause answers once this completes (netcoredbg's Break All waits until it has attached).</summary>
+        public Task PauseGate { get; init; } = Task.CompletedTask;
+
+        /// <summary>A pause fails with this.</summary>
+        public Exception? PauseError { get; init; }
+
         public int[] LastBreakpointIds { get; private set; } = [];
 
         public bool Disposed { get; private set; }
@@ -458,7 +593,16 @@ public sealed class CompoundDebugAdapterTests
 
         public Task StepOutAsync(int threadId, CancellationToken cancellationToken) => Record($"stepOut {threadId}");
 
-        public Task PauseAsync(int threadId, CancellationToken cancellationToken) => Record($"pause {threadId}");
+        public async Task PauseAsync(int threadId, CancellationToken cancellationToken)
+        {
+            await PauseGate.WaitAsync(cancellationToken);
+            if (PauseError is { } error)
+            {
+                throw error;
+            }
+
+            await Record($"pause {threadId}");
+        }
 
         public async Task<DapThread[]> ThreadsAsync(CancellationToken cancellationToken)
         {

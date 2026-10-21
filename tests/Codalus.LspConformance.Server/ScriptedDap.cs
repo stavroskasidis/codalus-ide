@@ -11,7 +11,8 @@ namespace Codalus.LspConformance.Server;
 /// A launch configuration with <c>threads</c> (see <see cref="Threads"/>) is a program that keeps running until a
 /// <c>pause</c>, which stops it on the thread named, as netcoredbg does (Break All tests). Started with netcoredbg's
 /// arguments (<c>--interpreter=vscode</c>), it stands in for netcoredbg: <c>configurationDone</c> without a launch, then
-/// an attach (a program started in the terminal, see <see cref="AttachScript"/>).
+/// an attach (a program started in the terminal, see <see cref="AttachScript"/>); or an attach, then a
+/// <c>configurationDone</c> that runs past netcoredbg's 15 seconds (<see cref="AttachLateAsync"/>).
 /// </summary>
 internal static class ScriptedDap
 {
@@ -20,10 +21,14 @@ internal static class ScriptedDap
     /// <summary>How many requests arrived (<c>runtimeAfter</c> with <c>+request</c>).</summary>
     private static int s_requests;
 
+    /// <summary>The attached program's threads, once a slow attach has the process (<see cref="AttachLateAsync"/>).</summary>
+    private static JsonElement[]? s_attachedThreads;
+
     public static async Task RunAsync(Stream input, Stream output)
     {
         JsonElement? launch = null;
         var configured = false;
+        (int ProcessId, string? RuntimeAfter, bool Slow)? slowAttach = null;
         var evaluations = 0;
         while (await ReadAsync(input) is { } message)
         {
@@ -46,11 +51,31 @@ internal static class ScriptedDap
                 case "launch":
                     launch = message.TryGetProperty("arguments", out var arguments) ? arguments.Clone() : null;
                     break;
+                case "attach" when !configured && AttachScript(message) is { Slow: true } slow:
+                    // As netcoredbg: it only takes the process id, and attaches in configurationDone.
+                    slowAttach = slow;
+                    break;
+                case "configurationDone" when launch is null && slowAttach is { } attaching:
+                    {
+                        // netcoredbg reads no request until it has answered configurationDone, and answers it with its
+                        // command timeout once the attach runs past its fixed 15 seconds; the attach goes on (the packaged
+                        // WinUI app on a loaded Windows runner, PR #97's CI). A request sent meanwhile is read after.
+                        await Task.Delay(1000);
+                        await FailAsync(output, requestSeq, command, "Command execution timed out.");
+                        _ = AttachLateAsync(output, int.Parse(attaching.RuntimeAfter!, System.Globalization.CultureInfo.InvariantCulture));
+                        continue;
+                    }
+
+                case "threads" when slowAttach is not null && Volatile.Read(ref s_attachedThreads) is null:
+                    // As netcoredbg answers before it has handled the process's CreateProcess callback (its
+                    // CheckDebugProcess).
+                    await FailAsync(output, requestSeq, command, "Failed command 'threads' : 0x80004005");
+                    continue;
                 case "configurationDone" when launch is null:
                     // An attach comes next: a program started in the terminal.
                     configured = true;
                     break;
-                case "attach" when configured && AttachScript(message) is { } attach:
+                case "attach" when configured && AttachScript(message) is { Slow: false } attach:
                     {
                         // An attach after configurationDone carries netcoredbg's start, and its 5-second wait for the
                         // runtime: it fails as netcoredbg's does, and the program goes on as the script says.
@@ -74,11 +99,12 @@ internal static class ScriptedDap
                     break;
                 case "configurationDone" when FailsToStart(launch):
                     {
-                        // As netcoredbg answers when the program's runtime didn't report within its 5 seconds. Like
-                        // netcoredbg, it started the program first, as its child, and doesn't end it on disconnect: its id
-                        // is listed next to the starts file.
+                        // As netcoredbg answers when the program's runtime didn't report within its 5 seconds (with
+                        // startTimesOut, when the start ran past its 15 seconds: its command timeout). Like netcoredbg, it
+                        // started the program first, as its child, and doesn't end it on disconnect: its id is listed next
+                        // to the starts file.
                         var program = StartProgram(StartsFile(launch!.Value) + ".programs");
-                        await FailAsync(output, requestSeq, command, "Failed command 'configurationDone' : 0x80004005");
+                        await FailAsync(output, requestSeq, command, Option(launch.Value, "startTimesOut") == "true" ? "Command execution timed out." : "Failed command 'configurationDone' : 0x80004005");
                         _ = AfterTimeoutAsync(output, program, Option(launch.Value, "runtimeAfter"), launch.Value.GetRawText());
                         continue;
                     }
@@ -95,7 +121,7 @@ internal static class ScriptedDap
                 case "threads":
                     body = new JsonObject
                     {
-                        ["threads"] = new JsonArray([.. (Threads(launch) ?? []).Select(t => (JsonNode)new JsonObject { ["id"] = t.GetProperty("id").GetInt32(), ["name"] = t.GetProperty("name").GetString() })]),
+                        ["threads"] = new JsonArray([.. (Threads(launch) ?? Volatile.Read(ref s_attachedThreads) ?? []).Select(t => (JsonNode)new JsonObject { ["id"] = t.GetProperty("id").GetInt32(), ["name"] = t.GetProperty("name").GetString() })]),
                     };
                     break;
                 case "pause":
@@ -116,7 +142,7 @@ internal static class ScriptedDap
                 case "stackTrace":
                     {
                         var id = message.GetProperty("arguments").GetProperty("threadId").GetInt32();
-                        var thread = (Threads(launch) ?? []).FirstOrDefault(t => t.GetProperty("id").GetInt32() == id);
+                        var thread = (Threads(launch) ?? Volatile.Read(ref s_attachedThreads) ?? []).FirstOrDefault(t => t.GetProperty("id").GetInt32() == id);
                         if (thread.ValueKind != JsonValueKind.Object || thread.GetProperty("frames").ValueKind != JsonValueKind.Array)
                         {
                             await FailAsync(output, requestSeq, command, "Failed command 'stackTrace' : 0x80070057");
@@ -163,9 +189,11 @@ internal static class ScriptedDap
     /// <summary>
     /// What an attached process does when netcoredbg's attach times out, as its script says: the file
     /// <c>codalus-scripted-attach-&lt;process id&gt;</c> in the temp folder holds <see cref="AfterTimeoutAsync"/>'s
-    /// <c>runtimeAfter</c> (empty: the program ends before its runtime starts). Without one, the attach works.
+    /// <c>runtimeAfter</c> (empty: the program ends before its runtime starts). Without one, the attach works. With
+    /// <c>slow &lt;milliseconds&gt;</c>, an attach sent before <c>configurationDone</c> runs past netcoredbg's 15 seconds
+    /// there, and its runtime reports that many milliseconds after the timeout (<see cref="AttachLateAsync"/>).
     /// </summary>
-    private static (int ProcessId, string? RuntimeAfter)? AttachScript(JsonElement request)
+    private static (int ProcessId, string? RuntimeAfter, bool Slow)? AttachScript(JsonElement request)
     {
         var processId = request.GetProperty("arguments").GetProperty("processId").GetInt32();
         var script = Path.Combine(Path.GetTempPath(), "codalus-scripted-attach-" + processId.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -175,12 +203,35 @@ internal static class ScriptedDap
         }
 
         var runtimeAfter = File.ReadAllText(script).Trim();
-        return (processId, runtimeAfter.Length == 0 ? null : runtimeAfter);
+        var slow = runtimeAfter.StartsWith("slow ", StringComparison.Ordinal);
+        if (slow)
+        {
+            runtimeAfter = runtimeAfter["slow ".Length..].Trim();
+        }
+
+        return (processId, runtimeAfter.Length == 0 ? null : runtimeAfter, slow);
+    }
+
+    /// <summary>
+    /// A slow attach going on after netcoredbg's command timeout: <paramref name="runtimeAfter"/> milliseconds later the
+    /// runtime reports (netcoredbg sends the attach's thread and module events), and a moment later netcoredbg handles
+    /// the process's CreateProcess callback, which it gets after them. From then on <c>threads</c> answers, with one
+    /// thread in the program's code, and the program runs until a pause.
+    /// </summary>
+    private static async Task AttachLateAsync(Stream output, int runtimeAfter)
+    {
+        await Task.Delay(runtimeAfter);
+        await EventAsync(output, "thread", new JsonObject { ["reason"] = "started", ["threadId"] = 1 });
+        await EventAsync(output, "module", new JsonObject { ["reason"] = "new", ["module"] = new JsonObject { ["id"] = "1", ["name"] = "program.dll" } });
+        await Task.Delay(500);
+        using var threads = JsonDocument.Parse("""[{ "id": 1, "name": "Main Thread", "frames": [{ "name": "App.Program.Main" }] }]""");
+        Volatile.Write(ref s_attachedThreads, [.. threads.RootElement.Clone().EnumerateArray()]);
     }
 
     /// <summary>
     /// A launch configuration with <c>failStarts</c> (a count) and <c>startsFile</c> (a file the adapters share) fails
     /// that many starts, one per adapter process, before one succeeds (the debug service starts again, as after netcoredbg's startup timeout).
+    /// With <c>startTimesOut</c> (true), a failed start is answered with netcoredbg's command timeout instead.
     /// A netcoredbg launch (a debug service's own <c>LaunchArguments</c>) carries the two in its <c>env</c>.
     /// </summary>
     private static bool FailsToStart(JsonElement? launch)
