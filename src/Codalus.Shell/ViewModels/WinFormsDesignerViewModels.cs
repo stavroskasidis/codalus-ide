@@ -732,6 +732,11 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         Problems = render.Errors.Length == 0 ? null : string.Join("\n", render.Errors);
         UpdateTray();
         SurfaceChanged?.Invoke(this, EventArgs.Empty);
+
+        // #67: a change can lock a control or enable a verb (Remove Tab once there's a tab page).
+        _renderVersion++;
+        PublishContext();
+        RefreshVerbs();
     }
 
     private void UpdateTray()
@@ -796,6 +801,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         OnPropertyChanged(nameof(PrimarySelection));
         UpdateTray();
         UpdateMenus();
+        PublishContext();
+        RefreshVerbs();
         SurfaceChanged?.Invoke(this, EventArgs.Empty);
         if (notify)
         {
@@ -850,9 +857,12 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         SetSelection(add ? [.. _selection.Where(s => s != Root?.Name), .. picked] : picked.Count == 0 ? [container] : picked, notify: true);
     }
 
-    /// <summary>The selected controls that can move (not the root, not parts).</summary>
+    /// <summary>
+    /// The selected controls that can move (not the root, not parts, not locked: #67, as the classic IDE's drag and arrow
+    /// keys skip a locked control; the Properties window still sets its Location).
+    /// </summary>
     private List<DesignerComponentView> Movable() =>
-        [.. _selection.Select(Find).OfType<DesignerComponentView>().Where(c => c.IsControl && c != Root && !c.IsPart)];
+        [.. _selection.Select(Find).OfType<DesignerComponentView>().Where(c => c.IsControl && c != Root && !c.IsPart && c.Locked != true)];
 
     private static string Invariant(double value) => Math.Round(value).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -1210,6 +1220,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             return false;
         }
 
+        await EnsureDefaultResourcesAsync(edits).ConfigureAwait(true);
         var result = await client.WinFormsEditAsync(new WinFormsEditParams(new TextDocumentIdentifier(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(DesignerPath)), [.. edits]) { Version = _designerCode.Version, ResourceFiles = HeldResourceFiles() }, CancellationToken.None).ConfigureAwait(true);
         if (result is null || result.Error is { } error)
         {
@@ -1429,6 +1440,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
         s_clipboard = [.. names.Select(n => Describe(model, n, DesignerPath, locals)).OfType<DesignerClipboardEntry>()];
         _shell.StatusBar.ShowMessage(Localizer.Format("msg.winFormsDesigner.copied", "Copied {0} component(s).", s_clipboard.Count), TimeSpan.FromSeconds(3));
+        PublishContext();
     }
 
     /// <summary><c>Controls.Add</c> and the collections' calls (<c>Items.AddRange</c>, <c>ColumnStyles.Add</c>, <c>Images.SetKeyName</c>).</summary>
@@ -1487,8 +1499,9 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     }
 
     /// <summary>
-    /// Paste: the copied components under new names, in the selected container (or the copied ones' parent), a little
-    /// lower and to the right, with their collections, extender properties and data bindings where what they name
+    /// Paste: the copied components under new names, in the nearest container of the primary selection (#67, as the
+    /// classic IDE: a selected container, a selected control's container, a split container's panel; else the form), a
+    /// little lower and to the right, with their collections, extender properties and data bindings where what they name
     /// exists. Their event hookups come too when pasting into the form they were copied from (the handlers are its);
     /// into another form they don't, as Visual Studio does (ADR 0073).
     /// </summary>
@@ -1499,8 +1512,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             return;
         }
 
-        var target = _selection.Select(Find).OfType<DesignerComponentView>().FirstOrDefault(c => c.IsContainer && !c.IsPart);
-        var targetName = target is null || target == Root ? string.Empty : target.Name;
+        var (targetName, targetPath) = PasteTarget();
         var copied = s_clipboard.Select(e => e.Name).ToHashSet(StringComparer.Ordinal);
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         var taken = model.Components.Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
@@ -1562,7 +1574,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
                 Type = entry.Type,
                 CreationArguments = entry.CreationArguments,
                 Parent = parent,
-                ParentPath = topLevel ? null : entry.ParentPath,
+                ParentPath = topLevel ? (entry.Parent is null ? null : targetPath) : entry.ParentPath,
                 Cell = topLevel ? null : entry.Cell,
                 Index = topLevel ? 0 : int.MaxValue,
                 Properties = properties,

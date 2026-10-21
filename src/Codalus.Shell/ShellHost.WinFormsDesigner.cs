@@ -81,8 +81,13 @@ public sealed partial class ShellHost
             if (document is WinFormsDesignerDocument designer)
             {
                 PropertySource = designer;
+                designer.PublishContext(force: true); // its menus' enablement (#67)
                 _ = designer.LoadToolboxAsync(); // the Toolbox has the active designer's project's controls
                 _ = designer.OnActivatedAsync(); // a build made while another tab was active (#66)
+            }
+            else
+            {
+                WinFormsDesignerDocument.ClearContext(this);
             }
 
             Workbench.Context.Set("editorHasWinFormsDesigner", ActiveEditor?.Model.Path is { } path && WinFormsDesignerService.CodeFileOf(path) is { } code && WinFormsDesigner.HasDesigner(code));

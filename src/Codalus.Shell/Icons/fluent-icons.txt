@@ -5,6 +5,12 @@
 add_16_regular
 alert_16_regular
 alert_badge_16_regular
+align_bottom_16_regular
+align_center_horizontal_16_regular
+align_center_vertical_16_regular
+align_left_16_regular
+align_right_16_regular
+align_top_16_regular
 archive_16_regular
 arrow_clockwise_16_regular
 arrow_clockwise_dashes_16_regular
@@ -104,6 +110,7 @@ folder_open_16_regular
 gauge_16_regular
 glasses_16_regular
 globe_16_regular
+grid_16_regular
 history_16_regular
 home_16_regular
 image_16_regular
@@ -120,6 +127,7 @@ link_add_16_regular
 link_multiple_16_regular
 list_16_regular
 list_bar_tree_16_regular
+lock_closed_16_filled
 lock_closed_16_regular
 lock_open_16_regular
 merge_16_regular
@@ -138,6 +146,8 @@ play_16_filled
 play_16_regular
 plug_connected_16_regular
 plug_disconnected_16_regular
+position_to_back_20_regular
+position_to_front_20_regular
 preview_link_16_regular
 print_16_regular
 puzzle_piece_16_regular

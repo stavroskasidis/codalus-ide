@@ -336,6 +336,20 @@ public static class IconSet
         ["split-down"] = "split_horizontal_16_regular",
         ["close-all"] = "dismiss_square_multiple_16_regular",
         ["layout"] = "layout_column_two_16_regular",
+
+        // The Windows Forms designer's menus (#67, D40): Order, Align (to Grid on the surface's menu too), and a locked
+        // control's lock (filled: the regular lock's outline is 0.6 px at the adorner's 10 px). 1.1.344 has no 16 px
+        // position icons: the 20 px ones are drawn at 16 as the shell scales a 20 px design.
+        ["bring-to-front"] = "position_to_front_20_regular",
+        ["send-to-back"] = "position_to_back_20_regular",
+        ["align-grid"] = "grid_16_regular",
+        ["align-left"] = "align_left_16_regular",
+        ["align-center"] = "align_center_vertical_16_regular",
+        ["align-right"] = "align_right_16_regular",
+        ["align-top"] = "align_top_16_regular",
+        ["align-middle"] = "align_center_horizontal_16_regular",
+        ["align-bottom"] = "align_bottom_16_regular",
+        ["locked"] = "lock_closed_16_filled",
         ["document-text"] = "document_text_16_regular",
         ["update"] = "arrow_sync_circle_16_regular",
         ["sparkle"] = "sparkle_16_regular",

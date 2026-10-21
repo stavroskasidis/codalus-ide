@@ -11,12 +11,19 @@ namespace Codalus.Shell;
 /// <summary>
 /// The Windows Forms designer (M41a and M41b, ADR 0073): the Toolbox, View Code and View Designer, their keys and menus,
 /// the setting that opens forms in the designer, the Format menu (Align, Make Same Size, spacing, Center in Form,
-/// Order), Tab Order, the smart tag, and the surface's context menu.
+/// Order, Lock Controls), Tab Order, the smart tag, and the context menus of the surface and the component tray as the
+/// classic IDE has them (#67), with its command set's enablement.
 /// </summary>
 internal static partial class BuiltIns
 {
-    /// <summary>The designer surface's context menu (M41b).</summary>
+    /// <summary>The designer surface's context menu (M41b; the classic IDE's since #67).</summary>
     public const string WinFormsSurfaceMenu = "winforms/surface";
+
+    /// <summary>A component tray item's context menu (#67).</summary>
+    public const string WinFormsTrayMenu = "winforms/tray";
+
+    /// <summary>The component tray's own context menu, on its background (#67).</summary>
+    public const string WinFormsTrayBackgroundMenu = "winforms/trayBackground";
 
     private const string InDesigner = "activeDocumentKind == winformsDesigner";
 
@@ -60,23 +67,30 @@ internal static partial class BuiltIns
         Add("winforms.viewCode", "View Code", () => shell.ViewWinFormsCodeAsync(), "activeDocumentKind == winformsDesigner");
         Add("winforms.viewDesigner", "View Designer", shell.ViewWinFormsDesignerAsync);
 
-        // M41b: the Format menu, Tab Order and the smart tag, on the active designer.
-        void Designer(string id, string title, Func<WinFormsDesignerDocument, Task> handler) =>
-            Add(id, title, () => shell.Layout.ActiveDocument is WinFormsDesignerDocument designer ? handler(designer) : Task.CompletedTask, InDesigner);
+        // M41b: the Format menu, Tab Order and the smart tag, on the active designer; #67: enabled as the classic IDE's
+        // command set enables them (the context keys of WinFormsDesignerDocument.PublishContext).
+        void Designer(string id, string title, Func<WinFormsDesignerDocument, Task> handler, string? enablement = null) =>
+            Add(id, title, () => shell.Layout.ActiveDocument is WinFormsDesignerDocument designer ? handler(designer) : Task.CompletedTask, enablement is null ? InDesigner : $"{InDesigner} && {enablement}");
         Designer("winforms.tabOrder", "Tab Order", d =>
         {
             d.IsTabOrderMode = !d.IsTabOrderMode;
             return Task.CompletedTask;
         });
-        Designer("winforms.smartTag", "Show Smart Tag", d => d.PrimarySelection is { } selected ? d.OpenActionsAsync(selected) : Task.CompletedTask);
+        Designer("winforms.smartTag", "Show Smart Tag", d => d.PrimarySelection is { } selected ? d.OpenActionsAsync(selected) : Task.CompletedTask, "winFormsSelectionHasActions");
+
+        // The classic IDE's enablement: Lefts…Bottoms and Make Same Size need two or more controls and a primary one
+        // (OnStatusMultiSelectPrimary); to Grid, Size to Grid and Center in Form any control (OnStatusControlsOnlySelection;
+        // Align and Size to Grid stay enabled without a SnapToGrid layout mode, which Codalus doesn't have); spacing two or
+        // more with one parent; Order controls when the form has two components or more. A selection with the form in it
+        // counts as empty, as there.
         foreach (var (id, title, alignment) in s_alignments)
         {
-            Designer("winforms.align." + id, "Align " + title, d => d.AlignAsync(alignment));
+            Designer("winforms.align." + id, "Align " + title, d => d.AlignAsync(alignment), alignment == DesignerAlignment.ToGrid ? "winFormsCanFormat" : "winFormsCanAlign");
         }
 
         foreach (var (id, title, sizing) in s_sizings)
         {
-            Designer("winforms.sameSize." + id, sizing == DesignerSizing.ToGrid ? "Size to Grid" : "Make Same " + title, d => d.MakeSameSizeAsync(sizing));
+            Designer("winforms.sameSize." + id, sizing == DesignerSizing.ToGrid ? "Size to Grid" : "Make Same " + title, d => d.MakeSameSizeAsync(sizing), sizing == DesignerSizing.ToGrid ? "winFormsCanFormat" : "winFormsCanAlign");
         }
 
         foreach (var horizontal in new[] { true, false })
@@ -84,14 +98,32 @@ internal static partial class BuiltIns
             var axis = horizontal ? "Horizontal" : "Vertical";
             foreach (var (id, title, spacing) in s_spacings)
             {
-                Designer($"winforms.{(horizontal ? "h" : "v")}spacing.{id}", $"{axis} Spacing: {title}", d => d.SpacingAsync(horizontal, spacing));
+                Designer($"winforms.{(horizontal ? "h" : "v")}spacing.{id}", $"{axis} Spacing: {title}", d => d.SpacingAsync(horizontal, spacing), "winFormsCanSpace");
             }
         }
 
-        Designer("winforms.center.horizontally", "Center in Form Horizontally", d => d.CenterAsync(horizontal: true));
-        Designer("winforms.center.vertically", "Center in Form Vertically", d => d.CenterAsync(horizontal: false));
-        Designer("winforms.order.front", "Bring to Front", d => d.OrderAsync(front: true));
-        Designer("winforms.order.back", "Send to Back", d => d.OrderAsync(front: false));
+        Designer("winforms.center.horizontally", "Center in Form Horizontally", d => d.CenterAsync(horizontal: true), "winFormsCanFormat");
+        Designer("winforms.center.vertically", "Center in Form Vertically", d => d.CenterAsync(horizontal: false), "winFormsCanFormat");
+        Designer("winforms.order.front", "Bring to Front", d => d.OrderAsync(front: true), "winFormsCanOrder");
+        Designer("winforms.order.back", "Send to Back", d => d.OrderAsync(front: false), "winFormsCanOrder");
+
+        // #67: Lock Controls (controls only, OnStatusLockControls), and the context menus' commands, on the designer's
+        // selection whatever has the keyboard focus (a tray item's menu, the smoke test). The surface keeps its own keys.
+        Designer("winforms.lockControls", "Lock Controls", d => d.LockControlsAsync(), "winFormsControlsOnly");
+        Designer("winforms.cut", "Cut", d => d.CutAsync(), "winFormsCanCopy && winFormsCanDelete");
+        Designer("winforms.copy", "Copy", d =>
+        {
+            d.Copy();
+            return Task.CompletedTask;
+        }, "winFormsCanCopy");
+        Designer("winforms.paste", "Paste", d => d.PasteAsync(), "winFormsCanPaste");
+        Designer("winforms.delete", "Delete", d => d.DeleteSelectionAsync(), "winFormsCanDelete");
+        Designer("winforms.selectParent", "Select Parent", d =>
+        {
+            d.SelectParent();
+            return Task.CompletedTask;
+        }, "winFormsSelectionHasParent");
+        Designer("winforms.lineUpIcons", "Line Up Icons", d => d.LineUpTrayAsync());
     }
 
     private static readonly (string Id, string Title, DesignerAlignment Alignment)[] s_alignments =
@@ -142,6 +174,9 @@ internal static partial class BuiltIns
             Sub(format, Vertical, "_Vertical Spacing", "2-spacing"),
             Sub(format, Center, "_Center in Form", "3-center"),
             Sub(format, Order, "_Order", "4-order"),
+
+            // At the bottom, a check entry, as in the classic IDE.
+            Item(format, "winforms.lockControls", "Lock Controls", "5-lock") with { Checked = WhenClause.Parse("winFormsControlsLocked") },
             Item(Center, "winforms.center.horizontally", "Horizontally"),
             Item(Center, "winforms.center.vertically", "Vertically"),
             Item(Order, "winforms.order.front", "Bring to Front"),
@@ -152,16 +187,42 @@ internal static partial class BuiltIns
         rules.AddRange(s_spacings.Select(a => Item(Horizontal, "winforms.hspacing." + a.Id, a.Title)));
         rules.AddRange(s_spacings.Select(a => Item(Vertical, "winforms.vspacing." + a.Id, a.Title)));
 
-        // The surface's context menu.
-        // TODO(issue): the classic IDE's context menus and Lock Controls (#67 part 2), with the host tests' Locked and
-        // split-panel checks; their design comes first and waits for the maintainer's approval (roadmap, Deferred work).
-        rules.Add(Item(WinFormsSurfaceMenu, "winforms.smartTag", "Show Smart Tag", "0-tasks"));
-        rules.Add(Item(WinFormsSurfaceMenu, "winforms.order.front", "Bring to Front", "1-order"));
-        rules.Add(Item(WinFormsSurfaceMenu, "winforms.order.back", "Send to Back", "1-order"));
-        rules.Add(Sub(WinFormsSurfaceMenu, Align, "_Align", "2-layout"));
-        rules.Add(Sub(WinFormsSurfaceMenu, Size, "_Make Same Size", "2-layout"));
-        rules.Add(Item(WinFormsSurfaceMenu, "winforms.tabOrder", "Tab Order", "3-view"));
-        rules.Add(Item(WinFormsSurfaceMenu, "winforms.viewCode", "View Code", "3-view"));
+        // The surface's context menu, the classic IDE's (#67, D40): the component's verbs (added as it opens, in the first
+        // group with Show Smart Tag, the one entry the classic menu doesn't have), View Code, Bring to Front, Send to Back,
+        // Align to Grid, Lock Controls, Select 'parent', the clipboard and Properties, grayed when they don't apply. Align,
+        // Make Same Size and Tab Order are in Format and View only, as there. A tool strip item gets it too.
+        // TODO(issue): a tool strip item's own classic menu (Convert To, Insert, Set Image…, Edit DropDownItems…).
+        MenuItemRule Clipboard(string location, string command, string title, string keys) => Item(location, command, title, "6-clipboard") with { Keys = keys };
+        var hasActions = WhenClause.Parse(InDesigner + " && winFormsSelectionHasActions");
+        foreach (var location in new[] { WinFormsSurfaceMenu, WinFormsTrayMenu })
+        {
+            rules.Add(Item(location, "winforms.smartTag", "Show Smart Tag", "0-verbs") with { When = hasActions });
+            rules.Add(Item(location, "winforms.viewCode", "View Code", "1-code"));
+            if (location == WinFormsSurfaceMenu)
+            {
+                rules.Add(Item(location, "winforms.order.front", "Bring to Front", "2-order"));
+                rules.Add(Item(location, "winforms.order.back", "Send to Back", "2-order"));
+                rules.Add(Item(location, "winforms.align.toGrid", "Align to Grid", "3-grid"));
+                rules.Add(Item(location, "winforms.lockControls", "Lock Controls", "4-lock") with { Checked = WhenClause.Parse("winFormsControlsLocked") });
+                rules.Add(Item(location, "winforms.selectParent", "Select Parent", "5-select") with { When = WhenClause.Parse(InDesigner + " && winFormsSelectionHasParent") });
+            }
+
+            rules.Add(Clipboard(location, "winforms.cut", "Cut", "primary+x"));
+            rules.Add(Clipboard(location, "winforms.copy", "Copy", "primary+c"));
+            rules.Add(Clipboard(location, "winforms.paste", "Paste", "primary+v"));
+            rules.Add(Clipboard(location, "winforms.delete", "Delete", "delete"));
+            if (location == WinFormsTrayMenu)
+            {
+                // The tray keeps Rename (F2, added as it opens) before Line Up Icons; Lock Controls isn't in its menu.
+                rules.Add(Item(location, "winforms.lineUpIcons", "Line Up Icons", "7-tray"));
+            }
+
+            rules.Add(Item(location, "workbench.view.properties", "Properties", "8-properties"));
+        }
+
+        // The tray's background: Paste, then Line Up Icons, in the item menu's group order.
+        rules.Add(Clipboard(WinFormsTrayBackgroundMenu, "winforms.paste", "Paste", "primary+v"));
+        rules.Add(Item(WinFormsTrayBackgroundMenu, "winforms.lineUpIcons", "Line Up Icons", "7-tray"));
         menus.Add(rules);
     }
 }
