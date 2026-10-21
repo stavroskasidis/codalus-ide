@@ -35,7 +35,7 @@ F5 then builds the solution once and starts the projects in that order. Those se
 - the Call Stack, Threads and Debug Location toolbar name each thread after its program (`Partner: Main Thread`);
 - the Processes window lists every program;
 - each program stops at its own breakpoints, and the others keep running;
-- Break All stops every program except one that is still starting, which keeps running;
+- Break All stops every program except a later one that is still starting, which keeps running (Break All waits for the first program to be attached to, as above);
 - the session ends when the last program ends.
 
 The choice is saved with the solution, for you only, in `.codalus/state/` next to it (not in the solution file; see [What a solution reopens with](solutions.md#what-a-solution-reopens-with)).
