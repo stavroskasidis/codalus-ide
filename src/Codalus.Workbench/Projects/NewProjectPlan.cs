@@ -119,6 +119,43 @@ public sealed record NewProjectPlan
 
     public bool CreatesSolution => IsBlankSolution || Request.SolutionMode == SolutionMode.CreateNew;
 
+    /// <summary>Enlist in Aspire orchestration is chosen and the chosen member offers it.</summary>
+    public bool EnlistsInAspire => Request.HostOptions.Aspire && !IsBlankSolution && (Request.Member ?? Request.Group.MemberFor(Request.Framework))?.HostOptions.Aspire == true;
+
+    /// <summary>The name new Aspire projects start with (<c>&lt;name&gt;.AppHost</c>): the request's, else the solution's, else the project's.</summary>
+    public string AspireName => Request.AspireName is { Length: > 0 } name ? name : SolutionName ?? Request.ProjectName.Trim();
+
+    /// <summary>
+    /// Where Enlist in Aspire orchestration's new projects go: the new solution's folder, or the location when adding to
+    /// the open solution or folder. With the solution and the project in the same directory they go beside the project's
+    /// folder, in the location: inside it, the project's default globs would compile the AppHost's and ServiceDefaults'
+    /// code into the project.
+    /// </summary>
+    public string? AspireDirectory => CreatesSolution && Request.SameDirectory ? Location : SolutionDirectory ?? Location;
+
+    /// <summary>The folders of the Aspire projects Create makes: none without Aspire, and none for those the open solution has.</summary>
+    public IReadOnlyList<string> AspireProjectDirectories()
+    {
+        if (!EnlistsInAspire || AspireDirectory is not { } folder)
+        {
+            return [];
+        }
+
+        var existing = Request.ExistingAspire;
+        var folders = new List<string>();
+        if (existing?.ServiceDefaults is null)
+        {
+            folders.Add(Path.Combine(folder, AspireName + ".ServiceDefaults"));
+        }
+
+        if (existing?.AppHost is null)
+        {
+            folders.Add(Path.Combine(folder, AspireName + ".AppHost"));
+        }
+
+        return folders;
+    }
+
     /// <summary>The folders and names of a request (a location that isn't a path leaves them null).</summary>
     public static NewProjectPlan Create(NewProjectRequest request)
     {
@@ -222,21 +259,33 @@ public sealed record NewProjectPlan
         : null;
 
     /// <summary>
-    /// What's wrong with the folders on disk, or null: the project's folder already exists and isn't empty; the new
-    /// solution's file is there already; on Windows without long paths, a file of the template whose path would be
-    /// <see cref="PathRules.MaxPath"/> characters or more. It reads the disk: call it off the UI thread.
+    /// What's wrong with the folders on disk, or null: the project's folder (or an Aspire project's) already exists and
+    /// isn't empty; the new solution's file is there already; a folder can't be read; on Windows without long paths, a
+    /// file of the template whose path would be <see cref="PathRules.MaxPath"/> characters or more. It reads the disk:
+    /// call it off the UI thread.
     /// </summary>
     public string? ValidateTarget(PathRules rules)
     {
-        if (ProjectDirectory is { } project && Directory.Exists(project) && Directory.EnumerateFileSystemEntries(project).Any())
+        try
         {
-            return Localizer.Format("msg.newProject.folderExists", "The folder \"{0}\" already exists. Choose another name or location.", project);
-        }
+            foreach (var folder in new[] { ProjectDirectory }.Concat(AspireProjectDirectories()).OfType<string>())
+            {
+                if (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
+                {
+                    return Localizer.Format("msg.newProject.folderExists", "The folder \"{0}\" already exists. Choose another name or location.", folder);
+                }
+            }
 
-        if (CreatesSolution && SolutionDirectory is { } folder && SolutionName is { Length: > 0 } name
-            && s_solutionExtensions.Select(e => Path.Combine(folder, name + e)).FirstOrDefault(File.Exists) is { } existing)
+            if (CreatesSolution && SolutionDirectory is { } solution && SolutionName is { Length: > 0 } name
+                && s_solutionExtensions.Select(e => Path.Combine(solution, name + e)).FirstOrDefault(File.Exists) is { } existing)
+            {
+                return Localizer.Format("msg.newProject.solutionExists", "The solution \"{0}\" already exists. Choose another name or location.", existing);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
-            return Localizer.Format("msg.newProject.solutionExists", "The solution \"{0}\" already exists. Choose another name or location.", existing);
+            // A folder that exists but can't be read (a denied ACL, a container's root-owned bind mount).
+            return Localizer.Format("msg.newProject.folderUnreadable", "Couldn't check the location: {0} Choose another name or location.", ex.Message);
         }
 
         if (LongestPath(rules) is { } length && length >= PathRules.MaxPath)

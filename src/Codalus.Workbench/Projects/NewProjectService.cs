@@ -115,7 +115,7 @@ public sealed class NewProjectService(ITemplateCli cli, PathRules? rules = null)
         var projects = ProjectFiles(projectDirectory);
         var project = projects.FirstOrDefault(p => string.Equals(Path.GetFileNameWithoutExtension(p), name, StringComparison.OrdinalIgnoreCase)) ?? (projects.Count > 0 ? projects[0] : null)
             ?? throw new NewProjectException(Localizer.Format("msg.newProject.noProjectFile", "The template created {0} but no project file.", projectDirectory), log.ToString());
-        var aspire = request.HostOptions.Aspire && member?.HostOptions.Aspire == true
+        var aspire = plan.EnlistsInAspire
             ? await EnlistInAspireAsync(plan, project, progress, log, created, cancellationToken).ConfigureAwait(false)
             : null;
         return new NewProjectResult(solution, project, [.. projects.Where(p => p != project)], filesToOpen, log.ToString()) { Aspire = aspire };
@@ -130,8 +130,8 @@ public sealed class NewProjectService(ITemplateCli cli, PathRules? rules = null)
     {
         var request = plan.Request;
         var existing = request.ExistingAspire ?? AspireProjects.None;
-        var folder = plan.SolutionDirectory ?? plan.Location!;
-        var name = request.AspireName is { Length: > 0 } aspireName ? aspireName : plan.SolutionName ?? request.ProjectName.Trim();
+        var folder = plan.AspireDirectory!;
+        var name = plan.AspireName;
         if (existing.AppHost is null || existing.ServiceDefaults is null)
         {
             var list = await cli.RunAsync(["new", "list", AspireEnlistment.AppHostTemplate], cancellationToken).ConfigureAwait(false);

@@ -200,5 +200,15 @@ public sealed class AspireEnlistmentIntegrationTests(TemplateHiveFixture hive) :
         Assert.Contains("builder.AddProject<Projects.Store_Admin>(\"store-admin\");", appHost, StringComparison.Ordinal);
         Assert.Contains("builder.AddProject<Projects.Store_Api>(\"store-api\");", appHost, StringComparison.Ordinal);
         Assert.Equal(2, Directory.EnumerateDirectories(Path.Combine(location, "Store")).Count(d => Path.GetFileName(d).StartsWith("Store.App", StringComparison.Ordinal) || Path.GetFileName(d).StartsWith("Store.Service", StringComparison.Ordinal)));
+
+        // Place solution and project in the same directory: the AppHost and ServiceDefaults beside the web project's
+        // folder, none of their code under it (its default globs would compile AppHost.cs and Extensions.cs into it).
+        var same = await service.CreateAsync(NewProjectPlan.Create(request with { ProjectName = "Hello", SameDirectory = true, AspireName = null }), null, TestContext.Current.CancellationToken);
+        Assert.Equal(Path.Combine(location, "Hello"), Path.GetDirectoryName(same.SolutionPath)); // .slnx or .sln, as the SDK makes it
+        Assert.Equal(Path.Combine(location, "Hello.AppHost", "Hello.AppHost.csproj"), same.Aspire!.AppHost);
+        Assert.Equal(Path.Combine(location, "Hello.ServiceDefaults", "Hello.ServiceDefaults.csproj"), same.Aspire.ServiceDefaults);
+        Assert.DoesNotContain(Directory.EnumerateDirectories(Path.Combine(location, "Hello")), d => Path.GetFileName(d).StartsWith("Hello.", StringComparison.Ordinal));
+        Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(location, "Hello"), "*.cs", SearchOption.AllDirectories), f => Path.GetFileName(f) is "AppHost.cs" or "Extensions.cs");
+        Assert.Contains("builder.AddProject<Projects.Hello>(\"hello\");", File.ReadAllText(Path.Combine(location, "Hello.AppHost", "AppHost.cs")), StringComparison.Ordinal);
     }
 }

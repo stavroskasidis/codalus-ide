@@ -129,6 +129,65 @@ public sealed class NewProjectPlanTests : IDisposable
     }
 
     [Fact]
+    public async Task Aspire_projects_go_beside_the_project_with_the_same_directory()
+    {
+        var webapi = await RowAsync("dotnet:Microsoft.Web.WebApi|C#");
+        var request = Request(webapi, "net11.0") with { Location = _root, ProjectName = "Api", SolutionName = "Shop", HostOptions = new HostOptionValues { Aspire = true } };
+
+        // Separate folders: in the solution's folder, next to the project's.
+        var separate = NewProjectPlan.Create(request);
+        Assert.True(separate.EnlistsInAspire);
+        Assert.Equal(Path.Combine(_root, "Shop"), separate.AspireDirectory);
+        Assert.Equal([Path.Combine(_root, "Shop", "Shop.ServiceDefaults"), Path.Combine(_root, "Shop", "Shop.AppHost")], separate.AspireProjectDirectories());
+
+        // The same directory: the solution's folder is the project's, so they go beside it, not inside the web project
+        // (whose default globs would compile AppHost.cs and Extensions.cs into it).
+        var same = NewProjectPlan.Create(request with { SameDirectory = true });
+        Assert.Equal(Path.Combine(_root, "Api"), same.ProjectDirectory);
+        Assert.Equal(_root, same.AspireDirectory);
+        Assert.Equal([Path.Combine(_root, "Api.ServiceDefaults"), Path.Combine(_root, "Api.AppHost")], same.AspireProjectDirectories());
+
+        // Adding: in the location; the solution's own AppHost is reused, so only the ServiceDefaults is new.
+        var add = NewProjectPlan.Create(request with { SolutionMode = SolutionMode.AddToSolution, AspireName = "Shop", ExistingAspire = new AspireProjects(Path.Combine(_root, "Shop.AppHost", "Shop.AppHost.csproj"), null) });
+        Assert.Equal([Path.Combine(_root, "Shop.ServiceDefaults")], add.AspireProjectDirectories());
+
+        // An Aspire project's folder that exists and isn't empty stops Create, like the project's own.
+        Directory.CreateDirectory(Path.Combine(_root, "Api.AppHost"));
+        Assert.Null(same.ValidateTarget(s_linux));
+        File.WriteAllText(Path.Combine(_root, "Api.AppHost", "AppHost.cs"), "// an earlier one");
+        Assert.Equal($"The folder \"{Path.Combine(_root, "Api.AppHost")}\" already exists. Choose another name or location.", same.ValidateTarget(s_linux));
+        Assert.Null(NewProjectPlan.Create(request with { SameDirectory = true, HostOptions = new HostOptionValues() }).ValidateTarget(s_linux)); // without Aspire
+        Assert.Empty(NewProjectPlan.Create(request with { HostOptions = new HostOptionValues() }).AspireProjectDirectories());
+    }
+
+    [Fact]
+    public async Task A_folder_that_cant_be_read_is_an_error_not_an_exception()
+    {
+        var console = await RowAsync("dotnet:Microsoft.Common.Console|C#");
+        var project = Directory.CreateDirectory(Path.Combine(_root, "Sol", "App")).FullName;
+
+        // Root reads any folder, and Windows has no Unix modes: there, nothing here can be denied.
+        if (OperatingSystem.IsWindows() || Environment.UserName == "root")
+        {
+            Assert.Skip("Needs a non-root user on Linux or macOS to deny a folder.");
+        }
+        else
+        {
+            File.SetUnixFileMode(project, UnixFileMode.None);
+            try
+            {
+                var error = NewProjectPlan.Create(Request(console) with { Location = _root, ProjectName = "App", SolutionName = "Sol" }).ValidateTarget(s_linux);
+                Assert.NotNull(error);
+                Assert.StartsWith("Couldn't check the location: ", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                File.SetUnixFileMode(project, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+        }
+    }
+
+    [Fact]
     public void Global_json_warnings()
     {
         var location = Path.Combine(_root, "pinned", "deeper");

@@ -2067,6 +2067,7 @@
   "msg.newProject.createdNotOpened": "Created {0}. It wasn't opened.",
   "msg.newProject.creating": "Creating {0}…",
   "msg.newProject.folderExists": "The folder \"{0}\" already exists. Choose another name or location.",
+  "msg.newProject.folderUnreadable": "Couldn't check the location: {0} Choose another name or location.",
   "msg.newProject.globalJson": "This location's global.json selects .NET SDK {0}, which can't build {1} projects.",
   "msg.newProject.installFailed": "Couldn't install {0}: {1}",
   "msg.newProject.installingAspire": "Installing the Aspire templates…",
