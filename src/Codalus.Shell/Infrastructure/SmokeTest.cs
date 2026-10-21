@@ -2668,10 +2668,25 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(names.Contains(expected), $"the check box's context menu has {expected}: {string.Join(", ", names)}");
         }
 
+        // The list box's verbs as the real host answers, however long a busy machine takes (the menu waits only 300 ms for
+        // them, and opens without them after that): the menu is built again until they're in it, or 30 s pass.
         designer.SetSelection(["historyListBox"], notify: true);
         designer.PrefetchVerbs();
-        var menu = await view.BuildMenuAsync(BuiltIns.WinFormsSurfaceMenu).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
-        names = Names(menu);
+        ContextMenu? menu;
+        var waited = Stopwatch.StartNew();
+        while (true)
+        {
+            await designer.SelectionVerbsAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+            menu = await view.BuildMenuAsync(BuiltIns.WinFormsSurfaceMenu).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+            names = Names(menu);
+            if (names.FirstOrDefault()?.StartsWith("Edit Items", StringComparison.Ordinal) == true || waited.Elapsed > TimeSpan.FromSeconds(30))
+            {
+                break;
+            }
+
+            await Task.Delay(250).ConfigureAwait(true);
+        }
+
         Check(names.FirstOrDefault()?.StartsWith("Edit Items", StringComparison.Ordinal) == true, "the list box's menu starts with its designer's verb: " + string.Join(", ", names));
         Check(names.Contains("Select 'notesSplit.Panel1'"), "the list box's menu selects the split container's panel: " + string.Join(", ", names));
         menu!.Open(view.Surface);
