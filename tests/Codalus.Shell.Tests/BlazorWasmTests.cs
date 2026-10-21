@@ -96,6 +96,62 @@ public sealed class BlazorWasmTests
     }
 
     [AvaloniaFact]
+    public async Task Hot_reload_applies_an_edit_to_the_app_while_it_is_debugged()
+    {
+        // The maintainer's 0.5 request: Hot Reload worked only without the debugger. The dev server runs under dotnet watch
+        // while the page debugs, and the browser's runtime takes the update with the debugging proxy attached (ADR 0040).
+        Assert.SkipWhen(NodeRuntime.Platform is null, "No Node.js build for this platform.");
+        Assert.SkipWhen(Browsers.Find() is null && Environment.GetEnvironmentVariable("CI") != "true", "No Chrome, Edge or Chromium is installed.");
+        Environment.SetEnvironmentVariable(ShellHost.NodeCacheVariable, SharedCache);
+        Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, "1");
+        try
+        {
+            await using var f = ShellFixture.Create();
+            var folder = f.CopySample("BlazorWasm");
+            var settings = Path.Combine(folder, "BlazorWasm", "Properties", "launchSettings.json");
+            await File.WriteAllTextAsync(settings, (await File.ReadAllTextAsync(settings, TestContext.Current.CancellationToken))
+                .Replace("5045", FreePort().ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal), TestContext.Current.CancellationToken);
+            f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+            await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BlazorWasm.slnx"));
+            await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+
+            // Stopped once in the component, so the page has loaded and the proxy is attached; then running again.
+            var counter = Path.Combine(folder, "BlazorWasm", "Pages", "Counter.razor");
+            f.Shell.Debugger.Breakpoints.Toggle(counter, Line(counter, "initialized"));
+            await f.RunAsync("debug.start");
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 600,
+                describe: () => "Debug Console:\n" + f.Shell.DebugLog.GetText());
+            f.Shell.Debugger.Breakpoints.Clear();
+            await f.RunAsync("debug.continue");
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Running);
+            var server = Assert.Single(f.Shell.Runs.Running);
+            Assert.Same(server, f.Shell.HotReloadProgram);
+            Assert.Equal(true, f.Shell.Workbench.Context.GetValue("hotReloadRunning")); // Apply Code Changes (Alt+F10) works while debugging
+
+            // The tick, every half second, now adds 1000: the change runs in the browser, under the debugger.
+            var editor = await f.Shell.OpenFileAsync(counter, preview: false, null);
+            await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+            var offset = editor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
+            editor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+            await f.RunAsync("run.applyCodeChanges");
+            await ShellFixture.PumpUntil(() => server.HotReload!.Applied >= 1, seconds: 120, describe: () => "Run output:\n" + server.Channel?.GetText());
+            await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+            f.Shell.Debugger.Breakpoints.Toggle(counter, Line(counter, "tick"));
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 60);
+            var ticks = int.Parse((await f.Shell.Debugger.EvaluateAsync("ticks", "watch")).Result, System.Globalization.CultureInfo.InvariantCulture);
+            Assert.True(ticks >= 1000, $"ticks is {ticks}: the edit didn't run");
+
+            f.Shell.Debugger.Breakpoints.Clear();
+            await f.Shell.Debugger.StopAsync();
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle && f.Shell.Runs.Running.Count == 0, seconds: 60);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, null);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Hot_reload_applies_a_razor_edit_to_the_page_in_the_browser()
     {
         var browser = Browsers.Find();

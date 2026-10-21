@@ -25,6 +25,9 @@ public sealed partial class ShellHost
     /// <summary>Whether Start Debugging debugs an ASP.NET Core app's page with its server (ADR 0027).</summary>
     public const string JavaScriptDebugSetting = "debug.javaScript";
 
+    /// <summary>Whether a Blazor WebAssembly app's dev server runs under <c>dotnet watch</c> while it's debugged (ADR 0040, 2026-10-20).</summary>
+    public const string DebugHotReloadSetting = "debug.hotReload";
+
     private static readonly TimeSpan s_devServerTimeout = TimeSpan.FromMinutes(2);
 
     /// <summary>How long a server has to log its address before the page opens at the launch profile's.</summary>
@@ -115,7 +118,15 @@ public sealed partial class ShellHost
             return;
         }
 
-        var server = await Runs.StartAsync(project, externalConsole: false, CancellationToken.None, openBrowser: false).ConfigureAwait(true);
+        // Hot Reload while debugging (ADR 0040, 2026-10-20): the components run in the browser's runtime, which takes
+        // dotnet watch's updates with the debugging proxy attached, unlike a program netcoredbg runs.
+        var hotReload = Workbench.Settings.GetBoolean(DebugHotReloadSetting, true) && HotReloadUnsupportedReason(project) is null;
+        var server = await Runs.StartAsync(project, externalConsole: false, CancellationToken.None, hotReload: hotReload, openBrowser: false).ConfigureAwait(true);
+        if (hotReload)
+        {
+            OnHotReloadStarted(server);
+        }
+
         try
         {
             await server.Listening.WaitAsync(s_devServerTimeout).ConfigureAwait(true);
