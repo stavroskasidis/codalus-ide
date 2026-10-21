@@ -99,11 +99,12 @@ internal static class ScriptedDap
                     break;
                 case "configurationDone" when FailsToStart(launch):
                     {
-                        // As netcoredbg answers when the program's runtime didn't report within its 5 seconds. Like
-                        // netcoredbg, it started the program first, as its child, and doesn't end it on disconnect: its id
-                        // is listed next to the starts file.
+                        // As netcoredbg answers when the program's runtime didn't report within its 5 seconds (with
+                        // startTimesOut, when the start ran past its 15 seconds: its command timeout). Like netcoredbg, it
+                        // started the program first, as its child, and doesn't end it on disconnect: its id is listed next
+                        // to the starts file.
                         var program = StartProgram(StartsFile(launch!.Value) + ".programs");
-                        await FailAsync(output, requestSeq, command, "Failed command 'configurationDone' : 0x80004005");
+                        await FailAsync(output, requestSeq, command, Option(launch.Value, "startTimesOut") == "true" ? "Command execution timed out." : "Failed command 'configurationDone' : 0x80004005");
                         _ = AfterTimeoutAsync(output, program, Option(launch.Value, "runtimeAfter"), launch.Value.GetRawText());
                         continue;
                     }
@@ -230,6 +231,7 @@ internal static class ScriptedDap
     /// <summary>
     /// A launch configuration with <c>failStarts</c> (a count) and <c>startsFile</c> (a file the adapters share) fails
     /// that many starts, one per adapter process, before one succeeds (the debug service starts again, as after netcoredbg's startup timeout).
+    /// With <c>startTimesOut</c> (true), a failed start is answered with netcoredbg's command timeout instead.
     /// A netcoredbg launch (a debug service's own <c>LaunchArguments</c>) carries the two in its <c>env</c>.
     /// </summary>
     private static bool FailsToStart(JsonElement? launch)

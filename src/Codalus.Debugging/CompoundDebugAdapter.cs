@@ -13,7 +13,7 @@ namespace Codalus.Debugging;
 /// request goes to the adapter its id came from. Breakpoint ids are this class's own; a breakpoint is bound when any
 /// adapter bound it.</item>
 /// <item>One stop shows at a time. A stop in another adapter while one shows waits, and shows once the shown one
-/// resumes. Pause pauses every adapter, and Continue from a pause continues every paused one.</item>
+/// resumes. Pause pauses every adapter but one still joining, and Continue from a pause continues every paused one.</item>
 /// <item>The session ends when any adapter ends: closing the browser stops the server, as stopping the server closes
 /// the browser.</item>
 /// </list>
@@ -769,7 +769,12 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         ShowNext();
     }
 
-    /// <summary>Pauses <paramref name="threadId"/>'s adapter, or with 0 every running adapter.</summary>
+    /// <summary>
+    /// Pauses <paramref name="threadId"/>'s adapter, or with 0 every running adapter. A program still joining is left
+    /// out, as by <see cref="ThreadsAsync"/>: netcoredbg can't pause it until it has attached, and its Break All waits
+    /// for that (<see cref="DebugAdapter.PauseAsync"/>, up to a minute), which would hold up the next programs' pauses
+    /// and stop it once attached, after the session may have gone on.
+    /// </summary>
     public async Task PauseAsync(int threadId, CancellationToken cancellationToken)
     {
         if (threadId != 0)
@@ -781,12 +786,19 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
         foreach (var part in Parts().Where(p => !p.Stopped))
         {
+            if (part.Starting)
+            {
+                Log?.Invoke(this, $"[{part.Name}] Not paused: it's still starting.");
+                continue;
+            }
+
             try
             {
                 await part.Adapter.PauseAsync(0, cancellationToken).ConfigureAwait(false);
             }
-            catch (DapException ex)
+            catch (Exception ex) when (ex is DapException or DapConnectionLostException)
             {
+                // Its program is ending, or its adapter ended meanwhile: the others still pause.
                 Log?.Invoke(this, $"[{part.Name}] Pause failed: {ex.Message}");
             }
         }

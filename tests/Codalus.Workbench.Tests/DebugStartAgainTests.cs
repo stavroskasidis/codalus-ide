@@ -13,7 +13,8 @@ namespace Codalus.Workbench.Tests;
 /// adapter is the scripted one (<c>Codalus.LspConformance.Server --dap</c>), told to fail its first starts and what the
 /// program does next (<c>runtimeAfter</c>). A program started in the terminal is attached to after
 /// <c>configurationDone</c>, so there it's the <c>attach</c> that netcoredbg fails, and the same holds. So it does when
-/// netcoredbg answers the start with its command timeout (the start ran past its 15 seconds) and goes on starting.
+/// netcoredbg answers the start with its command timeout (the start ran past its 15 seconds) and goes on starting, for
+/// an adapter on this machine; on another, that start fails without starting again.
 /// </summary>
 public sealed class DebugStartAgainTests : IDisposable
 {
@@ -211,12 +212,18 @@ public sealed class DebugStartAgainTests : IDisposable
         return running;
     }
 
-    private JsonElement Launch(int failStarts, string? runtimeAfter = null)
+    /// <param name="timesOut">The failed starts get netcoredbg's command timeout (they ran past its 15 seconds), not its 5-second answer.</param>
+    private JsonElement Launch(int failStarts, string? runtimeAfter = null, bool timesOut = false)
     {
         var launch = new Dictionary<string, object> { ["failStarts"] = failStarts, ["startsFile"] = _starts };
         if (runtimeAfter is not null)
         {
             launch["runtimeAfter"] = runtimeAfter;
+        }
+
+        if (timesOut)
+        {
+            launch["startTimesOut"] = true;
         }
 
         return JsonSerializer.SerializeToElement(launch);
@@ -396,6 +403,30 @@ public sealed class DebugStartAgainTests : IDisposable
         var (ids, running) = LeftPrograms();
         Assert.Equal(DebugService.StartupAttempts, ids.Length);
         Assert.True(running.Count == 0, "still running: " + string.Join(", ", running.Select(p => p.Id)));
+    }
+
+    [Fact]
+    public async Task A_start_on_another_machine_that_netcoredbg_answers_with_its_command_timeout_fails_without_starting_again()
+    {
+        // netcoredbg goes on starting after its command timeout. Here the start waits for a program that still runs; on
+        // another machine (an SSH, container or WSL transport) nothing can, and starting again would leave behind there the
+        // program netcoredbg is still starting, each attempt taking its 15 seconds again. The stand-in is told it's
+        // behind a transport.
+        await using var debug = new DebugService(() => null);
+        var output = new System.Text.StringBuilder();
+        debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
+        var remote = Adapter() with { Transport = "ssh scripted" };
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAdapterAsync("Scripted", remote, Launch(failStarts: 10, timesOut: true), Timeout()));
+
+        Assert.Equal(DebugAdapter.CommandTimeoutMessage, error.Message);
+        Assert.Equal("1", File.ReadAllText(_starts));
+        lock (output)
+        {
+            Assert.DoesNotContain("starting again", output.ToString(), StringComparison.Ordinal);
+        }
+
+        Assert.Equal(DebugState.Idle, debug.State);
     }
 
     /// <summary>
@@ -590,18 +621,25 @@ public sealed class DebugStartAgainTests : IDisposable
     [Fact]
     public void Only_netcoredbgs_startup_timeout_starts_again()
     {
-        Assert.True(DebugService.IsStartupTimeout(new DapException("configurationDone", "Failed command 'configurationDone' : 0x80004005")));
-        Assert.False(DebugService.IsStartupTimeout(new DapException("configurationDone", "Failed command 'configurationDone' : 0x80070057")));
-        Assert.False(DebugService.IsStartupTimeout(new DapException("launch", "Failed command 'launch' : 0x80004005")));
+        // netcoredbg's 5-second answer, here and on another machine.
+        foreach (var local in new[] { true, false })
+        {
+            Assert.True(DebugService.IsStartupTimeout(new DapException("configurationDone", "Failed command 'configurationDone' : 0x80004005"), local));
+            Assert.False(DebugService.IsStartupTimeout(new DapException("configurationDone", "Failed command 'configurationDone' : 0x80070057"), local));
+            Assert.False(DebugService.IsStartupTimeout(new DapException("launch", "Failed command 'launch' : 0x80004005"), local));
 
-        // An attach after configurationDone (a program started in the terminal) carries the start, and the timeout.
-        Assert.True(DebugService.IsStartupTimeout(new DapException("attach", "Failed command 'attach' : 0x80004005")));
-        Assert.False(DebugService.IsStartupTimeout(new DapException("attach", "Failed command 'attach' : 0x80070057")));
+            // An attach after configurationDone (a program started in the terminal) carries the start, and the timeout.
+            Assert.True(DebugService.IsStartupTimeout(new DapException("attach", "Failed command 'attach' : 0x80004005"), local));
+            Assert.False(DebugService.IsStartupTimeout(new DapException("attach", "Failed command 'attach' : 0x80070057"), local));
+        }
 
-        // netcoredbg's command timeout to the request that carries the start (it ran past 15 seconds, and goes on).
-        Assert.True(DebugService.IsStartupTimeout(new DapException("configurationDone", DebugAdapter.CommandTimeoutMessage)));
-        Assert.True(DebugService.IsStartupTimeout(new DapException("attach", DebugAdapter.CommandTimeoutMessage)));
-        Assert.False(DebugService.IsStartupTimeout(new DapException("launch", DebugAdapter.CommandTimeoutMessage)));
-        Assert.False(DebugService.IsStartupTimeout(new DapException("evaluate", DebugAdapter.CommandTimeoutMessage)));
+        // netcoredbg's command timeout to the request that carries the start (it ran past 15 seconds, and goes on), on
+        // this machine only: on another nothing waits for the program, and starting again would leave it behind there.
+        Assert.True(DebugService.IsStartupTimeout(new DapException("configurationDone", DebugAdapter.CommandTimeoutMessage), local: true));
+        Assert.True(DebugService.IsStartupTimeout(new DapException("attach", DebugAdapter.CommandTimeoutMessage), local: true));
+        Assert.False(DebugService.IsStartupTimeout(new DapException("launch", DebugAdapter.CommandTimeoutMessage), local: true));
+        Assert.False(DebugService.IsStartupTimeout(new DapException("evaluate", DebugAdapter.CommandTimeoutMessage), local: true));
+        Assert.False(DebugService.IsStartupTimeout(new DapException("configurationDone", DebugAdapter.CommandTimeoutMessage), local: false));
+        Assert.False(DebugService.IsStartupTimeout(new DapException("attach", DebugAdapter.CommandTimeoutMessage), local: false));
     }
 }

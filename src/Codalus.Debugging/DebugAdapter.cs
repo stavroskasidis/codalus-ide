@@ -327,7 +327,10 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// Windows ICorDebug's attach waits without a limit for the process's loader breakpoint, then netcoredbg waits its 5
     /// seconds for the CreateProcess callback. netcoredbg goes on starting after that answer (its worker finishes a
     /// request before it takes the next), so the program is waited for as after the 5 seconds; ending the session at
-    /// the answer detached from a program that netcoredbg was about to debug.
+    /// the answer detached from a program that netcoredbg was about to debug. When this answer still ends the start (the
+    /// program ended first, or netcoredbg runs on another machine, where nothing waits for it), the start is made again
+    /// only on this machine (<c>DebugService.IsStartupTimeout</c>): on another, the program netcoredbg is still starting
+    /// would be left behind.
     /// </para>
     /// TODO(issue): ask Samsung/netcoredbg for a configurable wait.
     /// </summary>
