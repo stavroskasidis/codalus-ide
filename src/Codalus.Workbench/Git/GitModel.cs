@@ -55,25 +55,39 @@ public sealed record GitBranch(string Name, bool IsRemote, bool IsCurrent, strin
 /// <summary>What <see cref="GitService.UpdateBranchAsync"/> did to a local branch.</summary>
 public enum GitBranchUpdateOutcome
 {
-    /// <summary>Fast-forwarded to its upstream.</summary>
+    /// <summary>Fast-forwarded to its upstream by <see cref="GitBranchUpdate.Behind"/> commits.</summary>
     Updated,
 
-    /// <summary>It already had every commit of its upstream (it may have more): nothing changed.</summary>
+    /// <summary>It and its upstream are at the same commit: nothing changed.</summary>
     UpToDate,
 
-    /// <summary>It and its upstream both have commits the other doesn't, so it can't be fast-forwarded: nothing changed.</summary>
+    /// <summary>It has <see cref="GitBranchUpdate.Ahead"/> commits its upstream doesn't and nothing new from it: nothing to update (Push sends them).</summary>
+    Ahead,
+
+    /// <summary>It and its upstream both have commits the other doesn't (<see cref="GitBranchUpdate.Ahead"/>, <see cref="GitBranchUpdate.Behind"/>), so it can't be fast-forwarded: nothing changed.</summary>
     Diverged,
 
     /// <summary>It has no upstream branch to update from.</summary>
     NoUpstream,
 
-    /// <summary>It's checked out in another worktree (<see cref="GitBranchUpdate.WorktreePath"/>), where it's updated by a pull.</summary>
+    /// <summary>
+    /// It's checked out in another worktree (<see cref="GitBranchUpdate.WorktreePath"/>), where a pull updates it, or a rebase or
+    /// bisect there is working on it (<see cref="GitBranchUpdate.Operation"/>): git wasn't run.
+    /// </summary>
     CheckedOutElsewhere,
+
+    /// <summary>
+    /// A merge or rebase is in progress on it in this worktree, or a rebase or bisect is working on it
+    /// (<see cref="GitBranchUpdate.Operation"/>: <c>merge</c>, <c>rebase</c> or <c>bisect</c>): git wasn't run.
+    /// </summary>
+    OperationInProgress,
 }
 
 /// <summary>
 /// The result of <see cref="GitService.UpdateBranchAsync"/>: <see cref="Upstream"/> is the upstream's short name
-/// (<c>origin/main</c>), <see cref="Before"/> and <see cref="After"/> the branch's commit before and after (full ids).
+/// (<c>origin/main</c>), <see cref="Before"/> and <see cref="After"/> the branch's commit before and after (full ids),
+/// <see cref="Ahead"/> and <see cref="Behind"/> the commits it has that the upstream doesn't and the upstream's it
+/// didn't have (for <see cref="GitBranchUpdateOutcome.Updated"/>, the commits it gained).
 /// </summary>
 public sealed record GitBranchUpdate(string Branch, GitBranchUpdateOutcome Outcome)
 {
@@ -83,8 +97,26 @@ public sealed record GitBranchUpdate(string Branch, GitBranchUpdateOutcome Outco
 
     public string? After { get; init; }
 
+    /// <summary>It's the branch checked out in this worktree.</summary>
+    public bool IsCurrent { get; init; }
+
+    public int Ahead { get; init; }
+
+    public int Behind { get; init; }
+
+    /// <summary>Where it's checked out, for <see cref="GitBranchUpdateOutcome.CheckedOutElsewhere"/> (with the OS's separators).</summary>
     public string? WorktreePath { get; init; }
+
+    /// <summary>The operation that holds it (<c>merge</c>, <c>rebase</c>, <c>bisect</c>), or null.</summary>
+    public string? Operation { get; init; }
 }
+
+/// <summary>
+/// A branch that a rebase or bisect is working on (<see cref="Operation"/>): HEAD is detached while they run, so git
+/// lists no branch as checked out, yet it counts this one as checked out where they run. <see cref="WorktreePath"/> is
+/// that worktree, <see cref="IsThisWorktree"/> whether it's the repository's own.
+/// </summary>
+public sealed record GitBranchOperation(string Branch, string Operation, string? WorktreePath, bool IsThisWorktree);
 
 /// <summary>One line of a hunk: <see cref="Kind"/> is <c>' '</c> (context), <c>'+'</c>, <c>'-'</c> or <c>'\\'</c> (no newline at end of file).</summary>
 public sealed record DiffLine(char Kind, string Text);
