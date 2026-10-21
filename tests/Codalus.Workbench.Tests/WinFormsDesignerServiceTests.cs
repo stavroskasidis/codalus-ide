@@ -285,6 +285,47 @@ public sealed class WinFormsDesignerServiceTests
     }
 
     [Fact]
+    public async Task A_host_process_that_cant_start_fails_with_the_reason_and_leaves_no_copy()
+    {
+        // The output is there (so the copy is made) but the process doesn't start: dotnet missing, or a pipe that
+        // can't be made. The launcher's exception becomes the designer's reason, and the copy goes.
+        var (folder, target) = AppOutput();
+        var root = Path.Combine(folder, "copies");
+        try
+        {
+            foreach (var failure in new Exception[] { new System.ComponentModel.Win32Exception(2, "An error occurred trying to start process 'dotnet'. The system cannot find the file specified."), new IOException("The pipe has been ended.") })
+            {
+                var launcher = new FailingLauncher(failure);
+                var error = await Assert.ThrowsAsync<PreviewerException>(() => WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: launcher, copyRoot: root));
+                Assert.Equal("The designer didn't start: " + failure.Message, error.Message);
+                Assert.Same(failure, error.InnerException);
+                Assert.Equal(1, launcher.Starts);
+                Assert.StartsWith(root, Path.GetDirectoryName(launcher.Started!.WorkingDirectory!)!, StringComparison.Ordinal); // it was started on the copy
+                await AssertNoCopyAsync(root);
+            }
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>A launcher whose process doesn't start.</summary>
+    private sealed class FailingLauncher(Exception failure) : IProcessLauncher
+    {
+        public int Starts { get; private set; }
+
+        public ProcessLaunchInfo? Started { get; private set; }
+
+        public Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
+        {
+            Starts++;
+            Started = launch;
+            return Task.FromException<IHostProcess>(failure);
+        }
+    }
+
+    [Fact]
     public async Task A_host_that_never_becomes_ready_leaves_no_copy()
     {
         var (folder, target) = AppOutput();

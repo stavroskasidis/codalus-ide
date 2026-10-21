@@ -5,7 +5,8 @@ namespace Codalus.Workbench.Tests;
 /// <summary>
 /// #66 on every OS: the copy of a build output a designer host runs on, so a build can replace the original while a form
 /// is open. The files the host needs (deps and runtimeconfig files, the top-level assemblies, runtimes/, satellites)
-/// must copy; others (a database another process holds, a log) are skipped. Paths inside the output map to the copy;
+/// must copy, tried again while they're held; others (a database another process holds, a log) are skipped, and
+/// publish folders and other builds' outputs inside the output aren't copied. Paths inside the output map to the copy;
 /// only the app's own assemblies (its deps file's) make it outdated; copies go when they're deleted or their process
 /// has ended, read-only files included.
 /// </summary>
@@ -81,7 +82,7 @@ public sealed class BuildOutputShadowCopyTests : IDisposable
     }
 
     private BuildOutputShadowCopy Copy(Action<string, string>? copyFile = null, params string[] assemblies) =>
-        BuildOutputShadowCopy.Create([Output], assemblies.Length == 0 ? [App] : assemblies, Root, copyFile, TestContext.Current.CancellationToken);
+        BuildOutputShadowCopy.Create([Output], assemblies.Length == 0 ? [App] : assemblies, Root, copyFile, retryDelay: TimeSpan.Zero, TestContext.Current.CancellationToken);
 
     private string[] Copies() => Directory.Exists(Root) ? [.. Directory.GetDirectories(Root).Select(Path.GetFileName).OfType<string>()] : [];
 
@@ -195,6 +196,104 @@ public sealed class BuildOutputShadowCopyTests : IDisposable
 
             await locked.DeleteAsync();
         }
+    }
+
+    [Fact]
+    public async Task A_file_the_host_needs_is_tried_again_while_its_held()
+    {
+        MakeOutput();
+
+        // Lib.dll is held for a moment (an antivirus scan right after the build): copied on the fourth try; a file the
+        // host doesn't need is tried once and skipped.
+        var tries = new Dictionary<string, int>(StringComparer.Ordinal);
+        void HeldForAMoment(string source, string target)
+        {
+            var name = Path.GetFileName(source);
+            tries[name] = tries.GetValueOrDefault(name) + 1;
+            if ((name == "Lib.dll" && tries[name] < 4) || name == "Database.mdf")
+            {
+                throw new IOException("The process cannot access the file because it is being used by another process.");
+            }
+
+            File.Copy(source, target, overwrite: true);
+        }
+
+        var copy = Copy(HeldForAMoment);
+        Assert.Equal(4, tries["Lib.dll"]);
+        Assert.Equal(1, tries["Database.mdf"]);
+        Assert.Equal(1, tries["App.dll"]);
+        Assert.Equal("lib", await File.ReadAllTextAsync(Path.Combine(copy.Folder, "0", "Lib.dll"), TestContext.Current.CancellationToken));
+        Assert.Equal([OutputFile("Database.mdf")], copy.Skipped);
+        await copy.DeleteAsync();
+
+        // Held for good: MSBuild's Copy's ten tries, then the designer doesn't start, and nothing is left.
+        tries.Clear();
+        var error = Assert.Throws<PreviewerException>(() => Copy((source, target) =>
+        {
+            if (Path.GetFileName(source) == "Lib.dll")
+            {
+                tries["Lib.dll"] = tries.GetValueOrDefault("Lib.dll") + 1;
+                throw new UnauthorizedAccessException("Access to the path is denied.");
+            }
+
+            File.Copy(source, target, overwrite: true);
+        }));
+        Assert.Equal(BuildOutputShadowCopy.CopyAttempts, tries["Lib.dll"]);
+        Assert.Equal(10, BuildOutputShadowCopy.CopyAttempts);
+        Assert.StartsWith("The designer didn't start: copying " + OutputFile("Lib.dll"), error.Message, StringComparison.Ordinal);
+        Assert.Empty(Copies());
+
+        // A start canceled while it waits to try again stops at once.
+        using var cancel = new CancellationTokenSource();
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        Assert.ThrowsAny<OperationCanceledException>(() => BuildOutputShadowCopy.Create([Output], [App], Root, (source, target) =>
+        {
+            if (Path.GetFileName(source) == "Lib.dll")
+            {
+                cancel.Cancel();
+                throw new IOException("The process cannot access the file because it is being used by another process.");
+            }
+
+            File.Copy(source, target, overwrite: true);
+        }, retryDelay: TimeSpan.FromMinutes(5), cancel.Token));
+        Assert.True(started.Elapsed < TimeSpan.FromMinutes(1), $"the canceled copy took {started.Elapsed}");
+        Assert.Empty(Copies());
+    }
+
+    [Fact]
+    public async Task Publish_folders_and_other_builds_outputs_inside_the_output_arent_copied()
+    {
+        MakeOutput();
+
+        // `dotnet publish -r win-x64` in a project with no RuntimeIdentifier: a whole self-contained build in win-x64/
+        // and its publish/ in it; a publish folder deeper down; content folders and the output's own runtimes/ and
+        // culture folders stay.
+        Write("win-x64/App.dll", "rid app");
+        Write("win-x64/App.deps.json", Deps);
+        Write("win-x64/App.runtimeconfig.json", "{}");
+        Write("win-x64/coreclr.dll", "runtime");
+        Write("win-x64/publish/App.dll", "rid published");
+        Write("tools/other/Tool.runtimeconfig.json", "{}");
+        Write("tools/other/Tool.dll", "tool");
+        Write("Assets/publish/old.png", "old");
+        Write("Assets/app.publish/old.png", "old");
+        Write("Assets/logo.png", "logo");
+        Write("runtimes/win-x64/lib/net8.0/Native.Wrapper.dll", "wrapper");
+        Write("de/App.resources.dll", "de");
+
+        var copy = Copy();
+        var app = Path.Combine(copy.Folder, "0");
+        Assert.False(Directory.Exists(Path.Combine(app, "win-x64")), "a RuntimeIdentifier build's output isn't the app the designer runs");
+        Assert.False(Directory.Exists(Path.Combine(app, "tools", "other")), "another program's output isn't the app's");
+        Assert.False(Directory.Exists(Path.Combine(app, "Assets", "publish")), "a publish folder at any depth");
+        Assert.False(Directory.Exists(Path.Combine(app, "Assets", "app.publish")), "a ClickOnce publish folder at any depth");
+        Assert.True(File.Exists(Path.Combine(app, "Assets", "logo.png")));
+        Assert.True(File.Exists(Path.Combine(app, "runtimes", "win-x64", "lib", "net8.0", "Native.Wrapper.dll")));
+        Assert.True(File.Exists(Path.Combine(app, "runtimes", "win-x64", "native", "x.dll")));
+        Assert.True(File.Exists(Path.Combine(app, "de", "App.resources.dll")));
+        Assert.True(File.Exists(Path.Combine(app, "App.dll")));
+        Assert.Empty(copy.Skipped);
+        await copy.DeleteAsync();
     }
 
     [Fact]

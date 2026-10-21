@@ -12,10 +12,12 @@ namespace Codalus.Workbench.Previewer;
 /// assemblies on the runtime's trusted list from the deps file's folder, so the copy has to exist before the host
 /// starts (a copy made by the host can't redirect those loads), and a stack trace the host prints keeps the pdb it read
 /// open. The files the host needs (deps and runtimeconfig files, the top-level assemblies, <c>runtimes/</c>, satellite
-/// assemblies) must copy; every other file is copied when it can be: a database another process holds, the running
-/// app's log or an unreadable file is skipped. Copies live in <c>%TEMP%/codalus-winformsdesigner/&lt;pid&gt;-&lt;id&gt;/&lt;n&gt;/</c>
-/// (one numbered folder per source folder, the app's first) and go when the host ends; copies a crashed IDE left
-/// behind go at the next copy.
+/// assemblies) must copy, retried while they're held (as MSBuild's Copy retries); every other file is copied when it
+/// can be: a database another process holds, the running app's log or an unreadable file is skipped. Publish folders
+/// and other builds' outputs inside the output (a RuntimeIdentifier build's <c>win-x64/</c>) aren't copied. Copies live
+/// in <c>%TEMP%/codalus-winformsdesigner/&lt;pid&gt;-&lt;id&gt;/&lt;n&gt;/</c> (one numbered folder per source folder, the
+/// app's first) and go when the host ends, the IDE's exit included; copies a crashed IDE (or an exit cut short) left
+/// behind go at the next start on Windows and at the next copy.
 /// </summary>
 public sealed class BuildOutputShadowCopy
 {
@@ -23,6 +25,10 @@ public sealed class BuildOutputShadowCopy
     public const string RootFolderName = "codalus-winformsdesigner";
 
     private const int DeleteAttempts = 10;
+
+    /// <summary>How many times a file the host needs is tried, and how long apart: MSBuild's Copy defaults (an antivirus scan, or a build's last writes).</summary>
+    internal const int CopyAttempts = 10;
+    private static readonly TimeSpan s_copyRetry = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan s_deleteRetry = TimeSpan.FromMilliseconds(300);
     private static readonly StringComparison s_comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     private static readonly StringComparer s_comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
@@ -65,13 +71,15 @@ public sealed class BuildOutputShadowCopy
     /// Copies <paramref name="folders"/> (the app's output first, then a designed library's when it's elsewhere) into a
     /// new copy under <paramref name="root"/>. <paramref name="assemblies"/> are the app's and the designed project's
     /// assemblies: they, their deps and runtimeconfig files and the assemblies their deps files list are what
-    /// <see cref="IsOutdated"/> watches. A missing folder, or a file the host needs that doesn't copy, is a
+    /// <see cref="IsOutdated"/> watches. A missing folder, or a file the host needs that doesn't copy after
+    /// <see cref="CopyAttempts"/> tries <paramref name="retryDelay"/> apart (by default a second), is a
     /// <see cref="PreviewerException"/> (and nothing is left behind). <paramref name="copyFile"/> copies one file (tests).
     /// </summary>
-    public static BuildOutputShadowCopy Create(IReadOnlyList<string> folders, IReadOnlyList<string> assemblies, string? root = null, Action<string, string>? copyFile = null, CancellationToken cancellationToken = default)
+    public static BuildOutputShadowCopy Create(IReadOnlyList<string> folders, IReadOnlyList<string> assemblies, string? root = null, Action<string, string>? copyFile = null, TimeSpan? retryDelay = null, CancellationToken cancellationToken = default)
     {
         var started = System.Diagnostics.Stopwatch.StartNew();
         root ??= DefaultRoot;
+        var retry = retryDelay ?? s_copyRetry;
         copyFile ??= static (source, target) => File.Copy(source, target, overwrite: true);
         var sources = folders.Select(f => Path.TrimEndingDirectorySeparator(Path.GetFullPath(f))).Distinct(s_comparer).ToList();
         foreach (var source in sources)
@@ -94,7 +102,7 @@ public sealed class BuildOutputShadowCopy
         {
             foreach (var (source, target) in copy._folders)
             {
-                copy.CopyFolder(source, target, string.Empty, copyFile, skipped, cancellationToken);
+                copy.CopyFolder(source, target, string.Empty, copyFile, retry, skipped, cancellationToken);
             }
         }
         catch
@@ -109,7 +117,7 @@ public sealed class BuildOutputShadowCopy
         return copy;
     }
 
-    private void CopyFolder(string source, string target, string relative, Action<string, string> copyFile, List<string> skipped, CancellationToken cancellationToken)
+    private void CopyFolder(string source, string target, string relative, Action<string, string> copyFile, TimeSpan retry, List<string> skipped, CancellationToken cancellationToken)
     {
         string[] files;
         string[] folders;
@@ -137,34 +145,50 @@ public sealed class BuildOutputShadowCopy
             var name = Path.GetFileName(file);
             var path = relative.Length == 0 ? name : Path.Combine(relative, name);
             var copied = Path.Combine(target, name);
-            try
+            var required = IsRequired(path);
+            for (var attempt = 1; ; attempt++)
             {
-                copyFile(file, copied);
-                var attributes = File.GetAttributes(copied);
-                if ((attributes & FileAttributes.ReadOnly) != 0)
+                try
                 {
-                    // Read-only content (TFVC, Perforce) would stop the copy's deletion on Windows.
-                    File.SetAttributes(copied, attributes & ~FileAttributes.ReadOnly);
-                }
+                    copyFile(file, copied);
+                    var attributes = File.GetAttributes(copied);
+                    if ((attributes & FileAttributes.ReadOnly) != 0)
+                    {
+                        // Read-only content (TFVC, Perforce) would stop the copy's deletion on Windows.
+                        File.SetAttributes(copied, attributes & ~FileAttributes.ReadOnly);
+                    }
 
-                Files++;
-                Bytes += new FileInfo(copied).Length;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                if (IsRequired(path))
+                    Files++;
+                    Bytes += new FileInfo(copied).Length;
+                    break;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    throw new PreviewerException(Localizer.Format("msg.winFormsDesigner.copyFailed", "The designer didn't start: copying {0} to {1} failed: {2}", file, target, ex.Message), ex);
-                }
+                    if (!required)
+                    {
+                        skipped.Add(file);
+                        break;
+                    }
 
-                skipped.Add(file);
+                    // A file the host needs, held for a moment (an antivirus scan after the build, a build's last writes): tried again, as MSBuild's Copy does.
+                    if (attempt >= CopyAttempts)
+                    {
+                        throw new PreviewerException(Localizer.Format("msg.winFormsDesigner.copyFailed", "The designer didn't start: copying {0} to {1} failed: {2}", file, target, ex.Message), ex);
+                    }
+
+                    if (retry > TimeSpan.Zero && cancellationToken.WaitHandle.WaitOne(retry))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+                }
             }
         }
 
         foreach (var child in folders)
         {
             var name = Path.GetFileName(child);
-            if (relative.Length == 0 && (name.Equals("publish", StringComparison.OrdinalIgnoreCase) || name.Equals("app.publish", StringComparison.OrdinalIgnoreCase)))
+            var childRelative = relative.Length == 0 ? name : Path.Combine(relative, name);
+            if (name.Equals("publish", StringComparison.OrdinalIgnoreCase) || name.Equals("app.publish", StringComparison.OrdinalIgnoreCase) || IsOtherOutput(child, childRelative))
             {
                 continue;
             }
@@ -176,7 +200,30 @@ public sealed class BuildOutputShadowCopy
                 continue;
             }
 
-            CopyFolder(child, Path.Combine(target, name), relative.Length == 0 ? name : Path.Combine(relative, name), copyFile, skipped, cancellationToken);
+            CopyFolder(child, Path.Combine(target, name), childRelative, copyFile, retry, skipped, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Whether a folder inside the output (its path relative to it) is another build's output: a folder holding its own
+    /// deps or runtimeconfig file, such as a RuntimeIdentifier build's <c>win-x64/</c> next to the designer's output.
+    /// The host never loads from it. <c>runtimes/</c> and culture folders are the output's own.
+    /// </summary>
+    private static bool IsOtherOutput(string folder, string relative)
+    {
+        var parts = relative.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || parts[0].Equals("runtimes", StringComparison.OrdinalIgnoreCase) || (parts.Length == 1 && IsCulture(parts[0])))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Directory.EnumerateFiles(folder, "*.deps.json").Any() || Directory.EnumerateFiles(folder, "*.runtimeconfig.json").Any();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
