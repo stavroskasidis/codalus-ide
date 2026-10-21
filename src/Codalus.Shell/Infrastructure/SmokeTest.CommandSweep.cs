@@ -1045,7 +1045,7 @@ internal sealed partial class SmokeTest
         var stallLimit = SweepStallLimit(firstRun);
         if (problem is null && stall > stallLimit.TotalMilliseconds)
         {
-            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run; the GC paused {gcPause:0} ms of the run)";
+            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run; the GC paused {gcPause:0} ms of the run; it ran {_sweepStall.JobOfMax ?? "unsampled"})";
         }
 
         var unclosed = await CleanUpSweepAsync(before, saw).ConfigureAwait(true);
@@ -1812,7 +1812,8 @@ internal sealed partial class SmokeTest
     /// stall. The answer's time is read on the UI thread as it runs the probe, and the monitor waits on its own thread:
     /// an await on the thread pool timed the pool's queue too, so a pool busy with blocking work (ending a process tree,
     /// waiting for a program's output) read as a stalled UI thread. HotReloadRestartTests saw 897 ms that way under load,
-    /// while a monitor on its own thread saw 57 ms in the same run.
+    /// while a monitor on its own thread saw 57 ms in the same run. While it waits, it notes every 100 ms which posted job
+    /// the UI thread is running (<see cref="Ui.RunningJob"/>), to name what the longest wait was spent on.
     /// </summary>
     internal sealed class SweepStallMonitor
     {
@@ -1820,8 +1821,13 @@ internal sealed partial class SmokeTest
         private volatile bool _stopped;
         private long _maxTicks;
         private TimeSpan _maxGcPause;
+        private string? _maxJob;
 
-        public SweepStallMonitor() => new Thread(Loop) { IsBackground = true, Name = "Sweep stall monitor" }.Start();
+        public SweepStallMonitor()
+        {
+            Ui.Watch();
+            new Thread(Loop) { IsBackground = true, Name = "Sweep stall monitor" }.Start();
+        }
 
         public double MaxMilliseconds
         {
@@ -1846,12 +1852,29 @@ internal sealed partial class SmokeTest
             }
         }
 
+        /// <summary>
+        /// What the UI thread ran during the longest wait: the posted job it was in at most of the samples, by the file and
+        /// line that posted it, or none (a layout, rendering, input, or code not posted through <see cref="Ui.Post"/>,
+        /// such as a command's own); null for a wait too short to sample.
+        /// </summary>
+        public string? JobOfMax
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxJob;
+                }
+            }
+        }
+
         public void Reset()
         {
             lock (_gate)
             {
                 _maxTicks = 0;
                 _maxGcPause = TimeSpan.Zero;
+                _maxJob = null;
             }
         }
 
@@ -1872,6 +1895,8 @@ internal sealed partial class SmokeTest
                     return; // the dispatcher has shut down
                 }
 
+                Dictionary<string, int>? jobs = null;
+                var samples = 0;
                 try
                 {
                     while (!probe.Wait(100))
@@ -1880,6 +1905,11 @@ internal sealed partial class SmokeTest
                         {
                             return;
                         }
+
+                        jobs ??= new(StringComparer.Ordinal);
+                        var job = Ui.RunningJob is { } posted ? "the job posted at " + posted : "no posted job";
+                        jobs[job] = jobs.GetValueOrDefault(job) + 1;
+                        samples++;
                     }
                 }
                 catch (AggregateException)
@@ -1895,6 +1925,7 @@ internal sealed partial class SmokeTest
                     {
                         _maxTicks = ticks;
                         _maxGcPause = gcPause;
+                        _maxJob = jobs?.MaxBy(j => j.Value) is { } most ? $"{most.Key} ({most.Value} of {samples} samples)" : null;
                     }
                 }
 
@@ -1902,6 +1933,13 @@ internal sealed partial class SmokeTest
             }
         }
 
-        public void Stop() => _stopped = true;
+        public void Stop()
+        {
+            if (!_stopped)
+            {
+                _stopped = true;
+                Ui.Unwatch();
+            }
+        }
     }
 }
