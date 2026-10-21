@@ -165,4 +165,31 @@ public sealed class DocumentationFilesTests : IDisposable
         Assert.NotNull(own);
         Assert.True(File.Exists(Path.Combine(own, "System.Runtime.xml")), own);
     }
+
+    [Fact]
+    public void Miscellaneous_files_fall_back_to_the_hosts_own_assemblies_when_the_pack_cant_be_read()
+    {
+        // A pack whose files open (any assembly will do as their stand-in): Miscellaneous Files compile against it.
+        var dotnet = Path.Combine(_root, "dotnet");
+        var pack = Path.Combine(dotnet, "packs", "Microsoft.NETCore.App.Ref", "10.0.12", "ref", "net10.0");
+        var runtime = Path.Combine(dotnet, "shared", "Microsoft.NETCore.App", "10.0.12");
+        Directory.CreateDirectory(pack);
+        Directory.CreateDirectory(runtime);
+        var library = Library();
+        File.Copy(library, Path.Combine(pack, "System.Console.dll"));
+        File.Copy(library, Path.Combine(pack, "System.Runtime.dll"));
+        Assert.Equal(
+            [Path.Combine(pack, "System.Console.dll"), Path.Combine(pack, "System.Runtime.dll")],
+            WorkspaceManager.FrameworkReferences(runtime).Select(r => r.Display));
+
+        // One of its files can't be opened (an SDK update replacing the pack as the host starts; here, held open without
+        // sharing): the host still starts, on its own framework assemblies, instead of failing on the pack.
+        var trusted = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
+        using (File.Open(Path.Combine(pack, "System.Console.dll"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var references = WorkspaceManager.FrameworkReferences(runtime);
+            Assert.Contains(references, r => Path.GetFileName(r.Display) == "System.Runtime.dll");
+            Assert.All(references, r => Assert.Contains(r.Display, trusted));
+        }
+    }
 }

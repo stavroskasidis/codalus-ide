@@ -314,7 +314,7 @@ internal static partial class XamlNavigation
                 IEventSymbol @event => $"event {@event.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)} {@event.ContainingType.Name}.{@event.Name}",
                 _ => symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
             };
-            var summary = XamlDocs.Summary(symbol);
+            var summary = XamlDocs.Summary(symbol, cancellationToken);
             return new Hover(MarkupContent.Markdown($"```csharp\n{signature}\n```" + (summary is null ? string.Empty : "\n\n" + summary)), range);
         }
 

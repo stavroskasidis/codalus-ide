@@ -32,27 +32,52 @@ internal sealed class WorkspaceManager : IDisposable
             .Concat([typeof(Microsoft.CodeAnalysis.Completion.CompletionService).Assembly, Assembly.Load("Microsoft.CodeAnalysis.CSharp.Features")])
             .Distinct()));
 
-    private static readonly Lazy<MetadataReference[]> s_frameworkReferences = new(() =>
-        [.. FrameworkAssemblies()
-            .AsParallel()
-            .AsOrdered()
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p, documentation: DocumentationFiles.For(p, CultureInfo.CurrentUICulture)))]);
+    private static readonly Lazy<MetadataReference[]> s_frameworkReferences = new(() => FrameworkReferences(RuntimeEnvironment.GetRuntimeDirectory()));
 
     /// <summary>
-    /// What Miscellaneous Files compiles against: the reference pack of the host's .NET, as a project for it does, with
-    /// the documentation next to each assembly; else (a machine with the runtime only) the host's own framework
-    /// assemblies, which have no documentation.
+    /// What Miscellaneous Files compiles against: the reference pack of the .NET in <paramref name="runtimeDirectory"/>
+    /// (<see cref="ReferencePack"/>), as a project for it does, with the documentation next to each assembly. Else the
+    /// host's own framework assemblies, which have no documentation: on a machine with the runtime only, and when the
+    /// pack can't be read (an SDK update replacing it while the host starts, a broken link, a folder the user can't
+    /// read), since the host must start anyway.
     /// </summary>
-    private static IEnumerable<string> FrameworkAssemblies()
+    internal static MetadataReference[] FrameworkReferences(string runtimeDirectory)
     {
-        if (ReferencePack(RuntimeEnvironment.GetRuntimeDirectory()) is { } pack)
+        try
         {
-            return Directory.GetFiles(pack, "*.dll").Order(StringComparer.Ordinal);
+            if (ReferencePack(runtimeDirectory) is { } pack
+                && Open(Directory.GetFiles(pack, "*.dll").Order(StringComparer.Ordinal)) is var references
+                && !references.Contains(null))
+            {
+                return [.. references.OfType<MetadataReference>()];
+            }
+        }
+        catch (Exception ex) when (IsUnreadable(ex))
+        {
+            // Its folders can't be listed: the runtime's assemblies, below.
         }
 
-        return ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? string.Empty)
+        // Files the runtime has loaded; one that still can't be opened is left out rather than failing the host.
+        return [.. Open(((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Where(p => Path.GetFileName(p).StartsWith("System.", StringComparison.Ordinal) || Path.GetFileName(p) is "mscorlib.dll" or "netstandard.dll");
+            .Where(p => Path.GetFileName(p).StartsWith("System.", StringComparison.Ordinal) || Path.GetFileName(p) is "mscorlib.dll" or "netstandard.dll"))
+            .OfType<MetadataReference>()];
+
+        // In parallel (the cold start reads a few hundred files); null for a file that can't be read.
+        static MetadataReference?[] Open(IEnumerable<string> paths) =>
+            [.. paths.AsParallel().AsOrdered().Select(p =>
+            {
+                try
+                {
+                    return MetadataReference.CreateFromFile(p, documentation: DocumentationFiles.For(p, CultureInfo.CurrentUICulture));
+                }
+                catch (Exception ex) when (IsUnreadable(ex))
+                {
+                    return (MetadataReference?)null;
+                }
+            })];
+
+        static bool IsUnreadable(Exception ex) => ex is IOException or UnauthorizedAccessException or BadImageFormatException;
     }
 
     /// <summary>
