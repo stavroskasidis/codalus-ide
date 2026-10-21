@@ -777,6 +777,18 @@ public class IntelliSensePopupTests
             return view.TranslatePoint(new Point(visual.X + 2, visual.Y - (linesUp * view.DefaultLineHeight)), f.Window)!.Value;
         }
 
+        // What is under a point of the window, from the element hit up through its parents (a failure message).
+        string Under(Point point)
+        {
+            var parts = new List<string>();
+            for (var visual = f.Window.InputHitTest(point) as Visual; visual is not null && parts.Count < 14; visual = visual.GetVisualParent())
+            {
+                parts.Add($"{visual.GetType().Name}{((visual as Control)?.Name is { Length: > 0 } name ? "#" + name : "")}@{visual.Bounds}");
+            }
+
+            return parts.Count > 0 ? string.Join(" < ", parts) : "nothing";
+        }
+
         // The pointer rests on the word until Quick Info opens: its bounds (window coordinates).
         async Task<Rect> HoverAsync(Point at)
         {
@@ -785,8 +797,9 @@ public class IntelliSensePopupTests
             ShellFixture.RenderFrame(f.Window);
             f.Window.MouseMove(at);
             await ShellFixture.PumpUntil(() => editor.IsQuickInfoOpen && editor.HoverPopup.Child is { Bounds.Width: > 0 }, describe: () =>
-                $"Quick Info: {editor.QuickInfoTrace}; open {editor.IsQuickInfoOpen}, its size {editor.HoverPopup.Child?.Bounds.Size}; pointer over the text {view.IsPointerOver}, "
-                + $"under it {f.Window.InputHitTest(at)?.GetType().Name ?? "nothing"}; scroll {view.ScrollOffset}; diagnostics {editor.Markers.Segments.Count()}; focus {f.Window.FocusManager?.GetFocusedElement()?.GetType().Name}");
+                $"Quick Info: {editor.QuickInfoTrace}; open {editor.IsQuickInfoOpen}, its size {editor.HoverPopup.Child?.Bounds.Size}; pointer at {at}, over the text {view.IsPointerOver}; "
+                + $"the text at {view.TranslatePoint(default, f.Window)}, {view.Bounds.Size}; under the pointer {Under(at)}; toasts: {string.Join(", ", f.Shell.Notifications.Toasts.Select(t => t.Message))}; "
+                + $"scroll {view.ScrollOffset}; diagnostics {editor.Markers.Segments.Count()}; focus {f.Window.FocusManager?.GetFocusedElement()?.GetType().Name}");
             ShellFixture.Pump();
             var child = editor.HoverPopup.Child!;
             return new Rect(f.Window.PointToClient(child.PointToScreen(default)), child.Bounds.Size);
