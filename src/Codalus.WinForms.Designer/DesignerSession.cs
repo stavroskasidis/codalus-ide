@@ -189,7 +189,19 @@ internal sealed partial class DesignerSession : IDisposable
             return;
         }
 
-        foreach (var (key, value) in _textResources.Metadata())
+        IReadOnlyDictionary<string, object?> metadata;
+        try
+        {
+            metadata = _textResources.Metadata();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // A .resx that isn't XML: the form loads without its locks, and says why (the statements that read it say so too).
+            errors.Add($"The form's .resx: {ex.Message}");
+            return;
+        }
+
+        foreach (var (key, value) in metadata)
         {
             if (!key.EndsWith(".Locked", StringComparison.Ordinal) || value is not bool locked)
             {

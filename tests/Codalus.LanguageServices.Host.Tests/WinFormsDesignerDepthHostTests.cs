@@ -173,8 +173,9 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
     /// <summary>
     /// #67: Lock Controls' Locked is the control designers' design-time property, written as the default .resx's
     /// name.Locked metadata ($this.Locked for the form) with ResourceValues' type string, never as code, and read back
-    /// from it at load; a split container's panel has none; a batch over a form with a context menu strip (whose designer
-    /// has none) skips the strip instead of failing.
+    /// from it at load, also from a .resx with an entry nothing can deserialize (the metadata is read as XML); a split
+    /// container's panel has none; a batch over a form with a context menu strip (whose designer has none) skips the
+    /// strip instead of failing.
     /// </summary>
     [Fact]
     public async Task Locked_is_the_resx_metadata_both_ways()
@@ -223,6 +224,19 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
             Assert.Empty(unlocked.Changes);
         }
 
+        // The same .resx with an entry of a type that isn't there (as a binary-formatted TreeNode is on .NET 9 and later):
+        // the form still loads, locked; the statements that read the resources say what failed, as before #67.
+        var broken = resx.Replace("</root>", "  <data name=\"broken\" type=\"Nowhere.Missing, Nowhere\">\n    <value>x</value>\n  </data>\n</root>", StringComparison.Ordinal);
+        Assert.NotEqual(resx, broken);
+        var third = await WinFormsDesignerProcess.StartAsync(target, Ct);
+        await using (third)
+        {
+            var loaded = await third.LoadAsync(parameters with { Resources = [new DesignerResourceText(string.Empty, broken)] }, Ct);
+            Assert.True(loaded.Components.Single(c => c.Name == "giftCheckBox").Locked);
+            Assert.True(loaded.Components[0].Locked);
+            Assert.DoesNotContain(loaded.Errors, e => e.StartsWith("The form's .resx", StringComparison.Ordinal));
+        }
+
         // InventoryForm: Lock Controls' batch over every control and the context menu strip: no failure, no entry for the strip.
         var (inventory, inventoryRender, _) = await LoadAsync("InventoryForm.cs", withResources: true);
         await using (inventory)
@@ -242,8 +256,9 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
     /// <summary>
     /// #67: the context menu's verbs as the classic IDE's MenuCommandService lists them, with the action service present:
     /// a tab control's designer verbs (Add Tab runs, Remove Tab stays listed but unavailable with no tab page left), a list
-    /// box's Edit Items... (an action method marked IncludeAsDesignerVerb, the collection editor's), no two by the same
-    /// text; the smart tag's items don't change.
+    /// box's Edit Items... (an action method marked IncludeAsDesignerVerb, the collection editor's), a menu strip's in the
+    /// framework's words with their mnemonics ("&amp;Insert Standard Items"), an image list's Choose images (the Images
+    /// editor's, although its text has no "..."), no two by the same text; the smart tag's items don't change.
     /// </summary>
     [Fact]
     public async Task Context_menu_verbs_are_the_classic_ides()
@@ -274,6 +289,14 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
         Assert.Contains(listBox.Verbs, v => v is { Kind: DesignerActionKinds.Method, Collection: "System.Windows.Forms.ListBox:Items" } && v.DisplayName.StartsWith("Edit Items", StringComparison.Ordinal));
         Assert.Equal(listBox.Verbs.Length, listBox.Verbs.Select(v => v.DisplayName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.Contains(listBox.Items, i => i is { Kind: DesignerActionKinds.Method, Member: "InvokeItemsDialog" });
+
+        var strip = await VerbsAsync("mainMenuStrip");
+        Assert.Contains(strip, v => v.Kind == DesignerActionKinds.Method && DesignerMnemonics.Strip(v.DisplayName) == "Insert Standard Items" && !v.Unavailable);
+        Assert.Equal(strip.Length, strip.Select(v => DesignerMnemonics.Strip(v.DisplayName)).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+        var images = await host.ActionsAsync(new DesignerComponentsParams(["iconImageList"]), Ct);
+        Assert.Contains(images.Verbs, v => v is { Kind: DesignerActionKinds.Method, Member: "ChooseImages", DisplayName: "Choose images", Collection: "System.Windows.Forms.ImageList:Images", Unavailable: false });
+        Assert.Contains(images.Items, i => i is { Member: "ChooseImages", Collection: "System.Windows.Forms.ImageList:Images" });
     }
 
     [Fact]

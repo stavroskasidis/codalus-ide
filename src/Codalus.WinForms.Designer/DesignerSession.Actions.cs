@@ -170,7 +170,9 @@ internal sealed partial class DesignerSession
             Console.Error.WriteLine($"{component.Site?.Name}'s verbs couldn't be read: {ex.Message}");
         }
 
-        return [.. verbs.Where((verb, i) => !verbs.Skip(i + 1).Any(later => string.Equals(later.DisplayName, verb.DisplayName, StringComparison.OrdinalIgnoreCase)))];
+        // Merged by the text as it reads ("&Edit Items..." and "Edit Items..." are one entry): the IDE shows the mnemonic as its
+        // access key, so two that differ only by it would look the same.
+        return [.. verbs.Where((verb, i) => !verbs.Skip(i + 1).Any(later => string.Equals(DesignerMnemonics.Strip(later.DisplayName), DesignerMnemonics.Strip(verb.DisplayName), StringComparison.OrdinalIgnoreCase)))];
     }
 
     private static ActionItem Describe(DesignerActionList list, DesignerActionPropertyItem item)
@@ -215,11 +217,21 @@ internal sealed partial class DesignerSession
         return Dialog(component, new ActionItem(DesignerActionKinds.Method, member, display) { Category = item.Category, Description = item.Description }, display, item.MemberName);
     }
 
-    /// <summary>A method or a verb whose text ends with "…" (a Windows Forms dialog): the IDE's editor of the collection or image it's about, or unavailable.</summary>
+    /// <summary>
+    /// The action methods that open a Windows Forms dialog although their text has no "…" (#67): an image list's
+    /// <c>ImageListActionList.ChooseImages</c>, "Choose images", whose collection editor would go to the host's UI
+    /// service, which shows no dialog, so the verb would do nothing.
+    /// </summary>
+    private static readonly HashSet<string> s_dialogMethods = new(StringComparer.Ordinal) { "ChooseImages" };
+
+    /// <summary>
+    /// A method or a verb whose text ends with "…", or one of <see cref="s_dialogMethods"/> (a Windows Forms dialog): the
+    /// IDE's editor of the collection or image it's about, or unavailable.
+    /// </summary>
     private ActionItem Dialog(IComponent component, ActionItem result, string display, string? memberName)
     {
         var name = display.TrimEnd();
-        if (!name.EndsWith("...", StringComparison.Ordinal) && !name.EndsWith('…'))
+        if (!name.EndsWith("...", StringComparison.Ordinal) && !name.EndsWith('…') && (memberName is null || !s_dialogMethods.Contains(memberName)))
         {
             return result;
         }
