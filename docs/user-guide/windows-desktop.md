@@ -92,6 +92,8 @@ Running or debugging a WPF app loads a small agent into it (a .NET startup hook)
 On Windows, a form's or user control's `.cs` file opens in the **Windows Forms designer**: double-click it in Solution Explorer (it has a form icon) or open it. **View Code** (`F7`) shows its code, and **View Designer** (`Shift+F7`, or the Solution Explorer's and the editor's context menu) shows the designer again. The `.Designer.cs` file itself opens as code. To open forms as code by default, turn **Open Forms in the Designer** off (Settings → Windows Forms, `windowsForms.openInDesigner`).
 
 The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply.
+
+The designer runs on a copy of your build output (in your temp folder), as the classic IDE does, so you can build while a form is open. After a build that changes your app, the designer loads the form again on the new build, so your own controls show their changes; a designer that isn't the active tab does it when you switch to it. While it loads again, the form takes no clicks, and changes you make in the Properties window apply once it's back; your unsaved changes and the selection stay. A designer you open while a build runs waits for the build to finish.
 - **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent, `Ctrl+A` everything on the form.
 - **Move** the selected controls by dragging them; dropped on a panel, a group box, a tab page or a split container's panel, a control moves into it. The arrow keys move them a pixel, `Shift`+arrows resize them.
 - **Resize** the selected control with its grab handles (the form from its right and bottom ones).
@@ -177,6 +179,7 @@ With the designer active, the **Properties** window (`F4`) shows the selected co
 - Not yet: Visual Studio's Data Sources window (bind through a `BindingSource` instead), complex data binding's designer (a grid's `DataSource` is an ordinary property), the component designer (a class that is a component but not a control opens as code), and a design surface for WPF (its XAML Previewer shows the window, and selects both ways).
 - Smart tag tasks and collection items that open one of Windows Forms' own dialogs (a data grid view's **Add Column…**, a binding source's data source wizard) aren't available; set those properties in the Properties window.
 - The designer runs your code (your controls' constructors), so it works only in folders you trust.
+- The copies of your build output live in your temp folder's `codalus-winformsdesigner` folder and are removed when the designer closes (or, after a crash, the next time a designer starts). A file another program holds open in your output (a LocalDB database, your running app's log) isn't copied, which the **Windows Forms Designer** output lists. At design time your controls see the copy's folder as theirs (`AppContext.BaseDirectory`, `Assembly.Location`).
 
 On Linux and macOS, forms open as code (the status bar says once that the designer is Windows only), View Designer says so, and the code edits, completes and builds as usual.
 

@@ -94,6 +94,8 @@ internal sealed class WpfDesigner(string appPath)
 
     // ------------------------------------------------------------------ the app
 
+    // TODO(issue): load the app from a BuildOutputShadowCopy (started by the shell on the copy's deps file), as the Windows
+    // Forms designer does (#66): loaded from the build output, the app's assemblies can't be replaced by a build while it runs.
     private Assembly? ResolveAssembly(AssemblyName name)
     {
         foreach (var directory in _probe.ToArray())

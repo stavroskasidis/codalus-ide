@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.6.0
+
+- **Fixed: building while a form is open in the Windows Forms designer** ([user guide](docs/user-guide/windows-desktop.md#the-windows-forms-designer)): the designer kept your app's assembly open, so the next build failed with MSB3027 ("Could not copy … The process cannot access the file") until you closed it. It now runs on a copy of your build output, as the classic IDE does, and after a build that changes your app it loads the form again on the new build, so your own controls show their changes (a designer in another tab does it when you switch to it). While it loads again, the form takes no clicks, and changes you make in the Properties window apply once it's back. A designer you open while a build runs waits for the build instead of failing with "A build is already running.".
+
 ## 0.5.0
 
 - **IntelliSense like a classic IDE's** ([user guide](docs/user-guide/editing.md#intellisense)): in C# and Visual Basic, the completion list, parameter info and Quick Info show code in the editor's own colors, and generic types as you use them (`LayoutBuilderBase<PageModel, PageBuilder<PageModel>>.AddTab(…)`, not `LayoutBuilderBase<TModel, TBuilder>`). Other languages get the same popups, in plain text.
