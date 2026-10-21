@@ -9,7 +9,6 @@
         Title="{Binding WindowTitle}"
         Width="1000" Height="680" MinWidth="760" MinHeight="520"
         WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
         KeyboardNavigation.TabNavigation="Cycle"
         Background="{DynamicResource Shell.Panel}">
   <!--

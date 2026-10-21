@@ -248,6 +248,13 @@ public sealed class NewProjectWizardTests
         Assert.Equal(("C_onfigure for HTTPS", "E_nlist in Aspire orchestration"), (https.Content, aspire.Content));
         Assert.True(https.IsEffectivelyEnabled);
         Assert.False(aspire.IsEffectivelyEnabled);
+
+        // An option's access key is its page's: Alt+O presses C_onfigure for HTTPS here, not Configure's hidden S_olution.
+        var before = https.IsChecked;
+        Press(window, Key.O, RawInputModifiers.Alt, "o");
+        Assert.NotEqual(before, https.IsChecked);
+        Assert.NotSame(Named<ComboBox>(window, "SolutionCombo"), Focused(window));
+        https.IsChecked = true;
         Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == "Needs a trusted location (previous page).");
         Named<ComboBox>(window, "AuthCombo").SelectedItem = model.AuthChoices.Single(a => a.Value == "Individual");
         ShellFixture.Pump();
@@ -279,6 +286,40 @@ public sealed class NewProjectWizardTests
         Assert.True(Named<Button>(window, "CreateButton").IsEffectivelyVisible);
         await ShellFixture.PumpUntil(() => Named<TextBox>(window, "SolutionNameBox").IsFocused, describe: () => $"focused: {Focused(window)}");
 
+        model.Cancel();
+        Assert.Null(await command);
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_a_recent_template_then_one_in_the_list_keeps_both_lists_in_step()
+    {
+        await using var f = ShellFixture.Create();
+        using var data = new TemplateTestData();
+        UseRecordedTemplates(f, data);
+        f.Shell.NewProjectHistory.AddRecentTemplate("dotnet:Microsoft.Test.xUnit|C#");
+        var command = f.Shell.Workbench.Commands.ExecuteAsync("templates.newProject", TestContext.Current.CancellationToken);
+        var (model, window) = await OpenedAsync(f);
+        var list = Named<ListBox>(window, "TemplateList");
+        var recent = Named<ListBox>(window, "RecentList");
+
+        recent.SelectedItem = model.RecentTemplates[0];
+        ShellFixture.Pump();
+        Assert.Same(model.RecentTemplates[0], model.SelectedTemplate);
+        Assert.Null(list.SelectedItem); // the recent row isn't the list's
+
+        var console = model.Templates.Single(r => r.Id == "dotnet:Microsoft.Common.Console|C#");
+        model.SelectedTemplate = console;
+        ShellFixture.Pump();
+        Assert.Same(console, list.SelectedItem); // the list's binding survived the row it didn't have
+        Assert.Null(recent.SelectedItem);
+        list.SelectedItem = model.Templates.Single(r => r.Id == "dotnet:Microsoft.Web.Blazor|C#");
+        ShellFixture.Pump();
+        Assert.Equal("Blazor Web App", model.SelectedTemplate!.Name);
+
+        // A search keeps the chosen template selected when it still matches.
+        model.Search = "blazor";
+        ShellFixture.Pump();
+        Assert.Same(model.SelectedTemplate, list.SelectedItem);
         model.Cancel();
         Assert.Null(await command);
     }
