@@ -145,6 +145,18 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Equal("&Edit", collection.Items[0].Text);
         var actions = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerActionsResult([new DesignerActionItem(DesignerActionKinds.Method, "verb:Add Tab", "Add Tab") { Collection = "TabControl:TabPages" }]), json.DesignerActionsResult), json.DesignerActionsResult)!;
         Assert.Equal(("verb:Add Tab", "TabControl:TabPages"), (actions.Items[0].Member, actions.Items[0].Collection));
+
+        // #66: the Toolbox's double-click or Enter (the selection's container, its default place), and a drop's defaults.
+        var add = JsonSerializer.Serialize(new DesignerCreateParams("System.Windows.Forms.CheckBox", "checkBox1", null, 8, 31) { AtDefaultLocation = true, Selected = ["placeOrderButton", "buttonPanel"] }, json.DesignerCreateParams);
+        Assert.Contains("\"atDefaultLocation\":true", add, StringComparison.Ordinal);
+        Assert.Contains("\"selected\":[\"placeOrderButton\",\"buttonPanel\"]", add, StringComparison.Ordinal);
+        var addBack = JsonSerializer.Deserialize(add, json.DesignerCreateParams)!;
+        Assert.True(addBack is { AtDefaultLocation: true, X: 8, Y: 31, Parent: null });
+        Assert.Equal(["placeOrderButton", "buttonPanel"], addBack.Selected);
+        var drop = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerCreateParams("System.Windows.Forms.Button", "button1", "buttonPanel", 56, 331), json.DesignerCreateParams), json.DesignerCreateParams)!;
+        Assert.False(drop.AtDefaultLocation);
+        Assert.Empty(drop.Selected);
+        Assert.Equal("buttonPanel", drop.Parent);
     }
 
     [Fact]
