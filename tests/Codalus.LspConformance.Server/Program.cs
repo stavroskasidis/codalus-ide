@@ -6,7 +6,15 @@ using Codalus.Rpc;
 // shell's narrowed types don't: options objects, location links, marked strings, numeric diagnostic codes,
 // insert/replace edits, snippets, offset parameter labels, `changes` maps and bare commands among code actions.
 // Documents are "key = value" lines; a line without '=' is an error with code 42. With --dap it is a scripted debug
-// adapter instead (ScriptedDap), as with netcoredbg's --interpreter=vscode (a stand-in for netcoredbg).
+// adapter instead (ScriptedDap), as with netcoredbg's --interpreter=vscode (a stand-in for netcoredbg). With the
+// arguments of js-debug's DAP server (a port and a host) it stands in for vscode-js-debug (ScriptedJsDebug).
+if (args is [var port, var host] && int.TryParse(port, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var portNumber)
+    && System.Net.IPAddress.TryParse(host, out var address))
+{
+    await Codalus.LspConformance.Server.ScriptedJsDebug.RunAsync(address, portNumber);
+    return;
+}
+
 if (args.Contains("--program"))
 {
     // The scripted adapter's "program" in a start that times out: it runs until it's killed, as a program that netcoredbg
