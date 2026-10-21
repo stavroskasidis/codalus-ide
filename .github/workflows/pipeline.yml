@@ -128,6 +128,25 @@ jobs:
     outputs:
       skip: ${{ steps.check.outputs.skip }}
     steps:
+      # A release branch's VERSION is the X.Y.Z of its name (it is what master publishes), and its workflow files are
+      # develop's: the release's tag is created by the workflow token, which GitHub lets tag only a commit whose workflow
+      # files match the default branch's (M31b), so a workflow change goes into both (docs/release/releasing.md).
+      - name: The release branch's version and workflows
+        if: github.event_name == 'pull_request' && github.base_ref == 'master' && startsWith(github.head_ref, 'release/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          version="$(gh api "repos/$GITHUB_REPOSITORY/contents/VERSION?ref=$HEAD_SHA" --jq .content | base64 -d | tr -d '[:space:]')"
+          if [[ "$version" != "${HEAD_REF#release/}" ]]; then
+            echo "::error::$HEAD_REF has VERSION $version: a release branch's VERSION is the version in its name." && exit 1
+          fi
+          workflows() { gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows?ref=$1" --jq '[.[] | {name, sha}] | sort_by(.name)'; }
+          if [[ "$(workflows "$HEAD_SHA")" != "$(workflows develop)" ]]; then
+            echo "::error::$HEAD_REF's .github/workflows differ from develop's, and the release couldn't be tagged: bring the workflow changes into both by pull request (docs/release/releasing.md)." && exit 1
+          fi
       - id: check
         if: github.event_name == 'pull_request' && github.base_ref == 'master' && startsWith(github.head_ref, 'release/')
         shell: bash
@@ -682,7 +701,7 @@ jobs:
           git diff --cached --quiet || { git commit -q -m "Update to $VERSION"; git push -q origin HEAD:master; }
 
   # Last: develop takes in master (a release branch's fixes, a hotfix) and moves past the release, once everything is
-  # out; develop's VERSION, already moved on when the release branch was cut, wins a conflict. The "protect" ruleset lets
+  # out; develop keeps its VERSION, already moved on when the release branch was cut. The "protect" ruleset lets
   # develop change only through a pull request, so the job opens one and merges it (it needs no approval, and the
   # repository lets GitHub Actions create pull requests). The workflow token's pull request and merge start no run,
   # so they make no CI run and no nightly; master's content already passed this release's gates.
@@ -708,8 +727,8 @@ jobs:
           git fetch origin develop master
           git switch -c develop-after-release origin/develop
           if ! git merge --no-edit origin/master; then
-            # VERSION moved on in develop when the release branch was cut, or a hotfix released from master: develop's
-            # VERSION wins (the bump below moves it past the release); any other conflict needs the maintainer.
+            # A hotfix released from master (or a VERSION change on both sides): develop's VERSION wins (the bump below
+            # moves it past the release); any other conflict needs the maintainer.
             if [[ "$(git diff --name-only --diff-filter=U)" == "VERSION" ]]; then
               git checkout --ours VERSION && git add VERSION && git commit --no-edit
             else
