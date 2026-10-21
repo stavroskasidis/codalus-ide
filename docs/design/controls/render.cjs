@@ -32,13 +32,17 @@ const PAGES = [
   { file: 'WinFormsDesignerMenus.dc.html', name: 'winforms-designer-menus', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
   { file: 'PropertiesWindow.dc.html', name: 'properties-window', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
   { file: 'PropertiesWindow.dc.html', name: 'properties-window-color', query: 'state=Color', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
-  { file: 'PropertiesWindow.dc.html', name: 'properties-window-font', query: 'state=Font', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light'] },
+  // The font editor keeps the Properties window inactive: Classic High Contrast shows the selected name's outline there.
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-font', query: 'state=Font', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light', 'Classic High Contrast'] },
   { file: 'PropertiesWindow.dc.html', name: 'properties-window-invalid', query: 'state=Invalid', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
   // The window's other states, checked in every theme but not rendered: the sheet above shows each of them.
   { file: 'PropertiesWindow.dc.html', name: 'properties-window-alignment', query: 'state=Alignment', width: 1280, height: 800, themes: [] },
   { file: 'PropertiesWindow.dc.html', name: 'properties-window-strings', query: 'state=Strings', width: 1280, height: 800, themes: [] },
   { file: 'PropertiesWindow.dc.html', name: 'properties-window-resource', query: 'state=Resource', width: 1280, height: 800, themes: [] },
   { file: 'PropertiesWindow.dc.html', name: 'properties-window-file', query: 'state=File', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-events', query: 'state=Events', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-multiple', query: 'state=Multiple', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-reference', query: 'state=Reference', width: 1280, height: 800, themes: [] },
   { file: 'GitChanges.dc.html', name: 'git-changes', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
   { file: 'GitChanges.dc.html', name: 'git-changes-folder', query: 'state=folder', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
   { file: 'GitChanges.dc.html', name: 'git-changes-branch-menu', query: 'state=branch-menu', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light'] },
