@@ -28,7 +28,8 @@ const PAGES = [
   { file: 'ChecklistDialog.dc.html', name: 'checklist-dialog', width: 1280, height: 800, themes: VIEW_THEMES },
   { file: 'ChecklistDialog.dc.html', name: 'checklist-dialog-macos', query: 'os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
   { file: 'AiChat.dc.html', name: 'ai-chat', width: 1280, height: 800, themes: VIEW_THEMES },
-  { file: 'Options.dc.html', name: 'options', width: 1280, height: 800, themes: VIEW_THEMES }
+  { file: 'Options.dc.html', name: 'options', width: 1280, height: 800, themes: VIEW_THEMES },
+  { file: 'Toolbox.dc.html', name: 'toolbox', width: 1280, height: 800, full: true, themes: ['Classic Light', 'Classic Dark', 'Classic High Contrast', 'Harbor Light', 'Harbor Dark'] }
 ];
 
 const slug = (s) => s.toLowerCase().replace(/\s+/g, '-');
