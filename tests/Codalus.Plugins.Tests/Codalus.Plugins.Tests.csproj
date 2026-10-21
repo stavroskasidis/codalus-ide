@@ -8,7 +8,6 @@
     <ProjectReference Include="..\..\src\Codalus.LanguageServices.Host\Codalus.LanguageServices.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\samples\plugins\HelloWorld\HelloWorld.csproj" ReferenceOutputAssembly="false" />
     <!-- Referenced for their internals and launched in the host by the integration tests. -->
-    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.Templates\Codalus.Plugins.Templates.csproj" />
     <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.DotNetTest\Codalus.Plugins.DotNetTest.csproj" />
     <!-- The hosting plugins (ADR 0031): their providers are tested directly and in the host, against mock servers. -->
     <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.Hosting\Codalus.Plugins.Hosting.csproj" />

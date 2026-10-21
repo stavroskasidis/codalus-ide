@@ -86,6 +86,8 @@ public sealed record NewProjectPlan
     /// <summary>The longest name New Project accepts.</summary>
     public const int MaxNameLength = 128;
 
+    private static readonly string[] s_solutionExtensions = [".slnx", ".sln"];
+
     private static readonly char[] s_invalidNameCharacters = ['/', '?', ':', '&', '\\', '*', '"', '<', '>', '|', '#', '%'];
 
     private static readonly string[] s_reservedNames = ["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"];
@@ -214,18 +216,21 @@ public sealed record NewProjectPlan
         : null;
 
     /// <summary>
-    /// What's wrong with the folders on disk, or null: a folder the plan creates that already exists and isn't empty;
-    /// on Windows without long paths, a file of the template whose path would be <see cref="PathRules.MaxPath"/> characters
-    /// or more. It reads the disk: call it off the UI thread.
+    /// What's wrong with the folders on disk, or null: the project's folder already exists and isn't empty; the new
+    /// solution's file is there already; on Windows without long paths, a file of the template whose path would be
+    /// <see cref="PathRules.MaxPath"/> characters or more. It reads the disk: call it off the UI thread.
     /// </summary>
     public string? ValidateTarget(PathRules rules)
     {
-        foreach (var folder in new[] { SolutionDirectory, ProjectDirectory }.OfType<string>().Distinct(SolutionService.PathComparer))
+        if (ProjectDirectory is { } project && Directory.Exists(project) && Directory.EnumerateFileSystemEntries(project).Any())
         {
-            if (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
-            {
-                return Localizer.Format("msg.newProject.folderExists", "The folder \"{0}\" already exists. Choose another name or location.", folder);
-            }
+            return Localizer.Format("msg.newProject.folderExists", "The folder \"{0}\" already exists. Choose another name or location.", project);
+        }
+
+        if (CreatesSolution && SolutionDirectory is { } folder && SolutionName is { Length: > 0 } name
+            && s_solutionExtensions.Select(e => Path.Combine(folder, name + e)).FirstOrDefault(File.Exists) is { } existing)
+        {
+            return Localizer.Format("msg.newProject.solutionExists", "The solution \"{0}\" already exists. Choose another name or location.", existing);
         }
 
         if (LongestPath(rules) is { } length && length >= PathRules.MaxPath)

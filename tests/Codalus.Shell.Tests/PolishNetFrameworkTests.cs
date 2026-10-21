@@ -172,27 +172,11 @@ public partial class PolishTests
         modules.Rows.Add(new ModuleRow(new DebugModule("3", "Codalus.Sample.Legacy.dll", Path.Combine(debuggee, "Codalus.Sample.Legacy.dll"), "Codalus.Sample.Legacy.pdb is a Windows PDB, which this debugger doesn't read: build with portable PDBs (DebugType portable).", false, false, 2)));
         Check("modules (desktop clr)", new ModulesView { DataContext = modules }, ToolWindowMinWidth, 420);
 
-        // The pickers over the window: New Project's .NET Framework entries as the templates plugin gives them off Windows
-        // (its Description after the label, its Detail on the right), the framework, and Attach to Process's processes.
+        // The picker over the window: Attach to Process's processes. (New Project's .NET Framework rows are the wizard's
+        // since 0.6.0, ADR 0082, no longer pickers.)
         var paletteView = f.Window.GetVisualDescendants().OfType<QuickPickView>().First();
-        const string windowsOnly = "C# · Windows only: it edits and builds here, and runs on Windows";
         var pickers = new (string Name, string Placeholder, string Query, QuickPickItem[] Items)[]
         {
-            ("new-project", "Create a new project", "", [
-                new QuickPickItem("Console App") { Detail = "console", KeyLabel = "C#, F#, VB" },
-                new QuickPickItem(".NET Framework Console App") { Detail = "SDK-style, .NET Framework 4.x", KeyLabel = windowsOnly },
-                new QuickPickItem(".NET Framework Class Library") { Detail = "SDK-style, .NET Framework 4.x", KeyLabel = windowsOnly },
-                new QuickPickItem("Windows Forms App") { Detail = "winforms", KeyLabel = windowsOnly },
-            ]),
-            ("new-project (filtered, the matches on the selected row)", "Create a new project", "framework", [
-                new QuickPickItem(".NET Framework Console App") { Detail = "SDK-style, .NET Framework 4.x", KeyLabel = windowsOnly },
-                new QuickPickItem(".NET Framework Class Library") { Detail = "SDK-style, .NET Framework 4.x", KeyLabel = windowsOnly },
-            ]),
-            ("new-project-framework", "Target framework", "", [
-                new QuickPickItem(".NET Framework 4.8") { Detail = "net48", KeyLabel = "Default" },
-                new QuickPickItem(".NET Framework 4.8.1") { Detail = "net481" },
-                new QuickPickItem(".NET Framework 4.7.2") { Detail = "net472" },
-            ]),
             ("attach-to-process", "Attach to a process (.NET processes are listed first)", "", [
                 new QuickPickItem("LegacyApp (4242)") { Detail = new ProcessEntry(4242, "LegacyApp", "Orders — Contoso Legacy Order Entry (Administrator)", true, true).Runtime + " · Orders — Contoso Legacy Order Entry (Administrator)" },
                 new QuickPickItem("ConsoleApp (5150)") { Detail = new ProcessEntry(5150, "ConsoleApp", null, true).Runtime },

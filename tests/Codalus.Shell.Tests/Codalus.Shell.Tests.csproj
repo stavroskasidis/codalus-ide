@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="..\Shared\MockNuGetFeed.cs" Link="Shared\MockNuGetFeed.cs" />
+    <!-- New Project's recorded templates (ADR 0082): the Workbench tests' data, and its stand-in CLI. -->
+    <Compile Include="..\Codalus.Workbench.Tests\TemplateTestData.cs" Link="Shared\TemplateTestData.cs" />
     <ProjectReference Include="..\..\src\Codalus.Shell\Codalus.Shell.csproj" />
     <!-- The live agent (M19b) is tested in-process against headless windows. -->
     <ProjectReference Include="..\..\src\Codalus.Previewer.Agent\Codalus.Previewer.Agent.csproj" />

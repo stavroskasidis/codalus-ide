@@ -419,10 +419,24 @@ public sealed partial class PluginDescription
 public static class PluginDiscovery
 {
     /// <summary>
+    /// Built-in plugins whose features became the IDE's own: a copy left behind (in the user's plugins folder, under
+    /// <c>--plugin-dir</c>, or from a portable install unpacked over an older one) is never loaded, so it can't take
+    /// back the IDE's commands. <c>codalus.templates</c>: New Project is part of the IDE since 0.6.0 (ADR 0082).
+    /// </summary>
+    public static IReadOnlySet<string> RetiredIds { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "codalus.templates" };
+
+    /// <summary>
     /// Scans <paramref name="roots"/> in order; when two folders declare the same id, the first wins
     /// (so <c>--plugin-dir</c> development copies override installed ones).
     /// </summary>
-    public static IReadOnlyList<PluginDescription> Scan(IEnumerable<(string Directory, bool IsBuiltIn)> roots, PlatformKind platform, bool allowProposedApi = false)
+    public static IReadOnlyList<PluginDescription> Scan(IEnumerable<(string Directory, bool IsBuiltIn)> roots, PlatformKind platform, bool allowProposedApi = false) =>
+        Scan(roots, platform, allowProposedApi, retired: null);
+
+    /// <summary>
+    /// <see cref="Scan(IEnumerable{ValueTuple{string, bool}}, PlatformKind, bool)"/>, leaving out the copies of
+    /// <see cref="RetiredIds"/> and adding each one's id and folder to <paramref name="retired"/>.
+    /// </summary>
+    public static IReadOnlyList<PluginDescription> Scan(IEnumerable<(string Directory, bool IsBuiltIn)> roots, PlatformKind platform, bool allowProposedApi, ICollection<(string Id, string Directory)>? retired)
     {
         var result = new List<PluginDescription>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -439,6 +453,12 @@ public static class PluginDiscovery
             foreach (var directory in candidates)
             {
                 var plugin = PluginDescription.Read(directory, isBuiltIn, platform, allowProposedApi);
+                if (RetiredIds.Contains(plugin.Id))
+                {
+                    retired?.Add((plugin.Id, directory));
+                    continue;
+                }
+
                 if (seen.Add(plugin.Id))
                 {
                     result.Add(plugin);

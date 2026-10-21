@@ -368,9 +368,11 @@ public sealed class ProjectTemplateCatalog
                 AuthOption = auth is null ? null : CliOption(template, auth.Name),
                 LocalDbOption = Find(template, "UseLocalDB") is { } localDb ? CliOption(template, localDb.Name) : null,
                 Docker = host.SupportsDocker,
-                Aspire = template.Language == "C#" && isWeb && host.SupportsDocker
+                // Aspire enlists a C# web app with a server: not a test or library, not Aspire's own, not standalone WebAssembly.
+                Aspire = template.Language == "C#" && isWeb
                     && !classes.Any(c => c.Equals("Test", StringComparison.OrdinalIgnoreCase) || c.Equals("Library", StringComparison.OrdinalIgnoreCase) || c.Equals("Aspire", StringComparison.OrdinalIgnoreCase))
-                    && !template.Identity.Contains("Aspire", StringComparison.OrdinalIgnoreCase),
+                    && !template.Identity.Contains("Aspire", StringComparison.OrdinalIgnoreCase)
+                    && !template.ShortNames.Any(n => n.StartsWith("blazorwasm", StringComparison.OrdinalIgnoreCase)),
             },
             DefaultName = template.DefaultName ?? DefaultNameFor(template.ShortName, template.Name),
             SourceName = definition.SourceName,

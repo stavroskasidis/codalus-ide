@@ -195,6 +195,25 @@ public sealed class ManifestValidationTests : IDisposable
     }
 
     [Fact]
+    public void A_retired_templates_plugin_copy_is_ignored()
+    {
+        // A copy of the built-in Templates plugin left in a plugins folder (New Project is the IDE's since 0.6.0, ADR 0082).
+        var stale = Variant("templates", m => m["id"] = "codalus.templates");
+        var retired = new List<(string Id, string Directory)>();
+        var plugins = PluginDiscovery.Scan([(_root, false)], PlatformKind.Windows, allowProposedApi: false, retired);
+        Assert.DoesNotContain(plugins, p => p.Id == "codalus.templates");
+        Assert.Equal([("codalus.templates", stale)], retired);
+        Assert.Empty(PluginDiscovery.Scan([(stale, true)], PlatformKind.Windows)); // built-in or not
+
+        var paths = AppPaths.Resolve(PlatformInfo.Current, _ => null, Path.Combine(_root, "user"));
+        paths.EnsureCreated();
+        using var workbench = new Codalus.Workbench.WorkbenchServices(paths, PlatformInfo.Current, watchFiles: false);
+        var manager = new PluginManager(workbench, _ => throw new InvalidOperationException("no host"), "test");
+        manager.ReportRetired(retired);
+        Assert.Contains($"An old copy of the Templates plugin at {stale} is ignored: New Project is part of Codalus IDE since 0.6.0.", manager.PluginLog.GetText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_plugin_cannot_take_a_shell_command_or_setting()
     {
         var paths = AppPaths.Resolve(PlatformInfo.Current, _ => null, Path.Combine(_root, "user"));

@@ -37,6 +37,7 @@ public sealed partial class ShellHost
     {
         ProjectItems = new ProjectItemService(Solutions);
         Templates = new TemplateService(workingDirectory: Paths.State);
+        InitializeNewProject();
         PropertiesWindow = new PropertiesWindowViewModel(this);
         InitializeBuildDepth();
         Solutions.FilesChanged += (_, directories) => Ui.Post(() => Explorer.OnFilesChanged(directories));

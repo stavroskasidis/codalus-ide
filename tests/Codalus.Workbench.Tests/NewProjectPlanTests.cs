@@ -104,11 +104,17 @@ public sealed class NewProjectPlanTests : IDisposable
         var request = Request(blazor, "net11.0") with { Location = _root, ProjectName = "App", SolutionName = "Sol" };
         Assert.Null(NewProjectPlan.Create(request).ValidateTarget(s_linux));
 
-        // An existing folder that isn't empty is an error; an empty one is fine.
-        Directory.CreateDirectory(Path.Combine(_root, "Sol"));
-        Assert.Null(NewProjectPlan.Create(request).ValidateTarget(s_linux));
+        // The project's folder existing and not empty is an error; empty, it's fine; the solution's folder may hold other
+        // things, not a solution of the same name.
+        Directory.CreateDirectory(Path.Combine(_root, "Sol", "App"));
         File.WriteAllText(Path.Combine(_root, "Sol", "keep.txt"), "x");
-        Assert.Equal($"The folder \"{Path.Combine(_root, "Sol")}\" already exists. Choose another name or location.", NewProjectPlan.Create(request).ValidateTarget(s_linux));
+        Assert.Null(NewProjectPlan.Create(request).ValidateTarget(s_linux));
+        File.WriteAllText(Path.Combine(_root, "Sol", "App", "keep.txt"), "x");
+        Assert.Equal($"The folder \"{Path.Combine(_root, "Sol", "App")}\" already exists. Choose another name or location.", NewProjectPlan.Create(request).ValidateTarget(s_linux));
+        File.Delete(Path.Combine(_root, "Sol", "App", "keep.txt"));
+        File.WriteAllText(Path.Combine(_root, "Sol", "Sol.slnx"), "<Solution />");
+        Assert.Equal($"The solution \"{Path.Combine(_root, "Sol", "Sol.slnx")}\" already exists. Choose another name or location.", NewProjectPlan.Create(request).ValidateTarget(s_linux));
+        Assert.Null(NewProjectPlan.Create(request with { SolutionMode = SolutionMode.AddToSolution }).ValidateTarget(s_linux)); // no new solution
 
         // Windows without long paths: the project folder plus the template's deepest file stays under 260 characters.
         var deep = request with { Location = Path.Combine(_root, new string('d', 120)), SolutionName = new string('s', 40) };

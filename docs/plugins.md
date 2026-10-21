@@ -110,7 +110,7 @@ A manifest string that is a whole `%key%` (VS Code's convention) is replaced whe
 
 ### When-clauses
 
-`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`, or Classic's `blue`: a theme family's variant gives its kind), `themeFamily` (since M45: `classic`, `harbor`, `graphite`, `daylight` or `ember`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`), `explorerItemIsProjectReference`, `editorTextFocus` (an editor has keyboard focus), `editorLanguageId` (`csharp`, or absent for plain text), `editorHasSelection`, `editorHasMultipleSelections`, `buildRunning`, `programRunning` (a program started with Run Without Debugging is still running), `hasStartupProject`, `debugActive`, `debugRunning`, `debugStopped`, `hasBreakpoints`, `gitRepository` (the open solution is in a git repository), `gitMerging`, `gitRepositories` (the solution spans several repositories; since 0.2.6), `gitLfs` (the repository uses Git LFS), `hostingRepository` (the repository is on a host the user is signed in to), `hostingProvider` (that provider's id), `testsRunning`, `testExplorerSelection`, `coverageAvailable` (a coverage run's results are shown), and since 0.2.8 `folderMode` (a folder is open without a solution), `explorerFolderView`, `explorerShowAllFiles`, `explorerItemExcluded` (a file on disk that isn't in its project), `explorerItemInProject`, `explorerItemLinked`, `explorerItemIsProjectFile` and `explorerProjectLoaded`. Every text document, editor tabs included, has `activeDocumentKind == textFile`. In `toolWindow/title`, `view` is the tool window's id.
+`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`, or Classic's `blue`: a theme family's variant gives its kind), `themeFamily` (since M45: `classic`, `harbor`, `graphite`, `daylight` or `ember`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`), `explorerItemIsProjectReference`, `editorTextFocus` (an editor has keyboard focus), `editorLanguageId` (`csharp`, or absent for plain text), `editorHasSelection`, `editorHasMultipleSelections`, `buildRunning`, `programRunning` (a program started with Run Without Debugging is still running), `hasStartupProject`, `debugActive`, `debugRunning`, `debugStopped`, `hasBreakpoints`, `gitRepository` (the open solution is in a git repository), `gitMerging`, `gitRepositories` (the solution spans several repositories; since 0.2.6), `gitLfs` (the repository uses Git LFS), `hostingRepository` (the repository is on a host the user is signed in to), `hostingProvider` (that provider's id), `testsRunning`, `testExplorerSelection`, `coverageAvailable` (a coverage run's results are shown), and since 0.2.8 `folderMode` (a folder is open without a solution), `explorerFolderView`, `explorerShowAllFiles`, `explorerItemExcluded` (a file on disk that isn't in its project), `explorerItemInProject`, `explorerItemLinked`, `explorerItemIsProjectFile` and `explorerProjectLoaded`, and since 0.6.0 `solutionIsProjectFile` (a project file is open on its own, without a solution). Every text document, editor tabs included, has `activeDocumentKind == textFile`. In `toolWindow/title`, `view` is the tool window's id.
 
 ## The code
 
@@ -184,6 +184,9 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `workbench.getRecentSolutions` | none; returns `[{ path, name }]`, most recent first |
 | `solution.getInfo` | none; returns `{ path, format, trusted }` of the open solution, or null |
 | `solution.addProjectFile` | project path; adds it to the open solution (in the selected solution folder) |
+| `templates.newProject` | optional `{ "template": "<short name or row id>", "language": "C#", "fromStartWindow": true }`; opens New Project (on that template when given) and returns the created project's path once Create has finished and the project is in the open solution, or null when cancelled. The wizard isn't modal: the command completes when it closes. Since 0.6.0 the IDE's own (it was the Templates plugin's). |
+| `templates.newSolution` | none; opens New Project on Blank Solution and returns the solution's path, or null when cancelled. Since 0.6.0 the IDE's own. |
+| `solution.addNewProject` | none; New Project adding to the open solution (in the solution folder selected when it opens) or folder; returns the project's path, or null. Since 0.6.0. |
 | `editor.action.revealDefinition`, `editor.action.goToImplementation`, `editor.action.triggerSuggest`, `editor.action.showHover`, `editor.action.find`, `editor.action.gotoLine` | none; act on the active editor |
 | `editor.action.referenceSearch`, `editor.action.rename`, `editor.action.quickFix`, `editor.action.formatDocument`, `editor.action.formatSelection`, `workbench.action.gotoAll`, `workbench.action.gotoFile`, `workbench.action.gotoType`, `workbench.action.gotoMember`, `workbench.action.gotoText`, `workbench.action.findInFiles` | none; act on the active editor (Code Search and Find in Files on the solution) |
 | `build.buildSolution`, `build.rebuildSolution`, `build.cleanSolution`, `build.cancel`, `run.stop`, `run.selectStartupProject` | none |
@@ -199,7 +202,9 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `file.saveAll`, `workbench.navigateBack`, `workbench.navigateForward`, `workbench.splitEditorRight`, `workbench.splitEditorDown`, `workbench.view.errorList` | none |
 | `workbench.showCommandPalette`, `workbench.openSettings`, `workbench.openKeyboardShortcuts`, `workbench.selectTheme`, `workbench.showLogs`, `workbench.view.plugins` | none |
 
-The built-in Welcome plugin (`src/Plugins/Codalus.Plugins.Welcome`) and Templates plugin (`src/Plugins/Codalus.Plugins.Templates`: New Project and New Solution with quick picks, input boxes and `dotnet new`) are complete examples that reach the shell only through these commands.
+The built-in Welcome plugin (`src/Plugins/Codalus.Plugins.Welcome`) is a complete example that reaches the shell only through these commands. The HelloWorld sample (`samples/plugins/HelloWorld`) shows every contribution point, quick picks and input boxes with Browse included (`hello.ask`).
+
+A plugin can't take a command or a setting the IDE owns: declaring one is ignored, and the plugin log says so (since 0.6.0). Its menus and keys may still run the IDE's command.
 
 ## Languages, grammars and language servers
 
@@ -364,6 +369,19 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### 0.6.0 New Project (no API version change)
+
+New Project is the classic IDE's three-page wizard, part of the IDE ([ADR 0082](adr/0082-new-project-wizard.md)):
+
+- The built-in Templates plugin (`codalus.templates`) is retired. Its commands `templates.newProject` and `templates.newSolution` and its setting `templates.defaultLocation` are the IDE's, with the same ids and results: the created project's path (the solution's for New Solution), or null when cancelled. `templates.newProject` also takes an optional `{ template, language, fromStartWindow }`. The new command `solution.addNewProject` adds a project to the open solution or folder.
+- An old copy of the Templates plugin (in the user plugins folder, under `--plugin-dir`, or from a portable install unpacked over an older one) isn't loaded; the plugin log says where it is.
+- A plugin can no longer redeclare a command or a setting the IDE owns: the declaration is ignored and logged. This was never documented, and the IDE's commands no longer change hands with the order plugins load in.
+- `solution.getInfo` and `solution.addProjectFile` stay, for plugins.
+- The context key `solutionIsProjectFile`.
+- The HelloWorld sample asks for `^1.1.0` and has `hello.ask`: a quick pick, then input boxes with Browse for a folder and a file. The plugin host's tests answer it, the API's end-to-end test of `InputBoxOptions.Browse`.
+
+`PublicAPI.txt` doesn't change.
 
 ### 1.1.0 (Codalus IDE 0.5)
 

@@ -310,6 +310,7 @@ public static class CommandIcons
         // File.
         ["templates.newProject"] = new("new"),
         ["templates.newSolution"] = new("new-solution"),
+        ["solution.addNewProject"] = new("new"),
         ["workbench.openSolution"] = new("folder-open", Open),
         ["workbench.openFolder"] = new("folder", Open),
         ["workbench.openRecent"] = new("history"),

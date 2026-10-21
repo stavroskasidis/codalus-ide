@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Reflection;
 using System.Text;
 using Codalus.Workbench.Projects;
 
@@ -24,7 +25,10 @@ internal sealed class TemplateTestData : IDisposable
         Cache10 = WriteCache("templatecache-10.0.json", bom);
     }
 
-    public static string Source => Path.Combine(ContainerToolsTests.RepoRoot, "tests", "Codalus.Workbench.Tests", "TestData", "Templates");
+    public static string Source => Path.Combine(RepoRoot, "tests", "Codalus.Workbench.Tests", "TestData", "Templates");
+
+    /// <summary>The repository (the test assembly's metadata: the shell's tests link this file too).</summary>
+    private static string RepoRoot => typeof(TemplateTestData).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusRepoRoot").Value!;
 
     public string Root { get; }
 
