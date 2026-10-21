@@ -271,7 +271,13 @@ public sealed record DesignerChangeResult(DesignerPropertyChange[] Changes, Desi
     public DesignerLocalized[] Localized { get; init; } = [];
 }
 
-/// <summary>A property to set: from the Properties window's text (converted as the property's type converter does) or a value, or reset to its default.</summary>
+/// <summary>
+/// A property to set: from the Properties window's text (converted as the property's type converter does) or a value, or
+/// reset to its default. <see cref="Property"/> may be a dotted path to a sub-property (#68: <c>Font.Bold</c>,
+/// <c>Padding.Left</c>, <c>FlatAppearance.BorderSize</c>): the host builds the parent's new value through its converter's
+/// <c>CreateInstance</c> (written as one assignment of the whole value), or sets the sub-property on a parent that is a
+/// reference type. The edits of one request apply in order, as one change.
+/// </summary>
 public sealed record DesignerPropertyEdit(string Component, string Property)
 {
     public string? Text { get; init; }
@@ -453,6 +459,118 @@ public static class DesignerEditors
 
     /// <summary>A collection (M41b): its editor (<see cref="DesignerPropertyInfo.Collection"/>).</summary>
     public const string Collection = "collection";
+
+    /// <summary>A <c>ContentAlignment</c> (#68): the 3×3 picker.</summary>
+    public const string ContentAlignment = "contentAlignment";
+
+    /// <summary>Text with line breaks (#68): the multi-line drop-down, written with CRLF.</summary>
+    public const string Multiline = "multiline";
+
+    /// <summary>Strings, one per line (#68): the String Collection Editor (a <c>string[]</c> such as a text box's Lines).</summary>
+    public const string Strings = "strings";
+
+    /// <summary>A menu item's shortcut keys (#68): modifiers and a key.</summary>
+    public const string ShortcutKeys = "shortcutKeys";
+
+    /// <summary>A date (#68): a month calendar.</summary>
+    public const string Date = "date";
+
+    /// <summary>
+    /// A value whose editor is a Windows Forms dialog with no counterpart in the IDE (#68: a mask, a cell style): typed in
+    /// the cell when its converter takes text, else read-only.
+    /// </summary>
+    public const string Modal = "modal";
+
+    private static readonly Dictionary<string, string> s_editorTypes = new(StringComparer.Ordinal)
+    {
+        ["System.Drawing.Design.ColorEditor"] = Color,
+        ["System.Drawing.Design.FontEditor"] = Font,
+        ["System.Drawing.Design.ContentAlignmentEditor"] = ContentAlignment,
+        ["System.ComponentModel.Design.MultilineStringEditor"] = Multiline,
+        ["System.Windows.Forms.Design.StringArrayEditor"] = Strings,
+        ["System.Windows.Forms.Design.StringCollectionEditor"] = Strings,
+        ["System.Windows.Forms.Design.ListControlStringCollectionEditor"] = Strings,
+        ["System.Windows.Forms.Design.ShortcutKeysEditor"] = ShortcutKeys,
+        ["System.ComponentModel.Design.DateTimeEditor"] = Date,
+        ["System.Windows.Forms.Design.DockEditor"] = Dock,
+        ["System.Windows.Forms.Design.AnchorEditor"] = Anchor,
+        ["System.Drawing.Design.ImageEditor"] = Image,
+        ["System.Drawing.Design.IconEditor"] = Image,
+        ["System.Drawing.Design.BitmapEditor"] = Image,
+        ["System.Drawing.Design.MetafileEditor"] = Image,
+    };
+
+    private const string CollectionEditorType = "System.ComponentModel.Design.CollectionEditor";
+
+    /// <summary>
+    /// The editor a property's <c>UITypeEditor</c> stands for (#68), from the editor's full type name and then each of its
+    /// base types' (so a vendor's subclass of the color editor is a color editor): the IDE's own editor, a collection
+    /// (<paramref name="hasCollectionEditor"/>: one the IDE edits, else <see cref="Modal"/>), <see cref="Modal"/> for any
+    /// other dialog, and null for any other drop-down (the property keeps the editor its type gives it). Matching by name
+    /// keeps this file free of Windows Forms, and names that moved between .NET versions still match through a base type.
+    /// </summary>
+    public static string? FromEditorType(IReadOnlyList<string> typeAndBaseTypeNames, bool modal, bool hasCollectionEditor)
+    {
+        foreach (var name in typeAndBaseTypeNames)
+        {
+            if (s_editorTypes.TryGetValue(name, out var editor))
+            {
+                return editor;
+            }
+
+            if (name == CollectionEditorType)
+            {
+                return hasCollectionEditor ? Collection : Modal;
+            }
+        }
+
+        return modal ? Modal : null;
+    }
+}
+
+/// <summary>
+/// The properties of several selected components as one list (#68), as the classic IDE's grid merges them: the
+/// properties they all have (by name, type, provider and data binding), in the first one's order; a value they don't
+/// share is <see cref="DesignerPropertyInfo.Mixed"/> (shown blank); set if any sets it; reset and typing-in-choices only
+/// if all allow them; sub-properties merged the same way, a parent mixed when any of its parts is.
+/// </summary>
+public static class DesignerPropertyMerge
+{
+    public static DesignerPropertyInfo[] Merge(IReadOnlyList<DesignerPropertyInfo> a, IReadOnlyList<DesignerPropertyInfo> b)
+    {
+        var others = new Dictionary<(string, string, string?, bool), DesignerPropertyInfo>();
+        foreach (var info in b)
+        {
+            others.TryAdd((info.Name, info.Type, info.Provider, info.DataBinding), info);
+        }
+
+        var merged = new List<DesignerPropertyInfo>(a.Count);
+        foreach (var info in a)
+        {
+            if (others.TryGetValue((info.Name, info.Type, info.Provider, info.DataBinding), out var other))
+            {
+                merged.Add(Merge(info, other));
+            }
+        }
+
+        return [.. merged];
+    }
+
+    private static DesignerPropertyInfo Merge(DesignerPropertyInfo a, DesignerPropertyInfo b)
+    {
+        var subProperties = a.SubProperties is { } aSub && b.SubProperties is { } bSub ? Merge(aSub, bSub) : null;
+        var mixed = a.Mixed || b.Mixed || a.Value != b.Value || (subProperties?.Any(s => s.Mixed) ?? false);
+        return a with
+        {
+            Value = mixed ? null : a.Value,
+            Mixed = mixed,
+            IsSet = a.IsSet || b.IsSet,
+            CanReset = a.CanReset && b.CanReset,
+            ChoicesEditable = a.ChoicesEditable && b.ChoicesEditable,
+            IsReadOnly = a.IsReadOnly || b.IsReadOnly,
+            SubProperties = subProperties,
+        };
+    }
 }
 
 /// <summary>
@@ -484,6 +602,19 @@ public sealed record DesignerPropertyInfo(string Name, string Category, string T
 
     /// <summary>A collection's editor (<see cref="DesignerCollectionInfo.Key"/>).</summary>
     public string? Collection { get; init; }
+
+    /// <summary>
+    /// The value's parts (#68), as its type converter lists them (Font's Name, Size, Unit, Bold…; Location's X and Y;
+    /// FlatAppearance's colors), two levels deep, named relative to this property; the edit path is
+    /// <c>Property.Part</c>. Null: not expandable (and from a host older than #68).
+    /// </summary>
+    public DesignerPropertyInfo[]? SubProperties { get; init; }
+
+    /// <summary>Whether Reset can put it back (#68): the property descriptor's <c>CanResetValue</c>, as the classic IDE's context menu asks.</summary>
+    public bool CanReset { get; init; }
+
+    /// <summary>A value not in <see cref="StandardValues"/> can be typed too (#68): the converter's standard values aren't exclusive (Cursor, Font.Size).</summary>
+    public bool ChoicesEditable { get; init; }
 }
 
 public sealed record DesignerPropertiesResult(DesignerPropertyInfo[] Properties);
