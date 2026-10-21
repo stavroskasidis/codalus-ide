@@ -28,8 +28,8 @@ public interface IPluginPrompts
     /// <summary>Returns the index of the chosen item, or null when cancelled.</summary>
     Task<int?> PickAsync(IReadOnlyList<QuickPickItemDto> items, string? placeholder, string source, CancellationToken cancellationToken);
 
-    /// <summary>Returns the entered text, or null when cancelled.</summary>
-    Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken);
+    /// <summary>Returns the entered text, or null when cancelled. <paramref name="browse"/>: <c>folder</c> or <c>file</c> for a path's Browse button, or null.</summary>
+    Task<string?> InputAsync(string title, string? prompt, string? value, string? browse, string source, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -1446,7 +1446,7 @@ public sealed class PluginManager : IAsyncDisposable
                     : null));
             connection.OnRequest(PluginMethods.ShowInputBox, json.ShowInputBoxParams, json.ShowInputBoxResult, async (p, ct) =>
                 new ShowInputBoxResult(_manager.Prompts is { } prompts
-                    ? await prompts.InputAsync(p.Title, p.Prompt, p.Value, _manager.Find(p.PluginId)?.DisplayName ?? p.PluginId, ct).ConfigureAwait(false)
+                    ? await prompts.InputAsync(p.Title, p.Prompt, p.Value, p.Browse, _manager.Find(p.PluginId)?.DisplayName ?? p.PluginId, ct).ConfigureAwait(false)
                     : null));
             connection.OnNotification(PluginMethods.ProgressStart, json.ProgressStartParams, p =>
             {

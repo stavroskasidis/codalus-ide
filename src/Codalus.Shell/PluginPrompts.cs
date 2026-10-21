@@ -22,10 +22,16 @@ internal sealed class PluginPrompts(ShellHost shell) : IPluginPrompts
             return picked?.Tag as int?;
         }).Unwrap();
 
-    public Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken) =>
+    public Task<string?> InputAsync(string title, string? prompt, string? value, string? browse, string source, CancellationToken cancellationToken) =>
         Ui.RunAsync(async () =>
         {
             using var registration = cancellationToken.Register(() => Ui.Post(shell.Dialogs.Cancel));
-            return await shell.Dialogs.InputAsync(title, prompt ?? source, value ?? string.Empty).ConfigureAwait(true);
+            Controls.PathKind? kind = browse switch
+            {
+                "folder" => Controls.PathKind.Folder,
+                "file" => Controls.PathKind.File,
+                _ => null,
+            };
+            return await shell.Dialogs.InputAsync(title, prompt ?? source, value ?? string.Empty, browse: kind).ConfigureAwait(true);
         }).Unwrap();
 }

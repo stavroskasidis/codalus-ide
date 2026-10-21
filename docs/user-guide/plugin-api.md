@@ -1,6 +1,6 @@
 # Plugin API reference
 
-The plugin API, version 1.0.0: every public type and member of `Codalus.Plugins.Abstractions`, from its documentation comments. How to write a plugin is in the [plugin guide](../plugins.md); this page is generated from the API and checked by its tests, so it matches the version it names.
+The plugin API, version 1.1.0: every public type and member of `Codalus.Plugins.Abstractions`, from its documentation comments. How to write a plugin is in the [plugin guide](../plugins.md); this page is generated from the API and checked by its tests, so it matches the version it names.
 
 ## Codalus.Plugins
 
@@ -56,6 +56,7 @@ The plugin API, version 1.0.0: every public type and member of `Codalus.Plugins.
 - [`ITreeDataProvider<T>`](#itreedataprovidert)
 - [`IWindow`](#iwindow)
 - [`IWorkspace`](#iworkspace)
+- [`InputBoxBrowse`](#inputboxbrowse)
 - [`InputBoxOptions`](#inputboxoptions)
 - [`LineCoverage`](#linecoverage)
 - [`MethodCoverage`](#methodcoverage)
@@ -826,6 +827,18 @@ The open solution as the build host evaluated it, plus test discovery from sourc
 | `Task<WorkspaceSolution?> GetSolutionAsync(CancellationToken cancellationToken)` | The open solution, or null when none is open. |
 | `Task<TypeOutline?> GetTypeOutlineAsync(string documentUri, int line, int character, CancellationToken cancellationToken)` | The class, record or struct at a zero-based position of a document, with its methods; null when there is none. |
 
+### `InputBoxBrowse`
+
+`enum Codalus.Plugins.InputBoxBrowse`
+
+What the Browse button of an `InputBoxOptions` asks for. Since API 1.1.0.
+
+| Member | Description |
+|---|---|
+| `File = 2` | An existing file. |
+| `Folder = 1` | An existing folder. |
+| `None = 0` | No Browse button: the text isn't a path. |
+
 ### `InputBoxOptions`
 
 `record Codalus.Plugins.InputBoxOptions`
@@ -835,6 +848,7 @@ What `IWindow.ShowInputBoxAsync` asks. Since API 0.1.1.
 | Member | Description |
 |---|---|
 | `InputBoxOptions(string Title)` | What `IWindow.ShowInputBoxAsync` asks. Since API 0.1.1. |
+| `InputBoxBrowse Browse { get; init; }` | The text is a path on the user's computer: a Browse button beside the box opens the OS's folder or file picker where the typed path is, and puts the choice in the box. Since API 1.1.0. |
 | `string? Prompt { get; init; }` | Explanatory text under the title. |
 | `string Title { get; init; }` | The question, for example "Project name". |
 | `string? Value { get; init; }` | The initial text. |
@@ -951,7 +965,7 @@ Constants of this version of the plugin API.
 | Member | Description |
 |---|---|
 | `const string DeprecationDiagnostic = "CODALUS0001"` | The diagnostic id of deprecated API members (`[Obsolete(..., DiagnosticId = "CODALUS0001")]`). |
-| `const string Version = "1.0.0"` | The API version that a plugin's `engines.codalus` range is checked against. Since 1.0 (M22a), minor versions only add to the API and a member goes away only after a major version, deprecated first with the `PluginApi.DeprecationDiagnostic` warning (ADR 0003, docs/plugins.md#changelog). |
+| `const string Version = "1.1.0"` | The API version that a plugin's `engines.codalus` range is checked against. Since 1.0 (M22a), minor versions only add to the API and a member goes away only after a major version, deprecated first with the `PluginApi.DeprecationDiagnostic` warning (ADR 0003, docs/plugins.md#changelog). |
 
 ### `PluginInfo`
 

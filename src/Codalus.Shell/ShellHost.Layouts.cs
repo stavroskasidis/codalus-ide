@@ -45,7 +45,7 @@ public sealed partial class ShellHost
     public async Task SaveWindowLayoutAsync(string? name = null)
     {
         name ??= Plugins.Prompts is { } prompts
-            ? await prompts.InputAsync("Save Window Layout", "A name for this layout", null, "Codalus IDE", CancellationToken.None).ConfigureAwait(true)
+            ? await prompts.InputAsync("Save Window Layout", "A name for this layout", null, null, "Codalus IDE", CancellationToken.None).ConfigureAwait(true)
             : null;
         if (string.IsNullOrWhiteSpace(name))
         {

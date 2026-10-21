@@ -150,6 +150,6 @@ public sealed class PublicApiTests
             .Where(m => m.Attribute is not null)
             .ToList();
         Assert.All(obsolete, m => Assert.True(m.Attribute!.DiagnosticId == PluginApi.DeprecationDiagnostic, $"{m.Member.DeclaringType?.Name}.{m.Member.Name} is deprecated without {PluginApi.DeprecationDiagnostic}."));
-        Assert.Equal("1.0.0", PluginApi.Version);
+        Assert.Equal("1.1.0", PluginApi.Version);
     }
 }
