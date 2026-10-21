@@ -208,63 +208,121 @@ public sealed partial class WinFormsDesignerDocument
     // ------------------------------------------------------------------ the Properties window's rows (M41b)
 
     /// <summary>
-    /// A property's row: the Dock and Anchor pickers, choices, flags, colors, text; an extender property as "ToolTip on
-    /// toolTip1"; a data binding in (DataBindings); an image imported into the resources; a collection's editor; the
-    /// root's Localizable, which moves its values between the code and the resources.
+    /// A property's row (#68: as the classic IDE's grid shows it): its parts (<see cref="DesignerPropertyInfo.SubProperties"/>,
+    /// each edited through its dotted path), Reset when the host can reset it, its editor from the host's kind (the
+    /// pickers, choices that may take typing, flags, colors, alignment, multi-line text, shortcut keys, dates, fonts,
+    /// strings, a collection's or an image's editor behind "…"; a Windows Forms dialog's value typed in the cell or
+    /// read-only), choices kept for any editor that has standard values (AcceptButton, Font.Name, Cursor); an extender
+    /// property as "ToolTip on toolTip1"; a data binding under (DataBindings); the root's Localizable, which moves its
+    /// values between the code and the resources. An editor kind this IDE doesn't know falls to text, so an older or newer
+    /// host still works.
     /// </summary>
-    private PropertyRowViewModel RowFor(List<string> selected, DesignerPropertyInfo info, string value)
+    private PropertyRowViewModel RowFor(List<string> selected, DesignerPropertyInfo info, string value, string? path = null)
     {
+        path ??= info.Name;
         var description = info.Localizable
             ? Localizer.Get("msg.winFormsDesigner.localizedProperty", "Localizable: this value is in the form's resources, for the language shown.") + " " + info.Description
             : info.Description ?? string.Empty;
         if (info.Provider is { } provider)
         {
             Func<string?, Task>? setExtender = info.IsReadOnly ? null : text => SetExtenderAsync(selected, info.Name, provider, text ?? string.Empty);
-            return info.Editor is DesignerEditors.Boolean or DesignerEditors.Enum && info.StandardValues is { Length: > 0 } extenderValues
-                ? new PropertyRowViewModel(ExtenderName(info.Name, provider), value, PropertyRowKind.Choice, description, setExtender, [.. extenderValues.Select(v => new PropertyOption(v, v))], info.IsSet)
-                : new PropertyRowViewModel(ExtenderName(info.Name, provider), value, PropertyRowKind.Text, description, setExtender, null, info.IsSet);
+            var extender = info.Editor is DesignerEditors.Boolean or DesignerEditors.Enum && info.StandardValues is { Length: > 0 } extenderValues
+                ? new PropertyRowViewModel(ExtenderName(info.Name, provider), value, PropertyRowKind.Choice, description, setExtender, [.. extenderValues.Select(v => new PropertyOption(v, v))], info.IsSet) { Path = $"{info.Name} on {provider}", IsMixed = info.Mixed }
+                : new PropertyRowViewModel(ExtenderName(info.Name, provider), value, PropertyRowKind.Text, description, setExtender, null, info.IsSet) { Path = $"{info.Name} on {provider}", IsMixed = info.Mixed };
+            return extender;
         }
 
         if (info.DataBinding)
         {
             return new PropertyRowViewModel(info.Name, value, PropertyRowKind.Choice, description, text => SetDataBindingAsync(selected, info.Name, text ?? "(none)"),
-                [.. (info.StandardValues ?? ["(none)"]).Select(v => new PropertyOption(v, v))], info.IsSet);
+                [.. (info.StandardValues ?? ["(none)"]).Select(v => new PropertyOption(v, v))], info.IsSet)
+            {
+                Path = DataBindingsRow + "." + info.Name,
+                Reset = () => SetDataBindingAsync(selected, info.Name, "(none)"),
+                CanReset = info.IsSet,
+                IsMixed = info.Mixed,
+            };
         }
 
-        Func<string?, Task>? commit = info.IsReadOnly ? null : text => SetPropertyAsync(selected, info.Name, text ?? string.Empty);
+        Func<string?, Task>? commit = info.IsReadOnly ? null : text => SetPropertyAsync(selected, path, text ?? string.Empty);
+        List<PropertyRowViewModel> children = [.. (info.SubProperties ?? []).Select(sub => RowFor(selected, sub, sub.Mixed ? string.Empty : sub.Value ?? string.Empty, path + "." + sub.Name))];
+        List<PropertyOption>? options = info.StandardValues is { Length: > 0 } values ? [.. values.Select(v => new PropertyOption(v, v))] : null;
+        System.Windows.Input.ICommand? modal = null;
+        PropertyRowKind kind;
         switch (info.Editor)
         {
             case DesignerEditors.Image when selected.Count == 1:
-                return new PropertyRowViewModel(info.Name, value, PropertyRowKind.ReadOnly, description, null, null, info.IsSet)
-                {
-                    Action = new RelayCommand(() => _ = ImportImageAsync(selected[0], info.Name, path: null, toProject: false)),
-                    ActionTitle = Localizer.Format("msg.winFormsDesigner.importImage", "Import an image into the form's resources for {0}…", info.Name),
-                    ActionIcon = "file-add",
-                    SecondaryAction = new RelayCommand(() => _ = ImportImageAsync(selected[0], info.Name, path: null, toProject: true)),
-                    SecondaryActionTitle = Localizer.Format("msg.winFormsDesigner.importProjectImage", "Import an image into the project's resources (Properties/Resources.resx) for {0}…", info.Name),
-                };
+                kind = PropertyRowKind.ReadOnly;
+                modal = new RelayCommand(() => _ = ImportImageAsync(selected[0], info.Name, path: null, toProject: false));
+                break;
             case DesignerEditors.Collection when selected.Count == 1 && info.Collection is { } key:
-                return new PropertyRowViewModel(info.Name, value, PropertyRowKind.ReadOnly, description, null, null, info.IsSet)
-                {
-                    Action = new RelayCommand(() => _ = OpenCollectionEditorAsync(ComponentOf(selected[0]), key)),
-                    ActionTitle = Localizer.Format("msg.winFormsDesigner.editCollection", "Edit {0}…", info.Name),
-                    ActionIcon = "more",
-                };
-            case DesignerEditors.Dock when info.StandardValues is { Length: > 0 } docks:
-                return new PropertyRowViewModel(info.Name, value, PropertyRowKind.Dock, description, commit, [.. docks.Select(v => new PropertyOption(v, v))], info.IsSet);
-            case DesignerEditors.Anchor when info.StandardValues is { Length: > 0 } anchors:
-                return new PropertyRowViewModel(info.Name, value, PropertyRowKind.Anchor, description, commit, [.. anchors.Where(f => f is not "None").Select(f => new PropertyOption(f, f))], info.IsSet);
-            case DesignerEditors.Boolean or DesignerEditors.Enum or DesignerEditors.Color when info.StandardValues is { Length: > 0 } values:
-                return new PropertyRowViewModel(info.Name, value, info.Editor == DesignerEditors.Color ? PropertyRowKind.Color : PropertyRowKind.Choice, description, commit,
-                    [.. values.Select(v => new PropertyOption(v, v))], info.IsSet);
-            case DesignerEditors.Flags when info.StandardValues is { Length: > 0 } flags:
-                return new PropertyRowViewModel(info.Name, value, PropertyRowKind.Flags, description, commit, [.. flags.Where(f => f is not "None").Select(f => new PropertyOption(f, f))], info.IsSet);
+                // A collection: "(Collection)", read-only, its editor behind "…" (D41 question 20).
+                kind = PropertyRowKind.ReadOnly;
+                modal = new RelayCommand(() => _ = OpenCollectionEditorAsync(ComponentOf(selected[0]), key));
+                break;
+            case DesignerEditors.Dock when options is not null:
+                kind = PropertyRowKind.Dock;
+                break;
+            case DesignerEditors.Anchor when options is not null:
+                kind = PropertyRowKind.Anchor;
+                options = [.. options.Where(o => o.Value is not "None")];
+                break;
+            case DesignerEditors.Flags when options is not null:
+                kind = PropertyRowKind.Flags;
+                options = [.. options.Where(o => o.Value is not "None")];
+                break;
             case DesignerEditors.Color:
-                return new PropertyRowViewModel(info.Name, value, PropertyRowKind.Color, description, commit, null, info.IsSet);
+                kind = PropertyRowKind.Color;
+                break;
+            case DesignerEditors.ContentAlignment:
+                kind = PropertyRowKind.ContentAlignment;
+                break;
+            case DesignerEditors.Multiline:
+                kind = PropertyRowKind.Multiline;
+                break;
+            case DesignerEditors.ShortcutKeys:
+                kind = PropertyRowKind.ShortcutKeys;
+                break;
+            case DesignerEditors.Date:
+                kind = PropertyRowKind.Date;
+                break;
+            case DesignerEditors.Font:
+                kind = PropertyRowKind.Font;
+                break;
+            case DesignerEditors.Strings:
+                kind = PropertyRowKind.Text;
+                break;
+            case DesignerEditors.Modal:
+                // A Windows Forms dialog the IDE doesn't show (D41 question 8): no "…"; typed in the cell when its converter takes text.
+                kind = PropertyRowKind.Text;
+                description = (description.Length == 0 ? string.Empty : description + "\n") + (info.IsReadOnly
+                    ? Localizer.Get("msg.winFormsDesigner.dialogEditorReadOnly", "Its editor is a Windows Forms dialog, which Codalus IDE doesn't show, and the value can't be typed: set it in the code.")
+                    : Localizer.Get("msg.winFormsDesigner.dialogEditor", "Its editor is a Windows Forms dialog, which Codalus IDE doesn't show: type the value here."));
+                break;
+            case DesignerEditors.Boolean or DesignerEditors.Enum when options is not null:
+                kind = PropertyRowKind.Choice;
+                break;
             default:
-                return new PropertyRowViewModel(info.Name, value, PropertyRowKind.Text, description, commit, null, info.IsSet);
+                // Any other editor with standard values is a choice (AcceptButton, Font.Name, Cursor), typed too when the list isn't exclusive.
+                kind = options is not null ? PropertyRowKind.Choice : PropertyRowKind.Text;
+                break;
         }
+
+        return new PropertyRowViewModel(info.Name, value, kind, description, commit, options, info.IsSet)
+        {
+            Path = path,
+            Children = children,
+            Reset = info.IsReadOnly && info.SubProperties is null ? null : () => SetPropertyAsync(selected, path, null),
+            CanReset = info.CanReset,
+            ChoicesEditable = info.ChoicesEditable,
+            IsMixed = info.Mixed,
+            ModalEditor = modal,
+            IsCursor = info.Type == "System.Windows.Forms.Cursor",
+        };
     }
+
+    /// <summary>The row the shell nests the data bindings under (#68, D41 question 6), in Data, as the classic IDE's.</summary>
+    internal const string DataBindingsRow = "(DataBindings)";
 
     /// <summary>Visual Studio's name of an extender property's row: <c>ToolTip on toolTip1</c>.</summary>
     public static string ExtenderName(string property, string provider) => Localizer.Format("msg.winFormsDesigner.extender", "{0} on {1}", property, provider);
@@ -275,14 +333,14 @@ public sealed partial class WinFormsDesignerDocument
             Localizer.Get("msg.winFormsDesigner.language", "The language the form is designed in: its localizable properties are written to that language's resources (only what differs from the default)."),
             text => SetCultureAsync(text ?? DefaultLanguage), [.. LanguageChoices.Select(c => new PropertyOption(c, c))], _culture.Length > 0));
 
-    /// <summary>An extender property set in the Properties window (<c>ToolTip on toolTip1</c>), or reset when empty.</summary>
-    public Task SetExtenderAsync(IReadOnlyList<string> components, string property, string provider, string text) =>
+    /// <summary>An extender property set in the Properties window (<c>ToolTip on toolTip1</c>), or reset when empty; the host's error, or null.</summary>
+    public Task<string?> SetExtenderAsync(IReadOnlyList<string> components, string property, string provider, string text) =>
         RunAsync(host => host.SetPropertiesAsync(new DesignerSetPropertiesParams([.. components.Select(c => text.Length == 0
             ? new DesignerPropertyEdit(ComponentOf(c), property) { Provider = provider, Reset = true }
             : new DesignerPropertyEdit(ComponentOf(c), property) { Provider = provider, Text = text })]), CancellationToken.None));
 
-    /// <summary>A property bound to a binding source's member (<c>bindingSource1 - Name</c>) or unbound (<c>(none)</c>).</summary>
-    public Task SetDataBindingAsync(IReadOnlyList<string> components, string property, string binding) =>
+    /// <summary>A property bound to a binding source's member (<c>bindingSource1 - Name</c>) or unbound (<c>(none)</c>); the host's error, or null.</summary>
+    public Task<string?> SetDataBindingAsync(IReadOnlyList<string> components, string property, string binding) =>
         RunAsync(host => host.SetPropertiesAsync(new DesignerSetPropertiesParams([.. components.Select(c => new DesignerPropertyEdit(ComponentOf(c), property) { DataBinding = true, Text = binding })]), CancellationToken.None));
 
     // ------------------------------------------------------------------ images (M41b)

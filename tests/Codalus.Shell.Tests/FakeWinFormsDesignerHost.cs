@@ -28,7 +28,14 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     private readonly Dictionary<(string Component, string Property), string> _bindings = [];
     private readonly Dictionary<string, List<string>> _parts = new(StringComparer.Ordinal);
     private readonly HashSet<string> _locked = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Component, string Property), DesignerValue> _assigned = [];
     private string _root = "Form1";
+
+    /// <summary>The properties the fake keeps as the code says them (#68), besides Text, Location, Size, TabIndex, Dock and Anchor.</summary>
+    private static readonly HashSet<string> s_kept = new(StringComparer.Ordinal) { "Font", "ForeColor", "BackColor", "TextAlign", "Cursor", "Enabled", "Lines", "FlatAppearance.BorderSize", "AcceptButton", "CancelButton", "ShortcutKeys" };
+
+    /// <summary>The edits of the last designer/setProperties (#68: a font editor's parts come in one request).</summary>
+    public List<DesignerPropertyEdit> LastEdits { get; } = [];
 
     /// <summary>A Locked metadata entry as the classic IDE writes it (and the real host, through ResXResourceWriter).</summary>
     public const string BooleanType = "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
@@ -66,6 +73,12 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         _bindings.Clear();
         _parts.Clear();
         _locked.Clear();
+        _assigned.Clear();
+        foreach (var assign in parameters.Model.Statements.Where(s => s.Kind == DesignerStatementKinds.Assign && s.Member is { } member && s_kept.Contains(member) && s.Value is not null))
+        {
+            _assigned[(assign.Target.Length == 0 ? parameters.Model.ClassName : assign.Target, assign.Member!)] = assign.Value!;
+        }
+
         if (parameters.Resources.FirstOrDefault(r => r.Culture.Length == 0) is { } resources)
         {
             // The control designers' Locked, as the classic IDE keeps it: name.Locked ($this.Locked) metadata.
@@ -345,6 +358,9 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         var changes = new List<DesignerPropertyChange>();
         var resources = new List<DesignerResourceEntry>();
         var localized = new List<DesignerLocalized>();
+        LastEdits.Clear();
+        LastEdits.AddRange(parameters.Edits);
+        var fonts = new HashSet<string>(StringComparer.Ordinal);
         foreach (var edit in parameters.Edits)
         {
             if (edit.Property == "Locked" && edit.Provider is null)
@@ -413,6 +429,23 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                 continue;
             }
 
+            if (SetKept(edit, changes, fonts) is { } keptError)
+            {
+                return Task.FromResult(new DesignerChangeResult([], Render()) { Error = keptError });
+            }
+
+            if (s_handled.Contains(edit.Property) || edit.Property.StartsWith("Font.", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (edit.Property == "Text" && _items.TryGetValue(edit.Component, out var menuItem))
+            {
+                _items[edit.Component] = menuItem with { Text = edit.Reset ? null : edit.Text };
+                changes.Add(new DesignerPropertyChange(edit.Component, "Text", edit.Reset ? null : DesignerValue.String(edit.Text ?? string.Empty)));
+                continue;
+            }
+
             var control = _controls[edit.Component];
             switch (edit.Property)
             {
@@ -449,7 +482,182 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             }
         }
 
+        // Several edits of one font in one request make one change (#68: the font editor's OK).
+        foreach (var component in fonts)
+        {
+            changes.Add(new DesignerPropertyChange(component == _root ? string.Empty : component, "Font", Assigned(component, "Font")));
+        }
+
         return Task.FromResult(new DesignerChangeResult([.. changes], Render()) { Resources = [.. resources], Localized = [.. localized] });
+    }
+
+    private static readonly HashSet<string> s_handled = new(StringComparer.Ordinal)
+    {
+        "Font", "ForeColor", "BackColor", "TextAlign", "Cursor", "Enabled", "Lines", "AcceptButton", "CancelButton", "ShortcutKeys", "FlatAppearance.BorderSize",
+        "Location.X", "Location.Y", "Size.Width", "Size.Height",
+    };
+
+    /// <summary>
+    /// The properties of #68 as the real host answers them: a part's dotted path written as the whole value (one font
+    /// change for several of its parts), colors, alignment, cursors, a string array, a component reference, a reset;
+    /// <c>Location.X = "abc"</c> is the converter's error.
+    /// </summary>
+    private string? SetKept(DesignerPropertyEdit edit, List<DesignerPropertyChange> changes, HashSet<string> fonts)
+    {
+        var component = edit.Component.Length == 0 ? _root : edit.Component;
+        var key = (component, edit.Property);
+        var text = edit.Text ?? string.Empty;
+        void Change(string property, DesignerValue? value)
+        {
+            if (value is null)
+            {
+                _assigned.Remove((component, property));
+            }
+            else
+            {
+                _assigned[(component, property)] = value;
+            }
+
+            changes.RemoveAll(c => c.Component == edit.Component && c.Property == property);
+            changes.Add(new DesignerPropertyChange(edit.Component, property, value));
+        }
+
+        switch (edit.Property)
+        {
+            case "Location.X" or "Location.Y" or "Size.Width" or "Size.Height":
+            {
+                if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+                {
+                    return $"'{text}' is not a valid value for Int32.";
+                }
+
+                var control = _controls[component];
+                control = edit.Property switch
+                {
+                    "Location.X" => control with { X = number },
+                    "Location.Y" => control with { Y = number },
+                    "Size.Width" => control with { W = number },
+                    _ => control with { H = number },
+                };
+                _controls[component] = control;
+                var location = edit.Property.StartsWith("Location", StringComparison.Ordinal);
+                changes.RemoveAll(c => c.Component == edit.Component && c.Property == (location ? "Location" : "Size"));
+                changes.Add(new DesignerPropertyChange(edit.Component, location ? "Location" : "Size", location
+                    ? DesignerValue.NewOf("System.Drawing.Point", DesignerValue.Int((int)control.X), DesignerValue.Int((int)control.Y))
+                    : DesignerValue.NewOf("System.Drawing.Size", DesignerValue.Int((int)control.W), DesignerValue.Int((int)control.H))));
+                return null;
+            }
+
+            case "Font":
+                if (edit.Reset)
+                {
+                    _assigned.Remove(key);
+                }
+                else if (text.Split(',', StringSplitOptions.TrimEntries) is [var family, var points, ..] && float.TryParse(points.Replace("pt", string.Empty, StringComparison.Ordinal), NumberStyles.Float, CultureInfo.InvariantCulture, out var typed))
+                {
+                    var styles = text.Contains("style=", StringComparison.Ordinal) ? text[(text.IndexOf("style=", StringComparison.Ordinal) + 6)..].Split(',', StringSplitOptions.TrimEntries) : [];
+                    _assigned[key] = FontValue(Assigned(component, "Font"), family, typed, styles);
+                }
+                else
+                {
+                    return $"'{text}' is not a valid value for Font.";
+                }
+
+                fonts.Add(component);
+                return null;
+
+            case ['F', 'o', 'n', 't', '.', ..]:
+            {
+                var font = Assigned(component, "Font");
+                var (name, size, styles) = FontParts(font);
+                var set = styles.ToHashSet(StringComparer.Ordinal);
+                var part = edit.Property["Font.".Length..];
+                switch (part)
+                {
+                    case "Name":
+                        name = edit.Reset ? "Segoe UI" : text;
+                        break;
+                    case "Size" when edit.Reset:
+                        size = 9F;
+                        break;
+                    case "Size":
+                        if (!float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out size) || size <= 0)
+                        {
+                            return $"'{text}' is not a valid value for Single.";
+                        }
+
+                        break;
+                    case "Bold" or "Italic" or "Underline" or "Strikeout":
+                        _ = !edit.Reset && string.Equals(text, "True", StringComparison.OrdinalIgnoreCase) ? set.Add(part) : set.Remove(part);
+                        break;
+                    default:
+                        return $"Font's {part} can't be set.";
+                }
+
+                _assigned[(component, "Font")] = FontValue(font, name, size, set);
+                fonts.Add(component);
+                return null;
+            }
+
+            case "ForeColor" or "BackColor":
+            {
+                var fallback = edit.Property == "BackColor" ? "Control" : "ControlText";
+                if (edit.Reset || text == fallback)
+                {
+                    Change(edit.Property, null);
+                    return null;
+                }
+
+                if (ColorValue(text) is not { } color)
+                {
+                    return $"'{text}' is not a valid value for Color.";
+                }
+
+                Change(edit.Property, color);
+                return null;
+            }
+
+            case "TextAlign":
+                Change("TextAlign", edit.Reset || text is "MiddleCenter" or "Left" ? null : DesignerValue.EnumOf(_controls[component].Type.EndsWith("TextBox", StringComparison.Ordinal) ? Forms + "HorizontalAlignment" : "System.Drawing.ContentAlignment", text));
+                return null;
+
+            case "Cursor":
+                Change("Cursor", edit.Reset || text == "Default" ? null : DesignerValue.MemberOf(Forms + "Cursors", text));
+                return null;
+
+            case "Enabled":
+                Change("Enabled", edit.Reset || string.Equals(text, "True", StringComparison.OrdinalIgnoreCase) ? null : DesignerValue.Bool(false));
+                return null;
+
+            case "Lines":
+                Change("Lines", edit.Reset ? null : edit.Value ?? DesignerValue.ArrayOf("System.String", [.. text.Split('\n').Select(l => DesignerValue.String(l.TrimEnd('\r')))]));
+                return null;
+
+            case "AcceptButton" or "CancelButton":
+                if (!edit.Reset && text != "(none)" && !_controls.ContainsKey(text))
+                {
+                    return $"'{text}' is not a valid value for IButtonControl.";
+                }
+
+                Change(edit.Property, edit.Reset || text == "(none)" ? null : DesignerValue.ReferenceTo(text));
+                return null;
+
+            case "ShortcutKeys":
+                Change("ShortcutKeys", edit.Reset || text == "None" ? null : DesignerValue.EnumOf(Forms + "Keys", [.. text.Split('+', StringSplitOptions.TrimEntries).Select(k => k == "Ctrl" ? "Control" : k)]));
+                return null;
+
+            case "FlatAppearance.BorderSize":
+                if (!edit.Reset && !int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                {
+                    return $"'{text}' is not a valid value for Int32.";
+                }
+
+                Change("FlatAppearance.BorderSize", edit.Reset || text == "1" ? null : DesignerValue.Int(int.Parse(text, CultureInfo.InvariantCulture)));
+                return null;
+
+            default:
+                return null;
+        }
     }
 
     public Task<DesignerChangeResult> SetParentAsync(DesignerSetParentParams parameters, CancellationToken cancellationToken)
@@ -489,22 +697,160 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     private DesignerCollectionChange ItemsChange(string owner) =>
         new(owner, _items.ContainsKey(owner) ? "DropDownItems" : "Items", "AddRange", Forms + "ToolStripItem", [.. _itemOrder[owner].Select(DesignerValue.ReferenceTo)]);
 
+    // ------------------------------------------------------------------ the Properties window (#68: the real host's shapes)
+
+    /// <summary>The font families the real host's FontNameConverter lists (a few of them).</summary>
+    public static readonly string[] FontFamilies = ["Arial", "Consolas", "Courier New", "Segoe UI", "Tahoma", "Times New Roman", "Verdana"];
+
+    private static readonly string[] s_cursors = ["AppStarting", "Arrow", "Cross", "Default", "Hand", "Help", "HSplit", "IBeam", "No", "NoMove2D", "SizeAll", "SizeNESW", "SizeNS", "SizeNWSE", "SizeWE", "UpArrow", "VSplit", "WaitCursor"];
+
+    private static readonly string[] s_alignments = ["TopLeft", "TopCenter", "TopRight", "MiddleLeft", "MiddleCenter", "MiddleRight", "BottomLeft", "BottomCenter", "BottomRight"];
+
+    private static readonly string[] s_units = ["World", "Display", "Pixel", "Point", "Inch", "Document", "Millimeter"];
+
+    private static readonly string[] s_bool = ["True", "False"];
+
+    /// <summary>The ColorConverter's standard values: the known colors, system and web.</summary>
+    private static readonly string[] s_colors = [.. Enum.GetNames<System.Drawing.KnownColor>().Where(n => System.Drawing.Color.FromName(n).IsKnownColor)];
+
+    private DesignerValue? Assigned(string component, string property) => _assigned.GetValueOrDefault((component.Length == 0 ? _root : component, property));
+
+    private static (string Name, float Size, string[] Styles) FontParts(DesignerValue? font) =>
+        font is { Kind: DesignerValueKinds.New, Arguments: [var name, var size, ..] arguments }
+            ? (name.Value ?? "Segoe UI", float.Parse(size.Value ?? "9", CultureInfo.InvariantCulture), arguments.Length > 2 && arguments[2].Kind == DesignerValueKinds.Enum ? [.. arguments[2].Members!.Where(m => m != "Regular")] : [])
+            : ("Segoe UI", 9F, []);
+
+    /// <summary>A font as FontConverter writes it: <c>Segoe UI, 9pt, style=Bold, Italic</c>.</summary>
+    private static string FontText(DesignerValue? font)
+    {
+        var (name, size, styles) = FontParts(font);
+        return $"{name}, {size.ToString(CultureInfo.InvariantCulture)}pt" + (styles.Length > 0 ? ", style=" + string.Join(", ", styles) : string.Empty);
+    }
+
+    /// <summary>A font's code as the classic IDE writes it: <c>new Font("Segoe UI", 9F, FontStyle.Bold | FontStyle.Italic, GraphicsUnit.Point, 0)</c>.</summary>
+    private static DesignerValue FontValue(DesignerValue? old, string name, float size, IEnumerable<string> styles)
+    {
+        string[] order = ["Bold", "Italic", "Underline", "Strikeout"];
+        var set = styles.ToHashSet(StringComparer.Ordinal);
+        string[] members = [.. order.Where(set.Contains)];
+        var charset = old?.Arguments is { Length: > 4 } arguments ? arguments[4] : DesignerValue.Int(0);
+        return DesignerValue.NewOf("System.Drawing.Font", DesignerValue.String(name), DesignerValue.Float(size), DesignerValue.EnumOf("System.Drawing.FontStyle", members.Length == 0 ? ["Regular"] : members),
+            DesignerValue.EnumOf("System.Drawing.GraphicsUnit", "Point"), charset);
+    }
+
+    private static string ColorText(DesignerValue? color, string fallback) => color switch
+    {
+        { Kind: DesignerValueKinds.Member, Value: { } member } => member,
+        { Kind: DesignerValueKinds.Call, Arguments: { } arguments } => string.Join(", ", arguments.Select(a => a.Value)),
+        _ => fallback,
+    };
+
+    private static DesignerValue? ColorValue(string text)
+    {
+        var parts = text.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length == 3 && parts.All(p => byte.TryParse(p, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)))
+        {
+            return DesignerValue.CallOf("System.Drawing.Color", "FromArgb", [.. parts.Select(p => DesignerValue.Int(int.Parse(p, CultureInfo.InvariantCulture)))]);
+        }
+
+        var known = System.Drawing.Color.FromName(text);
+        return !known.IsKnownColor ? null : DesignerValue.MemberOf(known.IsSystemColor ? "System.Drawing.SystemColors" : "System.Drawing.Color", known.Name);
+    }
+
+    private static DesignerPropertyInfo Bool(string name, string category, string value, bool isSet = false) =>
+        new(name, category, "System.Boolean", value) { Editor = DesignerEditors.Boolean, StandardValues = s_bool, IsSet = isSet, CanReset = isSet };
+
+    /// <summary>A font's row with its parts in FontConverter's order (Name, Size, Unit, then the rest by name).</summary>
+    private DesignerPropertyInfo FontInfo(string component)
+    {
+        var font = Assigned(component, "Font");
+        var (name, size, styles) = FontParts(font);
+        DesignerPropertyInfo Style(string style) => Bool(style, "Misc", styles.Contains(style) ? "True" : "False", font is not null);
+        return new DesignerPropertyInfo("Font", "Appearance", "System.Drawing.Font", FontText(font))
+        {
+            Editor = DesignerEditors.Font,
+            IsSet = font is not null,
+            CanReset = font is not null,
+            Description = "The font used to display text in the control.",
+            SubProperties =
+            [
+                new("Name", "Misc", "System.String", name) { Editor = DesignerEditors.Enum, StandardValues = FontFamilies, IsSet = font is not null },
+                new("Size", "Misc", "System.Single", size.ToString(CultureInfo.InvariantCulture)) { IsSet = font is not null },
+                new("Unit", "Misc", "System.Drawing.GraphicsUnit", "Point") { Editor = DesignerEditors.Enum, StandardValues = s_units, IsSet = font is not null },
+                Style("Bold"),
+                new("GdiCharSet", "Misc", "System.Byte", "0") { IsReadOnly = true, Editor = DesignerEditors.ReadOnly },
+                Bool("GdiVerticalFont", "Misc", "False") with { IsReadOnly = true, Editor = DesignerEditors.ReadOnly, StandardValues = null },
+                Style("Italic"),
+                Style("Strikeout"),
+                Style("Underline"),
+            ],
+        };
+    }
+
+    private DesignerPropertyInfo ColorInfo(string component, string property, string fallback)
+    {
+        var value = Assigned(component, property);
+        return new DesignerPropertyInfo(property, "Appearance", "System.Drawing.Color", ColorText(value, fallback))
+        {
+            Editor = DesignerEditors.Color,
+            StandardValues = s_colors,
+            IsSet = value is not null,
+            CanReset = value is not null,
+            Description = property == "BackColor" ? "The background color of the component." : "The foreground color of this component, which is used to display text.",
+        };
+    }
+
     public Task<DesignerPropertiesResult> PropertiesAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken)
     {
         var name = parameters.Components.FirstOrDefault() ?? string.Empty;
         if (_items.TryGetValue(name, out var item))
         {
-            return Task.FromResult(new DesignerPropertiesResult([new("Name", "Design", "System.String", name) { IsSet = true }, new("Text", "Appearance", "System.String", item.Text ?? string.Empty) { IsSet = true }]));
+            List<DesignerPropertyInfo> itemRows =
+            [
+                new("Name", "Design", "System.String", name) { IsSet = true },
+                new("Text", "Appearance", "System.String", item.Text ?? string.Empty) { IsSet = true, CanReset = true, Editor = DesignerEditors.Multiline },
+                FontInfo(name),
+            ];
+            if (item.Type.EndsWith("ToolStripMenuItem", StringComparison.Ordinal))
+            {
+                var keys = Assigned(name, "ShortcutKeys");
+                itemRows.Add(new("ShortcutKeys", "Misc", Forms + "Keys", keys?.Members is { } members ? string.Join("+", members.Select(m => m == "Control" ? "Ctrl" : m)) : "None")
+                {
+                    Editor = DesignerEditors.ShortcutKeys,
+                    StandardValues = ["None", "A", "B", "C", "N", "O", "S", "F1", "F2", "Delete"],
+                    IsSet = keys is not null,
+                    CanReset = keys is not null,
+                });
+            }
+
+            return Task.FromResult(new DesignerPropertiesResult([.. itemRows]));
         }
 
         var control = _controls.GetValueOrDefault(name);
         var rows = new List<DesignerPropertyInfo>
         {
-            new("Name", "Design", "System.String", name.Length == 0 ? _root : name) { IsSet = true, IsReadOnly = name.Length == 0 },
+            new("Name", "Design", "System.String", name.Length == 0 ? _root : name) { IsSet = true, IsReadOnly = name.Length == 0, Description = "The name of the component in the code." },
         };
         if (name.Length == 0)
         {
             rows.Add(new("Localizable", "Design", "System.Boolean", LastLoad?.Localizable == true ? "True" : "False") { Editor = DesignerEditors.Boolean, StandardValues = ["True", "False"] });
+
+            // A component reference (D41 question 17): "(none)", then the form's buttons by name, an exclusive list.
+            string[] buttons = ["(none)", .. _controls.Where(c => c.Value.Type == Forms + "Button").Select(c => c.Key).Order(StringComparer.Ordinal)];
+            foreach (var reference in new[] { "AcceptButton", "CancelButton" })
+            {
+                var value = Assigned(name, reference);
+                rows.Add(new(reference, "Misc", Forms + "IButtonControl", value?.Value ?? "(none)")
+                {
+                    Editor = DesignerEditors.Enum,
+                    StandardValues = buttons,
+                    IsSet = value is not null,
+                    CanReset = value is not null,
+                    Description = reference == "AcceptButton"
+                        ? "The accept button of the form. If this is set, the button is 'clicked' whenever the user presses the 'ENTER' key."
+                        : "The cancel button of the form. If this is set, the button is 'clicked' whenever the user presses the 'ESC' key.",
+                });
+            }
         }
 
         if (name.Length == 0 || control is not null)
@@ -517,16 +863,86 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             return Task.FromResult(new DesignerPropertiesResult([.. rows]));
         }
 
+        var isTextBox = control.Type.EndsWith("TextBox", StringComparison.Ordinal);
+        var enabled = Assigned(name, "Enabled");
+        var cursor = Assigned(name, "Cursor");
         rows.AddRange(
         [
-            new("Text", "Appearance", "System.String", control.Text ?? string.Empty) { IsSet = true, Localizable = LastLoad?.Localizable == true },
-            new("Location", "Layout", "System.Drawing.Point", $"{control.X}, {control.Y}") { IsSet = true },
+            new("Text", "Appearance", "System.String", control.Text ?? string.Empty)
+            {
+                IsSet = true,
+                CanReset = true,
+                Localizable = LastLoad?.Localizable == true,
+                Editor = DesignerEditors.Multiline,
+                Description = "The text associated with the control.",
+            },
+            new("Location", "Layout", "System.Drawing.Point", $"{control.X}, {control.Y}")
+            {
+                IsSet = true,
+                Description = "The coordinates of the upper-left corner of the control relative to the upper-left corner of its container.",
+                SubProperties =
+                [
+                    new("X", "Misc", "System.Int32", control.X.ToString(CultureInfo.InvariantCulture)) { IsSet = true },
+                    new("Y", "Misc", "System.Int32", control.Y.ToString(CultureInfo.InvariantCulture)) { IsSet = true },
+                ],
+            },
+            new("Size", "Layout", "System.Drawing.Size", $"{control.W}, {control.H}")
+            {
+                IsSet = true,
+                SubProperties =
+                [
+                    new("Width", "Misc", "System.Int32", control.W.ToString(CultureInfo.InvariantCulture)) { IsSet = true },
+                    new("Height", "Misc", "System.Int32", control.H.ToString(CultureInfo.InvariantCulture)) { IsSet = true },
+                ],
+            },
             new("TabIndex", "Behavior", "System.Int32", control.TabIndex.ToString(CultureInfo.InvariantCulture)) { IsSet = true },
-            new("Enabled", "Behavior", "System.Boolean", "True") { Editor = DesignerEditors.Boolean, StandardValues = ["True", "False"] },
+            Bool("Enabled", "Behavior", enabled?.Value == "false" ? "False" : "True", enabled is not null),
             new("Anchor", "Layout", Forms + "AnchorStyles", control.Anchor) { Editor = DesignerEditors.Anchor, StandardValues = ["None", "Top", "Bottom", "Left", "Right"] },
             new("Dock", "Layout", Forms + "DockStyle", control.Dock) { Editor = DesignerEditors.Dock, StandardValues = ["None", "Top", "Bottom", "Left", "Right", "Fill"] },
-            new("BackColor", "Appearance", "System.Drawing.Color", "Control") { Editor = DesignerEditors.Color },
+            ColorInfo(name, "BackColor", "Control"),
+            ColorInfo(name, "ForeColor", "ControlText"),
+            FontInfo(name),
+            new("Cursor", "Appearance", Forms + "Cursor", cursor?.Value ?? "Default")
+            {
+                Editor = DesignerEditors.Enum,
+                StandardValues = s_cursors,
+                ChoicesEditable = true,
+                IsSet = cursor is not null,
+                CanReset = cursor is not null,
+                Description = "The cursor that appears when the pointer moves over the control.",
+            },
         ]);
+        var align = Assigned(name, "TextAlign");
+        rows.Add(isTextBox
+            ? new("TextAlign", "Appearance", Forms + "HorizontalAlignment", align?.Members?[0] ?? "Left") { Editor = DesignerEditors.Enum, StandardValues = ["Left", "Right", "Center"], IsSet = align is not null, CanReset = align is not null }
+            : new("TextAlign", "Appearance", "System.Drawing.ContentAlignment", align?.Members?[0] ?? "MiddleCenter")
+            {
+                Editor = DesignerEditors.ContentAlignment,
+                StandardValues = s_alignments,
+                IsSet = align is not null,
+                CanReset = align is not null,
+                Description = "The alignment of the text that will be displayed on the control.",
+            });
+        if (isTextBox)
+        {
+            rows.Add(new("Lines", "Appearance", "System.String[]", "String[] Array") { Editor = DesignerEditors.Strings, IsSet = Assigned(name, "Lines") is not null, Description = "The lines of text in a multiline edit, as an array of String values." });
+        }
+
+        if (control.Type == Forms + "Button")
+        {
+            var border = Assigned(name, "FlatAppearance.BorderSize");
+            rows.Add(new("FlatAppearance", "Appearance", Forms + "FlatButtonAppearance", string.Empty)
+            {
+                IsReadOnly = true,
+                Editor = DesignerEditors.ReadOnly,
+                SubProperties =
+                [
+                    new("BorderColor", "Appearance", "System.Drawing.Color", string.Empty) { Editor = DesignerEditors.Color, StandardValues = s_colors },
+                    new("BorderSize", "Appearance", "System.Int32", border?.Value ?? "1") { IsSet = border is not null, CanReset = border is not null },
+                ],
+            });
+        }
+
         if (control.Type.EndsWith("PictureBox", StringComparison.Ordinal) || control.Type.EndsWith("Button", StringComparison.Ordinal))
         {
             rows.Add(new("Image", "Appearance", "System.Drawing.Image", "(none)") { Editor = DesignerEditors.Image });

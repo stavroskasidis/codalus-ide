@@ -166,16 +166,20 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>The component selector's entries (a designer's selection), the form first.</summary>
-    public IReadOnlyList<DesignerComponentChoice> ComponentChoices => _source?.ComponentChoices ?? [];
+    /// <summary>The component selector's entries (a designer's selection), the form first; a new list only when they change.</summary>
+    public IReadOnlyList<DesignerComponentChoice> ComponentChoices => _choices;
+
+    private IReadOnlyList<DesignerComponentChoice> _choices = [];
+    private bool _syncingSelector;
 
     /// <summary>The selector's entry: the one selected component, or null for several (blank). Setting it selects that component in the designer.</summary>
     public DesignerComponentChoice? SelectedComponent
     {
-        get => _source?.SelectedComponent is { } name ? ComponentChoices.FirstOrDefault(c => c.Name == name) : null;
+        get => _source?.SelectedComponent is { } name ? _choices.FirstOrDefault(c => c.Name == name) : null;
         set
         {
-            if (value is not null && _source is { } source && value.Name != source.SelectedComponent)
+            // While the window updates the selector (its list or its entry), the combo box's own echo isn't a pick.
+            if (!_syncingSelector && value is not null && _source is { } source && value.Name != source.SelectedComponent)
             {
                 source.SelectComponent(value.Name);
             }
@@ -254,8 +258,23 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
 
     private void RaiseSourceState()
     {
-        OnPropertyChanged(nameof(ComponentChoices));
-        OnPropertyChanged(nameof(SelectedComponent));
+        _syncingSelector = true;
+        try
+        {
+            var choices = _source?.ComponentChoices ?? [];
+            if (!choices.SequenceEqual(_choices))
+            {
+                _choices = choices;
+                OnPropertyChanged(nameof(ComponentChoices));
+            }
+
+            OnPropertyChanged(nameof(SelectedComponent));
+        }
+        finally
+        {
+            _syncingSelector = false;
+        }
+
         OnPropertyChanged(nameof(IsInputEnabled));
         Grid.IsEnabled = IsInputEnabled;
         ((RelayCommand)EventsCommand).RaiseCanExecuteChanged();
