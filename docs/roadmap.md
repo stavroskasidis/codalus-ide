@@ -2803,7 +2803,7 @@ Items deferred with a `TODO(issue)` to a milestone that has since closed without
 | The Windows Forms designer's Toolbox drag: the tool's outline and snap lines while an item is dragged over the form, as the classic IDE shows them (`WinFormsDesignerView.cs`) | 0.6 (#66), ADR 0073 | none |
 | A control dropped from the Toolbox on a `FlowLayoutPanel` inserted at the point under the cursor, as the classic `FlowLayoutPanelDesigner` does (`DesignerSession.cs`) | 0.6 (#66), ADR 0073 | none |
 | The Windows Forms designer's context menus and Lock Controls as in the classic IDE, with the host tests' Locked and split-panel checks (#67 part 2; its design waits for the maintainer's approval, `BuiltIns.WinForms.cs`) | 0.6 (#67), ADR 0073 | none |
-| Update on each branch's own menu in the Git Changes window's branch drop-down, passing the row's ref to `git.updateBranch` (today it's in Git → Branches and the window's ⋯ menu, with a quick pick; `ShellHost.Git.cs`) | 0.6 (the user's request, 2026-10-21) | 0.6 (#23, D38) |
+| Update on each branch's own menu in the Git Changes window's branch drop-down (B22-B26: "Update from 'origin/x'" before Push, Updating… on the row, the diverged and worktree banners), passing the row's ref to `git.updateBranch`. This entry is what the user asked for; until the drop-down exists, Git → Branches and the window's ⋯ menu offer it with a quick pick, which the mockup doesn't draw (`ShellHost.Git.cs`) | 0.6 (the user's request, 2026-10-21) | 0.6 (#23, D38) |
 
 ## Unscheduled candidates
 
