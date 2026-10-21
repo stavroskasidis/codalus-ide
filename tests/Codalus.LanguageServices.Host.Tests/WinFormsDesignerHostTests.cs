@@ -333,7 +333,10 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
         // A bindable property (Text) also has its row in (DataBindings) since M41b: these are the properties' own rows.
         DesignerPropertyInfo Property(string name) => properties.Single(p => p.Name == name && !p.DataBinding);
         Assert.Equal(("placeOrderButton", true), (Property("Name").Value, Property("Name").IsSet));
-        Assert.Equal(("&Place order", DesignerEditors.Text, true), (Property("Text").Value, Property("Text").Editor, Property("Text").IsSet));
+        // #68: ButtonBase.Text's UITypeEditor is the multi-line string editor; Reset is the descriptor's CanResetValue.
+        Assert.Equal(("&Place order", DesignerEditors.Multiline, true), (Property("Text").Value, Property("Text").Editor, Property("Text").IsSet));
+        Assert.True(Property("Text").CanReset);
+        Assert.False(Property("Name").CanReset);
         Assert.Equal(DesignerEditors.Anchor, Property("Anchor").Editor);
         Assert.Contains("Bottom", Property("Anchor").Value, StringComparison.Ordinal);
         Assert.Equal(DesignerEditors.Dock, Property("Dock").Editor);

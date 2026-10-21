@@ -765,7 +765,8 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     {
         var font = Assigned(component, "Font");
         var (name, size, styles) = FontParts(font);
-        DesignerPropertyInfo Style(string style) => Bool(style, "Misc", styles.Contains(style) ? "True" : "False", font is not null);
+        // A font's parts have no default value, so Reset is grayed for them, as on the real host.
+        DesignerPropertyInfo Style(string style) => Bool(style, "Misc", styles.Contains(style) ? "True" : "False", font is not null) with { CanReset = false };
         return new DesignerPropertyInfo("Font", "Appearance", "System.Drawing.Font", FontText(font))
         {
             Editor = DesignerEditors.Font,
