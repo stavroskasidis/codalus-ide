@@ -22,7 +22,7 @@ Some shortcuts belong to the operating system or the desktop, which takes them b
 
 ## New Project
 
-`Ctrl+Shift+N` (`⌘⇧N` on macOS) opens New Project. In it, `Alt+Right` and `Enter` go to the next page (Create on the last), `Alt+Left` goes back, `Esc` closes it (clearing the search first), `Alt+S` goes to the search and `Down` from there into the templates, and `Delete` removes the selected recent template. On macOS the `Alt` keys are `⌥`. [New projects and solutions](solutions.md#keys) has the access keys.
+`Ctrl+Shift+N` (`⌘⇧N` on macOS) opens New Project. In it, `Alt+Right` and `Enter` go to the next page (Create on the last), `Alt+Left` goes back, `Esc` closes it (clearing the search first), `Alt+S` goes to the search and `Down` from there into the templates, and `Delete` removes the selected recent template. On macOS `⌘]` and `⌘[` go to the next page and back from anywhere, and `⌥→` and `⌥←` do too except in a text box, where they move by word as macOS's text boxes do; the other `Alt` keys are `⌥`. [New projects and solutions](solutions.md#keys) has the access keys.
 
 ## Edit's clipboard keys
 

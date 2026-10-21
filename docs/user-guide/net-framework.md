@@ -81,7 +81,7 @@ The debugger is 64-bit, and debugs 64-bit processes: an app built for x86, or An
 
 ## New projects
 
-File → New Project lists **.NET Framework Console App** and **.NET Framework Class Library**: SDK-style projects for .NET Framework 4.8 (or 4.8.1, 4.7.2, 4.6.2), written by Codalus IDE (the .NET SDK's own templates don't target .NET Framework), in C# 7.3 with a `Main` method. On Linux and macOS they have a **Windows only** tag. Additional information's **Framework** lists .NET Framework 4.8.1, 4.8, 4.7.2 and 4.6.2 with their support.
+File → New Project lists **.NET Framework Console App** and **.NET Framework Class Library**: SDK-style projects for .NET Framework 4.8 (or 4.8.1, 4.7.2, 4.6.2), written by Codalus IDE (the .NET SDK's own templates don't target .NET Framework), in C# 7.3 with a `Main` method. On Linux and macOS they have a **Windows only** tag. Additional information's **Framework** lists .NET Framework 4.8.1, 4.8, 4.7.2 and 4.6.2 (without a support label: .NET Framework 4.x follows the support of the Windows it's part of).
 
 ## Not supported
 

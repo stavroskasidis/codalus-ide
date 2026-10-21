@@ -223,7 +223,7 @@ The in-window dialog (`DialogView`, from `DialogViewModel.ShowAsync(new DialogRe
 
 **Wizards** (New Project, 0.6.0, [ADR 0082](adr/0082-new-project-wizard.md); the setup window, M46) are windows of their own, owned by the main window and not modal (`Show(owner)`, never `ShowDialog`): the in-window dialog draws only in the main window, so a wizard asks every question on its own pages (trust, installing what it needs) and closes before the main window opens or changes anything.
 
-- Back, then Next (Create or Done on the last page) on the right of `Border.dialogFooter` on every OS, the forward one the only primary; Cancel joins them while the last step runs, with its progress on the left. Alt+Left and Alt+Right move between the pages, Enter goes forward, Escape closes.
+- Back, then Next (Create or Done on the last page) on the right of `Border.dialogFooter` on every OS, the forward one the only primary; Cancel joins them while the last step runs, with its progress on the left. Alt+Left and Alt+Right move between the pages, Enter goes forward, Escape closes. On macOS ⌥← and ⌥→ move by word in a text box, so a wizard with text boxes leaves them to the focused one and moves between its pages with ⌘[ and ⌘] (New Project).
 - Each page reserves the access keys of its buttons and labels; options whose labels come from elsewhere (a template's) keep their own letter where it's free and lose it otherwise, and the IDE's options take the first free letter of their label (`AccessKeyAllocator`). A label is a `Label` with `Target`, so its key focuses its field (a `PathBox` passes the focus to its text box).
 - Each page focuses its first field when it opens (a name with its text selected), and Tab follows the reading order.
 
