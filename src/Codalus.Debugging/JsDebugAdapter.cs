@@ -36,6 +36,12 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
     /// <summary>The page <see cref="LaunchAsync"/> left blank, until a child opens it.</summary>
     private string? _navigateTo;
 
+    /// <summary>
+    /// Children js-debug asked for (<c>startDebugging</c>) whose attach hasn't ended yet, counted from the request: one
+    /// that fails leaves the page to these (<see cref="OpenPageAsync"/>).
+    /// </summary>
+    private int _attaching;
+
     private JsDebugAdapter(Process server, int port, string adapterId, TcpClient client)
     {
         _server = server;
@@ -207,9 +213,6 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
         public Dictionary<int, int> Ids { get; } = [];
 
         public TaskCompletionSource Initialized { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        /// <summary>js-debug answered its start (<c>launch</c> or <c>attach</c>). Read and written under the adapter's gate.</summary>
-        public bool Started { get; set; }
     }
 
     private async Task OnLaunchEventAsync(DapEvent e)
@@ -231,6 +234,13 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
         if (request.Command == "startDebugging" && request.Arguments.ValueKind == JsonValueKind.Object
             && request.Arguments.Deserialize(Json.StartDebuggingArguments) is { } arguments)
         {
+            // Counted here, before the child connects: a sibling whose attach fails meanwhile must not take the page as
+            // if nothing else were attaching.
+            lock (_gate)
+            {
+                _attaching++;
+            }
+
             // Off the event loop: the child's own events must keep flowing while it is configured.
             _ = Task.Run(() => AttachChildAsync(arguments));
         }
@@ -242,6 +252,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
     private async Task AttachChildAsync(StartDebuggingArguments arguments)
     {
         Session? child = null;
+        var attached = false;
         try
         {
             var client = new TcpClient();
@@ -264,10 +275,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
             await ReplayAsync(session).ConfigureAwait(false);
             await session.Connection.RequestAsync("configurationDone", new EmptyArguments(), Json.EmptyArguments).ConfigureAwait(false);
             await started.ConfigureAwait(false);
-            lock (_gate)
-            {
-                session.Started = true;
-            }
+            attached = true;
         }
         catch (Exception ex) when (ex is SocketException or IOException or DapException or DapConnectionLostException or ObjectDisposedException)
         {
@@ -275,29 +283,31 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
             if (child is not null)
             {
                 Remove(child);
-                child = null;
             }
         }
-
-        await OpenPageAsync(child).ConfigureAwait(false);
+        finally
+        {
+            // Whatever ended the attach, it no longer counts as attaching.
+            await OpenPageAsync(attached ? child : null).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
-    /// Opens the page <see cref="LaunchAsync"/> left blank, once, through <paramref name="started"/>, a child whose start
-    /// js-debug has answered. js-debug answers it after the browser has answered the page session's <c>Debugger.enable</c>,
-    /// so after the proxy's first handshake step, which went out before it; the proxy sends the second step (the flag for
-    /// new documents) as soon as it reads that answer. So the flag is registered before this navigation reaches the
-    /// browser, and the breakpoints sent while the page was blank carry over to its document. When the child's attach
-    /// failed (null), another started child opens the page, or one still starting does once it has; with none, the Debug
-    /// Console says the page couldn't be opened.
+    /// Ends a child's attach. Opens the page <see cref="LaunchAsync"/> left blank, once, through <paramref name="started"/>,
+    /// a child whose start js-debug has answered. js-debug answers it after the browser has answered the page session's
+    /// <c>Debugger.enable</c>, so after the proxy's first handshake step, which went out before it; the proxy sends the
+    /// second step (the flag for new documents) as soon as it reads that answer. So the flag is registered before this
+    /// navigation reaches the browser, and the breakpoints sent while the page was blank carry over to its document. When
+    /// the child's attach failed (null), a child still attaching opens the page once it has started (a child that started
+    /// already took it when it did); when none is left, the Debug Console says the page couldn't be opened.
     /// </summary>
     private async Task OpenPageAsync(Session? started)
     {
         string? url;
         lock (_gate)
         {
-            started ??= _children.FirstOrDefault(c => c.Started);
-            if (started is null && _children.Count > 0)
+            _attaching--;
+            if (started is null && _attaching > 0)
             {
                 return;
             }
@@ -574,6 +584,9 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
             children = [.. _children];
             _children.Clear();
             _active = null;
+
+            // The attaches that this ends fail: the page wasn't left unopened by the browser, so nothing is said about it.
+            _navigateTo = null;
         }
 
         foreach (var session in children.Append(_launch))

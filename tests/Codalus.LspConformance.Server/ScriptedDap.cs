@@ -296,7 +296,7 @@ internal static class ScriptedDap
         return program.Id;
     }
 
-    private static Task FailAsync(Stream output, int requestSeq, string command, string error) =>
+    internal static Task FailAsync(Stream output, int requestSeq, string command, string error) =>
         WriteAsync(output, new JsonObject
         {
             ["seq"] = ++s_seq,
@@ -307,7 +307,7 @@ internal static class ScriptedDap
             ["message"] = error,
         });
 
-    private static Task RespondAsync(Stream output, int requestSeq, string command, JsonNode? body) =>
+    internal static Task RespondAsync(Stream output, int requestSeq, string command, JsonNode? body) =>
         WriteAsync(output, new JsonObject
         {
             ["seq"] = ++s_seq,
@@ -318,12 +318,12 @@ internal static class ScriptedDap
             ["body"] = body ?? new JsonObject(),
         });
 
-    private static Task EventAsync(Stream output, string name, JsonNode? body) =>
+    internal static Task EventAsync(Stream output, string name, JsonNode? body) =>
         WriteAsync(output, new JsonObject { ["seq"] = ++s_seq, ["type"] = "event", ["event"] = name, ["body"] = body ?? new JsonObject() });
 
     private static readonly SemaphoreSlim s_write = new(1, 1);
 
-    private static async Task WriteAsync(Stream output, JsonObject message)
+    internal static async Task WriteAsync(Stream output, JsonObject message)
     {
         // A timed-out start's program writes its events beside the answers to requests.
         await s_write.WaitAsync();
@@ -342,7 +342,7 @@ internal static class ScriptedDap
         }
     }
 
-    private static async Task<JsonElement?> ReadAsync(Stream input)
+    internal static async Task<JsonElement?> ReadAsync(Stream input)
     {
         var length = -1;
         var line = new StringBuilder();
