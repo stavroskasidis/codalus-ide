@@ -381,8 +381,9 @@ public sealed class RunService : IDisposable
         profiles.FirstOrDefault(p => p.Name == ChosenProfile(projectPath)) ?? profiles.FirstOrDefault(p => p.IsRunnable);
 
     /// <summary>
-    /// What a run of <paramref name="projectPath"/> starts (program, arguments, directory, environment) with its launch
-    /// profile, for running it somewhere else (the integrated terminal). <c>Error</c> explains ignored launch settings.
+    /// What a run of <paramref name="projectPath"/> would start (program, arguments, directory, environment) with its
+    /// launch profile, to read (its addresses, its environment). It has no effects: a plan that will be started comes from
+    /// <see cref="LaunchPlanAsync(string, CancellationToken)"/>. <c>Error</c> explains ignored launch settings.
     /// </summary>
     public async Task<(LaunchPlan Plan, LaunchProfile? Profile, string? Error)> PlanAsync(string projectPath, CancellationToken cancellationToken)
     {
@@ -392,8 +393,9 @@ public sealed class RunService : IDisposable
     }
 
     /// <summary>
-    /// The plan of a project's run with <paramref name="profile"/>, the environment override applied. A
-    /// <c>DebugRoslynComponent</c> profile runs the compiler on its target project (M14c, <see cref="RoslynComponents"/>).
+    /// The plan of a project's run with <paramref name="profile"/>, the environment override applied, to read: it has no
+    /// effects, and a plan that will be started comes from <see cref="LaunchPlanAsync(RunInfo, LaunchProfile?, CancellationToken)"/>.
+    /// A <c>DebugRoslynComponent</c> profile runs the compiler on its target project (M14c, <see cref="RoslynComponents"/>).
     /// </summary>
     public async Task<LaunchPlan> PlanAsync(RunInfo info, LaunchProfile? profile, CancellationToken cancellationToken)
     {
@@ -404,13 +406,35 @@ public sealed class RunService : IDisposable
             return Adjust(await RoslynComponents.PlanAsync(_solutions, info, profile, cancellationToken).ConfigureAwait(false));
         }
 
-        var plan = Adjust(LaunchPlanner.Plan(info, profile), info);
-        return ProgramPlan is { } hook ? hook(info, plan) : plan;
+        return Adjust(LaunchPlanner.Plan(info, profile), info);
     }
 
     /// <summary>
-    /// Changes a project's program plan for running and debugging alike (M19b: the live agent of an Avalonia app joins
-    /// its environment). Not for a Roslyn component's plan, which runs the compiler.
+    /// The plan of a run of <paramref name="projectPath"/> that is about to start, here, in the terminal or under the
+    /// debugger: <see cref="PlanAsync(string, CancellationToken)"/>'s, changed by <see cref="ProgramPlan"/>.
+    /// </summary>
+    public async Task<(LaunchPlan Plan, LaunchProfile? Profile, string? Error)> LaunchPlanAsync(string projectPath, CancellationToken cancellationToken)
+    {
+        var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken).ConfigureAwait(false);
+        var profile = ResolveProfile(projectPath, profiles);
+        return (await LaunchPlanAsync(info, profile, cancellationToken).ConfigureAwait(false), profile, error);
+    }
+
+    /// <summary>
+    /// The plan of a project's run with <paramref name="profile"/> that is about to start: <see cref="PlanAsync(RunInfo, LaunchProfile?, CancellationToken)"/>'s,
+    /// changed by <see cref="ProgramPlan"/> (not a Roslyn component's, which runs the compiler).
+    /// </summary>
+    public async Task<LaunchPlan> LaunchPlanAsync(RunInfo info, LaunchProfile? profile, CancellationToken cancellationToken)
+    {
+        var plan = await PlanAsync(info, profile, cancellationToken).ConfigureAwait(false);
+        return profile is not { CommandName: LaunchProfile.RoslynComponent } && ProgramPlan is { } hook ? hook(info, plan) : plan;
+    }
+
+    /// <summary>
+    /// Changes the plan of a project's program that is about to start, run or debugged alike (M19b: an Avalonia or WPF
+    /// app's plan gets the live agent and a new live session, which replaces the last run's). Only
+    /// <see cref="LaunchPlanAsync(RunInfo, LaunchProfile?, CancellationToken)"/> calls it, once per start: a plan made to
+    /// read it would end the session of the run it raced, whose app then couldn't connect (2026-10-21).
     /// </summary>
     public Func<RunInfo, LaunchPlan, LaunchPlan>? ProgramPlan { get; set; }
 
@@ -465,7 +489,7 @@ public sealed class RunService : IDisposable
         }
 
         var profile = ResolveProfile(projectPath, profiles);
-        var plan = await PlanAsync(info, profile, cancellationToken).ConfigureAwait(false);
+        var plan = await LaunchPlanAsync(info, profile, cancellationToken).ConfigureAwait(false);
         if (!openBrowser)
         {
             plan = plan with { BrowserUrl = null };

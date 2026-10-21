@@ -1,4 +1,5 @@
 using Codalus.Debugging;
+using Codalus.Tests;
 using Codalus.Workbench.Build;
 using Codalus.Workbench.Debugging;
 using Codalus.Workbench.Node;
@@ -90,6 +91,69 @@ public sealed class BrowserDebugTests : IDisposable
     }
 
     [Fact]
+    public async Task Behind_the_webassembly_debugging_proxy_the_page_opens_once_the_proxy_has_attached_to_it()
+    {
+        // The Blazor WebAssembly debugging proxy sets globalThis.dotnetDebugger for the page's next document when the
+        // browser reports the page attached, and the .NET runtime pauses for the proxy only where it's set. js-debug
+        // opened the page right after attaching, so a slow handshake left the app's document without the flag: the proxy
+        // never saw the runtime start and no C# breakpoint bound (BlazorWasmTests and the smoke step under load). The
+        // stand-in proxy answers its handshake late every time; the page must still open with the flag, and stop at a
+        // breakpoint set while it was blank.
+        Assert.SkipWhen(NodeRuntime.Platform is null, "No Node.js build for this platform.");
+        var browser = Browsers.Find();
+        Assert.SkipWhen(browser is null && Environment.GetEnvironmentVariable("CI") != "true", "No Chrome, Edge or Chromium is installed.");
+        Assert.NotNull(browser);
+
+        using var node = new NodeRuntime(SharedCache);
+        using var jsDebug = new JsDebug(node, SharedCache);
+        await jsDebug.EnsureAsync(null, Timeout());
+
+        Directory.CreateDirectory(_site);
+        var script = Path.Combine(_site, "app.js");
+        await File.WriteAllTextAsync(script, "var flagged = globalThis.dotnetDebugger === true;\nconsole.log('flagged', flagged);\n", TestContext.Current.CancellationToken);
+        await using var site = new MockHttpServer(request => request.Path switch
+        {
+            "/index.html" => MockHttpResponse.Text("<!DOCTYPE html>\n<html><body><script src=\"app.js\"></script></body></html>\n", contentType: "text/html; charset=utf-8"),
+            "/app.js" => MockHttpResponse.Text(File.ReadAllText(script), contentType: "text/javascript; charset=utf-8"),
+            _ => MockHttpResponse.NotFound(),
+        });
+        await using var proxy = new StandInDebuggingProxy(TimeSpan.FromSeconds(2));
+
+        var debug = new DebugService(() => null);
+        var console = new System.Text.StringBuilder();
+        debug.Output += (_, output) =>
+        {
+            lock (console)
+            {
+                console.Append(output.Text);
+            }
+        };
+        debug.Breakpoints.Toggle(script, 2);
+        await debug.LaunchBrowserAsync(
+            ct => JsDebugAdapter.StartAsync(jsDebug.NodePath, jsDebug.ServerScript, browser.LaunchType, ct),
+            new BrowserLaunchArguments(browser.LaunchType, site.BaseUrl + "/index.html", _site, InspectUri: proxy.InspectUri, RuntimeExecutable: browser.Path, RuntimeArgs: ["--headless=new"]),
+            Timeout());
+        try
+        {
+            await WaitAsync(() => debug.State == DebugState.Stopped, () =>
+            {
+                lock (console)
+                {
+                    return $"The page didn't stop at the breakpoint ({proxy.Handshakes} handshakes, pages served: {string.Join(", ", site.Requests.Select(r => r.Path))}). Debug Console:\n{console}";
+                }
+            });
+            Assert.Equal(2, debug.Frames[0].Line);
+            Assert.Equal(script, debug.Frames[0].Source?.Path, StringComparer.OrdinalIgnoreCase);
+            Assert.True(proxy.Handshakes > 0, "js-debug got the page's attach event after the handshake");
+            Assert.Equal("true", (await debug.EvaluateAsync("flagged", "repl", Timeout())).Result);
+        }
+        finally
+        {
+            await debug.StopAsync();
+        }
+    }
+
+    [Fact]
     public void Browsers_are_found_by_kind_or_path_and_webassembly_apps_debug_in_one()
     {
         Assert.Null(Browsers.Find(Path.Combine(_site, "missing-browser.exe")));
@@ -125,12 +189,12 @@ public sealed class BrowserDebugTests : IDisposable
         Assert.Null(LaunchPlanner.PageDebugTarget(null, javaScript: true));
     }
 
-    private static async Task WaitAsync(Func<bool> condition)
+    private static async Task WaitAsync(Func<bool> condition, Func<string>? describe = null)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(90);
         while (!condition())
         {
-            Assert.True(DateTime.UtcNow < deadline, "Timed out.");
+            Assert.True(DateTime.UtcNow < deadline, describe?.Invoke() ?? "Timed out.");
             await Task.Delay(25, TestContext.Current.CancellationToken);
         }
     }

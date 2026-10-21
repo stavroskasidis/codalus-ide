@@ -95,7 +95,7 @@ public sealed partial class ShellHost
         var name = Path.GetFileNameWithoutExtension(project);
         var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
         var profile = Runs.ResolveProfile(project, profiles);
-        var plan = await Runs.PlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
+        var plan = await Runs.LaunchPlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
         var server = new IdeExecutionServer(StartRunSessionAsync);
         server.Log += line => AspireLog.AppendLine(line);
         try

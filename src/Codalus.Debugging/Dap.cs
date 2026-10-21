@@ -121,7 +121,9 @@ public sealed record RunInTerminalResponse(int? ProcessId = null, int? ShellProc
 /// <summary>
 /// vscode-js-debug's browser <c>launch</c> arguments (ADR 0026). <see cref="Type"/> is <c>pwa-chrome</c> or
 /// <c>pwa-msedge</c>; <see cref="InspectUri"/> routes the connection through the Blazor WebAssembly debugging proxy;
-/// <see cref="UserDataDir"/> true gives the browser a temporary profile.
+/// <see cref="UserDataDir"/> true gives the browser a temporary profile. <see cref="SkipNavigateForTest"/> (js-debug's
+/// own name for it) leaves the page at <c>about:blank</c> instead of opening <see cref="Url"/>: <see cref="JsDebugAdapter"/>
+/// sets it behind the proxy and opens the page itself.
 /// </summary>
 public sealed record BrowserLaunchArguments(
     string Type,
@@ -134,7 +136,8 @@ public sealed record BrowserLaunchArguments(
     int Timeout = 60000,
     string Name = "Browser",
     string Request = "launch",
-    JsDebugTrace? Trace = null);
+    JsDebugTrace? Trace = null,
+    bool? SkipNavigateForTest = null);
 
 /// <summary>js-debug's own log (<c>trace</c>): written to <see cref="LogFile"/>, for diagnosing a browser session.</summary>
 public sealed record JsDebugTrace(string LogFile);

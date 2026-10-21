@@ -321,7 +321,17 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Before running a project with an https URL, once per session: offers to trust the development certificate.</summary>
+    /// <summary>
+    /// The development certificate check of the last start (<see cref="OfferDevCertificateAsync"/>), which runs beside
+    /// the start without holding it up (tests: it reads the project's plan while the start makes its own).
+    /// </summary>
+    internal Task DevCertificateCheck { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// Before running a project with an https URL, once per session: offers to trust the development certificate. It
+    /// only reads the run's plan (<c>Runs.PlanAsync</c>, which has no effects), so the plan the start launches is the
+    /// only one that gets an Avalonia app's live session.
+    /// </summary>
     private async Task OfferDevCertificateAsync(string project)
     {
         if (_devCertificateOffered)
