@@ -93,6 +93,13 @@ internal static partial class BuiltIns
             Description = "Start Debugging opens an ASP.NET Core app's page in Chrome or Edge under the debugger, when its launch profile opens a browser, so breakpoints in its scripts bind too. Blazor WebAssembly components always debug in the browser.",
             Order = 4,
         },
+        SettingDescriptor.Create(ShellHost.DebugHotReloadSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Hot Reload while debugging",
+            Category = "Debugging",
+            Description = "Start Debugging runs a Blazor WebAssembly app's dev server under dotnet watch, so saving a file (or Apply Code Changes, Alt+F10) applies the edit to the app in the browser while you debug it. The .NET runtime refuses edits to a program the debugger runs, so other apps restart instead.",
+            Order = 5,
+        },
         SettingDescriptor.Create(Codalus.Shell.Editor.EditorOptions.PerfTipsKey, "true", SettingType.Boolean, ContributionSource.Shell) with
         {
             Title = "PerfTips",

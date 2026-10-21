@@ -51,6 +51,28 @@ public sealed class SweepStallMonitorTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task A_stall_names_the_posted_job_the_UI_thread_spent_it_on()
+    {
+        var stall = new SmokeTest.SweepStallMonitor();
+        try
+        {
+            await PumpForAsync(TimeSpan.FromMilliseconds(200));
+            stall.Reset();
+
+            // Posted from another thread, as a workbench event's handler is: a job of the dispatcher's queue.
+            await Task.Run(() => Ui.Post(() => Thread.Sleep(700)));
+            await PumpForAsync(TimeSpan.FromMilliseconds(1000));
+
+            Assert.True(stall.MaxMilliseconds >= 400, $"The UI thread was blocked for 700 ms, but the monitor saw {stall.MaxMilliseconds:0} ms.");
+            Assert.StartsWith("the job posted at SweepStallMonitorTests.cs:", stall.JobOfMax);
+        }
+        finally
+        {
+            stall.Stop();
+        }
+    }
+
     /// <summary>Runs the dispatcher's jobs for a while without blocking the UI thread between them (no pool timer needed).</summary>
     private static async Task PumpForAsync(TimeSpan duration)
     {
