@@ -92,8 +92,6 @@ Running or debugging a WPF app loads a small agent into it (a .NET startup hook)
 On Windows, a form's or user control's `.cs` file opens in the **Windows Forms designer**: double-click it in Solution Explorer (it has a form icon) or open it. **View Code** (`F7`) shows its code, and **View Designer** (`Shift+F7`, or the Solution Explorer's and the editor's context menu) shows the designer again. The `.Designer.cs` file itself opens as code. To open forms as code by default, turn **Open Forms in the Designer** off (Settings → Windows Forms, `windowsForms.openInDesigner`).
 
 The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply.
-
-The designer runs on a copy of your build output (in your temp folder), as the classic IDE does, so you can build while a form is open. After a build that changes your app, the designer loads the form again on the new build, so your own controls show their changes; a designer that isn't the active tab does it when you switch to it. While it loads again, the form takes no clicks, and changes you make in the Properties window apply once it's back; your unsaved changes and the selection stay. A designer you open while a build runs waits for the build to finish.
 - **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent, `Ctrl+A` everything on the form.
 - **Move** the selected controls by dragging them; dropped on a panel, a group box, a tab page or a split container's panel, a control moves into it. The arrow keys move them a pixel, `Shift`+arrows resize them.
 - **Resize** the selected control with its grab handles (the form from its right and bottom ones).
@@ -104,6 +102,8 @@ The designer runs on a copy of your build output (in your temp folder), as the c
 - A docked control shows its dock, and an anchored one (other than top and left) lines to the edges it's anchored to.
 
 **Every change is written as code**, the way Visual Studio's designer writes it, in your file's own style (for .NET, or for .NET Framework with `this.` and full type names): a moved button changes its one `Location` line; a new one adds its field, its creation, its commented section with its properties in Visual Studio's order and its `Controls.Add`. The rest of the file doesn't move, so source control and local history show only what changed. The changes are in the designer file's editor until you save (`Ctrl+S` saves the designer).
+
+**Building while a form is open.** The designer runs on a copy of your build output (in your temp folder), as the classic IDE does, so you can build while a form is open. After a build that changes your app, the designer loads the form again on the new build, so your own controls show their changes; a designer that isn't the active tab does it when you switch to it. While it loads again, the form takes no clicks, and changes you make in the Properties window or from the Toolbox apply once it's back; your unsaved changes and the selection stay. A designer you open while a build runs waits for the build to finish.
 
 ### The Format menu and tab order
 
@@ -160,7 +160,11 @@ A form with a `BindingSource` (from the Toolbox's **Data** category, its `DataSo
 
 View → **Toolbox** (`Ctrl+Alt+X`) lists Windows Forms' controls and components by Visual Studio's categories: **Common Controls**, **Containers**, **Menus & Toolbars**, **Data**, **Components**, **Printing** and **Dialogs**. Your project's own controls and components (and those of the projects it references) come first, under **_Project_ Components**; mark a class `[ToolboxItem(false)]` to leave it out. The search box filters them. Each control and component has an icon of its own (a button, a check box, a tree, a grid, a timer…); one of yours or a vendor's takes the icon of the control its name ends with (`OrderTextBox` a text box's), else a generic control's or component's.
 
-Click an item, then click on the form (it gets its default size) or drag a rectangle (it gets that size); or drag the item onto the form. It's named as in Visual Studio (`button1`, `textBox2`…) and selected; `Esc` or the **Pointer** cancels.
+Click an item (or press `Space` on it), then click on the form (it gets its default size) or drag a rectangle (it gets that size): the item stays highlighted until then, and the designer's status line says what a click on the form does. Or drag the item onto the form; a component that doesn't show on the form (a timer, a tool tip) can also be dropped on the component tray. It's named as in Visual Studio (`button1`, `textBox2`…) and selected; `Esc` or the **Pointer** cancels.
+
+**Double-click** an item, or press `Enter` on it, to add it at once, as in the classic IDE: into the selected container (the form when nothing is selected, or the container of the selected control), at its top-left corner, or a little below and to the right of the selected control, so repeated double-clicks cascade. The designer then has the focus, so the arrow keys move the new control and `F4` shows its properties. Nothing is added in tab order mode, and nothing can be dropped there.
+
+Items are created as the classic IDE creates them, whichever way you add them: a label sizes itself to its text, a split container added to a container whose other controls are all docked fills it, the first menu strip becomes the form's main menu, and a control added to a tab control goes to its selected page.
 
 ### Properties and events
 
@@ -179,6 +183,7 @@ With the designer active, the **Properties** window (`F4`) shows the selected co
 - Not yet: Visual Studio's Data Sources window (bind through a `BindingSource` instead), complex data binding's designer (a grid's `DataSource` is an ordinary property), the component designer (a class that is a component but not a control opens as code), and a design surface for WPF (its XAML Previewer shows the window, and selects both ways).
 - Smart tag tasks and collection items that open one of Windows Forms' own dialogs (a data grid view's **Add Column…**, a binding source's data source wizard) aren't available; set those properties in the Properties window.
 - The designer runs your code (your controls' constructors), so it works only in folders you trust.
+- No outline or snap lines show while you drag an item from the Toolbox over the form (they show once it's there, when you move it), and a control dropped on a flow layout panel isn't inserted at the point you drop it.
 - The copies of your build output live in your temp folder's `codalus-winformsdesigner` folder and are removed when the designer closes (or, after a crash, the next time a designer starts). A file another program holds open in your output (a LocalDB database, your running app's log) isn't copied, which the **Windows Forms Designer** output lists. At design time your controls see the copy's folder as theirs (`AppContext.BaseDirectory`, `Assembly.Location`).
 
 On Linux and macOS, forms open as code (the status bar says once that the designer is Windows only), View Designer says so, and the code edits, completes and builds as usual.
