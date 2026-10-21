@@ -199,9 +199,125 @@ public sealed class WinFormsDesignerServiceTests
         await fake.Stopped.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
     }
 
+    /// <summary>An app's build output in a temp folder: its assembly, runtimeconfig and deps files.</summary>
+    private static (string Folder, WinFormsDesignerTarget Target) AppOutput()
+    {
+        var folder = Directory.CreateTempSubdirectory("codalus-winforms-copy-").FullName;
+        var output = Path.Combine(folder, "bin");
+        Directory.CreateDirectory(output);
+        var app = Path.Combine(output, "App.dll");
+        File.WriteAllText(app, "app");
+        File.WriteAllText(Path.Combine(output, "App.runtimeconfig.json"), "{}");
+        File.WriteAllText(Path.Combine(output, "App.deps.json"), "{}");
+        return (folder, new WinFormsDesignerTarget(Path.Combine(folder, "Form1.cs"), Path.Combine(folder, "App.csproj"), app, app, "/ide/winformsdesigner/codalus-winformsdesigner.dll"));
+    }
+
+    private static async Task AssertNoCopyAsync(string root)
+    {
+        var until = DateTime.UtcNow.AddSeconds(5);
+        while (Directory.Exists(root) && Directory.EnumerateDirectories(root).Any() && DateTime.UtcNow < until)
+        {
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(!Directory.Exists(root) || !Directory.EnumerateDirectories(root).Any(), $"a copy was left in {root}");
+    }
+
+    [Fact]
+    public async Task A_target_starts_on_the_copys_runtime_loads_the_copy_and_takes_the_copy_with_it()
+    {
+        // #66 on every OS: the host is launched on the copy's runtimeconfig, deps file and folder (never the build
+        // output's, which would lock it again), designer/load names the copy's assemblies, and the copy goes with the host.
+        var (folder, target) = AppOutput();
+        var root = Path.Combine(folder, "copies");
+        var output = Path.GetDirectoryName(target.ProjectAssembly)!;
+        try
+        {
+            await using var fake = new FakeDesignerHost(ready: true, answerLoad: true);
+            var host = (WinFormsDesignerProcess)await WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: fake, copyRoot: root);
+            var copy = host.CopyFolder!;
+            var copied = Path.Combine(copy, "0");
+            Assert.Equal(root, Path.GetDirectoryName(copy));
+            Assert.True(File.Exists(Path.Combine(copied, "App.dll")));
+            Assert.Equal(["exec", "--runtimeconfig", Path.Combine(copied, "App.runtimeconfig.json"), "--depsfile", Path.Combine(copied, "App.deps.json"), target.DesignerHost], fake.Started!.Arguments);
+            Assert.Equal(copied, fake.Started.WorkingDirectory);
+            Assert.DoesNotContain(fake.Started.Arguments, a => a.StartsWith(output, StringComparison.Ordinal));
+
+            // The document sends the real paths; the host gets the copy's.
+            var model = new DesignerModel { ClassName = "Form1", Namespace = "App", BaseType = "System.Windows.Forms.Form" };
+            await host.LoadAsync(WinFormsDesignerService.LoadParams(target, model, "App.Form1"), TestContext.Current.CancellationToken);
+            Assert.Equal(Path.Combine(copied, "App.dll"), fake.LastLoad!.ProjectAssembly);
+            Assert.Equal([copied], fake.LastLoad.SearchFolders);
+            Assert.False(await host.IsOutdatedAsync(TestContext.Current.CancellationToken));
+            File.AppendAllText(target.ProjectAssembly, " rebuilt");
+            Assert.True(await host.IsOutdatedAsync(TestContext.Current.CancellationToken)); // a build replaced the app's assembly
+
+            await host.DisposeAsync();
+            await AssertNoCopyAsync(root);
+
+            // A library with no app: the host's own runtime, in the library's copy.
+            var library = Path.Combine(folder, "lib");
+            Directory.CreateDirectory(library);
+            File.WriteAllText(Path.Combine(library, "Forms.dll"), "forms");
+            await using var libraryFake = new FakeDesignerHost(ready: true, answerLoad: true);
+            var libraryHost = (WinFormsDesignerProcess)await WinFormsDesignerProcess.StartAsync(target with { HostAssembly = null, ProjectAssembly = Path.Combine(library, "Forms.dll") }, s_short, TestContext.Current.CancellationToken, launcher: libraryFake, copyRoot: root);
+            Assert.Equal([target.DesignerHost], libraryFake.Started!.Arguments);
+            Assert.Equal(Path.Combine(libraryHost.CopyFolder!, "0"), libraryFake.Started.WorkingDirectory);
+            await libraryHost.DisposeAsync();
+            await AssertNoCopyAsync(root);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task A_host_that_never_becomes_ready_leaves_no_copy()
+    {
+        var (folder, target) = AppOutput();
+        var root = Path.Combine(folder, "copies");
+        try
+        {
+            await using var fake = new FakeDesignerHost(ready: false);
+            var error = await Assert.ThrowsAsync<PreviewerException>(() => WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: fake, copyRoot: root));
+            Assert.StartsWith("The designer didn't start in 2 seconds", error.Message, StringComparison.Ordinal);
+            Assert.NotNull(fake.Started);
+            await AssertNoCopyAsync(root);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Early_log_lines_reach_the_first_subscriber()
+    {
+        // The document subscribes once the start returns: the copy's line and the host's ready line were written before.
+        var (folder, target) = AppOutput();
+        try
+        {
+            await using var fake = new FakeDesignerHost(ready: true);
+            var host = await WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: fake, copyRoot: Path.Combine(folder, "copies"));
+            await using var _ = host;
+            var lines = new List<string>();
+            host.Log += (_, line) => lines.Add(line);
+            Assert.Contains(lines, l => l.StartsWith("Copied the build output (3 files, ", StringComparison.Ordinal) && l.Contains("builds can replace the original while the designer runs.", StringComparison.Ordinal));
+            Assert.Contains(lines, l => l.StartsWith("The designer host is ready after ", StringComparison.Ordinal));
+            var second = new List<string>();
+            host.Log += (_, line) => second.Add(line);
+            Assert.Empty(second); // replayed once, to the first
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     /// <summary>
-    /// A designer host in this process, over pipes: designer/ready answered (or never), designer/load never answered, and
-    /// designer/status saying what a stuck host would.
+    /// A designer host in this process, over pipes: designer/ready answered (or never), designer/load never answered
+    /// (or answered with an empty drawing), and designer/status saying what a stuck host would.
     /// </summary>
     private sealed class FakeDesignerHost : IProcessLauncher, IHostProcess
     {
@@ -214,7 +330,7 @@ public sealed class WinFormsDesignerServiceTests
         private readonly bool _ready;
         private int _readyRequests;
 
-        public FakeDesignerHost(bool ready)
+        public FakeDesignerHost(bool ready, bool answerLoad = false)
         {
             _ready = ready;
             _hostInput = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, _toHost.ClientSafePipeHandle);
@@ -233,10 +349,15 @@ public sealed class WinFormsDesignerServiceTests
             });
             _connection.OnRequest(WinFormsDesignerMethods.Status, json.JsonElement, json.DesignerStatus, (_, _) =>
                 Task.FromResult(new DesignerStatus(_ready ? "UI thread: designer/load for 1.0 s (running line 12 of the designer file)." : "its window's message loop hasn't started.")));
-            _connection.OnRequest(WinFormsDesignerMethods.Load, json.DesignerLoadParams, json.DesignerRenderResult, async (_, ct) =>
+            _connection.OnRequest(WinFormsDesignerMethods.Load, json.DesignerLoadParams, json.DesignerRenderResult, async (load, ct) =>
             {
                 ErrorLine?.Invoke("[designer] loading App.dll");
-                await Task.Delay(Timeout.Infinite, ct);
+                LastLoad = load;
+                if (!answerLoad)
+                {
+                    await Task.Delay(Timeout.Infinite, ct);
+                }
+
                 return new DesignerRenderResult(null, [], []);
             });
             _connection.OnRequest("shutdown", (_, _) => Task.FromResult<JsonElement?>(null));
@@ -245,6 +366,12 @@ public sealed class WinFormsDesignerServiceTests
         public ProcessLaunchInfo Launch => new("codalus-winformsdesigner", []) { Launcher = this };
 
         public int ReadyRequests => Volatile.Read(ref _readyRequests);
+
+        /// <summary>How the IDE started this host.</summary>
+        public ProcessLaunchInfo? Started { get; private set; }
+
+        /// <summary>The last designer/load's parameters.</summary>
+        public DesignerLoadParams? LastLoad { get; private set; }
 
         /// <summary>Completes when the IDE ended the host (killed it, or it exited after shutdown).</summary>
         public Task Stopped => _exited.Task;
@@ -261,6 +388,7 @@ public sealed class WinFormsDesignerServiceTests
 
         public Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
         {
+            Started = launch;
             _connection.Start();
             return Task.FromResult<IHostProcess>(this);
         }

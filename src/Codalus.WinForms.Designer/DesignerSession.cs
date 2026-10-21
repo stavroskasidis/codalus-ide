@@ -101,6 +101,9 @@ internal sealed partial class DesignerSession : IDisposable
             project = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => !a.IsDynamic && string.Equals(a.Location, parameters.ProjectAssembly, StringComparison.OrdinalIgnoreCase))
                 ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(parameters.ProjectAssembly);
             _types.Add(project);
+
+            // The IDE's Windows Forms Designer output: where the project came from (#66: the shell's copy of the build output, not bin/).
+            Console.Error.WriteLine($"[designer] {project.GetName().Name} loaded from {project.Location}");
         }
         else
         {

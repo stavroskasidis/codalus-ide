@@ -213,6 +213,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
 
     public Task<DesignerChangeResult> CreateAsync(DesignerCreateParams parameters, CancellationToken cancellationToken)
     {
+        Creates.Add(parameters);
         var x = (int)parameters.X - 8;
         var y = (int)parameters.Y - 31;
         _controls[parameters.Name] = new Control(parameters.Type, _root, x, y, 75, 23, parameters.Name, 11, "None", "Top, Left");
@@ -523,5 +524,20 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
 
     public void Restart() => Restarted?.Invoke(this, EventArgs.Empty);
 
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    /// <summary>Whether a build replaced the output this host loaded (#66): the designer starts a new host to show it.</summary>
+    public bool Outdated { get; set; }
+
+    /// <summary>Whether the designer ended this host.</summary>
+    public bool Disposed { get; private set; }
+
+    /// <summary>The creates this host answered (#66: a gesture made while the designer restarts applies on the new host).</summary>
+    public List<DesignerCreateParams> Creates { get; } = [];
+
+    public Task<bool> IsOutdatedAsync(CancellationToken cancellationToken) => Task.FromResult(Outdated);
+
+    public ValueTask DisposeAsync()
+    {
+        Disposed = true;
+        return ValueTask.CompletedTask;
+    }
 }
