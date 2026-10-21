@@ -784,7 +784,9 @@ public class IntelliSensePopupTests
             f.Window.MouseMove(At(word, linesUp: 3)); // from elsewhere: a move to where the pointer is may not count
             ShellFixture.RenderFrame(f.Window);
             f.Window.MouseMove(at);
-            await ShellFixture.PumpUntil(() => editor.IsQuickInfoOpen && editor.HoverPopup.Child is { Bounds.Width: > 0 });
+            await ShellFixture.PumpUntil(() => editor.IsQuickInfoOpen && editor.HoverPopup.Child is { Bounds.Width: > 0 }, describe: () =>
+                $"Quick Info: {editor.QuickInfoTrace}; open {editor.IsQuickInfoOpen}, its size {editor.HoverPopup.Child?.Bounds.Size}; pointer over the text {view.IsPointerOver}, "
+                + $"under it {f.Window.InputHitTest(at)?.GetType().Name ?? "nothing"}; scroll {view.ScrollOffset}; diagnostics {editor.Markers.Segments.Count()}; focus {f.Window.FocusManager?.GetFocusedElement()?.GetType().Name}");
             ShellFixture.Pump();
             var child = editor.HoverPopup.Child!;
             return new Rect(f.Window.PointToClient(child.PointToScreen(default)), child.Bounds.Size);

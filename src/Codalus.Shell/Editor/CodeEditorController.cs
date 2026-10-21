@@ -91,6 +91,9 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>The text view's scroll offset when Quick Info opened: Quick Info is placed against the text.</summary>
     private Vector _quickInfoScroll;
+
+    /// <summary>Quick Info's last decisions (asked, refused and why, opened, closed and why), for a test's failure message.</summary>
+    private readonly Queue<string> _quickInfoTrace = new();
     private DocumentOptions? _documentOptions;
     private readonly bool _attached;
     private bool _disposed;
@@ -166,6 +169,7 @@ public sealed partial class CodeEditorController : IDisposable
         _nextEdit = new NextEditSuggestions(editor, () => Model, () => services.AiNextEdit, () => _completion is not null || _inline.IsVisible, () => ResourceBrush("Shell.Info"));
         _hoverTimer = new DispatcherTimer { Interval = s_hoverDelay };
         _hoverTimer.Tick += OnHoverTimer;
+        _hoverPopup.Closed += OnQuickInfoClosed;
 
         ApplyOptions();
         ApplyTheme();
@@ -1560,11 +1564,31 @@ public sealed partial class CodeEditorController : IDisposable
             return;
         }
 
+        if (_hoverPopup.IsOpen)
+        {
+            TraceQuickInfo($"the pointer moved away, to {point}");
+        }
+
         _hoverPoint = point;
         _hoverPopup.IsOpen = false;
         _hoverTimer.Stop();
         _hoverTimer.Start();
     }
+
+    /// <summary>What Quick Info did lately and why, oldest first (tests).</summary>
+    internal string QuickInfoTrace => string.Join("; ", _quickInfoTrace);
+
+    private void TraceQuickInfo(string what)
+    {
+        if (_quickInfoTrace.Count == 12)
+        {
+            _quickInfoTrace.Dequeue();
+        }
+
+        _quickInfoTrace.Enqueue($"{Environment.TickCount64 % 1_000_000} {what}");
+    }
+
+    private void OnQuickInfoClosed(object? sender, EventArgs e) => TraceQuickInfo("closed");
 
     /// <summary>
     /// Whether a pointer move over the text leaves Quick Info open: near where it opened, on the symbol it describes, or on
@@ -1623,12 +1647,18 @@ public sealed partial class CodeEditorController : IDisposable
     {
         if (_hoverPopup.IsOpen && (Editor.TextArea.TextView.ScrollOffset - _quickInfoScroll).Length > 0.5)
         {
+            TraceQuickInfo($"the text scrolled from {_quickInfoScroll} to {Editor.TextArea.TextView.ScrollOffset}");
             _hoverPopup.IsOpen = false;
         }
     }
 
     private void OnPointerExited(object? sender, PointerEventArgs e)
     {
+        if (_hoverTimer.IsEnabled)
+        {
+            TraceQuickInfo("the pointer left the text before Quick Info was asked for");
+        }
+
         _hoverTimer.Stop();
         _link.Clear();
     }
@@ -1639,10 +1669,12 @@ public sealed partial class CodeEditorController : IDisposable
         var view = Editor.TextArea.TextView;
         if (view.GetPosition(_hoverPoint + view.ScrollOffset) is not { } position)
         {
+            TraceQuickInfo($"no text at {_hoverPoint}");
             return;
         }
 
         var offset = Model.Text.GetOffset(position.Location);
+        TraceQuickInfo($"asked at {offset} ({_hoverPoint})");
         _ = ShowQuickInfoAsync(offset, _hoverPoint, DefinitionLink.IdentifierAt(Editor, _hoverPoint));
     }
 
@@ -1663,6 +1695,7 @@ public sealed partial class CodeEditorController : IDisposable
             // Not while the completion list or signature help is open: they say what Quick Info would.
             if (IsIntelliSenseOpen)
             {
+                TraceQuickInfo("not shown: the completion list or parameter info is open");
                 return;
             }
 
@@ -1682,6 +1715,7 @@ public sealed partial class CodeEditorController : IDisposable
             var hasSymbol = hover?.Description is { } described && (described.Signature.Length > 0 || described.Sections.Length > 0) || hover?.Contents.Value is { Length: > 0 };
             if (cancellationToken.IsCancellationRequested || _disposed || IsIntelliSenseOpen || (!hasSymbol && diagnostics.Count == 0 && dataTip is null))
             {
+                TraceQuickInfo($"not shown at {offset}: cancelled {cancellationToken.IsCancellationRequested}, IntelliSense {IsIntelliSenseOpen}, symbol {hasSymbol}, diagnostics {diagnostics.Count} of {_markers.Segments.Count()}, data tip {dataTip is not null}");
                 return;
             }
 
@@ -1702,6 +1736,7 @@ public sealed partial class CodeEditorController : IDisposable
 
             if (!CanShowPopups)
             {
+                TraceQuickInfo("not shown: the editor isn't showing");
                 return; // a document opened over the editor while Quick Info was asked for
             }
 
@@ -1728,9 +1763,11 @@ public sealed partial class CodeEditorController : IDisposable
             _quickInfoClosest = null;
             _quickInfoScroll = Editor.TextArea.TextView.ScrollOffset;
             _hoverPopup.IsOpen = true;
+            TraceQuickInfo(_hoverPopup.IsOpen ? $"opened at {at}" : "didn't open");
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            TraceQuickInfo($"failed: {ex.GetType().Name}");
             Report(ex);
         }
     }
@@ -2154,6 +2191,7 @@ public sealed partial class CodeEditorController : IDisposable
         view.VisualLinesChanged -= OnViewChanged;
         view.PointerMoved -= OnPointerMoved;
         view.PointerExited -= OnPointerExited;
+        _hoverPopup.Closed -= OnQuickInfoClosed;
         view.PointerPressed -= OnPointerPressed;
         Editor.TextArea.Caret.PositionChanged -= OnCaretChanged;
         Editor.TextArea.SelectionChanged -= OnCaretChanged;
