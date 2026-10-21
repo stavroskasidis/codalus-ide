@@ -47,7 +47,8 @@ const PAGES = [
   // The other states in the whole window, checked in every theme but not rendered: the sheet above shows each of them.
   ...['changes', 'staged-folder', 'deleted-folder', 'untracked-folder', 'filtered', 'discard', 'discard-filtered', 'rename', 'delete', 'delete-remote',
     'compare', 'branches', 'search', 'nomatch', 'current-menu', 'remote-menu', 'worktree', 'worktree-enter', 'detached', 'operation', 'unborn', 'noremote', 'narrow']
-    .map((state) => ({ file: 'GitChanges.dc.html', name: `git-changes-${state}`, query: `state=${state}`, width: 1280, height: 800, themes: [] }))
+    .map((state) => ({ file: 'GitChanges.dc.html', name: `git-changes-${state}`, query: `state=${state}`, width: 1280, height: 800, themes: [] })),
+  { file: 'PackageManager.dc.html', name: 'package-manager', width: 1280, height: 800, full: true, themes: ALL }
 ];
 
 const slug = (s) => s.toLowerCase().replace(/\s+/g, '-');
