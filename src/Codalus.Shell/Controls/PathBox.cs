@@ -162,12 +162,7 @@ public sealed class PathBox : Decorator
         {
             try
             {
-                var path = Environment.ExpandEnvironmentVariables(typed);
-                if (path == "~" || path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal))
-                {
-                    path = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + path[1..];
-                }
-
+                var path = Codalus.Platform.UserPaths.Expand(typed);
                 path = baseFolder is not null ? Path.GetFullPath(path, baseFolder) : Path.IsPathFullyQualified(path) ? Path.GetFullPath(path) : null;
                 for (var folder = path; folder is not null; folder = Path.GetDirectoryName(folder))
                 {
