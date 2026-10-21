@@ -42,7 +42,10 @@ internal sealed class ShellSystemFonts : FontCollectionBase
     public override Uri Key => s_key;
 
     /// <summary>Replaces Avalonia's system font collection; call it before any text is laid out.</summary>
-    public static void Install() => FontManager.Current.AddFontCollection(new ShellSystemFonts(PlatformImpl(FontManager.Current)));
+    public static void Install() => FontManager.Current.AddFontCollection(Create());
+
+    /// <summary>A collection on the platform's font manager, with nothing looked up yet (tests).</summary>
+    internal static ShellSystemFonts Create() => new(PlatformImpl(FontManager.Current));
 
     public override bool TryGetGlyphTypeface(string familyName, FontStyle style, FontWeight weight, FontStretch stretch, [NotNullWhen(true)] out GlyphTypeface? glyphTypeface)
     {
@@ -71,7 +74,8 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             return true;
         }
 
-        if (Create(platformTypeface, FontSimulations.None) is not { } created)
+        // With the simulations the platform applies (Avalonia's collection drops them), so its style and weight are how it draws.
+        if (Create(platformTypeface, platformTypeface.FontSimulations) is not { } created)
         {
             return false;
         }
@@ -82,8 +86,15 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             TryAddGlyphTypeface(familyName, key, created);
         }
 
-        // Another thread may have added this key meanwhile: the one in the collection wins.
-        TryAddGlyphTypeface(created);
+        // Also under the style the platform says the face has, never the one its tables say: a face it slanted or
+        // emboldened (fontconfig's synthetic faces report it, Skia's simulations don't) read as the family's regular one
+        // once an italic or a bold was asked for first, and every regular text after it came out slanted or bold.
+        // Another thread may have added these keys meanwhile: the faces in the collection win.
+        if (platformTypeface.FontSimulations == FontSimulations.None)
+        {
+            TryAddGlyphTypeface(created, KeyOf(platformTypeface));
+        }
+
         return TryGetGlyphTypeface(familyName, key, allowNearestMatch: false, out glyphTypeface);
     }
 
@@ -107,10 +118,21 @@ internal sealed class ShellSystemFonts : FontCollectionBase
 
         // The platform's match for the style asked for: a face the family has (an oblique for an italic), or the nearest
         // with the bold or italic simulations it lacks, drawn by Skia from the same typeface. Skia slants only for an
-        // italic, so an oblique is asked for as one.
+        // italic, so an oblique is asked for as one. The family is asked for by the name the platform found the face by
+        // first: the name table's family of a weight outside the four standard ones carries the weight ("Fira Code
+        // SemiBold"), which DirectWrite and CoreText don't know.
         var asked = style == FontStyle.Oblique ? FontStyle.Italic : style;
-        if (!TryCreateGlyphTypeface(_platform, glyphTypeface.FamilyName, asked, weight, stretch, out var platformTypeface)
-            || (platformTypeface.FontSimulations == FontSimulations.None && KeyOf(platformTypeface) == source))
+        IPlatformTypeface? platformTypeface = null;
+        foreach (var name in new[] { glyphTypeface.PlatformTypeface.FamilyName, glyphTypeface.FamilyName, glyphTypeface.TypographicFamilyName }
+                     .Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (TryCreateGlyphTypeface(_platform, name, asked, weight, stretch, out platformTypeface))
+            {
+                break;
+            }
+        }
+
+        if (platformTypeface is null || (platformTypeface.FontSimulations == FontSimulations.None && KeyOf(platformTypeface) == source))
         {
             return false;
         }
@@ -142,8 +164,11 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             return false;
         }
 
+        // A face cached for the family and style, when it has the character: the lookup also matches another family by its
+        // name's prefix ("SimSun-ExtB" for "SimSun"), where Avalonia's reads only the family's own entry.
         var platformKey = KeyOf(platformTypeface);
-        if (TryGetGlyphTypeface(platformTypeface.FamilyName, platformKey, allowNearestMatch: false, out glyphTypeface))
+        if (TryGetGlyphTypeface(platformTypeface.FamilyName, platformKey, allowNearestMatch: false, out glyphTypeface)
+            && glyphTypeface.CharacterToGlyphMap.ContainsGlyph(codepoint))
         {
             return true;
         }
