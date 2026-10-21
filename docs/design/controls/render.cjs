@@ -48,9 +48,14 @@ const PAGES = [
   { file: 'GitChanges.dc.html', name: 'git-changes-branch-menu', query: 'state=branch-menu', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light'] },
   { file: 'GitChanges.dc.html', name: 'git-changes-delete-unmerged', query: 'state=delete-unmerged', width: 1280, height: 800, themes: ['Classic Light'] },
   { file: 'GitChanges.dc.html', name: 'git-changes-folder-macos', query: 'state=folder&os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
+  // A danger dialog's buttons on macOS: Cancel, the default, stays at the trailing edge.
+  { file: 'GitChanges.dc.html', name: 'git-changes-delete-macos', query: 'state=delete&os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
   // The other states in the whole window, checked in every theme but not rendered: the sheet above shows each of them.
-  ...['changes', 'staged-folder', 'deleted-folder', 'untracked-folder', 'filtered', 'discard', 'discard-filtered', 'rename', 'delete', 'delete-remote',
-    'compare', 'branches', 'search', 'nomatch', 'current-menu', 'remote-menu', 'worktree', 'worktree-enter', 'detached', 'operation', 'unborn', 'noremote', 'narrow']
+  ...['changes', 'staged-folder', 'deleted-folder', 'untracked-folder', 'filtered', 'file-menu', 'staged-file', 'deleted-file', 'repo-menu', 'conflict-file',
+    'conflict-folder', 'discard', 'discard-filtered', 'stash', 'new-branch', 'new-branch-operation', 'rename', 'delete', 'delete-upstream',
+    'delete-unmerged-upstream', 'delete-remote', 'compare', 'compare-loading', 'compare-same', 'branches', 'search', 'nomatch', 'loading', 'error', 'many',
+    'branch-actions', 'current-menu', 'remote-menu', 'remote-twin', 'worktree', 'worktree-enter', 'detached', 'operation', 'unborn', 'noremote',
+    'noremote-link', 'long-row', 'long-name', 'narrow']
     .map((state) => ({ file: 'GitChanges.dc.html', name: `git-changes-${state}`, query: `state=${state}`, width: 1280, height: 800, themes: [] })),
   { file: 'PackageManager.dc.html', name: 'package-manager', width: 1280, height: 800, full: true, themes: ALL }
 ];
