@@ -165,21 +165,60 @@ public class NavigationDepthTests
             return Avalonia.VisualExtensions.TranslatePoint(view, new Avalonia.Point(visual.X + 2, visual.Y), f.Window)!.Value;
         }
 
+        string Describe()
+        {
+            var log = f.Shell.LanguageLog.GetText();
+            return $"{program.Link.State}; Quick Info open: {program.IsQuickInfoOpen}; pointer over the text: {view.IsPointerOver}; C#: {f.Shell.Languages.Status(ShellHost.CSharpLanguageId)}; "
+                + $"restore: {f.Shell.Solutions.RestoreState}; design-time builds: {f.Shell.Solutions.DesignTimeProgress}. Language log: {log[Math.Max(0, log.Length - 3000)..]}";
+        }
+
+        // Ctrl+hover over a symbol until the condition holds, as a user would: the pointer stays on the symbol, moving
+        // within it every couple of seconds. While design-time builds load the projects again (after the restore), the
+        // service can briefly not know the symbol, and the link asks again on a later move (as the Navigation test asks
+        // Peek again).
+        async Task HoverUntil(string text, Func<bool> condition, string what)
+        {
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            for (var move = 0; !condition(); move++)
+            {
+                if (started.Elapsed >= TimeSpan.FromSeconds(30))
+                {
+                    Assert.Fail($"No {what} after {move} moves within '{text}': {Describe()}");
+                }
+
+                ShellFixture.RenderFrame(f.Window);
+                f.Window.MouseMove(At(text, 2 + move % 2), Avalonia.Input.RawInputModifiers.Control);
+                var moved = System.Diagnostics.Stopwatch.StartNew();
+                await ShellFixture.PumpUntil(() => condition() || moved.Elapsed >= TimeSpan.FromSeconds(2));
+            }
+        }
+
         // Without Ctrl, nothing; with Ctrl over Scale, the method is a link: underlined, the pointer a hand.
         var scale = program.Model.Text.Text.IndexOf("Scale(", StringComparison.Ordinal);
         f.Window.MouseMove(At("Scale(", 1));
         ShellFixture.Pump();
         Assert.Null(program.Link.Link);
-        f.Window.MouseMove(At("Scale(", 2), Avalonia.Input.RawInputModifiers.Control);
-        await ShellFixture.PumpUntil(() => program.Link.Link is not null, seconds: 30);
+        await HoverUntil("Scale(", () => program.Link.Link is not null, "link");
         Assert.Equal((scale, scale + "Scale".Length), program.Link.Link);
         Assert.Equal("Hand", view.Cursor?.ToString());
+
+        // Resting there opens Quick Info, which leaves the link alone: its light dismiss lets the pointer through to the
+        // text (it took the pointer, and the link with it). Moving off the symbol, above Quick Info past the end of a
+        // line, closes Quick Info and takes the link away.
+        await HoverUntil("Scale(", () => program.IsQuickInfoOpen, "Quick Info");
+        ShellFixture.RenderFrame(f.Window);
+        ShellFixture.Pump();
+        Assert.True(view.IsPointerOver, Describe());
+        Assert.Equal((scale, scale + "Scale".Length), program.Link.Link);
+        var endOfLine = At("new Circle(2);", "new Circle(2);".Length);
+        ShellFixture.RenderFrame(f.Window);
+        f.Window.MouseMove(new Avalonia.Point(endOfLine.X + 100, endOfLine.Y), Avalonia.Input.RawInputModifiers.Control);
+        await ShellFixture.PumpUntil(() => program.Link.Link is null && !program.IsQuickInfoOpen, describe: Describe);
 
         // Text in a string isn't a link, and letting go of Ctrl takes the link away.
         f.Window.MouseMove(At("\"Ada\"", 2), Avalonia.Input.RawInputModifiers.Control);
         await ShellFixture.PumpUntil(() => program.Link.Link is null);
-        f.Window.MouseMove(At("Scale(", 2), Avalonia.Input.RawInputModifiers.Control);
-        await ShellFixture.PumpUntil(() => program.Link.Link is not null, seconds: 30);
+        await HoverUntil("Scale(", () => program.Link.Link is not null, "link");
         f.Window.KeyReleaseQwerty(Avalonia.Input.PhysicalKey.ControlLeft, Avalonia.Input.RawInputModifiers.None);
         await ShellFixture.PumpUntil(() => program.Link.Link is null);
         Assert.NotEqual("Hand", view.Cursor?.ToString());

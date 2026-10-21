@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
@@ -110,7 +111,7 @@ public sealed partial class CodeEditorController : IDisposable
         var view = editor.TextArea.TextView;
         view.LineTransformers.Add(_colorizer);
         view.LineTransformers.Add(_markers);
-        _link = new DefinitionLink(editor, () => Model, () => Client);
+        _link = new DefinitionLink(editor, DefinitionsAtAsync);
         view.LineTransformers.Add(_link);
         view.BackgroundRenderers.Add(_highlights);
         view.BackgroundRenderers.Add(_markers);
@@ -288,6 +289,10 @@ public sealed partial class CodeEditorController : IDisposable
     public event EventHandler? TokensApplied;
 
     private LanguageHostClient? Client => _services.Client(Model);
+
+    /// <summary>The definitions of the symbol at an offset, for the Ctrl+hover link; null without a language service.</summary>
+    private async Task<Codalus.LanguageServices.Protocol.Location[]?> DefinitionsAtAsync(int offset, CancellationToken cancellationToken) =>
+        Client is { } client ? await client.DefinitionAsync(Model.Uri, Model.PositionAt(offset), cancellationToken).ConfigureAwait(true) : null;
 
     private CancellationTokenSource Restart(ref CancellationTokenSource? cts)
     {
@@ -486,6 +491,9 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>Requests everything again: after the language service (re)started, or the document was reloaded.</summary>
     public void RefreshAll()
     {
+        // A symbol under the Ctrl+hover pointer that the service didn't know may be known now.
+        _link.Recheck();
+
         // Highlighting the visible lines first; folding (a walk of the whole file), options and the insights (CodeLens,
         // inlay hints and document symbols, whose answers for a 100k-line file are megabytes the service computes beside
         // the first classification) when it's done.
@@ -1633,6 +1641,12 @@ public sealed partial class CodeEditorController : IDisposable
             };
             _hoverPopup.WindowManagerAddShadowHint = true;
             _hoverPopup.PlacementTarget = Editor.TextArea.TextView;
+
+            // Light dismiss covers the window with a layer that takes the pointer while Quick Info is open. Over the text it
+            // lets the pointer through: the text view keeps the pointer (no PointerExited, which took the Ctrl+hover link
+            // away) and its moves, so moving off closes Quick Info, and a click (Ctrl+click) goes to the text. The layer lets
+            // through only to the element's descendants, so it's the text view's presenter (the text and nothing else).
+            _hoverPopup.OverlayInputPassThroughElement = Editor.TextArea.TextView.GetVisualParent() as IInputElement ?? Editor.TextArea;
             _hoverPopup.Placement = PlacementMode.AnchorAndGravity;
             _hoverPopup.PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft;
             _hoverPopup.PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight;
