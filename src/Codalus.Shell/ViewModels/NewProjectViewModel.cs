@@ -239,6 +239,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
                 OnPropertyChanged(nameof(IsChoosePage));
                 OnPropertyChanged(nameof(IsConfigurePage));
                 OnPropertyChanged(nameof(IsAdditionalPage));
+                OnPropertyChanged(nameof(ShowPageHint));
                 RefreshCommands();
                 PageEntered?.Invoke(this, value);
             }
@@ -314,7 +315,8 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         get => _language;
         set
         {
-            if (SetField(ref _language, value))
+            // A combo box whose list is replaced sends null: the filter stays.
+            if (value is not null && SetField(ref _language, value))
             {
                 ApplyFilter();
             }
@@ -326,7 +328,8 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         get => _platform;
         set
         {
-            if (SetField(ref _platform, value))
+            // A combo box whose list is replaced sends null: the filter stays.
+            if (value is not null && SetField(ref _platform, value))
             {
                 ApplyFilter();
             }
@@ -338,7 +341,8 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         get => _projectType;
         set
         {
-            if (SetField(ref _projectType, value))
+            // A combo box whose list is replaced sends null: the filter stays.
+            if (value is not null && SetField(ref _projectType, value))
             {
                 ApplyFilter();
             }
@@ -763,7 +767,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         get => _solutionMode;
         set
         {
-            if (SetField(ref _solutionMode, value))
+            if (value is not null && SetField(ref _solutionMode, value))
             {
                 if (!_locationEdited)
                 {
@@ -1064,7 +1068,8 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         get => _framework;
         set
         {
-            if (SetField(ref _framework, value))
+            // The list is replaced as the page opens: the null the combo box sends then isn't a choice.
+            if (value is not null && SetField(ref _framework, value))
             {
                 RebuildOptions();
                 ScheduleGlobalJsonCheck();
@@ -1116,7 +1121,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         get => _auth;
         set
         {
-            if (SetField(ref _auth, value))
+            if (value is not null && SetField(ref _auth, value))
             {
                 OnPropertyChanged(nameof(ForcesHttps));
                 OnPropertyChanged(nameof(IsHttpsEnabled));
@@ -1459,6 +1464,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         {
             if (SetField(ref _isCreating, value))
             {
+                OnPropertyChanged(nameof(ShowPageHint));
                 RefreshCommands();
                 EvaluateConditions();
             }
@@ -1476,8 +1482,20 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
     public string? CreateError
     {
         get => _createError;
-        private set => SetField(ref _createError, value);
+        private set
+        {
+            if (SetField(ref _createError, value))
+            {
+                OnPropertyChanged(nameof(HasCreateError));
+                OnPropertyChanged(nameof(ShowPageHint));
+            }
+        }
     }
+
+    public bool HasCreateError => _createError is not null;
+
+    /// <summary>The footer's keyboard hint (Alt+Left, Alt+Right) on Configure and Additional information, when nothing else is said there.</summary>
+    public bool ShowPageHint => Page != NewProjectPage.Choose && !_isCreating && _createError is null;
 
     /// <summary>The request the pages describe now.</summary>
     internal NewProjectRequest Request()

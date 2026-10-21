@@ -13,9 +13,10 @@ namespace Codalus.Shell.Tests;
 /// M34g on M43 (.NET Framework, ADR 0075 and 0076): the .NET Framework project UI (Solution Explorer's old-style and
 /// can't-build projects with the reason), Convert to SDK-Style's preview, the Error List entries of a project that needs
 /// Visual Studio's targets, Check Environment's .NET Framework rows, the desktop-CLR debugger's pieces (its stack frames,
-/// labels and frames without user code, its modules' symbol status) and the pickers (New Project's .NET Framework
-/// entries, the framework, Attach to Process's .NET Framework processes), each in its states at its minimum size in all
-/// sixteen themes, with the same checks as the other M34g views.
+/// labels and frames without user code, its modules' symbol status) and Attach to Process's picker of .NET Framework
+/// processes, each in its states at its minimum size in all sixteen themes, with the same checks as the other M34g views.
+/// New Project's .NET Framework rows and their framework labels are the wizard's since 0.6.0 (ADR 0082), checked with
+/// its other states in PolishNewProjectTests.
 /// </summary>
 public partial class PolishTests
 {
@@ -173,7 +174,7 @@ public partial class PolishTests
         Check("modules (desktop clr)", new ModulesView { DataContext = modules }, ToolWindowMinWidth, 420);
 
         // The picker over the window: Attach to Process's processes. (New Project's .NET Framework rows are the wizard's
-        // since 0.6.0, ADR 0082, no longer pickers.)
+        // since 0.6.0, ADR 0082: PolishNewProjectTests checks them, Windows only chips and framework labels included.)
         var paletteView = f.Window.GetVisualDescendants().OfType<QuickPickView>().First();
         var pickers = new (string Name, string Placeholder, string Query, QuickPickItem[] Items)[]
         {

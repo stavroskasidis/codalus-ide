@@ -172,7 +172,10 @@ public static class TemplateTags
         _ => type,
     };
 
-    /// <summary>A row's chips: its language, then its platforms, then its project types, in the display language.</summary>
+    /// <summary>
+    /// A row's chips: its language, then its platforms, then its project types, in the display language; a word that is
+    /// both a platform and a type (Blazor's Web) once.
+    /// </summary>
     public static IReadOnlyList<string> Chips(string language, IEnumerable<string> platforms, IEnumerable<string> projectTypes) =>
-        [.. (language.Length > 0 ? [LanguageLabel(language)] : Array.Empty<string>()), .. platforms.Select(PlatformLabel), .. projectTypes.Select(ProjectTypeLabel)];
+        [.. new[] { language.Length > 0 ? LanguageLabel(language) : null }.OfType<string>().Concat(platforms.Select(PlatformLabel)).Concat(projectTypes.Select(ProjectTypeLabel)).Distinct(StringComparer.Ordinal)];
 }

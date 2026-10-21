@@ -78,8 +78,44 @@ public sealed class NewProjectTemplateRow : ObservableObject
     public IReadOnlyList<HighlightRun> NameRuns
     {
         get => _nameRuns;
-        internal set => SetField(ref _nameRuns, value);
+        internal set
+        {
+            if (SetField(ref _nameRuns, value))
+            {
+                OnPropertyChanged(nameof(NameHighlights));
+            }
+        }
     }
+
+    /// <summary>The positions of the name's characters that match the search (the view draws them bold).</summary>
+    public IReadOnlyList<int> NameHighlights
+    {
+        get
+        {
+            var positions = new List<int>();
+            var at = 0;
+            foreach (var run in _nameRuns)
+            {
+                if (run.IsMatch)
+                {
+                    positions.AddRange(Enumerable.Range(at, run.Text.Length));
+                }
+
+                at += run.Text.Length;
+            }
+
+            return positions;
+        }
+    }
+
+    /// <summary>The language a recent template's row shows beside its name (<c>C#</c>, <c>F#</c>, <c>VB</c>).</summary>
+    public string Language => Group.Language;
+
+    /// <summary>The tags a template's row shows (a pack's Not installed is <see cref="PackChip"/>).</summary>
+    public IReadOnlyList<string> TagChips => IsPack ? [] : Chips;
+
+    /// <summary>A template package's Not installed chip, or null.</summary>
+    public string? PackChip => IsPack && Chips.Count > 0 ? Chips[0] : null;
 
     /// <summary>Its projects run only on Windows, and this isn't Windows: the row says so.</summary>
     public bool ShowWindowsOnly => Group.RunsOnlyOnWindows && !_owner.IsWindows;

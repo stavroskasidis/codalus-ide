@@ -1,0 +1,459 @@
+<Window xmlns:l="using:Codalus.Shell.Infrastructure"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Codalus.Shell.ViewModels"
+        xmlns:wb="using:Codalus.Workbench.Projects"
+        xmlns:controls="using:Codalus.Shell.Controls"
+        x:Class="Codalus.Shell.Views.NewProjectWindow"
+        x:DataType="vm:NewProjectViewModel"
+        Title="{Binding WindowTitle}"
+        Width="1000" Height="680" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        KeyboardNavigation.TabNavigation="Cycle"
+        Background="{DynamicResource Shell.Panel}">
+  <!--
+    New Project (0.6.0, ADR 0082; docs/design/controls/NewProject.dc.html): the classic IDE's three-page wizard in a
+    window owned by the main window. Create a new project (recent templates on the left; search, the filters and the
+    templates on the right), Configure your new project, Additional information; Back, then Next, Install or Create, in
+    the footer. Every color is a token; every string is the catalogue's or the templates' own.
+  -->
+  <Window.Styles>
+    <Style Selector="TextBlock.pageTitle">
+      <Setter Property="FontSize" Value="22" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+    <Style Selector="TextBlock.sectionTitle">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,10,0,6" />
+    </Style>
+    <!-- A template's icon on its tile (16 px in 28 px), in its kind's palette color. -->
+    <Style Selector="Border.templateTile">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Grid.Header}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <!-- The template list: rows taller than the 22 px standard on purpose (the tags on a line of their own), ruled. -->
+    <Style Selector="ListBox#TemplateList ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ListBox#TemplateList ListBoxItem" x:DataType="vm:NewProjectTemplateRow">
+      <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+    </Style>
+    <Style Selector="ListBox#RecentList ListBoxItem" x:DataType="vm:NewProjectTemplateRow">
+      <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+      <Setter Property="Padding" Value="8,0,4,0" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Border.templateRow">
+      <Setter Property="Padding" Value="12,9,16,9" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <!-- A selected row's tags stay chips: on the list's own background, as the classic IDE draws them. -->
+    <Style Selector="ListBox#TemplateList ListBoxItem:selected Border.chip:not(.warning):not(.info)">
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+    </Style>
+    <Style Selector="Button.pin">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="Button.pin.pinned, ListBoxItem:pointerover Button.pin, ListBoxItem:selected Button.pin">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="StackPanel.field">
+      <Setter Property="Spacing" Value="4" />
+      <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+    <Style Selector="StackPanel.field > Label">
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Label.optionLabel">
+      <Setter Property="Padding" Value="0" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel>
+    <!-- The footer: a link, the keys, the progress or the error on the left; Back, then Next, Install or Create on the right. -->
+    <Border DockPanel.Dock="Bottom" Classes="dialogFooter">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
+          <Button x:Name="BackButton" Classes="dialog" Content="{l:T newProject.back}" Command="{Binding BackCommand}" ToolTip.Tip="{Binding BackToolTip}" />
+          <Button x:Name="NextButton" Classes="dialog accent" Content="{l:T newProject.next}" Command="{Binding NextCommand}" IsVisible="{Binding IsNextVisible}"
+                  ToolTip.Tip="{l:T newProject.nextTip}" />
+          <Button x:Name="InstallButton" Classes="dialog accent" Content="{l:T newProject.install}" Command="{Binding InstallCommand}" IsVisible="{Binding IsInstallVisible}" />
+          <Button x:Name="CreateButton" Classes="dialog accent" Content="{l:T newProject.create}" Command="{Binding CreateCommand}" IsVisible="{Binding IsCreateVisible}"
+                  ToolTip.Tip="{l:T newProject.createTip}" />
+          <Button x:Name="CancelButton" Classes="dialog" Content="{l:T newProject.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding IsCreating}" />
+        </StackPanel>
+        <Panel VerticalAlignment="Center">
+          <WrapPanel IsVisible="{Binding IsChoosePage}" VerticalAlignment="Center">
+            <TextBlock Classes="muted" Text="{Binding NotFindingText}" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <Button x:Name="InstallMoreButton" Classes="link" Content="{l:T newProject.installMoreTemplates}" Command="{Binding InstallMoreCommand}" />
+          </WrapPanel>
+          <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding ShowPageHint}" VerticalAlignment="Center">
+            <Border Classes="kbd"><TextBlock Text="{l:T newProject.keyAltLeft}" /></Border>
+            <Border Classes="kbd"><TextBlock Text="{l:T newProject.keyAltRight}" /></Border>
+            <TextBlock Classes="muted small" Text="{l:T newProject.hintMoveBetweenPages}" VerticalAlignment="Center" Margin="2,0,0,0" />
+          </StackPanel>
+          <DockPanel IsVisible="{Binding IsCreating}" VerticalAlignment="Center">
+            <ProgressBar DockPanel.Dock="Left" IsIndeterminate="True" Width="160" Height="4" MinHeight="4" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <TextBlock Text="{Binding CreateStatus}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CreateStatus}" />
+          </DockPanel>
+          <!-- Sized to its text, so Show Output follows the message; a long message is trimmed (its tooltip has all of it). -->
+          <DockPanel IsVisible="{Binding HasCreateError}" VerticalAlignment="Center" HorizontalAlignment="Left">
+            <controls:Icon DockPanel.Dock="Left" Kind="error" Classes="error" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+            <Button x:Name="ShowOutputButton" DockPanel.Dock="Right" Classes="link" Content="{l:T newProject.showOutput}" Command="{Binding ShowOutputCommand}" Margin="8,0,0,0" />
+            <TextBlock Classes="error" Text="{Binding CreateError}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CreateError}"
+                       AutomationProperties.LiveSetting="Assertive" />
+          </DockPanel>
+        </Panel>
+      </DockPanel>
+    </Border>
+
+    <Panel Margin="28,20,28,16" IsEnabled="{Binding !IsCreating}">
+      <!-- ============================================================ Create a new project -->
+      <Grid x:Name="ChoosePage" ColumnDefinitions="270,32,*" IsVisible="{Binding IsChoosePage}">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Classes="pageTitle" Text="{Binding PageTitle}" TextWrapping="Wrap" />
+          <TextBlock DockPanel.Dock="Top" Classes="sectionTitle" Text="{l:T newProject.recentProjectTemplates}" IsVisible="{Binding HasRecentTemplates}" />
+          <ListBox x:Name="RecentList" ItemsSource="{Binding RecentTemplates}" Background="Transparent" BorderThickness="0"
+                   IsVisible="{Binding HasRecentTemplates}" AutomationProperties.Name="{l:T newProject.recentProjectTemplates}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:NewProjectTemplateRow">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Background="Transparent">
+                  <Grid.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem controls:MenuEntry.Icon="pin" Header="{Binding PinTitle}" Command="{Binding PinCommand}" />
+                      <MenuItem controls:MenuEntry.Icon="close" Header="{Binding RemoveTitle}" Command="{Binding RemoveCommand}" />
+                    </ContextMenu>
+                  </Grid.ContextMenu>
+                  <controls:Icon Kind="{Binding IconKind}" Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,8,0" />
+                  <controls:HighlightedText Grid.Column="1" Source="{Binding Name}" Highlights="{Binding NameHighlights}" VerticalAlignment="Center"
+                                            TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                  <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Language}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                  <Button Grid.Column="3" Classes="toolbar pin" Classes.pinned="{Binding IsPinned}" Command="{Binding PinCommand}"
+                          ToolTip.Tip="{Binding PinTitle}" AutomationProperties.Name="{Binding PinTitle}">
+                    <controls:Icon Kind="pin" />
+                  </Button>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+
+        <DockPanel Grid.Column="2">
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+            <TextBox x:Name="SearchBox" Text="{Binding Search}" PlaceholderText="{l:T newProject.searchForTemplatesAltS}"
+                     AutomationProperties.Name="{l:T newProject.searchForTemplates}">
+              <TextBox.InnerLeftContent>
+                <controls:Icon Kind="search" Width="14" Height="14" Margin="8,0,0,0" VerticalAlignment="Center" />
+              </TextBox.InnerLeftContent>
+              <TextBox.InnerRightContent>
+                <Button x:Name="ClearSearchButton" Classes="subtle" IsTabStop="False" Padding="4,0" Margin="0,0,2,0" Command="{Binding ClearSearchCommand}"
+                        IsVisible="{Binding HasSearch}" ToolTip.Tip="{l:T newProject.clearTheSearchEsc}" AutomationProperties.Name="{l:T newProject.clearTheSearch}">
+                  <controls:Icon Kind="close" Width="12" Height="12" />
+                </Button>
+              </TextBox.InnerRightContent>
+            </TextBox>
+            <Button x:Name="ClearAllButton" Grid.Column="1" Classes="link" Margin="12,0,0,0" VerticalAlignment="Center" Content="{l:T newProject.clearAll}"
+                    Command="{Binding ClearAllCommand}" IsEnabled="{Binding HasFilter}" />
+          </Grid>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,8,*,8,*" Margin="0,8,0,10">
+            <ComboBox x:Name="LanguageFilter" HorizontalAlignment="Stretch" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}"
+                      AutomationProperties.Name="{l:T newProject.language}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:FilterOption">
+                  <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <ComboBox x:Name="PlatformFilter" Grid.Column="2" HorizontalAlignment="Stretch" ItemsSource="{Binding Platforms}" SelectedItem="{Binding SelectedPlatform}"
+                      AutomationProperties.Name="{l:T newProject.platform}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:FilterOption">
+                  <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <ComboBox x:Name="ProjectTypeFilter" Grid.Column="4" HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectTypes}" SelectedItem="{Binding SelectedProjectType}"
+                      AutomationProperties.Name="{l:T newProject.projectType}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:FilterOption">
+                  <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </Grid>
+
+          <Border BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" Background="{DynamicResource Shell.Editor.Background}" ClipToBounds="True">
+            <Panel>
+              <ListBox x:Name="TemplateList" ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate, Mode=OneWay}" Background="Transparent"
+                       BorderThickness="0" AutomationProperties.Name="{l:T newProject.projectTemplates}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:NewProjectTemplateRow">
+                    <Border Classes="templateRow" Background="Transparent">
+                      <Grid ColumnDefinitions="28,*">
+                        <Border Classes="templateTile">
+                          <controls:Icon Kind="{Binding IconKind}" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="2">
+                          <controls:HighlightedText Source="{Binding Name}" Highlights="{Binding NameHighlights}" FontWeight="SemiBold"
+                                                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                          <TextBlock Text="{Binding Description}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                     IsVisible="{Binding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                          <TextBlock Text="{Binding InstallDescription}" TextWrapping="Wrap"
+                                     IsVisible="{Binding InstallDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                          <ItemsControl ItemsSource="{Binding TagChips}" Margin="0,4,0,0">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <WrapPanel />
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="x:String">
+                                <Border Classes="chip square" Margin="0,0,6,4"><TextBlock Text="{Binding}" FontWeight="Normal" /></Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <WrapPanel IsVisible="{Binding ShowWindowsOnly}">
+                            <Border Classes="chip square warning" Margin="0,0,6,4" ToolTip.Tip="{Binding WindowsOnlyTip}">
+                              <TextBlock Text="{Binding WindowsOnlyText}" FontWeight="Normal" />
+                            </Border>
+                          </WrapPanel>
+                          <WrapPanel IsVisible="{Binding PackChip, Converter={x:Static ObjectConverters.IsNotNull}}" Margin="0,4,0,0">
+                            <Border Classes="chip square info" Margin="0,0,6,4"><TextBlock Text="{Binding PackChip}" FontWeight="Normal" /></Border>
+                          </WrapPanel>
+                          <DockPanel IsVisible="{Binding IsInstalling}" Margin="0,4,0,0">
+                            <ProgressBar DockPanel.Dock="Left" IsIndeterminate="True" Width="120" Height="4" MinHeight="4" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding InstallStatus}" TextWrapping="Wrap" />
+                          </DockPanel>
+                          <DockPanel IsVisible="{Binding InstallError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Margin="0,4,0,0">
+                            <controls:Icon DockPanel.Dock="Left" Kind="error" Classes="error" Width="12" Height="12" Margin="0,2,4,0" VerticalAlignment="Top" />
+                            <TextBlock Classes="error" Text="{Binding InstallError}" TextWrapping="Wrap" />
+                          </DockPanel>
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+
+              <!-- Loading: the window shows at once and the list arrives (a cold dotnet new list takes a few seconds). -->
+              <StackPanel Classes="emptyState" IsVisible="{Binding IsLoading}">
+                <ProgressBar IsIndeterminate="True" Width="160" Height="4" MinHeight="4" HorizontalAlignment="Center" />
+                <TextBlock Text="{l:T newProject.loadingTemplates}" />
+              </StackPanel>
+              <!-- No match: say so, with Clear all and Install more templates. -->
+              <StackPanel Classes="emptyState" IsVisible="{Binding IsEmpty}">
+                <controls:Icon Kind="search" />
+                <TextBlock Text="{Binding EmptyText}" />
+                <TextBlock Text="{Binding LoadError}" IsVisible="{Binding LoadError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <Button x:Name="EmptyClearAllButton" Content="{l:T newProject.clearAll}" Command="{Binding ClearAllCommand}" IsVisible="{Binding HasFilter}" />
+                <Button x:Name="EmptyInstallMoreButton" Classes="link" Content="{l:T newProject.installMoreTemplates}" Command="{Binding InstallMoreCommand}" />
+              </StackPanel>
+            </Panel>
+          </Border>
+        </DockPanel>
+      </Grid>
+
+      <!-- ============================================================ Configure your new project -->
+      <DockPanel x:Name="ConfigurePage" IsVisible="{Binding IsConfigurePage}">
+        <StackPanel DockPanel.Dock="Top">
+          <TextBlock Classes="pageTitle" Text="{Binding PageTitle}" TextWrapping="Wrap" />
+          <WrapPanel Margin="0,0,0,14">
+            <TextBlock Text="{Binding TemplateName}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" Margin="0,0,12,4" />
+            <ItemsControl ItemsSource="{Binding TemplateChips}" VerticalAlignment="Center">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <Border Classes="chip square" Margin="0,0,6,4"><TextBlock Text="{Binding}" FontWeight="Normal" /></Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </WrapPanel>
+        </StackPanel>
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Width="560" HorizontalAlignment="Left" Margin="0,0,16,0">
+            <StackPanel Classes="field" IsVisible="{Binding ShowProjectName}">
+              <Label x:Name="ProjectNameLabel" Content="{l:T newProject.projectName}" Target="{Binding #ProjectNameBox}" />
+              <TextBox x:Name="ProjectNameBox" Text="{Binding ProjectName}" Classes.invalid="{Binding NameError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       AutomationProperties.LabeledBy="{Binding #ProjectNameLabel}" />
+              <DockPanel IsVisible="{Binding NameError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <controls:Icon DockPanel.Dock="Left" Kind="error" Classes="error" Width="12" Height="12" Margin="0,2,4,0" VerticalAlignment="Top" />
+                <TextBlock Classes="error small" Text="{Binding NameError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+              </DockPanel>
+            </StackPanel>
+
+            <StackPanel Classes="field">
+              <Label x:Name="LocationLabel" Content="{l:T newProject.location}" Target="{Binding #LocationBox}" />
+              <controls:PathBox x:Name="LocationBox" Text="{Binding Location}" Recent="{Binding RecentLocations}" Kind="Folder"
+                                AutomationProperties.LabeledBy="{Binding #LocationLabel}" />
+              <DockPanel IsVisible="{Binding LocationError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <controls:Icon DockPanel.Dock="Left" Kind="error" Classes="error" Width="12" Height="12" Margin="0,2,4,0" VerticalAlignment="Top" />
+                <TextBlock Classes="error small" Text="{Binding LocationError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+              </DockPanel>
+            </StackPanel>
+
+            <StackPanel Classes="field" IsVisible="{Binding ShowSolutionChoice}">
+              <Label x:Name="SolutionLabel" Content="{l:T newProject.solution}" Target="{Binding #SolutionCombo}" />
+              <ComboBox x:Name="SolutionCombo" HorizontalAlignment="Stretch" ItemsSource="{Binding SolutionChoices}" SelectedItem="{Binding SelectedSolutionChoice}"
+                        AutomationProperties.LabeledBy="{Binding #SolutionLabel}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SolutionModeChoice">
+                    <TextBlock Text="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+
+            <StackPanel Classes="field" IsVisible="{Binding ShowSolutionName}">
+              <Label x:Name="SolutionNameLabel" Content="{l:T newProject.solutionName}" Target="{Binding #SolutionNameBox}" />
+              <TextBox x:Name="SolutionNameBox" Text="{Binding SolutionName}" IsEnabled="{Binding IsSolutionNameEnabled}"
+                       Classes.invalid="{Binding SolutionNameError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       AutomationProperties.LabeledBy="{Binding #SolutionNameLabel}" />
+              <DockPanel IsVisible="{Binding SolutionNameError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <controls:Icon DockPanel.Dock="Left" Kind="error" Classes="error" Width="12" Height="12" Margin="0,2,4,0" VerticalAlignment="Top" />
+                <TextBlock Classes="error small" Text="{Binding SolutionNameError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+              </DockPanel>
+            </StackPanel>
+
+            <CheckBox x:Name="SameDirectoryBox" Content="{l:T newProject.sameDirectory}" IsChecked="{Binding SameDirectory}" IsVisible="{Binding ShowSameDirectory}"
+                      Margin="0,0,0,10" />
+            <StackPanel IsVisible="{Binding ShowTrust}" Margin="0,0,0,12" Spacing="2">
+              <CheckBox x:Name="TrustBox" Content="{l:T newProject.trustLocation}" IsChecked="{Binding TrustLocation}" IsEnabled="{Binding IsTrustEnabled}" />
+              <TextBlock Classes="muted small" Text="{Binding TrustNote}" TextWrapping="Wrap" Margin="24,0,0,0" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding AddsTo}" TextWrapping="Wrap" Margin="0,0,0,8" IsVisible="{Binding AddsTo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock x:Name="CreatedInText" Classes="muted" Text="{Binding CreatedIn}" TextWrapping="Wrap"
+                       IsVisible="{Binding TargetError, Converter={x:Static ObjectConverters.IsNull}}" />
+            <DockPanel IsVisible="{Binding TargetError, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <controls:Icon DockPanel.Dock="Left" Kind="error" Classes="error" Width="12" Height="12" Margin="0,2,4,0" VerticalAlignment="Top" />
+              <TextBlock Classes="error" Text="{Binding TargetError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+            </DockPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+
+      <!-- ============================================================ Additional information -->
+      <DockPanel x:Name="AdditionalPage" IsVisible="{Binding IsAdditionalPage}">
+        <StackPanel DockPanel.Dock="Top">
+          <TextBlock Classes="pageTitle" Text="{Binding PageTitle}" TextWrapping="Wrap" />
+          <WrapPanel Margin="0,0,0,14">
+            <TextBlock Text="{Binding TemplateName}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" Margin="0,0,12,4" />
+            <ItemsControl ItemsSource="{Binding TemplateChips}" VerticalAlignment="Center">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <Border Classes="chip square" Margin="0,0,6,4"><TextBlock Text="{Binding}" FontWeight="Normal" /></Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </WrapPanel>
+        </StackPanel>
+        <ScrollViewer x:Name="AdditionalScroll" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel x:Name="AdditionalFields" Width="470" HorizontalAlignment="Left" Margin="0,0,16,0">
+            <StackPanel Classes="field" IsVisible="{Binding ShowFramework}">
+              <Label x:Name="FrameworkLabel" Content="{l:T newProject.framework}" Target="{Binding #FrameworkCombo}" />
+              <ComboBox x:Name="FrameworkCombo" HorizontalAlignment="Stretch" ItemsSource="{Binding Frameworks}" SelectedItem="{Binding SelectedFramework}"
+                        AutomationProperties.LabeledBy="{Binding #FrameworkLabel}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="wb:FrameworkChoice">
+                    <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <DockPanel IsVisible="{Binding GlobalJsonWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <controls:Icon DockPanel.Dock="Left" Kind="warning" Classes="warning" Width="12" Height="12" Margin="0,2,4,0" VerticalAlignment="Top" />
+                <TextBlock Classes="warning small" Text="{Binding GlobalJsonWarning}" TextWrapping="Wrap" />
+              </DockPanel>
+            </StackPanel>
+
+            <!-- The IDE's own options first, in the classic IDE's order: authentication, HTTPS, containers. -->
+            <StackPanel Classes="field" IsVisible="{Binding ShowAuth}">
+              <Label x:Name="AuthComboLabel" Content="{Binding AuthLabel}" Target="{Binding #AuthCombo}" />
+              <ComboBox x:Name="AuthCombo" HorizontalAlignment="Stretch" ItemsSource="{Binding AuthChoices}" SelectedItem="{Binding SelectedAuth}"
+                        AutomationProperties.LabeledBy="{Binding #AuthComboLabel}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AuthChoice">
+                    <TextBlock Text="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <TextBlock Classes="muted small" Text="{Binding AuthNote}" TextWrapping="Wrap"
+                         IsVisible="{Binding AuthNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+            <WrapPanel IsVisible="{Binding ShowHttps}" Margin="0,0,0,10">
+              <CheckBox x:Name="HttpsBox" Content="{Binding HttpsLabel}" IsChecked="{Binding Https}" IsEnabled="{Binding IsHttpsEnabled}"
+                        ToolTip.Tip="{Binding HttpsToolTip}" Margin="0,0,10,0" />
+              <TextBlock Classes="muted small" Text="{Binding HttpsToolTip}" VerticalAlignment="Center" TextWrapping="Wrap"
+                         IsVisible="{Binding ForcesHttps}" />
+            </WrapPanel>
+            <WrapPanel IsVisible="{Binding ShowDocker}" Margin="0,0,0,10">
+              <CheckBox x:Name="DockerBox" Content="{Binding DockerLabel}" IsChecked="{Binding Docker}" IsEnabled="{Binding AreTrustedOptionsEnabled}" Margin="0,0,10,0" />
+              <TextBlock Classes="muted small" Text="{Binding TrustedOptionsNote}" VerticalAlignment="Center" TextWrapping="Wrap"
+                         IsVisible="{Binding TrustedOptionsNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </WrapPanel>
+
+            <!-- The template's own options, in its ide.host.json order (the chosen framework's member's). -->
+            <ItemsControl x:Name="OptionsList" ItemsSource="{Binding Options}">
+              <ItemsControl.DataTemplates>
+                <DataTemplate DataType="vm:BoolOptionViewModel">
+                  <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding ToolTip}" Margin="0,0,0,10" />
+                </DataTemplate>
+                <DataTemplate DataType="vm:ChoiceOptionViewModel">
+                  <StackPanel Classes="field">
+                    <Label x:Name="ChoiceLabel" Classes="optionLabel" Content="{Binding Label}" Target="{Binding #ChoiceBox}" IsEnabled="{Binding IsEnabled}" />
+                    <ComboBox x:Name="ChoiceBox" HorizontalAlignment="Stretch" ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected}"
+                              IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding ToolTip}" AutomationProperties.LabeledBy="{Binding #ChoiceLabel}">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="wb:TemplateChoice">
+                          <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
+                  </StackPanel>
+                </DataTemplate>
+                <DataTemplate DataType="vm:TextOptionViewModel">
+                  <StackPanel Classes="field">
+                    <Label x:Name="TextLabel" Classes="optionLabel" Content="{Binding Label}" Target="{Binding #TextValue}" IsEnabled="{Binding IsEnabled}" />
+                    <TextBox x:Name="TextValue" Text="{Binding Text}" IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding ToolTip}"
+                             AutomationProperties.LabeledBy="{Binding #TextLabel}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.DataTemplates>
+            </ItemsControl>
+
+            <!-- Aspire last: it adds projects of its own. Its description is the consent to install its templates. -->
+            <StackPanel IsVisible="{Binding ShowAspire}" Margin="0,0,0,10" Spacing="2">
+              <WrapPanel>
+                <CheckBox x:Name="AspireBox" Content="{Binding AspireLabel}" IsChecked="{Binding Aspire}" IsEnabled="{Binding AreTrustedOptionsEnabled}" Margin="0,0,10,0" />
+                <TextBlock Classes="muted small" Text="{Binding TrustedOptionsNote}" VerticalAlignment="Center" TextWrapping="Wrap"
+                           IsVisible="{Binding TrustedOptionsNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              </WrapPanel>
+              <TextBlock Classes="muted small" Text="{Binding AspireDescription}" TextWrapping="Wrap" Margin="24,0,0,0" />
+            </StackPanel>
+
+            <TextBlock Classes="muted" Text="{Binding NoOptionsNote}" TextWrapping="Wrap"
+                       IsVisible="{Binding NoOptionsNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+    </Panel>
+  </DockPanel>
+</Window>

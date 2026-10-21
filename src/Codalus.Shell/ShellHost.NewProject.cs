@@ -41,7 +41,10 @@ public sealed partial class ShellHost
     /// <summary>Whether the wizard is open.</summary>
     public bool IsNewProjectOpen => _newProject is not null;
 
-    /// <summary>The wizard's window for a model (the view: NewProjectWindow). Without one the model is driven directly (tests).</summary>
+    /// <summary>The open wizard's window (tests, the smoke test's screenshots).</summary>
+    public Window? NewProjectWindowView => _newProjectWindow;
+
+    /// <summary>The wizard's window for a model (<see cref="Views.NewProjectWindow"/>). Tests may set none and drive the model alone.</summary>
     internal Func<NewProjectViewModel, Window?>? NewProjectWindowFactory { get; set; }
 
     private OutputChannel TemplatesLog => Workbench.Output.GetOrCreate("codalus.templates", "Templates");
@@ -52,6 +55,7 @@ public sealed partial class ShellHost
         ProjectTemplates = new ProjectTemplateCatalog(Templates);
         NewProjects = new NewProjectService(Templates);
         NewProjectHistory = new NewProjectHistory(Path.Combine(Paths.State, "new-project.json"));
+        NewProjectWindowFactory = model => new Views.NewProjectWindow { DataContext = model };
     }
 
     /// <summary>
