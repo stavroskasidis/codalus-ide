@@ -382,7 +382,13 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
             return [$"the button wasn't created: {error}"];
         }
 
-        var frame1 = PngPixels.FromBase64(created.Render.Frame!.Png);
+        // The host says what it drew again: the two overlapping controls, each once (and nothing in a form without overlaps).
+        if (created.Render.Frame!.Restacked != 2)
+        {
+            checks.Add($"created, {created.Render.Frame.Restacked} controls were drawn again, not the 2 that overlap");
+        }
+
+        var frame1 = PngPixels.FromBase64(created.Render.Frame.Png);
         var inFront = frame1.Differing(frame0, r);
         if (inFront * 10 < area * 3)
         {
@@ -391,6 +397,11 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
 
         var siblings = created.Render.Components.Count(c => c.Parent == container.Name && !c.IsPart);
         var back = await host.SetChildIndexAsync(new DesignerChildIndexParams("button1", siblings - 1), Ct);
+        if (back.Render.Frame!.Restacked != 2)
+        {
+            checks.Add($"sent to the back, {back.Render.Frame.Restacked} controls were drawn again, not 2");
+        }
+
         var behind = PngPixels.FromBase64(back.Render.Frame!.Png).Differing(frame0, r);
         if (behind != 0)
         {
@@ -434,6 +445,26 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
         // In the group box, on expressRadioButton (110, 22, 63×19): the region is inside both, at any depth the same.
         var checks = await OverlapChecksAsync(host, render, "shippingGroupBox", new Point(130, 20), new Rectangle(131, 23, 41, 17));
         Assert.True(checks.Count == 0, string.Join("\n", checks));
+    }
+
+    /// <summary>
+    /// #78: a form whose visible controls overlap nowhere (at any depth; InventoryForm's two tab pages share their
+    /// bounds, but only the selected one is visible) has nothing drawn after the first pass, so its frame is exactly
+    /// what it was before the redraw of overlapping controls.
+    /// </summary>
+    [Fact]
+    public async Task Forms_without_overlapping_controls_are_drawn_once()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        foreach (var form in new[] { "OrderForm.cs", "InventoryForm.cs", "MainForm.cs", "AboutForm.cs" })
+        {
+            var (host, render, _) = await LoadAsync(form);
+            await using (host)
+            {
+                Assert.True(render.Errors.Length == 0, string.Join("\n", render.Errors));
+                Assert.True(render.Frame!.Restacked == 0, $"{form}: {render.Frame.Restacked} controls drawn again");
+            }
+        }
     }
 
     [Fact]

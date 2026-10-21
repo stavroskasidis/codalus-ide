@@ -112,7 +112,7 @@ With the designer active, the **Format** menu (and the surface's context menu) l
 - **Make Same Size**: Width, Height, both, and Size to Grid;
 - **Horizontal Spacing** and **Vertical Spacing**: Make Equal, Increase, Decrease, Remove;
 - **Center in Form**: Horizontally, Vertically;
-- **Order**: **Bring to Front** and **Send to Back**, which change the order of the parent's `Controls.Add` (its z-order).
+- **Order**: **Bring to Front** and **Send to Back**, which change the order of the parent's `Controls.Add` (its z-order). Controls that overlap are drawn in that order, the front one over the others, as your app shows them.
 
 View → **Tab Order** numbers every control with its `TabIndex` (a group box's controls as `5.0`, `5.1`…). Click the controls in the order the `Tab` key should visit them: each container counts from 0. `Esc` or View → Tab Order again ends it.
 

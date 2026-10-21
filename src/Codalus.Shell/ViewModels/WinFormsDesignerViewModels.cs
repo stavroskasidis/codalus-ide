@@ -172,6 +172,9 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>How many frames have arrived (tests).</summary>
     public int FrameCount { get; private set; }
 
+    /// <summary>How many controls the host drew again in the last frame because they overlap a sibling (#78; tests and the smoke test).</summary>
+    internal int FrameRestacked { get; private set; }
+
     /// <summary>The surface's components: the root first, then controls (front first, parents before children), then non-visual components.</summary>
     public IReadOnlyList<DesignerComponentView> Components => _components;
 
@@ -704,6 +707,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             old?.Dispose();
             FrameWidth = frame.Width;
             FrameHeight = frame.Height;
+            FrameRestacked = frame.Restacked;
             FrameCount++;
         }
 

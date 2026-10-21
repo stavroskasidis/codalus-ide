@@ -120,6 +120,12 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Equal(2, back.Changes.Length);
         Assert.Null(back.Changes[1].Value);
         Assert.Equal((300, 200), (back.Render.Frame!.Width, back.Render.Frame.Height));
+
+        // #78: the controls drawn again because they overlap; a frame from an older host, without it, reads as none.
+        var restacked = JsonSerializer.Serialize(new DesignerRenderResult(new DesignerFrame("iVBORw0KGgo=", 300, 200, 2), [], []), json.DesignerRenderResult);
+        Assert.Contains("\"restacked\":2", restacked, StringComparison.Ordinal);
+        Assert.Equal(2, JsonSerializer.Deserialize(restacked, json.DesignerRenderResult)!.Frame!.Restacked);
+        Assert.Equal(0, JsonSerializer.Deserialize("{\"frame\":{\"png\":\"iVBORw0KGgo=\",\"width\":300,\"height\":200},\"components\":[],\"errors\":[]}", json.DesignerRenderResult)!.Frame!.Restacked);
         Assert.Equal(31, back.Render.Components[0].ClientY);
         Assert.Equal("button1", back.Created!.Properties[0].Value.Value);
         Assert.Equal(["label1"], back.Removed);
