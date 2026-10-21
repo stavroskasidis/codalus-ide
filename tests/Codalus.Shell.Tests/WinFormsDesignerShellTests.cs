@@ -15,11 +15,11 @@ namespace Codalus.Shell.Tests;
 /// <summary>
 /// M41a (ADR 0073, D31) in the headless shell on samples/WindowsDesktop's Windows Forms app. Off Windows a form opens as
 /// code and View Designer says the designer is Windows only. With a fake designer host (any OS): the form's code file
-/// opens in the designer; the Toolbox has the framework's controls and the project's own (also when the form opened
-/// before the restore brought what they derive from); a Toolbox item created on the surface, a property set in the
-/// Properties window, an event handler from the Events view and a delete become code in the designer file (and the
-/// code file), undo goes back through the designer file's own undo stack, F7 shows the code; code the designer can't
-/// read opens as code with the reason.
+/// opens in the designer; the Toolbox has the framework's controls and the active designer's project's own (also when
+/// the form opened before the restore brought what they derive from, or before the C# service had the project); a
+/// Toolbox item created on the surface, a property set in the Properties window, an event handler from the Events view
+/// and a delete become code in the designer file (and the code file), undo goes back through the designer file's own
+/// undo stack, F7 shows the code; code the designer can't read opens as code with the reason.
 /// </summary>
 public sealed class WinFormsDesignerShellTests
 {
@@ -85,8 +85,12 @@ public sealed class WinFormsDesignerShellTests
 
     private const string CounterControlType = "WinFormsApp.Controls.CounterControl";
 
-    /// <summary>The fake designer host (any OS: the real one is Windows only, D31) for the forms opened from now on; each host it starts goes to <paramref name="hosts"/>.</summary>
-    private static void UseFakeDesignerHost(ShellFixture f, List<FakeWinFormsDesignerHost> hosts)
+    /// <summary>
+    /// The fake designer host (any OS: the real one is Windows only, D31) for the forms opened from now on; each host it
+    /// starts goes to <paramref name="hosts"/>, after <paramref name="starting"/> (a slow start, such as the build for the
+    /// designer) when there is one.
+    /// </summary>
+    private static void UseFakeDesignerHost(ShellFixture f, List<FakeWinFormsDesignerHost> hosts, Func<Task>? starting = null)
     {
         f.Shell.WinFormsDesigner = new WinFormsDesignerService(f.Shell.Solutions, _ => true, (_, _) => Task.FromResult(true), async (project, names, ct) =>
         {
@@ -96,11 +100,16 @@ public sealed class WinFormsDesignerShellTests
         {
             IsWindows = () => true,
             DesignerHost = () => typeof(WinFormsDesignerShellTests).Assembly.Location,
-            HostFactory = (_, _) =>
+            HostFactory = async (_, _) =>
             {
+                if (starting is not null)
+                {
+                    await starting();
+                }
+
                 var host = new FakeWinFormsDesignerHost();
                 hosts.Add(host);
-                return Task.FromResult<IWinFormsDesignerHost>(host);
+                return host;
             },
         };
     }
@@ -110,17 +119,18 @@ public sealed class WinFormsDesignerShellTests
         inputs.Arguments.Any(a => a.Contains("System.Windows.Forms.dll", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// What a wait for the project's own control in the Toolbox found: the restore, whether the compiler inputs have
-    /// Windows Forms, the C# service, the Toolbox's categories and the designer's log. The C# host finds the project's
-    /// controls only in a compilation with Windows Forms, so this says whether the C# service hadn't loaded the restored
-    /// inputs or the Toolbox hadn't asked again since (macOS CI, PR #100 and #55).
+    /// What a wait for <paramref name="waitingFor"/> (by default, the project's own control in the Toolbox) found: the
+    /// restore, whether the compiler inputs have Windows Forms, the C# service, the Toolbox's categories and the
+    /// designer's log. The C# host finds the project's controls only in a compilation with Windows Forms, so this says
+    /// whether the C# service hadn't loaded the restored inputs or the Toolbox hadn't asked again since (macOS CI, PR
+    /// #100 and #55).
     /// </summary>
-    private static string DescribeToolbox(ShellFixture f)
+    private static string DescribeToolbox(ShellFixture f, string? waitingFor = null)
     {
         var inputs = f.Shell.Solutions.CompilerInputs.Values.Select(i => $"{Path.GetFileName(i.Path)} {i.State} {(ReferencesWindowsForms(i) ? "with" : "without")} System.Windows.Forms.dll").ToList();
         var status = f.Shell.Languages.Status(ShellHost.CSharpLanguageId);
         var categories = f.Shell.Toolbox.Categories.Select(c => $"{c.Title} ({c.Items.Count(i => !i.IsPointer)})");
-        return $"the Toolbox to list {CounterControlType} (restore {f.Shell.Solutions.RestoreState ?? "not run"}; compiler inputs: {(inputs.Count == 0 ? "none" : string.Join(", ", inputs))}; "
+        return $"{waitingFor ?? $"the Toolbox to list {CounterControlType}"} (restore {f.Shell.Solutions.RestoreState ?? "not run"}; compiler inputs: {(inputs.Count == 0 ? "none" : string.Join(", ", inputs))}; "
             + $"C# {status?.State ?? "not running"} with {status?.Projects ?? 0} project(s); Toolbox: {string.Join(", ", categories)}). Windows Forms Designer log:\n{f.Shell.WinFormsDesignerLog.GetText()}";
     }
 
@@ -190,7 +200,9 @@ public sealed class WinFormsDesignerShellTests
         Assert.True(f.Shell.Toolbox.IsAvailable);
         Assert.Contains(f.Shell.Toolbox.Categories, c => c.Title == "Common Controls");
         Assert.Contains(f.Shell.Toolbox.Categories, c => c.Title == "Containers");
-        await ShellFixture.PumpUntil(() => f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType), seconds: 60, () => DescribeToolbox(f));
+        // When the C# service was ready before the restore, the control comes after the restore, the design-time build
+        // after it and the C# service's reload (the same budget as the other waits on the restore).
+        await ShellFixture.PumpUntil(() => f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType), seconds: 300, () => DescribeToolbox(f));
         Assert.Contains(f.Shell.Toolbox.Categories, c => c.Title == "WinFormsApp Components");
         var buttonItem = f.Shell.Toolbox.Items.First(i => i.Type == "System.Windows.Forms.Button");
         f.Shell.Toolbox.Filter = "Combo";
@@ -314,7 +326,8 @@ public sealed class WinFormsDesignerShellTests
         UseFakeDesignerHost(f, []);
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "WinFormsApp.slnx"));
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 240);
-        await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: WorkspaceStates.Ready, Projects: 1 }, seconds: 300, () => DescribeToolbox(f));
+        await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: WorkspaceStates.Ready, Projects: 1 }, seconds: 300,
+            () => DescribeToolbox(f, "the C# service to be ready before the restore"));
         Assert.Null(f.Shell.Solutions.RestoreState);
         if (!OperatingSystem.IsWindows())
         {
@@ -355,7 +368,8 @@ public sealed class WinFormsDesignerShellTests
         try
         {
             await f.Shell.Solutions.RestoreAsync(null, CancellationToken.None);
-            await ShellFixture.PumpUntil(() => Volatile.Read(ref reload) == 2, seconds: 300, () => DescribeToolbox(f));
+            await ShellFixture.PumpUntil(() => Volatile.Read(ref reload) == 2, seconds: 300,
+                () => DescribeToolbox(f, "the C# service to load the restored inputs (loading, then ready)"));
         }
         finally
         {
@@ -387,6 +401,94 @@ public sealed class WinFormsDesignerShellTests
         await ShellFixture.PumpUntil(() => !ReferenceEquals(asked, designer.ToolboxLoad));
         await designer.ToolboxLoad;
         Assert.Equal(categories, f.Shell.Toolbox.Categories);
+    }
+
+    /// <summary>
+    /// A form opened in the designer, with its code open, before the C# service has its project (the design-time build's
+    /// inputs haven't reached the C# host yet: held here, as a busy machine does). The C# host reads the form from
+    /// Miscellaneous Files, so its answer names no project, and the Toolbox never asked (until the designer was
+    /// reopened). It asks with the build host's project, and again once the C# service has loaded it.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_form_opened_before_the_CSharp_service_has_its_project_lists_the_projects_controls_once_loaded()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = f.CopySample("WindowsDesktop");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        UseFakeDesignerHost(f, []);
+        var gate = f.Shell.Languages.FlushGate;
+        await gate.WaitAsync(TestContext.Current.CancellationToken);
+        var held = true;
+        try
+        {
+            await f.Shell.OpenSolutionAsync(Path.Combine(folder, "WinFormsApp.slnx"));
+            await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 240);
+
+            // The form's code is open (as a session restores it) and View Designer opens the designer while the C# service
+            // has no project: the C# host reads both files from Miscellaneous Files, where the base type's name decides.
+            var form = Path.Combine(folder, "WinFormsApp", "OrderForm.cs");
+            Assert.NotNull(await f.Shell.OpenFileAsync(form, textEditor: true));
+            await f.Shell.OpenWinFormsDesignerAsync(form);
+            var designer = Assert.Single(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>());
+            await ShellFixture.PumpUntil(() => designer.FrameCount > 0, seconds: 120, () => $"a frame: {designer.Status}\n{f.Shell.WinFormsDesignerLog.GetText()}");
+            await designer.ToolboxLoad;
+            Assert.Equal(0, f.Shell.Languages.Status(ShellHost.CSharpLanguageId)?.Projects ?? 0);
+            Assert.DoesNotContain(f.Shell.Toolbox.Items, i => i.Type == CounterControlType);
+
+            // The restore (on open) and the design-time build after it, then the C# host gets the project (loading, then ready).
+            await ShellFixture.PumpUntil(() => f.Shell.Solutions.RestoreState == "succeeded" && f.Shell.Solutions.DesignTimeProgress is { Completed: true }
+                && f.Shell.Solutions.CompilerInputs.Values.Any(ReferencesWindowsForms), seconds: 300, () => DescribeToolbox(f, "the restore and the design-time build after it"));
+            held = false;
+            gate.Release();
+            await ShellFixture.PumpUntil(() => f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType), seconds: 300, () => DescribeToolbox(f));
+            Assert.Contains(f.Shell.Toolbox.Categories, c => c.Title == "WinFormsApp Components");
+        }
+        finally
+        {
+            if (held)
+            {
+                gate.Release();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The Toolbox shows the active designer's project: a designer that finishes starting after another became the
+    /// active document doesn't ask (its answer, then the newest request, replaced the active designer's).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_designer_that_starts_behind_the_active_one_leaves_it_the_toolbox()
+    {
+        var (f, app) = await OpenAsync();
+        await using var _ = f;
+        var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var starts = 0;
+        UseFakeDesignerHost(f, [], () => Interlocked.Increment(ref starts) == 1 ? first.Task : Task.CompletedTask);
+        await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: WorkspaceStates.Ready, Projects: 1 }, seconds: 300,
+            () => DescribeToolbox(f, "the C# service to be ready"));
+
+        // OrderForm's designer waits for its host (a build for the designer) while MainForm's opens and becomes active.
+        var opening = f.Shell.OpenFileAsync(Path.Combine(app, "OrderForm.cs"));
+        await ShellFixture.PumpUntil(() => Volatile.Read(ref starts) == 1, seconds: 60);
+        var order = Assert.Single(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>());
+        Assert.Null(await f.Shell.OpenFileAsync(Path.Combine(app, "MainForm.cs")));
+        var main = Assert.Single(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>(), d => d != order);
+        Assert.Same(main, f.Shell.Layout.ActiveDocument);
+        await ShellFixture.PumpUntil(() => main.FrameCount > 0, seconds: 120, () => $"a frame: {main.Status}\n{f.Shell.WinFormsDesignerLog.GetText()}");
+        await main.ToolboxLoad;
+
+        // OrderForm's designer starts behind it: it doesn't ask.
+        var asked = order.ToolboxLoad;
+        first.SetResult();
+        Assert.Null(await opening);
+        await ShellFixture.PumpUntil(() => order.FrameCount > 0, seconds: 120, () => $"a frame: {order.Status}\n{f.Shell.WinFormsDesignerLog.GetText()}");
+        Assert.Same(main, f.Shell.Layout.ActiveDocument);
+        Assert.Same(asked, order.ToolboxLoad);
+
+        // It asks once it's the active document.
+        f.Shell.Layout.OpenDocument(order, focus: true);
+        Assert.NotSame(asked, order.ToolboxLoad);
+        await order.ToolboxLoad;
     }
 
     /// <summary>

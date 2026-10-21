@@ -318,13 +318,17 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// when it becomes the active document, and when the C# service has loaded the projects again (the shell asks the
     /// active designer). The host finds them in the project's compilation, which before the restore can lack the
     /// framework they derive from (off Windows, Windows Forms' reference pack comes with the restore), so the first
-    /// answer may miss them. Only the Toolbox's newest request is shown: a slower earlier answer doesn't replace it.
+    /// answer may miss them. Only the active designer asks, since the Toolbox shows its project: a designer that
+    /// finishes starting behind another doesn't replace that one's items. Only the Toolbox's newest request is shown: a
+    /// slower earlier answer doesn't replace it.
     /// </summary>
-    internal Task LoadToolboxAsync() => _toolboxLoad = LoadToolboxCoreAsync();
+    internal Task LoadToolboxAsync() => ReferenceEquals(_shell.Layout.ActiveDocument, this) ? _toolboxLoad = LoadToolboxCoreAsync() : Task.CompletedTask;
 
     private async Task LoadToolboxCoreAsync()
     {
-        if (_disposed || _read?.Project is not { } project || _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is not { } client)
+        // The C# host names the project only once it has it (before, it reads the form from Miscellaneous Files): the
+        // build host's owner project is known from the evaluation, and the ask once the C# service has loaded finds it.
+        if (_disposed || (_read?.Project ?? _target?.Project) is not { } project || _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is not { } client)
         {
             return;
         }
