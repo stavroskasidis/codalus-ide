@@ -215,24 +215,19 @@ public sealed class PinnedDataTipLayer : Canvas
 
     private ContextMenu Menu(PinnedDataTip tip, Control anchor)
     {
-        static MenuItem Item(string header, Action action)
-        {
-            var item = new MenuItem { Header = header };
-            item.Click += (_, _) => action();
-            return item;
-        }
+        static MenuItem Item(string header, string icon, Action action) => Controls.MenuEntry.Create(header, icon, click: action);
 
         return new ContextMenu
         {
             ItemsSource = new List<Control>
             {
-                Item(tip.Comment is null ? "Add Comment" : "Edit Comment", () => EditComment(tip, anchor)),
-                Item("Copy Value", () => _ = VariableActions.CopyText?.Invoke(tip.Value ?? string.Empty)),
-                Item("Copy Expression", () => _ = VariableActions.CopyText?.Invoke(tip.Expression)),
-                Item("Add Watch", () => _ = VariableActions.AddWatch?.Invoke(tip.Expression)),
+                Item(tip.Comment is null ? "Add Comment" : "Edit Comment", "comment", () => EditComment(tip, anchor)),
+                Item("Copy Value", "copy", () => _ = VariableActions.CopyText?.Invoke(tip.Value ?? string.Empty)),
+                Item("Copy Expression", "copy", () => _ = VariableActions.CopyText?.Invoke(tip.Expression)),
+                Item("Add Watch", "watch", () => _ = VariableActions.AddWatch?.Invoke(tip.Expression)),
                 new Separator(),
-                Item("Unpin", () => Store.Unpin(tip)),
-                Item("Clear All DataTips", () => _services.RunCommand("debug.clearDataTips")),
+                Item("Unpin", "pin", () => Store.Unpin(tip)),
+                Item("Clear All DataTips", "clear-all", () => _services.RunCommand("debug.clearDataTips")),
             },
         };
     }

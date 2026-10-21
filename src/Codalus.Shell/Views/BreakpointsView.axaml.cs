@@ -56,13 +56,13 @@ public sealed partial class BreakpointsView : UserControl, IPaneView
             var items = new List<Control>();
             if (row.Spec is not null)
             {
-                items.Add(Item("Go To Source", () => _ = vm.OpenAsync(row)));
+                items.Add(Item("Go To Source", "go-to", () => _ = vm.OpenAsync(row)));
             }
 
-            items.Add(Item(row.Enabled ? "Disable" : "Enable", () => row.Enabled = !row.Enabled));
-            items.Add(Item("Edit Labels…", () => _ = EditLabelsAsync(vm, row)));
+            items.Add(Item(row.Enabled ? "Disable" : "Enable", row.Enabled ? "breakpoint-hollow" : "breakpoint-solid", () => row.Enabled = !row.Enabled));
+            items.Add(Item("Edit Labels…", "tag", () => _ = EditLabelsAsync(vm, row)));
             items.Add(new Separator());
-            items.Add(Item("Delete", () => vm.Remove(row)));
+            items.Add(Item("Delete", "trash", () => vm.Remove(row)));
             new ContextMenu { ItemsSource = items }.Open(List);
             e.Handled = true;
         };
@@ -76,12 +76,7 @@ public sealed partial class BreakpointsView : UserControl, IPaneView
         }
     }
 
-    private static MenuItem Item(string header, Action action)
-    {
-        var item = new MenuItem { Header = header };
-        item.Click += (_, _) => action();
-        return item;
-    }
+    private static MenuItem Item(string header, string icon, Action action) => Controls.MenuEntry.Create(header, icon, click: action);
 
     private void Open()
     {

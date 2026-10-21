@@ -84,12 +84,12 @@
       <Grid Classes="changeRow" ColumnDefinitions="2*,3*,54,18" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
         <Grid.ContextMenu>
           <ContextMenu>
-            <MenuItem Header="{l:T gitChanges.compareWithUnmodified}" Tag="diff" Click="OnFileAction" />
-            <MenuItem Header="{l:T gitChanges.openFile}" Tag="open" Click="OnFileAction" IsVisible="{Binding !IsDeleted}" />
+            <MenuItem controls:MenuEntry.Icon="compare" Header="{l:T gitChanges.compareWithUnmodified}" Tag="diff" Click="OnFileAction" />
+            <MenuItem controls:MenuEntry.Icon="file" Header="{l:T gitChanges.openFile}" Tag="open" Click="OnFileAction" IsVisible="{Binding !IsDeleted}" />
             <Separator />
-            <MenuItem Header="{l:T gitChanges.stage}" Tag="stage" Click="OnFileAction" IsVisible="{Binding CanStage}" />
-            <MenuItem Header="{l:T gitChanges.unstage}" Tag="unstage" Click="OnFileAction" IsVisible="{Binding CanUnstage}" />
-            <MenuItem Header="{l:T gitChanges.discardChanges}" Tag="discard" Click="OnFileAction" IsVisible="{Binding CanStage}" />
+            <MenuItem controls:MenuEntry.Icon="add" Header="{l:T gitChanges.stage}" Tag="stage" Click="OnFileAction" IsVisible="{Binding CanStage}" />
+            <MenuItem controls:MenuEntry.Icon="subtract" Header="{l:T gitChanges.unstage}" Tag="unstage" Click="OnFileAction" IsVisible="{Binding CanUnstage}" />
+            <MenuItem controls:MenuEntry.Icon="discard" Header="{l:T gitChanges.discardChanges}" Tag="discard" Click="OnFileAction" IsVisible="{Binding CanStage}" />
           </ContextMenu>
         </Grid.ContextMenu>
         <DockPanel ClipToBounds="True">
@@ -115,12 +115,12 @@
       <Grid Classes="changeRow" ColumnDefinitions="Auto,*,Auto,18" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
         <Grid.ContextMenu>
           <ContextMenu>
-            <MenuItem Header="{l:T gitChanges.compareWithUnmodified}" Tag="diff" Click="OnFileAction" IsVisible="{Binding IsFile}" />
-            <MenuItem Header="{l:T gitChanges.openFile}" Tag="open" Click="OnFileAction" IsVisible="{Binding IsFile}" />
+            <MenuItem controls:MenuEntry.Icon="compare" Header="{l:T gitChanges.compareWithUnmodified}" Tag="diff" Click="OnFileAction" IsVisible="{Binding IsFile}" />
+            <MenuItem controls:MenuEntry.Icon="file" Header="{l:T gitChanges.openFile}" Tag="open" Click="OnFileAction" IsVisible="{Binding IsFile}" />
             <Separator IsVisible="{Binding IsFile}" />
-            <MenuItem Header="{l:T gitChanges.stage}" Tag="stage" Click="OnFileAction" IsVisible="{Binding CanStage}" />
-            <MenuItem Header="{l:T gitChanges.unstage}" Tag="unstage" Click="OnFileAction" IsVisible="{Binding CanUnstage}" />
-            <MenuItem Header="{l:T gitChanges.discardChanges}" Tag="discard" Click="OnFileAction" IsVisible="{Binding CanDiscard}" />
+            <MenuItem controls:MenuEntry.Icon="add" Header="{l:T gitChanges.stage}" Tag="stage" Click="OnFileAction" IsVisible="{Binding CanStage}" />
+            <MenuItem controls:MenuEntry.Icon="subtract" Header="{l:T gitChanges.unstage}" Tag="unstage" Click="OnFileAction" IsVisible="{Binding CanUnstage}" />
+            <MenuItem controls:MenuEntry.Icon="discard" Header="{l:T gitChanges.discardChanges}" Tag="discard" Click="OnFileAction" IsVisible="{Binding CanDiscard}" />
           </ContextMenu>
         </Grid.ContextMenu>
         <controls:Icon Kind="{Binding Icon}" Margin="0,0,6,0" VerticalAlignment="Center" />
@@ -144,10 +144,10 @@
       <DockPanel Background="Transparent" ToolTip.Tip="{l:T gitChanges.doubleClickAppliesTheStash}">
         <DockPanel.ContextMenu>
           <ContextMenu>
-            <MenuItem Header="{l:T gitChanges.apply}" Tag="apply" Click="OnStashAction" />
-            <MenuItem Header="{l:T gitChanges.pop}" Tag="pop" Click="OnStashAction" />
+            <MenuItem controls:MenuEntry.Icon="check" Header="{l:T gitChanges.apply}" Tag="apply" Click="OnStashAction" />
+            <MenuItem controls:MenuEntry.Icon="stash" Header="{l:T gitChanges.pop}" Tag="pop" Click="OnStashAction" />
             <Separator />
-            <MenuItem Header="{l:T gitChanges.drop}" Tag="drop" Click="OnStashAction" />
+            <MenuItem controls:MenuEntry.Icon="trash" Header="{l:T gitChanges.drop}" Tag="drop" Click="OnStashAction" />
           </ContextMenu>
         </DockPanel.ContextMenu>
         <controls:Icon Kind="stash" Margin="0,0,6,0" />
@@ -196,16 +196,16 @@
               <controls:Icon Kind="more" />
               <Button.Flyout>
                 <MenuFlyout Placement="BottomEdgeAlignedRight">
-                  <MenuItem Header="{l:T gitChanges.newBranch}" Tag="git.createBranch" Click="OnMenuCommand" />
-                  <MenuItem Header="{l:T gitChanges.mergeBranch}" Tag="git.merge" Click="OnMenuCommand" />
-                  <MenuItem Header="{l:T gitChanges.rebaseCurrentBranch}" Tag="git.rebase" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.createBranch" Header="{l:T gitChanges.newBranch}" Tag="git.createBranch" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.merge" Header="{l:T gitChanges.mergeBranch}" Tag="git.merge" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.Icon="arrow-sort" Header="{l:T gitChanges.rebaseCurrentBranch}" Tag="git.rebase" Click="OnMenuCommand" />
                   <Separator />
-                  <MenuItem Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
-                  <MenuItem Header="{l:T gitChanges.viewHistory}" Tag="git.history" Click="OnMenuCommand" />
-                  <MenuItem Header="{l:T gitChanges.manageRemotes}" Tag="git.remotes" Click="OnMenuCommand" />
-                  <MenuItem Header="{l:T gitChanges.manageTags}" Tag="git.tags" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.stash" Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.history" Header="{l:T gitChanges.viewHistory}" Tag="git.history" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.Icon="cloud" Header="{l:T gitChanges.manageRemotes}" Tag="git.remotes" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.tags" Header="{l:T gitChanges.manageTags}" Tag="git.tags" Click="OnMenuCommand" />
                   <Separator />
-                  <MenuItem Header="{l:T gitChanges.refresh}" Tag="git.refresh" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.refresh" Header="{l:T gitChanges.refresh}" Tag="git.refresh" Click="OnMenuCommand" />
                 </MenuFlyout>
               </Button.Flyout>
             </Button>
@@ -284,9 +284,9 @@
           <SplitButton x:Name="CommitButton" Content="{Binding CommitText}" Click="OnCommit" IsEnabled="{Binding CanCommit}" ToolTip.Tip="{l:T gitChanges.ctrlEnterCommits}">
             <SplitButton.Flyout>
               <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                <MenuItem Tag="commit" Click="OnCommitMenu" />
-                <MenuItem Tag="push" Click="OnCommitMenu" />
-                <MenuItem Tag="sync" Click="OnCommitMenu" />
+                <MenuItem controls:MenuEntry.CommandIcon="git.commit" Tag="commit" Click="OnCommitMenu" />
+                <MenuItem controls:MenuEntry.CommandIcon="git.push" Tag="push" Click="OnCommitMenu" />
+                <MenuItem controls:MenuEntry.CommandIcon="git.sync" Tag="sync" Click="OnCommitMenu" />
               </MenuFlyout>
             </SplitButton.Flyout>
           </SplitButton>
@@ -386,11 +386,11 @@
                 <Button.Flyout>
                   <MenuFlyout Placement="BottomEdgeAlignedRight">
                     <MenuItem Tag="openFileAsDefault" Header="{l:T gitChanges.openFileAsDefaultAction}" ToggleType="CheckBox" Click="OnViewOption" />
-                    <MenuItem Tag="switchView" Click="OnViewOption" />
-                    <MenuItem Tag="filter" Click="OnViewOption" />
+                    <MenuItem controls:MenuEntry.Icon="list" Tag="switchView" Click="OnViewOption" />
+                    <MenuItem controls:MenuEntry.Icon="filter" Tag="filter" Click="OnViewOption" />
                     <Separator />
-                    <MenuItem Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
-                    <MenuItem Header="{l:T gitChanges.refresh}" Tag="git.refresh" Click="OnMenuCommand" />
+                    <MenuItem controls:MenuEntry.CommandIcon="git.stash" Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
+                    <MenuItem controls:MenuEntry.CommandIcon="git.refresh" Header="{l:T gitChanges.refresh}" Tag="git.refresh" Click="OnMenuCommand" />
                   </MenuFlyout>
                 </Button.Flyout>
               </Button>

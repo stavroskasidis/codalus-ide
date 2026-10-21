@@ -194,6 +194,14 @@ Patterns the views use (M34h):
   It is a list underneath: Tab reaches the chosen segment, the arrow keys, Home and End move the choice, and there is always one. It can bind `ItemsSource` and `SelectedItem` too.
 - **Tabs** inside a view (`TabControl`, 28 px) switch between different content (Body, Headers, Request): muted until selected, the selected one bold with a 2 px accent underline; a count goes in a `Border.badge` in the header (`<StackPanel Orientation="Horizontal" Spacing="6"><TextBlock …/><Border Classes="badge"><TextBlock Text="{Binding Count}"/></Border></StackPanel>`), which takes the accent on the selected tab.
 
+### Menus
+
+One look for every menu, context menu and drop-down's menu (the maintainer's 0.5 review, as Visual Studio's): 24 px rows, the 16 px icon column kept on every entry so text starts at the same place in every menu (a check or radio mark takes the icon's place), the shortcut on the right in muted text, separators that start under the text, and a small chevron on a submenu (ShellStyles.axaml).
+
+- An entry of the command registry (`menus` in a manifest, `MenuItemRule`) gets its icon from `CommandIcons` and its shortcut from the key bindings (`MenuBuilder`).
+- A view's own entry has an icon too: in XAML `<MenuItem Header="{l:T …}" controls:MenuEntry.Icon="compare" …/>`, or `controls:MenuEntry.CommandIcon="git.merge"` for the icon the menus give a command; in code `MenuEntry.Create(title, icon, command, keys: "Delete", click: …)`, `MenuEntry.Submenu` and `MenuEntry.Caption` for a muted line naming the entries under it. A check or radio entry is a `MenuItem` with its `ToggleType` and no icon.
+- `MenuEntryTests` fails on a XAML menu entry without an icon and on a `new MenuItem` made by hand outside `MenuEntry`, `MenuBuilder` and `ToolbarPanel`'s overflow.
+
 ### Lists, grids and states
 
 - Rows of 22 px (`Shell.Size.Row`; `<ListBox Classes="rows">` sets them), headers of 24 px on `Shell.Grid.Header`, separators in `Shell.Grid.Rule`, numbers right-aligned in tabular figures.

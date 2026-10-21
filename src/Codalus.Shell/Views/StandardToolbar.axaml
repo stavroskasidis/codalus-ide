@@ -62,12 +62,12 @@
                    Tag="run.startWithHotReload" ToolTip.Tip="{l:T standardToolbar.hotReload}" AutomationProperties.Name="{l:T standardToolbar.hotReload}">
         <SplitButton.Flyout>
           <MenuFlyout Placement="BottomEdgeAlignedLeft">
-            <MenuItem Header="{l:T standardToolbar.startWithHotReload}" Command="{Binding StartWithHotReloadCommand}" IsVisible="{Binding !IsHotReloadRunning}" />
-            <MenuItem Header="{l:T standardToolbar.applyCodeChanges}" Command="{Binding ApplyCodeChangesCommand}" IsVisible="{Binding IsHotReloadRunning}" />
-            <MenuItem Header="{l:T standardToolbar.stopRunning}" Command="{Binding StopRunningCommand}" IsVisible="{Binding IsHotReloadRunning}" />
+            <MenuItem controls:MenuEntry.Icon="play-outline" Header="{l:T standardToolbar.startWithHotReload}" Command="{Binding StartWithHotReloadCommand}" IsVisible="{Binding !IsHotReloadRunning}" />
+            <MenuItem controls:MenuEntry.Icon="flame" Header="{l:T standardToolbar.applyCodeChanges}" Command="{Binding ApplyCodeChangesCommand}" IsVisible="{Binding IsHotReloadRunning}" />
+            <MenuItem controls:MenuEntry.Icon="stop" Header="{l:T standardToolbar.stopRunning}" Command="{Binding StopRunningCommand}" IsVisible="{Binding IsHotReloadRunning}" />
             <Separator />
             <MenuItem Header="{l:T standardToolbar.hotReloadOnStart}" ToggleType="CheckBox" IsChecked="{Binding HotReloadOnStart, Mode=OneWay}" Command="{Binding ToggleHotReloadOnStartCommand}" />
-            <MenuItem Header="{l:T standardToolbar.hotReloadSettings}" Command="{Binding HotReloadSettingsCommand}" />
+            <MenuItem controls:MenuEntry.Icon="gear" Header="{l:T standardToolbar.hotReloadSettings}" Command="{Binding HotReloadSettingsCommand}" />
           </MenuFlyout>
         </SplitButton.Flyout>
       </SplitButton>
