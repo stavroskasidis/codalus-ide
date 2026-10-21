@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.6.0
+
+- **Fixed:** Quick Info, the completion list's description and parameter info showed only the declaration of a method or type from a referenced assembly, such as a NuGet package's or .NET's own (`app.UseWebAssemblyDebugging()`, `Console.WriteLine`), without its summary ([user guide](docs/user-guide/editing.md#intellisense)). They now show its documentation from the XML file next to the assembly, as the classic IDE does, or from a localized one for your OS's language beside it (in a `de`, `pt-br` or `zh-hans` folder) when one is installed. Files outside a project, and the files of a folder you don't trust, get .NET's documentation too: they now compile against .NET's reference assemblies, as a project does.
+
 ## 0.5.0
 
 - **IntelliSense like a classic IDE's** ([user guide](docs/user-guide/editing.md#intellisense)): in C# and Visual Basic, the completion list, parameter info and Quick Info show code in the editor's own colors, and generic types as you use them (`LayoutBuilderBase<PageModel, PageBuilder<PageModel>>.AddTab(…)`, not `LayoutBuilderBase<TModel, TBuilder>`). Other languages get the same popups, in plain text.
