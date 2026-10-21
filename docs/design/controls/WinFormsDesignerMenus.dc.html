@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Windows Forms designer menus: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<!-- This page's own icons, in the style of controls.js's (16 px Fluent-style drawings, our own): the kinds the plan adds
+     (bring-to-front, send-to-back, align-grid) and ones the menus already use (cut, paste, rename, layout, the filled lock). -->
+<svg id="wf-sprite" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="i-cut" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.6" cy="11.6" r="2.2"/><circle cx="11.4" cy="11.6" r="2.2"/><path d="M6.2 10 11.6 2.2M9.8 10 4.4 2.2"/></g></symbol>
+  <symbol id="i-paste" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5.6 2.8H4a1.2 1.2 0 0 0-1.2 1.2v8.8A1.2 1.2 0 0 0 4 14h2"/><path d="M10.4 2.8H12a1.2 1.2 0 0 1 1.2 1.2v2.4"/><rect x="5.6" y="1.8" width="4.8" height="2.4" rx=".8"/><rect x="7.6" y="7.4" width="6" height="6.8" rx="1.1"/></g></symbol>
+  <symbol id="i-rename" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M8.4 4.6H3a1.2 1.2 0 0 0-1.2 1.2v4.4A1.2 1.2 0 0 0 3 11.4h5.4M13.4 4.6h.2a.8.8 0 0 1 .8.8v5.2a.8.8 0 0 1-.8.8h-.2"/><path d="M11 2.2v11.6M9.6 2.2h2.8M9.6 13.8h2.8M4.4 8h2.2"/></g></symbol>
+  <symbol id="i-layout" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.6" width="12.4" height="10.8" rx="1.4"/><path d="M5.8 2.6v10.8M5.8 9.6h8.4"/></g></symbol>
+  <symbol id="i-bring-front" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 10.6H3a1.2 1.2 0 0 1-1.2-1.2V3A1.2 1.2 0 0 1 3 1.8h6.4A1.2 1.2 0 0 1 10.6 3v2.4"/><rect x="5.4" y="5.4" width="8.8" height="8.8" rx="1.2" fill="currentColor" fill-opacity=".28"/></g></symbol>
+  <symbol id="i-send-back" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.4H13a1.2 1.2 0 0 1 1.2 1.2V13a1.2 1.2 0 0 1-1.2 1.2H6.6A1.2 1.2 0 0 1 5.4 13v-2.4" fill="currentColor" fill-opacity=".28"/><rect x="1.8" y="1.8" width="8.8" height="8.8" rx="1.2"/></g></symbol>
+  <symbol id="i-align-grid" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="1.8" width="12.4" height="12.4" rx="1.6"/><path d="M6 1.8v12.4M10 1.8v12.4M1.8 6h12.4M1.8 10h12.4"/></g></symbol>
+  <symbol id="i-lock-filled" viewBox="0 0 16 16"><path fill="currentColor" d="M8 1.4a3.4 3.4 0 0 0-3.4 3.4v1.8H4a1.6 1.6 0 0 0-1.6 1.6v5.2A1.6 1.6 0 0 0 4 15h8a1.6 1.6 0 0 0 1.6-1.6V8.2A1.6 1.6 0 0 0 12 6.6h-.6V4.8A3.4 3.4 0 0 0 8 1.4Zm-2 5.2V4.8a2 2 0 0 1 4 0v1.8Z"/></symbol>
+</svg>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:24px 20px 32px;display:flex;flex-direction:column;gap:16px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.lead{color:var(--muted);max-width:1180px}
+.panels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 16px}
+.pnl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pnl h2{font-size:13px;line-height:18px;margin:0;font-weight:600;color:var(--strong);display:flex;flex-direction:column}
+.pnl h2 .src{font-family:var(--mono);font-size:11px;line-height:16px;font-weight:400;color:var(--muted);white-space:nowrap}
+.pnl .cap{color:var(--muted);font-size:11px;line-height:15px;min-height:45px}
+.stage{position:relative;height:500px}
+.stage .doc-tabs{height:30px}
+.stage .doc-tab .x{margin-left:6px}
+.dv{height:470px;display:flex;flex-direction:column}
+.dv.short{height:444px}
+.dtb{display:flex;align-items:center;gap:2px;height:32px;padding:0 6px;flex:none;min-width:0}
+.dtb .status{color:var(--muted);margin-left:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.surf{position:relative;flex:1 1 auto;min-height:0;background:var(--editor);z-index:2}
+.clip{position:absolute;inset:0;overflow:hidden}
+.trayb{height:34px;flex:none;border-top:1px solid var(--border);background:var(--panel);display:flex;align-items:center;padding:0 6px;overflow:hidden;white-space:nowrap}
+.trayb .tb{margin:2px;gap:4px;padding:0 6px 0 4px;flex:none}
+.trayb .tb.on{border-color:var(--accent)}
+/* The designer's adorners (WinFormsDesignerView.DesignerSurface.Render), in the theme's tokens. */
+.ad{position:absolute;box-sizing:border-box}
+.ad.fr{border:1px solid var(--accent)}
+.ad.fr.dash{border-style:dashed}
+.ad.hd{background:var(--panel);border:1px solid var(--accent)}
+.ad.glyph{background:var(--panel);border:1px solid var(--accent)}
+.ad.glyph::after{content:"";position:absolute;left:3px;top:2px;border-left:5px solid var(--accent);border-top:3px solid transparent;border-bottom:3px solid transparent}
+.ad.lock{background:var(--panel);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center}
+.ad.th{background:var(--panel);border:1px dashed var(--accent);color:var(--muted);font-size:11px;line-height:14px;padding:0 4px;display:flex;align-items:center;white-space:nowrap}
+/* Menus (ShellStyles.axaml: 24 px rows, the 16 px icon column on every entry, the shortcut muted on the right,
+   separators in Shell.Border from where the text starts, a small chevron on a submenu). */
+.cm{position:absolute;z-index:10;width:max-content;min-width:160px}
+.cm .mi{gap:0;padding:0 12px 0 8px}
+.cm .mi .ic{width:16px;height:16px;flex:none;margin-right:8px;display:flex;align-items:center;justify-content:center}
+.cm .mi .tx{flex:1 1 auto;white-space:nowrap}
+.cm .mi .sc{margin-left:auto;padding-left:32px;font-size:12px;color:var(--muted)}
+.cm .mi .subchev{width:12px;height:12px;margin-left:28px;margin-right:-6px;color:var(--fg);flex:none}
+.cm .mi.is-disabled{color:var(--disabled-fg)}
+.cm .mi.is-disabled .sc{color:var(--disabled-fg)}
+.cm .mi.is-disabled svg.i{opacity:.4}
+.cm .msep{margin:3px 0 3px 32px;background:var(--border)}
+.kind-hc .cm .mi.hover{background:var(--pressed)}
+/* The menu bar in the title bar (Border.titleBar Menu > MenuItem). */
+.mbar{position:relative;z-index:12;display:flex;height:26px;align-items:stretch;background:var(--title-bar);color:var(--title-bar-fg);white-space:nowrap}
+.mbar .mb{position:relative;display:flex;align-items:center;padding:0 8px;flex:none}
+.mbar .mb.open{background:var(--title-bar-hover)}
+.mbar .fmt{left:0;top:26px;color:var(--fg)}
+.mbar .fmt .sub{left:calc(100% - 4px);top:-1px}
+/* The form: a stand-in for the bitmap the designer host draws (Control.DrawToBitmap), in Windows' own colors in
+   every theme; its contrast is the form's, so the check skips it (data-nocheck). */
+.wf{position:absolute;font-family:"Segoe UI",Inter,system-ui,sans-serif;font-size:12px;line-height:15px;color:#000}
+.wf .w{position:absolute;box-sizing:border-box;white-space:nowrap}
+.w.f-frame{background:#F0F0F0;border:1px solid #8E8E8E;box-shadow:0 2px 8px rgba(0,0,0,.22)}
+.w.f-title{background:#FFFFFF}
+.w.f-ico{background:linear-gradient(#3A78C9 0 4px,#FFFFFF 4px);border:1px solid #3A78C9}
+.w.f-cap{display:flex;align-items:center}
+.w.f-closex{display:flex;align-items:center;justify-content:center;font-size:12px}
+.w.f-tb{background:#FFFFFF;border:1px solid #7A7A7A;padding:3px 4px}
+.w.f-ph{color:#6D6D6D}
+.w.f-cb{background:#E1E1E1;border:1px solid #ADADAD}
+.w.f-spin,.w.f-dtpb{background:#F0F0F0;border-left:1px solid #DADADA}
+.w.f-arr-d{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid #000}
+.w.f-arr-u{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:4px solid #000}
+.w.f-btn{background:#E1E1E1;border:1px solid #ADADAD;display:flex;align-items:center;justify-content:center}
+.w.f-flat{background:#4682B4;color:#FFFFFF;display:flex;align-items:center;justify-content:center}
+.w.f-chkb{background:#FFFFFF;border:1px solid #333333}
+.w.f-chkm{width:4px;height:8px;border:solid #000;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.w.f-radb{background:#FFFFFF;border:1px solid #333333;border-radius:50%}
+.w.f-radb.f-on::after{content:"";position:absolute;left:3px;top:3px;width:5px;height:5px;border-radius:50%;background:#000}
+.w.f-grp{border:1px solid #DCDCDC;border-radius:2px}
+.w.f-grpcap{background:#F0F0F0;padding:0 2px}
+.w.f-dash{border:1px dashed #9A9A9A}
+.w.f-dashv{border-left:1px dashed #9A9A9A}
+.w.f-split{border:1px solid #646464}
+.w.f-splitter{background:#F0F0F0}
+.w.f-lb{background:#FFFFFF;border:1px solid #828790;padding:1px 3px;white-space:pre-line}
+.w.f-notes{background:#FFFFE0;color:#6D6D6D;font-style:italic;padding:1px 4px;white-space:pre-line}
+.w.f-sb{background:#F0F0F0;border-left:1px solid #E3E3E3}
+.w.f-pic{background:radial-gradient(circle at 50% 50%,#F0A030 0 3px,#3A78C9 3.5px);border-radius:3px}
+.w.f-ms{background:#F5F6F7}
+.w.f-msi{display:flex;align-items:center;justify-content:center}
+.w.f-ts{background:#F5F6F7;border-bottom:1px solid #DADBDC}
+.w.f-grip{background:radial-gradient(circle,#A0A0A0 0 1px,transparent 1.2px) 0 0/4px 4px}
+.w.f-tsb::before{content:"";position:absolute;left:6px;top:3px;width:10px;height:14px;border:1px solid #5A6B80;background:#FFFFFF}
+.w.f-tss{background:#BCBCBC}
+.w.f-lv{background:#FFFFFF;border:1px solid #828790}
+.w.f-lvh{background:#FFFFFF;border-bottom:1px solid #E5E5E5}
+.w.f-lvhs{background:#E5E5E5}
+.w.f-tabh{background:#F0F0F0;border:1px solid #D9D9D9;border-bottom:0;display:flex;align-items:center;justify-content:center}
+.w.f-tabh.f-on{background:#FFFFFF;z-index:1}
+.w.f-tabp{background:#FFFFFF;border:1px solid #D9D9D9}
+.w.f-ss{background:#F0F0F0;border-top:1px solid #DADADA}
+/* The decisions at the bottom. */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);padding:14px 18px 16px;display:flex;flex-direction:column;gap:10px}
+.card h2{font-size:14px;line-height:20px;margin:0;font-weight:600;color:var(--strong)}
+.decide{display:flex;flex-direction:column;gap:14px}
+.dq{display:flex;gap:10px;align-items:flex-start}
+.dq .n{flex:none;width:20px;height:20px;border-radius:10px;background:var(--badge);color:var(--badge-fg);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.kind-hc .dq .n{border:1px solid var(--soft-border)}
+.dq .b{display:flex;gap:28px;align-items:flex-start;min-width:0}
+.dq .b>div:first-child{flex:0 0 640px}
+.dq2{display:flex;gap:28px;align-items:flex-start}
+.dq2 .col{flex:0 0 670px;display:flex;flex-direction:column;gap:14px}
+.dq .b b{font-weight:600;color:var(--strong)}
+.minis{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.mini{display:flex;flex-direction:column;gap:4px}
+.mini .lbl{font-size:11px;color:var(--muted)}
+.mini .cm{position:static;min-width:0}
+.mini .tile{display:flex;align-items:center;justify-content:center;width:16px;height:16px;box-sizing:border-box;background:var(--panel);border:1px solid var(--accent)}
+.mini .ck-tile{display:flex;align-items:center;justify-content:center;width:20px;height:20px;margin:-2px 4px -2px -2px;box-sizing:border-box;background:var(--tb-checked);border:1px solid var(--tb-checked-border);border-radius:var(--radius)}
+.corner{position:relative;width:96px;height:52px;background:#F0F0F0;border:1px solid var(--border)}
+.corner .ctl{position:absolute;left:30px;top:24px;width:70px;height:40px;background:#FFFFFF;border:1px solid #646464}
+.corner .fr{position:absolute;left:29px;top:23px;width:72px;height:42px;box-sizing:border-box;border:1px solid var(--accent)}
+.corner .gl{position:absolute;left:12px;top:6px}
+.corner .gl.bare svg{width:12px;height:12px;display:block}
+.corner .gl.tile{width:16px;height:16px;box-sizing:border-box;background:var(--panel);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}; --title-bar-hover: {{titleBarHover}}; min-height: 100vh">
+<main class="sheet">
+
+<header>
+  <h1>Windows Forms designer: context menus and locked controls</h1>
+  <div class="lead">Task #67, part 2: the surface's and the tray's context menus as the classic IDE's, with the enabled states of its command set, Lock Controls, and the locked adorner. OrderForm and InventoryForm from samples/WindowsDesktop/WinFormsApp; the forms stand in for the bitmaps the designer host draws. {{t.name}}, {{t.p.family}} family.</div>
+  <nav class="themes" aria-label="Themes">
+    <sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for>
+  </nav>
+</header>
+
+<section class="panels">
+<sc-for list="{{panels}}" as="p">
+  <article class="pnl" aria-label="{{p.title}}">
+    <h2>{{p.title}}<span class="src">{{p.src}}</span></h2>
+    <div class="cap">{{p.cap}}</div>
+    <div class="stage">
+      <sc-if value="{{p.formatMenu}}">
+        <div class="mbar" role="menubar" aria-label="Menu bar">
+          <sc-for list="{{p.mbar}}" as="mb">
+            <div class="mb {{mb.cls}}" role="menuitem">{{mb.t}}<sc-if value="{{mb.menu}}">
+              <div class="menu cm fmt" role="menu" aria-label="Format">
+                <sc-for list="{{p.formatMenu.rows}}" as="r">
+                  <sc-if value="{{r.sep}}"><div class="msep" role="separator"></div></sc-if>
+                  <sc-if value="{{r.item}}"><div class="mi {{r.cls}}" role="{{r.role}}" aria-disabled="{{r.dis}}" aria-checked="{{r.checked}}"><span class="ic"><sc-if value="{{r.i}}"><svg class="i {{r.c}}" aria-hidden="true"><use href="#i-{{r.i}}"></use></svg></sc-if></span><span class="tx">{{r.t}}</span><sc-if value="{{r.k}}"><span class="sc">{{r.k}}</span></sc-if><sc-if value="{{r.sub}}"><svg class="subchev" aria-hidden="true"><use href="#i-chevron-right"></use></svg></sc-if></div></sc-if>
+                </sc-for>
+                <div class="menu cm sub" role="menu" aria-label="Align">
+                  <sc-for list="{{p.alignMenu.rows}}" as="r">
+                    <sc-if value="{{r.sep}}"><div class="msep" role="separator"></div></sc-if>
+                    <sc-if value="{{r.item}}"><div class="mi {{r.cls}}" role="{{r.role}}" aria-disabled="{{r.dis}}" aria-checked="{{r.checked}}"><span class="ic"><sc-if value="{{r.i}}"><svg class="i {{r.c}}" aria-hidden="true"><use href="#i-{{r.i}}"></use></svg></sc-if></span><span class="tx">{{r.t}}</span><sc-if value="{{r.k}}"><span class="sc">{{r.k}}</span></sc-if></div></sc-if>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if></div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <div class="doc-tabs" role="tablist" aria-label="Open documents">
+        <span class="doc-tab on" role="tab" aria-selected="true"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>{{p.tab}}<svg class="i sm c-fg x" aria-hidden="true"><use href="#i-close"></use></svg></span>
+      </div>
+      <section class="doc dv {{p.dvCls}}" aria-label="{{p.tab}}">
+        <div class="dtb">
+          <button class="tb" aria-label="View Code (F7)" title="View Code (F7)"><svg class="i c-blue" aria-hidden="true"><use href="#i-code"></use></svg></button>
+          <button class="tb" aria-label="Load the form again (and restart the designer)" title="Load the form again (and restart the designer)"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+          <span class="status">{{p.status}}</span>
+        </div>
+        <div class="surf" role="img" aria-label="Design surface">
+          <div class="clip">
+            <div class="wf" data-nocheck aria-hidden="true" style="{{p.formStyle}}">
+              <sc-for list="{{p.form}}" as="e"><div class="w {{e.cls}}" style="{{e.style}}">{{e.t}}</div></sc-for>
+            </div>
+            <sc-for list="{{p.adorn}}" as="e"><div class="ad {{e.cls}}" style="{{e.style}}"><sc-if value="{{e.icon}}"><svg class="i {{e.ic}}" aria-hidden="true"><use href="#i-{{e.icon}}"></use></svg></sc-if>{{e.t}}</div></sc-for>
+          </div>
+        </div>
+        <div class="trayb" role="list" aria-label="Component tray">
+          <sc-for list="{{p.tray}}" as="ti"><span class="tb text {{ti.cls}}" role="listitem"><svg class="i {{ti.ic}}" aria-hidden="true"><use href="#i-{{ti.icon}}"></use></svg>{{ti.name}}</span></sc-for>
+        </div>
+      </section>
+      <sc-for list="{{p.menus}}" as="m">
+        <div class="menu cm" role="menu" aria-label="{{m.label}}" style="{{m.style}}">
+          <sc-for list="{{m.rows}}" as="r">
+            <sc-if value="{{r.sep}}"><div class="msep" role="separator"></div></sc-if>
+            <sc-if value="{{r.item}}"><div class="mi {{r.cls}}" role="{{r.role}}" aria-disabled="{{r.dis}}" aria-checked="{{r.checked}}"><span class="ic"><sc-if value="{{r.i}}"><svg class="i {{r.c}}" aria-hidden="true"><use href="#i-{{r.i}}"></use></svg></sc-if></span><span class="tx">{{r.t}}</span><sc-if value="{{r.k}}"><span class="sc">{{r.k}}</span></sc-if></div></sc-if>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </article>
+</sc-for>
+</section>
+
+<section class="card" aria-labelledby="h-decide">
+  <h2 id="h-decide">For the maintainer to decide</h2>
+  <div class="decide">
+    <div class="dq2">
+      <div class="col">
+        <div class="dq"><span class="n">1</span><div class="b"><div><b>Show Smart Tag stays, the one entry the classic IDE's menu doesn't have.</b> The panel's property tasks have no menu form; the designer's verbs (Edit Items..., Add Tab) come first either way. Drop it for exact parity.</div></div></div>
+        <div class="dq"><span class="n">2</span><div class="b"><div><b>Align, Make Same Size and Tab Order leave the surface menu</b>, as in the classic IDE; they stay in Format and View. Today's menu is on the right, for comparison; none of its entries has an icon yet.</div></div></div>
+      </div>
+      <div class="minis">
+        <div class="mini" data-nocheck><span class="lbl">Today</span><div class="menu cm" role="menu" aria-label="Today's surface menu"><sc-for list="{{todayRows}}" as="r"><sc-if value="{{r.sep}}"><div class="msep" role="separator"></div></sc-if><sc-if value="{{r.item}}"><div class="mi" role="menuitem"><span class="ic"></span><span class="tx">{{r.t}}</span><sc-if value="{{r.k}}"><span class="sc">{{r.k}}</span></sc-if><sc-if value="{{r.sub}}"><svg class="subchev" aria-hidden="true"><use href="#i-chevron-right"></use></svg></sc-if></div></sc-if></sc-for></div></div>
+      </div>
+    </div>
+    <div class="dq"><span class="n">3</span><div class="b"><div><b>Lock Controls is a check entry by the menus' rule</b> (ui-guidelines.md: a check takes the icon column, and a check entry has no icon), so the yellow lock shows only on the adorner. Rejected: the classic IDE's lock icon on a checked tile, a second check style for one entry.</div>
+      <div class="minis">
+        <div class="mini"><span class="lbl">Proposed: unchecked, checked</span><div class="menu cm" role="menu" aria-label="Lock Controls, proposed"><div class="mi" role="menuitemcheckbox" aria-checked="false"><span class="ic"></span><span class="tx">Lock Controls</span></div><div class="mi" role="menuitemcheckbox" aria-checked="true"><span class="ic"><svg class="i c-fg" aria-hidden="true"><use href="#i-check"></use></svg></span><span class="tx">Lock Controls</span></div></div></div>
+        <div class="mini" data-nocheck><span class="lbl">Rejected: unchecked, checked</span><div class="menu cm" role="menu" aria-label="Lock Controls, rejected"><div class="mi" role="menuitemcheckbox" aria-checked="false"><span class="ic"><svg class="i c-yellow" aria-hidden="true"><use href="#i-lock"></use></svg></span><span class="tx">Lock Controls</span></div><div class="mi" role="menuitemcheckbox" aria-checked="true"><span class="ic"><span class="ck-tile"><svg class="i c-yellow" aria-hidden="true"><use href="#i-lock"></use></svg></span></span><span class="tx">Lock Controls</span></div></div></div>
+      </div>
+    </div></div>
+    <div class="dq"><span class="n">4</span><div class="b"><div><b>The lock adorner sits on a 16 px tile</b> (the panel color with an accent edge, like the smart tag's glyph). Rejected: the bare 12 px glyph; the form is drawn in Windows' light colors in every theme, and the dark themes' yellow (#FFCC00) is about 1.3:1 on it.</div>
+      <div class="minis">
+        <div class="mini"><span class="lbl">Proposed</span><div class="corner"><div class="ctl"></div><div class="fr"></div><div class="gl tile"><svg class="i sm c-yellow" aria-hidden="true"><use href="#i-lock-filled"></use></svg></div></div></div>
+        <div class="mini" data-nocheck><span class="lbl">Rejected</span><div class="corner"><div class="ctl"></div><div class="fr"></div><div class="gl bare"><svg class="c-yellow" aria-hidden="true" viewBox="0 0 16 16"><use href="#i-lock-filled"></use></svg></div></div></div>
+      </div>
+    </div></div>
+    <div class="dq"><span class="n">5</span><div class="b"><div><b>A component's verbs and Show Smart Tag share the first group</b>, with no separator between them (both are the component's own tasks). Rejected: a separator after the verbs, which the plan's BuildMenuAsync would add. Verbs keep the designer's text, "Edit Items..." with three periods as dotnet/winforms and the classic IDE write it; a disabled verb is grayed.</div></div></div>
+    <div class="dq"><span class="n">6</span><div class="b"><div><b>Deliberate differences from the classic IDE:</b> Align to Grid stays enabled (Codalus has snap lines and an 8 px grid but no SnapToGrid layout mode, which is what enables it there); the tray keeps Rename (F2) and has no Lock Controls, since tray components can't be locked. Shortcuts are the key bindings' labels: Delete, not Del.</div></div></div>
+  </div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+    // Shell.TitleBar.Hover (Tokens.axaml): the menu bar's open title.
+    const titleBarHover = { 'Classic Blue': '#B8C0D8', 'Classic Light': '#D7D7DA', 'Classic Dark': '#353535', 'Classic High Contrast': '#0E4A7B', 'Harbor Light': '#3C4661', 'Harbor Dark': '#2E333F', 'Harbor High contrast': '#1A323D' }[t.name];
+
+    const pos = (x, y, w, h) => `left:${x}px;top:${y}px;` + (w == null ? '' : `width:${w}px;`) + (h == null ? '' : `height:${h}px;`);
+
+    // ---- the forms, in form coordinates (the client area starts at 8, 31: a 1 px edge, a 30 px title bar) ----
+    const CX = 8, CY = 31;
+    const formOf = (caption, clientW, clientH, body) => {
+      const L = [];
+      const add = (cls, x, y, w, h, text) => L.push({ cls: cls.split(' ').map((k) => 'f-' + k).join(' '), style: pos(x, y, w, h), t: text || '' });
+      const c = (cls, x, y, w, h, text) => add(cls, x + CX, y + CY, w, h, text);
+      const W = clientW + 2 * CX, H = clientH + CY + CX;
+      add('frame', 0, 0, W, H);
+      add('title', 1, 1, W - 2, 30);
+      add('ico', 10, 9, 14, 14);
+      add('cap', 32, 1, 200, 30, caption);
+      add('closex', W - 46, 1, 45, 30, '✕');
+      body(c);
+      return { list: L, W, H };
+    };
+    const orderForm = formOf('New order', 384, 401, (c) => {
+      c('lbl', 12, 15, null, null, 'Customer:');
+      c('tb ph', 96, 12, 276, 23, 'Name or account number');
+      c('cb', 96, 41, 160, 23); c('arr-d', 242, 51);
+      c('tb', 262, 41, 110, 23, '1'); c('spin', 354, 42, 17, 21); c('arr-u', 358, 46); c('arr-d', 358, 54);
+      c('chkb', 96, 73, 13, 13); c('chkm', 101, 74); c('lbl', 113, 72, null, null, 'Gift wrap it');
+      c('grp', 12, 102, 360, 45); c('grpcap', 18, 95, null, null, 'Shipping');
+      c('radb on', 24, 120, 13, 13); c('lbl', 41, 119, null, null, 'Standard');
+      c('radb', 122, 120, 13, 13); c('lbl', 139, 119, null, null, 'Express');
+      c('dash', 12, 153, 360, 30); c('dashv', 96, 153, 1, 30);
+      c('lbl', 15, 160, null, null, 'Date:');
+      c('tb', 99, 156, 270, 23, '10/21/2026'); c('dtpb', 351, 157, 17, 21); c('arr-d', 356, 166);
+      c('split', 12, 189, 360, 100);
+      c('lb', 13, 190, 120, 98, 'historyListBox');
+      c('splitter', 133, 190, 4, 98);
+      c('notes', 137, 190, 234, 98, 'Notes for the kitchen\n(one per line)');
+      c('sb', 354, 190, 17, 98);
+      c('pic', 12, 299, 16, 16);
+      c('lbl', 175, 301, null, null, '0');
+      c('btn', 242, 298, 75, 23, '+1');
+      c('dash', 0, 361, 384, 40);
+      c('flat', 196, 369, 95, 23, 'Place order');
+      c('btn', 297, 369, 75, 23, 'Cancel');
+    });
+    const inventoryForm = formOf('Inventory', 584, 361, (c) => {
+      c('ms', 0, 0, 584, 24); c('msi', 6, 2, 37, 20, 'File'); c('msi', 43, 2, 44, 20, 'Help');
+      c('ts', 0, 24, 584, 25); c('grip', 3, 28, 4, 17); c('tsb', 10, 26, 23, 22); c('tss', 37, 28, 1, 17); c('lbl', 43, 29, null, null, 'Search:');
+      c('lb', 12, 56, 120, 94, 'Tools\nGarden\nPaint');
+      c('lv', 138, 56, 434, 94); c('lvh', 139, 57, 432, 22); c('lbl', 145, 60, null, null, 'Name'); c('lvhs', 339, 57, 1, 22); c('lbl', 345, 60, null, null, 'Count');
+      c('lbl', 145, 82, null, null, 'Hammer'); c('lbl', 145, 99, null, null, 'Saw');
+      c('tabp', 12, 177, 560, 156); c('tabh on', 14, 156, 60, 22, 'General'); c('tabh', 74, 158, 48, 19, 'Stock'); c('tb', 22, 186, 200, 23);
+      c('ss', 0, 339, 584, 22); c('lbl', 12, 343, null, null, 'Ready');
+    });
+
+    // ---- the adorners, in surface coordinates ----
+    const at = (fx, fy) => (x, y, w, h) => ({ x: fx + CX + x, y: fy + CY + y, w, h });
+    const selection = (r, o = {}) => {
+      const A = [];
+      const X0 = r.x - 1, Y0 = r.y - 1, W = r.w + 2, H = r.h + 2;
+      A.push({ cls: 'fr', style: pos(X0, Y0, W, H) });
+      if (!o.locked) {
+        const xs = [X0, X0 + Math.floor((W - 1) / 2), X0 + W - 1];
+        const ys = [Y0, Y0 + Math.floor((H - 1) / 2), Y0 + H - 1];
+        for (const [i, j] of [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1]]) A.push({ cls: 'hd', style: pos(xs[i] - 3, ys[j] - 3, 7, 7) });
+      }
+      if (o.glyph) A.push({ cls: 'glyph', style: pos(r.x + r.w + 4, r.y - 2, 12, 12) });
+      if (o.locked) A.push({ cls: 'lock', icon: 'lock-filled', ic: 'sm c-yellow', style: pos(r.x - 17, r.y - 17, 16, 16) });
+      return A;
+    };
+
+    // ---- menu rows ----
+    const item = (text, o = {}) => ({
+      item: true, t: text, k: o.k || '', i: o.check ? 'check' : (o.i || ''), c: o.check ? 'c-fg' : (o.c || ''),
+      sub: !!o.sub, dis: o.dis ? 'true' : 'false', checked: o.toggle ? String(!!o.check) : '',
+      role: o.toggle ? 'menuitemcheckbox' : 'menuitem',
+      cls: [o.dis ? 'is-disabled' : '', o.hover ? 'hover' : ''].join(' ')
+    });
+    const SEP = { sep: true };
+    const rowsHeight = (rows) => 2 + 8 + rows.reduce((h, r) => h + (r.sep ? 7 : 24), 0);
+    const viewCode = (o) => item('View Code', { k: 'F7', i: 'code', c: 'c-blue', ...o });
+    const front = (o) => item('Bring to Front', { i: 'bring-front', c: 'c-blue', ...o });
+    const back = (o) => item('Send to Back', { i: 'send-back', c: 'c-blue', ...o });
+    const toGrid = (o) => item('Align to Grid', { i: 'align-grid', c: 'c-blue', ...o });
+    const lock = (o) => item('Lock Controls', { toggle: true, ...o });
+    const cut = (o) => item('Cut', { k: 'Ctrl+X', i: 'cut', c: 'c-blue', ...o });
+    const copy = (o) => item('Copy', { k: 'Ctrl+C', i: 'copy', c: 'c-blue', ...o });
+    const paste = (o) => item('Paste', { k: 'Ctrl+V', i: 'paste', c: 'c-blue', ...o });
+    const del = (o) => item('Delete', { k: 'Delete', i: 'trash', c: 'c-red', ...o });
+    const props = (o) => item('Properties', { k: 'F4', i: 'wrench', c: 'c-blue', ...o });
+
+    // The stage: [menu bar 26] + tabs 30 + the document (border-top: Classic 2, Harbor 1) + its toolbar 32.
+    const bt = t.p.family === 'Classic' ? 2 : 1;
+    const surfaceTop = (mbar) => (mbar ? 26 : 0) + 30 + bt + 32;
+    const ctxMenu = (label, rows, sx, sy, mbar, flip) => {
+      const h = rowsHeight(rows);
+      const x = 1 + sx, y = surfaceTop(mbar) + sy - (flip ? h : 0);
+      return { label, rows, style: pos(x, y) };
+    };
+    const status = (name) => `${name}: drag from the Toolbox, select, move and resize; F7 shows the code.`;
+    const orderTray = (sel) => [{ name: 'orderToolTip', icon: 'gear', ic: 'c-blue', cls: sel ? 'on' : '' }];
+    const inventoryTray = [
+      { name: 'itemsContextMenuStrip', icon: 'list', ic: 'c-blue', cls: '' },
+      { name: 'iconImageList', icon: 'gear', ic: 'c-blue', cls: '' },
+      { name: 'itemBindingSource', icon: 'table', ic: 'c-blue', cls: '' },
+      { name: 'inventoryToolTip', icon: 'gear', ic: 'c-blue', cls: '' }
+    ];
+    const formStyle = (f, fx, fy) => pos(fx, fy, f.W, f.H);
+
+    const panels = [];
+
+    // (a) historyListBox, in notesSplit.Panel1: nothing copied yet.
+    {
+      const fx = 16, fy = -185, S = at(fx, fy);
+      const rows = [
+        item('Edit Items...'), item('Show Smart Tag', { k: 'Alt+Shift+F10' }), SEP,
+        viewCode(), SEP, front(), back(), SEP, toGrid(), SEP, lock(), SEP,
+        item("Select 'notesSplit.Panel1'", { hover: true }), SEP,
+        cut(), copy(), paste({ dis: true }), del(), SEP, props()
+      ];
+      const p = S(64, 214, 0, 0);
+      panels.push({
+        title: '(a) A control in a split container\'s panel', src: 'historyListBox · ListBox',
+        cap: 'Nothing copied yet. No Type Here over the list. The designer\'s verb (Edit Items...) and Show Smart Tag first; Select names the parent, the split container\'s panel; Paste is grayed.',
+        tab: 'OrderForm.cs [Design]', status: status('OrderForm'), dvCls: '',
+        form: orderForm.list, formStyle: formStyle(orderForm, fx, fy),
+        adorn: selection(S(13, 190, 120, 98), { glyph: true }),
+        tray: orderTray(false), menus: [ctxMenu('historyListBox', rows, p.x, p.y, false, false)]
+      });
+    }
+
+    // (b) giftCheckBox, a direct child of the form: after Copy.
+    {
+      const fx = 16, fy = -31, S = at(fx, fy);
+      const rows = [viewCode(), SEP, front(), back(), SEP, toGrid(), SEP, lock(), SEP, item("Select 'OrderForm'"), SEP, cut(), copy(), paste(), del(), SEP, props()];
+      const p = S(140, 78, 0, 0);
+      panels.push({
+        title: '(b) A control on the form', src: 'giftCheckBox · CheckBox',
+        cap: 'After Copy. No verbs and no smart tag, so the menu starts at View Code; Select \'OrderForm\'; Paste is enabled.',
+        tab: 'OrderForm.cs [Design]', status: status('OrderForm'), dvCls: '',
+        form: orderForm.list, formStyle: formStyle(orderForm, fx, fy),
+        adorn: selection(S(96, 70, 83, 19)),
+        tray: orderTray(false), menus: [ctxMenu('giftCheckBox', rows, p.x, p.y, false, false)]
+      });
+    }
+
+    // (c) the form itself: nothing copied.
+    {
+      const fx = 16, fy = 16, S = at(fx, fy);
+      const rows = [viewCode(), SEP, front({ dis: true }), back({ dis: true }), SEP, toGrid({ dis: true }), SEP, lock({ hover: true }), SEP,
+        cut({ dis: true }), copy({ dis: true }), paste({ dis: true }), del({ dis: true }), SEP, props()];
+      const p = S(100, 310, 0, 0);
+      panels.push({
+        title: '(c) The form itself', src: 'OrderForm · Form',
+        cap: 'Nothing copied. No verbs and no Select. Bring to Front, Send to Back, Align to Grid, Cut, Copy, Paste and Delete are grayed, as in the classic IDE; Lock Controls stays enabled.',
+        tab: 'OrderForm.cs [Design]', status: status('OrderForm'), dvCls: '',
+        form: orderForm.list, formStyle: formStyle(orderForm, fx, fy),
+        adorn: selection({ x: fx, y: fy, w: orderForm.W, h: orderForm.H }),
+        tray: orderTray(false), menus: [ctxMenu('OrderForm', rows, p.x, p.y, false, true)]
+      });
+    }
+
+    // (d) orderToolTip, in the tray: after Copy. The menu opens above the pointer (no room below).
+    {
+      const fx = 16, fy = -132;
+      const rows = [viewCode(), SEP, cut(), copy(), paste(), del(), SEP, item('Rename', { k: 'F2', i: 'rename', c: 'c-blue' }), item('Line Up Icons', { i: 'layout', c: 'c-blue' }), SEP, props()];
+      const h = rowsHeight(rows);
+      const trayPointerY = 30 + 470 - 1 - 34 + 6; // just inside the tray item's top edge
+      panels.push({
+        title: '(d) A component in the tray', src: 'orderToolTip · ToolTip',
+        cap: 'After Copy. View Code, the clipboard, Rename (F2) with Line Up Icons, and Properties. No verbs, no smart tag, and no Lock Controls: tray components can\'t be locked.',
+        tab: 'OrderForm.cs [Design]', status: status('OrderForm'), dvCls: '',
+        form: orderForm.list, formStyle: formStyle(orderForm, fx, fy),
+        adorn: [],
+        tray: orderTray(true), menus: [{ label: 'orderToolTip', rows, style: pos(64, trayPointerY - h) }]
+      });
+    }
+
+    // (e) notesSplit locked (Lock Controls on), and the Format menu with Align open.
+    {
+      const fx = 8, fy = 16, S = at(fx, fy);
+      const formatRows = [
+        item('Align', { sub: true, hover: true }), item('Make Same Size', { sub: true }), SEP,
+        item('Horizontal Spacing', { sub: true }), item('Vertical Spacing', { sub: true }), SEP,
+        item('Center in Form', { sub: true }), SEP, item('Order', { sub: true }), SEP,
+        lock({ check: true })
+      ];
+      const alignRows = [
+        item('Lefts', { dis: true }), item('Centers', { dis: true }), item('Rights', { dis: true }), SEP,
+        item('Tops', { dis: true }), item('Middles', { dis: true }), item('Bottoms', { dis: true }), SEP,
+        item('to Grid', { i: 'align-grid', c: 'c-blue' })
+      ];
+      panels.push({
+        title: '(e) A locked control, and the Format menu', src: 'notesSplit · SplitContainer',
+        cap: 'Lock Controls is on. Locked: the accent frame, no grab handles, the lock on a tile at its top left; its smart tag stays. One control selected: Align Lefts to Bottoms grayed, to Grid enabled; Lock Controls checked at the bottom.',
+        tab: 'OrderForm.cs [Design]', status: status('OrderForm'), dvCls: 'short',
+        form: orderForm.list, formStyle: formStyle(orderForm, fx, fy),
+        adorn: selection(S(12, 189, 360, 100), { glyph: true, locked: true }),
+        tray: orderTray(false), menus: [],
+        mbar: [{ t: 'Debug', cls: '' }, { t: 'Format', cls: 'open', menu: true }, { t: 'Test', cls: '' }, { t: 'Analyze', cls: '' }, { t: 'Tools', cls: '' }, { t: 'Window', cls: '' }, { t: 'Help', cls: '' }],
+        formatMenu: { rows: formatRows }, alignMenu: { rows: alignRows }
+      });
+    }
+
+    // (f) mainMenuStrip on InventoryForm: a tool strip keeps its Type Here.
+    {
+      const fx = 16, fy = 16, S = at(fx, fy);
+      const th = S(89, 2, 96, 20);
+      panels.push({
+        title: '(f) A tool strip keeps Type Here', src: 'mainMenuStrip · MenuStrip',
+        cap: 'Unchanged: a strip whose Items hold tool strip items (MenuStrip, ToolStrip, StatusStrip, ContextMenuStrip) gets Type Here after its last item; a list\'s Items (ListBox, ComboBox, ListView, DomainUpDown) doesn\'t.',
+        tab: 'InventoryForm.cs [Design]', status: status('InventoryForm'), dvCls: '',
+        form: inventoryForm.list, formStyle: formStyle(inventoryForm, fx, fy),
+        adorn: [...selection(S(0, 0, 584, 24), { glyph: true }), { cls: 'th', t: 'Type Here', style: pos(th.x, th.y, th.w, th.h) }],
+        tray: inventoryTray, menus: []
+      });
+    }
+
+    // Today's surface menu (BuiltIns.WinForms.cs), for item 2: no icons yet.
+    const todayRows = [
+      { item: true, t: 'Show Smart Tag', k: 'Alt+Shift+F10' }, SEP,
+      { item: true, t: 'Bring to Front' }, { item: true, t: 'Send to Back' }, SEP,
+      { item: true, t: 'Align', sub: true }, { item: true, t: 'Make Same Size', sub: true }, SEP,
+      { item: true, t: 'Tab Order' }, { item: true, t: 'View Code', k: 'F7' }
+    ];
+
+    return { t, themes, titleBarHover, panels, todayRows };
+  }
+}
+</script>
+</body>
+</html>
