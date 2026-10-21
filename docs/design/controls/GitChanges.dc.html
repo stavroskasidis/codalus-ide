@@ -183,6 +183,9 @@
 /* Every row keeps the ⋯ slot, so the chips line up and nothing moves when the pointer arrives. */
 .fly-more.off{visibility:hidden}
 .fly-more.on{background:var(--tb-hover);border:1px solid var(--tb-hover-border)}
+/* Update (21): the row being updated says so where its chips go. */
+.fly-busy{color:var(--muted);flex:none}
+.fly-r.sel .fly-busy{color:inherit}
 /* A chip and a pressed ⋯ keep their own colors on a High contrast selection (whose icons turn black). */
 .cx.kind-hc .fly-r.sel .fly-chip svg.i{color:var(--badge-fg)}
 .cx.kind-hc .fly-r.sel .fly-more.on svg.i{color:var(--fg)}
@@ -258,7 +261,7 @@
 <sc-if value="{{sheet}}">
 <header>
   <h1>Git Changes: folder actions and the branch drop-down</h1>
-  <div class="lead">Task #23, the design before it is built (D38): the Git Changes window's menus (a folder, a file, the repository node, a conflict) and the branch drop-down with each branch's menu, as the classic IDE has them, in the repository states the plan lists. samples/BuildAndRun on main, one commit ahead of origin, with ten changes and two staged files; Git Changes docked right at 400 px. Each panel is one state, numbered by section (T the change tree, P the prompts, C Compare, B the branch drop-down); the links under the themes open a state in the whole window. {{t.name}}, {{t.p.family}} family, {{os}}.</div>
+  <div class="lead">Task #23, the design before it is built (D38): the Git Changes window's menus (a folder, a file, the repository node, a conflict) and the branch drop-down with each branch's menu, as the classic IDE has them, in the repository states the plan lists. samples/BuildAndRun on main, one commit ahead of origin, with ten changes and two staged files; Git Changes docked right at 400 px. Each panel is one state, numbered by section (T the change tree, P the prompts, C Compare, B the branch drop-down, where B22–B26 add the Update entry the maintainer asked for after approving the sheet, question 21); the links under the themes open a state in the whole window. {{t.name}}, {{t.p.family}} family, {{os}}.</div>
   <div class="navs">
     <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}&amp;os={{os}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
     <nav class="themes" aria-label="Operating system"><span class="lbl">Paths, Reveal and shortcuts on:</span><sc-for list="{{oses}}" as="o"><a href="?theme={{themeQ}}&amp;os={{o.name}}" class="{{o.cls}}">{{o.name}}</a></sc-for></nav>
@@ -412,7 +415,7 @@
           </span>
         </div>
         <sc-if value="{{f.prog}}"><div class="prog fly-prog" role="progressbar" aria-label="Loading branches"></div></sc-if>
-        <sc-if value="{{f.banner}}"><div class="fly-ban" role="status" style="height:{{f.banH}}px"><svg class="i c-info" aria-hidden="true"><use href="#i-info"></use></svg><div class="bt"><span>{{f.banner}}</span><sc-if value="{{f.banAct}}"><span class="btn sm has-icon" role="button"><svg class="i c-blue" aria-hidden="true"><use href="#i-window-new"></use></svg>{{f.banAct}}</span></sc-if></div></div></sc-if>
+        <sc-if value="{{f.banner}}"><div class="fly-ban" role="status" style="height:{{f.banH}}px"><svg class="i {{f.banC}}" aria-hidden="true"><use href="#i-{{f.banI}}"></use></svg><div class="bt"><span>{{f.banner}}</span><sc-if value="{{f.banAct}}"><span class="btn sm has-icon" role="button"><svg class="i {{f.banActC}}" aria-hidden="true"><use href="#i-{{f.banActI}}"></use></svg>{{f.banAct}}</span></sc-if></div></div></sc-if>
         <div class="fly-l {{f.listCls}}" role="listbox" aria-label="Branches" style="height:{{f.listH}}px">
           <sc-for list="{{f.rows}}" as="r">
             <sc-if value="{{r.isHead}}"><div class="fly-h" role="presentation">{{r.t}}</div></sc-if>
@@ -422,6 +425,7 @@
               <span class="nm trim" title="{{r.name}}"><sc-for list="{{r.parts}}" as="np"><span class="{{np.cls}}">{{np.t}}</span></sc-for></span>
               <sc-if value="{{r.det}}"><span class="det">{{r.det}}</span></sc-if>
               <span class="grow"></span>
+              <sc-if value="{{r.busy}}"><span class="fly-busy">{{r.busy}}</span></sc-if>
               <sc-if value="{{r.wt}}"><span class="fly-chip" title="{{r.wtTip}}"><svg class="i c-orange" aria-hidden="true"><use href="#i-worktree"></use></svg>worktree</span></sc-if>
               <sc-if value="{{r.track}}"><span class="fly-chip" title="{{r.trackName}}">{{r.track}}</span></sc-if>
               <span class="fly-more {{r.moreCls}}" role="button" aria-label="Branch actions (Shift+F10)" title="Branch actions (Shift+F10)"><svg class="i c-fg" aria-hidden="true"><use href="#i-more"></use></svg></span>
@@ -495,7 +499,7 @@
 </main>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"state":{"editor":"enum","default":"all","options":["all","changes","folder","staged-folder","deleted-folder","untracked-folder","filtered","file-menu","staged-file","deleted-file","repo-menu","conflict-file","conflict-folder","discard","discard-filtered","stash","new-branch","new-branch-operation","rename","delete","delete-upstream","delete-unmerged","delete-unmerged-upstream","delete-remote","compare","compare-loading","compare-same","branches","search","nomatch","loading","error","many","branch-menu","branch-actions","current-menu","remote-menu","remote-twin","worktree","worktree-enter","detached","operation","unborn","noremote","noremote-link","long-row","long-name","narrow"]},"os":{"editor":"enum","default":"Windows","options":["Windows","macOS","Linux"]},"$preview":{"width":1280,"height":16400}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"state":{"editor":"enum","default":"all","options":["all","changes","folder","staged-folder","deleted-folder","untracked-folder","filtered","file-menu","staged-file","deleted-file","repo-menu","conflict-file","conflict-folder","discard","discard-filtered","stash","new-branch","new-branch-operation","rename","delete","delete-upstream","delete-unmerged","delete-unmerged-upstream","delete-remote","compare","compare-loading","compare-same","branches","search","nomatch","loading","error","many","branch-menu","branch-actions","current-menu","remote-menu","remote-twin","worktree","worktree-enter","detached","operation","unborn","noremote","noremote-link","long-row","long-name","narrow","update-menu","updating","updated","update-diverged","update-worktree"]},"os":{"editor":"enum","default":"Windows","options":["Windows","macOS","Linux"]},"$preview":{"width":1280,"height":18400}}'>
 class Component extends DCLogic {
   renderVals() {
     const C = window.CodalusControls;
@@ -509,7 +513,8 @@ class Component extends DCLogic {
       'delete', 'delete-upstream', 'delete-unmerged', 'delete-unmerged-upstream', 'delete-remote',
       'compare', 'compare-loading', 'compare-same',
       'branches', 'search', 'nomatch', 'loading', 'error', 'many', 'branch-menu', 'branch-actions', 'current-menu', 'remote-menu',
-      'remote-twin', 'worktree', 'worktree-enter', 'detached', 'operation', 'unborn', 'noremote', 'noremote-link', 'long-row', 'long-name', 'narrow'];
+      'remote-twin', 'worktree', 'worktree-enter', 'detached', 'operation', 'unborn', 'noremote', 'noremote-link', 'long-row', 'long-name', 'narrow',
+      'update-menu', 'updating', 'updated', 'update-diverged', 'update-worktree'];
     const state = STATES.includes(this.props.state) ? this.props.state : 'all';
     const sheet = state === 'all';
     const themeQ = encodeURIComponent(t.name);
@@ -660,7 +665,8 @@ class Component extends DCLogic {
     const folderMenu = (o) => changeMenu({ kind: 'folder', ...o });
     // gitChanges/branch: 1-checkout, 2-integrate, 3-manage, 4-inspect, with the titles titleFor gives. An entry that passes
     // arguments shows only the keys its rule declares (F2 and Delete, which the list handles), never its command's global
-    // binding: keyFor beside titleFor, so View History shows none.
+    // binding: keyFor beside titleFor, so View History shows none. Update (21, the maintainer's request) shows on a local
+    // branch with an upstream, except the current branch during a merge or rebase (like Pull).
     const branchMenu = (o) => {
       if (o.unborn) return join([[mi('Copy Branch Name', { i: 'copy', c: 'c-blue' })]], o.hover);
       const local = o.kind !== 'remote';
@@ -670,16 +676,18 @@ class Component extends DCLogic {
         [shown && mi(checkout, { i: 'branch', c: 'c-orange' }), mi('New Local Branch From…', { i: 'branch', c: 'c-orange' })],
         !o.current && !o.operation ? [mi(o.detached ? `Merge '${o.name}' into HEAD` : `Merge '${o.name}' into '${o.cur}'`, { i: 'merge', c: 'c-orange' }),
           mi(o.detached ? `Rebase HEAD onto '${o.name}'` : `Rebase '${o.cur}' onto '${o.name}'`, { i: 'arrow-sort', c: 'c-orange' })] : [],
-        [local && o.hasRemote && mi('Push', { i: 'upload', c: 'c-orange' }), local && mi('Rename…', { i: 'rename', c: 'c-blue', k: KEY.rename }),
+        [local && o.upstream && !(o.current && o.operation) && mi(`Update from '${o.upstream}'`, { i: 'download', c: 'c-orange' }),
+          local && o.hasRemote && mi('Push', { i: 'upload', c: 'c-orange' }), local && mi('Rename…', { i: 'rename', c: 'c-blue', k: KEY.rename }),
           shown && mi(local ? 'Delete' : 'Delete from origin…', { i: 'trash', c: 'c-red', k: KEY.del })],
         [!o.current && mi(o.detached ? 'Compare with HEAD' : 'Compare with Current Branch', { i: 'compare', c: 'c-blue' }),
           mi('View History', { i: 'history', c: 'c-orange' }), mi('Copy Branch Name', { i: 'copy', c: 'c-blue' })]
       ], o.hover);
     };
-    // A context menu opens at the pointer, and above it when there's no room below.
+    // A context menu opens at the pointer, above it when there's no room below, and slides up to stay inside the window
+    // when there's room on neither side.
     const menuAt = (label, rows, px, py, H) => {
       const mh = menuH(rows);
-      return { label, rows, style: pos(px, py + mh > H ? py - mh : py) };
+      return { label, rows, style: pos(px, py + mh <= H ? py : py - mh >= 0 ? py - mh : Math.max(0, H - mh)) };
     };
 
     // ---------------------------------------------------------------- the branch drop-down (GitBranchPickerView)
@@ -688,11 +696,15 @@ class Component extends DCLogic {
       track: [ahead ? `↑${ahead}` : '', behind ? `↓${behind}` : ''].filter(Boolean).join(' '),
       trackName: [ahead ? `${ahead} outgoing` : '', behind ? `${behind} incoming` : ''].filter(Boolean).join(', ') + ` (${upstream})`
     });
+    // Each local branch tracks its namesake on origin (release/0.6 is up to date, so it has no chip).
     const LOCAL = [
-      { name: 'main', cur: true, ...track(1, 0, 'origin/main') },
-      { name: 'feature/sign-in', ...track(2, 1, 'origin/feature/sign-in') },
-      { name: 'release/0.6' }
+      { name: 'main', cur: true, up: 'origin/main', ...track(1, 0, 'origin/main') },
+      { name: 'feature/sign-in', up: 'origin/feature/sign-in', ...track(2, 1, 'origin/feature/sign-in') },
+      { name: 'release/0.6', up: 'origin/release/0.6' }
     ];
+    // Update (21): release/0.6 two commits behind origin/release/0.6 and nothing ahead, so it can fast-forward.
+    const LOCAL_BEHIND = [LOCAL[0], LOCAL[1], { ...LOCAL[2], ...track(0, 2, 'origin/release/0.6') }];
+    const UP = (name) => (LOCAL.find((b) => b.name === name) || {}).up;
     const ORIGIN = ['feature/sign-in', 'fix/null-greeting', 'main', 'release/0.6'];
     const LONG = 'feature/JIRA-1234-sign-in-with-external-providers';
     const LOCAL_LONG = [LOCAL[0], { name: LONG, ...track(3, 0, 'origin/' + LONG) }, LOCAL[1], LOCAL[2]];
@@ -723,9 +735,10 @@ class Component extends DCLogic {
         const cur = !!b.cur && !o.detached;
         const sel = o.sel === key, hover = o.hover === key;
         const wtPath = !remoteName && o.worktree ? o.worktree[b.name] || '' : '';
-        const trk = o.noRemote || remoteName ? '' : (b.track || '');
-        const acc = [remoteName ? `${b.name} on ${remoteName}` : b.name, cur ? 'current branch' : '', b.det || '', trk ? b.trackName : '', wtPath ? `checked out in ${wtPath}` : ''].filter(Boolean).join(', ');
-        return { isRow: true, h: FROW, key, cur, name: b.name, parts: parts(b.name), det: b.det || '', wt: !!wtPath, wtTip: `Checked out in ${wtPath}`, track: trk, trackName: b.trackName || '',
+        const busy = (o.busy && o.busy[key]) || '';
+        const trk = o.noRemote || remoteName || busy ? '' : (b.track || '');
+        const acc = [remoteName ? `${b.name} on ${remoteName}` : b.name, cur ? 'current branch' : '', b.det || '', trk ? b.trackName : '', wtPath ? `checked out in ${wtPath}` : '', busy].filter(Boolean).join(', ');
+        return { isRow: true, h: FROW, key, cur, name: b.name, parts: parts(b.name), det: b.det || '', busy, wt: !!wtPath, wtTip: `Checked out in ${wtPath}`, track: trk, trackName: b.trackName || '',
           moreCls: [sel || hover ? '' : 'off', o.moreOn === key ? 'on' : ''].join(' '),
           cls: [cur ? 'cur' : '', sel ? 'sel' : '', hover ? 'hover' : '', sel && o.kfocus ? 'kfocus' : ''].join(' '), selA: String(sel), acc };
       };
@@ -737,7 +750,7 @@ class Component extends DCLogic {
         if (remote.length) { rows.push({ isHead: true, h: FHEAD, t: 'origin' }); remote.forEach((n) => rows.push(rowOf('r:' + n, { name: n }, 'origin'))); }
         if (!rows.length) rows.push({ isEmpty: true, h: 64, t: `No branches match “${o.q}”.` });
       }
-      const banLines = o.banner ? Math.ceil(o.banner.length / 46) : 0;
+      const banLines = o.banner ? (o.banLines || Math.ceil(o.banner.length / 46)) : 0;
       const banH = o.banner ? 8 + 15 * banLines + (o.banAct ? 30 : 0) : 0;
       const head = 1 + 36 + (o.loading ? 6 : 0) + (banH ? banH + 6 : 0);
       const foot = o.noFooter ? 0 : 33;
@@ -752,6 +765,8 @@ class Component extends DCLogic {
       return {
         f: { style: pos(left, top, FLY_W, total), list: true, q: o.q || '', noQ: !o.q, count: `${local.length + remote.length} of ${localAll.length + originAll.length}`,
           searchCls: listFocus ? '' : 'is-focus', caret: !listFocus, prog: !!o.loading, banner: o.banner || '', banH, banAct: o.banAct || '', rows,
+          // The banner's glyph and its action's icon: information and Open in New Window unless a state says otherwise.
+          banI: o.banI || 'info', banC: o.banC == null ? 'c-info' : o.banC, banActI: o.banActI || 'window-new', banActC: o.banActC || 'c-blue',
           listH, listCls: scrolls ? 'scrolls' : '', thumb: scrolls ? `top:2px;height:${Math.max(24, Math.round(listH * listH / content))}px` : '',
           footer: o.noFooter ? '' : (o.footer || 'New Branch…') },
         left, top, right, h: total,
@@ -929,18 +944,18 @@ class Component extends DCLogic {
             case 'loading': Object.assign(fo, { loading: true }); break;
             case 'error': Object.assign(fo, { error: 'fatal: bad object refs/heads/old-experiment' }); break;
             case 'many': Object.assign(fo, { local: MANY_LOCAL, origin: MANY_ORIGIN, hover: 'l:feature/export-csv' }); break;
-            case 'branch-menu': Object.assign(fo, { sel: 'l:feature/sign-in' }); menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', cur: 'main', hasRemote: true, hover: 'Rebase \'main\' onto \'feature/sign-in\'' } }; break;
+            case 'branch-menu': Object.assign(fo, { sel: 'l:feature/sign-in' }); menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', cur: 'main', hasRemote: true, upstream: UP('feature/sign-in'), hover: 'Rebase \'main\' onto \'feature/sign-in\'' } }; break;
             case 'branch-actions':
               Object.assign(fo, { actions: { name: 'feature/sign-in', track: LOCAL[1].track, trackName: LOCAL[1].trackName,
-                rows: branchMenu({ name: 'feature/sign-in', cur: 'main', hasRemote: true, hover: 'Merge \'feature/sign-in\' into \'main\'' }) } });
+                rows: branchMenu({ name: 'feature/sign-in', cur: 'main', hasRemote: true, upstream: UP('feature/sign-in'), hover: 'Merge \'feature/sign-in\' into \'main\'' }) } });
               break;
-            case 'current-menu': Object.assign(fo, { sel: 'l:main' }); menu = { key: 'l:main', o: { name: 'main', cur: 'main', current: true, hasRemote: true } }; break;
+            case 'current-menu': Object.assign(fo, { sel: 'l:main' }); menu = { key: 'l:main', o: { name: 'main', cur: 'main', current: true, hasRemote: true, upstream: UP('main') } }; break;
             case 'remote-menu': Object.assign(fo, { sel: 'r:fix/null-greeting' }); menu = { key: 'r:fix/null-greeting', o: { kind: 'remote', name: 'origin/fix/null-greeting', cur: 'main', hasRemote: true, hover: 'Checkout' } }; break;
             case 'remote-twin':
               Object.assign(fo, { sel: 'r:feature/sign-in' });
               menu = { key: 'r:feature/sign-in', o: { kind: 'remote', name: 'origin/feature/sign-in', cur: 'main', hasRemote: true, twin: 'feature/sign-in', twinBehind: 1, hover: 'Switch to Local \'feature/sign-in\' (1 commit behind)' } };
               break;
-            case 'worktree': Object.assign(fo, { sel: 'l:release/0.6', worktree: { 'release/0.6': WORKTREE }, moreOn: 'l:release/0.6' }); menu = { key: 'l:release/0.6', more: true, o: { name: 'release/0.6', cur: 'main', worktree: true, hasRemote: true } }; break;
+            case 'worktree': Object.assign(fo, { sel: 'l:release/0.6', worktree: { 'release/0.6': WORKTREE }, moreOn: 'l:release/0.6' }); menu = { key: 'l:release/0.6', more: true, o: { name: 'release/0.6', cur: 'main', worktree: true, hasRemote: true, upstream: UP('release/0.6') } }; break;
             case 'worktree-enter':
               Object.assign(fo, { sel: 'l:release/0.6', kfocus: true, worktree: { 'release/0.6': WORKTREE },
                 banner: `release/0.6 is checked out in ${WORKTREE}, so it can't be checked out here too.`, banAct: 'Open in New Window' });
@@ -948,14 +963,14 @@ class Component extends DCLogic {
             case 'detached': case 'narrow':
               Object.assign(o, DETACHED);
               Object.assign(fo, { sel: 'l:feature/sign-in', detached: true, banner: DETACHED_BANNER });
-              if (key === 'detached') menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', detached: true, hasRemote: true } };
+              if (key === 'detached') menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', detached: true, hasRemote: true, upstream: UP('feature/sign-in') } };
               else delete fo.sel;
               s.statusBranch = DETACHED.branch;
               break;
             case 'operation':
               Object.assign(o, OPERATION);
-              Object.assign(fo, { sel: 'l:feature/sign-in', banner: 'A merge is in progress: Checkout, Merge, Rebase and Delete are hidden until it is committed or aborted, and a new branch isn\'t checked out.' });
-              menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', cur: 'main', operation: true, hasRemote: true } };
+              Object.assign(fo, { sel: 'l:feature/sign-in', banner: 'A merge is in progress: until it is committed or aborted, Checkout, Merge, Rebase, Delete and main\'s Update are hidden, and a new branch isn\'t checked out.' });
+              menu = { key: 'l:feature/sign-in', o: { name: 'feature/sign-in', cur: 'main', operation: true, hasRemote: true, upstream: UP('feature/sign-in') } };
               break;
             case 'unborn':
               Object.assign(o, { io: '0 / 0', ioTip: 'No commits yet: there is nothing to push.', msg: 'Initial commit', commit: 'Commit All', staged: null,
@@ -970,6 +985,27 @@ class Component extends DCLogic {
               if (key === 'noremote-link') Object.assign(o, { open: false, publishHover: true });
               break;
             case 'long-row': Object.assign(fo, { local: LOCAL_LONG, origin: ORIGIN_LONG, worktree: { [LONG]: WT_LONG }, hover: 'l:' + LONG }); break;
+            // Update (21): the entry, while it runs, after it, a branch that has diverged, one in another worktree.
+            case 'update-menu':
+              Object.assign(fo, { local: LOCAL_BEHIND, sel: 'l:release/0.6' });
+              menu = { key: 'l:release/0.6', o: { name: 'release/0.6', cur: 'main', hasRemote: true, upstream: UP('release/0.6'), hover: `Update from '${UP('release/0.6')}'` } };
+              break;
+            case 'updating':
+              Object.assign(fo, { local: LOCAL_BEHIND, sel: 'l:release/0.6', busy: { 'l:release/0.6': 'Updating…' } });
+              Object.assign(s, { status: 'Updating release/0.6 from origin/release/0.6…', stripLabel: 'The status bar while it runs (as Fetching… and Pulling…)' });
+              break;
+            case 'updated':
+              Object.assign(fo, { sel: 'l:release/0.6' });
+              Object.assign(s, { status: 'Updated release/0.6 from origin/release/0.6: 2 commits.', stripLabel: 'The status bar after it' });
+              break;
+            case 'update-diverged':
+              Object.assign(fo, { sel: 'l:feature/sign-in', banI: 'warning', banC: '', banAct: 'Checkout', banActI: 'branch', banActC: 'c-orange', banLines: 3,
+                banner: 'feature/sign-in has diverged from origin/feature/sign-in: 2 commits here, 1 there. Update only fast-forwards; check it out to merge or rebase.' });
+              break;
+            case 'update-worktree':
+              Object.assign(fo, { sel: 'l:release/0.6', worktree: { 'release/0.6': WORKTREE },
+                banner: `release/0.6 is checked out in ${WORKTREE}, so it can't be updated here. Pull in that window updates it.`, banAct: 'Open in New Window' });
+              break;
             case 'long-name':
               Object.assign(o, { branch: LONG, open: false, btnHover: true, io: '0 / 0', ioTip: `0 outgoing / 0 incoming (tracking origin/${LONG})` });
               s.statusBranch = LONG;
@@ -977,6 +1013,7 @@ class Component extends DCLogic {
             default: break;
           }
           P = pane(geo.pane, o);
+          if (s.stripLabel && !win) s.strip = s.status;
           if (key === 'long-name') {
             // The pointer on the trimmed button: its tooltip has the whole name, kept inside the window.
             s.tips.push({ t: LONG, style: `right:${G}px;top:${P.btnBottom + 4}px;` });
@@ -1068,18 +1105,18 @@ class Component extends DCLogic {
         'Over the flyout, which stays open under it (the spike checks this on each OS). The titles name the branches; F2 and Delete are the list\'s keys, and View History shows none.'],
       'branch-actions': ['(B8) The fallback, if the spike fails', 'one popup · Back returns',
         'The flyout\'s list swapped for the branch\'s commands, the same entries in the same order; Back or Esc returns to the list. Only one of B7 and B8 is built.'],
-      'current-menu': ['(B9) The current branch', 'main', 'No Checkout, Merge, Rebase, Delete or Compare.'],
+      'current-menu': ['(B9) The current branch', 'main', 'No Checkout, Merge, Rebase, Delete or Compare. Update from \'origin/main\' fetches, then fast-forwards with merge --ff-only (21).'],
       'remote-menu': ['(B10) A remote branch', 'origin/fix/null-greeting',
         'No local branch has it, so Checkout makes one that tracks it. Delete from origin… instead of Delete; no Push or Rename.'],
       'remote-twin': ['(B11) A remote branch with a local one', 'origin/feature/sign-in',
         'The entry names where it lands, the local feature/sign-in, and that it is 1 commit behind this row (its ↑2 ↓1 chip); the note goes when the local one isn\'t behind.'],
-      worktree: ['(B12) A branch checked out in another worktree', 'release/0.6 · worktree', 'The worktree chip on the row, and its menu from ⋯, under the button: Checkout and Delete are hidden.'],
+      worktree: ['(B12) A branch checked out in another worktree', 'release/0.6 · worktree', 'The worktree chip on the row, and its menu from ⋯, under the button: Checkout and Delete are hidden; Update says where the branch is checked out instead of trying (B26).'],
       'worktree-enter': ['(B13) Enter on that branch', 'release/0.6',
         'Instead of trying, the flyout says where the branch is checked out, with Open in New Window for that folder (the Worktrees window\'s command).'],
       detached: ['(B14) A detached HEAD', '(detached at 1a2b3c4)',
-        'The flyout says so, with the next step; no row has the check. Merge and Rebase name HEAD. No Publish branch link, and the outgoing/incoming tooltip says HEAD is detached.'],
+        'The flyout says so, with the next step; no row has the check. Merge and Rebase name HEAD; with no current branch, Update works on every local branch as on any other (21). No Publish branch link, and the outgoing/incoming tooltip says HEAD is detached.'],
       operation: ['(B15) A merge in progress', 'gitOperation · the window\'s banner',
-        'The flyout lists exactly what is hidden: Checkout, Merge, Rebase and Delete. New Local Branch From… and New Branch… stay, without switching (P5).'],
+        'The flyout lists exactly what is hidden: Checkout, Merge, Rebase and Delete, and the current branch\'s Update, as Pull. New Local Branch From… and New Branch… stay, without switching (P5), and so does another branch\'s Update, which doesn\'t touch the work tree.'],
       unborn: ['(B16) A repository with no commits', 'git init',
         'The current name with "No commits yet", no remote group, no New Branch… footer and no Publish link; its menu, from ⋯ under the row, has only Copy Branch Name.'],
       noremote: ['(B17) No remote', 'git remote: none', 'No remote group, no chips, and no Push in the menu; the window\'s link is Publish to a Git Host… (B18).'],
@@ -1088,7 +1125,17 @@ class Component extends DCLogic {
       'long-row': ['(B19) A long name with both chips', 'feature/JIRA-1234-…', 'The name trims before the chips and ⋯, which keep their places; the pointer\'s tooltip has the whole name.'],
       'long-name': ['(B20) A long name at 280 px', 'the button trims', 'The button trims the name, and its tooltip has the whole of it (today\'s says Switch branch); the accessible name stays "Branch: …".'],
       narrow: ['(B21) The narrowest pane, detached', '280 px · Shell.Size.ToolWindowMinWidth',
-        'The flyout keeps its 340 px, right-aligned to the button\'s edge, and opens over the editor; "(detached at 1a2b3c4)" trims, and the flyout\'s banner has the commit.']
+        'The flyout keeps its 340 px, right-aligned to the button\'s edge, and opens over the editor; "(detached at 1a2b3c4)" trims, and the flyout\'s banner has the commit.'],
+      'update-menu': ['(B22) Update from the upstream', 'release/0.6 ↓2 · git.updateBranch',
+        'A local branch with an upstream gets Update from \'origin/release/0.6\', before Push, in Git orange with Pull\'s icon. Not checked out, it runs git fetch origin refs/heads/release/0.6:refs/heads/release/0.6: fast-forward only, never a merge.'],
+      updating: ['(B23) While it runs', 'off the UI thread · cancellable',
+        'The flyout stays open; the row says Updating… where its chips go, and the status bar and the Git output show progress as Fetch\'s do. Another row can be used meanwhile; a second Update waits for the first.'],
+      updated: ['(B24) After it', 'release/0.6 = origin/release/0.6',
+        'The branch moved, and origin/release/0.6 with it; the list refreshes, the chip goes, and the status bar says how many commits came. Already up to date, or only ahead, it says that instead.'],
+      'update-diverged': ['(B25) A branch that has diverged', 'non-fast-forward · nothing changes',
+        'git refuses and the branch stays where it was; the flyout names both and the counts, with Checkout, to merge or rebase there. On the current branch it says to merge or rebase from origin/main\'s row instead.'],
+      'update-worktree': ['(B26) A branch checked out in another worktree', 'release/0.6 · %(worktreepath)',
+        'It says where, with Open in New Window (B13\'s banner), without running git: git before 2.35 would move a branch checked out in another worktree, and newer git refuses.']
     };
     const panel = (key) => {
       const s = key === 'delete-mac' ? scene('delete-remote', GEO.dialogTall, { mac: true, also: 'rename' }) : scene(key, GEO[kindOf(key)]);
@@ -1102,7 +1149,9 @@ class Component extends DCLogic {
         rows: [['discard', 'discard-filtered'], ['stash', 'new-branch'], ['new-branch-operation', 'rename'], ['delete', 'delete-upstream'], ['delete-unmerged', 'delete-unmerged-upstream'], ['delete-remote', 'delete-mac']] },
       { title: 'Compare with Current Branch', lead: 'A document named in diff order, with its loading and empty states.', rows: [['compare'], ['compare-loading', 'compare-same']] },
       { title: 'The branch drop-down and its menu', lead: 'The branch button becomes a drop-down; its flyout lists the branches and each row has the menu of gitChanges/branch, with the branch\'s keys (gitBranchKind, gitBranchIsCurrent, gitBranchHasUpstream, gitBranchInOtherWorktree, gitHasRemote) and the global gitOperation.',
-        rows: [['branches', 'search'], ['nomatch', 'loading'], ['error', 'many'], ['branch-menu', 'branch-actions'], ['current-menu', 'remote-menu'], ['remote-twin', 'worktree'], ['worktree-enter', 'detached'], ['operation', 'unborn'], ['noremote', 'noremote-link'], ['long-row', 'long-name'], ['narrow']] }
+        rows: [['branches', 'search'], ['nomatch', 'loading'], ['error', 'many'], ['branch-menu', 'branch-actions'], ['current-menu', 'remote-menu'], ['remote-twin', 'worktree'], ['worktree-enter', 'detached'], ['operation', 'unborn'], ['noremote', 'noremote-link'], ['long-row', 'long-name'], ['narrow']] },
+      { title: 'Update a branch from its upstream (21)', lead: 'The maintainer\'s request of 2026-10-21, after approving the sheet, and part of D38: "In git branches context menu, add an Update option, that updates the branch from the remote (if exists) without having to checkout the branch and pull". The entry shows on a local branch with an upstream, in B7, B8, B9, B12, B14 and B15 too; it is hidden on a local-only branch (B17), on a remote branch (B10, B11) and, during a merge or rebase, on the current branch (B15).',
+        rows: [['update-menu', 'updating'], ['updated', 'update-diverged'], ['update-worktree']] }
     ];
     let sections, mainCls = 'sheet';
     if (sheet) {
@@ -1133,7 +1182,8 @@ class Component extends DCLogic {
       { n: 17, b: 'New Local Branch From… is a dialog with the name, Based on and Check out the new branch (P4),', t: 'checked as in the classic IDE; today\'s Create Branch always switches. During a merge or rebase it still makes the branch, without switching (P5).', rej: 'hiding it and the footer during an operation; always switching.' },
       { n: 18, b: 'Every surface has its loading, error and empty states, each with a next step:', t: 'the flyout\'s first open (B4), git failing, with Try Again (B5), no match, with New Branch \'zzz\'… (B3), and the Compare document\'s loading and no differences (C2, C3).', rej: 'the generic footer as the only next step when nothing matches.' },
       { n: 19, b: 'With no remote the window\'s link is Publish to a Git Host… (B18),', t: 'which runs git.publish: Publish branch runs git.push, which fails with "This repository has no remote to push to." A detached HEAD hides the link and its tooltip says why (B14); so does an empty repository (B16).', rej: 'today\'s Publish branch link in all three.' },
-      { n: 20, b: 'Deliberate differences from the classic IDE\'s branch menu:', t: 'Reset and Cherry-Pick Tip are deferred (TODO(issue), the plan\'s roadmap rows); Create Pull Request isn\'t on it, since git.createPullRequest opens the current branch\'s pull request and takes no branch (TODO(issue)); branch names stay flat (4).', rej: 'building Reset, Cherry-Pick Tip and a per-branch Create Pull Request in this task.' }
+      { n: 20, b: 'Deliberate differences from the classic IDE\'s branch menu:', t: 'Reset and Cherry-Pick Tip are deferred (TODO(issue), the plan\'s roadmap rows); Create Pull Request isn\'t on it, since git.createPullRequest opens the current branch\'s pull request and takes no branch (TODO(issue)); branch names stay flat (4).', rej: 'building Reset, Cherry-Pick Tip and a per-branch Create Pull Request in this task.' },
+      { n: 21, b: 'Update, the maintainer\'s request of 2026-10-21, part of D38:', t: 'a local branch with an upstream gets Update from \'origin/x\' before Push, with git.pull\'s icon in Git orange (B22). Not checked out, it is one git fetch origin refs/heads/x:refs/heads/x, which only fast-forwards and moves origin/x too; on the current branch, git fetch then git merge --ff-only FETCH_HEAD, never a merge commit or a rebase whatever pull.rebase says. The flyout stays open, the row says Updating…, the status bar and Git output show progress (B23), then the chip and a status line give the result (B24). A diverged branch is left alone and the flyout says so with Checkout (B25); a branch in another worktree says where, without running git (B26). Hidden on a local-only branch, a remote branch and the current branch during a merge or rebase; with a detached HEAD every local branch updates.', rej: 'closing the flyout like the other entries (the new chip would show only on the next open); hiding it when the chips say diverged or ahead (they date from the last fetch); git pull --ff-only on the current branch (before git 2.34 pull.rebase made it rebase); Sync\'s arrow_sync icon (Sync also pushes).' }
     ];
 
     return { t, themeCls: 'th-' + t.name.toLowerCase().replace(/\s+/g, '-'), os, sheet, mainCls, themes, oses, stateLinks, themeQ, sections, decisions, searchKey: KEY.search,
