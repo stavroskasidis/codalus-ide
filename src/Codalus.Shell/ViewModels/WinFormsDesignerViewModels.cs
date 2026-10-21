@@ -308,14 +308,33 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         Status = Localizer.Format("msg.winFormsDesigner.ready", "{0}: drag from the Toolbox, select, move and resize; F7 shows the code.", _model.ClassName);
     }
 
-    private async Task LoadToolboxAsync()
+    private Task _toolboxLoad = Task.CompletedTask;
+
+    /// <summary>The designer's newest request for the Toolbox's project items (tests).</summary>
+    internal Task ToolboxLoad => _toolboxLoad;
+
+    /// <summary>
+    /// Asks the C# host for the project's own controls and components, for the Toolbox: when the designer has started,
+    /// when it becomes the active document, and when the C# service has loaded the projects again (the shell asks the
+    /// active designer). The host finds them in the project's compilation, which before the restore can lack the
+    /// framework they derive from (off Windows, Windows Forms' reference pack comes with the restore), so the first
+    /// answer may miss them. Only the Toolbox's newest request is shown: a slower earlier answer doesn't replace it.
+    /// </summary>
+    internal Task LoadToolboxAsync() => _toolboxLoad = LoadToolboxCoreAsync();
+
+    private async Task LoadToolboxCoreAsync()
     {
+        if (_disposed || _read?.Project is not { } project || _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is not { } client)
+        {
+            return;
+        }
+
+        var request = _shell.Toolbox.BeginProjectItemsRequest();
         try
         {
-            if (_read?.Project is { } project && _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is { } client
-                && await client.WinFormsToolboxAsync(project, CancellationToken.None).ConfigureAwait(true) is { } toolbox)
+            if (await client.WinFormsToolboxAsync(project, CancellationToken.None).ConfigureAwait(true) is { } toolbox && !_disposed)
             {
-                _shell.Toolbox.SetProjectItems(toolbox.Items);
+                _shell.Toolbox.SetProjectItems(request, toolbox.Items);
             }
         }
         catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException)
@@ -1540,6 +1559,7 @@ public sealed class ToolboxViewModel : ObservableObject
     };
 
     private IReadOnlyList<WinFormsToolboxItem> _projectItems = [];
+    private int _projectItemsRequest;
     private string _filter = string.Empty;
     private ToolboxItemViewModel? _armed;
     private bool _isAvailable;
@@ -1612,11 +1632,34 @@ public sealed class ToolboxViewModel : ObservableObject
 
     public string NoMatchesText => Localizer.Format("msg.toolbox.noMatches", "No Toolbox items match '{0}'. Clear the search box to see them all.", _filter);
 
-    /// <summary>The project's own controls and components (from the C# host).</summary>
+    /// <summary>
+    /// The project's own controls and components (from the C# host). The same items again change nothing: the
+    /// categories stay as they are (expanded or collapsed) and the armed item stays one of the Toolbox's.
+    /// </summary>
     public void SetProjectItems(IReadOnlyList<WinFormsToolboxItem> items)
     {
+        if (items.SequenceEqual(_projectItems))
+        {
+            return;
+        }
+
         _projectItems = items;
         Rebuild();
+    }
+
+    /// <summary>
+    /// Starts a request for the project's items (the C# host answers it later): only the newest request's answer is
+    /// shown, so a slower earlier answer, such as one from before the restore, doesn't replace a newer one.
+    /// </summary>
+    public int BeginProjectItemsRequest() => ++_projectItemsRequest;
+
+    /// <summary>The answer to <paramref name="request"/>: shown unless a newer request has started since.</summary>
+    public void SetProjectItems(int request, IReadOnlyList<WinFormsToolboxItem> items)
+    {
+        if (request == _projectItemsRequest)
+        {
+            SetProjectItems(items);
+        }
     }
 
     /// <summary>A framework item's full type name (<c>Button</c> is <c>System.Windows.Forms.Button</c>).</summary>
