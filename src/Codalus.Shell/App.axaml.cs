@@ -12,6 +12,12 @@ public sealed class App : Application
 
     public ShellHost? Shell { get; private set; }
 
+    public override void RegisterServices()
+    {
+        base.RegisterServices();
+        Infrastructure.ShellSystemFonts.Install();
+    }
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
