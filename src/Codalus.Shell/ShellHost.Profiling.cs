@@ -193,7 +193,7 @@ public sealed partial class ShellHost
 
             try
             {
-                var (plan, _, _) = await Runs.PlanAsync(project, CancellationToken.None).ConfigureAwait(true);
+                var (plan, _, _) = await Runs.LaunchPlanAsync(project, CancellationToken.None).ConfigureAwait(true);
                 var environment = new Dictionary<string, string>(plan.Environment, StringComparer.Ordinal) { [ProfilingLaunch.SuspendVariable] = "1" };
                 target = Path.GetFileNameWithoutExtension(project);
                 program = Runs.StartPlan(project, target, plan with { Environment = environment });

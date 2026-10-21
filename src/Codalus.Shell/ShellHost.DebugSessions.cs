@@ -168,7 +168,7 @@ public sealed partial class ShellHost
                         DebugLog.AppendLine($"[{name}] Ignoring the launch settings: {error}");
                     }
 
-                    var plan = await Runs.PlanAsync(info, Runs.ResolveProfile(target.Project, profiles), CancellationToken.None).ConfigureAwait(true);
+                    var plan = await Runs.LaunchPlanAsync(info, Runs.ResolveProfile(target.Project, profiles), CancellationToken.None).ConfigureAwait(true);
                     var launch = plan.Wsl is not null
                         ? await WslLaunchAsync(name, plan).ConfigureAwait(true)
                         : new DebugLaunch(name, plan) { Console = ConsoleFor(info) };

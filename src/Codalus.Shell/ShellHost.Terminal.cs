@@ -170,7 +170,7 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task<bool> RunInTerminalAsync(string project)
     {
-        var (plan, profile, error) = await Runs.PlanAsync(project, CancellationToken.None).ConfigureAwait(true);
+        var (plan, profile, error) = await Runs.LaunchPlanAsync(project, CancellationToken.None).ConfigureAwait(true);
         if (error is not null)
         {
             Workbench.Notifications.Warning(Localizer.Format("msg.terminal.ignoringTheLaunchSettings", "Ignoring the launch settings: {0}", error));

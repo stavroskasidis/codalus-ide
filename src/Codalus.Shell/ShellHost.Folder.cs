@@ -342,7 +342,7 @@ public sealed partial class ShellHost
                     return true;
                 }
 
-                (plan, _, _) = await Runs.PlanAsync(key, CancellationToken.None).ConfigureAwait(true);
+                (plan, _, _) = await Runs.LaunchPlanAsync(key, CancellationToken.None).ConfigureAwait(true);
             }
             else
             {

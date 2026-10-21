@@ -102,7 +102,7 @@ public sealed partial class ShellHost
             }
 
             var (info, profiles, error) = await Runs.GetProfilesAsync(project.Path, CancellationToken.None, framework).ConfigureAwait(true);
-            var plan = await Runs.PlanAsync(info, Runs.ResolveProfile(project.Path, profiles), CancellationToken.None).ConfigureAwait(true);
+            var plan = await Runs.LaunchPlanAsync(info, Runs.ResolveProfile(project.Path, profiles), CancellationToken.None).ConfigureAwait(true);
             DebugLog.Clear();
             if (error is not null)
             {

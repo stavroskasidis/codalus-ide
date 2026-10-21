@@ -144,7 +144,7 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
         var program = Path.Combine(Path.GetDirectoryName(project)!, "Program.cs");
         var line = Matrix.Line(program, "break");
         using var runs = new RunService(matrix.Solutions, matrix.Output, _ => { }) { DotnetRoot = CompatRoot.Path };
-        var (plan, _, _) = await runs.PlanAsync(project, Timeout());
+        var (plan, _, _) = await runs.LaunchPlanAsync(project, Timeout());
 
         await using var debug = new DebugService(DebugAdapterLocator.Resolve);
         var stopped = new TaskCompletionSource<StopInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
