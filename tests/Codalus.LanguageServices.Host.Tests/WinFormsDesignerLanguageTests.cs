@@ -53,6 +53,9 @@ public sealed class WinFormsDesignerLanguageTests(WinFormsLanguageFixture winFor
         Assert.Contains("System.Drawing", model.Imports);
         Assert.Equal("WinFormsApp.Controls.CounterControl", model.Components.Single(c => c.Name == "counterControl").Type);
 
+        // #76: read with every type of the restored project, so the designer doesn't read it again when the C# service loads.
+        Assert.False(result.IsPartial);
+
         // The compiler says which members are an enum's: DockStyle.Fill is, Color.SteelBlue and SystemColors.GrayText aren't.
         DesignerValue Value(string target, string member) => model.Statements.Single(s => s is { Kind: DesignerStatementKinds.Assign } && s.Target == target && s.Member == member).Value!;
         Assert.Equal(DesignerValueKinds.Enum, Value("historyListBox", "Dock").Kind);
@@ -63,10 +66,12 @@ public sealed class WinFormsDesignerLanguageTests(WinFormsLanguageFixture winFor
         var about = await winForms.Client.WinFormsReadAsync(Uri(Form("AboutForm.Designer.cs")), Ct);
         Assert.True(about!.Model!.QualifiedNames);
         Assert.Equal(Form("AboutForm.cs"), about.CodeFile);
+        Assert.False(about.IsPartial);
 
         // A user control.
         var control = await winForms.Client.WinFormsReadAsync(Uri(winForms.File("WinFormsApp", "Controls", "CounterControl.cs")), Ct);
         Assert.Equal("System.Windows.Forms.UserControl", control!.Model!.BaseType);
+        Assert.False(control.IsPartial);
     }
 
     [Fact]

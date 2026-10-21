@@ -85,6 +85,9 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     private IWinFormsDesignerHost? _host;
     private WinFormsDesignerTarget? _target;
     private WinFormsReadResult? _read;
+
+    /// <summary>The C# host's last read of the form (tests).</summary>
+    internal WinFormsReadResult? LastRead => _read;
     private DesignerModel? _model;
     private int _expectedVersion = -1;
     private CancellationTokenSource? _reload;
@@ -576,6 +579,66 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
                     : $"{System.IO.Path.GetFileName(_target?.HostAssembly ?? _target?.ProjectAssembly)} changed after the designer for {System.IO.Path.GetFileName(CodePath)} failed to start: starting it again.");
                 await ReloadCoreAsync(restartHost: true).ConfigureAwait(true);
             }
+        }
+        finally
+        {
+            ReleaseGate();
+        }
+    }
+
+    /// <summary>
+    /// The C# service has loaded the projects (#76): a form read without all of its project's types (from Miscellaneous
+    /// Files before the C# host had the project, or before the restore) is read again and loads again on its host. It
+    /// never starts a host: a start in progress holds the gate (and then loads the new model), and a start that failed
+    /// starts again after the next build (<see cref="ReloadIfOutdatedAsync"/>), so a project that doesn't build isn't
+    /// built again on every load. A complete read returns at once.
+    /// </summary>
+    internal Task ReadAgainIfPartialAsync() => _disposed || _read is not { IsPartial: true } ? Task.CompletedTask : ReadAgainCoreAsync();
+
+    private async Task ReadAgainCoreAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            if (_disposed || _designerCode is null || _read is not { IsPartial: true })
+            {
+                return;
+            }
+
+            _shell.WinFormsDesignerLog.AppendLine($"The C# service loaded the projects: reading {System.IO.Path.GetFileName(CodePath)} again (its last read lacked the project's types).");
+            var status = Status;
+
+            // A form that turns out not to be designable says why in the status and stays open.
+            if (!await ReadAsync(closeOnProblem: false).ConfigureAwait(true) || _disposed)
+            {
+                return;
+            }
+
+            if (_host is not null)
+            {
+                await LoadFormAsync().ConfigureAwait(true);
+            }
+            else
+            {
+                // No host (its start failed): the failure's reason stays.
+                Status = status;
+            }
+
+            _ = LoadToolboxAsync();
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+            // Closed while it read.
+        }
+        catch (PreviewerException ex)
+        {
+            Status = ex.Message;
+            _shell.WinFormsDesignerLog.AppendLine(ex.Message);
+        }
+        catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or IOException or InvalidOperationException)
+        {
+            Status = Localizer.Format("msg.winFormsDesigner.failed", "The designer failed: {0}", ex.Message);
+            _shell.WinFormsDesignerLog.AppendLine(ex.ToString());
         }
         finally
         {

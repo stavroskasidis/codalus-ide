@@ -91,7 +91,7 @@ Running or debugging a WPF app loads a small agent into it (a .NET startup hook)
 
 On Windows, a form's or user control's `.cs` file opens in the **Windows Forms designer**: double-click it in Solution Explorer (it has a form icon) or open it. **View Code** (`F7`) shows its code, and **View Designer** (`Shift+F7`, or the Solution Explorer's and the editor's context menu) shows the designer again. The `.Designer.cs` file itself opens as code. To open forms as code by default, turn **Open Forms in the Designer** off (Settings → Windows Forms, `windowsForms.openInDesigner`).
 
-The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply.
+The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply. A form you open while its project is still loading opens in the designer too; once the project has loaded, the designer reads it again.
 - **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent, `Ctrl+A` everything on the form.
 - **Move** the selected controls by dragging them; dropped on a panel, a group box, a tab page or a split container's panel, a control moves into it. The arrow keys move them a pixel, `Shift`+arrows resize them.
 - **Resize** the selected control with its grab handles (the form from its right and bottom ones).

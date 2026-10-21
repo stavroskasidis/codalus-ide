@@ -653,7 +653,10 @@ internal sealed class WorkspaceManager : IDisposable
         return null;
     }
 
-    private static bool IsMisc(Solution solution, DocumentId id) => solution.GetProject(id.ProjectId)?.Name == "Miscellaneous Files";
+    private static bool IsMisc(Solution solution, DocumentId id) => solution.GetProject(id.ProjectId) is { } project && IsMiscellaneous(project);
+
+    /// <summary>Whether a project is Miscellaneous Files, the home of open files no loaded project has.</summary>
+    public static bool IsMiscellaneous(Project project) => project.Name == "Miscellaneous Files";
 
     /// <summary>The LSP URI of a document (source-generated documents get a <c>codalus-generated</c> URI).</summary>
     public static string UriOf(Document document) =>

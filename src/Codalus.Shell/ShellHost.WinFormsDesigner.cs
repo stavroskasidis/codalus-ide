@@ -116,10 +116,12 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// The C# service has loaded the projects again (loading, then ready): the active designer asks again for the
-    /// project's own controls, which a compilation from before the restore lacked (off Windows, Windows Forms' reference
-    /// pack comes with the restore, and the C# service is ready before it). Only on that change: the service is also
-    /// ready after each pass over the diagnostics (each edit, each change in the designer), which changes no project.
+    /// The C# service has loaded the projects again (loading, then ready): a designer whose last read lacked the
+    /// project's types reads the form again (#76: opened before the C# host had the project, or before the restore), and
+    /// the active designer asks again for the project's own controls, which a compilation from before the restore lacked
+    /// (off Windows, Windows Forms' reference pack comes with the restore, and the C# service is ready before it). Only
+    /// on that change: the service is also ready after each pass over the diagnostics (each edit, each change in the
+    /// designer), which changes no project.
     /// </summary>
     internal void OnWinFormsLanguageStatus(string languageId, WorkspaceStatusParams status)
     {
@@ -130,7 +132,20 @@ public sealed partial class ShellHost
 
         var was = _winFormsCSharpState;
         _winFormsCSharpState = status.State;
-        if (status.State == WorkspaceStates.Ready && was != WorkspaceStates.Ready && Layout.ActiveDocument is WinFormsDesignerDocument designer)
+        if (status.State != WorkspaceStates.Ready || was == WorkspaceStates.Ready)
+        {
+            return;
+        }
+
+        if (status.Projects > 0)
+        {
+            foreach (var document in Layout.Documents.OfType<WinFormsDesignerDocument>().ToList())
+            {
+                _ = document.ReadAgainIfPartialAsync();
+            }
+        }
+
+        if (Layout.ActiveDocument is WinFormsDesignerDocument designer)
         {
             _ = designer.LoadToolboxAsync();
         }
