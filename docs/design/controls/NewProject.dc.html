@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New Project: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+/* New Project (0.6.0, docs/design/controls.md#new-project): the classic IDE's three-page wizard as an owned window
+   (1000 x 680, at least 760 x 520) over the main window, which stays usable behind it. ?page= picks the page,
+   ?state= the state, ?os= the OS (paths and the Windows only chip), ?keys=on shows the access keys as with Alt held. */
+.canvas{width:1280px;height:800px;position:relative;overflow:hidden}
+.bd{position:absolute;inset:0;display:flex;flex-direction:column}
+.bd .wtitle{height:34px;display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--title-bar);color:var(--title-bar-fg);flex:none}
+.bd .menu-items{display:flex;gap:14px}
+.bd .tbar{height:32px;background:var(--toolbar);border-bottom:1px solid var(--toolbar-border);flex:none;display:flex;align-items:center;gap:4px;padding:0 8px}
+.bd .work{flex:1;display:flex;gap:6px;padding:6px;min-height:0}
+.fam-classic .bd .work{gap:4px;padding:4px}
+.bd .ed{flex:1;display:flex;flex-direction:column;min-width:0}
+.bd .well{flex:1;border:1px solid var(--border);background:var(--editor)}
+.bd .se{width:300px;flex:none}
+.bd .se .row{height:22px}
+.bd .se .none{padding:12px;color:var(--muted)}
+.bd .status{height:24px;background:var(--accent);color:var(--accent-fg);display:flex;align-items:center;padding:0 10px;flex:none}
+
+.win{position:absolute;left:140px;top:58px;width:1000px;height:680px;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--overlay-border);border-radius:8px;box-shadow:var(--shadow);overflow:hidden}
+.fam-classic .win{border-radius:6px}
+.kind-hc .win{border-width:2px}
+.wcap{height:32px;display:flex;align-items:center;gap:8px;padding-left:12px;background:var(--title-bar);color:var(--title-bar-fg);border-bottom:1px solid var(--soft-border);flex:none}
+.wcap .wb{width:44px;height:32px;display:inline-flex;align-items:center;justify-content:center}
+.wbody{flex:1;min-height:0;display:flex;flex-direction:column;padding:20px 28px 14px}
+h1.pt{margin:0;font-size:22px;line-height:28px;font-weight:600;color:var(--strong)}
+.ak{text-decoration:none}
+.show-ak .ak{text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
+
+/* Page 1: recent templates on the left; search, filters and the templates on the right. */
+.p1{flex:1;min-height:0;display:grid;grid-template-columns:270px minmax(0,1fr);column-gap:32px}
+.p1 .left{position:relative;display:flex;flex-direction:column;min-height:0}
+.p1 .right{display:flex;flex-direction:column;min-height:0}
+.sub{margin:18px 0 6px;font-size:13px;line-height:18px;font-weight:600;color:var(--strong)}
+.rrow{display:flex;align-items:center;gap:8px;height:30px;padding:0 4px 0 8px;border-radius:var(--radius)}
+.rrow .nm{flex:1 1 auto}
+.rrow .lang{color:var(--muted);font-size:11px;flex:none}
+.rrow .tb{margin-left:2px}
+.rrow .pin-sp{width:24px;flex:none}
+.rrow.hover{background:var(--row-hover)}
+.rrow.sel{background:var(--sel);color:var(--sel-fg)}
+.rrow.sel .lang{color:inherit}
+.srow{display:flex;align-items:center;gap:10px}
+.frow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
+.list{position:relative;flex:1;min-height:0;margin-top:10px;border:1px solid var(--input-border);border-radius:var(--radius);background:var(--input);overflow:hidden}
+.list .sb{position:absolute;right:2px;top:3px;width:6px;height:150px;border-radius:3px;background:var(--soft-border)}
+.list .sb.low{top:auto;bottom:3px}
+.trow{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:12px;padding:9px 16px 9px 12px;border-bottom:1px solid var(--rule)}
+.trow.hover{background:var(--row-hover)}
+.trow.sel{background:var(--sel);color:var(--sel-fg)}
+.trow.sel-i{background:var(--sel-inactive);color:var(--sel-inactive-fg)}
+.trow.kfocus{box-shadow:inset 0 0 0 1px var(--focus)}
+.tile{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:var(--badge)}
+.kind-hc .tile{background:transparent;border:1px solid var(--soft-border)}
+.tn{font-size:13px;line-height:18px;font-weight:600;color:var(--strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.td{margin-top:1px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.trow.sel .tn,.trow.sel .td,.trow.sel-i .tn,.trow.sel-i .td{color:inherit}
+.trow.sel .hl{background:transparent;color:inherit;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:2px}
+.tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.tags .chip{height:18px;padding:0 6px;font-weight:400;border-radius:var(--radius)}
+.trow.sel .tags .chip.plain{background:var(--input);color:var(--fg)}
+.tnote{margin-top:4px}
+.tprog{display:flex;align-items:center;gap:8px;margin-top:6px}
+.terr{display:flex;align-items:flex-start;gap:6px;margin-top:6px}
+.pbar{position:relative;width:160px;height:4px;border-radius:2px;background:var(--soft-border);overflow:hidden;flex:none}
+.pbar span{position:absolute;left:22%;width:38%;top:0;bottom:0;border-radius:2px;background:var(--accent)}
+.trow.sel .pbar{background:var(--input)}
+/* A link on a selected row takes the selection's text color, underlined (the link color falls under 4.5:1 there). */
+.trow.sel .btn.link{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.loading{display:flex;align-items:center;gap:10px;padding:14px 14px;color:var(--muted)}
+.list .empty{position:absolute;inset:0}
+.ctx{position:absolute;left:150px;width:200px;z-index:5}
+
+/* Pages 2 and 3: a column of labeled fields under the template's name and tags. */
+.thead{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:8px}
+.thead .tname{font-size:14px;line-height:20px;font-weight:600;color:var(--strong);margin-right:6px}
+.thead .chip{height:18px;padding:0 6px;font-weight:400;border-radius:var(--radius)}
+.form{display:flex;flex-direction:column;gap:12px;width:560px;margin-top:18px}
+.form.p3{gap:10px;width:470px}
+.fld{position:relative;display:flex;flex-direction:column}
+.fld > .lbl{margin-bottom:4px}
+.lbl.is-disabled{color:var(--disabled-fg)}
+.fld .field{width:100%}
+.tsel{background:var(--accent);color:var(--accent-fg)}
+.pathbox{display:flex;gap:6px;align-items:center}
+.pathbox .field{flex:1 1 auto;padding-right:3px}
+.pathbox .tgl{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:var(--radius);color:var(--muted);flex:none}
+.pathbox .tgl .chev{width:12px;height:12px}
+.pathbox .tgl.on{background:var(--tb-pressed);color:var(--fg)}
+.menu.dd{position:absolute;left:0;right:0;top:100%;margin-top:2px;z-index:5}
+.menu.dd.path{right:34px}
+.menu .mi svg.i:not(.ck){flex:none}
+.chkrow{display:flex;flex-direction:column;gap:2px}
+.chkrow .line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cdesc{padding-left:24px;color:var(--muted);max-width:540px}
+.reason{color:var(--muted)}
+.created{margin-top:16px;max-width:760px;color:var(--muted)}
+.created .path{color:var(--fg)}
+.note{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.fmsg{display:flex;align-items:flex-start;gap:6px;margin-top:5px;max-width:560px}
+.fmsg svg.i{margin-top:0}
+.created.err{display:flex;align-items:flex-start;gap:6px;color:var(--error-fg)}
+
+/* The footer: a link, a hint or the progress on the left; Back then Next, Create or Install on the right. */
+.df{display:flex;align-items:center;gap:8px;height:56px;padding:0 20px;background:var(--dlg-footer);border-top:1px solid var(--soft-border);flex:none}
+.df .left{flex:1;min-width:0;display:flex;align-items:center;gap:6px}
+.df .hint{color:var(--muted);font-size:11px;display:flex;align-items:center;gap:4px}
+
+.states{width:1280px;box-sizing:border-box;padding:12px 16px 16px;background:var(--panel);border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+.states div{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline}
+.states b{color:var(--strong);min-width:70px}
+.states a{color:var(--link);text-decoration:none}
+.states a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+</style>
+</helmet>
+<div class="{{t.cls}} {{akCls}}" style="{{t.vars}}">
+<div class="canvas">
+  <div class="bd" aria-hidden="true" data-nocheck>
+    <div class="wtitle"><svg style="width:18px;height:18px;flex:none" viewBox="0 0 256 256"><polygon fill="#A47BFF" points="20,218 124,38 124,92 58,208"></polygon><polygon fill="#F0662A" points="236,218 132,38 132,92 198,208"></polygon></svg><span class="menu-items"><span>File</span><span>Edit</span><span>View</span><span>Git</span><span>Project</span><span>Build</span><span>Debug</span><span>Test</span><span>Tools</span><span>Window</span><span>Help</span></span></div>
+    <div class="tbar"><svg class="i c-blue"><use href="#i-arrow-up"></use></svg><svg class="i c-blue"><use href="#i-save"></use></svg><span class="tb-sep"></span><svg class="i c-green"><use href="#i-play"></use></svg></div>
+    <div class="work">
+      <div class="ed"><div class="well"></div></div>
+      <div class="tw se"><div class="tw-cap"><span class="title">Solution Explorer</span></div>
+        <sc-if value="{{bd.solution}}">
+          <div class="row"><svg class="i c-purple"><use href="#i-solution"></use></svg>Solution 'Wcf' (2 of 2 projects)</div>
+          <div class="row sel" style="padding-left:24px"><svg class="i c-folder"><use href="#i-folder"></use></svg>src</div>
+          <div class="row" style="padding-left:44px"><svg class="i c-green"><use href="#i-cube"></use></svg>CalculatorClient</div>
+          <div class="row" style="padding-left:44px"><svg class="i c-green"><use href="#i-cube"></use></svg>CalculatorService</div>
+        </sc-if>
+        <sc-if value="{{bd.folder}}">
+          <div class="row"><svg class="i c-folder"><use href="#i-folder-open"></use></svg>shop</div>
+          <div class="row" style="padding-left:24px"><svg class="i c-green"><use href="#i-cube"></use></svg>Shop.Api</div>
+          <div class="row" style="padding-left:24px"><svg class="i c-folder"><use href="#i-folder"></use></svg>docs</div>
+        </sc-if>
+        <sc-if value="{{bd.none}}"><div class="none">Open a solution, a project or a folder.</div></sc-if>
+      </div>
+    </div>
+    <div class="status">Ready</div>
+  </div>
+
+  <section class="win" aria-labelledby="np-title">
+    <div class="wcap">
+      <svg style="width:16px;height:16px;flex:none" viewBox="0 0 256 256" aria-hidden="true"><polygon fill="#A47BFF" points="20,218 124,38 124,92 58,208"></polygon><polygon fill="#F0662A" points="236,218 132,38 132,92 198,208"></polygon></svg>
+      <span>{{win.title}}</span>
+      <span class="grow"></span>
+      <span class="wb" aria-hidden="true"><svg class="i c-fg"><use href="#i-minus"></use></svg></span><span class="wb" aria-hidden="true"><svg class="i c-fg"><use href="#i-maximize"></use></svg></span><span class="wb" aria-hidden="true"><svg class="i c-fg"><use href="#i-close"></use></svg></span>
+    </div>
+
+    <div class="wbody">
+      <!-- ============ Page 1: Create a new project ============ -->
+      <sc-if value="{{pg.choose}}">
+      <div class="p1">
+        <div class="left">
+          <h1 class="pt" id="np-title">{{p1.title}}</h1>
+          <h2 class="sub" id="recent-h">Recent project templates</h2>
+          <div role="listbox" aria-labelledby="recent-h">
+            <sc-for list="{{recent}}" as="r">
+              <div class="rrow {{r.state}}" role="option" aria-selected="{{r.selected}}">
+                <svg class="i {{r.ic}}" aria-hidden="true"><use href="#i-{{r.icon}}"></use></svg>
+                <span class="nm trim">{{r.name}}</span>
+                <span class="lang">{{r.lang}}</span>
+                <sc-if value="{{r.pinned}}"><button class="tb" aria-label="Unpin from List" title="Unpin from List"><svg class="i c-blue" aria-hidden="true"><use href="#i-pin"></use></svg></button></sc-if>
+                <sc-if value="{{r.unpinned}}"><span class="pin-sp"></span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{p1.menu}}">
+            <div class="menu ctx" role="menu" aria-label="Console App" style="top:{{p1.menuTop}}px">
+              <div class="mi hover" role="menuitem"><svg class="i c-blue" aria-hidden="true"><use href="#i-pin"></use></svg>Pin to List</div>
+              <div class="mi" role="menuitem"><svg class="i c-red" aria-hidden="true"><use href="#i-close"></use></svg>Remove from List</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div class="right">
+          <div class="srow">
+            <span class="field grow {{p1.searchFocus}}"><svg class="i lead" aria-hidden="true"><use href="#i-search"></use></svg><input aria-label="Search for templates" placeholder="Search for templates (Alt+S)" value="{{p1.q}}"><sc-if value="{{p1.hasQ}}"><span class="clear" role="button" aria-label="Clear the search" title="Clear the search (Esc)"><svg class="i sm" aria-hidden="true"><use href="#i-close"></use></svg></span></sc-if></span>
+            <button class="btn link {{p1.clearCls}}" aria-disabled="{{p1.clearDisabled}}">Clear all</button>
+          </div>
+          <div class="frow">
+            <sc-for list="{{p1.filters}}" as="f">
+              <span class="field combo" role="combobox" aria-label="{{f.name}}"><span class="value">{{f.value}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+            </sc-for>
+          </div>
+          <div class="list" role="listbox" aria-label="Project templates">
+            <sc-if value="{{p1.loading}}"><div class="loading" role="status"><span class="pbar"><span></span></span>Loading templates…</div></sc-if>
+            <sc-for list="{{rows}}" as="r">
+              <div class="trow {{r.state}}" role="option" aria-selected="{{r.selected}}">
+                <span class="tile"><svg class="i {{r.ic}}" aria-hidden="true"><use href="#i-{{r.icon}}"></use></svg></span>
+                <div style="min-width:0">
+                  <div class="tn"><sc-for list="{{r.name}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></div>
+                  <div class="td">{{r.desc}}</div>
+                  <sc-if value="{{r.note}}"><div class="tnote">{{r.note}}</div></sc-if>
+                  <sc-if value="{{r.progress}}"><div class="tprog" role="status"><span class="pbar"><span></span></span>{{r.progress}}</div></sc-if>
+                  <sc-if value="{{r.error}}"><div class="terr"><svg class="i c-error" aria-hidden="true"><use href="#i-error"></use></svg><span>{{r.error}} <button class="btn link">Show Output</button></span></div></sc-if>
+                  <div class="tags"><sc-for list="{{r.chips}}" as="c"><span class="chip {{c.cls}}" title="{{c.tip}}">{{c.t}}</span></sc-for></div>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{p1.scroll}}"><span class="sb {{p1.scroll}}" aria-hidden="true"></span></sc-if>
+            <sc-if value="{{p1.empty}}">
+              <div class="empty" role="status">
+                <svg class="i big c-blue" aria-hidden="true"><use href="#i-search"></use></svg>
+                <div class="msg">No templates match your search.</div>
+                <button class="btn has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-clear-all"></use></svg>Clear all</button>
+                <button class="btn link">Install more templates…</button>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ Page 2: Configure your new project ============ -->
+      <sc-if value="{{pg.configure}}">
+        <h1 class="pt" id="np-title">Configure your new project</h1>
+        <div class="thead"><span class="tname">{{tpl.name}}</span><sc-for list="{{tpl.chips}}" as="c"><span class="chip {{c.cls}}" title="{{c.tip}}">{{c.t}}</span></sc-for></div>
+        <div class="form">
+          <sc-if value="{{cfg.showProject}}">
+          <div class="fld">
+            <span class="lbl" id="l-name">{{cfg.lName.a}}<span class="ak">{{cfg.lName.k}}</span>{{cfg.lName.b}}</span>
+            <span class="field {{cfg.nameCls}}" role="textbox" aria-labelledby="l-name" aria-invalid="{{cfg.nameError}}"><span class="value"><span class="{{cfg.nameSel}}">{{cfg.name}}</span></span></span>
+            <sc-if value="{{cfg.nameMsg}}"><div class="fmsg error-text small"><svg class="i sm c-error" aria-hidden="true"><use href="#i-error"></use></svg><span>{{cfg.nameMsg}}</span></div></sc-if>
+          </div>
+          </sc-if>
+          <sc-if value="{{cfg.solutionFirst}}">
+          <div class="fld">
+            <span class="lbl" id="l-sol1">{{cfg.lSolName.a}}<span class="ak">{{cfg.lSolName.k}}</span>{{cfg.lSolName.b}}</span>
+            <span class="field is-focus" role="textbox" aria-labelledby="l-sol1"><span class="value"><span class="tsel">{{cfg.solName}}</span></span></span>
+          </div>
+          </sc-if>
+          <div class="fld">
+            <span class="lbl" id="l-loc">{{cfg.lLoc.a}}<span class="ak">{{cfg.lLoc.k}}</span>{{cfg.lLoc.b}}</span>
+            <div class="pathbox">
+              <span class="field {{cfg.locCls}}" role="combobox" aria-labelledby="l-loc" aria-expanded="{{cfg.recentOpen}}"><span class="value fill trim">{{cfg.loc}}</span><span class="tgl {{cfg.tglCls}}" role="button" aria-label="Recent locations" title="Recent locations (Alt+Down)"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></span>
+              <button class="btn icon" aria-label="Browse…" title="Browse…"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg></button>
+            </div>
+            <sc-if value="{{cfg.recentOpen}}">
+              <div class="menu dd path" role="listbox" aria-label="Recent locations">
+                <sc-for list="{{cfg.recent}}" as="m"><div class="mi {{m.cls}}" role="option" aria-selected="{{m.sel}}"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder"></use></svg><span class="trim">{{m.t}}</span></div></sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <sc-if value="{{cfg.showSolCombo}}">
+          <div class="fld">
+            <span class="lbl" id="l-sol">{{cfg.lSol.a}}<span class="ak">{{cfg.lSol.k}}</span>{{cfg.lSol.b}}</span>
+            <span class="field combo {{cfg.solComboCls}}" role="combobox" aria-labelledby="l-sol" aria-expanded="{{cfg.solComboOpen}}"><span class="value">{{cfg.solCombo}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+            <sc-if value="{{cfg.solComboOpen}}">
+              <div class="menu dd" role="listbox" aria-labelledby="l-sol">
+                <sc-for list="{{cfg.solItems}}" as="m"><div class="mi {{m.cls}}" role="option" aria-selected="{{m.sel}}"><sc-if value="{{m.sel}}"><svg class="i ck" aria-hidden="true"><use href="#i-check"></use></svg></sc-if><sc-if value="{{m.unsel}}"><span class="ck"></span></sc-if>{{m.t}}</div></sc-for>
+              </div>
+            </sc-if>
+          </div>
+          </sc-if>
+          <sc-if value="{{cfg.showSolName}}">
+          <div class="fld">
+            <span class="lbl" id="l-soln">{{cfg.lSolName.a}}<span class="ak">{{cfg.lSolName.k}}</span>{{cfg.lSolName.b}}</span>
+            <span class="field" role="textbox" aria-labelledby="l-soln"><span class="value">{{cfg.solName}}</span></span>
+          </div>
+          </sc-if>
+          <sc-if value="{{cfg.showSameDir}}">
+            <span class="chk" role="checkbox" aria-checked="false"><span class="box"></span><span>{{cfg.lSame.a}}<span class="ak">{{cfg.lSame.k}}</span>{{cfg.lSame.b}}</span></span>
+          </sc-if>
+          <sc-if value="{{cfg.showTrust}}">
+          <div class="chkrow">
+            <span class="chk {{cfg.trustCls}}" role="checkbox" aria-checked="{{cfg.trust}}" aria-disabled="{{cfg.trustDisabled}}"><span class="box"><sc-if value="{{cfg.trust}}"><svg aria-hidden="true"><use href="#i-check"></use></svg></sc-if></span><span>{{cfg.lTrust.a}}<span class="ak">{{cfg.lTrust.k}}</span>{{cfg.lTrust.b}}</span></span>
+            <span class="cdesc">{{cfg.trustDesc}}</span>
+          </div>
+          </sc-if>
+          <sc-if value="{{cfg.note}}"><div class="note"><svg class="i c-info" aria-hidden="true"><use href="#i-info"></use></svg>{{cfg.note}}</div></sc-if>
+        </div>
+        <sc-if value="{{cfg.created}}"><div class="created" role="status">{{cfg.createdLabel}} <span class="path">"{{cfg.created}}"</span></div></sc-if>
+        <sc-if value="{{cfg.createdError}}"><div class="created err" role="alert"><svg class="i c-error" aria-hidden="true"><use href="#i-error"></use></svg><span>{{cfg.createdError}}</span></div></sc-if>
+      </sc-if>
+
+      <!-- ============ Page 3: Additional information ============ -->
+      <sc-if value="{{pg.additional}}">
+        <h1 class="pt" id="np-title">Additional information</h1>
+        <div class="thead"><span class="tname">{{tpl.name}}</span><sc-for list="{{tpl.chips}}" as="c"><span class="chip {{c.cls}}" title="{{c.tip}}">{{c.t}}</span></sc-for></div>
+        <div class="form p3">
+          <sc-for list="{{opts}}" as="o">
+            <sc-if value="{{o.isCombo}}">
+            <div class="fld">
+              <span class="lbl {{o.lblCls}}" id="o-{{$index}}">{{o.l.a}}<span class="ak">{{o.l.k}}</span>{{o.l.b}}</span>
+              <span class="field combo {{o.cls}}" role="combobox" aria-labelledby="o-{{$index}}" aria-expanded="{{o.open}}" aria-disabled="{{o.disabled}}" title="{{o.tip}}"><span class="value">{{o.value}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+              <sc-if value="{{o.warn}}"><div class="fmsg warn-text small" role="status"><svg class="i sm" aria-hidden="true"><use href="#i-warning"></use></svg><span>{{o.warn}}</span></div></sc-if>
+              <sc-if value="{{o.desc}}"><div class="fmsg muted small">{{o.desc}}</div></sc-if>
+              <sc-if value="{{o.open}}">
+                <div class="menu dd" role="listbox" aria-labelledby="o-{{$index}}">
+                  <sc-for list="{{o.items}}" as="m"><div class="mi {{m.cls}}" role="option" aria-selected="{{m.sel}}"><sc-if value="{{m.sel}}"><svg class="i ck" aria-hidden="true"><use href="#i-check"></use></svg></sc-if><sc-if value="{{m.unsel}}"><span class="ck"></span></sc-if>{{m.t}}</div></sc-for>
+                </div>
+              </sc-if>
+            </div>
+            </sc-if>
+            <sc-if value="{{o.isCheck}}">
+            <div class="chkrow">
+              <span class="line">
+                <span class="chk {{o.cls}}" role="checkbox" aria-checked="{{o.checked}}" aria-disabled="{{o.disabled}}" title="{{o.tip}}"><span class="box"><sc-if value="{{o.checked}}"><svg aria-hidden="true"><use href="#i-check"></use></svg></sc-if></span><span>{{o.l.a}}<span class="ak">{{o.l.k}}</span>{{o.l.b}}</span></span>
+                <sc-if value="{{o.reason}}"><span class="reason small">{{o.reason}}</span></sc-if>
+              </span>
+              <sc-if value="{{o.desc}}"><span class="cdesc small">{{o.desc}}</span></sc-if>
+            </div>
+            </sc-if>
+            <sc-if value="{{o.isNote}}"><div class="muted">{{o.text}}</div></sc-if>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <div class="df">
+      <div class="left">
+        <sc-if value="{{foot.more}}"><span class="muted">Not finding what you're looking for?</span><button class="btn link">Install more templates…</button></sc-if>
+        <sc-if value="{{foot.hint}}"><span class="hint"><span class="kbd-key">Alt+←</span><span class="kbd-key">Alt+→</span>move between pages</span></sc-if>
+        <sc-if value="{{foot.progress}}"><span class="pbar"><span></span></span><span role="status">{{foot.progress}}</span></sc-if>
+        <sc-if value="{{foot.error}}"><svg class="i c-error" aria-hidden="true"><use href="#i-error"></use></svg><span class="error-text trim" role="alert">{{foot.error}}</span><button class="btn link" style="flex:none">Show Output</button></sc-if>
+      </div>
+      <button class="btn dlg {{foot.backCls}}" aria-disabled="{{foot.backDisabled}}" title="{{foot.backTip}}"><span>{{foot.back.a}}<span class="ak">{{foot.back.k}}</span>{{foot.back.b}}</span></button>
+      <button class="btn primary dlg {{foot.primaryCls}}" aria-disabled="{{foot.primaryDisabled}}" title="{{foot.primaryTip}}"><span>{{foot.primary.a}}<span class="ak">{{foot.primary.k}}</span>{{foot.primary.b}}</span></button>
+      <sc-if value="{{foot.cancel}}"><button class="btn dlg">Cancel</button></sc-if>
+    </div>
+  </section>
+</div>
+<nav class="states" aria-label="Pages, states and themes">
+  <div><b>Page</b><sc-for list="{{nav.pages}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for></div>
+  <div><b>State</b><sc-for list="{{nav.states}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for></div>
+  <div><b>Theme</b><sc-for list="{{nav.themes}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for></div>
+  <div><b>OS</b><sc-for list="{{nav.oses}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for><b style="margin-left:24px">Access keys</b><sc-for list="{{nav.keys}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for></div>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Classic Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"page":{"editor":"enum","default":"choose","options":["choose","configure","additional"]},"state":{"editor":"string","default":""},"os":{"editor":"enum","default":"","options":["","Windows","Linux","macOS"]},"keys":{"editor":"enum","default":"","options":["","on"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const PAGES = { choose: 'Create a new project', configure: 'Configure your new project', additional: 'Additional information' };
+    const STATES = {
+      choose: ['data', 'search', 'nomatch', 'loading', 'install', 'installing', 'installfailed', 'menu', 'fromstart'],
+      configure: ['new', 'solution', 'folder', 'add', 'trusted', 'recent', 'error', 'exists', 'longpath', 'blank'],
+      additional: ['blazor', 'untrusted', 'globaljson', 'wpf', 'library', 'xunit', 'xunit10', 'creating', 'failed']
+    };
+    const page = PAGES[this.props.page] ? this.props.page : 'choose';
+    const state = STATES[page].includes(this.props.state) ? this.props.state : STATES[page][0];
+    const os = ['Windows', 'Linux', 'macOS'].includes(this.props.os) ? this.props.os : (['error', 'longpath'].includes(state) ? 'Windows' : 'Linux');
+    const keys = this.props.keys === 'on';
+    const win = os === 'Windows';
+    const sep = win ? '\\' : '/';
+    const root = win ? 'C:\\Users\\alex\\source\\repos' : os === 'macOS' ? '/Users/alex/source/repos' : '/home/alex/source/repos';
+    const join = (...p) => p.join(sep);
+
+    // A label with its access key: "Pro_ject name" -> { a: "Pro", k: "j", b: "ect name" }.
+    const ak = (s) => { const i = s.indexOf('_'); return i < 0 ? { a: s, k: '', b: '' } : { a: s.slice(0, i), k: s.charAt(i + 1), b: s.slice(i + 2) }; };
+    const hl = (text, q) => {
+      if (!q) return [{ t: text, cls: '' }];
+      const out = []; const low = text.toLowerCase(); const ql = q.toLowerCase(); let i = 0;
+      for (;;) { const j = low.indexOf(ql, i); if (j < 0) break; if (j > i) out.push({ t: text.slice(i, j), cls: '' }); out.push({ t: text.slice(j, j + q.length), cls: 'hl' }); i = j + q.length; }
+      if (i < text.length) out.push({ t: text.slice(i), cls: '' });
+      return out;
+    };
+
+    // The SDK's templates (SDK 10.0 and 11.0 rc.2): names and descriptions of the highest-precedence member; tags from
+    // the classifications and ide.host.json (TemplateTags); icon kinds as in CommandIcons.s_kindColors.
+    const X3 = ['Linux', 'macOS', 'Windows'];
+    const TPL = {
+      console: { name: 'Console App', icon: 'terminal', ic: 'c-blue', desc: 'A project for creating an empty command-line application that can run on .NET on Windows, Linux and macOS', tags: [...X3, 'Console'] },
+      classlib: { name: 'Class Library', icon: 'library', ic: 'c-purple', desc: 'A project for creating a class library that targets .NET or .NET Standard', tags: [...X3, 'Library'] },
+      xunit: { name: 'xUnit Test Project', icon: 'beaker', ic: 'c-green', desc: 'A project that contains xUnit.net tests that can run on .NET on Windows, Linux and macOS', tags: [...X3, 'Desktop', 'Test', 'Web'] },
+      worker: { name: 'Worker Service', icon: 'server', ic: 'c-purple', desc: 'An empty project template for creating a worker service.', tags: [...X3, 'Cloud', 'Service', 'Web'] },
+      web: { name: 'ASP.NET Core Empty', icon: 'globe', ic: 'c-blue', desc: 'An empty project template for creating an ASP.NET Core application. This template does not have any content in it.', tags: [...X3, 'Cloud', 'Web'] },
+      webapi: { name: 'ASP.NET Core Web API', icon: 'server', ic: 'c-purple', desc: 'A project template for creating a RESTful Web API using ASP.NET Core controllers or minimal APIs, with optional support for OpenAPI and authentication.', tags: [...X3, 'Cloud', 'Service', 'Web'] },
+      webapp: { name: 'ASP.NET Core Web App (Razor Pages)', icon: 'globe', ic: 'c-blue', desc: 'A project template for creating an ASP.NET Core application with example ASP.NET Core Razor Pages content', tags: [...X3, 'Cloud', 'Web'] },
+      mvc: { name: 'ASP.NET Core Web App (Model-View-Controller)', icon: 'globe', ic: 'c-blue', desc: 'A project template for creating an ASP.NET Core application with example ASP.NET Core MVC Views and Controllers. This template can also be used for RESTful HTTP services.', tags: [...X3, 'Cloud', 'Web'] },
+      blazor: { name: 'Blazor Web App', icon: 'globe', ic: 'c-blue', desc: 'A project template for creating a Blazor web app that supports both server-side rendering and client interactivity. This template can be used for web apps with rich dynamic user interfaces (UIs).', tags: [...X3, 'Cloud', 'Web'] },
+      maui: { name: '.NET MAUI App', icon: 'phone', ic: 'c-blue', desc: 'A project for creating a .NET MAUI application for iOS, Android, Mac Catalyst, WinUI and Tizen', tags: ['Android', 'iOS', 'Mac Catalyst', 'Windows', 'Desktop', 'Mobile'] },
+      wpf: { name: 'WPF Application', icon: 'desktop', ic: 'c-blue', desc: 'A project for creating a .NET WPF Application', tags: ['Windows', 'Desktop'], winOnly: true },
+      blank: { name: 'Blank Solution', icon: 'layers', ic: 'c-purple', desc: 'An empty solution with no projects, to add projects to later.', tags: [...X3, 'Other'], noLang: true },
+      avalonia: { name: 'Avalonia templates', icon: 'download', ic: 'c-green', desc: 'Cross-platform desktop, mobile and browser apps with Avalonia UI, from the Avalonia.Templates package.', pack: 'Avalonia.Templates' }
+    };
+    const WINONLY_TIP = 'Its projects build here but run only on Windows.';
+    const chipsOf = (x, lang) => [
+      ...(x.pack ? [{ t: 'Not installed', cls: 'info', tip: '' }] : []),
+      ...(x.pack || x.noLang ? [] : [{ t: lang, cls: 'plain', tip: '' }]),
+      ...(x.tags ?? []).map((g) => ({ t: g, cls: 'plain', tip: '' })),
+      ...(x.winOnly && !win ? [{ t: 'Windows only', cls: 'warn', tip: WINONLY_TIP }] : [])
+    ];
+    const row = (key, lang, q, extra) => {
+      const x = TPL[key];
+      const state = extra?.state ?? '';
+      return { name: hl(x.name, q), desc: x.desc, icon: x.icon, ic: x.ic, chips: chipsOf(x, lang), state, selected: String(state.includes('sel')), note: extra?.note ?? '', progress: extra?.progress ?? '', error: extra?.error ?? '' };
+    };
+
+    const v = { t, akCls: keys ? 'show-ak' : '', pg: { choose: page === 'choose', configure: page === 'configure', additional: page === 'additional' } };
+    const addMode = page === 'configure' && state === 'add';
+    v.win = { title: addMode ? 'Add New Project' : 'New Project' };
+    v.bd = { solution: ['solution', 'add'].includes(state), folder: state === 'folder' };
+    v.bd.none = !v.bd.solution && !v.bd.folder;
+    v.foot = { more: false, hint: false, progress: '', error: '', cancel: false, back: ak('_Back'), backCls: '', backDisabled: false, backTip: '', primary: ak('_Next'), primaryCls: '', primaryDisabled: false, primaryTip: 'Next (Alt+Right)' };
+    const disable = (k) => { v.foot[k + 'Cls'] = 'is-disabled'; v.foot[k + 'Disabled'] = true; };
+
+    // ---------------- Page 1 ----------------
+    if (page === 'choose') {
+      const recent = [
+        ['Blazor Web App', 'C#', 'globe', 'c-blue', true],
+        ['Console App', 'C#', 'terminal', 'c-blue', false],
+        ['xUnit Test Project', 'C#', 'beaker', 'c-green', false],
+        ['Class Library', 'C#', 'library', 'c-purple', false],
+        ['ASP.NET Core Web API', 'C#', 'server', 'c-purple', false],
+        ['Console App', 'F#', 'terminal', 'c-blue', false]
+      ];
+      v.recent = recent.map(([name, lang, icon, ic, pinned], i) => ({ name, lang, icon, ic, pinned, unpinned: !pinned, state: state === 'menu' && i === 1 ? 'sel' : '', selected: String(state === 'menu' && i === 1) }));
+      const q = state === 'search' ? 'web' : state === 'nomatch' ? 'unity' : '';
+      v.p1 = {
+        title: 'Create a new project', q, hasQ: !!q, menu: state === 'menu', menuTop: 112,
+        searchFocus: state === 'nomatch' ? 'is-focus' : '',
+        clearCls: q || state === 'search' ? '' : 'is-disabled', clearDisabled: !(q || state === 'search'),
+        filters: [
+          { name: 'Language', value: state === 'search' ? 'C#' : 'All languages' },
+          { name: 'Platform', value: 'All platforms' },
+          { name: 'Project type', value: 'All project types' }
+        ],
+        loading: state === 'loading', empty: state === 'nomatch', scroll: ''
+      };
+      const pack = { install: { state: 'sel kfocus', note: 'Installs Avalonia.Templates from nuget.org with dotnet new install.' },
+        installing: { state: 'sel', progress: 'Installing Avalonia.Templates…' },
+        installfailed: { state: 'sel kfocus', error: 'Couldn\'t install Avalonia.Templates: Unable to load the service index for source https://api.nuget.org/v3/index.json.' } };
+      if (state === 'search') {
+        v.rows = [row('webapi', 'C#', q), row('webapp', 'C#', q), row('mvc', 'C#', q), row('blazor', 'C#', q, { state: 'sel kfocus' }), row('web', 'C#', q), row('worker', 'C#', q)];
+        v.p1.scroll = 'top';
+      } else if (pack[state]) {
+        v.rows = [row('blazor', 'C#'), row('maui', 'C#'), row('wpf', 'C#'), row('blank', ''), row('avalonia', '', '', pack[state])];
+        v.p1.scroll = 'low';
+        v.foot.primary = ak('_Install');
+        v.foot.primaryTip = 'Install the Avalonia templates';
+        if (state === 'installing') { disable('primary'); disable('back'); }
+      } else if (state === 'nomatch' || state === 'loading') {
+        v.rows = [];
+        disable('primary');
+      } else {
+        const sel = state === 'menu' ? 'sel-i' : 'sel kfocus';
+        v.rows = [row('console', 'C#', '', { state: sel }), row('console', 'F#'), row('console', 'Visual Basic'), row('classlib', 'C#'), row('xunit', 'C#'), row('worker', 'C#'), row('webapi', 'C#')];
+        v.p1.scroll = 'top';
+      }
+      v.foot.more = true;
+      if (state !== 'fromstart') { disable('back'); } else { v.foot.backTip = 'Back to the start window (Alt+Left)'; }
+    }
+
+    // ---------------- Page 2 ----------------
+    if (page === 'configure') {
+      const blank = state === 'blank';
+      const key = blank ? 'blank' : addMode ? 'classlib' : 'blazor';
+      v.tpl = { name: TPL[key].name, chips: chipsOf(TPL[key], 'C#') };
+      const project = addMode ? 'CalculatorContracts' : state === 'error' ? 'CON' : state === 'longpath' ? 'ContosoCustomerPortal.Web' : 'BlazorApp1';
+      const solName = blank ? 'Solution1' : state === 'error' ? 'Shop' : project;
+      const loc = state === 'folder' ? (win ? 'C:\\Users\\alex\\work\\shop' : '/home/alex/work/shop')
+        : addMode ? join(root, 'Wcf')
+        : state === 'longpath' ? 'C:\\Users\\alex\\OneDrive - Contoso Ltd\\Documents\\Projects\\Customer Portal\\2026 redesign'
+        : root;
+      const solCombo = state === 'folder' ? 'Add to folder' : 'Create new solution';
+      const showSolCombo = state === 'solution' || state === 'folder';
+      const newSolution = !addMode && state !== 'folder';
+      const trusted = state === 'trusted';
+      v.cfg = {
+        showProject: !blank, solutionFirst: blank,
+        lName: ak('Pro_ject name'), lLoc: ak('_Location'), lSol: ak('S_olution'), lSolName: ak('Solution na_me'),
+        lSame: ak('Place solution and project in the same _directory'), lTrust: ak('_Trust this location: projects in it are built and their packages restored'),
+        name: project, nameError: state === 'error', nameSel: ['new', 'trusted', 'add'].includes(state) ? 'tsel' : '',
+        nameCls: state === 'error' ? 'is-error' : ['new', 'trusted', 'add'].includes(state) ? 'is-focus' : '',
+        nameMsg: state === 'error' ? '"CON" is a device name Windows reserves. Choose another name.' : '',
+        loc, recentOpen: state === 'recent', locCls: state === 'recent' ? 'is-focus' : '', tglCls: state === 'recent' ? 'on' : '',
+        recent: [
+          { t: root, cls: 'sel', sel: true },
+          { t: win ? 'C:\\Users\\alex\\work\\shop' : '/home/alex/work/shop', cls: 'hover', sel: false },
+          { t: win ? 'D:\\projects\\codalus-samples' : '/mnt/data/projects/codalus-samples', cls: '', sel: false },
+          { t: join(root, 'Wcf'), cls: '', sel: false }
+        ],
+        showSolCombo, solCombo, solComboOpen: state === 'solution', solComboCls: state === 'solution' ? 'is-open' : state === 'folder' ? 'is-focus' : '',
+        solItems: [{ t: 'Create new solution', cls: 'sel', sel: true, unsel: false }, { t: 'Add to solution', cls: 'hover', sel: false, unsel: true }],
+        showSolName: newSolution && !blank, solName,
+        showSameDir: newSolution && !blank,
+        showTrust: newSolution, trust: trusted, trustDisabled: trusted, trustCls: trusted ? 'on is-disabled' : '',
+        trustDesc: trusted ? 'This location is trusted.' : 'Otherwise the solution opens showing only its structure until you trust it.',
+        note: addMode ? 'Adds the project to the solution "Wcf", in its folder "src".' : state === 'folder' ? 'Adds the project to the folder\'s projects.' : '',
+        createdLabel: blank ? 'Solution will be created in' : 'Project will be created in',
+        created: '', createdError: ''
+      };
+      if (blank) v.cfg.created = join(root, 'Solution1') + sep;
+      else if (addMode || state === 'folder') v.cfg.created = join(loc, project) + sep;
+      else if (state === 'exists') v.cfg.createdError = `The folder "${join(root, 'BlazorApp1')}" already exists. Choose another name or location.`;
+      else if (state === 'longpath') v.cfg.createdError = 'The path of a file in this project would be 271 characters long, more than Windows allows (260). Choose a shorter location or name, or turn on long paths in Windows.';
+      else if (state !== 'error') v.cfg.created = join(loc, solName, project) + sep;
+      v.foot.hint = true;
+      if (blank) { v.foot.primary = ak('_Create'); v.foot.primaryTip = 'Create (Alt+Right)'; }
+      if (['error', 'exists', 'longpath'].includes(state)) disable('primary');
+    }
+
+    // ---------------- Page 3 ----------------
+    if (page === 'additional') {
+      const combo = (label, value, o = {}) => ({ isCombo: true, l: ak(label), value, open: !!o.open, items: o.items ?? [], warn: o.warn ?? '', desc: o.desc ?? '', tip: o.tip ?? '', disabled: !!o.disabled,
+        cls: [o.focus ? 'is-focus' : '', o.open ? 'is-open' : '', o.disabled ? 'is-disabled' : ''].join(' '), lblCls: o.disabled ? 'is-disabled' : '' });
+      const check = (label, checked, o = {}) => ({ isCheck: true, l: ak(label), checked, disabled: !!o.disabled, reason: o.reason ?? '', desc: o.desc ?? '', tip: o.tip ?? '',
+        cls: [checked ? 'on' : '', o.disabled ? 'is-disabled' : '', o.focus ? 'is-focus' : ''].join(' ') });
+      const note = (text) => ({ isNote: true, text });
+      const items = (list, chosen) => list.map((x) => ({ t: x, cls: x === chosen ? 'sel' : '', sel: x === chosen, unsel: x !== chosen }));
+      const LTS10 = '.NET 10.0 (Long Term Support)';
+      const PRE11 = '.NET 11.0 (Preview)';
+      const key = { wpf: 'wpf', library: 'classlib', xunit: 'xunit', xunit10: 'xunit' }[state] ?? 'blazor';
+      v.tpl = { name: TPL[key].name, chips: chipsOf(TPL[key], 'C#') };
+      const busy = state === 'creating';
+      const blazor = (trusted, auth, fw, warn) => {
+        const indiv = auth === 'Individual Accounts';
+        const needTrust = trusted ? '' : 'Needs a trusted location (previous page).';
+        return [
+          combo('_Framework', fw, { focus: !busy, warn, disabled: busy }),
+          combo('_Authentication type', auth, { disabled: busy }),
+          check('C_onfigure for HTTPS', true, { disabled: indiv || busy, reason: indiv ? 'Individual Accounts needs HTTPS.' : '', tip: indiv ? 'Individual Accounts needs HTTPS.' : '' }),
+          check('_Enable container support', false, { disabled: !trusted || busy, reason: needTrust }),
+          combo('_Interactive render mode', 'Server', { disabled: busy }),
+          combo('Interactivity _location', 'Per page/component', { disabled: busy }),
+          check('Include _sample pages', true, { disabled: busy }),
+          check('Do not use _top-level statements', false, { disabled: busy }),
+          check('Use the .dev.localhost TLD in the application URL', false, { disabled: busy }),
+          check('E_nlist in Aspire orchestration', trusted, { disabled: !trusted || busy, reason: needTrust,
+            desc: 'Adds BlazorApp1.AppHost and BlazorApp1.ServiceDefaults projects. Installs the Aspire templates from nuget.org first if they\'re missing.' })
+        ];
+      };
+      if (state === 'untrusted') v.opts = blazor(false, 'None', LTS10);
+      else if (state === 'globaljson') v.opts = blazor(true, 'None', PRE11, 'This location\'s global.json selects .NET SDK 10.0.100, which can\'t build .NET 11.0 projects.');
+      else if (state === 'wpf') {
+        const fws = [PRE11, LTS10, '.NET 9.0 (Standard Term Support)', '.NET 8.0 (Long Term Support)', '.NET 6.0 (Out of support)'];
+        v.opts = [combo('_Framework', LTS10, { open: true, items: items(fws, LTS10) }), check('Enable nullable', true)];
+        v.opts[0].items[2].cls = 'hover';
+      } else if (state === 'library') {
+        v.opts = [combo('_Framework', LTS10, { focus: true }), note('Class Library has no other options.')];
+      } else if (state === 'xunit') {
+        v.opts = [combo('_Framework', PRE11, { focus: true }), combo('xUnit.net version', 'v3'), combo('Test runner', 'Microsoft.Testing.Platform')];
+      } else if (state === 'xunit10') {
+        v.opts = [combo('_Framework', LTS10, { focus: true }), note('xUnit Test Project has no other options.')];
+      } else v.opts = blazor(true, 'Individual Accounts', LTS10);
+      v.foot.primary = ak('_Create');
+      v.foot.primaryTip = 'Create (Alt+Right)';
+      v.foot.hint = true;
+      if (busy) { v.foot.hint = false; v.foot.progress = 'Creating BlazorApp1…'; v.foot.cancel = true; disable('back'); disable('primary'); }
+      if (state === 'failed') { v.foot.hint = false; v.foot.error = 'Couldn\'t create the project: Template "Blazor Web App" could not be created. Failed to create template.'; }
+    }
+    if (!v.foot.backDisabled && !v.foot.backTip) v.foot.backTip = 'Back (Alt+Left)';
+
+    // The links under the picture: every page, state, theme, OS and the access keys.
+    const q = (o) => { const p = { page, state, theme: t.name, os: this.props.os || '', keys: keys ? 'on' : '', ...o }; return '?' + Object.entries(p).filter(([, x]) => x).map(([k, x]) => k + '=' + encodeURIComponent(x)).join('&'); };
+    v.nav = {
+      pages: Object.entries(PAGES).map(([k, label]) => ({ label, href: q({ page: k, state: '' }), cls: k === page ? 'on' : '' })),
+      states: STATES[page].map((s) => ({ label: s, href: q({ state: s }), cls: s === state ? 'on' : '' })),
+      themes: C.ORDER.map((n) => ({ label: n, href: q({ theme: n }), cls: n === t.name ? 'on' : '' })),
+      oses: ['Windows', 'Linux', 'macOS'].map((n) => ({ label: n, href: q({ os: n }), cls: n === os ? 'on' : '' })),
+      keys: [{ label: 'hidden', href: q({ keys: '' }), cls: keys ? '' : 'on' }, { label: 'shown (Alt held)', href: q({ keys: 'on' }), cls: keys ? 'on' : '' }]
+    };
+    return v;
+  }
+}
+</script>
+</body>
+</html>

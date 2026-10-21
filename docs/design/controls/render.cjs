@@ -31,6 +31,23 @@ const PAGES = [
   { file: 'Options.dc.html', name: 'options', width: 1280, height: 800, themes: VIEW_THEMES }
 ];
 
+// New Project (0.6.0): each page in the view themes, its main states in Harbor Light and Classic Dark, the others in
+// Classic Light (the default), and every state in the contrast check.
+const PAIR = ['Harbor Light', 'Classic Dark'];
+const NEW_PROJECT = {
+  choose: { data: VIEW_THEMES, search: PAIR, nomatch: PAIR, install: PAIR, loading: ['Classic Light'], installing: [], installfailed: ['Classic Light'], menu: ['Classic Light'], fromstart: [] },
+  configure: { new: VIEW_THEMES, solution: PAIR, error: PAIR, blank: PAIR, folder: [], add: ['Classic Light'], trusted: [], recent: ['Classic Light'], exists: [], longpath: ['Classic Light'] },
+  additional: { blazor: VIEW_THEMES, wpf: PAIR, xunit: PAIR, keys: PAIR, untrusted: ['Classic Light'], globaljson: ['Classic Light'], library: ['Classic Light'], xunit10: [], creating: ['Classic Light'], failed: ['Classic Light'] }
+};
+const FIRST = { choose: 'data', configure: 'new', additional: 'blazor' };
+for (const [page, states] of Object.entries(NEW_PROJECT)) {
+  for (const [state, themes] of Object.entries(states)) {
+    const name = state === FIRST[page] ? `new-project-${page}` : `new-project-${page}-${state}`;
+    const query = state === 'keys' ? `page=${page}&keys=on` : `page=${page}&state=${state}`;
+    PAGES.push({ file: 'NewProject.dc.html', name, query, width: 1280, height: 800, themes });
+  }
+}
+
 const slug = (s) => s.toLowerCase().replace(/\s+/g, '-');
 
 function checkInPage(minText) {
