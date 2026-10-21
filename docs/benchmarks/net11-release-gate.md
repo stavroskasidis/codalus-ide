@@ -302,7 +302,7 @@ The plugin host is 47 MB in every build. The harness itself agrees (`editor-100k
 | `fc33b476` | 923 (900–957) | 837 | 450 | 3505 |
 | this change | **790** (788–833) | **704** | **325** | 3437 |
 
-- **The shell runs blocking collections on Linux** (`GCLatencyMode.Batch`, since `58f9de14`, against a font-stream crash) and concurrent ones on macOS and Windows. The concurrent columns are builds with that line switched off, to measure the Macs' and Windows' mode here: the release lowers the memory in both.
+- **The shell runs blocking collections on Linux** (`GCLatencyMode.Batch`, from `58f9de14` until 0.5.0's `ShellSystemFonts` removed the font-stream crash it was against) and concurrent ones on macOS and Windows. The concurrent columns are builds with that line switched off, to measure the Macs' and Windows' mode here: the release lowers the memory in both.
 - **Nothing in the release is specific to the Mac:** no `OperatingSystem.IsMacOS` code, no package, runtime or GC setting changed between `f72b78e8` and `fc33b476`. What grew there isn't found from Linux. `TODO(issue)`: the scenario on a Mac, per process (the Mac session or a dispatch of `pipeline.yml` with `benchmarks`), before and after this change.
 
 ### Where the memory goes: the open's leftovers
