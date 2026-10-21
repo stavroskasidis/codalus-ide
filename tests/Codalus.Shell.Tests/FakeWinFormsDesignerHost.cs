@@ -178,6 +178,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             "ListView" => [Forms + "ListView:Columns", Forms + "ListView:Items"],
             "TabControl" => [Forms + "TabControl:TabPages"],
             "DataGridView" => [Forms + "DataGridView:Columns"],
+            "ImageList" => [Forms + "ImageList:Images"],
             _ => null,
         };
     }
@@ -652,7 +653,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     private DesignerActionsResult Actions(DesignerComponentsParams parameters)
     {
         var name = parameters.Components.FirstOrDefault() ?? string.Empty;
-        var type = _controls.TryGetValue(name, out var control) ? control.Type : string.Empty;
+        var type = _controls.TryGetValue(name, out var control) ? control.Type : _tray.GetValueOrDefault(name) ?? string.Empty;
         List<DesignerActionItem> items = [new(DesignerActionKinds.Method, "DockInParent", control?.Dock == "Fill" ? "Undock in Parent Container" : "Dock in Parent Container")];
         if (type.EndsWith("ListBox", StringComparison.Ordinal))
         {
@@ -663,7 +664,9 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         }
 
         // The context menu's verbs, as the real host lists them: a list box's Edit Items... (an action method marked
-        // IncludeAsDesignerVerb), a tab control's designer verbs (Remove Tab disabled without a tab page).
+        // IncludeAsDesignerVerb), a tab control's designer verbs (Remove Tab disabled without a tab page), a menu strip's
+        // in the framework's own words, mnemonics included ("&Insert Standard Items"), and an image list's Choose images
+        // (which the real host maps to the Images collection editor although its text has no "...").
         List<DesignerActionItem> verbs = [];
         if (type.EndsWith("ListBox", StringComparison.Ordinal))
         {
@@ -673,6 +676,16 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         {
             verbs.Add(new(DesignerActionKinds.Method, "verb:Add Tab", "Add Tab"));
             verbs.Add(new(DesignerActionKinds.Method, "verb:Remove Tab", "Remove Tab") { Unavailable = Children(name).Count == 0 });
+        }
+        else if (type == Forms + "MenuStrip")
+        {
+            verbs.Add(new(DesignerActionKinds.Method, "InvokeEmbedVerb", "Embed in ToolStripContainer"));
+            verbs.Add(new(DesignerActionKinds.Method, "InvokeInsertStandardItemsVerb", "&Insert Standard Items"));
+            verbs.Add(new(DesignerActionKinds.Method, "InvokeEditItemsVerb", "&Edit Items...") { Collection = Forms + "MenuStrip:Items" });
+        }
+        else if (type == Forms + "ImageList")
+        {
+            verbs.Add(new(DesignerActionKinds.Method, "ChooseImages", "Choose images") { Collection = Forms + "ImageList:Images" });
         }
 
         return new DesignerActionsResult([.. items]) { Verbs = [.. verbs] };

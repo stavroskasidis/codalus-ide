@@ -163,7 +163,9 @@ internal static partial class BuiltIns
         var when = WhenClause.Parse(InDesigner);
         MenuItemRule Sub(string location, string submenu, string title, string group) =>
             MenuItemRule.ForSubmenu(location, submenu, title, shell) with { Group = group, Order = ++order, When = when };
-        MenuItemRule Item(string location, string command, string title, string group = "default") =>
+        // A title only where the entry's differs from its command's ("Lefts" in Align): a rule's title wins over the
+        // command's localized one, so the others take the command's (#67).
+        MenuItemRule Item(string location, string command, string? title = null, string group = "default") =>
             new(location, command, shell) { Group = group, Order = ++order, Title = title, When = when };
         string Align = format + "/align", Size = format + "/sameSize", Horizontal = format + "/hspacing", Vertical = format + "/vspacing", Center = format + "/center", Order = format + "/order";
         var rules = new List<MenuItemRule>
@@ -176,11 +178,11 @@ internal static partial class BuiltIns
             Sub(format, Order, "_Order", "4-order"),
 
             // At the bottom, a check entry, as in the classic IDE.
-            Item(format, "winforms.lockControls", "Lock Controls", "5-lock") with { Checked = WhenClause.Parse("winFormsControlsLocked") },
+            Item(format, "winforms.lockControls", group: "5-lock") with { Checked = WhenClause.Parse("winFormsControlsLocked") },
             Item(Center, "winforms.center.horizontally", "Horizontally"),
             Item(Center, "winforms.center.vertically", "Vertically"),
-            Item(Order, "winforms.order.front", "Bring to Front"),
-            Item(Order, "winforms.order.back", "Send to Back"),
+            Item(Order, "winforms.order.front"),
+            Item(Order, "winforms.order.back"),
         };
         rules.AddRange(s_alignments.Select(a => Item(Align, "winforms.align." + a.Id, a.Title, a.Alignment == DesignerAlignment.ToGrid ? "2-grid" : a.Alignment <= DesignerAlignment.Rights ? "0-x" : "1-y")));
         rules.AddRange(s_sizings.Select(a => Item(Size, "winforms.sameSize." + a.Id, a.Title, a.Sizing == DesignerSizing.ToGrid ? "1-grid" : "0-same")));
@@ -192,37 +194,39 @@ internal static partial class BuiltIns
         // Align to Grid, Lock Controls, Select 'parent', the clipboard and Properties, grayed when they don't apply. Align,
         // Make Same Size and Tab Order are in Format and View only, as there. A tool strip item gets it too.
         // TODO(issue): a tool strip item's own classic menu (Convert To, Insert, Set Image…, Edit DropDownItems…).
-        MenuItemRule Clipboard(string location, string command, string title, string keys) => Item(location, command, title, "6-clipboard") with { Keys = keys };
+        MenuItemRule Clipboard(string location, string command, string keys) => Item(location, command, group: "6-clipboard") with { Keys = keys };
         var hasActions = WhenClause.Parse(InDesigner + " && winFormsSelectionHasActions");
         foreach (var location in new[] { WinFormsSurfaceMenu, WinFormsTrayMenu })
         {
-            rules.Add(Item(location, "winforms.smartTag", "Show Smart Tag", "0-verbs") with { When = hasActions });
-            rules.Add(Item(location, "winforms.viewCode", "View Code", "1-code"));
+            rules.Add(Item(location, "winforms.smartTag", group: "0-verbs") with { When = hasActions });
+            rules.Add(Item(location, "winforms.viewCode", group: "1-code"));
             if (location == WinFormsSurfaceMenu)
             {
-                rules.Add(Item(location, "winforms.order.front", "Bring to Front", "2-order"));
-                rules.Add(Item(location, "winforms.order.back", "Send to Back", "2-order"));
-                rules.Add(Item(location, "winforms.align.toGrid", "Align to Grid", "3-grid"));
-                rules.Add(Item(location, "winforms.lockControls", "Lock Controls", "4-lock") with { Checked = WhenClause.Parse("winFormsControlsLocked") });
-                rules.Add(Item(location, "winforms.selectParent", "Select Parent", "5-select") with { When = WhenClause.Parse(InDesigner + " && winFormsSelectionHasParent") });
+                rules.Add(Item(location, "winforms.order.front", group: "2-order"));
+                rules.Add(Item(location, "winforms.order.back", group: "2-order"));
+                rules.Add(Item(location, "winforms.align.toGrid", group: "3-grid"));
+                rules.Add(Item(location, "winforms.lockControls", group: "4-lock") with { Checked = WhenClause.Parse("winFormsControlsLocked") });
+
+                // Titled Select '…' as the menu opens (MenuBuilder's titleFor).
+                rules.Add(Item(location, "winforms.selectParent", group: "5-select") with { When = WhenClause.Parse(InDesigner + " && winFormsSelectionHasParent") });
             }
 
-            rules.Add(Clipboard(location, "winforms.cut", "Cut", "primary+x"));
-            rules.Add(Clipboard(location, "winforms.copy", "Copy", "primary+c"));
-            rules.Add(Clipboard(location, "winforms.paste", "Paste", "primary+v"));
-            rules.Add(Clipboard(location, "winforms.delete", "Delete", "delete"));
+            rules.Add(Clipboard(location, "winforms.cut", "primary+x"));
+            rules.Add(Clipboard(location, "winforms.copy", "primary+c"));
+            rules.Add(Clipboard(location, "winforms.paste", "primary+v"));
+            rules.Add(Clipboard(location, "winforms.delete", "delete"));
             if (location == WinFormsTrayMenu)
             {
                 // The tray keeps Rename (F2, added as it opens) before Line Up Icons; Lock Controls isn't in its menu.
-                rules.Add(Item(location, "winforms.lineUpIcons", "Line Up Icons", "7-tray"));
+                rules.Add(Item(location, "winforms.lineUpIcons", group: "7-tray"));
             }
 
-            rules.Add(Item(location, "workbench.view.properties", "Properties", "8-properties"));
+            rules.Add(Item(location, "workbench.view.properties", group: "8-properties"));
         }
 
         // The tray's background: Paste, then Line Up Icons, in the item menu's group order.
-        rules.Add(Clipboard(WinFormsTrayBackgroundMenu, "winforms.paste", "Paste", "primary+v"));
-        rules.Add(Item(WinFormsTrayBackgroundMenu, "winforms.lineUpIcons", "Line Up Icons", "7-tray"));
+        rules.Add(Clipboard(WinFormsTrayBackgroundMenu, "winforms.paste", "primary+v"));
+        rules.Add(Item(WinFormsTrayBackgroundMenu, "winforms.lineUpIcons", group: "7-tray"));
         menus.Add(rules);
     }
 }

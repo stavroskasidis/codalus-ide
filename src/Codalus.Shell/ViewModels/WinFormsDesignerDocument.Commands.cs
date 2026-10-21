@@ -194,6 +194,14 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>A right-button press on the surface: the verbs of what it selected, now.</summary>
     internal void PrefetchVerbs() => RefreshVerbs(now: true);
 
+    /// <summary>
+    /// The selection's verbs as the host answers, however long it takes: the ones fetched ahead, else fetched now (the
+    /// smoke test, before it checks the menu on a busy machine; the menu itself waits only 300 ms for them).
+    /// </summary>
+    internal Task<IReadOnlyList<Workbench.WinForms.DesignerActionItem>> SelectionVerbsAsync() =>
+        _host is null || VerbsTarget() is not { } component ? Task.FromResult<IReadOnlyList<Workbench.WinForms.DesignerActionItem>>([])
+        : HasVerbsFor(component) ? _verbs!.Value.Verbs : StartVerbs(component);
+
     private bool HasVerbsFor(string component) => _verbs is { } cached && cached.Component == component && cached.Version == _renderVersion;
 
     private Task<IReadOnlyList<Workbench.WinForms.DesignerActionItem>> StartVerbs(string component)
@@ -230,15 +238,18 @@ public sealed partial class WinFormsDesignerDocument
         var task = HasVerbsFor(component) ? _verbs!.Value.Verbs : StartVerbs(component);
         try
         {
-            var verbs = await task.WaitAsync(TimeSpan.FromMilliseconds(300)).ConfigureAwait(true);
+            var verbs = await task.WaitAsync(VerbsWait).ConfigureAwait(true);
             return VerbsTarget() == component ? verbs : [];
         }
         catch (TimeoutException)
         {
-            _shell.WinFormsDesignerLog.AppendLine($"{component}'s verbs didn't come within 300 ms: its context menu opened without them.");
+            _shell.WinFormsDesignerLog.AppendLine($"{component}'s verbs didn't come within {VerbsWait.TotalMilliseconds:0} ms: its context menu opened without them.");
             return [];
         }
     }
+
+    /// <summary>How long a context menu waits for verbs still on their way (tests: a late answer that comes within it).</summary>
+    internal TimeSpan VerbsWait { get; set; } = TimeSpan.FromMilliseconds(300);
 
     /// <summary>A verb of the context menu, on the primary selection: as a smart tag's method (a collection's editor for Edit Items…).</summary>
     public Task InvokeVerbAsync(Workbench.WinForms.DesignerActionItem verb) =>

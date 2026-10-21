@@ -865,6 +865,32 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     private List<DesignerComponentView> Movable() =>
         [.. _selection.Select(Find).OfType<DesignerComponentView>().Where(c => c.IsControl && c != Root && !c.IsPart && c.Locked != true)];
 
+    /// <summary>
+    /// The controls a drag or an arrow key moves: <see cref="Movable"/> without those inside another that moves (Select
+    /// All takes a group box and its radio buttons, a split container and the list box in its panel), which move with
+    /// it, as in the classic IDE; moved by the delta too, they went twice as far.
+    /// </summary>
+    private List<DesignerComponentView> MovingTogether()
+    {
+        var movable = Movable();
+        var names = new HashSet<string>(movable.Select(m => m.Name), StringComparer.Ordinal);
+        bool InsideMoving(DesignerComponentView view)
+        {
+            // Up through the parents, a split container's panel to its split container (the panel's own Parent).
+            for (var parent = view.Parent is { } p ? Find(p) : null; parent is not null && parent != Root; parent = parent.Parent is { } next ? Find(next) : null)
+            {
+                if (names.Contains(parent.Name))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return [.. movable.Where(m => !InsideMoving(m))];
+    }
+
     private static string Invariant(double value) => Math.Round(value).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private string ComponentOf(string name) => name == _model?.ClassName ? string.Empty : name;
@@ -872,7 +898,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>Moves the selected controls by a delta, into another container when they're dropped in one.</summary>
     public Task MoveSelectionAsync(double dx, double dy, double dropX, double dropY)
     {
-        var moving = Movable();
+        var moving = MovingTogether();
         if (moving.Count == 0 || (Math.Abs(dx) < 1 && Math.Abs(dy) < 1))
         {
             return Task.CompletedTask;
@@ -928,7 +954,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>The arrow keys: moves the selection a pixel, or with Shift resizes it.</summary>
     public Task NudgeAsync(int dx, int dy, bool resize)
     {
-        var moving = Movable();
+        // Shift+arrow resizes every selected control; an arrow moves a nested one only with its container.
+        var moving = resize ? Movable() : MovingTogether();
         if (moving.Count == 0)
         {
             return Task.CompletedTask;

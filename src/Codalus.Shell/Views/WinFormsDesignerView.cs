@@ -36,6 +36,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
     private readonly ScrollViewer _scroll;
     private readonly Canvas _overlay = new() { ClipToBounds = false };
     private readonly Border _collectionHost = new() { IsVisible = false, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, BorderThickness = new Thickness(1) };
+    private readonly Grid _surfaceArea;
     private ItemsControl? _tray;
     private string? _renaming;
 
@@ -106,9 +107,9 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         Avalonia.Automation.AutomationProperties.SetLiveSetting(message, Avalonia.Automation.AutomationLiveSetting.Polite);
         _collectionHost.Bind(Border.BackgroundProperty, _collectionHost.GetResourceObservable("Shell.Panel"));
         _collectionHost.Bind(Border.BorderBrushProperty, _collectionHost.GetResourceObservable("Shell.Border"));
-        var surfaceArea = new Grid { Children = { _scroll, message, _collectionHost } };
+        _surfaceArea = new Grid { Children = { _scroll, message, _collectionHost } };
 
-        Content = new DockPanel { Children = { toolbar, problemBar, trayBar, surfaceArea } };
+        Content = new DockPanel { Children = { toolbar, problemBar, trayBar, _surfaceArea } };
 
         // The document's state, without reflection bindings (the shell is Native AOT). With a Toolbox item armed, the
         // status line says what a click or a drag on the form does (#66: that hint sat above the Toolbox's list).
@@ -174,6 +175,13 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
 
     public void FocusPrimary() => _surface.Focus();
 
+    /// <summary>
+    /// Whether <paramref name="focused"/> is the surface or the component tray (an item, its background), where Edit's
+    /// commands act on the components (#67); the view's collection editor and smart tag panel aren't.
+    /// </summary>
+    internal bool HoldsComponentFocus(Avalonia.Visual focused) =>
+        focused == _surface || _surface.IsVisualAncestorOf(focused) || (_tray is { } tray && (focused == tray || tray.IsVisualAncestorOf(focused)));
+
     // ------------------------------------------------------------------ the context menus (#67)
 
     /// <summary>
@@ -201,7 +209,9 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             var at = 0;
             foreach (var verb in verbs)
             {
-                var entry = MenuEntry.Create(verb.DisplayName, null, click: () => _ = _document.InvokeVerbAsync(verb));
+                // The designer's text, its mnemonic as the entry's access key ("&Edit Columns..." reads "Edit Columns...").
+                var entry = MenuEntry.Create(DesignerMnemonics.Strip(verb.DisplayName), null, click: () => _ = _document.InvokeVerbAsync(verb));
+                entry.Header = DesignerMnemonics.ToAccessKey(verb.DisplayName);
                 entry.IsEnabled = !verb.Unavailable;
                 menu.Items.Insert(at++, entry);
             }
@@ -212,7 +222,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             }
         }
 
-        if (location == BuiltIns.WinFormsTrayMenu && _document.PrimarySelection is { } selected
+        if (location == BuiltIns.WinFormsTrayMenu && _document.Selection is [var selected]
             && items.FirstOrDefault(i => i.Command == "winforms.lineUpIcons") is { } lineUp
             && menu.Items.OfType<MenuItem>().FirstOrDefault(i => Avalonia.Automation.AutomationProperties.GetName(i) == lineUp.Title) is { } lineUpEntry)
         {
@@ -221,6 +231,9 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
 
         return menu;
     }
+
+    /// <summary>The context menu the view opened last (tests: the gestures that open one).</summary>
+    internal ContextMenu? LastMenu { get; private set; }
 
     /// <summary>
     /// Opens a context menu: at the pointer for a right-click, else (Shift+F10, the Menu key) under the primary selection
@@ -232,6 +245,8 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         {
             return;
         }
+
+        LastMenu = menu;
 
         if (!fromPointer)
         {
@@ -360,12 +375,13 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                     break;
             }
         };
-        // The classic IDE's menu (#67): the item is selected first, then its menu opens (on the tray, which outlives the
-        // item's button: selecting draws the tray again).
+        // The classic IDE's menu (#67): the item is selected first unless it's in the selection (which then stays, as a
+        // right-click on the surface keeps it), then its menu opens (on the tray, which outlives the item's button:
+        // selecting draws the tray again).
         button.ContextRequested += (_, e) =>
         {
             e.Handled = true;
-            if (!_document.Selection.SequenceEqual([item.Name]))
+            if (!_document.Selection.Contains(item.Name))
             {
                 item.Select.Execute(null);
             }
@@ -473,6 +489,11 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             _overlay.Children.Remove(old);
         }
 
+        foreach (var old in _surfaceArea.Children.Where(c => c.Tag is "actions").ToList())
+        {
+            _surfaceArea.Children.Remove(old);
+        }
+
         if (_document.ActionPanel is not { } panel || _document.Find(panel.Component) is not { } view)
         {
             return;
@@ -506,10 +527,35 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 e.Handled = true;
             }
         };
+        if (IsTrayOnly(view))
+        {
+            // A tray component (the host sends it 0 × 0 at the form's corner): just above the tray, at its item (#67: its
+            // menu's Show Smart Tag opened it over the form's caption). The tray is drawn again when the selection changes,
+            // so the item's place is taken again once it's laid out.
+            border.HorizontalAlignment = HorizontalAlignment.Left;
+            border.VerticalAlignment = VerticalAlignment.Bottom;
+            void Place()
+            {
+                var item = _tray?.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Tag as string == view.Name);
+                border.Margin = new Thickness(Math.Max(6, item?.TranslatePoint(default, _surfaceArea)?.X ?? 6), 6, 6, 6);
+            }
+
+            Place();
+            Avalonia.Threading.Dispatcher.UIThread.Post(Place, Avalonia.Threading.DispatcherPriority.Loaded);
+            _surfaceArea.Children.Add(border);
+            return;
+        }
+
         Canvas.SetLeft(border, view.X + view.Width + 14);
         Canvas.SetTop(border, view.Y);
         _overlay.Children.Add(border);
     }
+
+    /// <summary>A component only in the tray (a timer, a tool tip, a context menu strip), not a strip drawn on the form too.</summary>
+    private static bool IsTrayOnly(DesignerComponentView view) => !view.IsItem && (view.Width <= 0 || view.Height <= 0 || !view.IsControl);
+
+    /// <summary>The smart tag panel shown, or null (tests: where it opens).</summary>
+    internal Border? ActionsPanel => _overlay.Children.Concat(_surfaceArea.Children).OfType<Border>().FirstOrDefault(c => c.Tag is "actions");
 
     private static Control ActionRow(DesignerActionRowViewModel row)
     {
