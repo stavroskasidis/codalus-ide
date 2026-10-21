@@ -1,3 +1,4 @@
+using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Editor;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
@@ -19,6 +20,7 @@ public sealed partial class ShellHost
     private readonly Dictionary<CodeDocument, int> _heldModels = [];
     private IDesignerPropertySource? _propertySource;
     private bool _toldWindowsOnly;
+    private string? _winFormsCSharpState;
 
     /// <summary>The designer's service (tests replace it to run a fake designer host on any OS).</summary>
     public WinFormsDesignerService WinFormsDesigner { get; set; } = null!;
@@ -64,6 +66,7 @@ public sealed partial class ShellHost
             if (document is WinFormsDesignerDocument designer)
             {
                 PropertySource = designer;
+                _ = designer.LoadToolboxAsync(); // the Toolbox has the active designer's project's controls
             }
 
             Workbench.Context.Set("editorHasWinFormsDesigner", ActiveEditor?.Model.Path is { } path && WinFormsDesignerService.CodeFileOf(path) is { } code && WinFormsDesigner.HasDesigner(code));
@@ -75,6 +78,7 @@ public sealed partial class ShellHost
                 _ = designer.CloseAsync();
             }
         };
+        Languages.StatusChanged += (_, e) => Ui.Post(() => OnWinFormsLanguageStatus(e.LanguageId, e.Status));
         Explorer.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SolutionExplorerViewModel.Selected))
@@ -83,6 +87,27 @@ public sealed partial class ShellHost
                     && WinFormsDesignerService.CodeFileOf(file) is { } code && WinFormsDesigner.HasDesigner(code));
             }
         };
+    }
+
+    /// <summary>
+    /// The C# service has loaded the projects again (loading, then ready): the active designer asks again for the
+    /// project's own controls, which a compilation from before the restore lacked (off Windows, Windows Forms' reference
+    /// pack comes with the restore, and the C# service is ready before it). Only on that change: the service is also
+    /// ready after each pass over the diagnostics (each edit, each change in the designer), which changes no project.
+    /// </summary>
+    internal void OnWinFormsLanguageStatus(string languageId, WorkspaceStatusParams status)
+    {
+        if (languageId != CSharpLanguageId)
+        {
+            return;
+        }
+
+        var was = _winFormsCSharpState;
+        _winFormsCSharpState = status.State;
+        if (status.State == WorkspaceStates.Ready && was != WorkspaceStates.Ready && Layout.ActiveDocument is WinFormsDesignerDocument designer)
+        {
+            _ = designer.LoadToolboxAsync();
+        }
     }
 
     /// <summary>Whether opening <paramref name="path"/> shows the designer: a form's code file, on Windows, unless the setting is off.</summary>
