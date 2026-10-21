@@ -54,20 +54,18 @@ public sealed partial class WcfTestClientView : UserControl, IPaneView
         }
 
         flyout.Items.Clear();
-        flyout.Items.Add(new MenuItem { Header = Localizer.Get("msg.wcf.discovering", "Looking for running CoreWCF services…"), IsEnabled = false });
+        flyout.Items.Add(MenuEntry.Caption(Localizer.Get("msg.wcf.discovering", "Looking for running CoreWCF services…")));
         await vm.DiscoverAsync(selectFirst: false).ConfigureAwait(true); // only list them: the service shown and its form stay
         flyout.Items.Clear();
         if (vm.Discovered.Count == 0)
         {
-            flyout.Items.Add(new MenuItem { Header = vm.Status ?? Localizer.Get("msg.wcf.noneFound", "No running CoreWCF service was found."), IsEnabled = false });
+            flyout.Items.Add(MenuEntry.Caption(vm.Status ?? Localizer.Get("msg.wcf.noneFound", "No running CoreWCF service was found.")));
             return;
         }
 
         foreach (var service in vm.Discovered)
         {
-            var item = new MenuItem { Header = service.Label, Icon = new Icon { Kind = "radar" } };
-            item.Click += (_, _) => _ = vm.LoadDiscoveredAsync(service);
-            flyout.Items.Add(item);
+            flyout.Items.Add(MenuEntry.Create(service.Label, "radar", click: () => _ = vm.LoadDiscoveredAsync(service)));
         }
     }
 

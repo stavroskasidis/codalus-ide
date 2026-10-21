@@ -41,17 +41,11 @@ public sealed partial class TaskRunnerView : UserControl, IPaneView
             var items = new List<MenuItem>();
             if (!row.IsHeader)
             {
-                var run = new MenuItem { Header = "Run" };
-                run.Click += (_, _) => _ = vm.RunAsync(row);
-                items.Add(run);
+                items.Add(Controls.MenuEntry.Create("Run", "play", click: () => _ = vm.RunAsync(row)));
             }
 
-            var restore = new MenuItem { Header = "Restore Packages" };
-            restore.Click += (_, _) => _ = vm.RestoreAsync(row);
-            var open = new MenuItem { Header = "Open package.json" };
-            open.Click += (_, _) => _ = vm.OpenAsync(row);
-            items.Add(restore);
-            items.Add(open);
+            items.Add(Controls.MenuEntry.Create("Restore Packages", "package", click: () => _ = vm.RestoreAsync(row)));
+            items.Add(Controls.MenuEntry.Create("Open package.json", "file", click: () => _ = vm.OpenAsync(row)));
             new ContextMenu { ItemsSource = items }.Open(List);
             e.Handled = true;
         };
