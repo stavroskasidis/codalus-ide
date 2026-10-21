@@ -5,8 +5,9 @@
     <EmbedAllSources>true</EmbedAllSources>
   </PropertyGroup>
   <ItemGroup>
-    <!-- The Windows Forms designer's frames, pixel by pixel (#78). -->
+    <!-- The Windows Forms designer's frames, pixel by pixel, and which controls its host draws again (#78). -->
     <Compile Include="..\Shared\PngPixels.cs" Link="Shared\PngPixels.cs" />
+    <Compile Include="..\..\src\Codalus.WinForms.Designer\Restacking.cs" Link="WinForms\Restacking.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Codalus.LanguageServices.Host\Codalus.LanguageServices.Host.csproj" />

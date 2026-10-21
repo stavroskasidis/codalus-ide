@@ -416,17 +416,20 @@ internal sealed partial class DesignerSession : IDisposable
     /// <see cref="Restack(Bitmap, Control)"/> in <paramref name="parent"/>: its visible controls from the back (the last
     /// in Controls) to the front, each one that overlaps a sibling drawn again inside the parent's client area (and
     /// <paramref name="clip"/>, its ancestors'), and each one with controls of its own looked into right after it is
-    /// (drawn again or not), before the siblings in front of it.
+    /// (drawn again or not), before the siblings in front of it. Which are drawn again, and in what order, is
+    /// <see cref="Restacking.BackToFront"/>.
     /// </summary>
     private static int Restack(Bitmap bitmap, Control parent, Point origin, Rectangle clip, ref Graphics? graphics)
     {
-        var children = new List<(Control Control, Rectangle Bounds)>();
+        var children = new List<Control>();
+        var bounds = new List<Rectangle>();
         foreach (Control child in parent.Controls)
         {
             if (child.Visible && child.Width > 0 && child.Height > 0)
             {
                 var at = WindowOrigin(child);
-                children.Add((child, new Rectangle(at.X - origin.X, at.Y - origin.Y, child.Width, child.Height)));
+                children.Add(child);
+                bounds.Add(new Rectangle(at.X - origin.X, at.Y - origin.Y, child.Width, child.Height));
             }
         }
 
@@ -438,27 +441,11 @@ internal sealed partial class DesignerSession : IDisposable
         }
 
         var restacked = 0;
-        for (var i = children.Count - 1; i >= 0; i--)
+        foreach (var (index, redraw) in Restacking.BackToFront(bounds, area))
         {
-            var (child, bounds) = children[i];
-            var overlaps = false;
-            for (var j = 0; j < children.Count && !overlaps; j++)
+            var child = children[index];
+            if (redraw && Redraw(bitmap, child, bounds[index], area, ref graphics))
             {
-                overlaps = j != i && bounds.IntersectsWith(children[j].Bounds);
-            }
-
-            if (overlaps && bounds.IntersectsWith(area))
-            {
-                // As the first pass drew it (the child's own WM_PRINT), copied without scaling or blending: a transparent
-                // control shows its parent, not the siblings behind it, as at run time.
-                using var drawn = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
-                child.DrawToBitmap(drawn, new Rectangle(0, 0, bounds.Width, bounds.Height));
-                graphics ??= Graphics.FromImage(bitmap);
-                graphics.CompositingMode = CompositingMode.SourceCopy;
-                graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
-                graphics.PixelOffsetMode = PixelOffsetMode.Half;
-                graphics.SetClip(area);
-                graphics.DrawImage(drawn, bounds, 0, 0, bounds.Width, bounds.Height, GraphicsUnit.Pixel);
                 restacked++;
             }
 
@@ -469,6 +456,33 @@ internal sealed partial class DesignerSession : IDisposable
         }
 
         return restacked;
+    }
+
+    /// <summary>
+    /// Draws <paramref name="child"/> again at <paramref name="bounds"/>, inside <paramref name="area"/>, as the first pass
+    /// drew it (the child's own WM_PRINT), copied without scaling or blending: a transparent control shows its parent, not
+    /// the siblings behind it, as at run time. A child that can't be drawn alone (GDI+ refuses a bitmap that large, or
+    /// runs out of memory for it) keeps the first pass's pixels, out of order, and the frame stays; false then.
+    /// </summary>
+    private static bool Redraw(Bitmap bitmap, Control child, Rectangle bounds, Rectangle area, ref Graphics? graphics)
+    {
+        try
+        {
+            using var drawn = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+            child.DrawToBitmap(drawn, new Rectangle(0, 0, bounds.Width, bounds.Height));
+            graphics ??= Graphics.FromImage(bitmap);
+            graphics.CompositingMode = CompositingMode.SourceCopy;
+            graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+            graphics.PixelOffsetMode = PixelOffsetMode.Half;
+            graphics.SetClip(area);
+            graphics.DrawImage(drawn, bounds, 0, 0, bounds.Width, bounds.Height, GraphicsUnit.Pixel);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.Runtime.InteropServices.ExternalException or OutOfMemoryException)
+        {
+            Console.Error.WriteLine($"[designer] {child.Name} ({bounds.Width}x{bounds.Height}) couldn't be drawn again in its order: {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>
