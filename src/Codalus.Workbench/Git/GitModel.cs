@@ -52,6 +52,40 @@ public sealed record GitStatus(
 
 public sealed record GitBranch(string Name, bool IsRemote, bool IsCurrent, string? Upstream, string Commit);
 
+/// <summary>What <see cref="GitService.UpdateBranchAsync"/> did to a local branch.</summary>
+public enum GitBranchUpdateOutcome
+{
+    /// <summary>Fast-forwarded to its upstream.</summary>
+    Updated,
+
+    /// <summary>It already had every commit of its upstream (it may have more): nothing changed.</summary>
+    UpToDate,
+
+    /// <summary>It and its upstream both have commits the other doesn't, so it can't be fast-forwarded: nothing changed.</summary>
+    Diverged,
+
+    /// <summary>It has no upstream branch to update from.</summary>
+    NoUpstream,
+
+    /// <summary>It's checked out in another worktree (<see cref="GitBranchUpdate.WorktreePath"/>), where it's updated by a pull.</summary>
+    CheckedOutElsewhere,
+}
+
+/// <summary>
+/// The result of <see cref="GitService.UpdateBranchAsync"/>: <see cref="Upstream"/> is the upstream's short name
+/// (<c>origin/main</c>), <see cref="Before"/> and <see cref="After"/> the branch's commit before and after (full ids).
+/// </summary>
+public sealed record GitBranchUpdate(string Branch, GitBranchUpdateOutcome Outcome)
+{
+    public string? Upstream { get; init; }
+
+    public string? Before { get; init; }
+
+    public string? After { get; init; }
+
+    public string? WorktreePath { get; init; }
+}
+
 /// <summary>One line of a hunk: <see cref="Kind"/> is <c>' '</c> (context), <c>'+'</c>, <c>'-'</c> or <c>'\\'</c> (no newline at end of file).</summary>
 public sealed record DiffLine(char Kind, string Text);
 
