@@ -36,6 +36,29 @@ public sealed partial class DialogView : UserControl
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        BrowseButton.Click += (_, _) => _ = BrowseAsync();
+    }
+
+    /// <summary>Browse beside a path's input: the OS's picker where the typed path is; the choice replaces the input.</summary>
+    private async Task BrowseAsync()
+    {
+        if (_viewModel is not { Request: { Browse: { } kind } request } vm)
+        {
+            return;
+        }
+
+        var start = Controls.PathBox.StartFolder(vm.InputText, request.BrowseFolder);
+        var picked = vm.Picker is { } picker
+            ? await picker(kind, start).ConfigureAwait(true)
+            : await Controls.PathBox.PickAsync(this, kind, start).ConfigureAwait(true);
+        if (picked is null || !ReferenceEquals(vm.Request, request))
+        {
+            return;
+        }
+
+        vm.InputText = Controls.PathBox.Relative(picked, request.BrowseFolder);
+        Input.Focus();
+        Input.CaretIndex = Input.Text?.Length ?? 0;
     }
 
     /// <summary>

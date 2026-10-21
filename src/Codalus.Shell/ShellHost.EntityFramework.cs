@@ -417,7 +417,8 @@ public sealed partial class ShellHost
             return;
         }
 
-        var folder = await Dialogs.InputAsync(Localizer.Get("msg.entityFramework.compiledModel", "Compiled Model"), Localizer.Get("msg.entityFramework.theFolderForTheCompiledModel", "The folder for the compiled model (relative to the project):"), "CompiledModels", text => text.Trim().Length == 0 ? "Enter a folder." : null).ConfigureAwait(true);
+        var folder = await Dialogs.InputAsync(Localizer.Get("msg.entityFramework.compiledModel", "Compiled Model"), Localizer.Get("msg.entityFramework.theFolderForTheCompiledModel", "The folder for the compiled model (relative to the project):"), "CompiledModels", text => text.Trim().Length == 0 ? "Enter a folder." : null,
+            browse: Controls.PathKind.Folder, browseFolder: Path.GetDirectoryName(target.Project)).ConfigureAwait(true);
         if (folder is null)
         {
             return;

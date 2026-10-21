@@ -363,8 +363,13 @@ interface Codalus.Plugins.IWorkspace
   GetSolutionAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.WorkspaceSolution?>
   GetTypeOutlineAsync(System.String documentUri, System.Int32 line, System.Int32 character, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.TypeOutline?>
   SolutionChanged event System.EventHandler?
+enum Codalus.Plugins.InputBoxBrowse
+  File = 2
+  Folder = 1
+  None = 0
 class Codalus.Plugins.InputBoxOptions
   .ctor(System.String Title)
+  Browse { get; init; } : Codalus.Plugins.InputBoxBrowse
   Deconstruct(out System.String Title) -> System.Void
   Equals(Codalus.Plugins.InputBoxOptions? other) -> System.Boolean
   Equals(System.Object? obj) -> System.Boolean
@@ -452,7 +457,7 @@ class Codalus.Plugins.ParameterOutline
   Type { get; init; } : System.String
 static class Codalus.Plugins.PluginApi
   DeprecationDiagnostic : System.String = CODALUS0001
-  Version : System.String = 1.0.0
+  Version : System.String = 1.1.0
 class Codalus.Plugins.PluginInfo
   .ctor(System.String Id, System.String Version, System.String InstallPath)
   Deconstruct(out System.String Id, out System.String Version, out System.String InstallPath) -> System.Void

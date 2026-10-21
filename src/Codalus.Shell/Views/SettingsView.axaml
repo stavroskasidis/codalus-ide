@@ -133,6 +133,15 @@
         </StackPanel>
       </StackPanel>
     </DataTemplate>
+    <!-- Before the text setting's template, which it derives from: a path's text with the Browse button. -->
+    <DataTemplate DataType="vm:PathSettingViewModel">
+      <controls:PathBox Width="420"
+                        HorizontalAlignment="Left"
+                        Text="{Binding Text}"
+                        Kind="{Binding Kind}"
+                        IsEnabled="{Binding CanEdit}"
+                        AutomationProperties.Name="{Binding Heading}" />
+    </DataTemplate>
     <DataTemplate DataType="vm:TextSettingViewModel">
       <TextBox Width="420"
                HorizontalAlignment="Left"

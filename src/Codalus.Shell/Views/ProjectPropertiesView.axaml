@@ -155,11 +155,11 @@
                 <TextBlock Text="{l:T projectProperties.launch}" />
                 <ComboBox MinWidth="200" ItemsSource="{x:Static vm:LaunchProfilesViewModel.CommandNames}" SelectedItem="{Binding CommandName}" AutomationProperties.Name="{l:T projectProperties.launch}" />
                 <TextBlock Text="{l:T projectProperties.executable}" IsVisible="{Binding IsExecutable}" />
-                <TextBox Text="{Binding ExecutablePath}" IsVisible="{Binding IsExecutable}" AutomationProperties.Name="{l:T projectProperties.executable}" />
+                <controls:PathBox Kind="File" Text="{Binding ExecutablePath}" IsVisible="{Binding IsExecutable}" AutomationProperties.Name="{l:T projectProperties.executable}" />
                 <TextBlock Text="{l:T projectProperties.commandLineArguments}" />
                 <TextBox Text="{Binding CommandLineArgs}" AutomationProperties.Name="{l:T projectProperties.commandLineArguments}" />
                 <TextBlock Text="{l:T projectProperties.workingDirectory}" />
-                <TextBox Text="{Binding WorkingDirectory}" AutomationProperties.Name="{l:T projectProperties.workingDirectory}" />
+                <controls:PathBox Text="{Binding WorkingDirectory}" AutomationProperties.Name="{l:T projectProperties.workingDirectory}" />
                 <TextBlock Text="{l:T projectProperties.environmentVariablesNameValueOnePer}" />
                 <TextBox Text="{Binding EnvironmentVariables}" AcceptsReturn="True" MinHeight="70" AutomationProperties.Name="{l:T projectProperties.environmentVariables}" />
                 <TextBlock Text="{l:T projectProperties.appUrlWebProjects}" />

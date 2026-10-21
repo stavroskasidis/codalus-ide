@@ -2,7 +2,7 @@
 
 Plugins extend Codalus IDE with commands, menus, key bindings, settings, tool windows, notifications, output channels and status bar items. This guide walks through the sample in [`samples/plugins/HelloWorld`](../samples/plugins/HelloWorld). The design and its reasons are in [ADR 0003](adr/0003-plugin-api.md), and the wire protocol is in [plugin-protocol.md](plugin-protocol.md).
 
-**API version 1.0.0** ([ADR 0058](adr/0058-plugin-api-1-0.md)). The API is frozen: minor releases (1.x) only add, and a member goes away only in a major release, after it has been marked obsolete (warning `CODALUS0001`) for at least two minor releases. Ask for `^1.0.0`. See the [changelog](#changelog).
+**API version 1.1.0** ([ADR 0058](adr/0058-plugin-api-1-0.md)). The API is frozen: minor releases (1.x) only add, and a member goes away only in a major release, after it has been marked obsolete (warning `CODALUS0001`) for at least two minor releases. Ask for `^1.0.0`, or `^1.1.0` when you use what 1.1 added. See the [changelog](#changelog).
 
 ## How plugins run
 
@@ -135,7 +135,7 @@ public sealed class HelloPlugin : ICodalusPlugin
 
 - `IPluginContext` gives you `Commands`, `Window`, `Settings`, `Log` and `Subscriptions`, and the [workbench APIs](#workbench-apis): `Tests`, `Workspace`, `Build`, `Debug`, `Terminals`, `Hosting`, `Secrets`, `FileSystems`, `Authentication` and `SourceControl`. Add every registration to `Subscriptions`; they are disposed on deactivation.
 - **Commands** take and return JSON-serializable values (`CommandInvocation.Arg<T>(i)` reads arguments). `Commands.ExecuteAsync` runs any command, including the shell's built-ins below.
-- **Window:** notifications with actions (the task completes with the chosen action, or null), `ShowQuickPickAsync` (pick from a list in the command palette) and `ShowInputBoxAsync` (ask for a line of text) since 0.1.1, output channels, status bar items, tree data providers and `SetMarkdown` for Markdown views.
+- **Window:** notifications with actions (the task completes with the chosen action, or null), `ShowQuickPickAsync` (pick from a list in the command palette) and `ShowInputBoxAsync` (ask for a line of text; for a path, `Browse = InputBoxBrowse.Folder` or `File` adds a Browse button that opens the OS's picker, since 1.1) since 0.1.1, output channels, status bar items, tree data providers and `SetMarkdown` for Markdown views.
 - **Settings:** `GetValue<T>(key, fallback)` and a `Changed` event (`e.Affects("section")`).
 - **Log** goes to Output → Plugins.
 
@@ -364,6 +364,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### 1.1.0 (Codalus IDE 0.5)
+
+Added: `InputBoxOptions.Browse` and the enum `InputBoxBrowse`. With `Folder` or `File`, the input box has a Browse button beside it that opens the OS's folder or file picker where the typed path is, and puts the choice in the box, as every path field in the IDE does. The protocol's `window/showInputBox` takes `browse` (`folder` or `file`). Plugins that set it ask for `^1.1.0`; plugins built for 1.0 keep working.
 
 ### Command sweep fixes (no API version change)
 

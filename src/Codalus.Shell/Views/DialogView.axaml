@@ -112,12 +112,16 @@
       <DockPanel Margin="20,12,20,18" ClipToBounds="True">
         <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" Classes="message" Classes.label="{Binding HasChoices}" Text="{Binding Message}" TextWrapping="Wrap"
                    IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-        <TextBox x:Name="Input" DockPanel.Dock="Top" Margin="0,0,0,8"
-                 Text="{Binding InputText}"
-                 IsVisible="{Binding HasInput}"
-                 PasswordChar="{Binding PasswordChar}"
-                 Classes.invalid="{Binding HasError}"
-                 AutomationProperties.Name="{Binding Title}" />
+        <!-- A path's input has the Browse button beside it, as every path field (Controls/PathBox.cs). -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" IsVisible="{Binding HasInput}">
+          <Button x:Name="BrowseButton" DockPanel.Dock="Right" Margin="6,0,0,0" VerticalAlignment="Center" Classes="icon" controls:ButtonIcon.Kind="folder-open"
+                  IsVisible="{Binding CanBrowse}" ToolTip.Tip="{l:T dialog.browse}" AutomationProperties.Name="{l:T dialog.browse}" />
+          <TextBox x:Name="Input"
+                   Text="{Binding InputText}"
+                   PasswordChar="{Binding PasswordChar}"
+                   Classes.invalid="{Binding HasError}"
+                   AutomationProperties.Name="{Binding Title}" />
+        </DockPanel>
         <!-- The error says what to do, under the box, with the error icon. -->
         <DockPanel IsVisible="{Binding HasError}" DockPanel.Dock="Top" Margin="0,-4,0,8">
           <controls:Icon Kind="error" Classes="error" Width="12" Height="12" Margin="0,2,4,0" VerticalAlignment="Top" DockPanel.Dock="Left" />

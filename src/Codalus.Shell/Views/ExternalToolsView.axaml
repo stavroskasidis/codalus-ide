@@ -37,11 +37,11 @@
           <TextBlock Text="{l:T externalTools.title}" />
           <TextBox Text="{Binding Title}" AutomationProperties.Name="{l:T externalTools.title}" />
           <TextBlock Text="{l:T externalTools.command}" />
-          <TextBox Text="{Binding Command}" PlaceholderText="{l:T externalTools.aProgramOnPathOrIts}" AutomationProperties.Name="{l:T externalTools.command}" />
+          <controls:PathBox Kind="File" Text="{Binding Command}" PlaceholderText="{l:T externalTools.aProgramOnPathOrIts}" AutomationProperties.Name="{l:T externalTools.command}" />
           <TextBlock Text="{l:T externalTools.arguments}" />
           <TextBox Text="{Binding Arguments}" PlaceholderText="{l:T externalTools.itempath}" AutomationProperties.Name="{l:T externalTools.arguments}" />
           <TextBlock Text="{l:T externalTools.initialDirectory}" />
-          <TextBox Text="{Binding InitialDirectory}" PlaceholderText="{l:T externalTools.itemdir}" AutomationProperties.Name="{l:T externalTools.initialDirectory}" />
+          <controls:PathBox Text="{Binding InitialDirectory}" PlaceholderText="{l:T externalTools.itemdir}" AutomationProperties.Name="{l:T externalTools.initialDirectory}" />
           <CheckBox Content="{l:T externalTools.useTheOutputWindow}" IsChecked="{Binding UseOutputWindow}" />
           <CheckBox Content="{l:T externalTools.promptForArguments}" IsChecked="{Binding PromptForArguments}" />
           <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding CommandId, StringFormat='Command: {0}'}" />
