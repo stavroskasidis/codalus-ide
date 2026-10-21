@@ -54,6 +54,9 @@ public sealed record NewProjectContext
 
     public bool WorkspaceTrusted { get; init; }
 
+    /// <summary>The open solution's project files (Enlist in Aspire orchestration looks for its AppHost among them).</summary>
+    public IReadOnlyList<string> WorkspaceProjects { get; init; } = [];
+
     /// <summary>The solution folder selected when Add New Project opened (its id), where the project goes.</summary>
     public string? SolutionFolderId { get; init; }
 
@@ -1147,7 +1150,27 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         set => SetField(ref _aspire, value);
     }
 
-    public string AspireDescription => Localizer.Format("templates.option.aspireDescription", "Adds {0}.AppHost and {0}.ServiceDefaults projects. Installs the Aspire templates from nuget.org first if they're missing.", CreatesSolution ? SolutionNameForAspire : _context.WorkspaceName);
+    public string AspireDescription => !CreatesSolution && _existingAspire?.AppHost is { } appHost
+        ? Localizer.Format("templates.option.aspireExisting", "Adds this project to {0}, the solution's AppHost.", Path.GetFileNameWithoutExtension(appHost))
+        : Localizer.Format("templates.option.aspireDescription", "Adds {0}.AppHost and {0}.ServiceDefaults projects. Installs the Aspire templates from nuget.org first if they're missing.", AspireName);
+
+    /// <summary>The name new Aspire projects start with: the new solution's, else the open one's.</summary>
+    private string AspireName => CreatesSolution ? SolutionNameForAspire : _context.WorkspaceName ?? _projectName;
+
+    private AspireProjects? _existingAspire;
+
+    /// <summary>The open solution's AppHost and ServiceDefaults, read off the UI thread when Additional information opens.</summary>
+    private async Task DetectAspireAsync()
+    {
+        if (CreatesSolution || !ShowAspire || _context.WorkspaceProjects.Count == 0)
+        {
+            return;
+        }
+
+        var projects = _context.WorkspaceProjects;
+        _existingAspire = await Task.Run(() => AspireEnlistment.Detect(projects)).ConfigureAwait(true);
+        OnPropertyChanged(nameof(AspireDescription));
+    }
 
     private string SolutionNameForAspire => _sameDirectory ? _projectName : _solutionName;
 
@@ -1180,6 +1203,7 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         RebuildOptions();
         Page = NewProjectPage.Additional;
         ScheduleGlobalJsonCheck();
+        _ = DetectAspireAsync();
     }
 
     /// <summary>
@@ -1474,6 +1498,8 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
             Framework = framework,
             Values = Options.Count > 0 ? SymbolValues() : new Dictionary<string, string?>(),
             HostOptions = new HostOptionValues { Https = Https, Auth = _auth?.Value, Docker = Docker, Aspire = Aspire },
+            ExistingAspire = CreatesSolution ? null : _existingAspire,
+            AspireName = AspireName,
         };
     }
 

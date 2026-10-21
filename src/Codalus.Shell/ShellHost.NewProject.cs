@@ -161,6 +161,7 @@ public sealed partial class ShellHost
             WorkspaceDirectory = solution?.Directory,
             WorkspaceName = solution?.Name,
             WorkspaceTrusted = solution?.Trusted ?? false,
+            WorkspaceProjects = solution is null ? [] : [.. solution.Projects.Select(p => p.Path)],
             SolutionFolderId = folderId,
             SolutionFolderName = folderId is null ? null : solution?.Folders.FirstOrDefault(f => f.Id == folderId)?.Name,
             DefaultLocationSetting = Workbench.Settings.GetString(DefaultLocationSetting, string.Empty),
@@ -217,6 +218,11 @@ public sealed partial class ShellHost
 
         if (result.ProjectPath is { } created)
         {
+            if (result.Aspire is { } aspire && Solutions.Solution is { Trusted: true })
+            {
+                await EnlistInAspireAsync(created, aspire, plan.CreatesSolution ? null : completion.SolutionFolderId, plan.CreatesSolution).ConfigureAwait(true);
+            }
+
             if (Solutions.Solution is { Trusted: true } && Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true))
             {
                 _ = Solutions.RestoreAsync(null, CancellationToken.None);
@@ -234,6 +240,37 @@ public sealed partial class ShellHost
         }
 
         return result.ProjectPath ?? result.SolutionPath;
+    }
+
+    /// <summary>
+    /// Enlist in Aspire orchestration, in the open solution: the AppHost and ServiceDefaults New Project created join it,
+    /// the web project references the ServiceDefaults and the AppHost references the web project (through the build
+    /// host), and a new solution starts with the AppHost. Lines it couldn't add itself are shown, to add by hand.
+    /// </summary>
+    private async Task EnlistInAspireAsync(string project, AspireResult aspire, string? folder, bool newSolution)
+    {
+        if (aspire.CreatedServiceDefaults)
+        {
+            await Solutions.AddProjectAsync(aspire.ServiceDefaults, folder, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        if (aspire.CreatedAppHost)
+        {
+            await Solutions.AddProjectAsync(aspire.AppHost, folder, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        await Solutions.AddProjectReferenceAsync(project, aspire.ServiceDefaults, CancellationToken.None).ConfigureAwait(true);
+        await Solutions.AddProjectReferenceAsync(aspire.AppHost, project, CancellationToken.None).ConfigureAwait(true);
+        if (newSolution)
+        {
+            SetStartupProject(aspire.AppHost);
+        }
+
+        if (aspire.ManualSteps is { } steps)
+        {
+            TemplatesLog.AppendLine(steps);
+            ShowTemplatesError(Localizer.Format("msg.newProject.aspireManual", "Enlisted in Aspire orchestration, but add these lines yourself (Output → Templates has them): {0}", steps.Split('\n')[0]));
+        }
     }
 
     /// <summary>The files are there but the solution didn't open: say so, with Open.</summary>

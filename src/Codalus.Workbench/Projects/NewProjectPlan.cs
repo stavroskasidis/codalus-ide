@@ -72,6 +72,12 @@ public sealed record NewProjectRequest
     public IReadOnlyDictionary<string, string?> Values { get; init; } = new Dictionary<string, string?>(StringComparer.Ordinal);
 
     public HostOptionValues HostOptions { get; init; } = new();
+
+    /// <summary>The open solution's AppHost and ServiceDefaults, reused by Enlist in Aspire orchestration when adding.</summary>
+    public AspireProjects? ExistingAspire { get; init; }
+
+    /// <summary>The name new Aspire projects start with (<c>&lt;name&gt;.AppHost</c>): the solution's.</summary>
+    public string? AspireName { get; init; }
 }
 
 /// <summary>

@@ -463,6 +463,47 @@ public sealed class NewProjectViewModelTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Aspire_reuses_the_solutions_apphost_when_adding()
+    {
+        var solution = Path.Combine(_root, "Shop");
+        Directory.CreateDirectory(Path.Combine(solution, "Shop.AppHost"));
+        var appHost = Path.Combine(solution, "Shop.AppHost", "Shop.AppHost.csproj");
+        File.WriteAllText(appHost, "<Project Sdk=\"Microsoft.NET.Sdk\"><Sdk Name=\"Aspire.AppHost.Sdk\" Version=\"9.5.0\" /></Project>");
+        var model = Model(new NewProjectContext
+        {
+            Mode = NewProjectMode.Add,
+            Workspace = NewProjectWorkspace.Solution,
+            WorkspaceDirectory = solution,
+            WorkspaceName = "Shop",
+            WorkspaceTrusted = true,
+            WorkspaceProjects = [appHost],
+            IsWindows = false,
+        });
+        await model.LoadAsync();
+        await SelectAsync(model, "dotnet:Microsoft.Web.WebApi|C#");
+        await model.GoForwardAsync();
+        await SettleAsync(model);
+        await model.GoForwardAsync();
+        Assert.True(model.ShowAspire);
+        await ShellFixture.PumpUntil(() => model.AspireDescription.Contains("the solution's AppHost", StringComparison.Ordinal));
+        Assert.Equal("Adds this project to Shop.AppHost, the solution's AppHost.", model.AspireDescription);
+        model.Aspire = true;
+        var request = model.Request();
+        Assert.Equal((appHost, (string?)null), (request.ExistingAspire!.AppHost, request.ExistingAspire.ServiceDefaults));
+        Assert.True(request.HostOptions.Aspire);
+
+        // A new solution names its own: <solution>.AppHost.
+        var fresh = Model();
+        await fresh.LoadAsync();
+        await SelectAsync(fresh, "dotnet:Microsoft.Web.WebApi|C#");
+        await fresh.GoForwardAsync();
+        fresh.SolutionName = "Store";
+        await SettleAsync(fresh);
+        await fresh.GoForwardAsync();
+        Assert.Equal("Adds Store.AppHost and Store.ServiceDefaults projects. Installs the Aspire templates from nuget.org first if they're missing.", fresh.AspireDescription);
+    }
+
+    [AvaloniaFact]
     public async Task With_a_solution_open_new_mode_offers_add_to_solution()
     {
         var solution = Path.Combine(_root, "Open");

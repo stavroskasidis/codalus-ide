@@ -9,7 +9,11 @@ public sealed record NewProjectResult(
     string? ProjectPath,
     IReadOnlyList<string> ExtraProjects,
     IReadOnlyList<string> FilesToOpen,
-    string Log);
+    string Log)
+{
+    /// <summary>Enlist in Aspire orchestration's projects, when it was chosen.</summary>
+    public AspireResult? Aspire { get; init; }
+}
 
 /// <summary>New Project failed: <see cref="Exception.Message"/> is the CLI's last meaningful line, <see cref="Log"/> everything.</summary>
 public sealed class NewProjectException(string message, string log) : Exception(message)
@@ -111,7 +115,71 @@ public sealed class NewProjectService(ITemplateCli cli, PathRules? rules = null)
         var projects = ProjectFiles(projectDirectory);
         var project = projects.FirstOrDefault(p => string.Equals(Path.GetFileNameWithoutExtension(p), name, StringComparison.OrdinalIgnoreCase)) ?? (projects.Count > 0 ? projects[0] : null)
             ?? throw new NewProjectException(Localizer.Format("msg.newProject.noProjectFile", "The template created {0} but no project file.", projectDirectory), log.ToString());
-        return new NewProjectResult(solution, project, [.. projects.Where(p => p != project)], filesToOpen, log.ToString());
+        var aspire = request.HostOptions.Aspire && member?.HostOptions.Aspire == true
+            ? await EnlistInAspireAsync(plan, project, progress, log, created, cancellationToken).ConfigureAwait(false)
+            : null;
+        return new NewProjectResult(solution, project, [.. projects.Where(p => p != project)], filesToOpen, log.ToString()) { Aspire = aspire };
+    }
+
+    /// <summary>
+    /// Enlist in Aspire orchestration (<see cref="AspireEnlistment"/>): the solution's AppHost and ServiceDefaults, or new
+    /// ones next to the project (the Aspire templates installed first when they're missing: checking the box was the
+    /// consent), then the text edits. The references are the build host's, in the shell.
+    /// </summary>
+    private async Task<AspireResult> EnlistInAspireAsync(NewProjectPlan plan, string project, IProgress<string>? progress, StringBuilder log, List<string> created, CancellationToken cancellationToken)
+    {
+        var request = plan.Request;
+        var existing = request.ExistingAspire ?? AspireProjects.None;
+        var folder = plan.SolutionDirectory ?? plan.Location!;
+        var name = request.AspireName is { Length: > 0 } aspireName ? aspireName : plan.SolutionName ?? request.ProjectName.Trim();
+        if (existing.AppHost is null || existing.ServiceDefaults is null)
+        {
+            var list = await cli.RunAsync(["new", "list", AspireEnlistment.AppHostTemplate], cancellationToken).ConfigureAwait(false);
+            if (!list.Succeeded || !list.Output.Contains(AspireEnlistment.AppHostTemplate, StringComparison.Ordinal))
+            {
+                progress?.Report(Localizer.Get("msg.newProject.installingAspire", "Installing the Aspire templates…"));
+                log.AppendLine("dotnet new install " + AspireEnlistment.TemplatesPackage);
+                var (installed, output) = await cli.InstallAsync(AspireEnlistment.TemplatesPackage, cancellationToken).ConfigureAwait(false);
+                log.AppendLine(output.TrimEnd()).AppendLine();
+                if (!installed)
+                {
+                    throw new NewProjectException(Localizer.Format("msg.newProject.aspireInstallFailed", "Couldn't install the Aspire templates: {0}", new CliResult(1, output).LastMeaningfulLine), log.ToString());
+                }
+            }
+        }
+
+        async Task<string> CreateAsync(string template, string suffix)
+        {
+            var projectName = name + suffix;
+            var directory = Path.Combine(folder, projectName);
+            progress?.Report(Localizer.Format("msg.newProject.creating", "Creating {0}…", projectName));
+            Remember(directory, created);
+            await RunCliAsync(["new", template, "--name", projectName, "--output", directory, "--no-restore"], log, cancellationToken).ConfigureAwait(false);
+            return ProjectFiles(directory) is [var first, ..] ? first
+                : throw new NewProjectException(Localizer.Format("msg.newProject.noProjectFile", "The template created {0} but no project file.", directory), log.ToString());
+        }
+
+        var serviceDefaults = existing.ServiceDefaults ?? await CreateAsync(AspireEnlistment.ServiceDefaultsTemplate, ".ServiceDefaults").ConfigureAwait(false);
+        var appHost = existing.AppHost ?? await CreateAsync(AspireEnlistment.AppHostTemplate, ".AppHost").ConfigureAwait(false);
+        var manual = new List<string>();
+        var program = Path.Combine(Path.GetDirectoryName(project)!, "Program.cs");
+        var programSteps = File.Exists(program) ? AspireEnlistment.AddServiceDefaults(program) : "builder.AddServiceDefaults();\napp.MapDefaultEndpoints();";
+        if (programSteps is not null)
+        {
+            manual.Add($"{program}:\n{programSteps}");
+        }
+
+        if (AspireEnlistment.AppHostFile(appHost) is not { } appHostFile)
+        {
+            manual.Add($"{appHost}:\nbuilder.AddProject<{AspireEnlistment.ProjectsType(Path.GetFileNameWithoutExtension(project))}>(\"{AspireEnlistment.ResourceName(Path.GetFileNameWithoutExtension(project))}\");");
+        }
+        else if (AspireEnlistment.AddToAppHost(appHostFile, project) is { } appHostStep)
+        {
+            manual.Add($"{appHostFile}:\n{appHostStep}");
+        }
+
+        log.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"Aspire: {appHost} and {serviceDefaults}.");
+        return new AspireResult(appHost, serviceDefaults, existing.AppHost is null, existing.ServiceDefaults is null, manual.Count > 0 ? string.Join("\n\n", manual) : null);
     }
 
     /// <summary>The project files a template wrote: in its folder, else one folder down (a Blazor app with a client project).</summary>

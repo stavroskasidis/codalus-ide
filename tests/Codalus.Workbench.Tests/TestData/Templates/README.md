@@ -11,6 +11,8 @@ Recorded from the .NET SDK 10.0.401 and 11.0.100-rc.2 on Linux, trimmed to what 
   (`content/…` and the root).
 - `list-project.txt`, `list-project-columns-all.txt`: `dotnet new list --type project` (with `--columns-all`), trimmed.
 - `blazor-help.txt`: `dotnet new blazor --help`.
+- `AspireStandIn/`: stand-ins for the Aspire templates (`aspire-apphost`, `aspire-servicedefaults`), installed into a test
+  hive from the folder, so Enlist in Aspire orchestration is tested offline.
 
 The template files come from the .NET SDK and ASP.NET Core template packages (MIT license, © .NET Foundation and
 Contributors).
