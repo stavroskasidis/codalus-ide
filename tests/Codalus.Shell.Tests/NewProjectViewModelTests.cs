@@ -17,6 +17,7 @@ public sealed class NewProjectViewModelTests : IDisposable
     private readonly RecordedCli _cli = RecordedCli.Sdk11();
     private readonly List<string> _trusted = [];
     private readonly List<string> _output = [];
+    private readonly List<NewProjectViewModel> _models = [];
     private int _backToStart;
 
     public NewProjectViewModelTests()
@@ -33,6 +34,12 @@ public sealed class NewProjectViewModelTests : IDisposable
 
     public void Dispose()
     {
+        // Each wizard finished first, so nothing it scheduled writes its history into the folder after it's gone.
+        foreach (var model in _models)
+        {
+            model.OnClosed();
+        }
+
         _data.Dispose();
         try
         {
@@ -83,11 +90,13 @@ public sealed class NewProjectViewModelTests : IDisposable
             ShowOutput = _output.Add,
             BackToStartWindow = () => _backToStart++,
         };
-        return new NewProjectViewModel(services, context ?? new NewProjectContext { IsWindows = false })
+        var model = new NewProjectViewModel(services, context ?? new NewProjectContext { IsWindows = false })
         {
             SearchDelay = TimeSpan.Zero,
             ValidationDelay = TimeSpan.Zero,
         };
+        _models.Add(model);
+        return model;
     }
 
     private static async Task SelectAsync(NewProjectViewModel model, string id)

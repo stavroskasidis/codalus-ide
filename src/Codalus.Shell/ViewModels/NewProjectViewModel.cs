@@ -438,7 +438,14 @@ public sealed class NewProjectViewModel : ObservableObject, ILoadable, IDisposab
         }
     }
 
-    private void OnCatalogChanged(object? sender, EventArgs e) => Ui.Post(() => _ = ReloadAsync());
+    private void OnCatalogChanged(object? sender, EventArgs e) => Ui.Post(() =>
+    {
+        // A wizard that has closed since doesn't read the templates (or write its history) again.
+        if (!_finished)
+        {
+            _ = ReloadAsync();
+        }
+    });
 
     /// <summary>The templates changed (a pack installed): read them again, keeping the selection by id.</summary>
     private async Task ReloadAsync()
