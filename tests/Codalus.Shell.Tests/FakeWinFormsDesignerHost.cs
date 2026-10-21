@@ -211,14 +211,51 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
 
     public Task<DesignerRenderResult> RenderAsync(CancellationToken cancellationToken) => Task.FromResult(Render());
 
+    /// <summary>The framework's components that aren't controls (they go to the tray), by simple name.</summary>
+    private static readonly HashSet<string> s_components = new(StringComparer.Ordinal) { "Timer", "ToolTip", "BindingSource", "ErrorProvider", "ImageList", "ContextMenuStrip", "BackgroundWorker", "HelpProvider", "NotifyIcon" };
+
+    private static bool IsContainerType(string type)
+    {
+        var simple = type[(type.LastIndexOf('.') + 1)..];
+        return simple.EndsWith("Panel", StringComparison.Ordinal) || simple is "GroupBox" or "TabPage";
+    }
+
+    /// <summary>
+    /// A Toolbox item as the real host creates it (#66), for what the tests use: a component that isn't a control goes to
+    /// the tray; a drop goes into its parent at the point; the Toolbox's double-click or Enter goes into the selection's
+    /// container (the selected control's parent, or a container selected itself, else the form), at the container's
+    /// corner when it's selected itself, else a grid step (8, 8) below and right of the selected control.
+    /// </summary>
     public Task<DesignerChangeResult> CreateAsync(DesignerCreateParams parameters, CancellationToken cancellationToken)
     {
         Creates.Add(parameters);
-        var x = (int)parameters.X - 8;
-        var y = (int)parameters.Y - 31;
-        _controls[parameters.Name] = new Control(parameters.Type, _root, x, y, 75, 23, parameters.Name, 11, "None", "Top, Left");
-        Children(_root).Insert(0, parameters.Name);
-        var created = new DesignerCreated(parameters.Name, parameters.Type, [], string.Empty, null, null,
+        var simple = parameters.Type[(parameters.Type.LastIndexOf('.') + 1)..];
+        if (s_components.Contains(simple))
+        {
+            _tray[parameters.Name] = parameters.Type;
+            // Not a control on the form (a context menu has no parent): its creation takes the form's components, as the real host's does for an IContainer constructor.
+            var component = new DesignerCreated(parameters.Name, parameters.Type, simple is "Timer" or "ToolTip" or "ErrorProvider" or "ImageList" or "BindingSource" or "ContextMenuStrip" ? [DesignerValue.ReferenceTo("components")] : [], null, null, null, []);
+            return Task.FromResult(new DesignerChangeResult([], Render()) { Created = component });
+        }
+
+        string parent;
+        int x, y;
+        if (parameters.AtDefaultLocation)
+        {
+            var selected = parameters.Selected.FirstOrDefault(s => s == _root || _controls.ContainsKey(s));
+            parent = selected is null || selected == _root ? _root : IsContainerType(_controls[selected].Type) ? selected : _controls[selected].Parent ?? _root;
+            (x, y) = selected is null || selected == parent ? (0, 0) : ((int)_controls[selected].X + 8, (int)_controls[selected].Y + 8);
+        }
+        else
+        {
+            parent = parameters.Parent is { } named && _controls.ContainsKey(named) ? named : _root;
+            var view = Render().Components.First(v => v.Name == parent);
+            (x, y) = ((int)(parameters.X - view.ClientX), (int)(parameters.Y - view.ClientY));
+        }
+
+        _controls[parameters.Name] = new Control(parameters.Type, parent, x, y, 75, 23, parameters.Name, 11, "None", "Top, Left");
+        Children(parent).Insert(0, parameters.Name);
+        var created = new DesignerCreated(parameters.Name, parameters.Type, [], parent == _root ? string.Empty : parent, null, null,
         [
             new("Location", DesignerValue.NewOf("System.Drawing.Point", DesignerValue.Int(x), DesignerValue.Int(y))),
             new("Name", DesignerValue.String(parameters.Name)),

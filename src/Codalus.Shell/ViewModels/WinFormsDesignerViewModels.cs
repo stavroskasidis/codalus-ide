@@ -785,6 +785,35 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         _shell.Toolbox.Disarm();
     }
 
+    /// <summary>
+    /// The Toolbox's double-click or Enter (#66), as the classic IDE's tool pick: the item goes into the selected
+    /// container (the selection's, walked up to one that takes controls, else the form) at its default place (its
+    /// top-left corner, or a grid step below and right of the selected control, so repeated adds cascade), and is
+    /// selected; then the designer is activated with its surface focused, so the arrow keys, Delete and F4 act on it.
+    /// Nothing in tab order mode, as there. During a restart it waits and applies on the new host.
+    /// </summary>
+    public async Task AddFromToolboxAsync(string type)
+    {
+        if (_model is null || IsTabOrderMode)
+        {
+            return;
+        }
+
+        string? name = null;
+        await RunAsync(host =>
+        {
+            // Named once the host is there: a restart in between may have loaded other components.
+            name = NewName(type);
+            var root = Root;
+            return host.CreateAsync(new DesignerCreateParams(type, name, null, root?.ClientX ?? 0, root?.ClientY ?? 0) { AtDefaultLocation = true, Selected = [.. _selection] }, CancellationToken.None);
+        }, after: () => SetSelection([name!], notify: true)).ConfigureAwait(true);
+        _shell.Toolbox.Disarm();
+        if (!_disposed)
+        {
+            _shell.Layout.OpenDocument(this, preview: false, focus: true);
+        }
+    }
+
     /// <summary>Visual Studio's name for a new component: its type's name, first letter lowercased, and the first free number (<c>button1</c>).</summary>
     public string NewName(string type)
     {
@@ -1567,7 +1596,8 @@ public sealed class ToolboxCategoryViewModel(string title, IReadOnlyList<Toolbox
 /// <summary>
 /// The Toolbox (Ctrl+Alt+X, M41a): Windows Forms' common controls by Visual Studio's categories, and the project's own
 /// controls and components (from the C# host). Selecting an item arms it: the next click or drag on the designer's
-/// surface creates it there (the Pointer, or creating it, disarms). Items can also be dragged onto the surface.
+/// surface creates it there (the Pointer, or creating it, disarms). Items can also be dragged onto the surface, and
+/// since 0.6 (#66) a double-click or Enter adds one at once into the selected container, as the classic IDE does.
 /// </summary>
 public sealed class ToolboxViewModel : ObservableObject
 {
@@ -1733,6 +1763,21 @@ public sealed class ToolboxViewModel : ObservableObject
     public bool HasArmed => _armed is not null;
 
     public void Disarm() => Armed = null;
+
+    /// <summary>An item double-clicked or Enter pressed on (#66): the active designer adds it at once, as the classic IDE does.</summary>
+    public event EventHandler<ToolboxItemViewModel>? ItemPicked;
+
+    /// <summary>The Toolbox's double-click or Enter on an item (#66): nothing stays armed, and the active designer adds it at its default place.</summary>
+    public void Pick(ToolboxItemViewModel item)
+    {
+        if (item.IsPointer || !_isAvailable)
+        {
+            return;
+        }
+
+        Disarm();
+        ItemPicked?.Invoke(this, item);
+    }
 
     /// <summary>A Windows Forms designer is the active document.</summary>
     public bool IsAvailable

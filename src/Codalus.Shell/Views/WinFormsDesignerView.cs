@@ -108,11 +108,13 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
 
         Content = new DockPanel { Children = { toolbar, problemBar, trayBar, surfaceArea } };
 
-        // The document's state, without reflection bindings (the shell is Native AOT).
+        // The document's state, without reflection bindings (the shell is Native AOT). With a Toolbox item armed, the
+        // status line says what a click or a drag on the form does (#66: that hint sat above the Toolbox's list).
         void Update()
         {
-            status.Text = document.Status;
-            ToolTip.SetTip(status, string.IsNullOrEmpty(document.Status) ? null : document.Status);
+            var line = document.Toolbox.ArmedText ?? document.Status;
+            status.Text = line;
+            ToolTip.SetTip(status, string.IsNullOrEmpty(line) ? null : line);
             message.Text = document.Status;
             message.IsVisible = document.Frame is null && !string.IsNullOrEmpty(document.Status);
             busy.IsVisible = document.IsBusy;
@@ -137,6 +139,22 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             }
         });
         document.SurfaceChanged += (_, _) => Infrastructure.Ui.Post(Update);
+
+        // The Toolbox outlives the designer: its armed item is followed only while the view is shown.
+        void OnToolboxChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ToolboxViewModel.ArmedText))
+            {
+                Infrastructure.Ui.Post(Update);
+            }
+        }
+
+        AttachedToVisualTree += (_, _) =>
+        {
+            document.Toolbox.PropertyChanged += OnToolboxChanged;
+            Update();
+        };
+        DetachedFromVisualTree += (_, _) => document.Toolbox.PropertyChanged -= OnToolboxChanged;
         Avalonia.Automation.AutomationProperties.SetName(_surface, document.Title);
         _surface.ContextRequested += (_, e) =>
         {
@@ -167,7 +185,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         DragDrop.SetAllowDrop(tray, true);
         DragDrop.AddDragOverHandler(tray, (_, e) =>
         {
-            e.DragEffects = e.DataTransfer.Contains(TrayFormat) ? DragDropEffects.Move : DragDropEffects.None;
+            e.DragEffects = e.DataTransfer.Contains(TrayFormat) ? DragDropEffects.Move : TrayToolOf(e.DataTransfer) is not null ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         });
         DragDrop.AddDropHandler(tray, (_, e) =>
@@ -177,6 +195,12 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 var before = (e.Source as Control)?.FindAncestorOfType<Button>(includeSelf: true)?.Tag as string;
                 e.Handled = true;
                 _ = _document.MoveTrayItemAsync(name, before == name ? null : before);
+            }
+            else if (TrayToolOf(e.DataTransfer) is { } type)
+            {
+                // A component from the Toolbox (#66), as the classic component tray takes one: the host puts it in the tray.
+                e.Handled = true;
+                _ = _document.CreateAsync(type, 0, 0);
             }
         });
         tray.ContextMenu = new ContextMenu { Items = { MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.lineUpIcons", "Line Up Icons"), "layout", click: () => _ = _document.LineUpTrayAsync()) } };
@@ -279,6 +303,14 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         }, RoutingStrategies.Tunnel);
         return button;
     }
+
+    /// <summary>
+    /// A Toolbox item the tray takes (#66): a component that isn't a control (a timer, a tool tip, a context menu), as
+    /// the classic component tray does; a control is refused. Not in tab order mode or while the host starts again.
+    /// </summary>
+    private string? TrayToolOf(IDataTransfer data) =>
+        !_document.IsTabOrderMode && !_document.IsRestarting && data.TryGetValue(ToolboxFormat) is { Length: > 0 } type
+        && _document.Toolbox.Items.FirstOrDefault(i => i.Type == type) is { IsControl: false } ? type : null;
 
     public void StartRename(string name)
     {
@@ -687,19 +719,31 @@ public sealed class DesignerSurface : Control
         DragDrop.SetAllowDrop(this, true);
         DragDrop.AddDragOverHandler(this, (_, e) =>
         {
-            e.DragEffects = e.DataTransfer.Contains(WinFormsDesignerView.ToolboxFormat) && !_document.IsRestarting ? DragDropEffects.Copy : DragDropEffects.None;
+            // TODO(issue): show the tool's outline and snap lines while a Toolbox item is dragged over the form, as the classic IDE does.
+            e.DragEffects = AcceptsToolboxDrop(e.DataTransfer, e.GetPosition(this)) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         });
         DragDrop.AddDropHandler(this, (_, e) =>
         {
-            if (!_document.IsRestarting && e.DataTransfer.TryGetValue(WinFormsDesignerView.ToolboxFormat) is { Length: > 0 } type)
+            var at = e.GetPosition(this);
+            if (AcceptsToolboxDrop(e.DataTransfer, at) && e.DataTransfer.TryGetValue(WinFormsDesignerView.ToolboxFormat) is { Length: > 0 } type)
             {
-                var at = e.GetPosition(this);
                 e.Handled = true;
-                _ = _document.CreateAsync(type, at.X, at.Y);
+                Focus();
+                _ = DropToolboxItemAsync(type, at);
             }
         });
     }
+
+    /// <summary>
+    /// A Toolbox item dropped here creates it (#66): on the form only (outside it the cursor says no drop, as the classic
+    /// IDE's), not in tab order mode (tools are ignored there), not while the host starts again.
+    /// </summary>
+    private bool AcceptsToolboxDrop(IDataTransfer data, Point at) =>
+        data.Contains(WinFormsDesignerView.ToolboxFormat) && !_document.IsTabOrderMode && !_document.IsRestarting && _document.HitTest(at.X, at.Y) is not null;
+
+    /// <summary>What a Toolbox item dropped at <paramref name="at"/> (frame coordinates) does: the drop handler's own work (tests and the smoke test).</summary>
+    internal Task DropToolboxItemAsync(string type, Point at) => _document.CreateAsync(type, at.X, at.Y);
 
     /// <summary>The snap lines of the gesture in progress (tests).</summary>
     public IReadOnlyList<DesignerSnapLine> SnapLines => _snap?.Lines ?? [];

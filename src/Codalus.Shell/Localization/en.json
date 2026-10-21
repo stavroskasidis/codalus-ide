@@ -3566,6 +3566,7 @@
   "toolWindow.web.endpoints": "Endpoints Explorer",
   "toolWindow.web.taskRunner": "Task Runner Explorer",
   "toolWindow.xaml.preview": "XAML Previewer",
+  "toolbox.itemHelp": "Double-click it or press Enter to add it to the form. Click it or press Space, then click or drag on the form. Or drag it onto the form.",
   "toolbox.searchToolbox": "Search Toolbox",
   "toolbox.toolbox": "Toolbox",
   "variables.variables": "Variables",

@@ -82,6 +82,15 @@ public sealed partial class ShellHost
         };
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnWinFormsLanguageStatus(e.LanguageId, e.Status));
         Builds.Finished += (_, completed) => Ui.Post(() => OnWinFormsBuildFinished(completed));
+
+        // The Toolbox's double-click or Enter (#66): the active designer adds the item (it stays active while the Toolbox has the focus).
+        Toolbox.ItemPicked += (_, item) =>
+        {
+            if (Layout.ActiveDocument is WinFormsDesignerDocument designer)
+            {
+                _ = designer.AddFromToolboxAsync(item.Type);
+            }
+        };
         Explorer.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SolutionExplorerViewModel.Selected))
