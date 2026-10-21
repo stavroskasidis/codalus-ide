@@ -54,6 +54,7 @@ public sealed partial class ShellHost
         WinFormsDesigner = new WinFormsDesignerService(Solutions, path => Trust.IsTrusted(path), BuildForPreviewAsync, PreviewPropertiesAsync)
         {
             StartupProject = () => Runs.StartupProject,
+            IsBuilding = () => Builds.IsBuilding,
         };
     }
 
@@ -67,6 +68,7 @@ public sealed partial class ShellHost
             {
                 PropertySource = designer;
                 _ = designer.LoadToolboxAsync(); // the Toolbox has the active designer's project's controls
+                _ = designer.OnActivatedAsync(); // a build made while another tab was active (#66)
             }
 
             Workbench.Context.Set("editorHasWinFormsDesigner", ActiveEditor?.Model.Path is { } path && WinFormsDesignerService.CodeFileOf(path) is { } code && WinFormsDesigner.HasDesigner(code));
@@ -79,6 +81,7 @@ public sealed partial class ShellHost
             }
         };
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnWinFormsLanguageStatus(e.LanguageId, e.Status));
+        Builds.Finished += (_, completed) => Ui.Post(() => OnWinFormsBuildFinished(completed));
         Explorer.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SolutionExplorerViewModel.Selected))
@@ -107,6 +110,20 @@ public sealed partial class ShellHost
         if (status.State == WorkspaceStates.Ready && was != WorkspaceStates.Ready && Layout.ActiveDocument is WinFormsDesignerDocument designer)
         {
             _ = designer.LoadToolboxAsync();
+        }
+    }
+
+    /// <summary>
+    /// A build finished (#66): the active designer loads its form on the new build when the build replaced what its host
+    /// loaded (the others check when they become active). A canceled build changed nothing worth a restart; a failed
+    /// one may have replaced a referenced library before the app failed, and the check skips builds that changed
+    /// nothing. The designer's own build before its host starts has no host to check.
+    /// </summary>
+    internal void OnWinFormsBuildFinished(Codalus.Workbench.Build.BuildCompleted completed)
+    {
+        if (!completed.Result.Canceled && Layout.ActiveDocument is WinFormsDesignerDocument designer)
+        {
+            _ = designer.ReloadIfOutdatedAsync();
         }
     }
 

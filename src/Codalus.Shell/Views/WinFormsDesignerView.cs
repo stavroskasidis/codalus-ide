@@ -677,15 +677,22 @@ public sealed class DesignerSurface : Control
             InvalidateMeasure();
             InvalidateVisual();
         });
+        document.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(WinFormsDesignerDocument.IsRestarting))
+            {
+                Infrastructure.Ui.Post(OnRestartingChanged);
+            }
+        };
         DragDrop.SetAllowDrop(this, true);
         DragDrop.AddDragOverHandler(this, (_, e) =>
         {
-            e.DragEffects = e.DataTransfer.Contains(WinFormsDesignerView.ToolboxFormat) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.DragEffects = e.DataTransfer.Contains(WinFormsDesignerView.ToolboxFormat) && !_document.IsRestarting ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         });
         DragDrop.AddDropHandler(this, (_, e) =>
         {
-            if (e.DataTransfer.TryGetValue(WinFormsDesignerView.ToolboxFormat) is { Length: > 0 } type)
+            if (!_document.IsRestarting && e.DataTransfer.TryGetValue(WinFormsDesignerView.ToolboxFormat) is { Length: > 0 } type)
             {
                 var at = e.GetPosition(this);
                 e.Handled = true;
@@ -696,6 +703,24 @@ public sealed class DesignerSurface : Control
 
     /// <summary>The snap lines of the gesture in progress (tests).</summary>
     public IReadOnlyList<DesignerSnapLine> SnapLines => _snap?.Lines ?? [];
+
+    /// <summary>
+    /// The designer host starts again (#66): a gesture in progress ends (its frame is about to be replaced) and the
+    /// surface takes none until the form is back, showing the wait cursor.
+    /// </summary>
+    private void OnRestartingChanged()
+    {
+        if (_document.IsRestarting)
+        {
+            _pressed = null;
+            _mode = Mode.None;
+            _snap = null;
+            _moved = false;
+        }
+
+        Cursor = new Cursor(_document.IsRestarting ? StandardCursorType.Wait : StandardCursorType.Arrow);
+        InvalidateVisual();
+    }
 
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -1063,6 +1088,12 @@ public sealed class DesignerSurface : Control
     {
         base.OnPointerPressed(e);
         Focus();
+        if (_document.IsRestarting)
+        {
+            e.Handled = true;
+            return;
+        }
+
         var point = e.GetPosition(this);
         var properties = e.GetCurrentPoint(this).Properties;
         if (properties.IsRightButtonPressed && !_document.IsTabOrderMode && _document.HitTest(point.X, point.Y) is { } target && !_document.Selection.Contains(target.Name))
@@ -1216,6 +1247,11 @@ public sealed class DesignerSurface : Control
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        if (_document.IsRestarting)
+        {
+            return;
+        }
+
         var point = e.GetPosition(this);
         if (_pressed is { } pressed)
         {
@@ -1302,6 +1338,11 @@ public sealed class DesignerSurface : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        if (_document.IsRestarting && e.Key != Key.Escape)
+        {
+            return;
+        }
+
         var primary = (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0;
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         var item = _document.PrimarySelection is { } selected && _document.Find(selected) is { IsItem: true } itemView ? itemView : null;

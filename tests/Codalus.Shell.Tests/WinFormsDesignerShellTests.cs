@@ -23,7 +23,7 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class WinFormsDesignerShellTests
 {
-    private static async Task<(ShellFixture Fixture, string App)> OpenAsync()
+    internal static async Task<(ShellFixture Fixture, string App)> OpenAsync()
     {
         var f = ShellFixture.Create();
         var folder = f.CopySample("WindowsDesktop");
@@ -88,9 +88,9 @@ public sealed class WinFormsDesignerShellTests
     /// <summary>
     /// The fake designer host (any OS: the real one is Windows only, D31) for the forms opened from now on; each host it
     /// starts goes to <paramref name="hosts"/>, after <paramref name="starting"/> (a slow start, such as the build for the
-    /// designer) when there is one.
+    /// designer) when there is one. <paramref name="isBuilding"/> says whether a build runs (#66: the designer waits for it).
     /// </summary>
-    private static void UseFakeDesignerHost(ShellFixture f, List<FakeWinFormsDesignerHost> hosts, Func<Task>? starting = null)
+    internal static void UseFakeDesignerHost(ShellFixture f, List<FakeWinFormsDesignerHost> hosts, Func<Task>? starting = null, Func<bool>? isBuilding = null)
     {
         f.Shell.WinFormsDesigner = new WinFormsDesignerService(f.Shell.Solutions, _ => true, (_, _) => Task.FromResult(true), async (project, names, ct) =>
         {
@@ -99,6 +99,7 @@ public sealed class WinFormsDesignerShellTests
         })
         {
             IsWindows = () => true,
+            IsBuilding = isBuilding ?? (() => false),
             DesignerHost = () => typeof(WinFormsDesignerShellTests).Assembly.Location,
             HostFactory = async (_, _) =>
             {
@@ -125,7 +126,7 @@ public sealed class WinFormsDesignerShellTests
     /// whether the C# service hadn't loaded the restored inputs or the Toolbox hadn't asked again since (macOS CI, PR
     /// #100 and #55).
     /// </summary>
-    private static string DescribeToolbox(ShellFixture f, string? waitingFor = null)
+    internal static string DescribeToolbox(ShellFixture f, string? waitingFor = null)
     {
         var inputs = f.Shell.Solutions.CompilerInputs.Values.Select(i => $"{Path.GetFileName(i.Path)} {i.State} {(ReferencesWindowsForms(i) ? "with" : "without")} System.Windows.Forms.dll").ToList();
         var status = f.Shell.Languages.Status(ShellHost.CSharpLanguageId);

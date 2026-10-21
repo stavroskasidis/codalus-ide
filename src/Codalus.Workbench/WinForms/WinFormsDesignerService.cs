@@ -1,5 +1,6 @@
 using Codalus.Projects.Protocol;
 using Codalus.Rpc;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Previewer;
 using Codalus.Workbench.Projects;
 
@@ -108,6 +109,9 @@ public sealed class WinFormsDesignerService
 
     /// <summary>The startup project, preferred as the app a library's forms run in.</summary>
     public Func<string?> StartupProject { get; init; } = () => null;
+
+    /// <summary>Whether a build is running (#66): the designer waits for it before it checks the output or builds.</summary>
+    public Func<bool> IsBuilding { get; init; } = () => false;
 
     /// <summary>Starts a designer host for a target (tests give a fake one).</summary>
     public Func<WinFormsDesignerTarget, CancellationToken, Task<IWinFormsDesignerHost>> HostFactory { get; init; } = WinFormsDesignerProcess.StartAsync;
@@ -293,20 +297,56 @@ public sealed class WinFormsDesignerService
         return files;
     }
 
-    /// <summary>Builds when the output is stale, then starts a designer host for the target.</summary>
+    /// <summary>
+    /// Waits for a running build (#66: its output may be half written, and a second build can't start), builds when the
+    /// output is stale, then starts a designer host for the target.
+    /// </summary>
     public async Task<IWinFormsDesignerHost> StartAsync(WinFormsDesignerTarget target, Action<string> progress, CancellationToken cancellationToken)
     {
+        await WaitForBuildAsync(progress, cancellationToken).ConfigureAwait(false);
         if (NeedsBuild(target))
         {
-            progress($"Building {Path.GetFileNameWithoutExtension(target.HostProject ?? target.Project)} for the designer…");
-            if (!await _build(target.HostProject ?? target.Project, cancellationToken).ConfigureAwait(false))
+            bool built;
+            try
+            {
+                built = await BuildAsync(target, progress, cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                // A build started between the wait and this one ("A build is already running."): wait for it, then check again.
+                await WaitForBuildAsync(progress, cancellationToken).ConfigureAwait(false);
+                built = !NeedsBuild(target) || await BuildAsync(target, progress, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!built)
             {
                 throw new PreviewerException("The build failed: the designer needs the project built. See the Error List.");
             }
         }
 
-        progress("Starting the designer…");
+        progress(Localizer.Get("msg.winFormsDesigner.starting", "Starting the designer…"));
         return await HostFactory(target, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Task<bool> BuildAsync(WinFormsDesignerTarget target, Action<string> progress, CancellationToken cancellationToken)
+    {
+        progress(Localizer.Format("msg.winFormsDesigner.building", "Building {0} for the designer…", Path.GetFileNameWithoutExtension(target.HostProject ?? target.Project)));
+        return _build(target.HostProject ?? target.Project, cancellationToken);
+    }
+
+    private async Task WaitForBuildAsync(Action<string> progress, CancellationToken cancellationToken)
+    {
+        var told = false;
+        while (IsBuilding())
+        {
+            if (!told)
+            {
+                progress(Localizer.Get("msg.winFormsDesigner.waitingForBuild", "Waiting for the build to finish…"));
+                told = true;
+            }
+
+            await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>The load request for a model read by the C# host.</summary>

@@ -1256,6 +1256,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("winforms.designerDepth", "M41b", winFormsDepthTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the shell's side runs against a fake designer host in the tests on every OS.");
         }
 
+        // 0.6 (#66): the designer runs on a copy of the build output, so the app builds with a form open, and the form loads on the new build.
+        const string winFormsBuildTitle = "OrderForm in the designer: a CheckBox added on the form, the app builds while the designer is open (no MSB3027) and the designer loads the form on the new build, keeping it";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.buildWhileOpen", "0.6", winFormsBuildTitle, WinFormsBuildWhileOpenStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.buildWhileOpen", "0.6", winFormsBuildTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the copy, the reload after a build and the wait for a running build are tested on every OS against a fake designer host.");
+        }
+
         // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
         const string winUITitle = "The WinUI 3 app opens, its XAML completes x:Bind paths from the page's class, and it builds and runs unpackaged";
         if (OperatingSystem.IsWindows())
@@ -2473,6 +2484,59 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(code.Text.Text == original, "undo takes the designer file back to the original");
         shell.Layout.CloseDocument(designer);
         shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+    }
+
+    /// <summary>
+    /// Building with a form open in the shipped app (0.6, #66): OrderForm opened, a CheckBox added on the form, the app
+    /// built through Build Project (which saves the designer file first), with neither MSB3027 nor MSB3026 (before, the
+    /// designer host held the app's assembly and the build's copy step retried ten times and failed), then the form loaded
+    /// on a new host with the CheckBox; the designer file put back as it was.
+    /// </summary>
+    private async Task WinFormsBuildWhileOpenStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Builds.IsBuilding, "the previous run and build have stopped", 120).ConfigureAwait(true);
+        var app = Path.Combine(Work, "WindowsDesktop", "WinFormsApp");
+        var project = Path.Combine(app, "WinFormsApp.csproj");
+        var form = Path.Combine(app, "OrderForm.cs");
+        Check(shell.Solutions.Projects.Values.Any(p => p.UsesWindowsForms), "the WindowsDesktop solution is still open");
+        await shell.OpenFileAsync(form).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath == form);
+        Check(designer is not null, "OrderForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0 && designer.Host is not null, () => "the designer loads the form and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        var code = designer!.DesignerCode!;
+        var original = await File.ReadAllTextAsync(designer.DesignerPath).ConfigureAwait(true);
+        var root = designer.Root!;
+        await designer.CreateAsync("System.Windows.Forms.CheckBox", root.ClientX + 48, root.ClientY + 300).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("checkBox1 = new CheckBox();", StringComparison.Ordinal), "the new check box is in OrderForm.Designer.cs: " + designer.Status);
+
+        var host = designer.Host;
+        var frames = designer.FrameCount;
+        var before = shell.Builds.LastBuild;
+        var built = await shell.BuildProjectAsync(Codalus.Projects.Protocol.BuildTargets.Build, project).WaitAsync(TimeSpan.FromMinutes(10)).ConfigureAwait(true);
+        await WaitAsync(() => BuildDone(before), "the build finishes", 60).ConfigureAwait(true);
+        var output = shell.Builds.Channel.GetText();
+        Check(built, "the app builds with OrderForm open in the designer:\n" + Tail(output, 3000));
+        Check(!output.Contains("MSB3027", StringComparison.Ordinal) && !output.Contains("MSB3026", StringComparison.Ordinal), "no build step waited for or failed on a file the designer holds:\n" + Tail(output, 3000));
+
+        // The build replaced the app's assembly: the designer loads the form on a new host, with the saved check box.
+        await WaitAsync(() => designer.Host != host && designer.FrameCount > frames && !designer.IsRestarting,
+            () => "the designer loads the form on the new build: " + designer.Status + "\n" + Tail(shell.WinFormsDesignerLog.GetText(), 2000), 180).ConfigureAwait(true);
+        Check(designer.Problems is null, "every statement applied after the restart: " + designer.Problems);
+        Check(designer.Components.Any(c => c.Name == "checkBox1"), "the check box is on the form after the restart");
+        foreach (var line in shell.WinFormsDesignerLog.GetText().Split('\n').Where(l => l.StartsWith("Copied the build output", StringComparison.Ordinal) || l.StartsWith("A build replaced", StringComparison.Ordinal)).TakeLast(3))
+        {
+            Console.Out.WriteLine("  " + line.TrimEnd());
+        }
+
+        // The designer file as it was, saved (the build saved the check box).
+        while (code.Text.UndoStack.CanUndo)
+        {
+            code.Text.UndoStack.Undo();
+        }
+
+        await shell.SaveAllAsync().ConfigureAwait(true);
+        Check(await File.ReadAllTextAsync(designer.DesignerPath).ConfigureAwait(true) == original, "undo and save take OrderForm.Designer.cs back to the original");
+        shell.Layout.CloseDocument(designer);
     }
 
     /// <summary>

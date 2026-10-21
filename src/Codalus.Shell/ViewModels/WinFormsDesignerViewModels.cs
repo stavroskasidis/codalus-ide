@@ -92,6 +92,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     private string _status;
     private string? _problems;
     private bool _isBusy;
+    private bool _isRestarting;
     private bool _disposed;
 
     public WinFormsDesignerDocument(ShellHost shell, string codePath)
@@ -194,6 +195,16 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         private set => SetProperty(ref _isBusy, value);
     }
 
+    /// <summary>
+    /// The designer host is starting again (#66: after a build replaced the form's output, or Refresh): the surface
+    /// takes no gestures meanwhile, and the Toolbox's and the Properties window's changes wait and apply on the new host.
+    /// </summary>
+    public bool IsRestarting
+    {
+        get => _isRestarting;
+        private set => SetProperty(ref _isRestarting, value);
+    }
+
     /// <summary>The surface changed (a frame, the components, the selection): the view draws again.</summary>
     public event EventHandler? SurfaceChanged;
 
@@ -214,16 +225,31 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             _designerCode.PropertyChanged += OnDesignerCodePropertyChanged;
             await HoldResourcesAsync().ConfigureAwait(true);
             IsModified = _designerCode.IsModified || _resourceModels.Any(m => m.IsModified);
-            if (!await ReadAsync(closeOnProblem: true).ConfigureAwait(true))
+            if (_disposed)
             {
                 return;
             }
 
-            await StartHostAsync().ConfigureAwait(true);
+            // The first start holds the gate like a restart: a reload, a check after a build or a change made meanwhile waits for it.
+            await _gate.WaitAsync().ConfigureAwait(true);
+            try
+            {
+                if (_disposed || !await ReadAsync(closeOnProblem: true).ConfigureAwait(true))
+                {
+                    return;
+                }
+
+                await StartHostAsync().ConfigureAwait(true);
+            }
+            finally
+            {
+                ReleaseGate();
+            }
         }
         catch (PreviewerException ex)
         {
             Status = ex.Message;
+            _shell.WinFormsDesignerLog.AppendLine(ex.Message);
         }
         catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -286,6 +312,9 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         host.Restarted += (_, _) => Ui.Post(() => _ = ReloadAsync(restartHost: false));
         await LoadFormAsync().ConfigureAwait(true);
         _ = LoadToolboxAsync();
+
+        // A build that ended while the host started (after its copy was made): checked once the gate is free.
+        Ui.Post(() => _ = ReloadIfOutdatedAsync());
     }
 
     private async Task LoadFormAsync()
@@ -347,21 +376,44 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
     }
 
-    /// <summary>The code changed (typed, undone, another tool): read it again and load the form from it.</summary>
+    /// <summary>The code changed (typed, undone, another tool): read it again and load the form from it (Refresh: on a new designer host).</summary>
     public async Task ReloadAsync(bool restartHost)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         await _gate.WaitAsync().ConfigureAwait(true);
         try
         {
-            if (_disposed || _designerCode is null)
-            {
-                return;
-            }
+            await ReloadCoreAsync(restartHost).ConfigureAwait(true);
+        }
+        finally
+        {
+            ReleaseGate();
+        }
+    }
 
-            if (restartHost && _host is not null)
+    /// <summary><see cref="ReloadAsync"/> with the gate held.</summary>
+    private async Task ReloadCoreAsync(bool restartHost)
+    {
+        if (_disposed || _designerCode is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (restartHost)
             {
-                await _host.DisposeAsync().ConfigureAwait(true);
-                _host = null;
+                IsRestarting = true;
+                IsBusy = true;
+                if (_host is { } old)
+                {
+                    _host = null;
+                    await old.DisposeAsync().ConfigureAwait(true);
+                }
             }
 
             if (!await ReadAsync(closeOnProblem: false).ConfigureAwait(true))
@@ -377,16 +429,73 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             {
                 await LoadFormAsync().ConfigureAwait(true);
             }
+
+            if (restartHost)
+            {
+                // The Properties window shows the new host's values.
+                PropertiesChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
         catch (PreviewerException ex)
         {
             Status = ex.Message;
+            _shell.WinFormsDesignerLog.AppendLine(ex.Message);
         }
         catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or IOException or InvalidOperationException)
         {
             Status = Localizer.Format("msg.winFormsDesigner.failed", "The designer failed: {0}", ex.Message);
+            _shell.WinFormsDesignerLog.AppendLine(ex.ToString());
         }
         finally
+        {
+            if (restartHost)
+            {
+                IsRestarting = false;
+                IsBusy = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// After a build, or when the designer becomes the active document (#66): when the build replaced what the host
+    /// loaded (the app's or a referenced library's assemblies, not content written into the output), the form loads on
+    /// a new host, so the project's own controls show their changes. The check runs with the gate held, so however
+    /// many triggers come (a build's end and an activation in the same turn), the host starts again once: the next
+    /// check sees the new host's copy, which is current. Unsaved designer changes stay (the form is read from the
+    /// editor's text).
+    /// </summary>
+    internal async Task ReloadIfOutdatedAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        await _gate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            if (_disposed || _host is not { } host || !await host.IsOutdatedAsync(CancellationToken.None).ConfigureAwait(true) || _disposed)
+            {
+                return;
+            }
+
+            Status = Localizer.Format("msg.winFormsDesigner.reloadingAfterBuild", "The project was built: loading {0} on the new build…", System.IO.Path.GetFileName(CodePath));
+            _shell.WinFormsDesignerLog.AppendLine($"A build replaced {System.IO.Path.GetFileName(_target?.HostAssembly ?? _target?.ProjectAssembly)}: loading {System.IO.Path.GetFileName(CodePath)} on a new designer host.");
+            await ReloadCoreAsync(restartHost: true).ConfigureAwait(true);
+        }
+        finally
+        {
+            ReleaseGate();
+        }
+    }
+
+    /// <summary>The designer became the active document: a build made meanwhile (in another tab, outside the IDE) shows now; a running build's end will tell.</summary>
+    internal Task OnActivatedAsync() => _shell.WinFormsDesigner.IsBuilding() ? Task.CompletedTask : ReloadIfOutdatedAsync();
+
+    /// <summary>Lets the next change in (a designer closed meanwhile has let go of its gate).</summary>
+    private void ReleaseGate()
+    {
+        if (!_disposed)
         {
             _gate.Release();
         }
@@ -704,15 +813,28 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// </summary>
     private async Task RunAsync(Func<IWinFormsDesignerHost, Task<DesignerChangeResult>> change, Action? after = null)
     {
-        if (_host is not { } host || _designerCode is null || _model is null)
+        if (_disposed)
         {
             return;
         }
 
+        // A change made while the host starts (again) waits here, then applies on the new host (#66).
         await _gate.WaitAsync().ConfigureAwait(true);
+        var busy = false;
         try
         {
-            IsBusy = true;
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (_host is not { } host || _designerCode is null || _model is null)
+            {
+                Status = Localizer.Get("msg.winFormsDesigner.notReady", "The designer isn't running, so the change wasn't made: see the Windows Forms Designer output, or click Refresh.");
+                return;
+            }
+
+            IsBusy = busy = true;
             var result = await change(host).ConfigureAwait(true);
             if (result.Error is { } error)
             {
@@ -742,8 +864,12 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
         finally
         {
-            IsBusy = false;
-            _gate.Release();
+            if (busy)
+            {
+                IsBusy = false;
+            }
+
+            ReleaseGate();
         }
     }
 

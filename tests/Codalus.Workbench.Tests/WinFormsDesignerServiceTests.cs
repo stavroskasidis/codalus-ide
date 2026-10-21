@@ -315,6 +315,70 @@ public sealed class WinFormsDesignerServiceTests
         }
     }
 
+    [Fact]
+    public async Task Start_waits_for_a_running_build_before_checking_the_output()
+    {
+        // #66: a build the user started is running. The designer waits for it (its output may be half written, and a
+        // second build can't start: "A build is already running."), then builds when the output is stale, then starts.
+        var building = 1;
+        var builds = 0;
+        var starts = 0;
+        var throwOnce = false;
+        var progress = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var service = new WinFormsDesignerService(new SolutionService(() => "/nonexistent/codalus-buildhost.dll"), _ => true,
+            (_, _) =>
+            {
+                Interlocked.Increment(ref builds);
+                if (throwOnce)
+                {
+                    // A build started between the wait and this one.
+                    throwOnce = false;
+                    Volatile.Write(ref building, 1);
+                    _ = Task.Delay(600, CancellationToken.None).ContinueWith(_ => Volatile.Write(ref building, 0), TaskScheduler.Default);
+                    throw new InvalidOperationException("A build is already running.");
+                }
+
+                return Task.FromResult(true);
+            },
+            (_, _, _) => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()))
+        {
+            IsWindows = () => true,
+            IsBuilding = () => Volatile.Read(ref building) == 1,
+            HostFactory = (_, _) =>
+            {
+                Interlocked.Increment(ref starts);
+                throw new PreviewerException("started");
+            },
+        };
+        var missing = Path.Combine(Path.GetTempPath(), "codalus-no-such-output-" + Guid.NewGuid().ToString("N"), "App.dll");
+        var target = new WinFormsDesignerTarget(Path.Combine(Path.GetTempPath(), "Form1.cs"), Path.Combine(Path.GetTempPath(), "App.csproj"), missing, null, "/ide/winformsdesigner/codalus-winformsdesigner.dll");
+
+        var start = service.StartAsync(target, progress.Enqueue, TestContext.Current.CancellationToken);
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (!progress.Contains("Waiting for the build to finish…") && DateTime.UtcNow < until)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Contains("Waiting for the build to finish…", progress);
+        await Task.Delay(600, TestContext.Current.CancellationToken);
+        Assert.False(start.IsCompleted);
+        Assert.Equal((0, 0), (Volatile.Read(ref builds), Volatile.Read(ref starts)));
+        Volatile.Write(ref building, 0);
+        var started = await Assert.ThrowsAsync<PreviewerException>(() => start);
+        Assert.Equal("started", started.Message);
+        Assert.Equal((1, 1), (builds, starts)); // the output is missing: one build, then the host
+        Assert.Equal(["Waiting for the build to finish…", "Building App for the designer…", "Starting the designer…"], progress);
+
+        // A build that starts just before the designer's own: wait for it too, then build once more, and start.
+        (builds, starts, throwOnce) = (0, 0, true);
+        progress.Clear();
+        started = await Assert.ThrowsAsync<PreviewerException>(() => service.StartAsync(target, progress.Enqueue, TestContext.Current.CancellationToken));
+        Assert.Equal("started", started.Message);
+        Assert.Equal((2, 1), (builds, starts));
+        Assert.Equal(["Building App for the designer…", "Waiting for the build to finish…", "Building App for the designer…", "Starting the designer…"], progress);
+    }
+
     /// <summary>
     /// A designer host in this process, over pipes: designer/ready answered (or never), designer/load never answered
     /// (or answered with an empty drawing), and designer/status saying what a stuck host would.
