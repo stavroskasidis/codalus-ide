@@ -13,7 +13,7 @@ namespace Codalus.Debugging;
 /// request goes to the adapter its id came from. Breakpoint ids are this class's own; a breakpoint is bound when any
 /// adapter bound it.</item>
 /// <item>One stop shows at a time. A stop in another adapter while one shows waits, and shows once the shown one
-/// resumes. Pause pauses every adapter, and Continue from a pause continues every paused one.</item>
+/// resumes. Pause pauses every adapter but one still joining, and Continue from a pause continues every paused one.</item>
 /// <item>The session ends when any adapter ends: closing the browser stops the server, as stopping the server closes
 /// the browser.</item>
 /// </list>
@@ -98,8 +98,10 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         public IDebugAdapter Adapter { get; set; } = adapter;
 
         /// <summary>
-        /// It is joining the session and not configured yet: until <c>configurationDone</c> is answered, which netcoredbg
-        /// does once the program's runtime started (up to its 5 seconds), holding every request behind it.
+        /// It is joining the session and hasn't started yet: until <c>configurationDone</c> is answered, which netcoredbg
+        /// does once the program's runtime started (up to its 5 seconds), holding every request behind it, and its launch
+        /// or attach too (a program in the terminal is attached to after <c>configurationDone</c>, and netcoredbg can
+        /// take a minute more for it, see <see cref="DebugAdapter.AttachAsync(AttachArguments, CancellationToken)"/>).
         /// </summary>
         public bool Starting { get; set; }
 
@@ -305,12 +307,14 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             await adapter.Initialized.WaitAsync(cancellationToken).ConfigureAwait(false);
             await ReplayAsync(part, cancellationToken).ConfigureAwait(false);
             await adapter.ConfigurationDoneAsync(cancellationToken).ConfigureAwait(false);
+
+            // A program in the terminal or a console window is attached to only now (DebugService's held launch), and
+            // that attach can wait a minute more for netcoredbg (DebugAdapter.AttachAsync): it joins once it's answered.
+            await launching.ConfigureAwait(false);
             lock (_gate)
             {
                 part.Starting = false;
             }
-
-            await launching.ConfigureAwait(false);
         }
         catch
         {
@@ -769,7 +773,12 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         ShowNext();
     }
 
-    /// <summary>Pauses <paramref name="threadId"/>'s adapter, or with 0 every running adapter.</summary>
+    /// <summary>
+    /// Pauses <paramref name="threadId"/>'s adapter, or with 0 every running adapter. A program still joining is left
+    /// out, as by <see cref="ThreadsAsync"/>: netcoredbg can't pause it until it has attached, and its Break All waits
+    /// for that (<see cref="DebugAdapter.PauseAsync"/>, up to a minute), which would hold up the next programs' pauses
+    /// and stop it once attached, after the session may have gone on.
+    /// </summary>
     public async Task PauseAsync(int threadId, CancellationToken cancellationToken)
     {
         if (threadId != 0)
@@ -781,12 +790,19 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
         foreach (var part in Parts().Where(p => !p.Stopped))
         {
+            if (part.Starting)
+            {
+                Log?.Invoke(this, $"[{part.Name}] Not paused: it's still starting.");
+                continue;
+            }
+
             try
             {
                 await part.Adapter.PauseAsync(0, cancellationToken).ConfigureAwait(false);
             }
-            catch (DapException ex)
+            catch (Exception ex) when (ex is DapException or DapConnectionLostException)
             {
+                // Its program is ending, or its adapter ended meanwhile: the others still pause.
                 Log?.Invoke(this, $"[{part.Name}] Pause failed: {ex.Message}");
             }
         }
@@ -800,7 +816,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             if (part.Starting && !part.Stopped)
             {
                 // A program still joining has no threads to list yet, and netcoredbg answers only after
-                // configurationDone (up to its 5 seconds): another program's stop would wait for it.
+                // configurationDone or a later attach (up to its 5 or 15 seconds): another program's stop would wait for it.
                 continue;
             }
 
