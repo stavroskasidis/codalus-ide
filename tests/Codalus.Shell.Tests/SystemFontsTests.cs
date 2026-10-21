@@ -5,9 +5,9 @@ using Codalus.Shell.Infrastructure;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// The shell's system font collection (<see cref="ShellSystemFonts"/>): its synthetic bold and italic faces come from the
-/// platform's font manager instead of a copy of the font file. Each behavior test starts from a fresh collection, so
-/// what other tests looked up before doesn't decide which path a lookup takes.
+/// The shell's system font collection (<see cref="ShellSystemFonts"/>): its synthetic bold and italic faces are Avalonia's,
+/// made from a copy of the font file read with its stream kept alive. Each behavior test starts from a fresh collection,
+/// so what other tests looked up before doesn't decide which path a lookup takes.
 /// </summary>
 public sealed class SystemFontsTests
 {
@@ -32,20 +32,57 @@ public sealed class SystemFontsTests
     }
 
     [AvaloniaFact]
-    public void An_italic_of_a_family_with_only_an_oblique_is_that_face_not_a_slanted_copy()
+    public void A_semibold_of_a_family_without_one_is_its_regular_face_emboldened_as_Avalonia_draws_it()
     {
         using var fonts = ShellSystemFonts.Create();
+        GlyphTypeface? regular = null;
         var family = fonts.Select(f => f.Name).FirstOrDefault(name =>
-            fonts.TryGetFamilyTypefaces(name, out var faces) && faces.Any(f => f.Style == FontStyle.Oblique) && faces.All(f => f.Style != FontStyle.Italic));
-        Assert.SkipWhen(family is null, "No installed font family has an oblique face and no italic one (DejaVu Sans Mono on Linux).");
-        Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out _));
+            fonts.TryGetFamilyTypefaces(name, out var faces)
+            && faces.Any(f => f.Style == FontStyle.Normal && f.Weight == FontWeight.Normal)
+            && faces.Any(f => f.Style == FontStyle.Normal && f.Weight == FontWeight.Bold)
+            && faces.All(f => f.Weight != FontWeight.SemiBold)
+            && fonts.TryGetGlyphTypeface(name, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out regular));
+        Assert.SkipWhen(family is null || regular is null, "No installed font family has a regular and a bold face and no semibold one (DejaVu Sans on Linux, Arial on Windows).");
 
-        // Avalonia's own collection slants the regular face it already has, from a copy of the font file.
-        Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Italic, FontWeight.Normal, FontStretch.Normal, out var italic));
+        // Not the family's bold face, which the platform matches for it: that's wider, and the setup window's text cut off.
+        Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.SemiBold, FontStretch.Normal, out var semibold));
 
-        Assert.Equal(FontStyle.Oblique, italic.PlatformTypeface.Style);
-        Assert.Equal(FontSimulations.None, italic.PlatformTypeface.FontSimulations);
-        Assert.Equal(FontSimulations.None, italic.FontSimulations);
+        Assert.Equal(FontSimulations.Bold, semibold.FontSimulations);
+        Assert.Equal(regular.PlatformTypeface.Weight, semibold.PlatformTypeface.Weight);
+        Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.SemiBold, FontStretch.Normal, out var again));
+        Assert.Same(semibold, again);
+    }
+
+    [AvaloniaFact]
+    public void A_font_file_is_read_whole_while_collections_run()
+    {
+        using var fonts = ShellSystemFonts.Create();
+        Assert.True(fonts.TryGetGlyphTypeface(FontManager.Current.DefaultFontFamily.Name, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out var face));
+        using var collecting = new CancellationTokenSource();
+        var collector = Task.Run(() =>
+        {
+            while (!collecting.IsCancellationRequested)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+        });
+        try
+        {
+            long length = -1;
+            for (var i = 0; i < 50; i++)
+            {
+                using var file = ShellSystemFonts.FontFile(face.PlatformTypeface);
+                Assert.NotNull(file);
+                Assert.True(length < 0 || file.Length == length, $"Read {file.Length} bytes, then {length}.");
+                length = file.Length;
+            }
+        }
+        finally
+        {
+            collecting.Cancel();
+            collector.Wait();
+        }
     }
 
     [AvaloniaFact]
@@ -58,7 +95,7 @@ public sealed class SystemFontsTests
 
         // The italic first: a face slanted for it (by fontconfig or Skia), which mustn't be filed as the regular one.
         Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Italic, FontWeight.Normal, FontStretch.Normal, out var italic));
-        Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out var regular));
+        Assert.True(fonts.TryGetGlyphTypeface(family, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out var regular), family);
 
         Assert.NotSame(italic, regular);
         Assert.Equal(FontStyle.Normal, regular.PlatformTypeface.Style);

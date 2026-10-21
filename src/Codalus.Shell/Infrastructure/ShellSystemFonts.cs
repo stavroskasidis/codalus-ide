@@ -5,23 +5,26 @@ using System.Runtime.CompilerServices;
 using Avalonia.Media;
 using Avalonia.Media.Fonts;
 using Avalonia.Platform;
+using SkiaSharp;
 
 namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
-/// The system fonts, found as Avalonia's own collection finds them (this mirrors its internal <c>SystemFontCollection</c>,
-/// MIT), except for the synthetic bold or italic face a family lacks (an italic of a family that has only an oblique,
-/// common on Linux). Avalonia makes that face from the font file's bytes, read in <c>SkiaTypeface.TryGetStream</c> with
+/// The system fonts, found and synthesized as Avalonia's own collection does (this mirrors its internal
+/// <c>SystemFontCollection</c> and <c>FontCollectionBase.TryCreateSyntheticGlyphTypeface</c>, MIT), except for how a
+/// synthetic face reads its font file. A bold or italic a family lacks is the nearest face it has, emboldened or slanted
+/// by Skia, created again from the font file's bytes. Avalonia reads them in <c>SkiaTypeface.TryGetStream</c> with
 /// <c>SKStream.Read</c>, which doesn't keep its stream alive: a collection on any thread during the read can finalize the
 /// stream and unmap the font file Skia copies from, a segmentation fault in memcpy: the start window on Linux CI, then the
 /// first-run setup in the arm64 package's smoke test (develop run 39513048761) even with background collections turned
-/// off. Here the platform's font manager matches the family again with the style asked for and applies the simulations
-/// itself, reading no bytes. The font manager's members are Avalonia's unstable API,
+/// off. Here the stream lives until the read is done. Avalonia's font manager and Skia typeface are its unstable API,
 /// left out of its reference assemblies: they're reached through <see cref="UnsafeAccessorAttribute"/>, which Native AOT
 /// binds at compile time. TODO(issue): drop once Avalonia's TryGetStream keeps its stream alive.
 /// </summary>
 internal sealed class ShellSystemFonts : FontCollectionBase
 {
+    private const string SkiaTypefaceType = "Avalonia.Skia.SkiaTypeface, Avalonia.Skia";
+
     private static readonly Uri s_key = new("fonts:SystemFonts", UriKind.Absolute);
 
     private readonly IFontManagerImpl _platform;
@@ -74,8 +77,7 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             return true;
         }
 
-        // With the simulations the platform applies (Avalonia's collection drops them), so its style and weight are how it draws.
-        if (Create(platformTypeface, platformTypeface.FontSimulations) is not { } created)
+        if (Create(platformTypeface, FontSimulations.None) is not { } created)
         {
             return false;
         }
@@ -105,39 +107,38 @@ internal sealed class ShellSystemFonts : FontCollectionBase
     {
         syntheticGlyphTypeface = null;
         var key = new FontCollectionKey(style, weight, stretch);
-        var source = new FontCollectionKey(glyphTypeface.Style, glyphTypeface.Weight, glyphTypeface.Stretch);
-        if (source == key)
+        if (new FontCollectionKey(glyphTypeface.Style, glyphTypeface.Weight, glyphTypeface.Stretch) == key)
         {
             return false;
         }
 
-        if (TryGetGlyphTypeface(glyphTypeface.FamilyName, key, allowNearestMatch: false, out syntheticGlyphTypeface))
+        var simulations = FontSimulations.None;
+        if (style != FontStyle.Normal && glyphTypeface.Style != style)
         {
+            simulations |= FontSimulations.Oblique;
+        }
+
+        if ((int)weight >= 600 && glyphTypeface.Weight < weight)
+        {
+            simulations |= FontSimulations.Bold;
+        }
+
+        if (simulations == FontSimulations.None)
+        {
+            return false;
+        }
+
+        // One made already, through another of the family's names or by another thread.
+        if (TryGetGlyphTypeface(glyphTypeface.FamilyName, key, allowNearestMatch: false, out var cached) && cached.FontSimulations == simulations)
+        {
+            syntheticGlyphTypeface = cached;
             return true;
         }
 
-        // The platform's match for the style asked for: a face the family has (an oblique for an italic), or the nearest
-        // with the bold or italic simulations it lacks, drawn by Skia from the same typeface. Skia slants only for an
-        // italic, so an oblique is asked for as one. The family is asked for by the name the platform found the face by
-        // first: the name table's family of a weight outside the four standard ones carries the weight ("Fira Code
-        // SemiBold"), which DirectWrite and CoreText don't know.
-        var asked = style == FontStyle.Oblique ? FontStyle.Italic : style;
-        IPlatformTypeface? platformTypeface = null;
-        foreach (var name in new[] { glyphTypeface.PlatformTypeface.FamilyName, glyphTypeface.FamilyName, glyphTypeface.TypographicFamilyName }
-                     .Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (TryCreateGlyphTypeface(_platform, name, asked, weight, stretch, out platformTypeface))
-            {
-                break;
-            }
-        }
-
-        if (platformTypeface is null || (platformTypeface.FontSimulations == FontSimulations.None && KeyOf(platformTypeface) == source))
-        {
-            return false;
-        }
-
-        if (Create(platformTypeface, platformTypeface.FontSimulations) is not { } created)
+        using var file = FontFile(glyphTypeface.PlatformTypeface);
+        if (file is null
+            || !TryCreateGlyphTypeface(_platform, file, simulations, out var platformTypeface)
+            || Create(platformTypeface, simulations) is not { } created)
         {
             return false;
         }
@@ -184,6 +185,45 @@ internal sealed class ShellSystemFonts : FontCollectionBase
         return true;
     }
 
+    /// <summary>
+    /// A copy of <paramref name="typeface"/>'s font file, or null when it can't be read. The stream Skia opens on the file
+    /// (the file mapped into memory, unmapped when the stream is finalized) is disposed only after the read, so it stays
+    /// alive through it.
+    /// </summary>
+    internal static MemoryStream? FontFile(IPlatformTypeface typeface)
+    {
+        SKTypeface skia;
+        try
+        {
+            skia = SkiaTypeface(typeface);
+        }
+        catch (InvalidCastException)
+        {
+            // Not Skia's (the headless platform's): its own read.
+            return typeface.TryGetStream(out var stream) ? stream as MemoryStream ?? Copy(stream) : null;
+        }
+
+        using var asset = skia.OpenStream();
+        if (asset is null || asset.Length <= 0)
+        {
+            return null;
+        }
+
+        var bytes = new byte[asset.Length];
+        return asset.Read(bytes, bytes.Length) == bytes.Length ? new MemoryStream(bytes, writable: false) : null;
+
+        static MemoryStream Copy(Stream stream)
+        {
+            using (stream)
+            {
+                var copy = new MemoryStream();
+                stream.CopyTo(copy);
+                copy.Position = 0;
+                return copy;
+            }
+        }
+    }
+
     [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_PlatformImpl")]
     private static extern IFontManagerImpl PlatformImpl(FontManager manager);
 
@@ -193,11 +233,18 @@ internal sealed class ShellSystemFonts : FontCollectionBase
     [UnsafeAccessor(UnsafeAccessorKind.Method, Name = nameof(TryCreateGlyphTypeface))]
     private static extern bool TryCreateGlyphTypeface(IFontManagerImpl platform, string familyName, FontStyle style, FontWeight weight, FontStretch stretch, [NotNullWhen(true)] out IPlatformTypeface? platformTypeface);
 
+    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = nameof(TryCreateGlyphTypeface))]
+    private static extern bool TryCreateGlyphTypeface(IFontManagerImpl platform, Stream stream, FontSimulations fontSimulations, [NotNullWhen(true)] out IPlatformTypeface? platformTypeface);
+
     [UnsafeAccessor(UnsafeAccessorKind.Method, Name = nameof(TryGetFamilyTypefaces))]
     private static extern bool TryGetFamilyTypefaces(IFontManagerImpl platform, string familyName, [NotNullWhen(true)] out IReadOnlyList<Typeface>? familyTypefaces);
 
     [UnsafeAccessor(UnsafeAccessorKind.Method, Name = nameof(TryMatchCharacter))]
     private static extern bool TryMatchCharacter(IFontManagerImpl platform, int codepoint, FontStyle style, FontWeight weight, FontStretch stretch, string? familyName, CultureInfo? culture, [NotNullWhen(true)] out IPlatformTypeface? platformTypeface);
+
+    /// <summary>The Skia typeface of Avalonia's; <see cref="InvalidCastException"/> for another platform's.</summary>
+    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_SKTypeface")]
+    private static extern SKTypeface SkiaTypeface([UnsafeAccessorType(SkiaTypefaceType)] object typeface);
 
     private static FontCollectionKey KeyOf(IPlatformTypeface typeface) => new(typeface.Style, typeface.Weight, typeface.Stretch);
 
