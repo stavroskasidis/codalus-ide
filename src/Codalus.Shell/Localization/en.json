@@ -2120,6 +2120,8 @@
   "msg.pathBox.browse": "Browse…",
   "msg.pathBox.chooseFile": "Choose a File",
   "msg.pathBox.chooseFolder": "Choose a Folder",
+  "msg.pathBox.recent": "Recent locations",
+  "msg.pathBox.recentTip": "Recent locations (Alt+Down)",
   "msg.pluginManager.pluginFailed": "Plugin '{0}' failed: {1}",
   "msg.pluginManager.pluginHostCouldntStart": "Plugin host '{0}' couldn't start: {1}",
   "msg.pluginManager.pluginHostCrashedRepeatedlyAndWas": "Plugin host '{0}' crashed repeatedly and was stopped for this session{1}.",
