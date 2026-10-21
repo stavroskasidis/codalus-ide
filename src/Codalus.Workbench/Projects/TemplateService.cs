@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Workbench.Projects;
 
@@ -58,6 +59,12 @@ public sealed partial class TemplateService : ITemplateCli
 
     /// <inheritdoc/>
     public string? Hive => _hive;
+
+    /// <summary>
+    /// How long one command may run before it's stopped: a template's post action waiting for input, a download that
+    /// stalls. Reaching it isn't a cancel: the command fails with what it printed and a line that says so.
+    /// </summary>
+    internal TimeSpan CommandTimeout { get; set; } = TimeSpan.FromMinutes(3);
 
     /// <summary>The folder every command runs in (the shell's state folder): no workspace's <c>global.json</c> applies there.</summary>
     public string WorkingDirectory => Directory.Exists(_workingDirectory) ? _workingDirectory : Path.GetTempPath();
@@ -437,7 +444,7 @@ public sealed partial class TemplateService : ITemplateCli
             var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromMinutes(3));
+            timeout.CancelAfter(CommandTimeout);
             try
             {
                 await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
@@ -445,7 +452,24 @@ public sealed partial class TemplateService : ITemplateCli
             catch (OperationCanceledException)
             {
                 process.Kill(entireProcessTree: true);
-                throw;
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+
+                // The limit, not the caller's cancel: a failure, with what the command printed before it was stopped.
+                var printed = string.Empty;
+                try
+                {
+                    printed = string.Concat(await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false));
+                }
+                catch (Exception ex) when (ex is TimeoutException or IOException or OperationCanceledException or ObjectDisposedException)
+                {
+                    // Nothing more to show than the line below.
+                }
+
+                var stopped = Localizer.Format("msg.templates.commandTimedOut", "Stopped dotnet {0}: it didn't finish within {1} minutes.", string.Join(' ', args), Math.Round(CommandTimeout.TotalMinutes, 1));
+                return (-1, (printed.Length > 0 ? printed.TrimEnd() + Environment.NewLine : string.Empty) + stopped + Environment.NewLine);
             }
 
             return (process.ExitCode, (await stdout.ConfigureAwait(false)) + (await stderr.ConfigureAwait(false)));

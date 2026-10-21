@@ -2309,6 +2309,7 @@
   "msg.sync.setupUpToDate": "Settings sync is on with {0}, and up to date.",
   "msg.sync.syncSettingsWithAGitRepository": "Sync Settings with a Git Repository",
   "msg.sync.theRepositorysUrl": "The repository's URL",
+  "msg.templates.commandTimedOut": "Stopped dotnet {0}: it didn't finish within {1} minutes.",
   "msg.terminal.couldNotRunInTheTerminal": "Could not run {0} in the terminal: {1}",
   "msg.terminal.ignoringTheLaunchSettings": "Ignoring the launch settings: {0}",
   "msg.testing.exportedCoverageTo": "Exported coverage to {0}.",

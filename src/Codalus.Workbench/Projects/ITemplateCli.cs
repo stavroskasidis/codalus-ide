@@ -6,18 +6,58 @@ public sealed record CliResult(int ExitCode, string Output)
     public bool Succeeded => ExitCode == 0;
 
     /// <summary>
-    /// The last line that says something (not a blank, a usage hint or a link to the exit codes): the error New Project
-    /// shows when <c>dotnet new</c> fails.
+    /// The line that says what went wrong, the error New Project shows when <c>dotnet new</c> fails. Usage hints, the
+    /// commands they suggest and the link to the exit codes don't count. An <c>Error:</c> line counts first; when it
+    /// introduces a list (<c>Error: Invalid option(s):</c>), its first explanation does (<c>'--x' is not a valid option</c>).
+    /// Otherwise the last line counts, after the line that introduces it when there is one
+    /// (<c>Creating this template will make changes to existing files: Overwrite Program.cs</c>).
     /// </summary>
-    public string LastMeaningfulLine =>
-        Output.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')
-            .Select(l => l.Trim())
-            .LastOrDefault(l => l.Length > 0
-                && !l.StartsWith("For details on the exit code", StringComparison.OrdinalIgnoreCase)
-                && !l.StartsWith("dotnet new ", StringComparison.Ordinal)
-                && !l.StartsWith("To ", StringComparison.Ordinal)
-                && !l.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-        ?? $"exit code {ExitCode}";
+    public string LastMeaningfulLine
+    {
+        get
+        {
+            var lines = Output.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0 && !IsHint(l))
+                .ToList();
+            if (lines.Count == 0)
+            {
+                return $"exit code {ExitCode}";
+            }
+
+            var error = lines.FindIndex(l => l.StartsWith("Error:", StringComparison.OrdinalIgnoreCase));
+            if (error >= 0)
+            {
+                if (!lines[error].EndsWith(':'))
+                {
+                    return lines[error];
+                }
+
+                // The option or value is on a line of its own (no sentence); its explanation follows.
+                var detail = lines.Skip(error + 1).FirstOrDefault(l => l.Contains(' ', StringComparison.Ordinal) && !l.StartsWith('-'));
+                return detail is null ? lines[error].TrimEnd(':') : FirstSentence(detail);
+            }
+
+            var last = string.Join(' ', lines[^1].Split(' ', StringSplitOptions.RemoveEmptyEntries));
+            return lines.Count > 1 && lines[^2].EndsWith(':') ? lines[^2] + " " + last : last;
+        }
+    }
+
+    /// <summary>What the CLI prints to help rather than to say what's wrong: help and retry hints, commands, links.</summary>
+    private static bool IsHint(string line) =>
+        line.StartsWith("For details on the exit code", StringComparison.OrdinalIgnoreCase)
+        || line.StartsWith("For more information", StringComparison.OrdinalIgnoreCase)
+        || line.StartsWith("Rerun the command", StringComparison.OrdinalIgnoreCase)
+        || line.StartsWith("dotnet new ", StringComparison.Ordinal)
+        || line.StartsWith("To ", StringComparison.Ordinal)
+        || line.StartsWith("http", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A line up to the sentence that introduces a list (<c>… for --framework. The possible values are:</c>).</summary>
+    private static string FirstSentence(string line)
+    {
+        var end = line.LastIndexOf(". ", StringComparison.Ordinal);
+        return line.EndsWith(':') && end > 0 ? line[..(end + 1)] : line;
+    }
 }
 
 /// <summary>
