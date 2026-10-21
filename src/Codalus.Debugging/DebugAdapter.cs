@@ -266,9 +266,10 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// <c>configurationDone</c> comes last, and waits its fixed 5 seconds for the runtime there. A program started in the
     /// terminal or a console window is attached to once it reaches the startup hook, usually after
     /// <c>configurationDone</c> (netcoredbg sends <c>initialized</c> with its answer to <c>initialize</c>), and then it's
-    /// this request that netcoredbg fails when the runtime reports late (<see cref="IsStartupTimeout"/>; PR #35's Windows
-    /// CI): as after <see cref="ConfigurationDoneAsync"/>, a program that still runs gets <see cref="LateRuntimeWait"/>
-    /// more, and netcoredbg debugs it once its runtime reports.
+    /// this request that netcoredbg fails when the runtime reports late, or answers with its command timeout when the
+    /// attach runs past its 15 seconds (<see cref="IsStartupTimeout"/>; PR #35's Windows CI): as after
+    /// <see cref="ConfigurationDoneAsync"/>, a program that still runs gets <see cref="LateRuntimeWait"/> more, and
+    /// netcoredbg debugs it once its runtime reports.
     /// </summary>
     public async Task AttachAsync(AttachArguments arguments, CancellationToken cancellationToken)
     {
@@ -292,12 +293,12 @@ public sealed partial class DebugAdapter : IDebugAdapter
 
     /// <summary>
     /// Ends the configuration: netcoredbg starts the program (or attaches) and waits a fixed 5 seconds for its runtime
-    /// (<see cref="IsStartupTimeout"/>). Past them, a program on this machine that still runs gets
-    /// <see cref="LateRuntimeWait"/> more: netcoredbg gives up waiting, not the start, and debugs the program once its
-    /// runtime reports. Throws the timeout when the program ended first (or isn't found), or when netcoredbg can't take
-    /// up a runtime that started (a launched program is ended: <see cref="StuckRuntimeWait"/>), so that the start is
-    /// made again; and <see cref="InvalidOperationException"/> when the longer wait runs out too (a launched program is
-    /// ended).
+    /// (<see cref="IsStartupTimeout"/>). Past them, or past the 15 seconds after which netcoredbg answers any request
+    /// with its command timeout, a program on this machine that still runs gets <see cref="LateRuntimeWait"/> more:
+    /// netcoredbg gives up waiting, not the start, and debugs the program once its runtime reports. Throws the timeout
+    /// when the program ended first (or isn't found), or when netcoredbg can't take up a runtime that started (a
+    /// launched program is ended: <see cref="StuckRuntimeWait"/>), so that the start is made again; and
+    /// <see cref="InvalidOperationException"/> when the longer wait runs out too (a launched program is ended).
     /// </summary>
     public async Task ConfigurationDoneAsync(CancellationToken cancellationToken)
     {
@@ -320,14 +321,24 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// later of the launch or attach and <c>configurationDone</c>. That's <c>configurationDone</c>, except for an attach
     /// sent after it (a program started in the terminal, <see cref="AttachAsync(AttachArguments, CancellationToken)"/>);
     /// a launch never comes after it.
+    /// <para>
+    /// Also netcoredbg's command timeout (<see cref="CommandTimeoutMessage"/>) to that request, when the start itself
+    /// runs past its fixed 15 seconds (PR #97's Windows CI: the packaged WinUI app attached to on a loaded runner). On
+    /// Windows ICorDebug's attach waits without a limit for the process's loader breakpoint, then netcoredbg waits its 5
+    /// seconds for the CreateProcess callback. netcoredbg goes on starting after that answer (its worker finishes a
+    /// request before it takes the next), so the program is waited for as after the 5 seconds; ending the session at
+    /// the answer detached from a program that netcoredbg was about to debug.
+    /// </para>
     /// TODO(issue): ask Samsung/netcoredbg for a configurable wait.
     /// </summary>
     public static bool IsStartupTimeout(Exception ex) =>
-        ex is DapException { Command: "configurationDone" or "attach" } && ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase);
+        ex is DapException { Command: "configurationDone" or "attach" }
+        && (ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase) || IsCommandTimeout(ex));
 
     /// <summary>
-    /// How long a start waits, past netcoredbg's 5 seconds, for the runtime of a program on this machine
-    /// (<see cref="ConfigurationDoneAsync"/>).
+    /// How long a start waits, past netcoredbg's 5 seconds (or its 15-second command timeout), for the runtime of a
+    /// program on this machine (<see cref="ConfigurationDoneAsync"/>); and how long Break All waits for netcoredbg to
+    /// have the process (<see cref="ThreadsOnceAttachedAsync"/>).
     /// </summary>
     internal TimeSpan LateRuntimeWait { get; set; } = TimeSpan.FromSeconds(60);
 
@@ -374,12 +385,14 @@ public sealed partial class DebugAdapter : IDebugAdapter
     }
 
     /// <summary>
-    /// Waits past netcoredbg's 5 seconds for the program's runtime (its first thread or module), while the program
-    /// runs. netcoredbg's wait ends only its own waiting: dbgshim's registration for the runtime's start stays (on
-    /// Windows its thread waits for the runtime's startup event without a limit), and once the runtime reports,
-    /// netcoredbg attaches, binds the breakpoints and stops at them. It only leaves out the <c>process</c> event, which
-    /// is raised here. Meanwhile netcoredbg is sent a request now and then (<see cref="WakeCommand"/>), which it doesn't
-    /// know and answers at once: on macOS it can't take the runtime up without one.
+    /// Waits past netcoredbg's 5 seconds (or its command timeout: <see cref="IsStartupTimeout"/>) for the program's
+    /// runtime (its first thread or module), while the program runs. netcoredbg's wait ends only its own waiting:
+    /// dbgshim's registration for the runtime's start stays (on Windows its thread waits for the runtime's startup event
+    /// without a limit), and once the runtime reports, netcoredbg attaches, binds the breakpoints and stops at them. It
+    /// only leaves out the <c>process</c> event, which is raised here (after a command timeout netcoredbg may still raise
+    /// its own: a second one changes nothing). Meanwhile netcoredbg is sent a request now and then
+    /// (<see cref="WakeCommand"/>), which it doesn't know and answers at once: on macOS it can't take the runtime up
+    /// without one.
     /// </summary>
     /// <remarks>
     /// macOS (PR #24's CI, and the probe runs 39031376883 and 39034047801 on macOS 26.6 with netcoredbg 3.2.0): a
@@ -416,7 +429,13 @@ public sealed partial class DebugAdapter : IDebugAdapter
         TimeSpan? transportSince = null;
         using var wakes = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var nextWake = TimeSpan.Zero;
-        Log?.Invoke(this, $"The debugger didn't see the program's runtime start within its 5 seconds; waiting for it (up to {LateRuntimeWait.TotalSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture)} seconds more).");
+
+        // netcoredbg gave up on one of two waits: its 5 seconds for the runtime, or its 15 seconds for the request.
+        var commandTimeout = IsCommandTimeout(timeout);
+        var more = LateRuntimeWait.TotalSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+        Log?.Invoke(this, commandTimeout
+            ? $"The debugger took longer than its 15 seconds to {(_attachedTo is null ? "start" : "attach to")} the program; waiting for its runtime (up to {more} seconds more)."
+            : $"The debugger didn't see the program's runtime start within its 5 seconds; waiting for it (up to {more} seconds more).");
         var processEvent = _attachedTo is null
             ? new DapEvent(DapEvents.Process, JsonSerializer.SerializeToElement(new ProcessEvent(_program ?? program.ProcessName, program.Id, IsLocalProcess: true, StartMethod: "launch"), Json.ProcessEvent))
             : null;
@@ -458,7 +477,7 @@ public sealed partial class DebugAdapter : IDebugAdapter
                     }
 
                     throw new InvalidOperationException(
-                        $"The debugger didn't see the program's runtime start within {(LateRuntimeWait.TotalSeconds + 5).ToString("0", System.Globalization.CultureInfo.InvariantCulture)} seconds{(_attachedTo is null ? ", and ended the program" : string.Empty)}. Is it a .NET program?",
+                        $"The debugger didn't see the program's runtime start within {(LateRuntimeWait.TotalSeconds + (commandTimeout ? 15 : 5)).ToString("0", System.Globalization.CultureInfo.InvariantCulture)} seconds{(_attachedTo is null ? ", and ended the program" : string.Empty)}. Is it a .NET program?",
                         timeout);
                 }
 
@@ -646,12 +665,62 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// </summary>
     public async Task PauseAsync(int threadId, CancellationToken cancellationToken)
     {
-        if (threadId == 0 && (await ThreadsAsync(cancellationToken).ConfigureAwait(false)) is [var first, ..])
+        if (threadId == 0 && (await ThreadsOnceAttachedAsync(cancellationToken).ConfigureAwait(false)) is [var first, ..])
         {
             threadId = first.Id;
         }
 
         await _connection.RequestAsync("pause", new ThreadArguments(threadId), Json.ThreadArguments, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The program's threads for Break All, once netcoredbg has the process. The session shows running from
+    /// <c>configurationDone</c> on, but netcoredbg attaches in it, and fails <c>threads</c> with E_FAIL until it has
+    /// handled the process's CreateProcess callback (its <c>CheckDebugProcess</c>). Two Break Alls get that answer
+    /// (PR #97's Windows CI, the packaged WinUI app): one sent while the attach runs past netcoredbg's 15 seconds, which
+    /// waits behind <c>configurationDone</c> (netcoredbg reads no request until it's answered) and is answered as soon
+    /// as the attach gives up its own wait; and one sent once a late runtime's threads and modules were reported, which
+    /// netcoredbg does before that callback. While a program on this machine runs, <c>threads</c> is asked again until
+    /// netcoredbg answers it, for up to <see cref="LateRuntimeWait"/>; the session's end cancels the wait.
+    /// </summary>
+    /// <remarks>
+    /// Making the start itself wait until <c>threads</c> answers would cover any request sent after it, but Break All is
+    /// the only one the IDE sends while the program runs that needs the process: breakpoints and exception settings
+    /// wait in netcoredbg for one, and threads, stacks and evaluations otherwise follow a stop, which netcoredbg reports
+    /// only once it has the process. Waiting here leaves the start as it was, with no more requests for it to make.
+    /// </remarks>
+    private async Task<DapThread[]> ThreadsOnceAttachedAsync(CancellationToken cancellationToken)
+    {
+        Stopwatch? waited = null;
+        while (true)
+        {
+            try
+            {
+                return await ThreadsAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (DapException ex) when (ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase)
+                                          && !cancellationToken.IsCancellationRequested
+                                          && (waited is null || waited.Elapsed < LateRuntimeWait)
+                                          && ProgramRuns())
+            {
+                if (waited is null)
+                {
+                    waited = Stopwatch.StartNew();
+                    Log?.Invoke(this, "The debugger isn't attached to the program yet; Break All waits for it.");
+                }
+            }
+
+            await Task.Delay(AttachPollInterval, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>How often Break All asks netcoredbg for the threads again while it isn't attached yet.</summary>
+    private static readonly TimeSpan AttachPollInterval = TimeSpan.FromMilliseconds(250);
+
+    private bool ProgramRuns()
+    {
+        using var program = RunningProgram();
+        return program is not null;
     }
 
     public async Task<DapThread[]> ThreadsAsync(CancellationToken cancellationToken) =>

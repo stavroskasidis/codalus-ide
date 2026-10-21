@@ -12,7 +12,8 @@ namespace Codalus.Workbench.Tests;
 /// without the session ending in between; so does a later program of several startup projects, in its place. The
 /// adapter is the scripted one (<c>Codalus.LspConformance.Server --dap</c>), told to fail its first starts and what the
 /// program does next (<c>runtimeAfter</c>). A program started in the terminal is attached to after
-/// <c>configurationDone</c>, so there it's the <c>attach</c> that netcoredbg fails, and the same holds.
+/// <c>configurationDone</c>, so there it's the <c>attach</c> that netcoredbg fails, and the same holds. So it does when
+/// netcoredbg answers the start with its command timeout (the start ran past its 15 seconds) and goes on starting.
 /// </summary>
 public sealed class DebugStartAgainTests : IDisposable
 {
@@ -524,6 +525,69 @@ public sealed class DebugStartAgainTests : IDisposable
     }
 
     [Fact]
+    public async Task An_attach_past_netcoredbgs_command_timeout_goes_on_and_a_Break_All_meanwhile_waits_for_it()
+    {
+        // PR #97's Windows CI (WinUIShellTests): netcoredbg's attach to the packaged WinUI app ran past its fixed 15
+        // seconds. It answered configurationDone with its command timeout and went on attaching, but the session ended
+        // ("Could not start WinUIApp: Command execution timed out."), and the Break All sent as the session showed running
+        // got E_FAIL for its threads, netcoredbg not having the process yet. The stand-in's attach answers so: the runtime
+        // reports a second after the timeout, and threads fails until a moment after that (ScriptedDap.AttachLateAsync).
+        using var program = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("dotnet", [ScriptedAdapter, "--program"]) { UseShellExecute = false, RedirectStandardInput = true })!;
+        var id = program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        File.AppendAllText(_starts + ".programs", id + "\n");
+        var script = Path.Combine(Path.GetTempPath(), "codalus-scripted-attach-" + id);
+        _scratch.Add(script);
+        File.WriteAllText(script, "slow 1000");
+        try
+        {
+            await using var debug = new DebugService(() => NetcoredbgStandIn);
+            var output = new System.Text.StringBuilder();
+            var stopped = new TaskCompletionSource<StopInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task? pausing = null;
+            debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
+            debug.Stopped += (_, stop) => stopped.TrySetResult(stop);
+            debug.StateChanged += (_, _) =>
+            {
+                // Break All as soon as the session shows running, as the WinUI test does: before netcoredbg attaches.
+                if (debug.State == DebugState.Running && pausing is null)
+                {
+                    pausing = debug.PauseAsync();
+                }
+            };
+
+            await debug.AttachAsync(program.Id, Timeout());
+
+            // The session went on with the program once its runtime reported, and Break All stopped it.
+            Assert.NotEqual(DebugState.Idle, debug.State);
+            Assert.Equal(program.Id, debug.ProcessId);
+            Assert.NotNull(pausing);
+            await pausing.WaitAsync(Timeout());
+            var stop = await stopped.Task.WaitAsync(Timeout());
+            Assert.Equal("pause", stop.Reason);
+            Assert.Equal(1, stop.ThreadId);
+            Assert.Equal(DebugState.Stopped, debug.State);
+            Assert.Equal(["App.Program.Main"], debug.Frames.Select(f => f.Name));
+            string text;
+            lock (output)
+            {
+                text = output.ToString();
+            }
+
+            Assert.Contains("The debugger took longer than its 15 seconds to attach to the program; waiting for its runtime (up to 60 seconds more).", text, StringComparison.Ordinal);
+            Assert.Contains("The debugger saw the program's runtime start ", text, StringComparison.Ordinal);
+            Assert.Contains("The debugger isn't attached to the program yet; Break All waits for it.", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("starting again", text, StringComparison.Ordinal);
+            await debug.DetachAsync();
+            Assert.Equal(DebugState.Idle, debug.State);
+            Assert.False(program.HasExited);
+        }
+        finally
+        {
+            program.Kill();
+        }
+    }
+
+    [Fact]
     public void Only_netcoredbgs_startup_timeout_starts_again()
     {
         Assert.True(DebugService.IsStartupTimeout(new DapException("configurationDone", "Failed command 'configurationDone' : 0x80004005")));
@@ -533,5 +597,11 @@ public sealed class DebugStartAgainTests : IDisposable
         // An attach after configurationDone (a program started in the terminal) carries the start, and the timeout.
         Assert.True(DebugService.IsStartupTimeout(new DapException("attach", "Failed command 'attach' : 0x80004005")));
         Assert.False(DebugService.IsStartupTimeout(new DapException("attach", "Failed command 'attach' : 0x80070057")));
+
+        // netcoredbg's command timeout to the request that carries the start (it ran past 15 seconds, and goes on).
+        Assert.True(DebugService.IsStartupTimeout(new DapException("configurationDone", DebugAdapter.CommandTimeoutMessage)));
+        Assert.True(DebugService.IsStartupTimeout(new DapException("attach", DebugAdapter.CommandTimeoutMessage)));
+        Assert.False(DebugService.IsStartupTimeout(new DapException("launch", DebugAdapter.CommandTimeoutMessage)));
+        Assert.False(DebugService.IsStartupTimeout(new DapException("evaluate", DebugAdapter.CommandTimeoutMessage)));
     }
 }
