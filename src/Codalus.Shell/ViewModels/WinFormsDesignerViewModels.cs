@@ -73,6 +73,10 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     private readonly ShellHost _shell;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <summary>Canceled when the designer closes (or the IDE exits): a wait for a build, the designer's own build, the copy and the host's start stop.</summary>
+    private readonly CancellationTokenSource _closing = new();
+    private readonly CancellationToken _closed;
     private readonly List<CodeDocument> _resourceModels = [];
     private readonly Dictionary<CodeDocument, int> _expectedResources = [];
     private readonly List<(CodeDocument Model, int Version)[]> _undo = [];
@@ -94,10 +98,19 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     private bool _isBusy;
     private bool _isRestarting;
     private bool _disposed;
+    private HostFailure? _hostFailure;
+
+    /// <summary>
+    /// A start or restart that left the designer without a host (#66: the designer's build failed, a file of the output
+    /// was held, the host didn't get ready): the number of the last build that had ended, and the target's assemblies
+    /// as they were then (<see cref="WinFormsDesignerService.OutputStamp"/>).
+    /// </summary>
+    private sealed record HostFailure(long Build, Task<string> Output);
 
     public WinFormsDesignerDocument(ShellHost shell, string codePath)
     {
         _shell = shell;
+        _closed = _closing.Token;
         CodePath = codePath;
         DesignerPath = codePath[..^".cs".Length] + ".Designer.cs";
         Id = IdFor(codePath);
@@ -243,8 +256,13 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             }
             finally
             {
+                NoteHostState();
                 ReleaseGate();
             }
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+            // Closed while it waited for a build, built or started: nothing more to do.
         }
         catch (PreviewerException ex)
         {
@@ -262,6 +280,22 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
     }
 
+    /// <summary>
+    /// After a start, a restart or a reload with the gate held: without a host (and still open), what the next build's
+    /// end or activation compares to start it again (<see cref="ReloadIfOutdatedAsync"/>); with one, nothing.
+    /// </summary>
+    private void NoteHostState()
+    {
+        if (_disposed || _host is not null)
+        {
+            _hostFailure = null;
+            return;
+        }
+
+        var target = _target;
+        _hostFailure = new HostFailure(_shell.Builds.LastBuild?.Number ?? 0, Task.Run(() => WinFormsDesignerService.OutputStamp(target)));
+    }
+
     /// <summary>Reads the model from the code. Code it can't read: the first time, the file opens as code with the reason (as Visual Studio does); later, the designer says so.</summary>
     private async Task<bool> ReadAsync(bool closeOnProblem)
     {
@@ -269,7 +303,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         var client = await _shell.Languages.ClientAsync(ShellHost.CSharpLanguageId).ConfigureAwait(true)
             ?? throw new PreviewerException(Localizer.Get("msg.winFormsDesigner.noCSharp", "The C# language service isn't available: the designer reads the form through it."));
         var version = _designerCode!.Version;
-        var read = await client.WinFormsReadAsync(new WinFormsReadParams(new TextDocumentIdentifier(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(CodePath))) { ResourceFiles = HeldResourceFiles() }, CancellationToken.None).ConfigureAwait(true)
+        var read = await client.WinFormsReadAsync(new WinFormsReadParams(new TextDocumentIdentifier(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(CodePath))) { ResourceFiles = HeldResourceFiles() }, _closed).ConfigureAwait(true)
             ?? throw new PreviewerException(Localizer.Get("msg.winFormsDesigner.noAnswer", "The C# language service didn't read the form."));
         _read = read;
         if (read.Model is not { } model)
@@ -299,8 +333,26 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     private async Task StartHostAsync()
     {
-        _target = await _shell.WinFormsDesigner.ResolveAsync(CodePath, CancellationToken.None).ConfigureAwait(true);
-        var host = await _shell.WinFormsDesigner.StartAsync(_target, message => Ui.Post(() => Status = message), CancellationToken.None).ConfigureAwait(true);
+        // Canceled when the designer closes: a wait for a running build, the designer's own build, the copy of the output and the host's start.
+        _target = await _shell.WinFormsDesigner.ResolveAsync(CodePath, _closed).ConfigureAwait(true);
+
+        // The start's progress shows while it runs: a message posted just before the start failed doesn't hide the reason.
+        var starting = true;
+        IWinFormsDesignerHost host;
+        try
+        {
+            host = await _shell.WinFormsDesigner.StartAsync(_target, message => Ui.Post(() =>
+            {
+                if (starting && !_disposed)
+                {
+                    Status = message;
+                }
+            }), _closed).ConfigureAwait(true);
+        }
+        finally
+        {
+            starting = false;
+        }
         if (_disposed)
         {
             await host.DisposeAsync().ConfigureAwait(true);
@@ -414,9 +466,14 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
                     _host = null;
                     await old.DisposeAsync().ConfigureAwait(true);
                 }
+
+                if (_disposed)
+                {
+                    return; // closed while the old host stopped
+                }
             }
 
-            if (!await ReadAsync(closeOnProblem: false).ConfigureAwait(true))
+            if (!await ReadAsync(closeOnProblem: false).ConfigureAwait(true) || _disposed)
             {
                 return;
             }
@@ -436,6 +493,10 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
                 PropertiesChanged?.Invoke(this, EventArgs.Empty);
             }
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+            // Closed while the host started again.
+        }
         catch (PreviewerException ex)
         {
             Status = ex.Message;
@@ -453,6 +514,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
                 IsRestarting = false;
                 IsBusy = false;
             }
+
+            NoteHostState();
         }
     }
 
@@ -463,8 +526,12 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// many triggers come (a build's end and an activation in the same turn), the host starts again once: the next
     /// check sees the new host's copy, which is current. Unsaved designer changes stay (the form is read from the
     /// editor's text).
+    /// A designer left without a host by a start that failed (its build failed, a file was held, the host didn't get
+    /// ready) starts again after the next successful build that ended after the failure (<paramref name="build"/>, the
+    /// build's number), or when it becomes active and the target's assemblies changed since (a build in another tab or
+    /// outside the IDE): not on every activation, which would build again a project that doesn't build.
     /// </summary>
-    internal async Task ReloadIfOutdatedAsync()
+    internal async Task ReloadIfOutdatedAsync(long? build = null)
     {
         if (_disposed)
         {
@@ -474,14 +541,41 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         await _gate.WaitAsync().ConfigureAwait(true);
         try
         {
-            if (_disposed || _host is not { } host || !await host.IsOutdatedAsync(CancellationToken.None).ConfigureAwait(true) || _disposed)
+            if (_disposed)
             {
                 return;
             }
 
-            Status = Localizer.Format("msg.winFormsDesigner.reloadingAfterBuild", "The project was built: loading {0} on the new build…", System.IO.Path.GetFileName(CodePath));
-            _shell.WinFormsDesignerLog.AppendLine($"A build replaced {System.IO.Path.GetFileName(_target?.HostAssembly ?? _target?.ProjectAssembly)}: loading {System.IO.Path.GetFileName(CodePath)} on a new designer host.");
-            await ReloadCoreAsync(restartHost: true).ConfigureAwait(true);
+            if (_host is { } host)
+            {
+                if (!await host.IsOutdatedAsync(CancellationToken.None).ConfigureAwait(true) || _disposed)
+                {
+                    return;
+                }
+
+                Status = Localizer.Format("msg.winFormsDesigner.reloadingAfterBuild", "The project was built: loading {0} on the new build…", System.IO.Path.GetFileName(CodePath));
+                _shell.WinFormsDesignerLog.AppendLine($"A build replaced {System.IO.Path.GetFileName(_target?.HostAssembly ?? _target?.ProjectAssembly)}: loading {System.IO.Path.GetFileName(CodePath)} on a new designer host.");
+                await ReloadCoreAsync(restartHost: true).ConfigureAwait(true);
+            }
+            else if (_hostFailure is { } failure && _designerCode is not null && _model is not null)
+            {
+                var built = build is { } number && number > failure.Build;
+                if (!built)
+                {
+                    var target = _target;
+                    var now = await Task.Run(() => WinFormsDesignerService.OutputStamp(target)).ConfigureAwait(true);
+                    if (now == await failure.Output.ConfigureAwait(true) || _disposed)
+                    {
+                        return;
+                    }
+                }
+
+                Status = Localizer.Format("msg.winFormsDesigner.startingAfterBuild", "The project was built: starting the designer for {0} again…", System.IO.Path.GetFileName(CodePath));
+                _shell.WinFormsDesignerLog.AppendLine(built
+                    ? $"A build ended after the designer for {System.IO.Path.GetFileName(CodePath)} failed to start: starting it again."
+                    : $"{System.IO.Path.GetFileName(_target?.HostAssembly ?? _target?.ProjectAssembly)} changed after the designer for {System.IO.Path.GetFileName(CodePath)} failed to start: starting it again.");
+                await ReloadCoreAsync(restartHost: true).ConfigureAwait(true);
+            }
         }
         finally
         {
@@ -1537,6 +1631,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
 
         _disposed = true;
+        _closing.Cancel();
         _reload?.Cancel();
         if (_designerCode is { } model)
         {
@@ -1561,9 +1656,29 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         Dispose();
     }
 
+    /// <summary>
+    /// The IDE exits (#66): the designer host stops and its copy of the build output goes. Nothing else is let go (the
+    /// process is ending), and nothing here needs the UI thread, which waits for the exit.
+    /// </summary>
+    internal ValueTask ShutDownAsync()
+    {
+        if (_disposed)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        _disposed = true;
+        _closing.Cancel();
+        _reload?.Cancel();
+        var host = _host;
+        _host = null;
+        return host?.DisposeAsync() ?? ValueTask.CompletedTask;
+    }
+
     public void Dispose()
     {
         _reload?.Dispose();
+        _closing.Dispose();
         _gate.Dispose();
     }
 }

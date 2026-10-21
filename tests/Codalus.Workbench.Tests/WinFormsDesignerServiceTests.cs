@@ -310,6 +310,31 @@ public sealed class WinFormsDesignerServiceTests
         }
     }
 
+    [Fact]
+    public async Task The_output_stamp_changes_when_a_build_writes_or_replaces_the_assemblies()
+    {
+        // What a designer whose host didn't start compares when it becomes active (#66).
+        var (folder, target) = AppOutput();
+        try
+        {
+            Assert.Equal(string.Empty, WinFormsDesignerService.OutputStamp(null));
+            var built = WinFormsDesignerService.OutputStamp(target);
+            Assert.Equal(built, WinFormsDesignerService.OutputStamp(target));
+            Assert.Single(built.Split(';', StringSplitOptions.RemoveEmptyEntries)); // the app is the designed project
+            var missing = target with { ProjectAssembly = Path.Combine(folder, "bin", "Lib.dll") };
+            var before = WinFormsDesignerService.OutputStamp(missing);
+            Assert.Contains("Lib.dll|missing;", before, StringComparison.Ordinal);
+            await File.WriteAllTextAsync(missing.ProjectAssembly, "lib", TestContext.Current.CancellationToken);
+            Assert.NotEqual(before, WinFormsDesignerService.OutputStamp(missing));
+            await File.AppendAllTextAsync(target.ProjectAssembly, " rebuilt", TestContext.Current.CancellationToken);
+            Assert.NotEqual(built, WinFormsDesignerService.OutputStamp(target));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     /// <summary>A launcher whose process doesn't start.</summary>
     private sealed class FailingLauncher(Exception failure) : IProcessLauncher
     {

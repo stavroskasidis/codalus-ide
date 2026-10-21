@@ -220,6 +220,41 @@ public sealed class WinFormsDesignerToolboxShellTests
         f.Shell.Toolbox.Disarm();
     }
 
+    /// <summary>
+    /// Builds through the shell's own build service (its end and whether a build runs are what the designer follows), run
+    /// by a stand-in for the build host: each build runs until the test ends it, with the result the test gives.
+    /// </summary>
+    private sealed class BuildStandIn
+    {
+        private readonly ShellFixture _f;
+        private TaskCompletionSource<BuildResultInfo>? _running;
+
+        public BuildStandIn(ShellFixture f)
+        {
+            _f = f;
+            f.Shell.Builds.Runner = (_, _) => (_running = new TaskCompletionSource<BuildResultInfo>(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+        }
+
+        /// <summary>Starts a build of <paramref name="project"/>; it runs until <see cref="End"/>.</summary>
+        public Task<BuildResultInfo> Start(string project)
+        {
+            var build = _f.Shell.Builds.BuildAsync("Build", project, CancellationToken.None);
+            Assert.True(_f.Shell.Builds.IsBuilding);
+            return build;
+        }
+
+        public void End(bool succeeded = true, bool canceled = false) =>
+            _running!.SetResult(new BuildResultInfo(succeeded && !canceled, canceled, 0, 0, 10));
+
+        /// <summary>A build that ends at once with the given result.</summary>
+        public async Task RunAsync(string project, bool succeeded = true, bool canceled = false)
+        {
+            var build = Start(project);
+            End(succeeded, canceled);
+            await build;
+        }
+    }
+
     [AvaloniaFact]
     public async Task A_build_that_replaced_the_designed_output_loads_the_form_on_it_once()
     {
@@ -228,12 +263,12 @@ public sealed class WinFormsDesignerToolboxShellTests
         var hosts = new List<FakeWinFormsDesignerHost>();
         TaskCompletionSource? hold = null;
         var starts = 0;
-        var building = false;
         WinFormsDesignerShellTests.UseFakeDesignerHost(f, hosts, starting: () =>
         {
             starts++;
             return hold?.Task ?? Task.CompletedTask;
-        }, isBuilding: () => building);
+        });
+        var builds = new BuildStandIn(f);
         await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: WorkspaceStates.Ready, Projects: 1 }, seconds: 300,
             () => WinFormsDesignerShellTests.DescribeToolbox(f, "the C# service"));
         var project = Path.Combine(app, "WinFormsApp.csproj");
@@ -255,17 +290,15 @@ public sealed class WinFormsDesignerToolboxShellTests
             }
         }
 
-        // A build that replaced nothing the host loaded (an unrelated project, content), and a canceled one: no restart.
-        f.Shell.OnWinFormsBuildFinished(Build(project));
-        await SettleAsync();
-        Assert.Single(hosts);
-        host1.Outdated = true;
-        f.Shell.OnWinFormsBuildFinished(Build(project, canceled: true));
+        // The builds run through the shell's build service: its end is what reaches the designer.
+        // A build that replaced nothing the host loaded (an unrelated project, content): no restart.
+        await builds.RunAsync(project);
         await SettleAsync();
         Assert.Single(hosts);
 
         // A build that replaced it: the form on a new host, once; the old one ended; the selection kept.
-        f.Shell.OnWinFormsBuildFinished(Build(project));
+        host1.Outdated = true;
+        await builds.RunAsync(project);
         await ShellFixture.PumpUntil(() => hosts.Count == 2 && designer.Host == hosts[1] && designer.FrameCount > 0, seconds: 60, () => $"a new host: {designer.Status}\n{f.Shell.WinFormsDesignerLog.GetText()}");
         await SettleAsync();
         Assert.Equal(2, hosts.Count);
@@ -275,39 +308,47 @@ public sealed class WinFormsDesignerToolboxShellTests
         Assert.Equal(["placeOrderButton"], designer.Selection);
         Assert.Contains("A build replaced WinFormsApp.dll: loading OrderForm.cs on a new designer host.", f.Shell.WinFormsDesignerLog.GetText(), StringComparison.Ordinal);
 
-        // Another document is active: the build's end leaves the designer alone; it loads the new build when it's active again.
+        // A canceled build that had already replaced it (canceled after the app's assembly was copied): the new build shows too.
         var host2 = hosts[1];
         host2.Outdated = true;
-        await f.Shell.OpenFileAsync(Path.Combine(app, "Counter.cs"));
-        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == Path.Combine(app, "Counter.cs"));
-        f.Shell.OnWinFormsBuildFinished(Build(project));
+        await builds.RunAsync(project, canceled: true);
+        await ShellFixture.PumpUntil(() => hosts.Count == 3 && designer.Host == hosts[2], seconds: 60, () => $"a new host after a canceled build: {designer.Status}");
         await SettleAsync();
-        Assert.Equal(2, hosts.Count);
-        f.Shell.Layout.OpenDocument(designer, focus: true);
-        await ShellFixture.PumpUntil(() => hosts.Count == 3 && designer.Host == hosts[2], seconds: 60, () => $"a new host on activation: {designer.Status}");
-        await SettleAsync();
-        Assert.Equal(3, hosts.Count);
         Assert.True(host2.Disposed);
 
+        // Another document is active: the build's end leaves the designer alone; it loads the new build when it's active again.
+        var host3 = hosts[2];
+        host3.Outdated = true;
+        await f.Shell.OpenFileAsync(Path.Combine(app, "Counter.cs"));
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == Path.Combine(app, "Counter.cs"));
+        await builds.RunAsync(project);
+        await SettleAsync();
+        Assert.Equal(3, hosts.Count);
+        f.Shell.Layout.OpenDocument(designer, focus: true);
+        await ShellFixture.PumpUntil(() => hosts.Count == 4 && designer.Host == hosts[3], seconds: 60, () => $"a new host on activation: {designer.Status}");
+        await SettleAsync();
+        Assert.Equal(4, hosts.Count);
+        Assert.True(host3.Disposed);
+
         // A build's end and an activation in the same turn: one new host (the second check sees the new host's copy).
-        hosts[2].Outdated = true;
+        hosts[3].Outdated = true;
         f.Shell.OnWinFormsBuildFinished(Build(project));
         _ = designer.OnActivatedAsync();
         _ = designer.OnActivatedAsync();
-        await ShellFixture.PumpUntil(() => hosts.Count == 4 && designer.Host == hosts[3], seconds: 60, () => $"a new host: {designer.Status}");
+        await ShellFixture.PumpUntil(() => hosts.Count == 5 && designer.Host == hosts[4], seconds: 60, () => $"a new host: {designer.Status}");
         await SettleAsync();
-        Assert.Equal(4, hosts.Count);
+        Assert.Equal(5, hosts.Count);
 
         // A change made while the host starts again waits, then applies on the new host: never dropped, never sent to the old one.
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.DesignerSurface>().Any(s => s.IsEffectivelyVisible));
         var surface = f.Window.GetVisualDescendants().OfType<Views.DesignerSurface>().First(s => s.IsEffectivelyVisible);
-        var host4 = hosts[3];
-        host4.Outdated = true;
+        var host5 = hosts[4];
+        host5.Outdated = true;
         hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var startsBefore = starts;
-        f.Shell.OnWinFormsBuildFinished(Build(project));
+        await builds.RunAsync(project);
         await ShellFixture.PumpUntil(() => designer.IsRestarting && starts == startsBefore + 1, seconds: 60, () => $"the restart to wait for its host: {designer.Status}");
-        Assert.True(host4.Disposed);
+        Assert.True(host5.Disposed);
         var create = designer.CreateAsync("System.Windows.Forms.Label", 8 + 50, 31 + 300);
         var add = designer.AddFromToolboxAsync("System.Windows.Forms.TextBox"); // the Toolbox's double-click or Enter
         var gift = designer.Find("giftCheckBox")!;
@@ -324,36 +365,215 @@ public sealed class WinFormsDesignerToolboxShellTests
         Assert.False(create.IsCompleted);
         Assert.False(add.IsCompleted);
         Assert.Equal(["placeOrderButton"], designer.Selection); // the surface took no click
-        Assert.Empty(host4.Creates);
+        Assert.Empty(host5.Creates);
         hold.SetResult();
         hold = null;
         await create;
         await add;
         await SettleAsync();
-        Assert.Equal(5, hosts.Count);
-        Assert.Equal(2, hosts[4].Creates.Count);
-        Assert.Contains(hosts[4].Creates, c => (c.Type, c.Name, c.AtDefaultLocation) == ("System.Windows.Forms.Label", "label1", false));
-        Assert.Contains(hosts[4].Creates, c => (c.Type, c.Name, c.AtDefaultLocation) == ("System.Windows.Forms.TextBox", "textBox1", true));
-        Assert.Empty(host4.Creates);
+        Assert.Equal(6, hosts.Count);
+        Assert.Equal(2, hosts[5].Creates.Count);
+        Assert.Contains(hosts[5].Creates, c => (c.Type, c.Name, c.AtDefaultLocation) == ("System.Windows.Forms.Label", "label1", false));
+        Assert.Contains(hosts[5].Creates, c => (c.Type, c.Name, c.AtDefaultLocation) == ("System.Windows.Forms.TextBox", "textBox1", true));
+        Assert.Empty(host5.Creates);
         Assert.Contains("            label1 = new Label();\n", designer.DesignerCode!.Text.Text, StringComparison.Ordinal);
         Assert.Contains("            textBox1 = new TextBox();\n", designer.DesignerCode!.Text.Text, StringComparison.Ordinal);
-        Assert.Equal([hosts[4].Creates[1].Name], designer.Selection);
+        Assert.Equal([hosts[5].Creates[1].Name], designer.Selection);
 
-        // A designer opened while a build runs waits for it (no "A build is already running."), then starts.
-        building = true;
+        // A designer opened while a build runs waits for it (the shell's own "a build runs", no "A build is already running."), then starts.
+        var running = builds.Start(project);
         var opening = f.Shell.OpenFileAsync(Path.Combine(app, "MainForm.cs")); // it returns once the designer has loaded
         WinFormsDesignerDocument? main = null;
         await ShellFixture.PumpUntil(() => (main = f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>().SingleOrDefault(d => d.CodePath == Path.Combine(app, "MainForm.cs"))) is { Status: "Waiting for the build to finish…" },
             seconds: 60, () => $"the wait for the build: {main?.Status}");
         await Task.Delay(500, TestContext.Current.CancellationToken);
         ShellFixture.Pump();
-        Assert.Equal(5, hosts.Count);
+        Assert.Equal(6, hosts.Count);
         Assert.Equal("Waiting for the build to finish…", main!.Status);
         Assert.False(opening.IsCompleted);
-        building = false;
+        builds.End();
+        await running;
         await ShellFixture.PumpUntil(() => main.FrameCount > 0, seconds: 60, () => $"MainForm's frame: {main.Status}");
         Assert.Null(await opening);
-        Assert.Equal(6, hosts.Count);
+        Assert.Equal(7, hosts.Count);
         Assert.DoesNotContain("already running", main.Status, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A designer left without a host (its start failed, or its restart after a build did) starts again after the next
+    /// successful build, or when it becomes active and its output changed since, not on every activation or failed
+    /// build; a designer closed while it waits for a build (opening, or starting again) stops there: no build of its
+    /// own, no host; the IDE's exit stops the open designers' hosts (#66).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_designer_without_a_host_starts_after_a_build_and_a_closed_one_starts_nothing()
+    {
+        var (f, app) = await WinFormsDesignerShellTests.OpenAsync();
+        var exited = false;
+        try
+        {
+            var hosts = new List<FakeWinFormsDesignerHost>();
+            var failures = 0; // how many of the next starts fail
+            var attempts = 0;
+            var designerBuilds = 0;
+            const string Failure = "The designer didn't start: copying WinFormsApp.dll failed: The process cannot access the file because it is being used by another process.";
+            WinFormsDesignerShellTests.UseFakeDesignerHost(f, hosts, starting: () =>
+            {
+                attempts++;
+                if (failures > 0)
+                {
+                    failures--;
+                    return Task.FromException(new Codalus.Workbench.Previewer.PreviewerException(Failure));
+                }
+
+                return Task.CompletedTask;
+            }, build: () =>
+            {
+                designerBuilds++;
+                return Task.FromResult(true);
+            });
+            var builds = new BuildStandIn(f);
+            await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: WorkspaceStates.Ready, Projects: 1 }, seconds: 300,
+                () => WinFormsDesignerShellTests.DescribeToolbox(f, "the C# service"));
+            var project = Path.Combine(app, "WinFormsApp.csproj");
+            var counter = Path.Combine(app, "Counter.cs");
+            var form = Path.Combine(app, "OrderForm.cs");
+
+            async Task SettleAsync()
+            {
+                await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>().All(d => !d.IsRestarting && !d.IsBusy), seconds: 60, () => "the designers to settle");
+                for (var i = 0; i < 10; i++)
+                {
+                    ShellFixture.Pump();
+                    await Task.Delay(20, TestContext.Current.CancellationToken);
+                }
+            }
+
+            async Task ActivateAsync(WinFormsDesignerDocument designer)
+            {
+                await f.Shell.OpenFileAsync(counter);
+                await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == counter);
+                f.Shell.Layout.OpenDocument(designer, focus: true);
+                await SettleAsync();
+            }
+
+            // The start fails: no host, the reason in the status line.
+            failures = 1;
+            Assert.Null(await f.Shell.OpenFileAsync(form));
+            var designer = Assert.Single(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>());
+            await SettleAsync();
+            Assert.Null(designer.Host);
+            Assert.Equal(Failure, designer.Status);
+            Assert.Equal(1, attempts);
+
+            // Nothing changed: an activation, a failed build and a canceled one don't start it again.
+            await ActivateAsync(designer);
+            await builds.RunAsync(project, succeeded: false);
+            await SettleAsync();
+            await builds.RunAsync(project, canceled: true);
+            await SettleAsync();
+            Assert.Equal(1, attempts);
+            Assert.Null(designer.Host);
+
+            // A successful build: it starts, and the form loads.
+            await builds.RunAsync(project);
+            await ShellFixture.PumpUntil(() => designer.Host is not null && designer.FrameCount > 0, seconds: 60, () => $"the start after the build: {designer.Status}\n{f.Shell.WinFormsDesignerLog.GetText()}");
+            await SettleAsync();
+            Assert.Equal(2, attempts);
+            Assert.Same(Assert.Single(hosts), designer.Host);
+            Assert.Contains("A build ended after the designer for OrderForm.cs failed to start: starting it again.", f.Shell.WinFormsDesignerLog.GetText(), StringComparison.Ordinal);
+
+            // The restart after a build fails (a file of the output held): no host; the next successful build starts it.
+            hosts[0].Outdated = true;
+            failures = 1;
+            await builds.RunAsync(project);
+            await ShellFixture.PumpUntil(() => attempts == 3, seconds: 60, () => $"the restart: {designer.Status}");
+            await SettleAsync();
+            Assert.True(hosts[0].Disposed);
+            Assert.Null(designer.Host);
+            Assert.Equal(Failure, designer.Status);
+            await builds.RunAsync(project);
+            await ShellFixture.PumpUntil(() => designer.Host is not null, seconds: 60, () => $"the start after the next build: {designer.Status}");
+            await SettleAsync();
+            Assert.Equal(4, attempts);
+            Assert.Equal(2, hosts.Count);
+
+            // A build outside the IDE (or in another tab) while it had no host: it starts when it becomes active.
+            hosts[1].Outdated = true;
+            failures = 1;
+            await builds.RunAsync(project);
+            await ShellFixture.PumpUntil(() => attempts == 5, seconds: 60, () => $"the failed restart: {designer.Status}");
+            await SettleAsync();
+            Assert.Null(designer.Host);
+            await f.Shell.OpenFileAsync(counter);
+            await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == counter);
+            var target = await f.Shell.WinFormsDesigner.ResolveAsync(form, TestContext.Current.CancellationToken);
+            Directory.CreateDirectory(Path.GetDirectoryName(target.ProjectAssembly)!);
+            await File.WriteAllTextAsync(target.ProjectAssembly, "built outside the IDE", TestContext.Current.CancellationToken);
+            f.Shell.Layout.OpenDocument(designer, focus: true);
+            await ShellFixture.PumpUntil(() => designer.Host is not null, seconds: 60, () => $"the start on activation: {designer.Status}");
+            await SettleAsync();
+            Assert.Equal(6, attempts);
+            Assert.Equal(3, hosts.Count);
+            Assert.Contains("WinFormsApp.dll changed after the designer for OrderForm.cs failed to start: starting it again.", f.Shell.WinFormsDesignerLog.GetText(), StringComparison.Ordinal);
+            File.Delete(target.ProjectAssembly); // the output needs a build again, so a designer that went on would build it
+
+            // A designer closed while it waits for a build to open stops waiting: no build of its own, no host.
+            var hostsBefore = hosts.Count;
+            var running = builds.Start(project);
+            var opening = f.Shell.OpenFileAsync(Path.Combine(app, "MainForm.cs"));
+            WinFormsDesignerDocument? main = null;
+            await ShellFixture.PumpUntil(() => (main = f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>().SingleOrDefault(d => d.CodePath == Path.Combine(app, "MainForm.cs"))) is { Status: "Waiting for the build to finish…" },
+                seconds: 60, () => $"the wait for the build: {main?.Status}");
+            var buildsBefore = designerBuilds;
+            f.Shell.Layout.CloseDocument(main!);
+            await ShellFixture.PumpUntil(() => opening.IsCompleted, seconds: 10, () => $"the closed designer to stop waiting: {main!.Status}");
+            builds.End();
+            await running;
+            await SettleAsync();
+            Assert.Equal(buildsBefore, designerBuilds);
+            Assert.Equal(6, attempts);
+            Assert.Equal(hostsBefore, hosts.Count);
+
+            // A designer closed while it starts again (Load the form again during a build) stops there too.
+            running = builds.Start(project);
+            designer.RefreshCommand.Execute(null);
+            await ShellFixture.PumpUntil(() => designer.IsRestarting && designer.Status == "Waiting for the build to finish…", seconds: 60, () => $"the restart to wait for the build: {designer.Status}");
+            Assert.True(hosts[^1].Disposed);
+            f.Shell.Layout.CloseDocument(designer);
+            for (var i = 0; i < 10; i++)
+            {
+                ShellFixture.Pump();
+                await Task.Delay(20, TestContext.Current.CancellationToken);
+            }
+
+            builds.End();
+            await running;
+            for (var i = 0; i < 25; i++)
+            {
+                ShellFixture.Pump();
+                await Task.Delay(20, TestContext.Current.CancellationToken);
+            }
+
+            Assert.Equal(buildsBefore, designerBuilds);
+            Assert.Equal(6, attempts);
+            Assert.Equal(hostsBefore, hosts.Count);
+
+            // The IDE exits with a form open (the session reopens it next time): its host stops, so its copy goes.
+            Assert.Null(await f.Shell.OpenFileAsync(Path.Combine(app, "InventoryForm.cs")));
+            var inventory = Assert.Single(f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>());
+            await ShellFixture.PumpUntil(() => inventory.Host is not null, seconds: 60, () => $"InventoryForm's host: {inventory.Status}");
+            var last = (FakeWinFormsDesignerHost)inventory.Host!;
+            exited = true;
+            await f.DisposeAsync();
+            Assert.True(last.Disposed);
+        }
+        finally
+        {
+            if (!exited)
+            {
+                await f.DisposeAsync();
+            }
+        }
     }
 }

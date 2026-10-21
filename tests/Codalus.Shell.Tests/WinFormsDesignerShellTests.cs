@@ -87,19 +87,21 @@ public sealed class WinFormsDesignerShellTests
 
     /// <summary>
     /// The fake designer host (any OS: the real one is Windows only, D31) for the forms opened from now on; each host it
-    /// starts goes to <paramref name="hosts"/>, after <paramref name="starting"/> (a slow start, such as the build for the
-    /// designer) when there is one. <paramref name="isBuilding"/> says whether a build runs (#66: the designer waits for it).
+    /// starts goes to <paramref name="hosts"/>, after <paramref name="starting"/> (a slow start, or one that fails) when
+    /// there is one. <paramref name="build"/> is the designer's own build when the output needs one (by default it
+    /// succeeds at once). Whether a build runs (#66: the designer waits for it) is the shell's own answer, the build
+    /// service's.
     /// </summary>
-    internal static void UseFakeDesignerHost(ShellFixture f, List<FakeWinFormsDesignerHost> hosts, Func<Task>? starting = null, Func<bool>? isBuilding = null)
+    internal static void UseFakeDesignerHost(ShellFixture f, List<FakeWinFormsDesignerHost> hosts, Func<Task>? starting = null, Func<Task<bool>>? build = null)
     {
-        f.Shell.WinFormsDesigner = new WinFormsDesignerService(f.Shell.Solutions, _ => true, (_, _) => Task.FromResult(true), async (project, names, ct) =>
+        f.Shell.WinFormsDesigner = new WinFormsDesignerService(f.Shell.Solutions, _ => true, (_, _) => build?.Invoke() ?? Task.FromResult(true), async (project, names, ct) =>
         {
             var properties = await f.Shell.ProjectManagement.GetPropertiesAsync(project, names, null, ct);
             return properties.Properties.ToDictionary(p => p.Name, p => p.Value, StringComparer.OrdinalIgnoreCase);
         })
         {
             IsWindows = () => true,
-            IsBuilding = isBuilding ?? (() => false),
+            IsBuilding = f.Shell.WinFormsDesigner.IsBuilding,
             DesignerHost = () => typeof(WinFormsDesignerShellTests).Assembly.Location,
             HostFactory = async (_, _) =>
             {

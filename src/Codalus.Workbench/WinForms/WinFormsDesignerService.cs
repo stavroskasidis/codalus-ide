@@ -349,6 +349,38 @@ public sealed class WinFormsDesignerService
         }
     }
 
+    /// <summary>
+    /// The target's assemblies as they are on disk (#66): their lengths and times, or that they're missing. A designer
+    /// whose host didn't start compares it when it becomes active, to start again once a build has replaced them (or
+    /// written them for the first time).
+    /// </summary>
+    public static string OutputStamp(WinFormsDesignerTarget? target)
+    {
+        if (target is null)
+        {
+            return string.Empty;
+        }
+
+        var stamp = new System.Text.StringBuilder();
+        foreach (var file in new[] { target.ProjectAssembly, target.HostAssembly }.OfType<string>().Distinct(SolutionService.PathComparer))
+        {
+            stamp.Append(file).Append('|');
+            try
+            {
+                var info = new FileInfo(file);
+                stamp.Append(info.Exists ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{info.Length}|{info.LastWriteTimeUtc.Ticks}") : "missing");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                stamp.Append('?');
+            }
+
+            stamp.Append(';');
+        }
+
+        return stamp.ToString();
+    }
+
     /// <summary>The load request for a model read by the C# host.</summary>
     public static DesignerLoadParams LoadParams(WinFormsDesignerTarget target, Codalus.LanguageServices.Protocol.DesignerModel model, string? classFullName) =>
         new(model, target.ProjectAssembly, classFullName, [.. new[] { Path.GetDirectoryName(target.ProjectAssembly), target.HostAssembly is null ? null : Path.GetDirectoryName(target.HostAssembly) }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)]);
