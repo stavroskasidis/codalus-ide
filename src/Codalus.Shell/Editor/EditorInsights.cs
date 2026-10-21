@@ -727,10 +727,11 @@ public sealed class EditorInsights : IDisposable
                 menu.Items.Add(new Separator());
             }
 
-            menu.Items.Add(new MenuItem { Header = RelationTitle(group.Key), IsEnabled = false });
+            menu.Items.Add(Controls.MenuEntry.Caption(RelationTitle(group.Key)));
             foreach (var target in group)
             {
-                var entry = new MenuItem { Header = target.DisplayName, IsEnabled = target.Location is not null };
+                var entry = Controls.MenuEntry.Create(target.DisplayName, "go-to");
+                entry.IsEnabled = target.Location is not null;
                 if (target.Location is { } location)
                 {
                     entry.Click += (_, _) => _services.OpenLocations([location], target.DisplayName);

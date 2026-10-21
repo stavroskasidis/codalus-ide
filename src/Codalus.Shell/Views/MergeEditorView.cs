@@ -713,9 +713,9 @@ public sealed class MergeEditorView : UserControl, IPaneView
                 new Separator(),
                 incomingOnLeft,
                 new Separator(),
-                Item(Localizer.Get("mergeEditor.takeAllIncoming", "Take All Incoming"), () => _viewModel.TakeAll(MergeSide.Incoming, true)),
-                Item(Localizer.Get("mergeEditor.takeAllCurrent", "Take All Current"), () => _viewModel.TakeAll(MergeSide.Current, true)),
-                Item(Localizer.Get("mergeEditor.resetAll", "Reset All Conflicts"), _viewModel.ResetAll),
+                Controls.MenuEntry.Create(Localizer.Get("mergeEditor.takeAllIncoming", "Take All Incoming"), "merge", click: () => _viewModel.TakeAll(MergeSide.Incoming, true)),
+                Controls.MenuEntry.Create(Localizer.Get("mergeEditor.takeAllCurrent", "Take All Current"), "merge", click: () => _viewModel.TakeAll(MergeSide.Current, true)),
+                Controls.MenuEntry.Create(Localizer.Get("mergeEditor.resetAll", "Reset All Conflicts"), "reset", click: _viewModel.ResetAll),
             },
         };
         menu.Opening += (_, _) =>
@@ -731,7 +731,8 @@ public sealed class MergeEditorView : UserControl, IPaneView
         return button;
     }
 
-    private static MenuItem Item(string header, Action action, MenuItemToggleType toggle = MenuItemToggleType.None)
+    /// <summary>A layout choice: a radio or check entry, its mark in the icon column (Controls/MenuEntry.cs).</summary>
+    private static MenuItem Item(string header, Action action, MenuItemToggleType toggle)
     {
         var item = new MenuItem { Header = header, ToggleType = toggle };
         item.Click += (_, _) => action();

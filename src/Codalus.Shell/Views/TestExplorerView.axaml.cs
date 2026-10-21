@@ -134,8 +134,8 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
         var keys = vm.SelectedKeys;
         MenuItem Item(string header, Action action, string? icon = null, bool enabled = true)
         {
-            var item = new MenuItem { Header = header, IsEnabled = enabled, Icon = icon is null ? null : new Icon { Kind = icon } };
-            item.Click += (_, _) => action();
+            var item = Controls.MenuEntry.Create(header, icon, click: action);
+            item.IsEnabled = enabled;
             return item;
         }
 
@@ -145,18 +145,18 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
         menu.Items.Add(Item("Debug", () => _ = shell.RunTestsAsync(TestRunKind.Debug, keys), "debug", idle));
         menu.Items.Add(Item("Run with Coverage", () => _ = shell.RunTestsAsync(TestRunKind.Coverage, keys), "coverage", idle));
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Go to Test", () => _ = vm.OpenSelectedAsync(), enabled: row.Group.Node?.Uri is not null));
-        menu.Items.Add(Item("Add to Playlist…", () => _ = shell.AddToPlaylistAsync(keys)));
+        menu.Items.Add(Item("Go to Test", () => _ = vm.OpenSelectedAsync(), "go-to", enabled: row.Group.Node?.Uri is not null));
+        menu.Items.Add(Item("Add to Playlist…", () => _ = shell.AddToPlaylistAsync(keys), "add"));
         if (vm.Playlist is { } playlist)
         {
-            menu.Items.Add(Item($"Remove from '{playlist.Name}'", () => _ = shell.RemoveFromPlaylistAsync(playlist, keys)));
+            menu.Items.Add(Item($"Remove from '{playlist.Name}'", () => _ = shell.RemoveFromPlaylistAsync(playlist, keys), "subtract"));
         }
 
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Copy Name", () => Copy(row.Group.Node?.FullLabel ?? row.Label)));
+        menu.Items.Add(Item("Copy Name", () => Copy(row.Group.Node?.FullLabel ?? row.Label), "copy"));
         if (row.Group.Node is { IsLeaf: true, Result: { } result })
         {
-            menu.Items.Add(Item("Copy Details", () => Copy(Describe(row.Group.Node, result))));
+            menu.Items.Add(Item("Copy Details", () => Copy(Describe(row.Group.Node, result)), "copy"));
             if (shell.Ai.IsEnabled && result.Outcome is not TestOutcome.Passed)
             {
                 menu.Items.Add(Item("Ask AI Why It Fails", () => _ = shell.ExplainTestWithAiAsync(), "sparkle"));

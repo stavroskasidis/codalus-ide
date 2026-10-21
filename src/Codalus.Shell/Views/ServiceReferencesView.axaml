@@ -30,10 +30,10 @@
                KeyboardNavigation.TabNavigation="Continue" AutomationProperties.Name="{l:T serviceReferences.serviceReferences}">
         <ListBox.ContextMenu>
           <ContextMenu>
-            <MenuItem Header="{l:T serviceReferences.testClient}" Command="{Binding TestCommand}" IsVisible="{Binding SelectedIsWcf}" />
-            <MenuItem Header="{l:T serviceReferences.updateFromSource}" Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" />
-            <MenuItem Header="{l:T serviceReferences.openDocument}" Command="{Binding OpenCommand}" InputGesture="Enter" />
-            <MenuItem Header="{l:T serviceReferences.remove}" Command="{Binding RemoveCommand}" InputGesture="Delete" IsEnabled="{Binding !IsBusy}" />
+            <MenuItem controls:MenuEntry.Icon="plug" Header="{l:T serviceReferences.testClient}" Command="{Binding TestCommand}" IsVisible="{Binding SelectedIsWcf}" />
+            <MenuItem controls:MenuEntry.Icon="cloud-download" Header="{l:T serviceReferences.updateFromSource}" Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" />
+            <MenuItem controls:MenuEntry.Icon="link-external" Header="{l:T serviceReferences.openDocument}" Command="{Binding OpenCommand}" InputGesture="Enter" />
+            <MenuItem controls:MenuEntry.Icon="trash" Header="{l:T serviceReferences.remove}" Command="{Binding RemoveCommand}" InputGesture="Delete" IsEnabled="{Binding !IsBusy}" />
           </ContextMenu>
         </ListBox.ContextMenu>
         <ListBox.ItemTemplate>

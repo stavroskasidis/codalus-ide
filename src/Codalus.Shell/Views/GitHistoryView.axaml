@@ -62,20 +62,20 @@
         </ListBox.ItemTemplate>
         <ListBox.ContextMenu>
           <ContextMenu>
-            <MenuItem Header="{l:T gitHistory.checkoutDetached}" Tag="checkout" Click="OnCommitAction" />
-            <MenuItem Header="{l:T gitHistory.newBranchHere}" Tag="branch" Click="OnCommitAction" />
-            <MenuItem Header="{l:T gitHistory.createTag}" Tag="tag" Click="OnCommitAction" />
+            <MenuItem controls:MenuEntry.Icon="go-to" Header="{l:T gitHistory.checkoutDetached}" Tag="checkout" Click="OnCommitAction" />
+            <MenuItem controls:MenuEntry.Icon="branch" Header="{l:T gitHistory.newBranchHere}" Tag="branch" Click="OnCommitAction" />
+            <MenuItem controls:MenuEntry.Icon="tag" Header="{l:T gitHistory.createTag}" Tag="tag" Click="OnCommitAction" />
             <Separator />
-            <MenuItem Header="{l:T gitHistory.cherryPick}" Tag="cherryPick" Click="OnCommitAction" />
-            <MenuItem Header="{l:T gitHistory.revert}" Tag="revert" Click="OnCommitAction" />
-            <MenuItem Header="{l:T gitHistory.reset}">
+            <MenuItem controls:MenuEntry.Icon="fork" Header="{l:T gitHistory.cherryPick}" Tag="cherryPick" Click="OnCommitAction" />
+            <MenuItem controls:MenuEntry.Icon="undo" Header="{l:T gitHistory.revert}" Tag="revert" Click="OnCommitAction" />
+            <MenuItem controls:MenuEntry.Icon="reset" Header="{l:T gitHistory.reset}">
               <MenuItem Header="{l:T gitHistory.keepChangesStagedSoft}" Tag="reset-soft" Click="OnCommitAction" />
               <MenuItem Header="{l:T gitHistory.keepChangesMixed}" Tag="reset-mixed" Click="OnCommitAction" />
               <MenuItem Header="{l:T gitHistory.discardChangesHard}" Tag="reset-hard" Click="OnCommitAction" />
             </MenuItem>
-            <MenuItem Header="{l:T gitHistory.interactiveRebaseFromHere}" Tag="rebaseInteractive" Click="OnCommitAction" />
+            <MenuItem controls:MenuEntry.Icon="arrow-sort" Header="{l:T gitHistory.interactiveRebaseFromHere}" Tag="rebaseInteractive" Click="OnCommitAction" />
             <Separator />
-            <MenuItem Header="{l:T gitHistory.copyCommitHash}" Tag="copyHash" Click="OnCommitAction" />
+            <MenuItem controls:MenuEntry.Icon="copy" Header="{l:T gitHistory.copyCommitHash}" Tag="copyHash" Click="OnCommitAction" />
           </ContextMenu>
         </ListBox.ContextMenu>
       </ListBox>

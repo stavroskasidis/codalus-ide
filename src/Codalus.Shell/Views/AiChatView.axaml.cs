@@ -109,10 +109,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
             if (last is { } action)
             {
                 flyout.Items.Add(new Separator());
-                var item = new MenuItem { Header = action.Label, Icon = new Icon { Kind = "new", Width = 16, Height = 16 } };
-                Avalonia.Automation.AutomationProperties.SetName(item, action.Label);
-                item.Click += (_, _) => action.Run();
-                flyout.Items.Add(item);
+                flyout.Items.Add(MenuEntry.Create(action.Label, "new", click: action.Run));
             }
         };
         return flyout;

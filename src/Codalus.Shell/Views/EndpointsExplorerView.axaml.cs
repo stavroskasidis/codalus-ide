@@ -29,11 +29,14 @@ public sealed partial class EndpointsExplorerView : UserControl, IPaneView
                 return;
             }
 
-            var open = new MenuItem { Header = "Go to Handler" };
-            open.Click += (_, _) => _ = vm.OpenAsync(row);
-            var generate = new MenuItem { Header = "Generate Request" };
-            generate.Click += (_, _) => _ = vm.GenerateRequestAsync(row);
-            new ContextMenu { ItemsSource = new[] { open, generate } }.Open(List);
+            new ContextMenu
+            {
+                ItemsSource = new[]
+                {
+                    Controls.MenuEntry.Create("Go to Handler", "go-to", click: () => _ = vm.OpenAsync(row)),
+                    Controls.MenuEntry.Create("Generate Request", "send", click: () => _ = vm.GenerateRequestAsync(row)),
+                },
+            }.Open(List);
             e.Handled = true;
         };
     }

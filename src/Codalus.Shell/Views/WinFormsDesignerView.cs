@@ -179,9 +179,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 _ = _document.MoveTrayItemAsync(name, before == name ? null : before);
             }
         });
-        var lineUp = new MenuItem { Header = Localizer.Get("msg.winFormsDesigner.lineUpIcons", "Line Up Icons") };
-        lineUp.Click += (_, _) => _ = _document.LineUpTrayAsync();
-        tray.ContextMenu = new ContextMenu { Items = { lineUp } };
+        tray.ContextMenu = new ContextMenu { Items = { MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.lineUpIcons", "Line Up Icons"), "layout", click: () => _ = _document.LineUpTrayAsync()) } };
         return tray;
     }
 
@@ -256,16 +254,13 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                     break;
             }
         };
-        var rename = new MenuItem { Header = Localizer.Get("msg.winFormsDesigner.rename", "Rename") };
-        rename.Click += (_, _) => StartRename(item.Name);
-        var delete = new MenuItem { Header = Localizer.Get("msg.winFormsDesigner.delete", "Delete") };
-        delete.Click += (_, _) =>
+        var rename = MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.rename", "Rename"), "rename", click: () => StartRename(item.Name));
+        var delete = MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.delete", "Delete"), "trash", click: () =>
         {
             item.Select.Execute(null);
             _ = _document.DeleteSelectionAsync();
-        };
-        var lineUp = new MenuItem { Header = Localizer.Get("msg.winFormsDesigner.lineUpIcons", "Line Up Icons") };
-        lineUp.Click += (_, _) => _ = _document.LineUpTrayAsync();
+        });
+        var lineUp = MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.lineUpIcons", "Line Up Icons"), "layout", click: () => _ = _document.LineUpTrayAsync());
         button.ContextMenu = new ContextMenu { Items = { rename, delete, new Separator(), lineUp } };
 
         // Dragged before another tray component: the tray's order.
@@ -345,9 +340,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         var menu = new ContextMenu();
         foreach (var type in typeHere.Types)
         {
-            var item = new MenuItem { Header = type[(type.LastIndexOf('.') + 1)..] };
-            item.Click += (_, _) => _ = _document.AddItemAsync(typeHere, text: null, type);
-            menu.Items.Add(item);
+            menu.Items.Add(MenuEntry.Create(type[(type.LastIndexOf('.') + 1)..], null, click: () => _ = _document.AddItemAsync(typeHere, text: null, type)));
         }
 
         menu.Open(_surface);

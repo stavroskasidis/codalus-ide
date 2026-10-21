@@ -245,17 +245,25 @@ public sealed class McpBridge : IDisposable
 
     private async Task ListenAsync(NamedPipeServerStream? first)
     {
+        var pipe = first;
         while (!_stop.IsCancellationRequested)
         {
-            NamedPipeServerStream? pipe = first;
-            first = null;
             try
             {
                 pipe ??= CreatePipe();
                 await pipe.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
                 var connected = pipe;
                 pipe = null;
-                _ = Task.Run(() => ServeAsync(connected));
+                try
+                {
+                    // The next instance exists before the connected one is served and ends: with none left, the pipe
+                    // closes, and a call connecting just then failed with "isn't running" (Linux CI, run 39510410225).
+                    pipe = CreatePipe();
+                }
+                finally
+                {
+                    _ = Task.Run(() => ServeAsync(connected));
+                }
             }
             catch (OperationCanceledException)
             {
@@ -265,9 +273,12 @@ public sealed class McpBridge : IDisposable
             catch (IOException)
             {
                 pipe?.Dispose();
+                pipe = null;
                 await Task.Delay(200).ConfigureAwait(false);
             }
         }
+
+        pipe?.Dispose();
     }
 
     private async Task ServeAsync(NamedPipeServerStream pipe)
