@@ -209,8 +209,9 @@ public sealed partial class WinFormsDesignerDocument
         {
             return (await host.ActionsAsync(new DesignerComponentsParams([component]), CancellationToken.None).ConfigureAwait(false)).Verbs;
         }
-        catch (Exception ex) when (ex is PreviewerException or Rpc.JsonRpcConnectionLostException or Rpc.JsonRpcRemoteException or InvalidOperationException)
+        catch (Exception ex) when (ex is PreviewerException or Rpc.JsonRpcConnectionLostException or Rpc.JsonRpcRemoteException or InvalidOperationException or OperationCanceledException or ObjectDisposedException or IOException)
         {
+            // A host that ended or restarted meanwhile: the menu opens without verbs.
             return [];
         }
     }

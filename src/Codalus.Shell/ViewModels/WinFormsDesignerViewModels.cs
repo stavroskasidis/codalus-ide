@@ -1439,6 +1439,12 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             Add(selected);
         }
 
+        if (names.Count == 0)
+        {
+            // The form or a panel alone (Edit → Copy isn't grayed, as the menus' Copy is): what was copied stays.
+            return;
+        }
+
         s_clipboard = [.. names.Select(n => Describe(model, n, DesignerPath, locals)).OfType<DesignerClipboardEntry>()];
         _shell.StatusBar.ShowMessage(Localizer.Format("msg.winFormsDesigner.copied", "Copied {0} component(s).", s_clipboard.Count), TimeSpan.FromSeconds(3));
         PublishContext();
