@@ -2,7 +2,6 @@ using System.Windows.Input;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Layout;
 using Avalonia.VisualTree;
 using Codalus.Platform;
 using Codalus.Shell.Controls;
@@ -209,19 +208,9 @@ internal static class MenuBuilder
 
     private static MenuItem Entry(Workbench.Menus.MenuItem item, ShellHost shell, ICommand command)
     {
-        var header = new DockPanel { LastChildFill = true };
-        if (item.KeyLabel is { } keys)
-        {
-            var label = new TextBlock { Text = keys, Margin = new Avalonia.Thickness(32, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            label.Classes.Add("muted");
-            DockPanel.SetDock(label, Avalonia.Controls.Dock.Right);
-            header.Children.Add(label);
-        }
-
-        header.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis });
         var entry = new MenuItem
         {
-            Header = header,
+            Header = Controls.MenuEntry.Header(item.Title, item.KeyLabel),
             IsEnabled = item.Enabled,
             Command = command,
             Icon = CommandIcons.Create(item.Command, id => shell.Workbench.ToolWindows.Find(id)?.Icon),
