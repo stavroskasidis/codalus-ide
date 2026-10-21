@@ -68,7 +68,7 @@ public sealed class HotReloadRestartTests
             await ShellFixture.PumpUntil(() => first.HasExited, seconds: 30);
             Assert.False(second.HasExited);
             Assert.Same(second, f.Shell.HotReloadProgram);
-            Assert.True(stall.MaxMilliseconds < 500, $"The UI thread stalled for {stall.MaxMilliseconds:0} ms (the GC paused {stall.GcPauseOfMaxMilliseconds:0} ms of it).");
+            Assert.True(stall.MaxMilliseconds < 500, $"The UI thread stalled for {stall.MaxMilliseconds:0} ms (the GC paused {stall.GcPauseOfMaxMilliseconds:0} ms of it; it ran {stall.JobOfMax ?? "unsampled"}).");
         }
         finally
         {
