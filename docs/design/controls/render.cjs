@@ -5,7 +5,9 @@
 // every visible text in every mockup and theme, takes its color and the color under it (the backgrounds of its
 // ancestors, composited), and fails under 4.5:1 (7:1 in the High contrast themes). Icons, focus rings and check box
 // outlines are graphics, held to 3:1. Disabled controls are exempt (WCAG 1.4.3), and so are the "Now" pictures of
-// the current views on the before/after sheet (data-nocheck).
+// the current views on the before/after sheet (data-nocheck). A page with cues: true also has its non-text state cues
+// held to 3:1 against what is behind them (WCAG 1.4.11): the rounded corners' selected tab, frames, pill and bar.
+//   node docs/design/controls/render.cjs --only=DataTip   only the pages whose file starts with that
 'use strict';
 const path = require('path');
 const fs = require('fs');
@@ -57,12 +59,25 @@ const PAGES = [
     'branch-actions', 'current-menu', 'remote-menu', 'remote-twin', 'worktree', 'worktree-enter', 'detached', 'operation', 'unborn', 'noremote',
     'noremote-link', 'long-row', 'long-name', 'narrow']
     .map((state) => ({ file: 'GitChanges.dc.html', name: `git-changes-${state}`, query: `state=${state}`, width: 1280, height: 800, themes: [] })),
-  { file: 'PackageManager.dc.html', name: 'package-manager', width: 1280, height: 800, full: true, themes: ALL }
+  { file: 'PackageManager.dc.html', name: 'package-manager', width: 1280, height: 800, full: true, themes: ALL },
+  { file: 'DataTip.dc.html', name: 'data-tip', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  // Single states, each its panel alone (a small viewport, the full page: the picture is the panel's size): the keyboard's
+  // selection with the row's menu (in Classic High Contrast, whose overlays have 2 px borders), the Dictionary view and the
+  // View drop-down, two pinned tips while the program runs, Ctrl's see-through tips.
+  { file: 'DataTip.dc.html', name: 'data-tip-keyboard', query: 'state=keyboard', width: 400, height: 300, full: true, themes: ['Classic High Contrast'] },
+  { file: 'DataTip.dc.html', name: 'data-tip-dictionary-view', query: 'state=dictionary-view', width: 400, height: 300, full: true, themes: ['Classic Dark', 'Harbor Light'] },
+  { file: 'DataTip.dc.html', name: 'data-tip-collection-view', query: 'state=collection-view', width: 400, height: 300, full: true, themes: ['Classic Light'] },
+  { file: 'DataTip.dc.html', name: 'data-tip-pinned-more', query: 'state=pinned-more', width: 400, height: 300, full: true, themes: ['Classic Light', 'Harbor Dark'] },
+  { file: 'DataTip.dc.html', name: 'data-tip-ctrl', query: 'state=ctrl', width: 400, height: 300, full: true, themes: ['Classic Dark'] },
+  { file: 'DiffDocument.dc.html', name: 'diff-document', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  // Harbor's sheets draw the window as Harbor keeps it, then the Classic theme of the same kind for the rest (only Classic changes shape).
+  { file: 'RoundedCorners.dc.html', name: 'rounded-corners', width: 1280, height: 800, full: true, cues: true, themes: ['Classic Blue', ...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'RoundedCorners.dc.html', name: 'rounded-corners-proposed', query: 'state=proposed', width: 400, height: 300, full: true, cues: true, themes: ['Classic Light', 'Classic Dark'] }
 ];
 
 const slug = (s) => s.toLowerCase().replace(/\s+/g, '-');
 
-function checkInPage(minText) {
+function checkInPage({ minText, cues }) {
   const parse = (c) => {
     const m = /rgba?\(([^)]+)\)/.exec(c);
     if (!m) return null;
@@ -129,6 +144,28 @@ function checkInPage(minText) {
     if (exempt(el) || !visible(el)) continue;
     test(el.parentElement, getComputedStyle(el).borderTopColor, 'outline', 3, el.parentElement.textContent.trim());
   }
+  if (cues) {
+    // Each cue against what is behind it; of several colors (a tab found by its fill or by its outline) the best counts.
+    const cue = (el, under, colors, kind, text) => {
+      if (exempt(el) || !visible(el)) return;
+      const bg = bgUnder(under);
+      let best = null;
+      for (const c of colors.map(parse).filter(Boolean)) {
+        const shown = over(c, bg);
+        const r = ratio(shown, bg);
+        if (!best || r > best.r) best = { r, shown };
+      }
+      if (!best) return;
+      checked++;
+      if (best.r + 1e-6 < 3) fails.push({ kind, text: (text || '').slice(0, 60), fg: hex(best.shown), bg: hex(bg), ratio: Math.round(best.r * 100) / 100, min: 3 });
+    };
+    const cs = (el, pseudo) => getComputedStyle(el, pseudo);
+    for (const el of document.querySelectorAll('.v-new .dt.on')) cue(el, el.parentElement, [cs(el).backgroundColor, cs(el).borderTopColor], 'selected tab', el.textContent.trim());
+    for (const el of document.querySelectorAll('.v-new.outline .well:not(.idle) > .wd')) cue(el, el.parentElement.parentElement, [cs(el).borderLeftColor], 'document frame', 'active document');
+    for (const el of document.querySelectorAll('.v-new.outline:not(.capfill) .pn.focus')) cue(el, el.parentElement, [cs(el).borderLeftColor], 'tool window frame', el.getAttribute('aria-label'));
+    for (const el of document.querySelectorAll('.v-new .trow .pill')) cue(el, el.parentElement, [cs(el).backgroundColor], 'selection pill', el.parentElement.textContent.trim());
+    for (const el of document.querySelectorAll('.v-new .atab.on')) cue(el, el, [cs(el, '::after').backgroundColor], 'auto-hide bar', el.textContent.trim());
+  }
   return { checked, fails };
 }
 
@@ -147,7 +184,7 @@ function checkInPage(minText) {
       await page.waitForSelector('html[data-rendered="true"]');
       await page.evaluate(() => document.fonts.ready);
       const hc = theme.toLowerCase().includes('high contrast');
-      const { checked, fails } = await page.evaluate(checkInPage, hc ? 7 : 4.5);
+      const { checked, fails } = await page.evaluate(checkInPage, { minText: hc ? 7 : 4.5, cues: !!p.cues });
       total += checked;
       for (const f of fails) {
         failures++;
