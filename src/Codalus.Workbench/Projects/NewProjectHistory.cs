@@ -93,7 +93,9 @@ public sealed class NewProjectHistory(string file)
     });
 
     public void SetFilters(string? language, string? platform, string? projectType) =>
-        Update(state => state with { LanguageFilter = language, PlatformFilter = platform, ProjectTypeFilter = projectType });
+        Update(state => state.LanguageFilter == language && state.PlatformFilter == platform && state.ProjectTypeFilter == projectType
+            ? state
+            : state with { LanguageFilter = language, PlatformFilter = platform, ProjectTypeFilter = projectType });
 
     public void SetSameDirectory(bool value) => Update(state => state with { SameDirectory = value ? true : null });
 
@@ -160,11 +162,19 @@ public sealed class NewProjectHistory(string file)
         }
     }
 
+    /// <summary>Writes the change (a change that returns the same state writes nothing) and says so.</summary>
     private void Update(Func<NewProjectState, NewProjectState> change)
     {
         lock (_gate)
         {
-            _state = change(Load());
+            var current = Load();
+            var next = change(current);
+            if (ReferenceEquals(next, current))
+            {
+                return;
+            }
+
+            _state = next;
             StateFile.Write(file, _state, StateJsonContext.Default.NewProjectState);
         }
 

@@ -106,6 +106,27 @@ public sealed class NewProjectHistoryTests : IDisposable
     }
 
     [Fact]
+    public void Filters_that_dont_change_write_nothing()
+    {
+        var history = new NewProjectHistory(File);
+        var changes = 0;
+        history.Changed += (_, _) => changes++;
+        history.SetFilters("C#", null, null);
+        Assert.Equal(1, changes);
+        var written = System.IO.File.GetLastWriteTimeUtc(File);
+        System.IO.File.SetLastWriteTimeUtc(File, written.AddMinutes(-5));
+
+        // The wizard says the filters again as the list is filtered (each search, each load): nothing is written then.
+        history.SetFilters("C#", null, null);
+        history.SetFilters("C#", null, null);
+        Assert.Equal(1, changes);
+        Assert.Equal(written.AddMinutes(-5), System.IO.File.GetLastWriteTimeUtc(File));
+        history.SetFilters("F#", null, null);
+        Assert.Equal(2, changes);
+        Assert.Equal("F#", new NewProjectHistory(File).LanguageFilter);
+    }
+
+    [Fact]
     public void A_corrupt_file_reads_as_empty_and_writes_go_through_the_state_file()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(File)!);
