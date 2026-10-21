@@ -5,6 +5,10 @@
     <EmbedAllSources>true</EmbedAllSources>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The Windows Forms designer's frames, pixel by pixel (#78). -->
+    <Compile Include="..\Shared\PngPixels.cs" Link="Shared\PngPixels.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Codalus.LanguageServices.Host\Codalus.LanguageServices.Host.csproj" />
     <ProjectReference Include="..\..\src\Codalus.Workbench\Codalus.Workbench.csproj" />
     <!-- Built so the tests can launch it; not referenced as an assembly. -->

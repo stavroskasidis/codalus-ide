@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Drawing;
 using Codalus.LanguageServices.Host.WinForms;
 using Codalus.LanguageServices.Protocol;
+using Codalus.Tests;
 using Codalus.Workbench.WinForms;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
@@ -355,6 +357,83 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
         Assert.Equal("System.Windows.Forms.MouseEventHandler", events.Events.Single(e => e.Name == "MouseDown").DelegateType);
         var load = await host.EventsAsync(new DesignerComponentsParams([string.Empty]), Ct);
         Assert.Equal("Load", load.DefaultEvent);
+    }
+
+    /// <summary>
+    /// #78: a button created over another control (at <paramref name="at"/> of <paramref name="parent"/>'s client area,
+    /// the form's when null), then sent to the back and brought to the front again, looked at in
+    /// <paramref name="region"/> (of the same client area), inside both controls. Control.DrawToBitmap draws a
+    /// container's controls in reverse order ("Controls inside containers are rendered in reverse order"), so the front
+    /// one was drawn behind: the drop showed the control under it, and Send to Back seemed to bring it to the front.
+    /// Every check is collected (the red run on the old renderer shows both halves of the reversal).
+    /// </summary>
+    private static async Task<List<string>> OverlapChecksAsync(IWinFormsDesignerHost host, DesignerRenderResult render, string? parent, Point at, Rectangle region)
+    {
+        var container = parent is null ? render.Components[0] : render.Components.Single(c => c.Name == parent);
+        var (x, y) = ((int)container.ClientX, (int)container.ClientY);
+        var r = region with { X = x + region.X, Y = y + region.Y };
+        var area = r.Width * r.Height;
+        var checks = new List<string>();
+        var frame0 = PngPixels.FromBase64(render.Frame!.Png);
+
+        var created = await host.CreateAsync(new DesignerCreateParams("System.Windows.Forms.Button", "button1", parent, x + at.X, y + at.Y), Ct);
+        if (created.Error is { } error)
+        {
+            return [$"the button wasn't created: {error}"];
+        }
+
+        var frame1 = PngPixels.FromBase64(created.Render.Frame!.Png);
+        var inFront = frame1.Differing(frame0, r);
+        if (inFront * 10 < area * 3)
+        {
+            checks.Add($"created (in front), the button isn't drawn over the control: {inFront} of {area} pixels of {r} changed, at least 30 % expected");
+        }
+
+        var siblings = created.Render.Components.Count(c => c.Parent == container.Name && !c.IsPart);
+        var back = await host.SetChildIndexAsync(new DesignerChildIndexParams("button1", siblings - 1), Ct);
+        var behind = PngPixels.FromBase64(back.Render.Frame!.Png).Differing(frame0, r);
+        if (behind != 0)
+        {
+            checks.Add($"sent to the back, the control isn't drawn over the button: {behind} of {area} pixels of {r} differ from the frame before the button");
+        }
+
+        var front = await host.SetChildIndexAsync(new DesignerChildIndexParams("button1", 0), Ct);
+        var again = PngPixels.FromBase64(front.Render.Frame!.Png).Differing(frame1, r);
+        if (again != 0)
+        {
+            checks.Add($"brought to the front again, the button isn't drawn as when it was created: {again} of {area} pixels of {r} differ");
+        }
+
+        return checks;
+    }
+
+    [Fact]
+    public async Task A_control_dropped_on_another_is_drawn_in_front_of_it_and_follows_its_order()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var (host, render, _) = await LoadAsync("OrderForm.cs");
+        await using var _ = host;
+        var root = render.Components[0];
+        var frame0 = PngPixels.FromBase64(render.Frame!.Png);
+        var empty = frame0.At((int)root.ClientX + 380, (int)root.ClientY + 340);
+        Assert.True(empty.ToArgb() == SystemColors.Control.ToArgb(), $"the form's empty space reads {empty}, not {SystemColors.Control}: the frame isn't read right");
+
+        // On the counter (172, 295, 200×32): the region is inside the button (290, 300, 75×23) and the counter, right of
+        // the counter's own "+1" button (which ends at x 317).
+        var checks = await OverlapChecksAsync(host, render, null, new Point(290, 300), new Rectangle(318, 301, 47, 21));
+        Assert.True(checks.Count == 0, string.Join("\n", checks));
+    }
+
+    [Fact]
+    public async Task A_control_dropped_on_another_inside_a_container_is_drawn_in_its_order()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var (host, render, _) = await LoadAsync("OrderForm.cs");
+        await using var _ = host;
+
+        // In the group box, on expressRadioButton (110, 22, 63×19): the region is inside both, at any depth the same.
+        var checks = await OverlapChecksAsync(host, render, "shippingGroupBox", new Point(130, 20), new Rectangle(131, 23, 41, 17));
+        Assert.True(checks.Count == 0, string.Join("\n", checks));
     }
 
     [Fact]
