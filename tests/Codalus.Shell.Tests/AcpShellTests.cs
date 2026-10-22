@@ -207,12 +207,12 @@ public sealed class AcpShellTests
         f.Shell.Dialogs.Accept();
         await ShellFixture.PumpUntil(() => !turn.IsStreaming, 30);
 
-        // A permission: Allow Once, Reject and Always Reject, never always allow; Enter rejects. macOS puts them in
-        // the reverse order (the primary last).
+        // A permission: Allow Once, Reject and Always Reject, never always allow; Enter rejects. macOS puts the default
+        // (Reject) last and the others before it in the reverse order (D38, question 1).
         turn = await AskAsync(f, "permission");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
         string[] options = ["Allow Once", "Reject", "Always Reject"];
-        Assert.Equal(f.Shell.Dialogs.PrimaryLast ? options.AsEnumerable().Reverse() : options, f.Shell.Dialogs.Buttons.Select(b => b.Label));
+        Assert.Equal(DialogViewModel.Order(options, "Reject", f.Shell.Dialogs.PrimaryLast), f.Shell.Dialogs.Buttons.Select(b => b.Label));
         Assert.Equal("Reject", f.Shell.Dialogs.Buttons.Single(b => b.IsDefault).Label);
         Assert.Equal("shield", f.Shell.Dialogs.Icon);
         Assert.Contains(f.Shell.Dialogs.Details, d => d.Text == "+ new line" && d.IsAdded);
@@ -303,7 +303,7 @@ public sealed class AcpShellTests
         Assert.Contains(Label, f.Shell.Dialogs.Message, StringComparison.Ordinal);
         Assert.Equal(("sparkle", "claude in your user settings (ai.agents)"), (f.Shell.Dialogs.Icon, f.Shell.Dialogs.Context));
         string[] buttons = ["Add", "Cancel"];
-        Assert.Equal(f.Shell.Dialogs.PrimaryLast ? buttons.AsEnumerable().Reverse() : buttons, f.Shell.Dialogs.Buttons.Select(b => b.Label));
+        Assert.Equal(DialogViewModel.Order(buttons, "Add", f.Shell.Dialogs.PrimaryLast), f.Shell.Dialogs.Buttons.Select(b => b.Label));
         f.Shell.Dialogs.Cancel();
         await ShellFixture.PumpUntil(() => !f.Shell.Dialogs.IsOpen);
         Assert.Equal(["stand-in"], settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.EnumerateObject().Select(p => p.Name));

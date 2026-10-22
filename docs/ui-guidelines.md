@@ -136,7 +136,7 @@ One look for every button, field, choice, tab and row (M34h, D33): the design an
 
 | Kind | When | How |
 |---|---|---|
-| Primary | The one main action of a dialog, page or form (OK, Invoke, Add Reference, Send); at most one in view. A destructive primary keeps the accent and names what it does (Remove, not OK). | `<Button Classes="accent" …/>` (the dialog's default button is drawn so on its own) |
+| Primary | The one main action of a dialog, page or form (OK, Invoke, Add Reference, Send); at most one in view. A destructive action (Discard, Delete, Drop Stash, Reset) is a plain button named for what it does (Delete, not OK), and Cancel is the default and the primary, so Enter never destroys (D38). | `<Button Classes="accent" …/>` (the dialog's default button is drawn so on its own) |
 | Default | Every other text button. | `<Button Content="{l:T …}"/>` |
 | Subtle | A secondary action in a crowded row (Reset beside Invoke): flat until hovered. | `Classes="subtle"` |
 | Icon only | A familiar command with a standard glyph (refresh, start, stop, delete, open, copy, move up and down, clear, filter, pin, collapse). A tooltip with its name and shortcut in the menus' format (`Refresh (F5)`) and an `AutomationProperties.Name`: a tooltip isn't a name. | `<Button Classes="icon" controls:ButtonIcon.Kind="refresh" ToolTip.Tip="{l:T …}" AutomationProperties.Name="{l:T …}"/>` |
@@ -165,7 +165,7 @@ Patterns the views use (M34h):
 - One height per context: **28 px** (`Shell.Size.Control`, the default) for buttons, text boxes and combo boxes in dialogs, documents and pages; **24 px** in tool windows, toolbars, form grids and dense rows (`Classes="compact"` on a button; inside a `controls:ToolbarPanel` buttons, text boxes and combo boxes are 24 px on their own).
 - Inside a button: 12 px on each side (`Shell.Padding.Button`), 10 before an icon, 6 between the icon and the text (`Shell.Space.ButtonIcon`); 8 at 24 px (`Shell.Padding.ButtonCompact`). Icons 16 px, chevrons 12 px.
 - Corners: `Shell.Control.CornerRadius` (Classic 2, Harbor and Graphite 3, Daylight and Ember 6); dialogs and popups `Shell.CornerRadius.Overlay`.
-- A dialog's buttons are right-aligned in its footer, the primary is the default (Enter) and Cancel answers Escape. **Windows and Linux** put the primary first (`OK` `Cancel`); **macOS** puts it last (`Cancel` `OK`). A request lists its buttons primary first; `DialogViewModel` reverses them on macOS (`PrimaryLast`).
+- A dialog's buttons are right-aligned in its footer, the default (Enter) is the primary and Cancel answers Escape. **Windows and Linux** show them as the request lists them, primary first (`OK` `Cancel`); **macOS** puts the default button last (`Cancel` `OK`). A request lists its buttons primary first; on macOS `DialogViewModel` moves the `DefaultButton` to the trailing edge (`PrimaryLast`, `DialogViewModel.Order`) rather than reversing the list, so a destructive request whose default is Cancel reads `Delete` `Cancel` on every OS and a habitual click on the trailing button never deletes (D38). `Dialogs.ConfirmAsync(danger: true)`'s callers still make the action the default; they follow in a TODO(issue).
 
 ### Focus
 
@@ -218,7 +218,8 @@ The in-window dialog (`DialogView`, from `DialogViewModel.ShowAsync(new DialogRe
 
 - Header: a 28 px tile with the request's `Icon` in its color (a dangerous request gets the warning icon), the title at 14 px semibold, a muted line with its `Context` (the type and file it acts on), and a close button (Escape).
 - Body: `Shell.Padding.Dialog` (20 px at the sides). A checklist is a bordered list with a header row (Select all, `2 of 4`), rows of 30 px with each item's `Icon`, its label in the editor's font and its detail; Space checks the selected row, and a reorderable one has Move Up and Move Down as icon buttons beside it (Alt+Up, Alt+Down).
-- Footer: `Border.dialogFooter` (`Shell.Dialog.Footer`, a top separator, `Shell.Padding.DialogFooter`), a keyboard hint on the left (`Border.kbd` keys), the buttons on the right in the OS's order, the default one the only primary.
+- Footer: `Border.dialogFooter` (`Shell.Dialog.Footer`, a top separator, `Shell.Padding.DialogFooter`), a keyboard hint on the left (`Border.kbd` keys), the buttons on the right in the OS's order, the default one the only primary (Cancel for Discard and Delete, which are plain buttons named for the action).
+- A single choice (Delete's "Also delete origin/x on the server") is one check box with its note and its list under it (`DialogRequest.Option`), never the checklist with Select all and `0 of 1`.
 - Width 520 px (`Shell.Size.Dialog.Width`), growing with its content up to 720 (`Shell.Size.Dialog.MaxWidth`; 960 with notes), narrower only in a smaller window. A preview of changes takes three quarters of the window instead (`DialogView.PreviewSize`: at least 640 × 400 where there is room, at most the window less 16 px on each side), its changes on the editor's background filling what the header, message and footer leave, each added or removed line marked in the diff's color at its left edge. The window behind is dimmed by `Shell.Dialog.Scrim`.
 
 ### Tokens of the control set
