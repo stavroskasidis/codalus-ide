@@ -61,10 +61,14 @@ public sealed class RazorHtmlTests
                 return labels;
             }
 
-            // An element only the HTML server knows, an attribute, and a CSS property in a style block.
-            Assert.Contains("blockquote", await CompleteAsync(model.Text.Text.IndexOf("<blockq", StringComparison.Ordinal) + "<blockq".Length));
-            Assert.Contains("tabindex", await CompleteAsync(model.Text.Text.IndexOf(" tabi", StringComparison.Ordinal) + " tabi".Length));
-            Assert.Contains("color", await CompleteAsync(model.Text.Text.IndexOf("colo }", StringComparison.Ordinal) + "colo".Length));
+            // An element only the HTML server knows, an attribute, and a CSS property in a style block. Without the HTML
+            // server's items the list is the C# host's alone: the log says why (an embedded completion that failed, the
+            // server's start).
+            void AssertOffered(string expected, IReadOnlyList<string> labels) =>
+                Assert.True(labels.Contains(expected), $"'{expected}' isn't among the {labels.Count} items ({string.Join(", ", labels.Take(30))}…). Log:\n{f.Shell.LanguageLog.GetText()}");
+            AssertOffered("blockquote", await CompleteAsync(model.Text.Text.IndexOf("<blockq", StringComparison.Ordinal) + "<blockq".Length));
+            AssertOffered("tabindex", await CompleteAsync(model.Text.Text.IndexOf(" tabi", StringComparison.Ordinal) + " tabi".Length));
+            AssertOffered("color", await CompleteAsync(model.Text.Text.IndexOf("colo }", StringComparison.Ordinal) + "colo".Length));
 
             // In @code it is C#: the C# host's members, no HTML.
             var code = await CompleteAsync(model.Text.Text.IndexOf("currentCount++", StringComparison.Ordinal) + "curr".Length);
