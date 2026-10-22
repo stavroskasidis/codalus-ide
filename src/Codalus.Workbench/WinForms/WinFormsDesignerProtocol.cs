@@ -91,8 +91,12 @@ public sealed record DesignerLoadParams(DesignerModel Model, string ProjectAssem
 /// <summary>A <c>.resx</c> file's text and its culture (empty: the default resources).</summary>
 public sealed record DesignerResourceText(string Culture, string Text);
 
-/// <summary>A drawn surface: a PNG (base64) of the root as it shows at design time, in pixels (96 DPI, 1 pixel per unit of the code).</summary>
-public sealed record DesignerFrame(string Png, int Width, int Height);
+/// <summary>
+/// A drawn surface: a PNG (base64) of the root as it shows at design time, in pixels (96 DPI, 1 pixel per unit of the
+/// code). <see cref="Restacked"/> counts the controls drawn again, back to front, because they overlap a sibling (#78:
+/// Control.DrawToBitmap draws a container's controls in reverse order); 0 when none overlap, and from an older host.
+/// </summary>
+public sealed record DesignerFrame(string Png, int Width, int Height, int Restacked = 0);
 
 /// <summary>
 /// A component on the surface: its bounds in the frame (<see cref="X"/>…), its parent control's name (null for the

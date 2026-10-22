@@ -132,7 +132,8 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         {
             "MenuStrip" or "ToolStrip" or "StatusStrip" or "ContextMenuStrip" => [Forms + simple + ":Items"],
             "ToolStripMenuItem" or "ToolStripDropDownButton" or "ToolStripSplitButton" => [Forms + "ToolStripDropDownItem:DropDownItems"],
-            "ListBox" or "ComboBox" => [Forms + simple + ":Items"],
+            "ListBox" or "ComboBox" or "DomainUpDown" => [Forms + simple + ":Items"],
+            "ListView" => [Forms + "ListView:Columns", Forms + "ListView:Items"],
             "TabControl" => [Forms + "TabControl:TabPages"],
             "DataGridView" => [Forms + "DataGridView:Columns"],
             _ => null,
@@ -488,8 +489,12 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         return Task.FromResult(new DesignerCollectionResult(key, [.. (_values.GetValueOrDefault(parameters.Component) ?? []).Select(v => new DesignerCollectionItem { Value = v, Text = v.Value, Display = v.Value })]));
     }
 
+    /// <summary>How many collection writes this host answered (#67: a list's items aren't replaced by a stray Type Here).</summary>
+    public int SetCollectionCalls { get; private set; }
+
     public Task<DesignerChangeResult> SetCollectionAsync(DesignerSetCollectionParams parameters, CancellationToken cancellationToken)
     {
+        SetCollectionCalls++;
         if (parameters.Property is "Items" or "DropDownItems" && parameters.Items.All(i => i.Value is null))
         {
             var old = _itemOrder.GetValueOrDefault(parameters.Component) ?? [];

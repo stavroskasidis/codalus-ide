@@ -146,6 +146,19 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
         Assert.Equal(("fileToolStripMenuItem", 2), (View("exitToolStripMenuItem").Owner, View("exitToolStripMenuItem").ItemIndex));
         Assert.Contains("System.Windows.Forms.ListBox:Items", View("categoryListBox").Collections!);
         Assert.True(View("detailsTabControl").HasActions);
+
+        // #67: the real host's keys make the strips' items, and only theirs, a strip's (the surface's Type Here).
+        foreach (var strip in new[] { "mainMenuStrip", "mainToolStrip", "mainStatusStrip", "itemsContextMenuStrip" })
+        {
+            Assert.True(View(strip).Collections?.Any(DesignerCollections.IsStripItems) == true, $"{strip}: {string.Join(", ", View(strip).Collections ?? [])}");
+        }
+
+        foreach (var list in new[] { "categoryListBox", "itemsListView" })
+        {
+            Assert.False(View(list).Collections?.Any(DesignerCollections.IsStripItems) == true, $"{list}: {string.Join(", ", View(list).Collections ?? [])}");
+        }
+
+        Assert.Contains("System.Windows.Forms.ListView:Items", View("itemsListView").Collections!);
     }
 
     [Fact]

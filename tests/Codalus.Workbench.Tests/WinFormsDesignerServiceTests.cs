@@ -120,6 +120,12 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Equal(2, back.Changes.Length);
         Assert.Null(back.Changes[1].Value);
         Assert.Equal((300, 200), (back.Render.Frame!.Width, back.Render.Frame.Height));
+
+        // #78: the controls drawn again because they overlap; a frame from an older host, without it, reads as none.
+        var restacked = JsonSerializer.Serialize(new DesignerRenderResult(new DesignerFrame("iVBORw0KGgo=", 300, 200, 2), [], []), json.DesignerRenderResult);
+        Assert.Contains("\"restacked\":2", restacked, StringComparison.Ordinal);
+        Assert.Equal(2, JsonSerializer.Deserialize(restacked, json.DesignerRenderResult)!.Frame!.Restacked);
+        Assert.Equal(0, JsonSerializer.Deserialize("{\"frame\":{\"png\":\"iVBORw0KGgo=\",\"width\":300,\"height\":200},\"components\":[],\"errors\":[]}", json.DesignerRenderResult)!.Frame!.Restacked);
         Assert.Equal(31, back.Render.Components[0].ClientY);
         Assert.Equal("button1", back.Created!.Properties[0].Value.Value);
         Assert.Equal(["label1"], back.Removed);
@@ -157,6 +163,27 @@ public sealed class WinFormsDesignerServiceTests
         Assert.False(drop.AtDefaultLocation);
         Assert.Empty(drop.Selected);
         Assert.Equal("buttonPanel", drop.Parent);
+    }
+
+    [Fact]
+    public void Only_tool_strips_items_take_Type_Here()
+    {
+        // #67: a strip is a component whose Items hold tool strip items, by the collection table, not by type names.
+        const string Forms = "System.Windows.Forms.";
+        foreach (var strip in new[] { "MenuStrip", "ToolStrip", "StatusStrip", "ContextMenuStrip" })
+        {
+            Assert.True(DesignerCollections.IsStripItems(Forms + strip + ":Items"), strip);
+        }
+
+        foreach (var key in new[] { "ListBox:Items", "ComboBox:Items", "DomainUpDown:Items", "ListView:Items", "ListView:Columns", "ToolStripDropDownItem:DropDownItems", "TabControl:TabPages", "DataGridView:Columns" })
+        {
+            Assert.False(DesignerCollections.IsStripItems(Forms + key), key);
+        }
+
+        Assert.False(DesignerCollections.IsStripItems("Contoso.FilmStrip:Items"));
+        Assert.False(DesignerCollections.IsStripItems("Items"));
+        Assert.Equal(Forms + "ToolStripMenuItem", DesignerCollections.MenuItemType);
+        Assert.Equal(DesignerCollections.MenuItemType, DesignerCollections.Find(Forms + "MenuStrip:Items")!.ItemTypes[0]);
     }
 
     [Fact]
