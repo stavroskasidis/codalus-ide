@@ -163,7 +163,7 @@ public sealed class DataTipEditingTests
 
         // The header's own pin: app, which expands like the hover's.
         var tip = await s.HoverAsync(s.OffsetOf(5, "app", 1));
-        s.Click(tip.Header.PinButton!);
+        tip.Header.PinButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); // the pinned tip at the line's end can lie under it
         await ShellFixture.PumpUntil(() => s.F.Shell.Debugger.PinnedTips.All.Count == 2 && s.Editor.PinLayer.Cascades.Count == 2);
         await ShellFixture.PumpUntil(() => s.Editor.PinLayer.Cascades.SingleOrDefault(c => c.Root.Name == "app") is { Root.HasChildren: true });
         var app = s.Editor.PinLayer.Cascades.Single(c => c.Root.Name == "app");

@@ -153,12 +153,19 @@ internal sealed class DataTipCascade : IDataTipHost
         Arrange();
     }
 
-    /// <summary>The hover's diagnostics, in a popup of their own right above the header.</summary>
+    /// <summary>The widest the diagnostics strip gets.</summary>
+    public const double StripMaxWidth = 470;
+
+    /// <summary>
+    /// The hover's diagnostics (A3, decision 17): a strip of their own right above the header, 2 px from it, with the
+    /// code's help link, the message, Fix and Other Fixes as Quick Info shows them; under the header when the tips open
+    /// upwards (A18), so it stays clear of them.
+    /// </summary>
     public void SetStrip(Control diagnostics)
     {
         _strip = new Popup
         {
-            Child = new Border { Classes = { "editorHover", "intelliSense" }, MaxWidth = 640, Child = diagnostics },
+            Child = new Border { Classes = { "editorHover", "intelliSense", "dataTipStrip" }, MaxWidth = StripMaxWidth, Child = diagnostics },
             IsLightDismissEnabled = false,
             Focusable = false,
             WindowManagerAddShadowHint = true,
@@ -170,6 +177,7 @@ internal sealed class DataTipCascade : IDataTipHost
             PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideX | PopupPositionerConstraintAdjustment.SlideY,
         };
         _root.Children.Add(_strip);
+        _strip.Child.SizeChanged += (_, _) => Arrange(); // measured again in its window, with its styles
     }
 
     /// <summary>Every popup the tip shows: the header's, the diagnostics' and each child tip's (the smoke test's screenshot).</summary>
@@ -190,7 +198,7 @@ internal sealed class DataTipCascade : IDataTipHost
     {
         if (_strip is { IsOpen: true, Child: { } strip } popup)
         {
-            yield return new Rect(popup.HorizontalOffset, popup.VerticalOffset, strip.DesiredSize.Width, strip.DesiredSize.Height);
+            yield return new Rect(new Point(popup.HorizontalOffset, popup.VerticalOffset), strip.Bounds.Height > 0 ? strip.Bounds.Size : strip.DesiredSize);
         }
     }
 
@@ -347,8 +355,10 @@ internal sealed class DataTipCascade : IDataTipHost
         if (_strip is { Child: { } strip } popup)
         {
             strip.Measure(Size.Infinity);
-            popup.HorizontalOffset = header.Left;
-            popup.VerticalOffset = header.Top - strip.DesiredSize.Height - 2;
+            var under = _levels.Count > 0 && _flip;
+            var size = strip.Bounds.Height > 0 ? strip.Bounds.Size : strip.DesiredSize;
+            popup.HorizontalOffset = Math.Max(0, Math.Min(header.Left, _view.Bounds.Width - size.Width));
+            popup.VerticalOffset = under ? header.Bottom + 2 : header.Top - size.Height - 2;
         }
     }
 

@@ -163,7 +163,7 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
 - **Pinning**: the pin at the end of the row under the pointer (and in the header) pins that expression to the line. Groups and members only the debugger names (`Name (Base)`) have no pin.
 - **Near the edges**: near the editor's bottom the tips open upwards, and near its right edge they move left, their values trimmed sooner.
 - **The code under the header**: a double-click on the header's name selects the word, `Ctrl+Click` goes to its definition, and the wheel scrolls the editor (and closes the tips). Hold `Ctrl` to fade the tips and click through them to the code; let go to bring them back.
-- **Errors and warnings** at the hovered name show above the header, with their fixes, as in Quick Info.
+- **Errors and warnings** at the hovered name show in a strip right above the header: the code (a link to its documentation), the message, **Fix** and **Other Fixes**, as in Quick Info. When the tips open upwards near the editor's bottom edge, the strip moves under the header.
 
 ## Exceptions
 
