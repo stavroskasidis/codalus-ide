@@ -44,6 +44,7 @@ beaker_16_regular
 book_16_regular
 bookmark_16_regular
 bookmark_multiple_16_regular
+bot_16_regular
 box_16_regular
 braces_16_regular
 branch_16_regular

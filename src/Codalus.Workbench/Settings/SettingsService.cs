@@ -302,14 +302,47 @@ public sealed class SettingsService : IDisposable
         return SetRawAsync(key, value, scope, cancellationToken);
     }
 
-    private async Task SetRawAsync(string key, JsonElement? value, SettingScope scope, CancellationToken cancellationToken)
+    private Task SetRawAsync(string key, JsonElement? value, SettingScope scope, CancellationToken cancellationToken) =>
+        EditAsync(text => JsoncEditor.SetProperty(text, key, value is { } written ? Readable(written) : null), scope, cancellationToken);
+
+    /// <summary>
+    /// Writes <paramref name="member"/> of the object setting <paramref name="key"/> in the given layer (null removes it),
+    /// leaving the object's other members and the comments inside it as they are (<see cref="JsoncEditor.SetMember"/>;
+    /// Connect and Disconnect of one <c>ai.agents</c> entry). The setting's whole value is validated as
+    /// <see cref="SetAsync(string, JsonElement?, SettingScope, CancellationToken)"/> does.
+    /// </summary>
+    public Task SetMemberAsync(string key, string member, JsonElement? value, SettingScope scope, CancellationToken cancellationToken)
+    {
+        if (Find(key) is { } descriptor && value is not null)
+        {
+            var whole = new System.Text.Json.Nodes.JsonObject();
+            if (GetLayerValue(key, scope) is { ValueKind: JsonValueKind.Object } existing)
+            {
+                foreach (var property in existing.EnumerateObject())
+                {
+                    whole[property.Name] = System.Text.Json.Nodes.JsonNode.Parse(property.Value.GetRawText());
+                }
+            }
+
+            whole[member] = System.Text.Json.Nodes.JsonNode.Parse(value.Value.GetRawText());
+            using var document = JsonDocument.Parse(whole.ToJsonString());
+            if (descriptor.Validate(document.RootElement) is { } error)
+            {
+                throw new ArgumentException($"{key}: {error}", nameof(value));
+            }
+        }
+
+        return EditAsync(text => JsoncEditor.SetMember(text, key, member, value is { } written ? Readable(written) : null), scope, cancellationToken);
+    }
+
+    private async Task EditAsync(Func<string, string> edit, SettingScope scope, CancellationToken cancellationToken)
     {
         var file = scope == SettingScope.User ? UserFile : WorkspaceFile ?? throw new InvalidOperationException("No workspace is open.");
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var text = File.Exists(file) ? ReadShared(file) : string.Empty;
-            var updated = JsoncEditor.SetProperty(text, key, value is { } written ? Readable(written) : null);
+            var updated = edit(text);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
             // The watcher's reload (or another program, an indexer, an antivirus) may be reading the file: on Windows that
             // is a sharing violation for the writer, which passes in moments.

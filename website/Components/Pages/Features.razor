@@ -180,7 +180,8 @@
                     <li>Commit messages, pull request descriptions, Ask AI on an exception or a failing test, Fix with AI, tests for the selection, and profile summaries</li>
                     <li>Agent mode, one switch: it reads, searches, builds, edits and runs commands, each step shown in the chat, every change in a preview and every command after you allow it</li>
                     <li>MCP: your MCP servers' tools in agent mode, and <code>codalus mcp</code> for agents outside the IDE</li>
-                    <li>External agents in AI Chat over the Agent Client Protocol (pi, Claude, Codex, Gemini CLI, GitHub Copilot, OpenCode, goose, your own CLIs), set up in one step with Add agent… (pinned versions, the exact command shown first): Codalus serves their file, terminal and permission requests with its own checks, and gives each one the IDE's tools</li>
+                    <li>External agents in AI Chat over the Agent Client Protocol (Claude, Codex, Gemini CLI, GitHub Copilot, pi, OpenCode, goose, your own CLIs): Codalus serves their file, terminal and permission requests with its own checks, and gives each one the IDE's tools</li>
+                    <li>Connect to Claude, Codex, Gemini CLI or GitHub Copilot from AI Chat in one dialog: it finds or installs Node.js with your own package manager, signs the agent in (Claude subscription through Claude Code's own login, or an API key kept in the OS credential store), tests the connection in an empty folder, and only then saves it; Disconnect undoes it</li>
                     <li>Files .gitignore or a .codalusignore excludes, and secrets, are never sent; a request log of what was</li>
                 </ul>
             </div>
@@ -349,6 +350,9 @@
         new("ai-agent", "Agent mode", "ai-chat-agent.png",
             "AI Chat in agent mode: the file it read shown as a step, its explanation, and the edit it proposes as a code block to apply",
             "Agent mode reads, searches, builds, edits and runs commands, each step shown in the chat, every change in a preview and every command after you allow it."),
+        new("agent-connect", "Connect an agent", "agent-connect.png",
+            "Connect to Claude over AI Chat: Node.js and npx found, Claude's ways to sign in, the exact commands it runs, and the box that turns AI assistance on",
+            "Connect Claude, Codex, Gemini CLI or GitHub Copilot in one dialog: what it needs, how it signs in and exactly what runs, then a connection test before anything is saved."),
         new("setup", "First start", "setup.png",
             "The first-run setup's appearance step: Classic, chosen, then Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, and the mode",
             "The first start sets it up your way: a theme family and its mode, previewed as you click, then the keyboard scheme, your settings from elsewhere and a tools check."),

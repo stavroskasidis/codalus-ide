@@ -1,0 +1,14 @@
+{
+  "_source": "Read from the code of @agentclientprotocol/codex-acp 2.2.2 (getCodexAuthMethods, initialize) for Codalus's client capabilities (no elicitation, no gateway), not yet recorded from a run: refresh it with eng/record-acp-initialize.sh codex.",
+  "protocolVersion": 1,
+  "agentCapabilities": {
+    "auth": { "logout": {} },
+    "loadSession": true,
+    "promptCapabilities": { "embeddedContext": true, "image": true }
+  },
+  "agentInfo": { "name": "@agentclientprotocol/codex-acp", "title": "Codex", "version": "2.2.2" },
+  "authMethods": [
+    { "id": "api-key", "name": "API Key", "description": "Use an API key to authenticate", "_meta": { "api-key": { "provider": "openai" } } },
+    { "id": "chat-gpt", "name": "ChatGPT", "description": "Use ChatGPT to authenticate" }
+  ]
+}

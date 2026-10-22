@@ -27,6 +27,9 @@
     <!-- Recorded template packages' files (New Project, ADR 0082): data, not code of the tests. -->
     <Compile Remove="TestData\**" />
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
+    <!-- External agents' Connect (ADR 0083): stand-in node and npx, and a credential store that says it persists. -->
+    <Compile Include="..\Shared\StandInNode.cs" Link="Shared\StandInNode.cs" />
+    <Compile Include="..\Shared\FakePersistentCredentialStore.cs" Link="Shared\FakePersistentCredentialStore.cs" />
     <!-- Properties and items of the fixtures' projects, read from MSBuild's answer file. -->
     <Compile Include="..\Shared\MSBuildQuery.cs" Link="Shared\MSBuildQuery.cs" />
   </ItemGroup>

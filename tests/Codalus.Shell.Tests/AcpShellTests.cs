@@ -106,9 +106,13 @@ public sealed class AcpShellTests
         Assert.False(Visible<Border>(view, "ExternalAgentBanner").IsEffectivelyVisible);
         var menu = (MenuFlyout)picker.Flyout!;
         menu.ShowAt(picker);
-        await ShellFixture.PumpUntil(() => menu.Items.Count == 4);
-        Assert.Equal(["Built-in", "stand-in", "Add agent…"], menu.Items.OfType<MenuItem>().Select(i => i.Header as string));
-        Assert.Equal([true, false, false], menu.Items.OfType<MenuItem>().Select(i => i.IsChecked));
+        // Then Connect to each one-click agent not connected yet, More agents… and Manage Agents… (D43), in groups.
+        await ShellFixture.PumpUntil(() => menu.Items.Count == 10);
+        Assert.Equal(
+            ["Built-in", "stand-in", "Connect to Claude…", "Connect to Codex…", "Connect to Gemini CLI…", "Connect to GitHub Copilot…", "More agents…", "Manage Agents…"],
+            menu.Items.OfType<MenuItem>().Select(i => i.Header as string));
+        Assert.Equal([false, false, true, false, false, false, false, true, false, false], menu.Items.Cast<object>().Select(i => i is Separator));
+        Assert.Equal([true, false], menu.Items.OfType<MenuItem>().Take(2).Select(i => i.IsChecked));
         menu.Items.OfType<MenuItem>().Single(i => (i.Header as string) == "stand-in").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         menu.Hide();
         await ShellFixture.PumpUntil(() => chat.IsExternal);
@@ -245,19 +249,17 @@ public sealed class AcpShellTests
         Assert.Equal("Agent", AutomationProperties.GetName(Visible<DropDownButton>(ChatView(f), "AgentPicker")));
     }
 
-    /// <summary>Opens "Add agent…" from the agent picker's menu, as a click does, and waits for the list.</summary>
-    private static async Task OpenAddAgentAsync(ShellFixture f)
+    /// <summary>Opens More agents… from the agent picker's menu, as a click does, and waits for the list (D43).</summary>
+    private static async Task OpenMoreAgentsAsync(ShellFixture f)
     {
         var picker = Visible<DropDownButton>(ChatView(f), "AgentPicker");
         await ShellFixture.PumpUntil(() => picker.IsEffectivelyVisible);
         var menu = (MenuFlyout)picker.Flyout!;
         menu.ShowAt(picker);
-        await ShellFixture.PumpUntil(() => menu.Items.OfType<MenuItem>().Any(i => (i.Header as string) == "Add agent…"));
-        var add = menu.Items.OfType<MenuItem>().Last();
-        Assert.Equal("Add agent…", add.Header as string);
-        add.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        await ShellFixture.PumpUntil(() => menu.Items.OfType<MenuItem>().Any(i => (i.Header as string) == "More agents…"));
+        menu.Items.OfType<MenuItem>().Single(i => (i.Header as string) == "More agents…").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         menu.Hide();
-        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen && f.Shell.Palette.Rows.Count == AcpAgentCatalog.Agents.Count);
+        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen && f.Shell.Palette.Rows.Count == AcpAgentTemplates.All.Count);
     }
 
     /// <summary>A folder with a stand-in for an agent's CLI (it fails if run; nothing runs it), for the list's PATH.</summary>
@@ -276,120 +278,80 @@ public sealed class AcpShellTests
     }
 
     [AvaloniaFact]
-    public async Task Add_agent_lists_the_known_agents_asks_first_and_writes_the_user_settings_only()
+    public async Task More_agents_lists_every_template_and_opens_the_connect_dialog_which_writes_nothing_on_cancel()
     {
         await using var f = ShellFixture.Create();
         await SetUpAsync(f);
-        var chat = f.Shell.AiChat;
         var settings = f.Shell.Workbench.Settings;
-        f.Shell.AgentSearchPath = StandInCli(f, "gemini");
+        f.Shell.AgentSearchPath = StandInCli(f, "goose");
 
-        // The list: each known agent with what it is, the exact command and its pinned version; Gemini's CLI is on the PATH.
-        await OpenAddAgentAsync(f);
+        // The list: each template with its vendor and exact command; an agent whose CLI isn't on the PATH says so.
+        await OpenMoreAgentsAsync(f);
         var rows = f.Shell.Palette.Rows;
-        Assert.Equal(["pi", "Claude", "Codex", "Gemini CLI", "GitHub Copilot", "OpenCode", "goose"], rows.Select(r => r.Label));
-        Assert.Equal("0.64.0 · installed", rows.Single(r => r.Label == "Gemini CLI").KeyLabel);
-        var claudeRow = rows.Single(r => r.Label == "Claude");
-        Assert.Equal("0.93.0", claudeRow.KeyLabel);
-        Assert.Equal("ACP wrapper for Anthropic's Claude · npx -y @agentclientprotocol/claude-agent-acp@0.93.0", claudeRow.Detail);
-        Assert.Equal("goose acp", rows.Single(r => r.Label == "goose").Detail!.Split(" · ")[^1]);
-        Assert.Equal("tested with 1.55.0", rows.Single(r => r.Label == "goose").KeyLabel);
+        Assert.Equal(["Claude", "Codex", "Gemini CLI", "GitHub Copilot", "pi", "OpenCode", "goose"], rows.Select(r => r.Label));
+        Assert.Equal("Anthropic · npx -y @agentclientprotocol/claude-agent-acp@0.94.0", rows.Single(r => r.Label == "Claude").Detail);
+        Assert.Equal("npx -y pi-acp@0.0.34 · needs the pi CLI 0.81.0 or later", rows.Single(r => r.Label == "pi").Detail);
+        Assert.Equal("Its own CLI: goose acp (tested with 1.55.0)", rows.Single(r => r.Label == "goose").Detail);
+        Assert.Null(rows.Single(r => r.Label == "goose").KeyLabel); // its CLI is on this PATH
+        Assert.Equal("opencode not installed", rows.Single(r => r.Label == "OpenCode").KeyLabel);
+        Assert.All(rows, r => Assert.Equal("bot", r.Icon));
 
-        // Choosing one asks first, in the dialog frame: what runs, that npx downloads it, and the label. Cancel writes nothing.
-        f.Shell.Palette.Accept(claudeRow);
-        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
-        Assert.Equal("Add Claude?", f.Shell.Dialogs.Title);
-        Assert.Contains("When you start a chat with it, Codalus will run npx -y @agentclientprotocol/claude-agent-acp@0.93.0: npx downloads that package from npm the first time and runs it as you, with your account's access to your files, not only this folder's.", f.Shell.Dialogs.Message, StringComparison.Ordinal);
-        Assert.Contains(Label, f.Shell.Dialogs.Message, StringComparison.Ordinal);
-        Assert.Equal(("sparkle", "claude in your user settings (ai.agents)"), (f.Shell.Dialogs.Icon, f.Shell.Dialogs.Context));
-        string[] buttons = ["Add", "Cancel"];
-        Assert.Equal(DialogViewModel.Order(buttons, "Add", f.Shell.Dialogs.PrimaryLast), f.Shell.Dialogs.Buttons.Select(b => b.Label));
-        f.Shell.Dialogs.Cancel();
-        await ShellFixture.PumpUntil(() => !f.Shell.Dialogs.IsOpen);
+        // Choosing one opens Connect to it; Cancel writes nothing.
+        f.Shell.Palette.Accept(rows.Single(r => r.Label == "Claude"));
+        await ShellFixture.PumpUntil(() => f.Shell.ConnectAgent.IsOpen);
+        Assert.Equal("Connect to Claude", f.Shell.ConnectAgent.Title);
+        f.Shell.ConnectAgent.Cancel();
+        await ShellFixture.PumpUntil(() => !f.Shell.ConnectAgent.IsOpen);
         Assert.Equal(["stand-in"], settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.EnumerateObject().Select(p => p.Name));
-        Assert.Null(chat.SelectedAgent);
-
-        // Add writes exactly that entry to the user's settings (the workspace's untouched) and picks it; nothing starts.
-        await OpenAddAgentAsync(f);
-        f.Shell.Palette.Accept(f.Shell.Palette.Rows.Single(r => r.Label == "Claude"));
-        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
-        f.Shell.Dialogs.Accept();
-        await ShellFixture.PumpUntil(() => chat.SelectedAgent == "claude");
-        var user = settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value;
-        Assert.Equal(["stand-in", "claude"], user.EnumerateObject().Select(p => p.Name));
-        Assert.Equal("npx", AcpAgents.Parse(user)["claude"].Command);
-        Assert.Equal(["-y", "@agentclientprotocol/claude-agent-acp@0.93.0"], AcpAgents.Parse(user)["claude"].Args);
         Assert.Null(settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.Workspace));
-        Assert.Null(f.Shell.ExternalAgents.Current);
-        Assert.Equal(["Built-in", "claude", "stand-in"], chat.AgentChoices);
-        await ShellFixture.PumpUntil(() => (Visible<DropDownButton>(ChatView(f), "AgentPicker").Content as TextBlock)?.Text == "claude");
-
-        // Added already: marked so, and choosing it picks it without asking or adding it twice.
-        chat.SelectedAgentIndex = 0;
-        await OpenAddAgentAsync(f);
-        var added = f.Shell.Palette.Rows.Single(r => r.Label == "Claude");
-        Assert.Equal("0.93.0 · added", added.KeyLabel);
-        f.Shell.Palette.Accept(added);
-        await ShellFixture.PumpUntil(() => chat.SelectedAgent == "claude");
-        Assert.False(f.Shell.Dialogs.IsOpen);
-        Assert.Equal(2, settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.EnumerateObject().Count());
-        Assert.Null(f.Shell.ExternalAgents.Current);
     }
 
     [AvaloniaFact]
-    public async Task Add_agent_offers_to_replace_an_entry_it_cant_use_and_a_mistyped_entry_doesnt_break_the_chat()
+    public async Task A_mistyped_entry_is_skipped_and_the_chat_and_more_agents_go_on()
     {
         await using var f = ShellFixture.Create();
         await SetUpAsync(f);
         var chat = f.Shell.AiChat;
         var settings = f.Shell.Workbench.Settings;
         f.Shell.AgentSearchPath = Path.Combine(f.UserData, "empty-path"); // not this machine's PATH
-        using (var broken = JsonDocument.Parse("""{ "claude": { "args": [] }, "typo": { "command": 5 }, "list": [1] }"""))
+        using (var broken = JsonDocument.Parse("""{ "claude": { "args": [] }, "typo": { "command": 5 }, "list": [1], "bad": { "command": "x", "secretEnv": ["NOT A NAME"] } }"""))
         {
             await settings.SetAsync(AcpAgents.AgentsSetting, broken.RootElement.Clone(), SettingScope.User, CancellationToken.None);
         }
 
-        // Mistyped entries are skipped: the chat and its picker go on.
         chat.Refresh();
         await ShellFixture.PumpUntil(() => chat.AgentChoices.SequenceEqual(["Built-in"]));
+        Assert.Contains("isn't a variable name", Assert.Single(f.Shell.ExternalAgents.Problems), StringComparison.Ordinal);
 
-        // claude is in the settings but unusable: not "added"; choosing it asks to replace it.
-        await OpenAddAgentAsync(f);
-        var row = f.Shell.Palette.Rows.Single(r => r.Label == "Claude");
-        Assert.Equal("0.93.0", row.KeyLabel);
-        f.Shell.Palette.Accept(row);
-        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
-        Assert.Equal("Replace Claude?", f.Shell.Dialogs.Title);
-        Assert.StartsWith("Your settings have an entry named claude that Codalus can't use. Replace it?", f.Shell.Dialogs.Message, StringComparison.Ordinal);
-        Assert.Equal("Replace", f.Shell.Dialogs.Buttons.Single(b => b.IsDefault).Label);
-        f.Shell.Dialogs.Accept();
-        await ShellFixture.PumpUntil(() => chat.SelectedAgent == "claude");
-        var user = settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value;
-        Assert.Equal("npx", AcpAgents.Parse(user)["claude"].Command);
-        Assert.Equal(["typo", "list", "claude"], user.EnumerateObject().Select(p => p.Name));
-        Assert.Null(f.Shell.ExternalAgents.Current);
+        // claude is in the settings but unusable: More agents… doesn't call it connected.
+        await OpenMoreAgentsAsync(f);
+        Assert.Null(f.Shell.Palette.Rows.Single(r => r.Label == "Claude").KeyLabel);
+        f.Shell.Palette.Cancel();
     }
 
     [AvaloniaTheory]
     [InlineData("harbor.light")]
     [InlineData("ember.dark")]
-    public async Task The_add_agent_list_names_its_rows_and_cuts_no_text(string theme)
+    public async Task The_more_agents_list_names_its_rows_and_cuts_no_text(string theme)
     {
         await using var f = ShellFixture.Create();
         await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None);
         await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == ThemeService.Resolve(theme, null));
         await SetUpAsync(f);
         f.Shell.AgentSearchPath = StandInCli(f, "goose");
-        await OpenAddAgentAsync(f);
+        await OpenMoreAgentsAsync(f);
         var list = f.Window.GetVisualDescendants().OfType<QuickPickView>().Single(v => v.IsEffectivelyVisible);
-        await ShellFixture.PumpUntil(() => list.GetVisualDescendants().OfType<ListBoxItem>().Count() == AcpAgentCatalog.Agents.Count);
+        await ShellFixture.PumpUntil(() => list.GetVisualDescendants().OfType<ListBoxItem>().Count() == AcpAgentTemplates.All.Count);
         foreach (var row in f.Shell.Palette.Rows)
         {
             Assert.Contains(row.Label, row.AccessibleName, StringComparison.Ordinal);
-            Assert.Contains(row.KeyLabel!, row.AccessibleName, StringComparison.Ordinal);
+            if (row.KeyLabel is { } key)
+            {
+                Assert.Contains(key, row.AccessibleName, StringComparison.Ordinal);
+            }
         }
 
-        Assert.Contains(f.Shell.Palette.Rows, r => r.KeyLabel == "tested with 1.55.0 · installed");
+        Assert.Contains(f.Shell.Palette.Rows, r => r.KeyLabel == "pi not installed");
         Assert.Empty(PolishTests.Clipped(list));
         f.Shell.Palette.Cancel();
     }

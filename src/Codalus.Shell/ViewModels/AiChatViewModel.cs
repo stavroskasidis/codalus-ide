@@ -64,9 +64,24 @@ public interface IAiChatHost
     /// <summary>The IDE's side of an external agent's requests.</summary>
     IAcpHost AcpHost { get; }
 
-    /// <summary>"Add agent…": a known ACP agent added to the user's settings after asking; the agent to choose, or null.</summary>
-    Task<string?> AddExternalAgentAsync();
+    /// <summary>Connect to an agent (D43): the Connect dialog for <paramref name="templateId"/>, or More agents… without one; the agent written, or null.</summary>
+    Task<string?> ConnectExternalAgentAsync(string? templateId);
+
+    /// <summary>Manage Agents…: the configured agents, each with Check Connection and Disconnect.</summary>
+    Task ManageExternalAgentsAsync();
+
+    /// <summary>Why agents can't be connected here (a remote window), or null.</summary>
+    string? WhyAgentsCantConnect { get; }
 }
+
+/// <summary>An agent AI Chat offers to connect in one click (D43): its template's id and name.</summary>
+public sealed record AiConnectAgent(string Id, string Name)
+{
+    public string AccessibleName => Localizer.Format("msg.acp.connectTo", "Connect to {0}…", Name);
+}
+
+/// <summary>An action of the agent menu after its choices (Connect to Claude…, More agents…, Manage Agents…).</summary>
+public sealed record AiAgentMenuAction(string Label, string Icon, Func<Task> Run);
 
 /// <summary>A turn as AI Chat shows it (M34h): the turn, who answered (the model then) and when it was asked.</summary>
 public sealed class AiChatTurnItem(AiChatTurn turn, string? model, DateTime asked)
@@ -185,8 +200,16 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     /// <summary>The empty state while no provider is chosen: Choose Provider… (an external agent brings its own, M48).</summary>
     public bool ShowProviderState => NeedsProvider && !IsExternal && !HasTurns;
 
-    /// <summary>The empty state with AI ready: what to ask, and what goes with it.</summary>
-    public bool ShowReadyState => IsOn && (!NeedsProvider || IsExternal) && !HasTurns;
+    /// <summary>The empty state with AI ready: what to ask, and what goes with it (the built-in assistant's).</summary>
+    public bool ShowReadyState => IsOn && !NeedsProvider && !IsExternal && !HasTurns;
+
+    /// <summary>An external agent's empty state (D43): it answers with its own provider; Codalus asks before changes and commands.</summary>
+    public bool ShowExternalReadyState => IsOn && IsExternal && !HasTurns;
+
+    public string ExternalReadyMessage => Localizer.Format("msg.acp.askAgent", "Ask {0} about your solution. It answers with its own provider; Codalus asks you before it changes a file or runs a command.", SelectedAgentDisplayName);
+
+    /// <summary>The chosen agent as its template names it (Claude), else its key.</summary>
+    private string SelectedAgentDisplayName => SelectedAgent is { } agent ? AcpAgentTemplates.FromTag(_host.ExternalAgents.Configured.GetValueOrDefault(agent)?.Template)?.Name ?? agent : string.Empty;
 
     /// <summary>AI was turned off with a conversation on screen: the conversation stays, Turn On replaces the composer.</summary>
     public bool ShowOffBar => IsOff && HasTurns;
@@ -304,7 +327,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     /// <summary>The mode picker's label: the agent's current mode.</summary>
     public string SelectedModeLabel => Session is { } session && session.Modes.FirstOrDefault(m => m.Id == session.CurrentModeId) is { } mode ? mode.Name : string.Empty;
 
-    /// <summary>The picker shows while AI is on: Built-in, the agents, and "Add agent…" to set up a known one.</summary>
+    /// <summary>The picker shows while AI is on: Built-in, the agents, then Connect, More agents… and Manage Agents… (D43).</summary>
     public bool HasAgents => IsOn;
 
     /// <summary>The provider, model and Agent switch are the built-in assistant's.</summary>
@@ -387,17 +410,56 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         CommandSuggestions = [];
     }
 
-    /// <summary>
-    /// "Add agent…" (M48): picks a known ACP agent, adds it to the user's settings after asking, and chooses it (a new
-    /// chat, as any other choice). One already added is chosen, not added again.
-    /// </summary>
-    public async Task AddAgentAsync()
-    {
-        if (await _host.AddExternalAgentAsync().ConfigureAwait(true) is not { } name)
-        {
-            return;
-        }
+    /// <summary>The one-click agents (D43), offered as buttons while AI is off or has no provider.</summary>
+    public IReadOnlyList<AiConnectAgent> ConnectAgents { get; } = [.. AcpAgentTemplates.All.Where(t => t.Tier == AcpTemplateTier.OneClick).Select(t => new AiConnectAgent(t.Id, t.Name))];
 
+    /// <summary>The off and no-provider states' row: "Or connect a coding agent that brings its own provider" (not when the workspace turned AI off).</summary>
+    public bool ShowConnectRow => (ShowOffState || ShowProviderState) && !Ai.IsOffForWorkspace;
+
+    /// <summary>Why agents can't be connected here (a remote window): the buttons are disabled with it.</summary>
+    public string? ConnectBlockedReason => _host.WhyAgentsCantConnect;
+
+    public bool CanConnectAgents => ConnectBlockedReason is null;
+
+    public bool IsConnectBlocked => !CanConnectAgents;
+
+    /// <summary>Connect to <paramref name="templateId"/>… (a button of the off state, or the agent menu).</summary>
+    public async Task ConnectAsync(string templateId)
+    {
+        await _host.ConnectExternalAgentAsync(templateId).ConfigureAwait(true);
+        RefreshAgentState();
+    }
+
+    /// <summary>More agents…: every template in the palette.</summary>
+    public async Task MoreAgentsAsync()
+    {
+        await _host.ConnectExternalAgentAsync(null).ConfigureAwait(true);
+        RefreshAgentState();
+    }
+
+    /// <summary>Manage Agents….</summary>
+    public async Task ManageAgentsAsync()
+    {
+        await _host.ManageExternalAgentsAsync().ConfigureAwait(true);
+        RefreshAgentState();
+    }
+
+    /// <summary>
+    /// The agent menu's actions after its choices (D43), in groups a separator parts: Connect to each one-click agent not
+    /// connected yet, then More agents… and Manage Agents….
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<AiAgentMenuAction>> AgentMenuActions =>
+    [
+        [.. ConnectAgents.Where(a => !_agentNames.Contains(a.Id)).Select(a => new AiAgentMenuAction(a.AccessibleName, "plug", () => ConnectAsync(a.Id)))],
+        [
+            new(Localizer.Get("msg.acp.moreAgents", "More agents…"), "list", MoreAgentsAsync),
+            new(Localizer.Get("msg.acp.manageAgents", "Manage Agents…"), "gear", ManageAgentsAsync),
+        ],
+    ];
+
+    /// <summary>Picks <paramref name="name"/> (Start a Chat after Connect): a new chat with it.</summary>
+    public void SelectAgent(string name)
+    {
         RefreshAgentState();
         if (_agentNames.IndexOf(name) is var at and >= 0)
         {
@@ -480,6 +542,12 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShowProviderState));
         OnPropertyChanged(nameof(ShowReadyState));
         OnPropertyChanged(nameof(ShowOffBar));
+        OnPropertyChanged(nameof(ShowConnectRow));
+        OnPropertyChanged(nameof(ConnectBlockedReason));
+        OnPropertyChanged(nameof(CanConnectAgents));
+        OnPropertyChanged(nameof(IsConnectBlocked));
+        OnPropertyChanged(nameof(ShowExternalReadyState));
+        OnPropertyChanged(nameof(ExternalReadyMessage));
     }
 
     /// <summary>

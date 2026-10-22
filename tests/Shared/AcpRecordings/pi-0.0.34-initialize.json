@@ -1,0 +1,9 @@
+{
+  "_source": "Read from the code of pi-acp 0.0.34 (src/acp/auth.ts, getAuthMethods), not yet recorded from a run: refresh it with eng/record-acp-initialize.sh pi.",
+  "protocolVersion": 1,
+  "agentCapabilities": { "loadSession": true },
+  "agentInfo": { "name": "pi-acp", "title": "pi", "version": "0.0.34" },
+  "authMethods": [
+    { "id": "pi_terminal_login", "name": "Launch pi in the terminal", "description": "Start pi in an interactive terminal to configure API keys or login", "type": "terminal", "args": ["--terminal-login"], "env": {} }
+  ]
+}

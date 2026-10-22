@@ -1207,6 +1207,16 @@ public sealed class PluginManager : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Why a plugin host may not use <paramref name="pluginId"/> for its secrets (ADR 0083), or null: it must be one of
+    /// <paramref name="hostPlugins"/>, the plugins of that host, and never an id under the shell's own prefix.
+    /// </summary>
+    internal static string? SecretOwnerRefusal(string? pluginId, IEnumerable<string> hostPlugins) =>
+        pluginId is not { Length: > 0 } ? "secrets/* needs the plugin's id."
+        : pluginId.StartsWith(Ai.Acp.AcpAgentSecrets.ShellPrefix, StringComparison.OrdinalIgnoreCase) ? $"'{pluginId}' is the shell's own: a plugin can't use its secrets."
+        : !hostPlugins.Contains(pluginId, StringComparer.Ordinal) ? $"'{pluginId}' isn't a plugin of this host, so it can't use that plugin's secrets."
+        : null;
+
     /// <summary>One plugin host process (a host group) and the shell-side handlers for its requests.</summary>
     private sealed class HostConnection : IAsyncDisposable
     {
@@ -1667,18 +1677,28 @@ public sealed class PluginManager : IAsyncDisposable
             });
             connection.OnNotification(LanguageModelMethods.ChatPart, json.ChatPartParams, p => _manager.LanguageModelSink?.ChatPart(p));
             connection.OnRequest(HostingMethods.SecretsGet, json.SecretParams, json.SecretResult, async (p, ct) =>
-                new SecretResult(await Secrets.GetAsync(p.PluginId, p.Key, ct).ConfigureAwait(false)));
+                new SecretResult(await Secrets.GetAsync(SecretOwner(p.PluginId), p.Key, ct).ConfigureAwait(false)));
             connection.OnRequest(HostingMethods.SecretsStore, json.SecretParams, json.EmptyResult, async (p, ct) =>
             {
-                await Secrets.StoreAsync(p.PluginId, p.Key, p.Value ?? throw new JsonRpcHandlerException(PluginErrorCodes.CommandFailed, "secrets/store needs a value."), ct).ConfigureAwait(false);
+                await Secrets.StoreAsync(SecretOwner(p.PluginId), p.Key, p.Value ?? throw new JsonRpcHandlerException(PluginErrorCodes.CommandFailed, "secrets/store needs a value."), ct).ConfigureAwait(false);
                 return new EmptyResult();
             });
             connection.OnRequest(HostingMethods.SecretsDelete, json.SecretParams, json.EmptyResult, async (p, ct) =>
             {
-                await Secrets.DeleteAsync(p.PluginId, p.Key, ct).ConfigureAwait(false);
+                await Secrets.DeleteAsync(SecretOwner(p.PluginId), p.Key, ct).ConfigureAwait(false);
                 return new EmptyResult();
             });
         }
+
+        /// <summary>
+        /// The plugin id a <c>secrets/*</c> request may use (ADR 0083): one of this host's own plugins, never the shell's
+        /// (<c>codalus.shell.</c>, where external agents' keys are); anything else is refused, so a plugin can't read another
+        /// host's secrets or the agents' keys.
+        /// </summary>
+        private string SecretOwner(string pluginId) =>
+            SecretOwnerRefusal(pluginId, Members.Select(p => p.Id)) is { } refusal
+                ? throw new JsonRpcHandlerException(PluginErrorCodes.CommandFailed, refusal)
+                : pluginId;
 
         private Secrets.SecretStorage Secrets => _manager.Secrets ?? throw new JsonRpcHandlerException(PluginErrorCodes.ProposedApiUnavailable, "This shell has no credential store for secrets.");
 

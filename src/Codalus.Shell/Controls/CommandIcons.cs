@@ -99,6 +99,11 @@ public static class CommandIcons
         ["snapshot"] = Blue,
         ["plug"] = Blue,
         ["detach"] = Red,
+
+        // External agents (D43): an agent, the same generic icon for each (no vendor logos), in the AI family's purple;
+        // Disconnect in red, with close and delete.
+        ["bot"] = Purple,
+        ["plug-disconnected"] = Red,
         ["database-update"] = Yellow,
         ["dump"] = Blue,
         ["cube"] = Purple,
@@ -611,6 +616,19 @@ public static class CommandIcons
         ["help.about"] = new("info"),
         ["update.check"] = new("update"),
         ["update.whatsNew"] = new("sparkle"),
+
+        // External agents (D43): Connect to one agent is plug, to any agent the agent's own icon.
+        ["ai.agents.connect"] = new("bot"),
+        ["ai.agents.connect.claude"] = new("plug"),
+        ["ai.agents.connect.codex"] = new("plug"),
+        ["ai.agents.connect.gemini"] = new("plug"),
+        ["ai.agents.connect.copilot"] = new("plug"),
+        ["ai.agents.connect.pi"] = new("plug"),
+        ["ai.agents.connect.opencode"] = new("plug"),
+        ["ai.agents.connect.goose"] = new("plug"),
+        ["ai.agents.manage"] = new("gear"),
+        ["ai.agents.check"] = new("check-circle"),
+        ["ai.agents.disconnect"] = new("plug-disconnected"),
 
         // Solution Explorer.
         ["explorer.newFile"] = new("file-add"),

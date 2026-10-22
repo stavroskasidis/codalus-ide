@@ -47,6 +47,34 @@ public static partial class SecretRedactor
         }
     }
 
+    /// <summary>
+    /// The text with every occurrence of <paramref name="values"/> replaced (an external agent's keys from
+    /// <c>secretEnv</c>, which the patterns may not know; ADR 0083), then the patterns'. Values under 4 characters are
+    /// left alone (they would redact ordinary words).
+    /// </summary>
+    public static (string Text, int Count) Redact(string text, IEnumerable<string> values)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return (text, 0);
+        }
+
+        var count = 0;
+        foreach (var value in values.Where(v => v.Length >= 4).Distinct(StringComparer.Ordinal).OrderByDescending(v => v.Length))
+        {
+            var at = text.IndexOf(value, StringComparison.Ordinal);
+            while (at >= 0)
+            {
+                count++;
+                text = string.Concat(text.AsSpan(0, at), Placeholder, text.AsSpan(at + value.Length));
+                at = text.IndexOf(value, at + Placeholder.Length, StringComparison.Ordinal);
+            }
+        }
+
+        var (redacted, more) = Redact(text);
+        return (redacted, count + more);
+    }
+
     /// <summary>Values that are clearly not secrets (empty, a reference to a variable, a template marker).</summary>
     private static bool IsPlaceholderValue(string value) =>
         value.StartsWith('$') || value.StartsWith('%') || value.StartsWith("{{", StringComparison.Ordinal) ||
