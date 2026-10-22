@@ -1,5 +1,10 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using Avalonia;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.VisualTree;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Editor;
@@ -186,5 +191,78 @@ public sealed class DiffDocumentTests
         view.Result.Document.Insert(0, "// note\n");
         await ShellFixture.PumpUntil(() => view.ColoredTypeAt(MergePane.Result, 1, 4) == s_comment);
         Assert.Equal(s_keyword, view.ColoredTypeAt(MergePane.Result, 2, 0));
+    }
+
+    [AvaloniaFact]
+    public async Task Changed_lines_their_words_and_the_filler_are_drawn_in_the_themes_diff_colors()
+    {
+        var (f, _, file) = await RepositoryAsync();
+        await using var fixture = f;
+        await File.WriteAllTextAsync(file, Original.Replace("string Greet(", "string Hail(", StringComparison.Ordinal).Replace("    public static string Wave() => \"o/\";\n", string.Empty, StringComparison.Ordinal));
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var document = await f.Shell.OpenDiffAsync(file, staged: false);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any() && document!.ViewModel.NewColors is not null);
+        var view = f.Window.GetVisualDescendants().OfType<DiffView>().Single();
+
+        // The changed word of the paired lines, whole: "Greet" and "Hail".
+        var left = view.LeftText;
+        var right = view.RightText;
+        var changed = LineOf(right, "Hail(");
+        Assert.Equal(changed, LineOf(left, "Greet("));
+        Assert.Equal([(ColumnOf(left, changed, "Greet"), 5)], view.WordsAt(DiffPaneSide.Old, changed));
+        Assert.Equal([(ColumnOf(right, changed, "Hail"), 4)], view.WordsAt(DiffPaneSide.New, changed));
+        Assert.Empty(view.WordsAt(DiffPaneSide.New, 1));
+
+        // Drawn: the line's fill past its end, the word's fill and border, and the hatching opposite the removed line.
+        for (var i = 0; i < 5; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        using var frame = f.Window.CaptureRenderedFrame()!;
+        var variant = f.Window.ActualThemeVariant;
+        var editor = view.EditorOf(DiffPaneSide.New).TextArea.TextView;
+        var removedRow = LineOf(left, "Wave()");
+        Assert.True(removedRow > 0, left);
+        Assert.Equal(Token("Shell.Diff.Added.Line", variant), Pixel(frame, editor, changed, editor.Bounds.Width - 4));
+        Assert.Equal(Token("Shell.Diff.Removed.Line", variant), Pixel(frame, view.EditorOf(DiffPaneSide.Old).TextArea.TextView, removedRow, editor.Bounds.Width - 4));
+        var row = Row(frame, editor, changed, 0, editor.Bounds.Width - 1);
+        Assert.Contains(Token("Shell.Diff.Added.Word", variant), row);
+        Assert.Contains(Token("Shell.Diff.Added.WordBorder", variant), row);
+        Assert.Contains(Token("Shell.Diff.Filler", variant), Row(frame, editor, removedRow, 0, editor.Bounds.Width - 1));
+    }
+
+    private static Color Token(string key, Avalonia.Styling.ThemeVariant variant) =>
+        Application.Current!.TryGetResource(key, variant, out var value) && value is ISolidColorBrush brush ? brush.Color : throw new InvalidOperationException($"{key} in {variant}");
+
+    /// <summary>The pixel at an x in a text view, in the middle of a 1-based line (just under its top for <paramref name="top"/>).</summary>
+    private static Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, AvaloniaEdit.Rendering.TextView view, int line, double x, bool top = false)
+    {
+        var y = view.GetVisualTopByDocumentLine(line) - view.VerticalOffset + (top ? 2 : view.DefaultLineHeight / 2);
+        var point = view.TranslatePoint(new Point(x, y), (Visual?)Avalonia.Controls.TopLevel.GetTopLevel(view) ?? view)!.Value;
+        using var buffer = frame.Lock();
+        var offset = ((int)point.Y * buffer.RowBytes) + ((int)point.X * 4);
+        var (b0, b1, b2, b3) = (Marshal.ReadByte(buffer.Address, offset), Marshal.ReadByte(buffer.Address, offset + 1), Marshal.ReadByte(buffer.Address, offset + 2), Marshal.ReadByte(buffer.Address, offset + 3));
+        return buffer.Format == PixelFormat.Rgba8888 ? Color.FromArgb(b3, b0, b1, b2) : Color.FromArgb(b3, b2, b1, b0);
+    }
+
+    /// <summary>The colors along a line's rows of pixels, from <paramref name="from"/> to <paramref name="to"/>.</summary>
+    private static HashSet<Color> Row(Avalonia.Media.Imaging.WriteableBitmap frame, AvaloniaEdit.Rendering.TextView view, int line, double from, double to)
+    {
+        var colors = new HashSet<Color>();
+        for (var dy = 1.0; dy < view.DefaultLineHeight - 1; dy += 2)
+        {
+            for (var x = from; x < to; x++)
+            {
+                var y = view.GetVisualTopByDocumentLine(line) - view.VerticalOffset + dy;
+                var point = view.TranslatePoint(new Point(x, y), (Visual?)Avalonia.Controls.TopLevel.GetTopLevel(view) ?? view)!.Value;
+                using var buffer = frame.Lock();
+                var offset = ((int)point.Y * buffer.RowBytes) + ((int)point.X * 4);
+                var (b0, b1, b2, b3) = (Marshal.ReadByte(buffer.Address, offset), Marshal.ReadByte(buffer.Address, offset + 1), Marshal.ReadByte(buffer.Address, offset + 2), Marshal.ReadByte(buffer.Address, offset + 3));
+                colors.Add(buffer.Format == PixelFormat.Rgba8888 ? Color.FromArgb(b3, b0, b1, b2) : Color.FromArgb(b3, b2, b1, b0));
+            }
+        }
+
+        return colors;
     }
 }

@@ -16,6 +16,7 @@ public sealed class DiffViewModel : ObservableObject
     private bool _sideBySide = true;
     private string _summary = string.Empty;
     private int _colorsVersion;
+    private readonly Dictionary<int, (IReadOnlyList<(int Start, int Length)> Old, IReadOnlyList<(int Start, int Length)> New)> _words = [];
 
     public DiffViewModel(GitService git, string path, bool staged)
     {
@@ -218,6 +219,26 @@ public sealed class DiffViewModel : ObservableObject
         OldLines = oldLines;
         NewLines = newLines;
         Rows = rows;
+        _words.Clear();
+    }
+
+    /// <summary>
+    /// The changed words of a row that pairs a removed line with the added line replacing it (D45 question 14: a
+    /// character diff widened to whole words); none for other rows.
+    /// </summary>
+    public (IReadOnlyList<(int Start, int Length)> Old, IReadOnlyList<(int Start, int Length)> New) WordRanges(int row)
+    {
+        if ((uint)row >= (uint)Rows.Count || Rows[row] is not { Kind: '~', OldLine: { } oldLine, NewLine: { } newLine })
+        {
+            return ([], []);
+        }
+
+        if (!_words.TryGetValue(row, out var ranges))
+        {
+            _words[row] = ranges = WordDiff.Ranges(OldLines[oldLine - 1], NewLines[newLine - 1]);
+        }
+
+        return ranges;
     }
 
     /// <summary>

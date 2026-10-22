@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Media.Immutable;
 using AvaloniaEdit;
 using AvaloniaEdit.Rendering;
 using Codalus.Shell.Controls;
@@ -13,86 +12,6 @@ using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Git;
 
 namespace Codalus.Shell.Views;
-
-/// <summary>Backgrounds of a diff editor's lines: removed (red), added (green), filler rows (gray).</summary>
-internal sealed class DiffLineRenderer(Func<IReadOnlyList<char>> kinds) : IBackgroundRenderer
-{
-    private static readonly IBrush s_removed = new ImmutableSolidColorBrush(Color.FromArgb(0x45, 0xE5, 0x3E, 0x3E));
-    private static readonly IBrush s_added = new ImmutableSolidColorBrush(Color.FromArgb(0x45, 0x3E, 0xB8, 0x4E));
-    private static readonly IBrush s_filler = new ImmutableSolidColorBrush(Color.FromArgb(0x22, 0x80, 0x80, 0x80));
-
-    public KnownLayer Layer => KnownLayer.Background;
-
-    public void Draw(TextView textView, DrawingContext drawingContext)
-    {
-        var lineKinds = kinds();
-        if (!textView.VisualLinesValid)
-        {
-            return;
-        }
-
-        foreach (var line in textView.VisualLines)
-        {
-            var index = line.FirstDocumentLine.LineNumber - 1;
-            var brush = index < lineKinds.Count ? lineKinds[index] switch
-            {
-                '-' => s_removed,
-                '+' => s_added,
-                'f' => s_filler,
-                _ => null,
-            } : null;
-            if (brush is not null)
-            {
-                drawingContext.DrawRectangle(brush, null, new Rect(0, line.VisualTop - textView.VerticalOffset, textView.Bounds.Width, line.Height));
-            }
-        }
-    }
-}
-
-/// <summary>A "+" or "−" beside added and removed lines, so a diff doesn't rely on color alone.</summary>
-internal sealed class DiffSignMargin(Func<IReadOnlyList<char>> kinds) : AvaloniaEdit.Editing.AbstractMargin
-{
-    protected override void OnTextViewChanged(TextView? oldTextView, TextView? newTextView)
-    {
-        if (oldTextView is not null)
-        {
-            oldTextView.VisualLinesChanged -= OnVisualLinesChanged;
-        }
-
-        base.OnTextViewChanged(oldTextView, newTextView);
-        if (newTextView is not null)
-        {
-            newTextView.VisualLinesChanged += OnVisualLinesChanged;
-        }
-    }
-
-    private void OnVisualLinesChanged(object? sender, EventArgs e) => InvalidateVisual();
-
-    protected override Size MeasureOverride(Size availableSize) => new(14, 0);
-
-    public override void Render(DrawingContext context)
-    {
-        var lineKinds = kinds();
-        if (TextView is not { VisualLinesValid: true } view)
-        {
-            return;
-        }
-
-        var foreground = GetValue(Avalonia.Controls.Documents.TextElement.ForegroundProperty) ?? Brushes.Gray;
-        var typeface = new Typeface(GetValue(Avalonia.Controls.Documents.TextElement.FontFamilyProperty));
-        var size = GetValue(Avalonia.Controls.Documents.TextElement.FontSizeProperty);
-        foreach (var line in view.VisualLines)
-        {
-            var index = line.FirstDocumentLine.LineNumber - 1;
-            var sign = index < lineKinds.Count ? lineKinds[index] switch { '+' => "+", '-' => "−", _ => null } : null;
-            if (sign is not null)
-            {
-                var text = new FormattedText(sign, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, size, foreground);
-                context.DrawText(text, new Point(2, line.VisualTop - view.VerticalOffset));
-            }
-        }
-    }
-}
 
 /// <summary>
 /// A diff document: side by side (aligned rows, synchronized scrolling) or inline, with next/previous change and
@@ -109,9 +28,6 @@ public sealed class DiffView : UserControl, IPaneView
     private readonly SourceLineColorizer _leftColors;
     private readonly SourceLineColorizer _rightColors;
     private readonly SourceLineColorizer _inlineColors;
-    private IReadOnlyList<char> _leftKinds = [];
-    private IReadOnlyList<char> _rightKinds = [];
-    private IReadOnlyList<char> _inlineKinds = [];
     private DiffPane _leftPane = DiffPane.Empty;
     private DiffPane _rightPane = DiffPane.Empty;
     private DiffPane _inlinePane = DiffPane.Empty;
@@ -126,9 +42,9 @@ public sealed class DiffView : UserControl, IPaneView
         _leftColors = new SourceLineColorizer(line => ColorsOf(_leftPane, line));
         _rightColors = new SourceLineColorizer(line => ColorsOf(_rightPane, line));
         _inlineColors = new SourceLineColorizer(line => ColorsOf(_inlinePane, line));
-        _left = Editor(font, () => _leftKinds, "Old text", _leftColors);
-        _right = Editor(font, () => _rightKinds, "New text", _rightColors);
-        _inline = Editor(font, () => _inlineKinds, "Diff", _inlineColors);
+        _left = Editor(font, "Old text", _leftColors, () => _leftPane, i => WordsOf(_leftPane, i));
+        _right = Editor(font, "New text", _rightColors, () => _rightPane, i => WordsOf(_rightPane, i));
+        _inline = Editor(font, "Diff", _inlineColors, () => _inlinePane, i => WordsOf(_inlinePane, i));
         _sideBySide = new Grid { ColumnDefinitions = new ColumnDefinitions("*,4,*") };
         _sideBySide.Children.Add(_left);
         var splitter = new GridSplitter { ResizeDirection = GridResizeDirection.Columns };
@@ -252,6 +168,26 @@ public sealed class DiffView : UserControl, IPaneView
         }
     }
 
+    /// <summary>The changed words of a 0-based pane line, where it is half of a pair of changed lines.</summary>
+    private IReadOnlyList<(int Start, int Length)> WordsOf(DiffPane pane, int index)
+    {
+        if ((uint)index >= (uint)pane.Lines.Count || pane.Lines[index] is not { Kind: '-' or '+' } line)
+        {
+            return [];
+        }
+
+        var (old, now) = _viewModel.WordRanges(line.Row);
+        return line.Kind == '-' ? old : now;
+    }
+
+    /// <summary>The changed words drawn on a 1-based line of a side (tests): the ranges, or none.</summary>
+    public IReadOnlyList<(int Start, int Length)> WordsAt(DiffPaneSide side, int line) => WordsOf(side switch
+    {
+        DiffPaneSide.Old => _leftPane,
+        DiffPaneSide.New => _rightPane,
+        _ => _inlinePane,
+    }, line - 1);
+
     /// <summary>A pane line's file line and that file's colors.</summary>
     private (SourceTokens? Tokens, int Line) ColorsOf(DiffPane pane, int line)
     {
@@ -314,7 +250,7 @@ public sealed class DiffView : UserControl, IPaneView
         return button;
     }
 
-    private static TextEditor Editor(EditorFont font, Func<IReadOnlyList<char>> kinds, string name, SourceLineColorizer colors)
+    private static TextEditor Editor(EditorFont font, string name, SourceLineColorizer colors, Func<DiffPane> pane, Func<int, IReadOnlyList<(int Start, int Length)>> words)
     {
         var editor = new TextEditor
         {
@@ -326,9 +262,9 @@ public sealed class DiffView : UserControl, IPaneView
         };
         editor.Bind(BackgroundProperty, editor.GetResourceObservable("Shell.Editor.Background"));
         editor.Bind(ForegroundProperty, editor.GetResourceObservable("Shell.Editor.Foreground"));
-        editor.TextArea.TextView.BackgroundRenderers.Add(new DiffLineRenderer(kinds));
+        editor.TextArea.TextView.BackgroundRenderers.Add(new DiffRenderer(editor, pane, words));
         editor.TextArea.TextView.LineTransformers.Add(colors);
-        editor.TextArea.LeftMargins.Add(new DiffSignMargin(kinds));
+        editor.TextArea.LeftMargins.Add(new DiffSignMargin(pane));
         AutomationProperties(editor, name);
         return editor;
     }
@@ -342,9 +278,6 @@ public sealed class DiffView : UserControl, IPaneView
 
         (_leftPane, _rightPane) = DiffRows.SideBySide(vm.Rows, vm.OldLines, vm.NewLines);
         _inlinePane = DiffRows.Inline(vm.Rows, vm.OldLines, vm.NewLines);
-        _leftKinds = [.. _leftPane.Lines.Select(l => l.Kind)];
-        _rightKinds = [.. _rightPane.Lines.Select(l => l.Kind)];
-        _inlineKinds = [.. _inlinePane.Lines.Select(l => l.Kind)];
         _inlineRows = [.. _inlinePane.Lines.Select(l => l.Row)];
         _left.Text = _leftPane.Text;
         _right.Text = _rightPane.Text;

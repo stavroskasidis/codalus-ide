@@ -60,6 +60,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
+      <!-- The diff document (#86, D45): line and word fills, opaque, with Shell.Editor.Foreground at 4.5:1 on each and the syntax colors at 3:1; changed words get a 1 px border; High contrast draws the borders alone. Filler: the hatching opposite a side's lines. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#E3F4E6" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#FCE8E8" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#C4E8CC" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#F6CCCC" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#8FCB9C" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#E8A0A0" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#DADADA" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E5EBF1" />
       <!-- Icons in the Visual Studio palette (the maintainer's rule: every icon is colored), at least 3:1 against menus, toolbars and panels; command families are palette colors. -->
@@ -262,6 +270,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#482727" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#1B3427" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#4A2023" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#0E4C2B" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#6A2B2B" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#2F7048" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#8E3B3B" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#333333" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3E3E42" />
       <!-- Icons in the Visual Studio palette (every icon is colored); command families are palette colors. -->
@@ -670,6 +686,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#5C5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#0E4A7B" />
       <!-- High Contrast keeps icons monochrome: shape carries the meaning, not color. -->
@@ -878,6 +902,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#E3F4E8" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#FCE7E9" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#C2E7CE" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#F6C6CD" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#8CC9A0" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#E59BA6" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#DCE2EF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E0E6F6" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
@@ -1108,6 +1140,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#40242F" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#163430" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#3A1E2A" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#1F5143" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#5A2A39" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#2F7562" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#844056" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#222B40" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#273350" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
@@ -1338,6 +1378,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#5C5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#1A323D" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
@@ -1588,6 +1636,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#E3F4E8" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#FCE7E9" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#C2E7CE" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#F6C6CD" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#8CC9A0" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#E59BA6" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#DFDFE0" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E0EBEB" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
@@ -1823,6 +1879,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#452528" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#1C3527" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#401F21" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#234836" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#602B30" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#357659" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#8A414D" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#2F3034" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#213839" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
@@ -2058,6 +2122,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#5C5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#0F3A32" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
@@ -2313,6 +2385,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#E3F4E8" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#FCE7E9" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#C2E7CE" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#F6C6CD" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#8CC9A0" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#E59BA6" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#DFDFDF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#F0ECF9" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
@@ -2543,6 +2623,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#4B2930" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#243A31" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#48242B" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#2C5443" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#68303A" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#3D7B63" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#924657" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#37353E" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#38314B" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
@@ -2773,6 +2861,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#5C5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#322B3D" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
@@ -3023,6 +3119,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#F6DFDF" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#C62828" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#1E7F34" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#E3F4E8" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#FCE7E9" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#C2E7CE" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#F6C6CD" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#8CC9A0" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#E59BA6" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#E0DFDE" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#F4E9E0" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
@@ -3253,6 +3357,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#43201E" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#F14C4C" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#73C991" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#192F1B" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#3D1915" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#20462C" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#5D2524" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#32704D" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#873B41" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#2E2B29" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3A2A1C" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
@@ -3483,6 +3595,14 @@
       <SolidColorBrush x:Key="Shell.Merge.Conflict" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Merge.Conflict.Border" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Merge.Resolved.Border" Color="#00FF00" />
+      <!-- The diff document (#86, D45): fills under the code, the changed words' borders and the filler's hatching. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Line" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Word" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added.WordBorder" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.WordBorder" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#5C5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3D2B11" />
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />

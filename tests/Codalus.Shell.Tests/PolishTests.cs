@@ -88,6 +88,39 @@ public partial class PolishTests
     [GeneratedRegex("x:Key=\"([^\"]+)\"")]
     private static partial Regex KeyPattern();
 
+    /// <summary>
+    /// The diff document's fills (#86, D45) hold the editor's syntax colors at 3:1 or more in every theme: the colors the
+    /// design measured (keywords, control keywords, types, interfaces, methods, parameters, strings, numbers and
+    /// comments), each that meets AA on the editor's own background (the others are the editor palette's to fix).
+    /// </summary>
+    [AvaloniaFact]
+    public void The_diff_fills_keep_the_syntax_colors_readable()
+    {
+        string[] syntax = ["keyword", "controlKeyword", "class", "interface", "method", "parameter", "string", "number", "comment"];
+        string[] fills = ["Shell.Diff.Added.Line", "Shell.Diff.Removed.Line", "Shell.Diff.Added.Word", "Shell.Diff.Removed.Word"];
+        var failures = new List<string>();
+        foreach (var (id, variant) in ThemeService.Themes)
+        {
+            var theme = Editor.EditorTheme.For(id);
+            var background = Color("Shell.Editor.Background", variant);
+            foreach (var fill in fills)
+            {
+                var under = Color(fill, variant);
+                Assert.Equal(255, under.A); // opaque, so the code on it can be measured
+                foreach (var type in syntax)
+                {
+                    var color = Avalonia.Media.Color.FromUInt32(theme.TokenColor(type)!.Value);
+                    if (Contrast(color, background) >= 4.5 && Contrast(color, under) < 3)
+                    {
+                        failures.Add($"{ThemeService.Title(id)}: {type} {color} on {fill} {under} is {Contrast(color, under):0.00}:1");
+                    }
+                }
+            }
+        }
+
+        Assert.Empty(failures);
+    }
+
     // ------------------------------------------------------------------ clipped text
 
     /// <summary>In Classic and in each theme family (M45), whose shapes change sizes: one variant each, the sizes are the family's.</summary>

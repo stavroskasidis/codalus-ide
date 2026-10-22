@@ -110,6 +110,7 @@ Git asks your credential helper first (Git Credential Manager, the macOS Keychai
 A file's diff opens in a document:
 - **Side by side**, with the two versions aligned and scrolling together, or **inline**.
 - **In the editor's colors**: each side is colored by its language's grammar, and the side whose text is the open document's (usually the working tree) by the language service too, as the editor colors it.
+- **Changed words**: where a line was changed, the words that changed are marked on both sides, with a deeper fill and a thin border. Rows where only the other side has lines are hatched.
 - **Previous Change** and **Next Change** move between changes.
 - **Stage Hunk**, **Unstage Hunk** and **Discard Hunk** act on the change at the caret.
 - **Stage Selected Lines**, **Unstage Selected Lines** and **Discard Selected Lines** act on just the selected lines (or the caret's line) of a change.

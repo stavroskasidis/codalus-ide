@@ -171,3 +171,94 @@ public static class DiffRows
         return new DiffPane(DiffPaneSide.Inline, text.ToString(), lines);
     }
 }
+
+/// <summary>
+/// The changed words of a pair of lines (#86, D45 question 14): a character diff of the two lines, each changed
+/// character widened to the whole word it is in, so a changed name is marked whole (AddSingleton → AddScoped).
+/// </summary>
+public static class WordDiff
+{
+    /// <summary>Lines longer than this aren't compared character by character: they're marked as whole lines only.</summary>
+    public const int MaxLineLength = 2000;
+
+    /// <summary>The changed ranges (start, length) of each line, in order, merged where they touch.</summary>
+    public static (IReadOnlyList<(int Start, int Length)> Old, IReadOnlyList<(int Start, int Length)> New) Ranges(string oldLine, string newLine)
+    {
+        if (oldLine == newLine || oldLine.Length > MaxLineLength || newLine.Length > MaxLineLength)
+        {
+            return ([], []);
+        }
+
+        var ops = LineDiff.Diff(Characters(oldLine), Characters(newLine));
+        var oldChanged = new bool[oldLine.Length];
+        var newChanged = new bool[newLine.Length];
+        foreach (var op in ops)
+        {
+            if (op.Kind == '-')
+            {
+                oldChanged[op.OldIndex] = true;
+            }
+            else if (op.Kind == '+')
+            {
+                newChanged[op.NewIndex] = true;
+            }
+        }
+
+        return (Widen(oldLine, oldChanged), Widen(newLine, newChanged));
+    }
+
+    private static string[] Characters(string line)
+    {
+        var characters = new string[line.Length];
+        for (var i = 0; i < line.Length; i++)
+        {
+            characters[i] = line[i].ToString();
+        }
+
+        return characters;
+    }
+
+    private static bool IsWord(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+    /// <summary>Each changed character's whole word, then the ranges, merged where they touch.</summary>
+    private static List<(int Start, int Length)> Widen(string line, bool[] changed)
+    {
+        var marked = (bool[])changed.Clone();
+        for (var i = 0; i < line.Length; i++)
+        {
+            if (!changed[i] || !IsWord(line[i]))
+            {
+                continue;
+            }
+
+            for (var j = i - 1; j >= 0 && IsWord(line[j]); j--)
+            {
+                marked[j] = true;
+            }
+
+            for (var j = i + 1; j < line.Length && IsWord(line[j]); j++)
+            {
+                marked[j] = true;
+            }
+        }
+
+        var ranges = new List<(int Start, int Length)>();
+        for (var i = 0; i < line.Length; i++)
+        {
+            if (!marked[i])
+            {
+                continue;
+            }
+
+            var start = i;
+            while (i < line.Length && marked[i])
+            {
+                i++;
+            }
+
+            ranges.Add((start, i - start));
+        }
+
+        return ranges;
+    }
+}
