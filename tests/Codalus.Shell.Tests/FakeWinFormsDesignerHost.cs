@@ -30,8 +30,14 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     private readonly HashSet<string> _locked = new(StringComparer.Ordinal);
     private string _root = "Form1";
 
-    /// <summary>A Locked metadata entry as the classic IDE writes it (and the real host, through ResXResourceWriter).</summary>
-    public const string BooleanType = "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+    /// <summary>
+    /// A Locked metadata entry's type as the real host writes it (ResourceValues.Of, through ResXResourceWriter): shortened
+    /// to the mscorlib alias, which the entry brings as an <c>assembly</c> declaration (<see cref="MscorlibName"/>).
+    /// </summary>
+    public const string BooleanType = "System.Boolean, mscorlib";
+
+    /// <summary>The assembly the mscorlib alias declares.</summary>
+    public const string MscorlibName = "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
 
     public int Loads { get; private set; }
 
@@ -361,7 +367,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                 if (locked != _locked.Contains(name))
                 {
                     _ = locked ? _locked.Add(name) : _locked.Remove(name);
-                    resources.Add(new DesignerResourceEntry((name == _root ? "$this" : name) + ".Locked", locked ? new DesignerResource { Type = BooleanType, Text = "True" } : null) { Metadata = true });
+                    resources.Add(new DesignerResourceEntry((name == _root ? "$this" : name) + ".Locked", locked ? new DesignerResource { Type = BooleanType, Text = "True", AssemblyAlias = "mscorlib", AssemblyName = MscorlibName } : null) { Metadata = true });
                 }
 
                 continue;
