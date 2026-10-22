@@ -158,6 +158,31 @@ public sealed partial class LanguageServiceTests
         }
     }
 
+    private static string Summary(SymbolDescription? description) =>
+        string.Concat(description?.Sections.SingleOrDefault(s => s.Kind == DescriptionSectionKinds.Summary)?.Text.Select(r => r.Text) ?? []);
+
+    [Fact]
+    public async Task Referenced_assemblies_describe_their_members_with_their_documentation()
+    {
+        // Console is in the reference pack's System.Console.dll, with its System.Console.xml next to it, as a NuGet
+        // package has its documentation.
+        await fixture.OpenAsync(Program);
+        var hover = await fixture.Client.HoverAsync(Uri(Program), fixture.At(Program, "Console.WriteLine(circle", "Console.Write".Length), Ct);
+        Assert.StartsWith("Writes the specified string value", Summary(hover?.Description), StringComparison.Ordinal);
+        Assert.Contains("Writes the specified string value", hover?.Contents.Value, StringComparison.Ordinal);
+
+        var list = await fixture.Client.CompletionAsync(Uri(Program), fixture.At(Program, "Console.WriteLine(circle", "Console.".Length), new CompletionContext(CompletionTriggerKind.Invoked, null), Ct);
+        var resolved = await fixture.Client.ResolveCompletionAsync(list.Items.Single(i => i.Label == "WriteLine"), Ct);
+        Assert.Contains("line terminator", Summary(resolved.Description), StringComparison.Ordinal);
+        Assert.Contains("line terminator", resolved.Documentation?.Value, StringComparison.Ordinal);
+
+        var help = await fixture.Client.SignatureHelpAsync(Uri(Program), fixture.At(Program, "Console.WriteLine(circle", "Console.WriteLine(".Length), new SignatureHelpContext(2, "(", false), Ct);
+        Assert.NotNull(help);
+        var active = help.Signatures[help.ActiveSignature];
+        Assert.StartsWith("Writes the specified string value", active.Documentation?.Value, StringComparison.Ordinal);
+        Assert.Equal("The value to write.", Assert.Single(active.Parameters).Documentation?.Value);
+    }
+
     [Fact]
     public async Task Committing_with_a_character_resolves_for_it_and_suggestion_mode_commits_on_nothing()
     {

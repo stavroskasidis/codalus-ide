@@ -152,8 +152,15 @@ public sealed class XamlLanguageTests(AvaloniaLanguageFixture avalonia) : IClass
 
         // Element names: Avalonia's types, the library's control and the app's view through their prefixes, and the
         // parent's property elements.
-        var elements = await LabelsAsync(MainWindow, "<Bu />", 3);
+        var elementItems = await CompleteAsync(MainWindow, "<Bu />", 3);
+        var elements = elementItems.Select(i => i.Label).ToList();
         Assert.Contains("Button", elements);
+
+        // Their summaries, from Avalonia's XML documentation, come when the item is resolved rather than with the list
+        // (which would wait for the whole file).
+        var button = Assert.Single(elementItems, i => i.Label == "Button");
+        Assert.Null(button.Documentation);
+        Assert.Equal("A standard button control.", (await avalonia.Client.ResolveCompletionAsync(button, Ct)).Documentation?.Value);
         Assert.Contains("controls:RatingControl", elements);
         Assert.Contains("views:TodoItemView", elements);
         Assert.Contains("DockPanel.LastChildFill", elements);
@@ -208,7 +215,7 @@ public sealed class XamlLanguageTests(AvaloniaLanguageFixture avalonia) : IClass
         Assert.Contains(members, m => m.Label == "Count");
         Assert.Contains(members, m => m.Label == "Increment");
         var greeting = Assert.Single(members, m => m.Label == "Greeting");
-        Assert.Contains("The text at the top of the window.", greeting.Documentation?.Value, StringComparison.Ordinal);
+        Assert.Contains("The text at the top of the window.", (await avalonia.Client.ResolveCompletionAsync(greeting, Ct)).Documentation?.Value, StringComparison.Ordinal);
         var items = await LabelsAsync(MainWindow, "{Binding Items[0].}", "{Binding Items[0].".Length);
         Assert.Contains("Title", items);
         Assert.Contains("Priority", items);
