@@ -176,6 +176,9 @@ public sealed class DebuggerDisplays
     /// <summary>The expression applied to the object: <c>{Name}</c> on <c>order</c> is <c>(order).Name</c>.</summary>
     internal static string Member(string target, string member) => $"({target}).{member}";
 
+    /// <summary>What the companion says of a type (its attributes and member list), looked up once per session.</summary>
+    public Task<TypeDisplayResult?> TypeInfoAsync(string type, IReadOnlyList<string> modules, CancellationToken cancellationToken) => TypeAsync(type, modules, cancellationToken);
+
     private Task<TypeDisplayResult?> TypeAsync(string type, IReadOnlyList<string> modules, CancellationToken cancellationToken)
     {
         lock (_types)

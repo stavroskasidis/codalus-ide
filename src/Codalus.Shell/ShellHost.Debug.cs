@@ -54,6 +54,10 @@ public sealed partial class ShellHost
         // [DebuggerDisplay] and [DebuggerBrowsable] from the companion host (M14b); netcoredbg doesn't apply them.
         Debugger.Displays = new DebuggerDisplays(async (type, modules, cancellationToken) =>
             await Companion.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false));
+        // The solution's own code (D44): a module named as one of its projects, or built under one's folder.
+        Debugger.IsUserModule = path => path is not null && Solutions.Projects.Values.Any(p =>
+            string.Equals(p.Name, Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase)
+            || (Path.GetDirectoryName(p.Path) is { Length: > 0 } folder && path.StartsWith(folder + Path.DirectorySeparatorChar, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)));
         Locals = new VariablesViewModel(Debugger, autos: false, LineText);
         Autos = new VariablesViewModel(Debugger, autos: true, LineText);
         Watch = new WatchViewModel(Debugger);

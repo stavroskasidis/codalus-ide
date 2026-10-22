@@ -148,6 +148,13 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
 - **The header** sits right over the expression, its name on the code's: the icon of its kind (a local, a parameter, a field, a property), the name, and the value in a box. The type is in the name's tooltip. A string or a collection has a **View** drop-down: the magnifier opens the likely visualizer, the arrow lists them all (plugins' under **Plugins**).
 - **Expanding**: rest the pointer on the chevron (about 400 ms), click it, or press `Right`. The members open in a tip of their own, under the header and 24 px in; each member with members of its own expands the same way, so each level is a tip. Moving to another row of a tip closes the tip the last row opened.
 - **Rows** show the icon, the name and the value, trimmed at 400 px: rest on a value for all of it. A tip shows 15 rows, then scrolls with the wheel.
+- **Members** are grouped as in the classic IDE, in Locals, Autos, Watch and QuickWatch too:
+  - each has its kind's icon: a property's blue wrench, a field, a constant, an event;
+  - the private, protected and internal members of your own code (the solution's projects) are listed with the others, in name order, with a lock on their icon; the name's tooltip says what each is ("Private field of WeatherForecastController (your code)");
+  - a library type's non-public members are under **Non-Public members**, and **Static members** come last;
+  - a property whose getter threw reads "threw *ExceptionType*: *message*" in the error color, and expands to the exception;
+  - a value the debugger couldn't evaluate (a getter that ran past 5 seconds, or can't be called) reads "Couldn't evaluate": **Re-evaluate** asks again;
+  - in a remote session (SSH, containers, WSL) the program's assemblies aren't on this machine: nothing is grouped, and icons are guessed from the names (`_name` and `name` are fields, `Name` a property).
 - **From the keyboard**: `Up` and `Down` move in a tip, `Right` opens the selected row's tip, `Left` closes it or goes back, `F2` or `Enter` edits the value, `Ctrl+C` copies it, `Shift+F10` opens its menu and `Escape` closes the tips.
 - **Near the edges**: near the editor's bottom the tips open upwards, and near its right edge they move left, their values trimmed sooner.
 - **The code under the header**: a double-click on the header's name selects the word, `Ctrl+Click` goes to its definition, and the wheel scrolls the editor (and closes the tips). Hold `Ctrl` to fade the tips and click through them to the code; let go to bring them back.

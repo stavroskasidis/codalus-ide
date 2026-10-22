@@ -159,7 +159,7 @@ Servers that implement `documentSymbol`, the hierarchies, `inlayHint` and `codeL
 
 | Method | Params → result | Notes |
 |---|---|---|
-| `codalus/debug/typeDisplay` | `{typeName, modules}` → `{display?, name?, typeProxy?, hidden, rootHidden, module?}` or null | `[DebuggerDisplay]`, `[DebuggerTypeProxy]` and `[DebuggerBrowsable]` of the type or its nearest base type that has them, read from the modules' metadata (the paths the adapter's `module` events gave). |
+| `codalus/debug/typeDisplay` | `{typeName, modules}` → `{display?, name?, typeProxy?, hidden, rootHidden, module?, members?}` or null | `[DebuggerDisplay]`, `[DebuggerTypeProxy]` and `[DebuggerBrowsable]` of the type or its nearest base type that has them, read from the modules' metadata (the paths the adapter's `module` events gave). `members` lists the type's and its base types' fields, properties, events, constants and indexers, most derived first (generic base types through their definitions), each `{name, kind, access, isStatic, declaringType, module?, canWrite, type?}`: what the data tip groups and draws its rows by (D44); null when the type isn't in the modules. |
 | `codalus/debug/openDump` | `{path}` → `{id, path, runtime, architecture, processId?, modules, threads: [{managedId, osId, isFinalizer, exception?, frames: [{method, module, ilOffset, file?, line?}]}]}` | A Windows minidump or a Linux or macOS core dump of the same OS. A frame's line comes from the portable PDB next to its module; frames without an IL map (heap dumps) have none. |
 | `codalus/debug/dumpHeap` | `{id, top}` → `{totalObjects, totalSize, types: [{type, count, size, methodTable}]}` | Types by total size. |
 | `codalus/debug/dumpInstances` | `{id, methodTable, max}` → addresses | |

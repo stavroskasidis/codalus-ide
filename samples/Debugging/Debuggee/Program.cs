@@ -39,6 +39,11 @@ if (args is ["--depth"])
     return Depth.Run(); // [depth-call]
 }
 
+if (args is ["--datatip"])
+{
+    return DataTip.Run(); // [datatip-call]
+}
+
 if (args is ["--read"])
 {
     // A real console (debugging in the terminal, M14c): read a line and echo it.

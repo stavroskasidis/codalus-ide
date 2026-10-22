@@ -19,9 +19,27 @@ public sealed class Icon : Control
 
     public static readonly StyledProperty<IBrush?> ForegroundProperty = TextElement.ForegroundProperty.AddOwner<Icon>();
 
+    /// <summary>A kind drawn small over the icon's bottom right (the data tip's lock on a non-public member of your code, D44).</summary>
+    public static readonly StyledProperty<string?> BadgeProperty = AvaloniaProperty.Register<Icon, string?>(nameof(Badge));
+
+    /// <summary>What the badge stands on: the row's background, so it reads over the icon under it.</summary>
+    public static readonly StyledProperty<IBrush?> BadgeBackgroundProperty = AvaloniaProperty.Register<Icon, IBrush?>(nameof(BadgeBackground));
+
     static Icon()
     {
-        AffectsRender<Icon>(KindProperty, ForegroundProperty);
+        AffectsRender<Icon>(KindProperty, ForegroundProperty, BadgeProperty, BadgeBackgroundProperty);
+    }
+
+    public string? Badge
+    {
+        get => GetValue(BadgeProperty);
+        set => SetValue(BadgeProperty, value);
+    }
+
+    public IBrush? BadgeBackground
+    {
+        get => GetValue(BadgeBackgroundProperty);
+        set => SetValue(BadgeBackgroundProperty, value);
     }
 
     public string? Kind
@@ -70,6 +88,35 @@ public sealed class Icon : Control
     }
 
     public override void Render(DrawingContext context)
+    {
+        RenderIcon(context);
+        if (Badge is { } badge && IconSet.GetFilled(badge) is { } filled && Foreground is { } foreground)
+        {
+            // 9 px at the bottom right, on the row's background, in the badge kind's color (the text color in High Contrast).
+            var size = Math.Min(Bounds.Width, Bounds.Height);
+            var side = size * 9 / 16;
+            var at = new Point(((Bounds.Width + size) / 2) - side, ((Bounds.Height + size) / 2) - side);
+            if (BadgeBackground is { } background)
+            {
+                context.DrawRectangle(background, null, new Rect(at.X - 1, at.Y - 1, side + 1, side + 1), 1, 1);
+            }
+
+            var brush = !Theming.ThemeService.IsHighContrast(ActualThemeVariant) && CommandIcons.DefaultColorOf(badge) is { } color
+                && this.TryFindResource("Shell.Icon." + char.ToUpperInvariant(color[0]) + color[1..], ActualThemeVariant, out var token) && token is IBrush colored
+                ? colored
+                : foreground;
+            var scale = side / filled.DesignSize;
+            using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(at.X, at.Y)))
+            {
+                foreach (var layer in filled.Layers)
+                {
+                    context.DrawGeometry(brush, null, layer.Geometry);
+                }
+            }
+        }
+    }
+
+    private void RenderIcon(DrawingContext context)
     {
         if (Kind is { } image && image.StartsWith("img:", StringComparison.Ordinal))
         {
@@ -480,7 +527,7 @@ public static class IconSet
         "symbol-class", "symbol-struct", "symbol-interface", "symbol-enum", "symbol-enum-member", "symbol-delegate",
         "symbol-method", "symbol-extension-method", "symbol-property", "symbol-field", "symbol-event", "symbol-constant",
         "symbol-local", "symbol-parameter", "symbol-namespace", "symbol-keyword", "symbol-snippet", "symbol-type-parameter",
-        "symbol-operator", "symbol-module", "symbol-label", "symbol-text", "symbol-target-type",
+        "symbol-operator", "symbol-module", "symbol-label", "symbol-text", "symbol-target-type", "symbol-raw-view",
     };
 
     /// <summary>The code symbol icons' names (tests).</summary>
@@ -581,6 +628,9 @@ public static class IconSet
         ["arrow-up-down"] = "M5,13.5 V2.5 M2.5,5 L5,2.5 L7.5,5 M11,2.5 V13.5 M8.5,11 L11,13.5 L13.5,11",
         ["subtract"] = "M3.5,8 H12.5",
         ["pin"] = "M5.5,2 H10.5 M6.5,2 V6.5 L4,9.5 H12 L9.5,6.5 V2 M8,9.5 V14.5",
+
+        // The data tip's View drop-down (D44): a magnifier over a grid (Fluent has no 16 px table search).
+        ["visualizer"] = "M8.5,10.5 H14.5 V1.5 H5.5 V7 M10,1.5 V10.5 M5.5,6 H14.5 " + Circle(5.25, 10.75, 2.75) + "M3.25,12.75 L1.5,14.5",
 
         // Toolbox controls Fluent has no picture of (M34h): a combo box (a box with its drop-down button), a progress
         // bar (a bar partly filled), a group box (a frame with its caption in the top edge).

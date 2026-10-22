@@ -66,6 +66,9 @@ public static class CommandIcons
         ["symbol-label"] = Blue,
         ["symbol-text"] = Blue,
         ["symbol-target-type"] = Blue,
+        // The data tip (D44): Raw View under a collection view, and the View drop-down's visualizers.
+        ["symbol-raw-view"] = Blue,
+        ["visualizer"] = Blue,
 
         // The control set's views (M34h).
         ["add"] = Green,

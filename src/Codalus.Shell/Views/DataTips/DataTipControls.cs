@@ -66,6 +66,43 @@ public interface IDataTipHost
     void FocusParent(DataTipPanel owner);
 }
 
+/// <summary>A row's icon (with the lock badge on a non-public member of your code) and its Re-evaluate button.</summary>
+internal static class DataTipIcons
+{
+    public static Icon For(VariableNode node)
+    {
+        var icon = new Icon { Kind = node.Icon, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center, Badge = node.HasBadge ? "lock" : null };
+        icon.Bind(Icon.BadgeBackgroundProperty, icon.GetResourceObservable("Shell.Overlay"));
+        return icon;
+    }
+
+    /// <summary>Re-evaluate, for a value netcoredbg couldn't evaluate (its <c>&lt;error&gt;</c>).</summary>
+    public static Button? Reevaluate(VariableNode node)
+    {
+        if (!node.CanReevaluate)
+        {
+            return null;
+        }
+
+        var button = new Button { Classes = { "dataTipPin" }, Content = new Icon { Kind = "refresh", Width = 14, Height = 14 }, Margin = new Thickness(4, 0, 0, 0) };
+        ToolTip.SetTip(button, Localizer.Get("dataTip.reevaluate", "Re-evaluate"));
+        AutomationProperties.SetName(button, Localizer.Get("dataTip.reevaluate", "Re-evaluate"));
+        button.Click += (_, e) =>
+        {
+            e.Handled = true;
+            _ = node.ReevaluateAsync();
+        };
+        node.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(VariableNode.CanReevaluate))
+            {
+                button.IsVisible = node.CanReevaluate;
+            }
+        };
+        return button;
+    }
+}
+
 /// <summary>The View drop-down of a row or a header: the magnifier opens the first visualizer, the chevron lists them all.</summary>
 public sealed class ViewButton : Border
 {
@@ -91,7 +128,7 @@ public sealed class ViewButton : Border
                 Spacing = 3,
                 Children =
                 {
-                    new Icon { Kind = "search", Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center },
+                    new Icon { Kind = "visualizer", Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center },
                     new TextBlock { Text = Localizer.Get("dataTip.view", "View"), VerticalAlignment = VerticalAlignment.Center },
                 },
             },
@@ -198,7 +235,8 @@ public sealed class DataTipRow : Border
         };
         grid.Children.Add(_chevron);
 
-        var icon = new Icon { Kind = node.Icon, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center, IsVisible = !node.IsPlaceholder };
+        var icon = DataTipIcons.For(node);
+        icon.IsVisible = !node.IsPlaceholder;
         Grid.SetColumn(icon, 3);
         grid.Children.Add(icon);
 
@@ -248,8 +286,14 @@ public sealed class DataTipRow : Border
                 edit();
             }
         };
-        Grid.SetColumn(_value, 8);
-        grid.Children.Add(_value);
+        var valueCell = new StackPanel { Orientation = Orientation.Horizontal, Children = { _value } };
+        if (DataTipIcons.Reevaluate(node) is { } reevaluate)
+        {
+            valueCell.Children.Add(reevaluate);
+        }
+
+        Grid.SetColumn(valueCell, 8);
+        grid.Children.Add(valueCell);
         Child = grid;
         AutomationProperties.SetName(this, Accessible(node));
         PointerEntered += (_, _) => _host.PointerOnRow(Panel, this);
@@ -292,7 +336,10 @@ public sealed class DataTipRow : Border
     }
 
     private static string Accessible(VariableNode node) =>
-        node.IsPlaceholder ? node.Value : node.HasType ? $"{node.Name}, {node.Value}, {node.Type}" : $"{node.Name}, {node.Value}";
+        node.IsPlaceholder ? node.Value
+        : (node.HasType ? $"{node.Name}, {node.Value}, {node.Type}" : $"{node.Name}, {node.Value}")
+          + (node.HasBadge ? ", " + Localizer.Get("dataTip.nonPublic", "non-public") : string.Empty)
+          + (node.IsError ? ", " + Localizer.Get("dataTip.error", "error") : string.Empty);
 
     private void OnNodeChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -302,6 +349,11 @@ public sealed class DataTipRow : Border
             ToolTip.SetTip(_value, Node.Value);
             AutomationProperties.SetName(this, Accessible(Node));
         }
+        else if (e.PropertyName is nameof(VariableNode.IsError))
+        {
+            _value.Classes.Set("error", Node.IsError);
+        }
+
         else if (e.PropertyName is nameof(VariableNode.HasChildren))
         {
             _chevron.IsVisible = Node.HasChildren;
@@ -571,7 +623,9 @@ public sealed class DataTipHeader : Border
             }
         };
         panel.Children.Add(_chevron);
-        panel.Children.Add(new Icon { Kind = node.Icon, Width = 16, Height = 16, Margin = new Thickness(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center });
+        var headerIcon = DataTipIcons.For(node);
+        headerIcon.Margin = new Thickness(0, 0, 4, 0);
+        panel.Children.Add(headerIcon);
         NameBlock = new TextBlock { Text = node.Name, Classes = { "dataTipName" }, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Background = Brushes.Transparent };
         if (node.NameTip is { } tip)
         {
@@ -611,6 +665,11 @@ public sealed class DataTipHeader : Border
             }
         };
         panel.Children.Add(box);
+        if (DataTipIcons.Reevaluate(node) is { } reevaluate)
+        {
+            panel.Children.Add(reevaluate);
+        }
+
         if (_host.PinAction(node) is { } pin)
         {
             var button = new Button { Classes = { "dataTipPin" }, Content = new Icon { Kind = "pin", Width = 14, Height = 14 }, Margin = new Thickness(0, 0, 2, 0) };

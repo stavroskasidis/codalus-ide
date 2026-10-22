@@ -1302,6 +1302,46 @@ public sealed class DebugService : IAsyncDisposable
 
     private string[] ModulePaths() => [.. Modules.Select(m => m.Path).OfType<string>()];
 
+    /// <summary>
+    /// Whether a module (a path) is one of the solution's projects' outputs: the data tip lists the non-public members its
+    /// code declares inline, and a library's under Non-Public members (D44). The shell sets it; netcoredbg sends no
+    /// <c>isUserCode</c>, the .NET Framework engine does, and that wins.
+    /// </summary>
+    public Func<string?, bool> IsUserModule { get; set; } = _ => false;
+
+    /// <summary>Whether <paramref name="path"/> is the solution's own code: the adapter's word for the module, else <see cref="IsUserModule"/>.</summary>
+    public bool IsUserCode(string? path)
+    {
+        if (path is null)
+        {
+            return false;
+        }
+
+        var module = Modules.FirstOrDefault(m => m.Path is { } p && SolutionService.PathComparer.Equals(p, path));
+        return module?.IsUserCode ?? IsUserModule(path);
+    }
+
+    /// <summary>
+    /// The member list of <paramref name="type"/> and its base types from the companion host (D44), or null without it
+    /// (no companion, or a remote program whose modules aren't here).
+    /// </summary>
+    public async Task<IReadOnlyList<Codalus.Debugging.Companion.TypeMember>?> MembersAsync(string type, CancellationToken cancellationToken)
+    {
+        if (Displays is not { } displays || State != DebugState.Stopped || string.IsNullOrEmpty(type))
+        {
+            return null;
+        }
+
+        try
+        {
+            return (await displays.TypeInfoAsync(type, ModulePaths(), cancellationToken).ConfigureAwait(false))?.Members;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Evaluates in the selected frame. <paramref name="context"/>: <c>watch</c>, <c>repl</c> or <c>hover</c>.</summary>
     public async Task<EvaluateResponse> EvaluateAsync(string expression, string context, CancellationToken cancellationToken = default)
     {

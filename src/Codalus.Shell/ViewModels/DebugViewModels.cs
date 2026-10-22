@@ -9,42 +9,195 @@ using Codalus.Workbench.Output;
 namespace Codalus.Shell.ViewModels;
 
 /// <summary>
-/// Where a debugger tree's children come from: the adapter's variables of a node's reference, as nodes (the data tip,
-/// Locals, Autos, Watch and QuickWatch share it).
+/// Where a debugger tree's children come from (the data tip, Locals, Autos, Watch and QuickWatch share it): the adapter's
+/// variables of a node's reference, as rows (D44): each member's kind from the companion's member list, a library
+/// type's non-public members under Non-Public members, the solution's own inline with a lock badge, netcoredbg's Static
+/// members last; a getter that threw as "threw Type: message", and netcoredbg's <c>&lt;error&gt;</c> as "Couldn't
+/// evaluate" with Re-evaluate. Without a debugger (or its member lists), the kinds are guessed from the names.
 /// </summary>
-public class VariableSource(Func<int, Task<IReadOnlyList<Variable>>> variables)
+public class VariableSource
 {
+    private readonly Func<int, Task<IReadOnlyList<Variable>>> _variables;
+
+    public VariableSource(Func<int, Task<IReadOnlyList<Variable>>> variables) => _variables = variables;
+
     public VariableSource(DebugService debugger)
-        : this(r => debugger.VariablesAsync(r))
-    {
-    }
+        : this(r => debugger.VariablesAsync(r)) => Debugger = debugger;
+
+    protected DebugService? Debugger { get; }
 
     /// <summary>The children of <paramref name="parent"/>, read from its variables reference.</summary>
     public virtual async Task<IReadOnlyList<VariableNode>> ChildrenAsync(VariableNode parent, CancellationToken cancellationToken)
     {
-        var children = await variables(parent.Reference).ConfigureAwait(true);
+        var variables = await _variables(parent.Reference).ConfigureAwait(true);
         cancellationToken.ThrowIfCancellationRequested();
-        return [.. children.Select(child => Node(child, parent))];
+        IReadOnlyList<DebugMember> rows;
+        if (Debugger is not { } debugger)
+        {
+            rows = VariableGrouping.Group(variables, null, _ => false);
+        }
+        else if (parent.Kind == MemberKind.StaticGroup)
+        {
+            // netcoredbg's Static members node: its evaluate name is the type's.
+            rows = VariableGrouping.Statics(variables, await debugger.MembersAsync(parent.EvaluateName ?? string.Empty, cancellationToken).ConfigureAwait(true), debugger.IsUserCode);
+        }
+        else
+        {
+            rows = VariableGrouping.Group(variables, await debugger.MembersAsync(parent.Type ?? string.Empty, cancellationToken).ConfigureAwait(true), debugger.IsUserCode);
+        }
+
+        return await NodesAsync(rows, parent, parent.Reference, cancellationToken).ConfigureAwait(true);
     }
 
-    /// <summary>A node for one of the adapter's variables under <paramref name="parent"/>.</summary>
-    protected VariableNode Node(Variable child, VariableNode parent) =>
-        new(child.Name, child.Value, child.Type, child.VariablesReference, this, parent.Reference, child.EvaluateName)
+    /// <summary>The rows' nodes under <paramref name="parent"/>; <paramref name="container"/> is the reference the adapter's variables are in (setVariable's).</summary>
+    protected async Task<IReadOnlyList<VariableNode>> NodesAsync(IReadOnlyList<DebugMember> rows, VariableNode parent, int container, CancellationToken cancellationToken)
+    {
+        var nodes = new List<VariableNode>(rows.Count);
+        foreach (var row in rows)
         {
-            Icon = VariableIcons.Guess(child.Name),
+            nodes.Add(await NodeAsync(row, parent, container, cancellationToken).ConfigureAwait(true));
+        }
+
+        return nodes;
+    }
+
+    private async Task<VariableNode> NodeAsync(DebugMember row, VariableNode parent, int container, CancellationToken cancellationToken)
+    {
+        var variable = row.Variable;
+        var value = variable.Value;
+        var error = false;
+        var reevaluate = false;
+        if (row.Threw)
+        {
+            value = await ThrewAsync(variable).ConfigureAwait(true);
+            error = true;
+        }
+        else if (row.CouldNotEvaluate)
+        {
+            value = Localizer.Get("dataTip.couldntEvaluate", "Couldn't evaluate");
+            error = true;
+            reevaluate = variable.EvaluateName is not null;
+        }
+
+        var group = row.Kind is MemberKind.NonPublicGroup or MemberKind.StaticGroup or MemberKind.RawView;
+        var node = new VariableNode(Label(row), value, group ? null : variable.Type, variable.VariablesReference, this, group ? null : container, group && row.Kind != MemberKind.StaticGroup ? null : variable.EvaluateName)
+        {
+            Icon = IconOf(row),
+            Kind = row.Kind,
+            HasBadge = row.IsNonPublic && row.IsUserCode,
+            CanWrite = row.CanWrite,
+            IsDuplicate = row.IsDuplicate,
+            IsError = error,
+            CanReevaluate = reevaluate,
+            Description = Describe(row),
             Parent = parent,
         };
+        if (row.Children is { } children)
+        {
+            node.SetFixedChildren(await NodesAsync(children, node, container, cancellationToken).ConfigureAwait(true));
+        }
+
+        return node;
+    }
+
+    /// <summary>Re-evaluates a value netcoredbg couldn't (Re-evaluate on "Couldn't evaluate").</summary>
+    public virtual async Task ReevaluateAsync(VariableNode node)
+    {
+        if (Debugger is not { } debugger || node.EvaluateName is not { } expression)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await debugger.EvaluateAsync(expression, "watch").ConfigureAwait(true);
+            if (result.Result != VariableGrouping.Error)
+            {
+                node.SetError(false, canReevaluate: false);
+                node.Update(result.Result, result.Type ?? node.Type, result.VariablesReference);
+            }
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
+        {
+            // Still can't: the row keeps saying so.
+        }
+    }
+
+    /// <summary>"threw InvalidOperationException: Session has not been configured…", from the exception's Message.</summary>
+    private async Task<string> ThrewAsync(Variable variable)
+    {
+        var message = string.Empty;
+        if (variable.VariablesReference > 0)
+        {
+            try
+            {
+                var members = await _variables(variable.VariablesReference).ConfigureAwait(true);
+                message = (members.FirstOrDefault(m => m.Name == "Message") ?? members.FirstOrDefault(m => m.Name is "_message" or "message"))?.Value ?? string.Empty;
+            }
+            catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException)
+            {
+                // The type alone.
+            }
+        }
+
+        var type = VariableGrouping.ShortName(variable.Type ?? string.Empty);
+        return message.Length > 0
+            ? Localizer.Format("dataTip.threwMessage", "threw {0}: {1}", type, Visualizers.Unquote(message))
+            : Localizer.Format("dataTip.threw", "threw {0}", type);
+    }
+
+    private static string Label(DebugMember row) => row.Kind switch
+    {
+        MemberKind.NonPublicGroup => Localizer.Get("dataTip.nonPublicMembers", "Non-Public members"),
+        MemberKind.StaticGroup => Localizer.Get("dataTip.staticMembers", "Static members"),
+        MemberKind.RawView => Localizer.Get("dataTip.rawView", "Raw View"),
+        _ => row.Variable.Name,
+    };
+
+    public static string IconOf(DebugMember row) => row.Kind switch
+    {
+        MemberKind.Property => "symbol-property",
+        MemberKind.Constant => "symbol-constant",
+        MemberKind.Event => "symbol-event",
+        MemberKind.NonPublicGroup => "lock",
+        MemberKind.StaticGroup => "symbol-class",
+        MemberKind.RawView => "symbol-raw-view",
+        MemberKind.Unknown => VariableIcons.Guess(row.Variable.Name),
+        _ => "symbol-field",
+    };
+
+    /// <summary>The name's tooltip before the type, for a non-public member: "Private field of Controller (your code)".</summary>
+    private static string? Describe(DebugMember row)
+    {
+        if (!row.IsNonPublic || row.Access is not { } access || row.DeclaringType is not { } declaring)
+        {
+            return null;
+        }
+
+        var what = (access, row.Kind) switch
+        {
+            ("private", MemberKind.Property) => Localizer.Get("dataTip.privateProperty", "Private property"),
+            ("private", _) => Localizer.Get("dataTip.privateField", "Private field"),
+            ("protected", MemberKind.Property) => Localizer.Get("dataTip.protectedProperty", "Protected property"),
+            ("protected", _) => Localizer.Get("dataTip.protectedField", "Protected field"),
+            (_, MemberKind.Property) => Localizer.Get("dataTip.internalProperty", "Internal property"),
+            _ => Localizer.Get("dataTip.internalField", "Internal field"),
+        };
+        var owner = VariableGrouping.ShortName(declaring);
+        return row.IsUserCode
+            ? Localizer.Format("dataTip.memberOfYourCode", "{0} of {1} (your code)", what, owner)
+            : Localizer.Format("dataTip.memberOf", "{0} of {1}", what, owner);
+    }
 }
 
 /// <summary>The icon of a row whose kind nobody reported: guessed from its name, as for a remote program (B3).</summary>
 public static class VariableIcons
 {
-    public const string StaticMembers = "Static members";
-
-    public static string Guess(string name) =>
-        name == StaticMembers ? "symbol-class"
-        : name.StartsWith('[') || name.StartsWith('_') || (name.Length > 0 && char.IsLower(name[0])) ? "symbol-field"
-        : "symbol-property";
+    public static string Guess(string name) => VariableGrouping.Guess(name) switch
+    {
+        MemberKind.Property => "symbol-property",
+        _ => "symbol-field",
+    };
 }
 
 /// <summary>A variable (or watch, or evaluated expression) in a debugger tree; children load when it is expanded.</summary>
@@ -59,6 +212,9 @@ public sealed class VariableNode : ObservableObject
     private string _value;
     private string? _type;
     private int _reference;
+    private bool _fixed;
+    private bool _isError;
+    private bool _canReevaluate;
 
     public VariableNode(string name, string value, string? type, int reference, VariableSource? source, int? parentReference = null, string? evaluateName = null)
     {
@@ -87,6 +243,31 @@ public sealed class VariableNode : ObservableObject
 
     /// <summary>The row's icon kind (a code symbol: <c>symbol-property</c>, <c>symbol-field</c>…).</summary>
     public string Icon { get; init; } = "symbol-local";
+
+    /// <summary>What the row is (D44): a property, a field, a group…</summary>
+    public MemberKind Kind { get; init; }
+
+    /// <summary>A non-public member of the solution's own code: its icon carries the lock badge.</summary>
+    public bool HasBadge { get; init; }
+
+    /// <summary>A node the shell adds (Non-Public members, Static members, Raw View): no value of its own, no pin.</summary>
+    public bool IsGroup => Kind is MemberKind.NonPublicGroup or MemberKind.StaticGroup or MemberKind.RawView;
+
+    /// <summary>False when the member list says the value can't be set (no setter, read-only); null when nothing says.</summary>
+    public bool? CanWrite { get; init; }
+
+    /// <summary>netcoredbg's "name (Owner)" for a member a derived type hides (no evaluate name).</summary>
+    public bool IsDuplicate { get; init; }
+
+    /// <summary>"Couldn't evaluate": Re-evaluate asks again.</summary>
+    public bool CanReevaluate
+    {
+        get => _canReevaluate;
+        init => _canReevaluate = value;
+    }
+
+    /// <summary>What a non-public member is, before its type in the name's tooltip ("Private field of Controller (your code)").</summary>
+    public string? Description { get; init; }
 
     /// <summary>The muted "Loading…" row shown while the children load.</summary>
     public bool IsPlaceholder { get; private init; }
@@ -122,12 +303,49 @@ public sealed class VariableNode : ObservableObject
     public bool HasType => !string.IsNullOrEmpty(_type);
 
     /// <summary>Whether the value has members to expand (a chevron, a child tip).</summary>
-    public bool HasChildren => _reference > 0 && _source is not null;
+    public bool HasChildren => _fixed || (_reference > 0 && _source is not null);
 
-    /// <summary>The name's tooltip: the type the adapter reports (a data tip has no type column).</summary>
-    public string? NameTip => HasType ? Type : null;
+    /// <summary>The name's tooltip: what a non-public member is, and the type the adapter reports (a data tip has no type column).</summary>
+    public string? NameTip => Description is { } description ? (HasType ? $"{description} · {Type}" : description) : HasType ? Type : null;
 
-    public bool IsError { get; init; }
+    public bool IsError
+    {
+        get => _isError;
+        init => _isError = value;
+    }
+
+    /// <summary>Shows the value as an error or not (Re-evaluate's answer).</summary>
+    public void SetError(bool error, bool canReevaluate)
+    {
+        if (_isError != error)
+        {
+            _isError = error;
+            OnPropertyChanged(nameof(IsError));
+        }
+
+        if (_canReevaluate != canReevaluate)
+        {
+            _canReevaluate = canReevaluate;
+            OnPropertyChanged(nameof(CanReevaluate));
+        }
+    }
+
+    /// <summary>Asks again for a value netcoredbg couldn't evaluate.</summary>
+    public Task ReevaluateAsync() => _source?.ReevaluateAsync(this) ?? Task.CompletedTask;
+
+    /// <summary>A group's members, known already (Non-Public members, a collection view's Raw View).</summary>
+    public void SetFixedChildren(IReadOnlyList<VariableNode> children)
+    {
+        _fixed = true;
+        _loaded = true;
+        Children.Clear();
+        foreach (var child in children)
+        {
+            Children.Add(child);
+        }
+
+        OnPropertyChanged(nameof(HasChildren));
+    }
 
     public ObservableCollection<VariableNode> Children { get; } = [];
 
@@ -160,7 +378,7 @@ public sealed class VariableNode : ObservableObject
     {
         Value = value;
         Type = type;
-        if (reference == _reference && _loaded)
+        if (_fixed || (reference == _reference && _loaded))
         {
             return;
         }
@@ -294,7 +512,7 @@ public sealed class VariablesViewModel : ObservableObject
             var reference = scopes.Count > 0 ? scopes[0].VariablesReference : 0;
             foreach (var variable in variables)
             {
-                Roots.Add(new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, _source, reference, variable.EvaluateName) { Icon = VariableIcons.Guess(variable.Name) });
+                Roots.Add(new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, _source, reference, variable.EvaluateName) { Icon = "symbol-local" });
             }
 
             IsEmpty = Roots.Count == 0;
