@@ -28,7 +28,39 @@ const PAGES = [
   { file: 'ChecklistDialog.dc.html', name: 'checklist-dialog', width: 1280, height: 800, themes: VIEW_THEMES },
   { file: 'ChecklistDialog.dc.html', name: 'checklist-dialog-macos', query: 'os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
   { file: 'AiChat.dc.html', name: 'ai-chat', width: 1280, height: 800, themes: VIEW_THEMES },
-  { file: 'Options.dc.html', name: 'options', width: 1280, height: 800, themes: VIEW_THEMES }
+  { file: 'Options.dc.html', name: 'options', width: 1280, height: 800, themes: VIEW_THEMES },
+  { file: 'WinFormsDesignerMenus.dc.html', name: 'winforms-designer-menus', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-color', query: 'state=Color', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  // The font editor keeps the Properties window inactive: Classic High Contrast shows the selected name's outline there.
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-font', query: 'state=Font', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light', 'Classic High Contrast'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-invalid', query: 'state=Invalid', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  // The window's other states, checked in every theme but not rendered: the sheet above shows each of them.
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-alignment', query: 'state=Alignment', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-strings', query: 'state=Strings', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-resource', query: 'state=Resource', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-file', query: 'state=File', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-events', query: 'state=Events', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-multiple', query: 'state=Multiple', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-reference', query: 'state=Reference', width: 1280, height: 800, themes: [] },
+  { file: 'GitChanges.dc.html', name: 'git-changes', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-folder', query: 'state=folder', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-branch-menu', query: 'state=branch-menu', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-delete-unmerged', query: 'state=delete-unmerged', width: 1280, height: 800, themes: ['Classic Light'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-folder-macos', query: 'state=folder&os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
+  // A danger dialog's buttons on macOS: Cancel, the default, stays at the trailing edge.
+  { file: 'GitChanges.dc.html', name: 'git-changes-delete-macos', query: 'state=delete&os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
+  // Update (question 21, the maintainer's request after D38's approval): the entry, and a branch that has diverged.
+  { file: 'GitChanges.dc.html', name: 'git-changes-update-menu', query: 'state=update-menu', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-update-diverged', query: 'state=update-diverged', width: 1280, height: 800, themes: ['Harbor Light'] },
+  // The other states in the whole window, checked in every theme but not rendered: the sheet above shows each of them.
+  ...['changes', 'staged-folder', 'deleted-folder', 'untracked-folder', 'filtered', 'file-menu', 'staged-file', 'deleted-file', 'repo-menu', 'conflict-file',
+    'conflict-folder', 'discard', 'discard-filtered', 'stash', 'new-branch', 'new-branch-operation', 'rename', 'delete', 'delete-upstream',
+    'delete-unmerged-upstream', 'delete-remote', 'compare', 'compare-loading', 'compare-same', 'branches', 'search', 'nomatch', 'loading', 'error', 'many',
+    'branch-actions', 'current-menu', 'remote-menu', 'remote-twin', 'worktree', 'worktree-enter', 'detached', 'operation', 'unborn', 'noremote',
+    'noremote-link', 'long-row', 'long-name', 'narrow', 'updating', 'updated', 'update-worktree']
+    .map((state) => ({ file: 'GitChanges.dc.html', name: `git-changes-${state}`, query: `state=${state}`, width: 1280, height: 800, themes: [] })),
+  { file: 'PackageManager.dc.html', name: 'package-manager', width: 1280, height: 800, full: true, themes: ALL }
 ];
 
 const slug = (s) => s.toLowerCase().replace(/\s+/g, '-');
