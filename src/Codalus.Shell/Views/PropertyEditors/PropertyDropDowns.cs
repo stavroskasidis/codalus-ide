@@ -48,6 +48,9 @@ internal static class PropertyDropDowns
         PropertyRowKind.Multiline => "multiline",
         PropertyRowKind.ShortcutKeys => "shortcutKeys",
         PropertyRowKind.Date => "date",
+
+        // A Text row whose value has a line break (an extender's ToolTip): the multi-line editor, as it has no text box (D41 question 16).
+        PropertyRowKind.Text when row.HasLineBreaks => "multiline",
         _ => "choice",
     };
 
@@ -147,7 +150,11 @@ internal sealed class ChoiceDropDown : Border, IPropertyDropDown
     public void FocusFirst() => (_list.ContainerFromItem(_list.SelectedItem ?? new object()) ?? (Control)_list).Focus();
 }
 
-/// <summary>A flags enum's names, each a check box; a change commits the checked names ("None" when none is).</summary>
+/// <summary>
+/// A flags enum's names, each a check box; a change commits the checked names ("None" when none is). Each box names its
+/// flag to the row, which toggles it in the flags it has now: a commit refreshes the row with new flags while the
+/// drop-down stays open, and the next box adds to that value.
+/// </summary>
 internal sealed class FlagsDropDown : Border, IPropertyDropDown
 {
     private readonly StackPanel _panel = new() { Spacing = 2, Margin = new Thickness(8, 6) };
@@ -157,14 +164,18 @@ internal sealed class FlagsDropDown : Border, IPropertyDropDown
         Child = new ScrollViewer { Content = _panel, MaxHeight = 260 };
     }
 
+    /// <summary>The boxes (tests).</summary>
+    public IEnumerable<CheckBox> Boxes => _panel.Children.OfType<CheckBox>();
+
     public void Open(PropertyRowViewModel row, PropertyGridViewModel grid, Action close)
     {
         _panel.Children.Clear();
         foreach (var flag in row.Flags)
         {
-            var box = new CheckBox { Content = flag.Name, IsChecked = flag.IsChecked };
-            box.IsCheckedChanged += (_, _) => flag.IsChecked = box.IsChecked == true;
-            Avalonia.Automation.AutomationProperties.SetName(box, flag.Name);
+            var name = flag.Name;
+            var box = new CheckBox { Content = name, IsChecked = flag.IsChecked };
+            box.IsCheckedChanged += (_, _) => row.SetFlag(name, box.IsChecked == true);
+            Avalonia.Automation.AutomationProperties.SetName(box, name);
             _panel.Children.Add(box);
         }
     }

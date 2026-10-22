@@ -41,6 +41,9 @@ public sealed class PropertyGridViewTests
 
         public List<string> Commits { get; } = [];
 
+        /// <summary>A read-only row's value (a file's Full Path), shown in Misc when set.</summary>
+        public string? ReadOnlyPath { get; set; }
+
         public string PropertiesTitle => "button1 System.Windows.Forms.Button";
 
         public bool HasEvents => true;
@@ -97,6 +100,7 @@ public sealed class PropertyGridViewTests
             new("Misc", Row("ShortcutKeys", PropertyRowKind.ShortcutKeys, ["None", "N", "S", "F4"])),
             new("Behavior", Row("Value", PropertyRowKind.Date)),
             new("Appearance", new PropertyRowViewModel("Cursor", _values["Cursor"], PropertyRowKind.Choice, "The Cursor.", Commit("Cursor"), [new("Default", "Default"), new("Hand", "Hand"), new("IBeam", "IBeam")]) { ChoicesEditable = true, IsCursor = true }),
+            .. ReadOnlyPath is { } path ? [new DesignerPropertyRow("Misc", new PropertyRowViewModel("Full Path", path, PropertyRowKind.ReadOnly, "The file's path."))] : Array.Empty<DesignerPropertyRow>(),
         ]);
 
         public Task<IReadOnlyList<DesignerPropertyRow>> EventRowsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<DesignerPropertyRow>>([]);
@@ -114,7 +118,9 @@ public sealed class PropertyGridViewTests
         return (f, source, view);
     }
 
-    internal static Control? Container(PropertiesWindowView view, object item) => view.Grid.GetVisualDescendants().OfType<ItemsControl>().First(i => i.Name == "Rows").ContainerFromItem(item);
+    internal static ItemsControl Rows(PropertiesWindowView view) => view.Grid.GetVisualDescendants().OfType<ItemsControl>().First(i => i.Name == "Rows");
+
+    internal static Control? Container(PropertiesWindowView view, object item) => Rows(view).ContainerFromItem(item);
 
     internal static TextBox? Editor(PropertiesWindowView view, PropertyRowViewModel row) =>
         Container(view, row)?.GetVisualDescendants().OfType<TextBox>().FirstOrDefault(t => t.Classes.Contains("editor"));
@@ -294,7 +300,10 @@ public sealed class PropertyGridViewTests
         color.SelectTab(PropertyColors.CustomTab);
         color.Define(0);
         Assert.True(color.IsDefining);
+        Assert.Equal("Custom color 1", color.SlotText); // panel (d): the slot's name beside "Define Color"
         color.SetChannels(Avalonia.Media.Color.FromRgb(255, 128, 0));
+        Assert.True(color.TrackColor is { R: 255, G: >= 126 and <= 129, B: 0 }, color.TrackColor.ToString()); // the brightness bar: black, the color, white
+        NavigationDepthTests.Screenshot(f, "m68-define-color");
         color.AcceptDefine();
         await ShellFixture.PumpUntil(() => source.Commits.Contains("ForeColor=255, 128, 0") && view.Grid.OpenDropDownControl is null);
         Assert.Equal(Avalonia.Media.Color.FromRgb(255, 128, 0), grid.CustomColors[0]);
@@ -308,6 +317,7 @@ public sealed class PropertyGridViewTests
         // Multi-line text: committed with CRLF when it closes; Esc cancels.
         view.Grid.OpenDropDown(grid.Find("Notes")!);
         var multiline = Assert.IsType<MultilineTextDropDown>(view.Grid.OpenDropDownControl);
+        Assert.Equal(["Enter", "Ctrl+Enter", "Esc"], multiline.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("kbd")).Select(b => ((TextBlock)b.Child!).Text));
         multiline.Box.Text = "a\nb";
         view.Grid.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.Popup>().Single(p => p.Name == "DropDown").IsOpen = false;
         await ShellFixture.PumpUntil(() => source.Commits.Contains("Notes=a\r\nb"));
@@ -346,5 +356,202 @@ public sealed class PropertyGridViewTests
         list.Pick();
         await ShellFixture.PumpUntil(() => source.Commits.Contains("Cursor=Hand"));
         NavigationDepthTests.Screenshot(f, "m68-properties-drop-downs");
+    }
+
+    [AvaloniaFact]
+    public async Task The_flags_drop_down_adds_each_box_to_the_value_a_refresh_brought()
+    {
+        var (f, source, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+        var style = grid.Find("Style")!;
+        view.Grid.OpenDropDown(style);
+        var flags = Assert.IsType<FlagsDropDown>(view.Grid.OpenDropDownControl);
+        Assert.Equal(["Bold"], flags.Boxes.Where(b => b.IsChecked == true).Select(b => (string)b.Content!));
+
+        // Italic commits, and the refresh gives the row new flags while the drop-down stays open; Underline adds to them.
+        flags.Boxes.Single(b => (string)b.Content! == "Italic").IsChecked = true;
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("Style=Bold, Italic") && grid.Find("Style")!.Value == "Bold, Italic");
+        Assert.Same(flags, view.Grid.OpenDropDownControl);
+        flags.Boxes.Single(b => (string)b.Content! == "Underline").IsChecked = true;
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("Style=Bold, Italic, Underline"));
+        flags.Boxes.Single(b => (string)b.Content! == "Bold").IsChecked = false;
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("Style=Italic, Underline"));
+    }
+
+    [AvaloniaFact]
+    public async Task Keys_in_the_footer_stay_the_footers()
+    {
+        var (f, source, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+        var clicks = 0;
+        var link = new Button { Content = "Open Project Properties (Alt+Enter)", Classes = { "link" } };
+        link.Click += (_, _) => clicks++;
+        Avalonia.Automation.AutomationProperties.SetName(link, "Open Project Properties");
+        var footer = view.Grid.Footer;
+        view.Grid.Footer = link;
+        try
+        {
+            await ShellFixture.PumpUntil(() => link.IsEffectivelyVisible);
+            grid.SelectedRow = grid.Find("Enabled");
+            link.Focus();
+            ShellFixture.Pump();
+
+            // Enter activates the link, not the selected row; Down leaves the selection and the focus where they are.
+            f.Press(Key.Enter);
+            Assert.Equal(1, clicks);
+            Assert.DoesNotContain(source.Commits, c => c.StartsWith("Enabled=", StringComparison.Ordinal));
+            f.Press(Key.Down);
+            Assert.Equal("Enabled", grid.SelectedRow?.Name);
+            Assert.True(link.IsFocused);
+        }
+        finally
+        {
+            view.Grid.Footer = footer;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_row_menu_resets_and_toggles_the_description_and_the_splitters_are_clamped()
+    {
+        var (f, _, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+        var menu = Assert.IsType<ContextMenu>(Rows(view).ContextMenu);
+        var items = menu.Items.OfType<MenuItem>().ToList();
+        Assert.Equal(["Reset", "Description"], items.Select(i => i.Header as string));
+
+        // On a row: its Reset (grayed when the row can't be reset), and Description checked while the pane shows.
+        var text = grid.Find("Text")!;
+        grid.SelectedRow = text;
+        Container(view, text)!.RaiseEvent(new ContextRequestedEventArgs()); // a right-click on the row (Shift+F10, the Menu key)
+        await ShellFixture.PumpUntil(() => menu.IsOpen);
+        Assert.Same(text, menu.DataContext);
+        Assert.Equal(text.ResetCommand.CanExecute(null), items[0].Command?.CanExecute(null) ?? false);
+        Assert.True(items[1].IsChecked);
+        var pane = view.Grid.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "DescriptionPane");
+        Assert.True(pane.IsVisible);
+        items[1].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        menu.Close();
+        Assert.False(grid.ShowDescription);
+        ShellFixture.Pump();
+        Assert.False(pane.IsVisible);
+        Container(view, text)!.RaiseEvent(new ContextRequestedEventArgs()); // a right-click on the row (Shift+F10, the Menu key)
+        await ShellFixture.PumpUntil(() => menu.IsOpen);
+        Assert.False(items[1].IsChecked);
+        items[1].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        menu.Close();
+        Assert.True(grid.ShowDescription);
+
+        // The description's height and the names' share stay within their bounds.
+        grid.DescriptionHeight = 10;
+        Assert.Equal(40, grid.DescriptionHeight);
+        grid.DescriptionHeight = 1000;
+        Assert.Equal(400, grid.DescriptionHeight);
+        grid.NameColumnRatio = 0;
+        Assert.Equal(0.15, grid.NameColumnRatio);
+        grid.NameColumnRatio = 1;
+        Assert.Equal(0.85, grid.NameColumnRatio);
+        grid.NameColumnRatio = 0.45;
+        grid.DescriptionHeight = 76;
+    }
+
+    [AvaloniaFact]
+    public async Task A_name_or_a_value_shows_its_tooltip_only_while_it_is_clipped()
+    {
+        var (f, _, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+        TextBlock Name(PropertyRowViewModel row) => Container(view, row)!.GetVisualDescendants().OfType<TextBlock>().First(t => t.Classes.Contains("clipTip") && t.Text == row.Name);
+        var keys = grid.Find("ShortcutKeys")!;
+        Assert.Equal("ShortcutKeys", keys.NameToolTip); // the name alone, as panel (a) draws it
+
+        grid.NameColumnRatio = 0.15;
+        await ShellFixture.PumpUntil(() => Name(keys).Bounds.Width < 50);
+        Assert.True(PropertyGridView.IsClipped(Name(keys)));
+        grid.NameColumnRatio = 0.85;
+        await ShellFixture.PumpUntil(() => Name(keys).Bounds.Width > 100);
+        Assert.False(PropertyGridView.IsClipped(Name(keys)));
+        Assert.False(PropertyGridView.IsClipped(Editor(view, grid.Find("Text")!)!));
+        grid.NameColumnRatio = 0.45;
+    }
+
+    [AvaloniaFact]
+    public async Task A_read_only_value_is_selectable_and_ctrl_c_copies_a_rows_value()
+    {
+        var (f, source, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+        source.ReadOnlyPath = @"C:\src\WinFormsApp\OrderForm.cs";
+        source.Changed();
+        await ShellFixture.PumpUntil(() => grid.Find("Full Path") is not null && Container(view, grid.Find("Full Path")!) is not null);
+        var path = grid.Find("Full Path")!;
+        var value = Assert.IsType<SelectableTextBlock>(Container(view, path)!.GetVisualDescendants().OfType<Control>().Single(c => c.Classes.Contains("editor")));
+        Assert.Equal(source.ReadOnlyPath, value.Text);
+
+        // Ctrl+C on the row copies its whole value.
+        grid.SelectedRow = path;
+        Rows(view).Focus();
+        ShellFixture.Pump();
+        f.Press(Key.C, ShellFixture.Primary);
+        await ShellFixture.PumpUntil(() => Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(f.Window.Clipboard!).Result == source.ReadOnlyPath);
+    }
+
+    [AvaloniaFact]
+    public void A_grid_view_listens_to_its_grid_only_while_it_is_shown()
+    {
+        var grid = new PropertyGridViewModel();
+        var view = new PropertyGridView { DataContext = grid };
+        Assert.False(view.IsListening);
+        var window = new Window { Width = 300, Height = 300, Content = view };
+        window.Show();
+        ShellFixture.Pump();
+        Assert.True(view.IsListening);
+        window.Content = null;
+        ShellFixture.Pump();
+        Assert.False(view.IsListening);
+        window.Content = view;
+        ShellFixture.Pump();
+        Assert.True(view.IsListening);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task In_high_contrast_the_selected_name_and_the_row_under_the_pointer_are_outlined()
+    {
+        var (f, _, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+        var text = grid.Find("Text")!;
+        grid.SelectedRow = text;
+        var old = f.Window.RequestedThemeVariant;
+        try
+        {
+            foreach (var (_, variant) in Codalus.Shell.Theming.ThemeService.Themes.Where(t => Codalus.Shell.Theming.ThemeService.IsHighContrast(t.Variant)))
+            {
+                f.Window.RequestedThemeVariant = variant;
+                ShellFixture.Pump();
+                ShellFixture.Pump();
+
+                // The grid without the keyboard (the component selector, or the font editor, has it): the inactive selection is
+                // near black, so the name is outlined.
+                view.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "ComponentSelector").Focus();
+                await ShellFixture.PumpUntil(() => !view.Grid.IsKeyboardFocusWithin);
+                var name = Container(view, text)!.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("nameCell"));
+                Assert.True(name.BoxShadow.Count == 1, $"{variant}: {name.BoxShadow}");
+                var outline = name.BoxShadow[0];
+                Assert.True(outline is { IsInset: true, Spread: >= 1 } && outline.Color.A == 255, $"{variant}: {outline}");
+
+                // The row under the pointer takes the same outline (Border.pgRow:pointerover).
+                var row = Container(view, text)!.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("pgRow"));
+                Assert.True(row.TryFindResource("Shell.Row.Hover.Outline", variant, out var hover) && hover is Avalonia.Media.BoxShadows { Count: 1 } shadows && shadows[0].Color.A == 255, variant.ToString());
+            }
+        }
+        finally
+        {
+            f.Window.RequestedThemeVariant = old;
+            ShellFixture.Pump();
+        }
     }
 }

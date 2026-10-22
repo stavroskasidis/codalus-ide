@@ -12,8 +12,9 @@ using Codalus.Shell.Views.PropertyEditors;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// One editor per row (#68): the cell's text box, or its value as text (a read-only value, an exclusive choice, a
-/// picker, a value with line breaks). Only the template a row needs is built, unlike a template that hides the others.
+/// One editor per row (#68): the cell's text box, a read-only value as selectable text (M34g: a Full Path is selected
+/// and copied), or the value as text (an exclusive choice, a picker, a value with line breaks). Only the template a row
+/// needs is built, unlike a template that hides the others.
 /// </summary>
 public sealed class PropertyEditorSelector : IDataTemplate
 {
@@ -21,7 +22,11 @@ public sealed class PropertyEditorSelector : IDataTemplate
 
     public IDataTemplate? Value { get; set; }
 
-    public Control? Build(object? param) => param is PropertyRowViewModel row ? (row.ShowsTextBox ? TextBox : Value)?.Build(param) : null;
+    public IDataTemplate? ReadOnly { get; set; }
+
+    public Control? Build(object? param) => param is PropertyRowViewModel row
+        ? (row.ShowsTextBox ? TextBox : row.IsReadOnly && !row.HasModalEditor ? ReadOnly ?? Value : Value)?.Build(param)
+        : null;
 
     public bool Match(object? data) => data is PropertyRowViewModel;
 }
@@ -39,8 +44,31 @@ public sealed partial class PropertyGridView : UserControl
 
     private readonly Dictionary<string, Control> _dropDowns = new(StringComparer.Ordinal);
     private PropertyGridViewModel? _vm;
+    private PropertyGridViewModel? _subscribed;
     private PropertyRowViewModel? _dropDownRow;
     private Point? _splitterDrag;
+
+    static PropertyGridView()
+    {
+        // A name or a value shows its tooltip only while it is clipped (D41 question 19): the tooltip is always set, so a
+        // clipped text always has one, and its opening is cancelled while the whole text shows.
+        ToolTip.ToolTipOpeningEvent.AddClassHandler<Control>((control, e) =>
+        {
+            if (control.Classes.Contains("clipTip") && !IsClipped(control))
+            {
+                e.Cancel = true;
+            }
+        });
+    }
+
+    /// <summary>Whether a name's or a value's text is cut off: a trimmed text block, or a text box whose text is wider than it.</summary>
+    internal static bool IsClipped(Control control) => control switch
+    {
+        TextBlock text => text.TextLayout.TextLines.Any(l => l.HasCollapsed),
+        TextBox box => box.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.TextPresenter>().FirstOrDefault() is { } presenter
+            && presenter.TextLayout.WidthIncludingTrailingWhitespace > presenter.Bounds.Width + 0.5,
+        _ => true,
+    };
 
     public PropertyGridView()
     {
@@ -107,23 +135,51 @@ public sealed partial class PropertyGridView : UserControl
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_vm is not null)
-        {
-            _vm.PropertyChanged -= OnViewModelChanged;
-            _vm.DropDownRequested -= OnDropDownRequested;
-            _vm.EditRequested -= OnEditRequested;
-        }
-
         _vm = DataContext as PropertyGridViewModel;
-        if (_vm is not null)
-        {
-            _vm.PropertyChanged += OnViewModelChanged;
-            _vm.DropDownRequested += OnDropDownRequested;
-            _vm.EditRequested += OnEditRequested;
-        }
-
+        Subscribe(this.IsAttachedToVisualTree() ? _vm : null);
         UpdateLayoutMetrics();
     }
+
+    // The view listens to its grid only while it is shown: a view taken out of the tree (the collection editor's, when
+    // another item is chosen) neither keeps posting work nor stays alive through the grid's events.
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        Subscribe(_vm);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        DropDown.IsOpen = false;
+        Subscribe(null);
+    }
+
+    private void Subscribe(PropertyGridViewModel? vm)
+    {
+        if (ReferenceEquals(_subscribed, vm))
+        {
+            return;
+        }
+
+        if (_subscribed is { } old)
+        {
+            old.PropertyChanged -= OnViewModelChanged;
+            old.DropDownRequested -= OnDropDownRequested;
+            old.EditRequested -= OnEditRequested;
+        }
+
+        _subscribed = vm;
+        if (vm is not null)
+        {
+            vm.PropertyChanged += OnViewModelChanged;
+            vm.DropDownRequested += OnDropDownRequested;
+            vm.EditRequested += OnEditRequested;
+        }
+    }
+
+    /// <summary>Whether the view listens to its grid's events (tests: not while it is out of the tree).</summary>
+    internal bool IsListening => _subscribed is not null;
 
     private void OnViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -209,9 +265,10 @@ public sealed partial class PropertyGridView : UserControl
         }
 
         _vm.SelectedItem = item;
-        if (e.Source is Visual visual && visual.FindAncestorOfType<TextBox>(includeSelf: true) is null)
+        if (e.Source is Visual visual && visual.FindAncestorOfType<TextBox>(includeSelf: true) is null && visual.FindAncestorOfType<SelectableTextBlock>(includeSelf: true) is null)
         {
-            // A click on a name (or a value shown as text) gives the grid the keyboard.
+            // A click on a name (or a value shown as text) gives the grid the keyboard; a read-only value takes it itself,
+            // so a part of it can be selected and copied.
             Rows.Focus();
         }
     }
@@ -323,14 +380,24 @@ public sealed partial class PropertyGridView : UserControl
 
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
-        if (_vm is not { IsEnabled: true } vm || DropDown.IsOpen)
+        // Only keys pressed in the rows: the footer's links (Enter activates the focused one) and the description keep theirs.
+        if (_vm is not { IsEnabled: true } vm || DropDown.IsOpen || e.Source is not Visual source || !source.GetSelfAndVisualAncestors().Contains(Rows))
         {
             return;
         }
 
-        var box = (e.Source as Visual)?.FindAncestorOfType<TextBox>(includeSelf: true);
+        var box = source.FindAncestorOfType<TextBox>(includeSelf: true);
         if (box is not null && !box.Classes.Contains("editor"))
         {
+            return;
+        }
+
+        // Ctrl+C (Cmd+C) on a row, outside a text box and a selection in a read-only value: the row's whole value.
+        if (e.Key == Key.C && e.KeyModifiers == (OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control) && box is null
+            && vm.SelectedRow is { IsMixed: false } copied && !HasTextSelection(source))
+        {
+            _ = SafeClipboard.TrySetTextAsync(TopLevel.GetTopLevel(this)?.Clipboard, copied.Value);
+            e.Handled = true;
             return;
         }
 
@@ -420,6 +487,10 @@ public sealed partial class PropertyGridView : UserControl
                 break;
         }
     }
+
+    /// <summary>Part of a read-only value is selected: Ctrl+C copies that part (the text block's own copy).</summary>
+    private static bool HasTextSelection(Visual source) =>
+        source.FindAncestorOfType<SelectableTextBlock>(includeSelf: true) is { } selectable && selectable.SelectionStart != selectable.SelectionEnd;
 
     /// <summary>Commits a text box's text (Enter, or moving away with the arrows), keeping the focus.</summary>
     private static void Commit(TextBox? box, PropertyRowViewModel? row)

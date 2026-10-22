@@ -37,6 +37,21 @@ internal static class DropDownParts
         Brush(block, TextBlock.ForegroundProperty, "Shell.MutedForeground");
         return block;
     }
+
+    /// <summary>A key hint as the shell draws one (the dialog's): each key a cap (Border.kbd), then what it does, muted.</summary>
+    public static WrapPanel KeyHint(params (string Key, string Does)[] parts)
+    {
+        var hint = new WrapPanel { Orientation = Orientation.Horizontal };
+        foreach (var (key, does) in parts)
+        {
+            hint.Children.Add(new Border { Classes = { "kbd" }, Margin = new Thickness(0, 1, 4, 1), Child = new TextBlock { Text = key, FontSize = 11 } });
+            var text = new TextBlock { Text = does, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            Brush(text, TextBlock.ForegroundProperty, "Shell.MutedForeground");
+            hint.Children.Add(text);
+        }
+
+        return hint;
+    }
 }
 
 /// <summary>
@@ -55,7 +70,9 @@ internal sealed class ColorDropDown : Border, IPropertyDropDown
     private readonly WrapPanel _custom = new() { Margin = new Thickness(10, 10, 6, 4), ItemWidth = 24, ItemHeight = 24 };
     private readonly StackPanel _define = new() { Spacing = 6, Margin = new Thickness(10) };
     private readonly Border _defineSpectrum = new() { Height = 62, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2) };
-    private readonly Slider _brightness = new() { Minimum = 0, Maximum = 1, Value = 0.5, Height = 24 };
+    private readonly Slider _brightness = new() { Minimum = 0, Maximum = 1, Value = 0.5, Height = 24, Background = Brushes.Transparent, Foreground = Brushes.Transparent };
+    private readonly Border _brightnessTrack = new() { Height = 10, CornerRadius = new CornerRadius(2), BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0) };
+    private readonly TextBlock _slot = new() { FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
     private readonly TextBox _red = Channel("R");
     private readonly TextBox _green = Channel("G");
     private readonly TextBox _blue = Channel("B");
@@ -239,14 +256,19 @@ internal sealed class ColorDropDown : Border, IPropertyDropDown
 
     private void BuildDefine()
     {
+        // Panel (d): "Define Color", the slot's name muted and the preview.
         var title = new TextBlock { Text = Localizer.Get("msg.propertyGrid.defineColor", "Define Color"), FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
         var header = new DockPanel { Children = { title } };
         DockPanel.SetDock(title, Avalonia.Controls.Dock.Left);
         DockPanel.SetDock(_preview, Avalonia.Controls.Dock.Right);
+        DockPanel.SetDock(_slot, Avalonia.Controls.Dock.Right);
         header.Children.Insert(0, _preview);
+        header.Children.Insert(1, _slot);
+        DropDownParts.Brush(_slot, TextBlock.ForegroundProperty, "Shell.MutedForeground");
         DropDownParts.Brush(_preview, Border.BorderBrushProperty, "Shell.Border");
 
-        // The spectrum: hue across, saturation down; a click picks both. The slider is the brightness.
+        // The spectrum: hue across, saturation down; a click picks both. The slider is the brightness (the classic dialog's
+        // luminosity), over a bar from black through the color to white.
         _defineSpectrum.Background = new LinearGradientBrush
         {
             StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
@@ -274,6 +296,7 @@ internal sealed class ColorDropDown : Border, IPropertyDropDown
             }
         };
         DropDownParts.Named(_brightness, Localizer.Get("msg.propertyGrid.brightness", "Brightness"));
+        DropDownParts.Brush(_brightnessTrack, Border.BorderBrushProperty, "Shell.Border");
         _brightness.PropertyChanged += (_, e) =>
         {
             if (e.Property == RangeBase.ValueProperty && !_syncing)
@@ -311,7 +334,7 @@ internal sealed class ColorDropDown : Border, IPropertyDropDown
 
         _define.Children.Add(header);
         _define.Children.Add(_defineSpectrum);
-        _define.Children.Add(_brightness);
+        _define.Children.Add(new Panel { Children = { _brightnessTrack, _brightness } });
         _define.Children.Add(channels);
         _define.Children.Add(buttons);
     }
@@ -320,6 +343,7 @@ internal sealed class ColorDropDown : Border, IPropertyDropDown
     public void Define(int slot)
     {
         _defining = slot;
+        _slot.Text = Localizer.Format("msg.propertyGrid.customColorSlot", "Custom color {0}", slot + 1);
         var start = _grid?.CustomColors[slot] ?? (_row is null ? null : PropertyRowViewModel.ParseColor(_row.Value)) ?? Colors.White;
         SetChannels(start);
         ShowTab();
@@ -333,11 +357,12 @@ internal sealed class ColorDropDown : Border, IPropertyDropDown
         _red.Text = color.R.ToString(CultureInfo.InvariantCulture);
         _green.Text = color.G.ToString(CultureInfo.InvariantCulture);
         _blue.Text = color.B.ToString(CultureInfo.InvariantCulture);
-        var hsv = color.ToHsv();
-        _hue = hsv.H;
-        _saturation = hsv.S;
-        _brightness.Value = hsv.V;
+        var hsl = color.ToHsl();
+        _hue = hsl.H;
+        _saturation = hsl.S;
+        _brightness.Value = hsl.L;
         _syncing = false;
+        UpdateTrack();
         UpdatePreview();
     }
 
@@ -356,12 +381,27 @@ internal sealed class ColorDropDown : Border, IPropertyDropDown
         var height = Math.Max(1, _defineSpectrum.Bounds.Height);
         _hue = Math.Clamp(at.X / width, 0, 1) * 360;
         _saturation = 1 - Math.Clamp(at.Y / height, 0, 1);
+        UpdateTrack();
         FromHsb();
     }
 
+    /// <summary>The brightness bar: black, the spectrum's color at half brightness, white.</summary>
+    private void UpdateTrack() => _brightnessTrack.Background = new LinearGradientBrush
+    {
+        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+        EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+        GradientStops = { new GradientStop(Colors.Black, 0), new GradientStop(HslColor.ToRgb(_hue % 360, _saturation, 0.5), 0.5), new GradientStop(Colors.White, 1) },
+    };
+
+    /// <summary>The brightness bar's middle color (tests).</summary>
+    public Color TrackColor => _brightnessTrack.Background is LinearGradientBrush { GradientStops: [_, var middle, _] } ? middle.Color : default;
+
+    /// <summary>The custom slot's name beside "Define Color" (tests).</summary>
+    public string SlotText => _slot.Text ?? string.Empty;
+
     private void FromHsb()
     {
-        var color = HsvColor.ToRgb(_hue % 360, _saturation, _brightness.Value);
+        var color = HslColor.ToRgb(_hue % 360, _saturation, _brightness.Value);
         _syncing = true;
         _red.Text = color.R.ToString(CultureInfo.InvariantCulture);
         _green.Text = color.G.ToString(CultureInfo.InvariantCulture);
@@ -534,7 +574,15 @@ internal sealed class MultilineTextDropDown : Border, IPropertyDropDown
         Child = new StackPanel
         {
             Spacing = 6,
-            Children = { _box, DropDownParts.Muted(Localizer.Get("msg.propertyGrid.multilineHint", "Enter adds a line · Ctrl+Enter applies · Esc cancels")) },
+            // The keys as caps, as panel (f) draws them.
+            Children =
+            {
+                _box,
+                DropDownParts.KeyHint(
+                    (Localizer.Get("msg.propertyGrid.keyEnter", "Enter"), Localizer.Get("msg.propertyGrid.hintAddsLine", "adds a line")),
+                    (Localizer.Get("msg.propertyGrid.keyCtrlEnter", "Ctrl+Enter"), Localizer.Get("msg.propertyGrid.hintApplies", "applies")),
+                    (Localizer.Get("msg.propertyGrid.keyEsc", "Esc"), Localizer.Get("msg.propertyGrid.hintCancels", "cancels"))),
+            },
         };
     }
 

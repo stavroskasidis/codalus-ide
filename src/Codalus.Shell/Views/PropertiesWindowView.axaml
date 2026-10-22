@@ -39,8 +39,8 @@
           <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="type-hierarchy" IsChecked="{Binding !Alphabetical, Mode=OneWay}" Command="{Binding CategorizedCommand}" ToolTip.Tip="{l:T properties.categorized}" AutomationProperties.Name="{l:T properties.categorized}" />
           <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="arrow-sort" IsChecked="{Binding Alphabetical, Mode=OneWay}" Command="{Binding AlphabeticalCommand}" ToolTip.Tip="{l:T properties.alphabetical}" AutomationProperties.Name="{l:T properties.alphabetical}" />
           <Border Classes="toolbarSeparator" />
-          <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="properties" IsVisible="{Binding HasDesignerSource}" IsChecked="{Binding !ShowEvents, Mode=OneWay}" Command="{Binding PropertiesCommand}" ToolTip.Tip="{l:T properties.properties}" AutomationProperties.Name="{l:T properties.properties}" />
-          <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="events" IsVisible="{Binding HasDesignerSource}" IsChecked="{Binding ShowEvents, Mode=OneWay}" Command="{Binding EventsCommand}" ToolTip.Tip="{l:T properties.events}" AutomationProperties.Name="{l:T properties.events}" />
+          <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="properties" IsVisible="{Binding HasDesignerSource}" IsChecked="{Binding !IsShowingEvents, Mode=OneWay}" Command="{Binding PropertiesCommand}" ToolTip.Tip="{l:T properties.properties}" AutomationProperties.Name="{l:T properties.properties}" />
+          <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="events" IsVisible="{Binding HasDesignerSource}" IsChecked="{Binding IsShowingEvents, Mode=OneWay}" Command="{Binding EventsCommand}" ToolTip.Tip="{l:T properties.events}" AutomationProperties.Name="{l:T properties.events}" />
           <Border Classes="toolbarSeparator" IsVisible="{Binding HasDesignerSource}" />
           <Button Classes="toolbar icon" controls:ButtonIcon.Kind="tools" Command="{Binding PropertyPagesCommand}" ToolTip.Tip="{l:T properties.propertyPages}" AutomationProperties.Name="{l:T properties.propertyPages}" />
         </controls:ToolbarPanel>

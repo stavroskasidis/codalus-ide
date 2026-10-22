@@ -131,7 +131,9 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
             DefaultButton = ok,
             Context = grid.Context is { Length: > 0 } context ? $"{context} · {e.Row.Path}" : e.Row.Path,
         }).ConfigureAwait(true);
+        // Back to the row, shown (a part's parent expanded) and selected, whichever row was selected meanwhile.
         var row = grid.Find(e.Row.Path) ?? e.Row;
+        grid.Reveal(row);
         grid.SelectedItem = grid.Items.Contains(row) ? row : grid.SelectedItem;
         if (result.Button == ok)
         {
@@ -208,10 +210,18 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         {
             if (SetField(ref _showEvents, value))
             {
+                OnPropertyChanged(nameof(IsShowingEvents));
                 QueueRefresh();
             }
         }
     }
+
+    /// <summary>
+    /// The events are what the grid shows (the toolbar's checked button): Events was chosen and the selection has them.
+    /// Two components selected show their properties, with Properties checked and Events grayed (D41, panel r), and
+    /// one component again shows its events.
+    /// </summary>
+    public bool IsShowingEvents => _showEvents && _source?.HasEvents == true;
 
     /// <summary>The properties sorted by name rather than by category (#68: for every source, the Solution Explorer's too).</summary>
     public bool Alphabetical
@@ -276,6 +286,7 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         }
 
         OnPropertyChanged(nameof(IsInputEnabled));
+        OnPropertyChanged(nameof(IsShowingEvents));
         Grid.IsEnabled = IsInputEnabled;
         ((RelayCommand)EventsCommand).RaiseCanExecuteChanged();
         ((RelayCommand)PropertyPagesCommand).RaiseCanExecuteChanged();

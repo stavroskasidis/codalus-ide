@@ -89,6 +89,12 @@ public sealed class PropertyRowViewModel : ObservableObject
     private bool _isMixed;
     private string? _path;
     private string? _committed;
+    private ICommand? _action;
+    private string _actionTitle = string.Empty;
+    private string _actionIcon = "go-to";
+    private ICommand? _secondaryAction;
+    private string _secondaryActionTitle = string.Empty;
+    private bool _isCursor;
 
     public PropertyRowViewModel(string name, string value, PropertyRowKind kind, string description, Func<string?, Task>? commit = null, IReadOnlyList<PropertyOption>? options = null, bool isSet = false)
     {
@@ -144,10 +150,10 @@ public sealed class PropertyRowViewModel : ObservableObject
 
     public string Description => _description;
 
-    /// <summary>The trimmed name's tooltip: the whole name, and the description when there is one (M34g: rows without one had none).</summary>
-    public string NameToolTip => string.IsNullOrEmpty(_description) ? Name : $"{Name}: {_description}";
+    /// <summary>A clipped name's tooltip (D41 question 19, panel a): the whole name; the view shows it only while the name is clipped.</summary>
+    public string NameToolTip => Name;
 
-    /// <summary>The trimmed value's tooltip (D41 question 19): the whole value.</summary>
+    /// <summary>A clipped value's tooltip (D41 question 19): the whole value; the view shows it only while the value is clipped.</summary>
     public string? ValueToolTip => DisplayValue.Length == 0 ? null : DisplayValue;
 
     public PropertyRowKind Kind => _kind;
@@ -186,10 +192,14 @@ public sealed class PropertyRowViewModel : ObservableObject
     /// <summary>The cell shows the value as text (read-only, an exclusive choice, a picker, a value with line breaks).</summary>
     public bool ShowsValue => !ShowsTextBox;
 
-    /// <summary>Whether the row opens a drop-down from its arrow (F4, Alt+Down).</summary>
+    /// <summary>
+    /// Whether the row opens a drop-down from its arrow (F4, Alt+Down): a Text row whose value has a line break opens the
+    /// multi-line one (D41 question 16: an extender's ToolTip, a string without a multi-line editor), as it has no text box.
+    /// </summary>
     public bool HasDropDown => _kind is PropertyRowKind.Color or PropertyRowKind.ContentAlignment or PropertyRowKind.Multiline or PropertyRowKind.ShortcutKeys
         or PropertyRowKind.Date or PropertyRowKind.Dock or PropertyRowKind.Anchor or PropertyRowKind.Flags
-        || (_kind == PropertyRowKind.Choice && _options.Count > 0);
+        || (_kind == PropertyRowKind.Choice && _options.Count > 0)
+        || (HasLineBreaks && _commit is not null);
 
     /// <summary>The arrow shows on the selected row only, as in the classic IDE (D41 question 10).</summary>
     public bool ShowsDropDownButton => _isSelected && HasDropDown;
@@ -250,7 +260,11 @@ public sealed class PropertyRowViewModel : ObservableObject
     }
 
     /// <summary>A Cursor's choices: each drawn with its picture (D41 question 13).</summary>
-    public bool IsCursor { get; init; }
+    public bool IsCursor
+    {
+        get => _isCursor;
+        init => _isCursor = value;
+    }
 
     public string AccessibleName => $"{Name}: {DisplayValue}";
 
@@ -355,22 +369,45 @@ public sealed class PropertyRowViewModel : ObservableObject
     /// <summary>The cell's text box has the keyboard focus: a refresh keeps the text being typed.</summary>
     public bool IsEditing { get; set; }
 
-    /// <summary>A command next to the value (the Events view's Go to or create the handler; a double-click on the name runs it), or null.</summary>
-    public ICommand? Action { get; init; }
+    /// <summary>
+    /// A command of the row (the Events view's Go to or create the handler: a double-click on the name, or Enter, runs it),
+    /// or null. A refresh in place takes the fresh row's, so it acts on what the grid shows now (another component's Click).
+    /// </summary>
+    public ICommand? Action
+    {
+        get => _action;
+        init => _action = value;
+    }
 
-    public string ActionTitle { get; init; } = string.Empty;
+    public string ActionTitle
+    {
+        get => _actionTitle;
+        init => _actionTitle = value;
+    }
 
-    public bool HasAction => Action is not null;
+    public bool HasAction => _action is not null;
 
     /// <summary>The action's icon.</summary>
-    public string ActionIcon { get; init; } = "go-to";
+    public string ActionIcon
+    {
+        get => _actionIcon;
+        init => _actionIcon = value;
+    }
 
-    /// <summary>A second command next to the value, or null (kept for callers of M41b; the grid shows neither as a button).</summary>
-    public ICommand? SecondaryAction { get; init; }
+    /// <summary>A second command of the row, or null (kept for callers of M41b; the grid shows neither as a button).</summary>
+    public ICommand? SecondaryAction
+    {
+        get => _secondaryAction;
+        init => _secondaryAction = value;
+    }
 
-    public string SecondaryActionTitle { get; init; } = string.Empty;
+    public string SecondaryActionTitle
+    {
+        get => _secondaryActionTitle;
+        init => _secondaryActionTitle = value;
+    }
 
-    public bool HasSecondaryAction => SecondaryAction is not null;
+    public bool HasSecondaryAction => _secondaryAction is not null;
 
     // ------------------------------------------------------------------ Dock, Anchor and flags
 
@@ -408,6 +445,19 @@ public sealed class PropertyRowViewModel : ObservableObject
     {
         var text = string.Join(", ", _flags.Where(f => f.IsChecked).Select(f => f.Name));
         _ = CommitAsync(text.Length == 0 ? "None" : text);
+    }
+
+    /// <summary>
+    /// Checks or unchecks a flag by its name and commits the row's flags (the flags drop-down's boxes): the flag of the
+    /// row's current list, so a box toggled after a refresh adds to the value the refresh brought, not to the list the
+    /// drop-down opened with.
+    /// </summary>
+    public void SetFlag(string name, bool isChecked)
+    {
+        if (_flags.FirstOrDefault(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase)) is { } flag)
+        {
+            flag.IsChecked = isChecked;
+        }
     }
 
     // ------------------------------------------------------------------ colors
@@ -540,13 +590,20 @@ public sealed class PropertyRowViewModel : ObservableObject
 
     /// <summary>
     /// The row takes a fresh row's state after a refresh (same path and kind): its value, whether it is set, its choices,
-    /// description and delegates. The text being typed stays unless it is what was just committed.
+    /// description and delegates (the commit, Reset, the "…" and the actions, which hold the component and the document
+    /// the fresh row was made for). The text being typed stays unless it is what was just committed.
     /// </summary>
     internal void Update(PropertyRowViewModel fresh)
     {
         _commit = fresh._commit;
         _reset = fresh._reset;
         _modalEditor = fresh._modalEditor;
+        _action = fresh._action;
+        _actionTitle = fresh._actionTitle;
+        _actionIcon = fresh._actionIcon;
+        _secondaryAction = fresh._secondaryAction;
+        _secondaryActionTitle = fresh._secondaryActionTitle;
+        _isCursor = fresh._isCursor;
         var valueChanged = _value != fresh._value || _isMixed != fresh._isMixed;
         _value = fresh._value;
         _isMixed = fresh._isMixed;
@@ -587,7 +644,8 @@ public sealed class PropertyRowViewModel : ObservableObject
         nameof(DisplayValue), nameof(AccessibleName), nameof(Swatch), nameof(HasSwatch), nameof(HasLineBreaks), nameof(ShowsTextBox), nameof(ShowsValue),
         nameof(IsMixed), nameof(CanReset), nameof(ChoicesEditable), nameof(Flags), nameof(AnchorTop), nameof(AnchorBottom), nameof(AnchorLeft), nameof(AnchorRight),
         nameof(DockTop), nameof(DockBottom), nameof(DockLeft), nameof(DockRight), nameof(DockFill), nameof(DockNone), nameof(HasModalEditor), nameof(ShowsModalButton),
-        nameof(HasDropDown), nameof(ShowsDropDownButton), nameof(IsTextEditor),
+        nameof(HasDropDown), nameof(ShowsDropDownButton), nameof(IsTextEditor), nameof(ModalEditor), nameof(Action), nameof(HasAction), nameof(ActionTitle),
+        nameof(ActionIcon), nameof(SecondaryAction), nameof(HasSecondaryAction), nameof(SecondaryActionTitle), nameof(IsCursor),
     ];
 }
 
@@ -721,6 +779,9 @@ public sealed class PropertyGridViewModel : ObservableObject
         get => _showDescription;
         set => SetField(ref _showDescription, value);
     }
+
+    // TODO(issue): a search box over the grid, and the description's height, the name column's share and the sort mode
+    // kept between sessions (#68); they start at 76 px, 45 % and Categorized in each window meanwhile.
 
     /// <summary>The description pane's height (its splitter drags it): 76 px, a title and three lines.</summary>
     public double DescriptionHeight
@@ -870,6 +931,46 @@ public sealed class PropertyGridViewModel : ObservableObject
 
             path = path[..dot];
         }
+    }
+
+    /// <summary>Shows a row: its category and the rows it is a part of expanded (the invalid-value dialog's OK returns to a part's cell).</summary>
+    public void Reveal(PropertyRowViewModel row)
+    {
+        foreach (var category in Categories)
+        {
+            var parents = new List<PropertyRowViewModel>();
+            if (PathTo(category.Rows, row, parents))
+            {
+                SetExpanded(category, true);
+                foreach (var parent in parents)
+                {
+                    SetExpanded(parent, true);
+                }
+
+                return;
+            }
+        }
+    }
+
+    private static bool PathTo(IReadOnlyList<PropertyRowViewModel> rows, PropertyRowViewModel target, List<PropertyRowViewModel> parents)
+    {
+        foreach (var row in rows)
+        {
+            if (ReferenceEquals(row, target))
+            {
+                return true;
+            }
+
+            parents.Add(row);
+            if (PathTo(row.Children, target, parents))
+            {
+                return true;
+            }
+
+            parents.RemoveAt(parents.Count - 1);
+        }
+
+        return false;
     }
 
     /// <summary>Expands or collapses a category or a row with parts.</summary>

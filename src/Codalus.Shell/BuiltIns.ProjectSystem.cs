@@ -14,7 +14,7 @@ internal static partial class BuiltIns
 {
     public const string ProjectSystemKeybindings = """
         [
-          { "key": "f4", "command": "workbench.view.properties", "when": "focusedView != properties" },
+          { "key": "f4", "command": "workbench.view.properties", "when": "focusedView != properties && !propertyGridFocus" },
           { "key": "primary+shift+a", "command": "project.addNewItem", "when": "solutionOpen" },
           { "key": "shift+alt+a", "command": "project.addExistingItem", "when": "solutionOpen && solutionTrusted" },
           { "key": "primary+shift+alt+o", "command": "workbench.openFolder" }
