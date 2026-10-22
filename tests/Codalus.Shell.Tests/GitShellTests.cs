@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Codalus.Shell.Editor;
@@ -11,7 +12,7 @@ namespace Codalus.Shell.Tests;
 /// <summary>Git in the shell (ADR 0008) on a repository made from samples/BuildAndRun.</summary>
 public sealed class GitShellTests
 {
-    private static void Git(string directory, params string[] arguments)
+    private static string Git(string directory, params string[] arguments)
     {
         var start = new ProcessStartInfo("git") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         foreach (var argument in arguments)
@@ -20,9 +21,213 @@ public sealed class GitShellTests
         }
 
         using var process = Process.Start(start)!;
-        var error = process.StandardError.ReadToEnd();
+        var error = process.StandardError.ReadToEndAsync();
+        var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error.GetAwaiter().GetResult()}");
+        return output;
+    }
+
+    private static int GitExitCode(string directory, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("git") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(start)!;
+        var error = process.StandardError.ReadToEndAsync();
+        process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        error.GetAwaiter().GetResult();
+        return process.ExitCode;
+    }
+
+    private static void Configure(string repository)
+    {
+        Git(repository, "config", "user.name", "Ada Tester");
+        Git(repository, "config", "user.email", "ada@example.com");
+        Git(repository, "config", "commit.gpgsign", "false");
+        Git(repository, "config", "core.autocrlf", "false");
+    }
+
+    private static void CommitFile(string repository, string file, string message)
+    {
+        File.WriteAllText(Path.Combine(repository, file), message + "\n");
+        Git(repository, "add", ".");
+        Git(repository, "commit", "-q", "-m", message);
+    }
+
+    /// <summary>
+    /// Update Branch… brings a branch up to date from its remote without checking it out and pulling (D38, question 21).
+    /// The user asked for it on a branch's own menu, which waits for the Git Changes window's branch drop-down (#23, B22;
+    /// TODO(issue) in ShellHost.Git.cs); meanwhile Git → Branches, the Git Changes window's ⋯ menu and the palette offer
+    /// it, and this test covers those and the argument a branch's menu will pass. The quick pick lists the local branches
+    /// that have an upstream, the current one first; picking one fast-forwards it, with a cancellable task in the status
+    /// bar, while the checked-out branch and its files stay as they are. Then each result in B24-B26's words: up to date,
+    /// only ahead, no upstream (and git not run), diverged with Checkout (which checks it out), the current branch
+    /// diverged, the current branch updated with its files, a branch in another worktree with Open in New Window, and the
+    /// quick pick leaving out the current branch during a merge. On a plain folder, so no build or language host starts.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Update_branch_brings_a_branch_up_to_date_without_checking_it_out()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "repository");
+        var bare = Path.Combine(f.UserData, "remote.git");
+        var other = Path.Combine(f.UserData, "other");
+        Directory.CreateDirectory(folder);
+        Git(f.UserData, "init", "-q", "--bare", "-b", "main", bare);
+        Git(folder, "init", "-q", "-b", "main");
+        Configure(folder);
+        CommitFile(folder, "README.md", "initial");
+        Git(folder, "remote", "add", "origin", bare);
+        Git(folder, "push", "-q", "-u", "origin", "main");
+        Git(folder, "branch", "feature");
+        Git(folder, "push", "-q", "-u", "origin", "feature");
+        Git(folder, "branch", "local-only");
+        Git(f.UserData, "clone", "-q", "-b", "feature", bare, other);
+        Configure(other);
+        CommitFile(other, "feature.txt", "feature from the other clone");
+        Git(other, "push", "-q", "origin", "feature");
+        var tip = Git(other, "rev-parse", "HEAD").Trim();
+        var mainBefore = Git(folder, "rev-parse", "main").Trim();
+
+        f.Shell.Trust.Trust(folder);
+        await f.Shell.OpenFolderAsync(folder);
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "main" } && f.Shell.Workbench.Commands.IsEnabled("git.updateBranch"));
+
+        // Where it is for now: Git → Branches, after Switch and Create, and the Git Changes window's ⋯ menu.
+        Assert.Equal(
+            ["git.switchBranch", "git.createBranch", "git.updateBranch"],
+            f.Shell.Workbench.Menus.GetItems(BuiltIns.GitBranchesMenu).Where(i => i.Group == "1-branch").Select(i => i.Command));
+        Assert.Equal("Update Branch…", f.Shell.Workbench.Menus.GetItems(BuiltIns.GitBranchesMenu).Single(i => i.Command == "git.updateBranch").Title);
+        f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitChangesView>().Any());
+        var entry = f.Window.GetVisualDescendants().OfType<GitChangesView>().Single().GetVisualDescendants().OfType<Avalonia.Controls.Button>()
+            .Select(b => b.Flyout).OfType<Avalonia.Controls.MenuFlyout>()
+            .SelectMany(m => m.Items.OfType<Avalonia.Controls.MenuItem>())
+            .Single(i => i.Tag is "git.updateBranch");
+        Assert.Equal("Update Branch…", entry.Header);
+
+        var messages = new List<string>();
+        f.Shell.StatusBar.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(f.Shell.StatusBar.Message) && f.Shell.StatusBar.Message is { } message)
+            {
+                messages.Add(message);
+            }
+        };
+        var tasks = new List<(string Title, string Source, bool Cancellable)>();
+        f.Shell.Workbench.Progress.Changed += (_, _) =>
+        {
+            foreach (var task in f.Shell.Workbench.Progress.Running)
+            {
+                lock (tasks)
+                {
+                    tasks.Add((task.Title, task.Source, task.Cancellable));
+                }
+            }
+        };
+        Workbench.Notifications.Notification Notified(string message) =>
+            f.Shell.Workbench.Notifications.Items.Single(n => n.Message == message);
+        bool Has(string message) => f.Shell.Workbench.Notifications.Items.Any(n => n.Message == message);
+        string Notifications() => string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message));
+
+        // The quick pick: branches with an upstream, the current one first; local-only isn't offered.
+        await f.RunAsync("git.updateBranch");
+        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen && f.Shell.Palette.Rows.Count > 0);
+        Assert.Equal("Update which branch from its upstream?", f.Shell.Palette.Placeholder);
+        Assert.Equal(["main", "feature"], f.Shell.Palette.Rows.Select(r => r.Label));
+        Assert.Equal(["current, from origin/main", "from origin/feature"], f.Shell.Palette.Rows.Select(r => r.Detail));
+        f.Shell.Palette.Accept(f.Shell.Palette.Rows.Single(r => r.Label == "feature"));
+
+        // B23: the status bar's task while it runs, with a cancel button; B24: how many commits came.
+        await ShellFixture.PumpUntil(() => messages.Contains("Updated feature from origin/feature: 1 commit."), describe: () => string.Join(" | ", messages) + "; git log: " + f.Shell.GitLog.GetText());
+        lock (tasks)
+        {
+            Assert.Contains(("Updating feature from origin/feature", "Git", true), tasks);
+        }
+
+        Assert.Empty(f.Shell.Workbench.Progress.Running);
+        Assert.Equal(tip, Git(folder, "rev-parse", "refs/heads/feature").Trim());
+        Assert.Equal(mainBefore, Git(folder, "rev-parse", "HEAD").Trim());
+        Assert.Equal("main", f.Shell.Git.Status!.Branch);
+        Assert.False(File.Exists(Path.Combine(folder, "feature.txt")));
+
+        // By argument (a branch's full ref, as a branch's own menu will pass it): nothing more to bring in.
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("refs/heads/feature"));
+        Assert.Contains("feature is already up to date with origin/feature.", messages);
+
+        // No upstream: said, and git doesn't fetch.
+        var logBefore = f.Shell.GitLog.GetText().Length;
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("local-only"));
+        Assert.True(Has("local-only has no upstream branch to update from."), Notifications());
+        Assert.DoesNotContain("> git fetch", f.Shell.GitLog.GetText()[logBefore..], StringComparison.Ordinal);
+
+        // Only ahead: nothing to update, and Push sends it.
+        var mine = Git(folder, "commit-tree", "feature^{tree}", "-p", "feature", "-m", "mine").Trim();
+        Git(folder, "update-ref", "refs/heads/feature", mine);
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("feature"));
+        Assert.Contains("feature has nothing to update from origin/feature: it's ahead by 1 commit, which Push sends.", messages);
+
+        // B25, diverged: a commit here that the remote doesn't have, and one there. feature stays where it is; Checkout checks it out.
+        CommitFile(other, "more.txt", "more from the other clone");
+        Git(other, "push", "-q", "origin", "feature");
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("feature"));
+        const string Diverged = "feature has diverged from origin/feature: 1 commit here, 1 there. Update only fast-forwards; check it out to merge or rebase.";
+        Assert.True(Has(Diverged), Notifications());
+        var diverged = Notified(Diverged);
+        Assert.Equal(Workbench.Notifications.NotificationSeverity.Warning, diverged.Severity);
+        Assert.Equal(["Checkout"], diverged.Actions);
+        Assert.Equal(mine, Git(folder, "rev-parse", "refs/heads/feature").Trim());
+        f.Shell.Workbench.Notifications.Choose(diverged, "Checkout");
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "feature" }, describe: Notifications);
+
+        // The current branch diverged: merge or rebase instead (it is already checked out), and no Checkout.
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("feature"));
+        const string CurrentDiverged = "feature has diverged from origin/feature: 1 commit here, 1 there. Update only fast-forwards; merge origin/feature into it, or rebase it onto origin/feature.";
+        Assert.True(Has(CurrentDiverged), Notifications());
+        Assert.Empty(Notified(CurrentDiverged).Actions);
+        Assert.Equal(mine, Git(folder, "rev-parse", "HEAD").Trim());
+
+        // The current branch behind its upstream: fast-forwarded with its files.
+        Git(folder, "switch", "-q", "main");
+        Git(other, "fetch", "-q", "origin", "main");
+        Git(other, "switch", "-q", "-c", "main", "origin/main");
+        CommitFile(other, "main.txt", "main from the other clone");
+        Git(other, "push", "-q", "origin", "main");
+        await f.Shell.Git.RefreshAsync();
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("main"));
+        Assert.Contains("Updated main from origin/main: 1 commit.", messages);
+        Assert.True(File.Exists(Path.Combine(folder, "main.txt")));
+
+        // B26, checked out in another worktree: git isn't run, the notification says where and opens it in a new window.
+        var worktree = Path.Combine(f.UserData, "worktree");
+        Git(folder, "branch", "--track", "elsewhere", "origin/main");
+        Git(folder, "worktree", "add", "-q", worktree, "elsewhere");
+        logBefore = f.Shell.GitLog.GetText().Length;
+        await f.ExecuteAsync("git.updateBranch", JsonSerializer.SerializeToElement("elsewhere"));
+        var elsewhere = f.Shell.Workbench.Notifications.Items.Single(n => n.Message.StartsWith("elsewhere is checked out in ", StringComparison.Ordinal));
+        var where = elsewhere.Message["elsewhere is checked out in ".Length..^", so it can't be updated here. Pull in that window updates it.".Length];
+        Assert.Equal(Codalus.Platform.RealPath.Resolve(worktree), Codalus.Platform.RealPath.Resolve(where));
+        Assert.Equal(Path.GetFullPath(where), where); // the OS's separators
+        Assert.Equal(["Open in New Window"], elsewhere.Actions);
+        Assert.DoesNotContain("> git fetch", f.Shell.GitLog.GetText()[logBefore..], StringComparison.Ordinal);
+
+        // During a merge the quick pick leaves out the current branch, as Pull is hidden there.
+        Git(folder, "switch", "-q", "-c", "conflicting");
+        CommitFile(folder, "README.md", "conflicting");
+        Git(folder, "switch", "-q", "main");
+        CommitFile(folder, "README.md", "main's own");
+        Assert.NotEqual(0, GitExitCode(folder, "merge", "--no-edit", "conflicting"));
+        await f.Shell.Git.RefreshAsync();
+        Assert.Equal("merge", f.Shell.Git.Status!.Operation);
+        await f.RunAsync("git.updateBranch");
+        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen && f.Shell.Palette.Rows.Count > 0);
+        Assert.Equal(["elsewhere", "feature"], f.Shell.Palette.Rows.Select(r => r.Label));
+        f.Shell.Palette.Cancel();
     }
 
     [AvaloniaFact]

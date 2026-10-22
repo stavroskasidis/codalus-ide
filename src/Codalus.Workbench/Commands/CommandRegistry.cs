@@ -121,9 +121,16 @@ public sealed class CommandRegistry(ContextKeyService context)
 
     public Task<JsonElement?> ExecuteAsync(string id, CancellationToken cancellationToken) => ExecuteAsync(id, [], cancellationToken);
 
-    public async Task<JsonElement?> ExecuteAsync(string id, IReadOnlyList<JsonElement> args, CancellationToken cancellationToken)
+    public Task<JsonElement?> ExecuteAsync(string id, IReadOnlyList<JsonElement> args, CancellationToken cancellationToken) =>
+        ExecuteAsync(id, args, context, cancellationToken);
+
+    /// <summary>
+    /// Runs a command whose enablement is read in <paramref name="scope"/>: a menu built with keys of its own (the Git
+    /// Changes window's, D38) runs its entries in the context it showed them in.
+    /// </summary>
+    public async Task<JsonElement?> ExecuteAsync(string id, IReadOnlyList<JsonElement> args, IContextKeyReader scope, CancellationToken cancellationToken)
     {
-        if (_descriptors.TryGetValue(id, out var descriptor) && !descriptor.Enablement.Evaluate(context))
+        if (_descriptors.TryGetValue(id, out var descriptor) && !descriptor.Enablement.Evaluate(scope))
         {
             throw new CommandNotEnabledException(id);
         }

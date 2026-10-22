@@ -1,0 +1,101 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.GitBranchPickerView"
+             x:DataType="vm:GitBranchPickerViewModel">
+  <UserControl.Styles>
+    <!-- Rows of 22 px (Shell.Size.Row); a header is muted and semibold, and never selected. -->
+    <Style Selector="ListBox#List ListBoxItem" x:DataType="vm:GitBranchRow">
+      <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Row}" />
+      <Setter Property="Height" Value="{DynamicResource Shell.Size.Row}" />
+      <Setter Property="Padding" Value="8,0,6,0" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Focusable" Value="{Binding IsBranch}" />
+      <Setter Property="IsHitTestVisible" Value="{Binding IsBranch}" />
+      <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+    </Style>
+    <!-- ⋯ keeps its 20 px in every row, so the chips line up; it shows on the row under the pointer or selected (question 6). -->
+    <Style Selector="ListBox#List ListBoxItem Button.rowMore">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ListBox#List ListBoxItem:pointerover Button.rowMore, ListBox#List ListBoxItem:selected Button.rowMore">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+  </UserControl.Styles>
+  <Border x:Name="Frame" Classes="overlay" Width="340" MaxHeight="420" Padding="0" ClipToBounds="True" AutomationProperties.Name="{l:T gitBranches.branches}">
+    <DockPanel>
+      <!-- The search box has the focus (B1); the count of the branches shown in it. -->
+      <Border DockPanel.Dock="Top" Padding="6,6,6,4">
+        <TextBox x:Name="Search" Text="{Binding Query}" PlaceholderText="{l:T gitBranches.searchBranches}" AutomationProperties.Name="{l:T gitBranches.searchBranches}">
+          <TextBox.InnerRightContent>
+            <TextBlock Classes="muted small" Text="{Binding CountText}" VerticalAlignment="Center" Margin="0,0,6,0" />
+          </TextBox.InnerRightContent>
+        </TextBox>
+      </Border>
+      <!-- The first open (B4): an indeterminate bar under the search box. -->
+      <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="2" MinHeight="2" Margin="6,0" />
+      <!-- The banner: HEAD detached, an operation in progress, where a branch is checked out, what Update found (B13-B15, B25, B26). -->
+      <Border x:Name="Banner" DockPanel.Dock="Top" IsVisible="{Binding HasBanner}" Margin="6,2,6,4" Padding="8,4" CornerRadius="{DynamicResource Shell.Control.CornerRadius}"
+              Background="{DynamicResource Shell.Status.Info}" Classes.warning="{Binding IsBannerWarning}">
+        <Border.Styles>
+          <Style Selector="Border.warning">
+            <Setter Property="Background" Value="{DynamicResource Shell.Status.Warning}" />
+          </Style>
+        </Border.Styles>
+        <StackPanel Spacing="4">
+          <DockPanel>
+            <controls:Icon DockPanel.Dock="Left" Kind="{Binding BannerIcon}" Margin="0,1,6,0" VerticalAlignment="Top" />
+            <TextBlock Text="{Binding Banner}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+          </DockPanel>
+          <Button x:Name="BannerAction" Classes="iconText compact" controls:ButtonIcon.Kind="{Binding BannerActionIcon}" Content="{Binding BannerAction}"
+                  IsVisible="{Binding HasBannerAction}" HorizontalAlignment="Left" Margin="22,0,0,2" />
+        </StackPanel>
+      </Border>
+      <!-- New Branch…, or New Branch 'zzz'… when nothing matches (B3); none in an empty repository (B16). -->
+      <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0" Padding="4" IsVisible="{Binding HasFooter}">
+        <Button x:Name="Footer" Classes="subtle iconText compact" controls:ButtonIcon.Kind="branch" Content="{Binding FooterText}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+      </Border>
+      <Panel>
+        <TextBlock Classes="muted" Margin="12,8" Text="{Binding LoadingText}" IsVisible="{Binding IsLoading}" />
+        <!-- git fails (B5): what failed, git's own line (its tooltip has the whole of it), Try Again. -->
+        <StackPanel Margin="12,8" Spacing="6" IsVisible="{Binding HasError}">
+          <DockPanel>
+            <controls:Icon DockPanel.Dock="Left" Kind="error" Classes="error" Margin="0,1,6,0" VerticalAlignment="Top" />
+            <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+          </DockPanel>
+          <TextBlock Classes="muted small" Text="{Binding ErrorDetail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ErrorDetail}" Margin="22,0,0,0" />
+          <Button x:Name="TryAgain" Classes="iconText compact" controls:ButtonIcon.Kind="refresh" Content="{l:T gitBranches.tryAgain}" HorizontalAlignment="Left" Margin="22,0,0,0" />
+        </StackPanel>
+        <!-- Nothing matches (B3). -->
+        <TextBlock Classes="muted" Margin="12,16" TextWrapping="Wrap" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
+        <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" Padding="0,2"
+                 AutomationProperties.Name="{l:T gitBranches.branches}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:GitBranchRow">
+              <Panel>
+                <TextBlock Text="{Binding HeaderText}" IsVisible="{Binding IsHeader}" Classes="muted" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <DockPanel IsVisible="{Binding IsBranch}" Background="Transparent">
+                  <controls:Icon DockPanel.Dock="Left" Kind="check" Opacity="{Binding CheckOpacity}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                  <Button DockPanel.Dock="Right" Classes="toolbar icon rowMore" Width="20" Height="20" MinWidth="20" Padding="0" Margin="4,0,0,0" controls:ButtonIcon.Kind="more"
+                          Click="OnMore" ToolTip.Tip="{l:T gitBranches.moreActions}" AutomationProperties.Name="{l:T gitBranches.moreActions}" />
+                  <Border DockPanel.Dock="Right" Classes="chip" IsVisible="{Binding HasTrack}" Margin="4,0,0,0" ToolTip.Tip="{Binding TrackName}" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Track}" />
+                  </Border>
+                  <Border DockPanel.Dock="Right" Classes="chip" IsVisible="{Binding IsInOtherWorktree}" Margin="4,0,0,0" ToolTip.Tip="{Binding WorktreeTip}" VerticalAlignment="Center">
+                    <TextBlock Text="{l:T gitBranches.worktree}" />
+                  </Border>
+                  <TextBlock DockPanel.Dock="Right" Classes="muted" Text="{Binding Busy}" IsVisible="{Binding IsBusy}" Margin="4,0,0,0" VerticalAlignment="Center" />
+                  <TextBlock DockPanel.Dock="Right" Classes="muted" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" Margin="6,0,0,0" VerticalAlignment="Center" />
+                  <controls:HighlightedText Source="{Binding Name}" Highlights="{Binding Highlights}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Name}" />
+                </DockPanel>
+              </Panel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Panel>
+    </DockPanel>
+  </Border>
+</UserControl>

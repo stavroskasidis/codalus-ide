@@ -272,6 +272,7 @@ public static class CommandIcons
         ["database"] = Yellow,
         ["folder"] = Folder,
         ["folder-open"] = Folder,
+        ["eye-off"] = Blue,
 
         // The Windows Forms Toolbox (M34h): inputs, lists and menus blue, containers purple, pictures and progress green,
         // data yellow (as databases), errors red, notifications and tooltips yellow (as the bell), folders tan.
@@ -444,6 +445,21 @@ public static class CommandIcons
         ["git.switchBranch"] = new("branch", Git),
         ["git.createBranch"] = new("branch", Git),
         ["git.merge"] = new("merge", Git),
+        ["git.updateBranch"] = new("download", Git),
+
+        // The Git Changes window's menus (D38): Rebase orange in both of its menus (question 10), and each entry's icon.
+        ["git.rebase"] = new("arrow-sort", Git),
+        ["git.stage"] = new("add"),
+        ["git.unstage"] = new("subtract"),
+        ["git.discard"] = new("discard"),
+        ["git.openMergeEditor"] = new("merge", Git),
+        ["git.renameBranch"] = new("rename"),
+        ["git.deleteBranch"] = new("trash"),
+        ["git.compareBranch"] = new("compare"),
+        ["git.copyBranchName"] = new("copy"),
+        ["gitChanges.expandAll"] = new("unfold-all"),
+        ["gitChanges.collapseAll"] = new("fold-all"),
+        ["workbench.openFile"] = new("file"),
         ["git.mergeEditor.nextConflict"] = new("arrow-down", Navigate),
         ["git.mergeEditor.previousConflict"] = new("arrow-up", Navigate),
         ["git.mergeEditor.acceptMerge"] = new("check", Git),
@@ -604,6 +620,10 @@ public static class CommandIcons
         ["explorer.delete"] = new("trash"),
         ["explorer.copyPath"] = new("copy"),
         ["explorer.reveal"] = new("folder-open", Open),
+        ["explorer.copyRelativePath"] = new("copy"),
+
+        // An eye-off in blue (question 10): it was the menu's only entry without an icon.
+        ["explorer.addToGitignore"] = new("eye-off"),
         ["terminal.openInTerminal"] = new("terminal"),
         ["run.setStartupProject"] = new("play-outline", Run),
 

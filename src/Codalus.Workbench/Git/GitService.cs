@@ -542,9 +542,11 @@ public sealed partial class GitService : IDisposable
 
     // ------------------------------------------------------------------ remotes
 
-    public Task FetchAsync(CancellationToken cancellationToken = default) => MutateAsync(["fetch", "--prune"], cancellationToken);
+    public Task FetchAsync(CancellationToken cancellationToken = default) =>
+        WithFetchGateAsync(() => MutateAsync(["fetch", "--prune"], cancellationToken), cancellationToken);
 
-    public Task PullAsync(CancellationToken cancellationToken = default) => MutateAsync(["pull"], cancellationToken);
+    public Task PullAsync(CancellationToken cancellationToken = default) =>
+        WithFetchGateAsync(() => MutateAsync(["pull"], cancellationToken), cancellationToken);
 
     /// <summary>Pushes the current branch; the first push sets the upstream on the first remote (usually origin).</summary>
     public async Task PushAsync(CancellationToken cancellationToken = default)
@@ -579,5 +581,6 @@ public sealed partial class GitService : IDisposable
         Close();
         _lifetime.Dispose();
         _refreshGate.Dispose();
+        FetchGate.Dispose();
     }
 }

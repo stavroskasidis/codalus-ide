@@ -103,6 +103,7 @@ document_text_16_regular
 edit_16_regular
 error_circle_16_regular
 eye_16_regular
+eye_off_16_regular
 filter_16_regular
 fire_16_regular
 flash_16_regular

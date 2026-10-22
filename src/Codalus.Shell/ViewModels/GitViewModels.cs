@@ -57,6 +57,11 @@ public sealed class GitFileRow(GitFileStatus status, bool staged, GitLfsStatus? 
 
     public bool CanUnstage => Staged;
 
+    /// <summary>A rename's old name ("← Tokens.cs"), or null.</summary>
+    public string? OldName => Status.OriginalPath is { } old ? "← " + System.IO.Path.GetFileName(old) : null;
+
+    public bool HasOldName => Status.OriginalPath is not null;
+
     public string AccessibleName => $"{Name} in {Folder}, {Description}{(Staged ? ", staged" : string.Empty)}{(Badge is { } badge ? ", " + badge : string.Empty)}";
 }
 
@@ -118,9 +123,37 @@ public sealed class GitChangeNode(string key, string text, GitFileRow? row, bool
 
     public bool CanUnstage => Staged;
 
-    public bool CanDiscard => Row is { CanStage: true };
+    /// <summary>A file with unstaged changes, or a folder (or the repository) of the Changes section (T1: Discard on a folder's hover buttons).</summary>
+    public bool CanDiscard => Row is { CanStage: true } || (Row is null && Section == "changes");
 
-    public string AccessibleName => Row?.AccessibleName ?? Text;
+    /// <summary>The node's path: the repository's folder, a folder's or a file's (with the OS's separators).</summary>
+    public string FullPath { get; init; } = string.Empty;
+
+    /// <summary>Its path from the repository's folder, with '/' (empty for the repository).</summary>
+    public string RelativePath { get; init; } = string.Empty;
+
+    /// <summary>The section it's in: <c>changes</c>, <c>staged</c> or <c>conflicts</c>.</summary>
+    public string Section { get; init; } = string.Empty;
+
+    /// <summary>The changed files at and under it that the window shows (a filter can hide some).</summary>
+    public int ShownFiles => Rows.Count();
+
+    /// <summary>The changed files at and under it in its section, shown or not.</summary>
+    public int TotalFiles { get; set; }
+
+    /// <summary>"2 of 5 files" on a folder while a filter hides some of its files (T6, question 15); null otherwise.</summary>
+    public string? CountText => Row is null && ShownFiles < TotalFiles
+        ? Localizer.Format("msg.gitChanges.filesOfTotal", "{0} of {1} files", ShownFiles, TotalFiles)
+        : null;
+
+    public bool HasCountText => CountText is not null;
+
+    /// <summary>A file's description; a folder's name and its count (every folder's, question 15).</summary>
+    public string AccessibleName => Row?.AccessibleName ?? (IsRepository
+        ? Localizer.Format("msg.gitChanges.repositoryAccessibleName", "{0}, repository, {1} changed files", Text, TotalFiles)
+        : TotalFiles == 1
+            ? Localizer.Format("msg.gitChanges.folderAccessibleNameOne", "{0}, folder, 1 changed file", Text)
+            : Localizer.Format("msg.gitChanges.folderAccessibleName", "{0}, folder, {1} changed files", Text, TotalFiles));
 }
 
 /// <summary>A repository of the solution (several repositories, M13b).</summary>
@@ -294,13 +327,88 @@ public sealed partial class GitChangesViewModel : ObservableObject
     private void RebuildViews()
     {
         var root = _git.Root ?? string.Empty;
-        Fill(StagedTree, BuildTree(root, Staged.Where(Matches), "staged", staged: true, _collapsed, OnExpandedChanged));
-        Fill(ChangesTree, BuildTree(root, Changes.Where(Matches), "changes", staged: false, _collapsed, OnExpandedChanged));
-        Fill(ConflictsTree, BuildTree(root, Conflicts.Where(Matches), "conflicts", staged: false, _collapsed, OnExpandedChanged));
+        Fill(StagedTree, BuildTree(root, Staged.Where(Matches), "staged", staged: true, _collapsed, OnExpandedChanged, Staged));
+        Fill(ChangesTree, BuildTree(root, Changes.Where(Matches), "changes", staged: false, _collapsed, OnExpandedChanged, Changes));
+        Fill(ConflictsTree, BuildTree(root, Conflicts.Where(Matches), "conflicts", staged: false, _collapsed, OnExpandedChanged, Conflicts));
         Fill(StagedItems, Sorted(Staged.Where(Matches)));
         Fill(ChangesItems, Sorted(Changes.Where(Matches)));
         Fill(ConflictsItems, Sorted(Conflicts.Where(Matches)));
+        foreach (var name in new[] { nameof(StagedHeader), nameof(ChangesHeader), nameof(ConflictsHeader), nameof(IsFiltered), nameof(StagedFilteredOut), nameof(ChangesFilteredOut), nameof(FilteredOutText) })
+        {
+            OnPropertyChanged(name);
+        }
     }
+
+    /// <summary>A filter is hiding files (the menu's folder actions then act on the files shown, question 2).</summary>
+    public bool IsFiltered => _filterText.Trim().Length > 0;
+
+    /// <summary>The section's files: <c>changes</c>, <c>staged</c> or <c>conflicts</c>.</summary>
+    public IReadOnlyList<GitFileRow> SectionRows(string section) => section switch
+    {
+        "staged" => Staged,
+        "conflicts" => Conflicts,
+        _ => Changes,
+    };
+
+    /// <summary>
+    /// The section's files at or under <paramref name="path"/> (a file, a folder or the repository's folder), every one
+    /// or (<paramref name="shownOnly"/>) only those the filter shows.
+    /// </summary>
+    public IReadOnlyList<GitFileRow> RowsUnder(string path, string section, bool shownOnly)
+    {
+        var full = System.IO.Path.TrimEndingDirectorySeparator(path);
+        return [.. SectionRows(section).Where(r => (!shownOnly || Matches(r)) && IsUnder(r.Status.Path, full))];
+
+        static bool IsUnder(string file, string folder) =>
+            Workbench.Projects.SolutionService.PathComparer.Equals(file, folder)
+            || file.StartsWith(folder + System.IO.Path.DirectorySeparatorChar, Workbench.Projects.SolutionService.PathComparer == StringComparer.Ordinal ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The tree's node for <paramref name="path"/> in <paramref name="section"/>, or null.</summary>
+    public GitChangeNode? FindNode(string section, string path)
+    {
+        var tree = section switch { "staged" => StagedTree, "conflicts" => ConflictsTree, _ => ChangesTree };
+        return tree.SelectMany(Flatten).FirstOrDefault(n => Workbench.Projects.SolutionService.PathComparer.Equals(n.FullPath, System.IO.Path.TrimEndingDirectorySeparator(path)));
+
+        static IEnumerable<GitChangeNode> Flatten(GitChangeNode node) => node.Children.SelectMany(Flatten).Prepend(node);
+    }
+
+    /// <summary>Expand All and Collapse All on a folder or the repository node: it and every folder under it.</summary>
+    public void SetExpandedUnder(string section, string path, bool expanded)
+    {
+        if (FindNode(section, path) is not { } node)
+        {
+            return;
+        }
+
+        Apply(node);
+
+        void Apply(GitChangeNode n)
+        {
+            if (n.IsFile)
+            {
+                return;
+            }
+
+            n.IsExpanded = expanded;
+            foreach (var child in n.Children)
+            {
+                Apply(child);
+            }
+        }
+    }
+
+    /// <summary>The staged section has files, but the filter shows none of them.</summary>
+    public bool StagedFilteredOut => IsFiltered && Staged.Count > 0 && !Staged.Any(Matches);
+
+    public bool ChangesFilteredOut => IsFiltered && Changes.Count > 0 && !Changes.Any(Matches);
+
+    /// <summary>"No files match “Greeter”." in a section the filter empties (T6).</summary>
+    public string FilteredOutText => Localizer.Format("msg.gitChanges.noFilesMatch", "No files match “{0}”.", _filterText.Trim());
+
+    private static string Header(string title, int shown, int total) => shown < total
+        ? Localizer.Format("msg.gitChanges.sectionOfTotal", "{0} ({1} of {2})", title, shown, total)
+        : string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{title} ({total})");
 
     private void OnExpandedChanged(GitChangeNode node, bool expanded)
     {
@@ -336,7 +444,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
     /// name; a folder with nothing but one folder in it is shown with it (<c>src\Data</c>). Keys in
     /// <paramref name="collapsed"/> start collapsed.
     /// </summary>
-    public static IReadOnlyList<GitChangeNode> BuildTree(string root, IEnumerable<GitFileRow> rows, string section, bool staged, IReadOnlySet<string> collapsed, Action<GitChangeNode, bool>? expandedChanged = null)
+    public static IReadOnlyList<GitChangeNode> BuildTree(string root, IEnumerable<GitFileRow> rows, string section, bool staged, IReadOnlySet<string> collapsed, Action<GitChangeNode, bool>? expandedChanged = null, IReadOnlyList<GitFileRow>? all = null)
     {
         var top = new TreeFolder();
         foreach (var row in rows)
@@ -362,11 +470,30 @@ public sealed partial class GitChangesViewModel : ObservableObject
         }
 
         var key = section + ":";
-        var repository = new GitChangeNode(key, root.Replace('/', System.IO.Path.DirectorySeparatorChar), null, isRepository: true, staged, !collapsed.Contains(key), expandedChanged);
-        Add(repository, top, key);
+        var rootPath = root.Replace('/', System.IO.Path.DirectorySeparatorChar);
+        var repository = new GitChangeNode(key, rootPath, null, isRepository: true, staged, !collapsed.Contains(key), expandedChanged) { FullPath = rootPath, Section = section };
+        Add(repository, top, key, string.Empty);
+        var everything = (all ?? []).Select(r => r.Status.RelativePath.Replace('\\', '/')).ToList();
+        Count(repository);
         return [repository];
 
-        void Add(GitChangeNode parent, TreeFolder folder, string parentKey)
+        // Each folder's files in the section, shown or not (all: the section's rows before the filter).
+        void Count(GitChangeNode node)
+        {
+            if (node.IsFile)
+            {
+                return;
+            }
+
+            var prefix = node.IsRepository ? string.Empty : node.RelativePath + "/";
+            node.TotalFiles = all is null ? node.ShownFiles : everything.Count(p => p.StartsWith(prefix, StringComparison.Ordinal));
+            foreach (var child in node.Children)
+            {
+                Count(child);
+            }
+        }
+
+        void Add(GitChangeNode parent, TreeFolder folder, string parentKey, string parentRelative)
         {
             foreach (var (name, child) in folder.Folders.OrderBy(f => f.Key, StringComparer.OrdinalIgnoreCase))
             {
@@ -380,14 +507,25 @@ public sealed partial class GitChangesViewModel : ObservableObject
                 }
 
                 var folderKey = parentKey + "/" + string.Join('/', names);
-                var node = new GitChangeNode(folderKey, string.Join(System.IO.Path.DirectorySeparatorChar, names), null, isRepository: false, staged, !collapsed.Contains(folderKey), expandedChanged);
+                var relative = (parentRelative.Length > 0 ? parentRelative + "/" : string.Empty) + string.Join('/', names);
+                var node = new GitChangeNode(folderKey, string.Join(System.IO.Path.DirectorySeparatorChar, names), null, isRepository: false, staged, !collapsed.Contains(folderKey), expandedChanged)
+                {
+                    FullPath = System.IO.Path.Combine(rootPath, relative.Replace('/', System.IO.Path.DirectorySeparatorChar)),
+                    RelativePath = relative,
+                    Section = section,
+                };
                 parent.Children.Add(node);
-                Add(node, contents, folderKey);
+                Add(node, contents, folderKey, relative);
             }
 
             foreach (var file in folder.Files.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase))
             {
-                parent.Children.Add(new GitChangeNode(parentKey + "/" + file.Name, file.Name, file, isRepository: false, staged, expanded: false));
+                parent.Children.Add(new GitChangeNode(parentKey + "/" + file.Name, file.Name, file, isRepository: false, staged, expanded: false)
+                {
+                    FullPath = file.Status.Path,
+                    RelativePath = file.Status.RelativePath.Replace('\\', '/'),
+                    Section = section,
+                });
             }
         }
     }
@@ -408,19 +546,56 @@ public sealed partial class GitChangesViewModel : ObservableObject
         ? string.Empty
         : status.Branch ?? Localizer.Format("msg.gitChanges.detachedAt", "(detached at {0})", status.Head?[..Math.Min(7, status.Head.Length)]);
 
+    /// <summary>The branch button's accessible name (B20): "Branch: main".</summary>
+    public string BranchAccessibleName => Localizer.Format("msg.gitChanges.branchAccessibleName", "Branch: {0}", BranchName);
+
     /// <summary>Whether the branch tracks a remote branch (otherwise outgoing and incoming commits are unknown).</summary>
     public bool IsPublished => _git.Status?.Upstream is not null;
 
     public bool IsNotPublished => HasRepository && !IsPublished;
+
+    private bool _hasRemote = true;
+
+    /// <summary>The repository has a remote (set by the shell from <c>git remote</c>): without one, the link publishes to a Git host (B18).</summary>
+    public bool HasRemote
+    {
+        get => _hasRemote;
+        set
+        {
+            if (SetField(ref _hasRemote, value))
+            {
+                OnPropertyChanged(nameof(ShowPublishBranch));
+                OnPropertyChanged(nameof(ShowPublishToHost));
+                OnPropertyChanged(nameof(OutgoingIncomingTooltip));
+            }
+        }
+    }
+
+    /// <summary>HEAD is detached: no branch to push or pull (B14).</summary>
+    public bool IsDetached => _git.Status is { Branch: null };
+
+    /// <summary>The repository has no commits yet (B16).</summary>
+    public bool IsUnborn => _git.Status is { Branch: not null, Head: null };
+
+    /// <summary>Publish branch: a branch with no upstream in a repository with a remote (question 19).</summary>
+    public bool ShowPublishBranch => IsNotPublished && _hasRemote && !IsDetached && !IsUnborn;
+
+    /// <summary>Publish to a Git Host…: a repository with no remote (B18), not detached and with commits.</summary>
+    public bool ShowPublishToHost => HasRepository && !_hasRemote && !IsDetached && !IsUnborn;
 
     /// <summary>"2 / 1": the commits to push (outgoing) and to pull (incoming).</summary>
     public string OutgoingIncomingText => _git.Status is { } status
         ? string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{status.Ahead} / {status.Behind}")
         : string.Empty;
 
-    public string OutgoingIncomingTooltip => _git.Status is { Upstream: { } upstream } status
-        ? Localizer.Format("msg.gitChanges.outgoingIncoming", "{0} outgoing / {1} incoming (tracking {2})", status.Ahead, status.Behind, upstream)
-        : Localizer.Get("msg.gitChanges.notPublished", "The branch isn't published: push it to create its remote branch.");
+    public string OutgoingIncomingTooltip => _git.Status switch
+    {
+        { Upstream: { } upstream } status => Localizer.Format("msg.gitChanges.outgoingIncoming", "{0} outgoing / {1} incoming (tracking {2})", status.Ahead, status.Behind, upstream),
+        { Branch: null } status => Localizer.Format("msg.gitChanges.headIsDetached", "HEAD is detached at {0}: there is no branch to push or pull.", status.Head?[..Math.Min(7, status.Head.Length)]),
+        { Head: null } => Localizer.Get("msg.gitChanges.noCommitsYet", "No commits yet: there is nothing to push."),
+        not null when !_hasRemote => Localizer.Get("msg.gitChanges.noRemote", "The repository has no remote: publish it to a Git host, or add one with Manage Remotes… in the ⋯ menu."),
+        _ => Localizer.Get("msg.gitChanges.notPublished", "The branch isn't published: push it to create its remote branch."),
+    };
 
     public bool IsMerging => _git.Status?.IsMerging ?? false;
 
@@ -460,9 +635,10 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     public bool HasConflicts => Conflicts.Count > 0;
 
-    public string StagedHeader => $"Staged Changes ({Staged.Count})";
+    /// <summary>"Staged Changes (2)", or "(0 of 2)" while a filter hides some (T6).</summary>
+    public string StagedHeader => Header(Localizer.Get("msg.gitChanges.stagedChanges", "Staged Changes"), Staged.Count(Matches), Staged.Count);
 
-    public string ChangesHeader => Changes.Count > 0 ? $"Changes ({Changes.Count})" : "Changes";
+    public string ChangesHeader => Changes.Count > 0 ? Header(Localizer.Get("msg.gitChanges.changes", "Changes"), Changes.Count(Matches), Changes.Count) : Localizer.Get("msg.gitChanges.changes", "Changes");
 
     /// <summary>The commit button commits the staged changes when there are some, otherwise every change.</summary>
     public string CommitText => HasStaged
@@ -480,7 +656,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
     /// <summary>A message is required, and something to commit (or the last commit to amend).</summary>
     public bool CanCommit => !string.IsNullOrWhiteSpace(_message) && (HasStaged || HasChanges || Amend);
 
-    public string ConflictsHeader => $"Merge Conflicts ({Conflicts.Count})";
+    public string ConflictsHeader => Header(Localizer.Get("msg.gitChanges.mergeConflicts", "Merge Conflicts"), Conflicts.Count(Matches), Conflicts.Count);
 
     public string Message
     {
@@ -783,7 +959,8 @@ public sealed partial class GitChangesViewModel : ObservableObject
         RebuildViews();
         foreach (var name in new[]
         {
-            nameof(HasRepository), nameof(HasNoRepository), nameof(BranchName), nameof(IsPublished), nameof(IsNotPublished), nameof(OutgoingIncomingText),
+            nameof(HasRepository), nameof(HasNoRepository), nameof(BranchName), nameof(BranchAccessibleName), nameof(IsPublished), nameof(IsNotPublished), nameof(OutgoingIncomingText),
+            nameof(IsDetached), nameof(IsUnborn), nameof(ShowPublishBranch), nameof(ShowPublishToHost),
             nameof(OutgoingIncomingTooltip), nameof(IsMerging), nameof(HasStaged), nameof(HasChanges), nameof(HasConflicts), nameof(StagedHeader),
             nameof(ChangesHeader), nameof(ConflictsHeader), nameof(OperationText), nameof(CommitText), nameof(CommitAndPushText), nameof(CommitAndSyncText),
             nameof(CanCommit),
@@ -852,4 +1029,43 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     /// <summary>Runs a shell command (fetch, pull, push, discard…), which reports its own errors.</summary>
     public Task RunAsync(string command) => _run(command);
+
+    /// <summary>The branch drop-down's list (D38), set by the shell.</summary>
+    public GitBranchPickerViewModel? Branches { get; set; }
+
+    /// <summary>A node's menu from gitChanges/context: its path, section, kind (file, folder, repository) and the files shown; set by the shell.</summary>
+    public Func<string, string, string, IReadOnlyList<string>, Avalonia.Controls.ContextMenu?>? MenuFor { get; set; }
+
+    /// <summary>The menu of a tree node (null when no entry applies).</summary>
+    public Avalonia.Controls.ContextMenu? MenuOf(GitChangeNode node) =>
+        MenuFor?.Invoke(node.FullPath, node.Section, node.IsRepository ? "repository" : node.IsFile ? "file" : "folder", [.. node.Rows.Select(r => r.Status.Path)]);
+
+    /// <summary>The menu of a list row (a file).</summary>
+    public Avalonia.Controls.ContextMenu? MenuOf(GitFileRow row) =>
+        MenuFor?.Invoke(row.Status.Path, SectionOf(row), "file", [row.Status.Path]);
+
+    /// <summary>Runs a command with arguments (the hover buttons run the menu's commands on a node: D38's T1), set by the shell.</summary>
+    public Func<string, IReadOnlyList<System.Text.Json.JsonElement>, Task>? RunWithArguments { get; set; }
+
+    /// <summary>
+    /// The arguments of <c>gitChanges/context</c>'s commands for a node: its path, its section and the files the window
+    /// shows under it (question 2).
+    /// </summary>
+    public static IReadOnlyList<System.Text.Json.JsonElement> ArgumentsFor(string path, string section, IEnumerable<string> shown) =>
+    [
+        System.Text.Json.JsonSerializer.SerializeToElement(path, Docking.ShellJsonContext.Default.String),
+        System.Text.Json.JsonSerializer.SerializeToElement(section, Docking.ShellJsonContext.Default.String),
+        System.Text.Json.JsonSerializer.SerializeToElement(shown.ToArray(), Docking.ShellJsonContext.Default.StringArray),
+    ];
+
+    /// <summary>Runs <paramref name="command"/> on a tree node, with the files shown under it.</summary>
+    public Task RunOnAsync(string command, GitChangeNode node) =>
+        RunWithArguments is { } run ? run(command, ArgumentsFor(node.FullPath, node.Section, node.Rows.Select(r => r.Status.Path))) : Task.CompletedTask;
+
+    /// <summary>Runs <paramref name="command"/> on a list row (a file).</summary>
+    public Task RunOnAsync(string command, GitFileRow row) =>
+        RunWithArguments is { } run ? run(command, ArgumentsFor(row.Status.Path, SectionOf(row), [row.Status.Path])) : Task.CompletedTask;
+
+    /// <summary>The section a file row is in.</summary>
+    public string SectionOf(GitFileRow row) => row.Staged ? "staged" : Conflicts.Contains(row) ? "conflicts" : "changes";
 }

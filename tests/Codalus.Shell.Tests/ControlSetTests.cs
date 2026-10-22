@@ -597,6 +597,70 @@ public class ControlSetTests
         }
     }
 
+    /// <summary>
+    /// D38, question 1: Discard and Delete are plain buttons named for the action and Cancel is the default, at the trailing
+    /// edge on every OS ([Delete] [Cancel], P12); on macOS the default goes last instead of the list being reversed, so a
+    /// request whose primary is the default still reads [Cancel] [Rename] there. The single check box (P7) is its own row,
+    /// unchecked, with its note, and its id comes back when it's checked.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_destructive_action_is_plain_with_Cancel_the_default_at_the_trailing_edge(bool primaryLast)
+    {
+        Assert.Equal(["Delete", "Cancel"], DialogViewModel.Order(["Delete", "Cancel"], "Cancel", primaryLast));
+        Assert.Equal(primaryLast ? ["Cancel", "Rename"] : ["Rename", "Cancel"], DialogViewModel.Order(["Rename", "Cancel"], "Rename", primaryLast));
+        Assert.Equal(primaryLast ? ["Always Reject", "Allow Once", "Reject"] : ["Allow Once", "Reject", "Always Reject"], DialogViewModel.Order(["Allow Once", "Reject", "Always Reject"], "Reject", primaryLast));
+
+        var dialog = new DialogViewModel { PrimaryLast = primaryLast };
+        var shown = dialog.ShowAsync(new DialogRequest("Delete feature/sign-in?", "The branch is deleted from this repository.", ["Delete", "Cancel"])
+        {
+            DefaultButton = "Cancel",
+            Icon = "trash",
+            Context = "Local branch · tracks origin/feature/sign-in",
+            Option = new DialogOption("upstream", "Also delete origin/feature/sign-in on the server", false)
+            {
+                Note = "That deletes it for everyone.",
+                Lines = [new DetailLine("9f3e2d1  Handle expired tokens")],
+            },
+        });
+        ShellFixture.Pump();
+        var view = new DialogView { DataContext = dialog, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+        var window = Show(view, ThemeService.HarborLight, 900, 600);
+        try
+        {
+            var footer = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("dialogFooter"));
+            var buttons = footer.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("dialog")).ToList();
+            Assert.Equal(["Delete", "Cancel"], buttons.Select(b => b.Content as string));
+            Assert.Equal("Cancel", buttons.Single(b => b.Classes.Contains("accent")).Content);
+            Assert.True(buttons[0].TranslatePoint(default, footer)!.Value.X < buttons[1].TranslatePoint(default, footer)!.Value.X, "Cancel is at the trailing edge");
+
+            // The single check box: no checklist, its note and list shown; unchecked, Enter cancels.
+            Assert.False(dialog.HasChoices);
+            var option = view.FindControl<CheckBox>("Option")!;
+            Assert.True(option.IsEffectivelyVisible);
+            Assert.False(option.IsChecked);
+            Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "That deletes it for everyone." && t.IsEffectivelyVisible);
+            Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "9f3e2d1  Handle expired tokens" && t.IsEffectivelyVisible);
+            Assert.DoesNotContain(view.GetVisualDescendants().OfType<CheckBox>(), c => c.IsEffectivelyVisible && c != option);
+            option.IsChecked = true;
+            buttons[0].Command!.Execute(null);
+            var result = await shown;
+            Assert.Equal("Delete", result.Button);
+            Assert.Equal(["upstream"], result.Checked);
+
+            // Enter on another: Cancel.
+            var again = dialog.ShowAsync(new DialogRequest("Discard changes?", "They will be lost.", ["Discard", "Cancel"]) { DefaultButton = "Cancel" });
+            ShellFixture.Pump();
+            dialog.Accept();
+            Assert.Equal("Cancel", (await again).Button);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]

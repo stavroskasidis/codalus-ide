@@ -33,6 +33,18 @@ public sealed partial class ShellHost
         Git.IndexChanged += (_, _) => Ui.Post(ReloadGitDiffs);
         GitChanges = new GitChangesViewModel(Git, (path, staged) => OpenDiffAsync(path, staged), command => RunGitCommandAsync(command));
         GitChanges.OpenFile = path => OpenFileAsync(path);
+        GitChanges.RunWithArguments = RunOnGitChangeAsync;
+        GitBranches = new GitBranchPickerViewModel(Git)
+        {
+            Checkout = branch => CheckoutBranchAsync(branch.FullRef),
+            NewBranch = name => NewBranchFromAsync(null, name),
+            MenuFor = GitBranchMenu,
+            RunOnBranch = (command, branch) => GitBranchMenuItems(branch).Any(i => i.Command == command)
+                ? RunAsync(command, [System.Text.Json.JsonSerializer.SerializeToElement(branch.FullRef, Docking.ShellJsonContext.Default.String)], GitBranchScope(branch))
+                : Task.CompletedTask,
+        };
+        GitChanges.Branches = GitBranches;
+        GitChanges.MenuFor = GitChangesMenu;
         GitChangesView.ReportError = ReportGitError;
         DiffView.ReportError = ReportGitError;
         MergeEditorView.ReportError = ReportGitError;
@@ -80,7 +92,8 @@ public sealed partial class ShellHost
     {
         if (command.StartsWith("git.discard:", StringComparison.Ordinal))
         {
-            return DiscardAsync(command["git.discard:".Length..]);
+            var path = command["git.discard:".Length..];
+            return DiscardChangesAsync(GitChangesViewModel.ArgumentsFor(path, "changes", [path]));
         }
 
         if (command.StartsWith("git.mergeEditor:", StringComparison.Ordinal))
@@ -119,6 +132,7 @@ public sealed partial class ShellHost
         Workbench.Context.Set("gitRepository", Git.Status is not null);
         Workbench.Context.Set("gitMerging", Git.Status?.IsMerging ?? false);
         UpdateGitDepthStatus();
+        _ = UpdateHasRemoteAsync();
         if (Git.Status is not { } status)
         {
             Workbench.StatusBar.Remove(BranchStatusItem);
@@ -134,6 +148,34 @@ public sealed partial class ShellHost
             Tooltip = $"Branch {branch}{(status.Upstream is { } upstream ? $" (tracking {upstream})" : " (not published)")}; {changes.ToString(CultureInfo.InvariantCulture)} changed file(s). Click to switch branches.",
             AccessibleName = $"Git branch {branch}, {changes.ToString(CultureInfo.InvariantCulture)} changes",
         });
+    }
+
+    private string? _remotesReadFor;
+
+    /// <summary>Whether the repository has a remote (B17, B18: the window's Publish to a Git Host… link), read once per repository and after Manage Remotes.</summary>
+    private async Task UpdateHasRemoteAsync(bool force = false)
+    {
+        if (Git.Root is not { } root || (!force && _remotesReadFor == root))
+        {
+            return;
+        }
+
+        _remotesReadFor = root;
+        try
+        {
+            GitChanges.HasRemote = (await Git.RemotesAsync().ConfigureAwait(true)).Count > 0;
+        }
+        catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
+        {
+            GitLog.AppendLine("git remote failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>Publish to a Git Host…, then the window's link follows the remote it added (B18).</summary>
+    public async Task PublishAndReadRemotesAsync()
+    {
+        await PublishAsync().ConfigureAwait(true);
+        await UpdateHasRemoteAsync(force: true).ConfigureAwait(true);
     }
 
     // ------------------------------------------------------------------ diffs and files
@@ -292,6 +334,166 @@ public sealed partial class ShellHost
             }
         }
     });
+
+    /// <summary>
+    /// Update Branch… (Git → Branches, the Git Changes window's ⋯ menu, the palette): brings a local branch up to date with
+    /// its upstream without checking it out and pulling (<see cref="GitService.UpdateBranchAsync"/>, fast-forward only; D38,
+    /// question 21). <paramref name="branch"/> is a local branch's name or full ref; with none, a quick pick of the local
+    /// branches that have an upstream, the current one first, leaving out (as Pull is hidden there) the current branch
+    /// during a merge or rebase and the branch a rebase or bisect here works on. While it runs, the status bar says so
+    /// with a cancel button (B23); then it says how many commits came, that the branch was up to date, or that it has
+    /// only commits of its own (B24). A notification explains a branch that has diverged, with Checkout (B25), one checked
+    /// out in another worktree, with Open in New Window (B26), one with no upstream, and one a merge, rebase or bisect holds.
+    /// </summary>
+    public Task UpdateBranchAsync(string? branch = null) => GitActionAsync(async () =>
+    {
+        var branches = await Git.BranchesAsync().ConfigureAwait(true);
+        var target = string.IsNullOrWhiteSpace(branch) ? null : branch.Trim();
+        if (target is null)
+        {
+            var held = (await Git.BranchOperationsAsync().ConfigureAwait(true)).Where(o => o.IsThisWorktree).Select(o => o.Branch).ToHashSet(StringComparer.Ordinal);
+            var busy = Git.Status?.Operation is "merge" or "rebase";
+            var candidates = branches
+                .Where(b => b is { IsRemote: false, Upstream: not null } && !held.Contains(b.Name) && !(b.IsCurrent && busy))
+                .OrderByDescending(b => b.IsCurrent)
+                .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (candidates.Count == 0)
+            {
+                StatusBar.ShowMessage(Localizer.Get("msg.git.noLocalBranchHasAnUpstream", "No local branch has an upstream branch to update from."), TimeSpan.FromSeconds(5));
+                return;
+            }
+
+            var items = candidates.Select(b => new QuickPickItem(b.Name)
+            {
+                Tag = b.Name,
+                Detail = b.IsCurrent ? Localizer.Format("msg.git.currentBranchFrom", "current, from {0}", b.Upstream!) : Localizer.Format("msg.git.branchFrom", "from {0}", b.Upstream!),
+            }).ToList();
+            if (await Palette.ShowAsync(items, Localizer.Get("msg.git.updateWhichBranch", "Update which branch from its upstream?")).ConfigureAwait(true) is not { Tag: string picked })
+            {
+                return;
+            }
+
+            target = picked;
+        }
+
+        var name = target.StartsWith("refs/heads/", StringComparison.Ordinal) ? target["refs/heads/".Length..] : target;
+        var known = branches.FirstOrDefault(b => !b.IsRemote && b.Name == name);
+        using var cancel = new CancellationTokenSource();
+        var progress = known?.Upstream is { } upstream
+            ? Workbench.Progress.Begin(Localizer.Format("msg.git.updatingBranchFrom", "Updating {0} from {1}", name, upstream), "Git", cancel.Cancel)
+            : null;
+        GitBranchUpdate update;
+
+        // The drop-down stays open: the row says Updating… where its chips go (B23), then the list reloads (B24).
+        GitBranches.SetBusy(name, busy: true);
+        try
+        {
+            update = await Git.UpdateBranchAsync(target, cancel.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            StatusBar.ShowMessage(Localizer.Format("msg.git.updatingBranchWasCancelled", "Updating {0} was cancelled.", name), TimeSpan.FromSeconds(5));
+            return;
+        }
+        finally
+        {
+            progress?.End();
+            GitBranches.SetBusy(name, busy: false);
+            if (GitBranches.IsOpen)
+            {
+                _ = GitBranches.LoadAsync();
+            }
+        }
+
+        ReportBranchUpdate(update, known);
+    });
+
+    /// <summary>What Update Branch did, in the words and with the actions of D38's B24-B26.</summary>
+    private void ReportBranchUpdate(GitBranchUpdate update, GitBranch? known)
+    {
+        var (name, upstream) = (update.Branch, update.Upstream ?? string.Empty);
+        switch (update.Outcome)
+        {
+            case GitBranchUpdateOutcome.Updated:
+                StatusBar.ShowMessage(Localizer.Format("msg.git.updatedBranchFromCommits", "Updated {0} from {1}: {2}.", name, upstream, Commits(update.Behind)), TimeSpan.FromSeconds(5));
+                break;
+            case GitBranchUpdateOutcome.UpToDate:
+                StatusBar.ShowMessage(Localizer.Format("msg.git.branchIsAlreadyUpToDateWith", "{0} is already up to date with {1}.", name, upstream), TimeSpan.FromSeconds(5));
+                break;
+            case GitBranchUpdateOutcome.Ahead:
+                StatusBar.ShowMessage(Localizer.Format("msg.git.branchHasNothingToUpdateAhead", "{0} has nothing to update from {1}: it's ahead by {2}, which Push sends.", name, upstream, Commits(update.Ahead)), TimeSpan.FromSeconds(5));
+                break;
+            case GitBranchUpdateOutcome.Diverged when update.IsCurrent:
+                var currentDiverged = Localizer.Format("msg.git.currentBranchHasDiverged", "{0} has diverged from {1}: {2} here, {3} there. Update only fast-forwards; merge {1} into it, or rebase it onto {1}.", name, upstream, Commits(update.Ahead), update.Behind);
+                if (GitBranches.IsOpen)
+                {
+                    GitBranches.ShowBanner(currentDiverged, warning: true);
+                    break;
+                }
+
+                Workbench.Notifications.Warning(currentDiverged);
+                break;
+            case GitBranchUpdateOutcome.Diverged:
+                var checkout = Localizer.Get("msg.git.checkout", "Checkout");
+                var divergedText = Localizer.Format("msg.git.branchHasDiverged", "{0} has diverged from {1}: {2} here, {3} there. Update only fast-forwards; check it out to merge or rebase.", name, upstream, Commits(update.Ahead), update.Behind);
+                var branch = known ?? new GitBranch(name, IsRemote: false, IsCurrent: false, update.Upstream, update.Before ?? string.Empty);
+
+                // From the drop-down, its banner with Checkout (B25); from the palette, a notification with the same action.
+                if (GitBranches.IsOpen)
+                {
+                    GitBranches.ShowBanner(divergedText, warning: true, checkout, "branch", () => CheckoutBranchAsync("refs/heads/" + branch.Name));
+                    break;
+                }
+
+                var diverged = Workbench.Notifications.Warning(divergedText, checkout);
+                _ = diverged.Result.ContinueWith(t => { if (t.Result == checkout) { Ui.Post(() => _ = GitActionAsync(() => Git.SwitchAsync(branch))); } }, TaskScheduler.Default);
+                break;
+            case GitBranchUpdateOutcome.CheckedOutElsewhere:
+                var where = update.WorktreePath ?? Localizer.Get("msg.git.anotherWorktree", "another worktree");
+                var message = update.Operation switch
+                {
+                    "rebase" => Localizer.Format("msg.git.branchIsBeingRebasedIn", "{0} is being rebased in {1}, so it can't be updated here.", name, where),
+                    "bisect" => Localizer.Format("msg.git.branchIsBeingBisectedIn", "{0} is being bisected in {1}, so it can't be updated here.", name, where),
+                    _ => Localizer.Format("msg.git.branchIsCheckedOutInCantBeUpdated", "{0} is checked out in {1}, so it can't be updated here. Pull in that window updates it.", name, where),
+                };
+                if (update.WorktreePath is not { } path)
+                {
+                    Workbench.Notifications.Warning(message);
+                    break;
+                }
+
+                var open = Localizer.Get("msg.git.openInNewWindow", "Open in New Window");
+                if (GitBranches.IsOpen)
+                {
+                    // B26: the drop-down's banner says where, with Open in New Window.
+                    GitBranches.ShowBanner(message, warning: false, open, "window-new", () =>
+                    {
+                        StartNewWindow(path);
+                        return Task.CompletedTask;
+                    });
+                    break;
+                }
+
+                _ = Workbench.Notifications.Warning(message, open).Result.ContinueWith(t => { if (t.Result == open) { Ui.Post(() => StartNewWindow(path)); } }, TaskScheduler.Default);
+                break;
+            case GitBranchUpdateOutcome.OperationInProgress:
+                Workbench.Notifications.Info(update.Operation switch
+                {
+                    "merge" => Localizer.Format("msg.git.branchCantBeUpdatedDuringMerge", "{0} can't be updated while a merge is in progress. Commit or abort the merge first.", name),
+                    "bisect" => Localizer.Format("msg.git.branchIsBeingBisected", "{0} is being bisected, so it can't be updated now. End the bisect first.", name),
+                    _ => Localizer.Format("msg.git.branchIsBeingRebased", "{0} is being rebased, so it can't be updated now. Continue or abort the rebase first.", name),
+                });
+                break;
+            case GitBranchUpdateOutcome.NoUpstream:
+                Workbench.Notifications.Info(Localizer.Format("msg.git.branchHasNoUpstream", "{0} has no upstream branch to update from.", name));
+                break;
+        }
+    }
+
+    private static string Commits(int count) => count == 1
+        ? Localizer.Get("msg.git.oneCommit", "1 commit")
+        : Localizer.Format("msg.git.commitCount", "{0} commits", count);
 
     public Task FetchAsync() => GitActionAsync(() => Git.FetchAsync(), "Fetching…");
 

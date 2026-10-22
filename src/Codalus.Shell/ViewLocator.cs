@@ -31,6 +31,7 @@ public sealed class ViewLocator : IDataTemplate
         EditorConfigDocument document => new PaneHost(document, new EditorConfigView { DataContext = document }),
         CustomEditorDocument document => new PaneHost(document, new DeclarativeViewHost(document.ViewId, document.Plugins, activate: false)),
         GitHistoryDocument document => new PaneHost(document, new GitHistoryView { DataContext = document.ViewModel }),
+        GitCompareDocument document => new PaneHost(document, new GitCompareView { DataContext = document.ViewModel }),
         DumpDocument document => new PaneHost(document, new DumpView { DataContext = document.ViewModel }),
         MergeEditorDocument document => new PaneHost(document, new MergeEditorView(document.ViewModel, document.Font)),
         InteractiveRebaseDocument document => new PaneHost(document, new InteractiveRebaseView { DataContext = document.ViewModel }),

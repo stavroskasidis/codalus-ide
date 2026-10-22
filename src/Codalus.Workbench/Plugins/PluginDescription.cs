@@ -389,7 +389,7 @@ public sealed partial class PluginDescription
     /// </summary>
     private static bool IsKnownMenuLocation(string location)
     {
-        if (location is MenuLocations.CommandPalette or MenuLocations.ToolWindowTitle or MenuLocations.DocumentTabContext)
+        if (location is MenuLocations.CommandPalette or MenuLocations.ToolWindowTitle or MenuLocations.DocumentTabContext or MenuLocations.GitChangesContext or MenuLocations.GitChangesBranch)
         {
             return true;
         }
