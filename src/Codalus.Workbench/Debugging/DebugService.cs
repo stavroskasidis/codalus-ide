@@ -401,7 +401,10 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     private async Task JoinAsync(CompoundDebugAdapter session, LaunchPart part, CancellationToken cancellationToken)
     {
-        await session.AddAsync(part.Name, part.CreateAsync, part.StartAsync, (adapter, ex, attempt) => StartPartAgainAsync(part, adapter, ex, attempt, cancellationToken), cancellationToken).ConfigureAwait(false);
+        // Under its index in Processes: the session reports its process and exit by it (PartChanged). The session's own
+        // numbering follows the order the adapters started, which isn't the order of Processes when programs are added
+        // at once and the later one's netcoredbg starts first, or when an earlier one's netcoredbg didn't start.
+        await session.AddAsync(part.Name, part.CreateAsync, part.StartAsync, (adapter, ex, attempt) => StartPartAgainAsync(part, adapter, ex, attempt, cancellationToken), part.Index, cancellationToken).ConfigureAwait(false);
         if (part.ConfiguredAsync is { } configured)
         {
             await configured().ConfigureAwait(false);
@@ -524,7 +527,7 @@ public sealed class DebugService : IAsyncDisposable
             adapter => ((DebugAdapter)adapter).LaunchAsync(Arguments(launch.Plan), cancellationToken));
     }
 
-    /// <summary>A program of an independent compound session started or ended.</summary>
+    /// <summary>A program of an independent compound session started or ended: its index is its place in <see cref="Processes"/> (<see cref="JoinAsync"/>).</summary>
     private void OnPartChanged(object? sender, CompoundPartEvent e)
     {
         UpdateProcess(e.Index, p => e.Ended ? p with { Ended = true, ExitCode = e.ExitCode } : p with { Id = e.ProcessId ?? p.Id });

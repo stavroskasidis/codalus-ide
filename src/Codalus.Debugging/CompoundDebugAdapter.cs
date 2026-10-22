@@ -171,7 +171,34 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// session's breakpoints and exception settings are replayed to it, then it is configured.
     /// </summary>
     public Task AddAsync(IDebugAdapter adapter, string name, Func<IDebugAdapter, Task> launch, CancellationToken cancellationToken) =>
-        AddAsync(name, _ => Task.FromResult(adapter), launch, static (_, _, _) => Task.FromResult(false), cancellationToken);
+        AddAsync(name, _ => Task.FromResult(adapter), launch, static (_, _, _) => Task.FromResult(false), index: null, cancellationToken);
+
+    /// <summary>
+    /// <paramref name="index"/> when it's free, or the lowest free index when it's null (with the gate held). Throws when
+    /// the session is full or the index is taken.
+    /// </summary>
+    private int FreeIndex(int? index)
+    {
+        if (_parts.Count >= MaxParts)
+        {
+            throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
+        }
+
+        if (index is { } wanted)
+        {
+            return _parts.Any(p => p.Index == wanted)
+                ? throw new InvalidOperationException($"The debug session already has a program at index {wanted}.")
+                : wanted;
+        }
+
+        var free = 1;
+        while (_parts.Any(p => p.Index == free))
+        {
+            free++;
+        }
+
+        return free < MaxParts ? free : throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
+    }
 
     /// <summary>
     /// Adds a program to the running session (multiple startup projects, M14c): <paramref name="create"/> starts its
@@ -180,36 +207,45 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// true to start again in the same place, under the same index, or says false to fail. An abandoned attempt's
     /// events and end are no longer the session's.
     /// </summary>
+    /// <param name="index">
+    /// The program's index in the session, which <see cref="PartChanged"/> reports: the caller's own number for it (its
+    /// place in the caller's list of programs), from 1 (the primary's is 0), below <see cref="MaxParts"/> and not yet
+    /// taken; null for the lowest free one. A caller that numbers its programs before their adapters start needs its
+    /// own: programs added at once join in the order their adapters started, which needn't be the order they were
+    /// added in, and a program whose adapter didn't start takes no index here.
+    /// </param>
     public async Task AddAsync(
         string name,
         Func<CancellationToken, Task<IDebugAdapter>> create,
         Func<IDebugAdapter, Task> launch,
         Func<IDebugAdapter, Exception, int, Task<bool>> startAgain,
+        int? index,
         CancellationToken cancellationToken)
     {
+        if (index is < 1 or >= MaxParts)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"A program's index in a debug session is from 1 to {MaxParts - 1}.");
+        }
+
         lock (_gate)
         {
-            if (_parts.Count >= MaxParts)
-            {
-                throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
-            }
+            _ = FreeIndex(index);
         }
 
         var adapter = await create(cancellationToken).ConfigureAwait(false);
-        Part? part = null;
-        lock (_gate)
+        Part part;
+        try
         {
-            if (_parts.Count < MaxParts)
+            lock (_gate)
             {
-                part = new Part(adapter, name, _parts.Count) { Starting = true };
+                part = new Part(adapter, name, FreeIndex(index)) { Starting = true };
                 _parts.Add(part);
             }
         }
-
-        if (part is null)
+        catch (InvalidOperationException)
         {
             await adapter.DisposeAsync().ConfigureAwait(false);
-            throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
+            throw;
         }
 
         var abandoned = new StrongBox<bool>();
@@ -372,7 +408,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         lock (_gate)
         {
             var index = id % MaxParts;
-            return index < _parts.Count ? (_parts[index], id / MaxParts) : throw new DapException(command, "That debug target has ended.");
+            return _parts.Find(p => p.Index == index) is { } part ? (part, id / MaxParts) : throw new DapException(command, "That debug target has ended.");
         }
     }
 

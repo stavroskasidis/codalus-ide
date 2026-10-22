@@ -435,10 +435,12 @@ public sealed class DebugStartAgainTests : IDisposable
     /// launch's environment how many of its starts to fail.
     /// </summary>
     /// <param name="keepsRunning">The program runs until the session ends it, instead of printing and exiting with 7.</param>
-    private DebugLaunch StartupProject(string name, int failStarts, string? runtimeAfter = null, bool keepsRunning = false)
+    /// <param name="options">More of the scripted program's options (<c>processId</c>, <c>exitCode</c>).</param>
+    /// <param name="initializeAfter">Its adapter (netcoredbg) starts only once this file exists.</param>
+    private DebugLaunch StartupProject(string name, int failStarts, string? runtimeAfter = null, bool keepsRunning = false, Dictionary<string, string>? options = null, string? initializeAfter = null)
     {
         var folder = AppContext.BaseDirectory;
-        var env = new Dictionary<string, string> { ["failStarts"] = failStarts.ToString(System.Globalization.CultureInfo.InvariantCulture), ["startsFile"] = _starts };
+        var env = new Dictionary<string, string>(options ?? []) { ["failStarts"] = failStarts.ToString(System.Globalization.CultureInfo.InvariantCulture), ["startsFile"] = _starts };
         if (runtimeAfter is not null)
         {
             env["runtimeAfter"] = runtimeAfter;
@@ -449,9 +451,10 @@ public sealed class DebugStartAgainTests : IDisposable
             env["keepsRunning"] = "true";
         }
 
+        var adapter = initializeAfter is null ? Adapter() : Adapter() with { Arguments = [.. Adapter().Arguments, "--initialize-after", initializeAfter] };
         return new DebugLaunch(name, new Codalus.Workbench.Build.LaunchPlan("program", string.Empty, folder, new Dictionary<string, string>(), null))
         {
-            Remote = new RemoteLaunch(Adapter(), new LaunchArguments("program", [], folder, env), new SourceMap(), "here"),
+            Remote = new RemoteLaunch(adapter, new LaunchArguments("program", [], folder, env), new SourceMap(), "here"),
         };
     }
 
@@ -586,6 +589,38 @@ public sealed class DebugStartAgainTests : IDisposable
             Assert.Contains("[Api] The debugger saw the program's runtime start ", output.ToString(), StringComparison.Ordinal);
             Assert.DoesNotContain("Could not start", output.ToString(), StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task Programs_added_at_once_get_their_own_process_and_exit_whichever_debugger_starts_first()
+    {
+        // Two of an Aspire AppHost's projects added at once: each has its place in Processes before its netcoredbg starts,
+        // and the session numbered its programs in the order their netcoredbg started, which reported each one's process
+        // id and exit in the other's place when the later one's started first. Here the first one's netcoredbg starts
+        // only once the second one joined.
+        await using var debug = new DebugService(() => null);
+        await debug.LaunchAsync([StartupProject("AppHost", failStarts: 0, keepsRunning: true)], Timeout(), compound: true);
+        var go = _starts + ".go";
+        _scratch.Add(go);
+
+        var (first, firstJoined) = debug.AddLaunch(StartupProject("Api", failStarts: 0, options: new() { ["processId"] = "1111", ["exitCode"] = "11" }, initializeAfter: go), Timeout());
+        var (second, secondJoined) = debug.AddLaunch(StartupProject("Worker", failStarts: 0, options: new() { ["processId"] = "2222", ["exitCode"] = "22" }), Timeout());
+        Assert.Equal((1, 2), (first, second));
+        Assert.True(await secondJoined.WaitAsync(Timeout()));
+        Assert.False(firstJoined.IsCompleted);
+        await File.WriteAllTextAsync(go, string.Empty, TestContext.Current.CancellationToken);
+        Assert.True(await firstJoined.WaitAsync(Timeout()));
+
+        var timeout = Timeout();
+        while (!(debug.Processes[first].Ended && debug.Processes[second].Ended))
+        {
+            await Task.Delay(50, timeout);
+        }
+
+        Assert.Equal(("Api", (int?)1111, (int?)11), (debug.Processes[first].Name, debug.Processes[first].Id, debug.Processes[first].ExitCode));
+        Assert.Equal(("Worker", (int?)2222, (int?)22), (debug.Processes[second].Name, debug.Processes[second].Id, debug.Processes[second].ExitCode));
+        Assert.False(debug.Processes[0].Ended);
+        Assert.NotEqual(DebugState.Idle, debug.State);
     }
 
     [Fact]

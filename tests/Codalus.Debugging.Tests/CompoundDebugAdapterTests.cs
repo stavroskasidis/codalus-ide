@@ -267,6 +267,55 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task A_program_added_under_its_callers_index_is_reported_and_reached_by_it()
+    {
+        // The debug service numbers its programs before their adapters start (an Aspire AppHost's projects added at
+        // once): a program joins under that index, whichever adapter started first, and its process, exit and ids are
+        // the index's.
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var third = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var compound = new CompoundDebugAdapter(first, "AppHost", independent: true);
+        var parts = new List<CompoundPartEvent>();
+        compound.PartChanged += (_, e) =>
+        {
+            lock (parts)
+            {
+                parts.Add(e);
+            }
+        };
+
+        await compound.AddAsync("Worker", _ => Task.FromResult<IDebugAdapter>(third), _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: 2, Ct);
+        Assert.Equal([new DapThread(M, "AppHost: Main Thread"), new DapThread(M + 2, "Worker: Main Thread")], await compound.ThreadsAsync(Ct));
+        await compound.ContinueAsync(M + 2, Ct);
+        Assert.Contains("continue 1", third.Requests);
+        Assert.DoesNotContain("continue 1", first.Requests);
+        await Assert.ThrowsAsync<DapException>(() => compound.ContinueAsync(M + 1, Ct)); // no program at index 1
+
+        await third.RaiseAsync(DapEvents.Process, new ProcessEvent("worker", 300), DapJsonContext.Default.ProcessEvent);
+        await third.RaiseAsync(DapEvents.Exited, new ExitedEvent(4), DapJsonContext.Default.ExitedEvent);
+        await third.RaiseAsync(DapEvents.Terminated, new ExitedEvent(0), DapJsonContext.Default.ExitedEvent);
+        Assert.Equal([new CompoundPartEvent("Worker", 2, 300, false, null), new CompoundPartEvent("Worker", 2, null, true, 4)], parts);
+
+        // An index taken, or out of range, is refused before the adapter starts.
+        var started = 0;
+        Task<IDebugAdapter> Start(CancellationToken _)
+        {
+            started++;
+            return Task.FromResult<IDebugAdapter>(new FakeAdapter([new DapThread(1, "Main Thread")]));
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => compound.AddAsync("Again", Start, _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: 2, Ct));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => compound.AddAsync("Primary", Start, _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: 0, Ct));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => compound.AddAsync("Beyond", Start, _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: M, Ct));
+        Assert.Equal(0, started);
+
+        // Without one, a program takes the lowest free index.
+        await compound.AddAsync("Api", Start, _ => Task.CompletedTask, static (_, _, _) => Task.FromResult(false), index: null, Ct);
+        Assert.Equal(["AppHost", "Worker", "Api"], compound.PartNames);
+        Assert.Contains(new DapThread(M + 1, "Api: Main Thread"), await compound.ThreadsAsync(Ct));
+    }
+
+    [Fact]
     public async Task A_reserved_place_keeps_the_session_open_when_the_first_program_ends_before_the_next_joins()
     {
         // Found on a loaded Windows runner: the first program exited before the second's adapter was ready, the session
@@ -537,6 +586,7 @@ public sealed class CompoundDebugAdapterTests
                 attempts.Add((error, attempt));
                 return Task.FromResult(true);
             },
+            index: null,
             Ct);
 
         // One failed attempt, undone: disposed, its end and events no longer the session's.
