@@ -318,6 +318,12 @@
     worktree: `<g ${S}><circle cx="8" cy="12.4" r="1.6"/><circle cx="3.6" cy="3.6" r="1.6"/><circle cx="12.4" cy="3.6" r="1.6"/><path d="M8 10.8V8.4M3.6 5.2c0 2 4.4 1.6 4.4 3.2M12.4 5.2c0 2-4.4 1.6-4.4 3.2"/></g>`,
     lock: `<g ${S}><rect x="3.2" y="7" width="9.6" height="6.8" rx="1.4"/><path d="M5.4 7V5a2.6 2.6 0 0 1 5.2 0v2M8 9.6v1.6"/></g>`,
     unlock: `<g ${S}><rect x="3.2" y="7" width="9.6" height="6.8" rx="1.4"/><path d="M5.4 7V5a2.6 2.6 0 0 1 5-1M8 9.6v1.6"/></g>`,
+    // Connecting an external agent (AgentConnect.dc.html): the agent, its key, Disconnect, a pending and a running step.
+    bot: `<g ${S}><rect x="2.4" y="5" width="11.2" height="8.4" rx="2"/><path d="M8 5V3M6.2 10.8h3.6"/></g><g ${F}><circle cx="8" cy="2.4" r=".9"/><circle cx="5.8" cy="8.2" r="1"/><circle cx="10.2" cy="8.2" r="1"/></g>`,
+    key: `<g ${S}><circle cx="5.2" cy="10.8" r="2.9"/><path d="m7.3 8.7 6.1-6.1M11.4 4.6l1.7 1.7M9.6 6.4l1.3 1.3"/></g>`,
+    'plug-off': `<g ${S}><path d="M5.6 1.8v3M10.4 1.8v3M3.6 4.8h8.8v2.4a4.4 4.4 0 0 1-8.8 0zM8 11.6v2.6"/><path d="m2.2 2.2 11.6 11.6"/></g>`,
+    'circle-outline': `<circle ${S} cx="8" cy="8" r="5.4"/>`,
+    progress: `<g ${S}><path d="M8 2.4a5.6 5.6 0 1 1-5.6 5.6"/></g>`,
     check: `<path ${S} stroke-width="1.5" d="m3.4 8.4 3 3 6.2-6.8"/>`,
     'check-circle': `<g ${S}><circle cx="8" cy="8" r="6"/><path d="m5.4 8.2 1.8 1.8 3.5-3.7"/></g>`,
     warning: `<path fill="var(--warn-fill, currentColor)" stroke="var(--warn-stroke, currentColor)" stroke-linejoin="round" d="M8 1.6 15 14H1z"/><path stroke="var(--warn-mark, #1B1B1B)" stroke-width="1.5" stroke-linecap="round" d="M8 6v3.6M8 11.6v.1"/>`,

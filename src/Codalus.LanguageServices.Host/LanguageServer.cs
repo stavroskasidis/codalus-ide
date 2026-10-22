@@ -152,7 +152,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         OnPosition(Methods.Completion, json.CompletionParams, json.CompletionList, p => (p.TextDocument, p.Position),
             async (document, offset, p, ct) => await _completion.CompleteAsync(document, offset, p.Context, ct).ConfigureAwait(false), new CompletionList(false, []),
             (mapping, offset, p, ct) => _razor.CompleteAsync(mapping, offset, p.Context, ct),
-            async (xaml, offset, _, ct) => await Xaml.XamlCompletion.CompleteAsync(xaml, offset, ct).ConfigureAwait(false), Semantics.Analysis);
+            async (xaml, offset, _, ct) => await Xaml.XamlCompletion.CompleteAsync(xaml, offset, _completion, ct).ConfigureAwait(false), Semantics.Analysis);
         _connection.OnRequest(Methods.CompletionResolve, json.CompletionItem, json.CompletionItem, (item, ct) => _completion.ResolveAsync(item, ct));
         OnPosition(Methods.Hover, json.TextDocumentPositionParams, json.Hover, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => HoverFeature.HoverAsync(document, offset, ct), null,

@@ -18,7 +18,14 @@ public sealed class App : Application
         Infrastructure.ShellSystemFonts.Install();
     }
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        // Dock's deferred content fades a tab's view in from Opacity 0.85 when a document or tool tab is switched, and its
+        // transition races the value it posts at the end: every other switch left the whole document view at 0.85, so the
+        // editor's and the compare view's colors read 15% dimmer (#83). The classic IDE has no fade either; zero turns it off.
+        Dock.Controls.DeferredContentControl.DeferredContentPresentationSettings.RevealDuration = TimeSpan.Zero;
+        AvaloniaXamlLoader.Load(this);
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {

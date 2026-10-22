@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Diff Document: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<!-- This page's own glyphs, each the shape the shell would draw:
+     - Fluent UI System Icons copied from the pinned @fluentui/svg-icons 1.1.344 (Microsoft, MIT; eng/get-fluent-icons.sh):
+         compare           branch_compare_16_regular       (the tab; already the shell's "compare" kind, Blue)
+         fold, unfold      text_collapse_16_regular, text_expand_16_regular (Summary and a folded run; already "fold"/"unfold", Blue)
+         fl-add            add_16_regular                  (Stage, Stage All; already the shell's "add" kind, Green)
+       + staging-controls  add_subtract_circle_16_regular  (Show Staging Controls; the plan's one new kind, Blue)
+     - The shell's own 16×16 stroke drawings (Controls/Icon.cs, 1.25 px round pen): discard, subtract (Red), and the
+       navigation bar's class and method (as NavigationBar shows them: SymbolNodeViewModel.IconFor gives "class@Open" and
+       "method@Build", colored Shell.Icon.Open and Shell.Icon.Build).
+     - The classic file icons (cl-*): the app's pixel drawings (src/Codalus.Shell/Icons/Classic), as GitChanges.dc.html draws them.
+     - radio: the menu's radio mark (MenuItemToggleType.Radio draws it, as in the merge editor's layout menu), not an icon kind.
+     Everything else (arrows, gear, more, copy, doc-text, warning, info, check-circle, file) is controls.js's set, as in the
+     other mockups. -->
+<svg id="dd-sprite" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="i-cl-csharp" viewBox="0 0 16 16"><path fill="currentColor" d="M2 4H5V5H2ZM9 4H10V6H9ZM12 4H13V6H12ZM1 5H3V6H1ZM4 5H6V6H4ZM1 6H2V10H1ZM5 6H6V7H5ZM7 6H15V7H7ZM9 7H10V9H9ZM12 7H13V9H12ZM5 9H6V10H5ZM7 9H15V10H7ZM1 10H3V11H1ZM4 10H6V11H4ZM9 10H10V12H9ZM12 10H13V12H12ZM2 11H5V12H2Z"/></symbol>
+  <symbol id="i-cl-json" viewBox="0 0 16 16"><path fill="currentColor" d="M5 1H10V2H5ZM4 2H5V7H4ZM9 2H11V3H9ZM9 3H10V5H9ZM11 3H12V4H11ZM12 4H13V5H12ZM9 5H14V6H9ZM13 6H14V14H13ZM2 8H4V9H2ZM6 8H8V9H6ZM2 9H3V11H2ZM7 9H8V11H7ZM1 11H3V12H1ZM7 11H9V12H7ZM2 12H3V14H2ZM7 12H8V14H7ZM2 14H4V15H2ZM6 14H8V15H6ZM10 14H13V15H10Z"/></symbol>
+  <symbol id="i-cl-document" viewBox="0 0 16 16"><path fill="currentColor" d="M4 1H9V2H4ZM3 2H4V14H3ZM8 2H10V3H8ZM8 3H9V5H8ZM10 3H11V4H10ZM11 4H12V5H11ZM8 5H13V6H8ZM12 6H13V14H12ZM4 14H12V15H4Z"/></symbol>
+  <symbol id="i-compare" viewBox="0 0 16 16"><path fill="currentColor" d="M9.15 5.85a.5.5 0 1 0 .7-.7L8.71 4h1.79c.83 0 1.5.67 1.5 1.5v4.55a2.5 2.5 0 1 0 1 0V5.5A2.5 2.5 0 0 0 10.5 3H8.7l1.15-1.15a.5.5 0 0 0-.7-.7l-2 2a.5.5 0 0 0 0 .7zM14 12.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m-8-9a2.5 2.5 0 0 1-2 2.45v4.55c0 .83.67 1.5 1.5 1.5h1.8l-1.15-1.15a.5.5 0 0 1 .7-.7l2 2c.2.2.2.5 0 .7l-2 2a.5.5 0 0 1-.7-.7L7.29 13H5.5A2.5 2.5 0 0 1 3 10.5V5.95A2.5 2.5 0 1 1 6 3.5m-1 0a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0"/></symbol>
+  <symbol id="i-fold" viewBox="0 0 16 16"><path fill="currentColor" d="M13.5 13a.5.5 0 0 1 0 1h-10a.5.5 0 0 1 0-1zm-9-8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7M3 7.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1zM13.5 9a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1zm0-3a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1zm0-4a.5.5 0 0 1 0 1h-10a.5.5 0 0 1 0-1z"/></symbol>
+  <symbol id="i-unfold" viewBox="0 0 16 16"><path fill="currentColor" d="M13.5 13a.5.5 0 0 1 0 1h-10a.5.5 0 0 1 0-1zm-9-8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7m0 1.5a.5.5 0 0 0-.5.5v1H3a.5.5 0 0 0 0 1h1v1a.5.5 0 0 0 1 0v-1h1a.5.5 0 0 0 0-1H5v-1a.5.5 0 0 0-.5-.5m9 3a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1zm0-3a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1zm0-4a.5.5 0 0 1 0 1h-10a.5.5 0 0 1 0-1z"/></symbol>
+  <symbol id="i-fl-add" viewBox="0 0 16 16"><path fill="currentColor" d="M8 2c.28 0 .5.22.5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5c0-.28.22-.5.5-.5"/></symbol>
+  <symbol id="i-staging-controls" viewBox="0 0 16 16"><path fill="currentColor" d="M9 10.5c0-.28.22-.5.5-.5H12a.5.5 0 0 1 0 1H9.5a.5.5 0 0 1-.5-.5m-3-6a.5.5 0 0 0-1 0v1H4a.5.5 0 0 0 0 1h1v.8a.5.5 0 0 0 1 0v-.8h1a.5.5 0 0 0 0-1H6zM8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14m0-1a6 6 0 0 1-3.87-1.42l8.45-8.45A6 6 0 0 1 8 14m-4.58-2.13a6 6 0 0 1 8.46-8.46z"/></symbol>
+  <symbol id="i-discard" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M3 5.5H10C12 5.5 13.5 7 13.5 9C13.5 11 12 12.5 10 12.5H5M5.5 3 3 5.5 5.5 8"/></symbol>
+  <symbol id="i-subtract" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" d="M3.5 8H12.5"/></symbol>
+  <symbol id="i-nav-class" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M2.5 3H13.5V13H2.5ZM2.5 6.25H13.5"/></symbol>
+  <symbol id="i-nav-method" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M8 2.25 13 5.1V10.9L8 13.75 3 10.9V5.1Z"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="currentColor"/></symbol>
+</svg>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:24px 20px 40px;display:flex;flex-direction:column;gap:18px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.lead{color:var(--muted);max-width:1220px}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.sec{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.sec h2{font-size:16px;line-height:22px;margin:0;font-weight:600;color:var(--strong)}
+.prow{display:flex;gap:20px;align-items:flex-start}
+.pnl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pnl h3{font-size:13px;line-height:18px;margin:0;font-weight:600;color:var(--strong);display:flex;flex-direction:column}
+.pnl h3 .src{font-family:var(--mono);font-size:11px;line-height:16px;font-weight:400;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnl .cap{color:var(--muted);font-size:11px;line-height:15px}
+.pid{display:inline-block;min-width:24px;padding:0 5px;margin-right:4px;border-radius:9px;background:var(--badge);color:var(--badge-fg);font-size:11px;line-height:16px;text-align:center}
+.kind-hc .pid{border:1px solid var(--soft-border)}
+.c-open{color:var(--ic-open)}
+
+/* The document: the shell's document tab, then the diff (DiffView). */
+.dd{position:relative;display:flex;flex-direction:column;background:var(--bg)}
+.dd .doc-tabs{height:30px;overflow:hidden}
+.dd-doc{display:flex;flex-direction:column;min-height:0;position:relative}
+.dd-tb{flex:none;gap:2px;padding:2px 4px}
+.dd-count{padding:0 8px 0 6px;white-space:nowrap}
+.dd-tb .chip{height:18px;padding:0 6px;margin-right:2px}
+.dd-body{display:flex;background:var(--panel);min-height:0}
+.side{position:relative;display:flex;flex-direction:column;flex:1 1 0;min-width:0;background:var(--d-bg)}
+/* The splitter between the sides (DiffView's GridSplitter, kept): the 5 px gap; accent while hovered or dragged. */
+.side + .side{margin-left:5px}
+.side + .side::before{content:'';position:absolute;left:-5px;top:0;bottom:0;width:5px;z-index:1}
+.sp-hover .side + .side::before{background:var(--accent)}
+.sh{flex:none;height:24px;display:flex;align-items:center;gap:6px;padding:0 8px;background:var(--header);border-bottom:1px solid var(--soft-border);white-space:nowrap;overflow:hidden}
+.sh b{font-weight:600;color:var(--strong)}
+.sh .lbl{color:var(--muted)}
+.sh .note{font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.nav{flex:none;height:28px;display:flex;gap:4px;padding:3px 4px;background:var(--panel);border-bottom:1px solid var(--soft-border)}
+.nav .combo{flex:1 1 0;min-width:0;height:22px;padding:0 6px;gap:5px}
+.nav .combo .value{flex:1 1 auto}
+.nav .combo .value.ph{color:var(--disabled-fg)}
+.nav .combo.is-disabled svg.i{opacity:.4}
+
+/* The panes: AvaloniaEdit's text view with the diff's margins (numbers, staging, signs) and renderers (fills, filler, tints). */
+.pane{position:relative;overflow:hidden;flex:none;background:var(--d-bg)}
+.r{display:flex;height:18px;font-family:var(--mono);font-size:12px;line-height:18px;white-space:pre;color:var(--d-fg)}
+.r .no{width:44px;flex:none;text-align:right;padding-right:6px;color:var(--d-ln);background:var(--d-bg)}
+.two .r .no{width:36px;padding-right:4px}
+.r .sg{width:14px;flex:none;text-align:center}
+.r .cd{flex:1 1 auto;min-width:0;position:relative;overflow:hidden;padding-left:4px;padding-right:12px}
+.r .tx{position:relative}
+.r.cur{background:var(--d-cur)}
+.r.add{background:var(--d-add)}
+.r.del{background:var(--d-del)}
+.r.add .sg{color:var(--d-add-fg)}
+.r.del .sg{color:var(--d-del-fg)}
+.kind-hc .r.add .sg{box-shadow:inset 2px 0 0 var(--d-add-fg)}
+.kind-hc .r.del .sg{box-shadow:inset 2px 0 0 var(--d-del-fg)}
+/* Changed words: Shell.Diff.Added.Word / .Removed.Word, plus a 1 px outline as a second cue (High contrast: outline only). */
+.r.add .w{background:var(--d-add-w);--wo:var(--d-add-wo)}
+.r.del .w{background:var(--d-del-w);--wo:var(--d-del-wo)}
+.r .w{box-shadow:inset 0 1px 0 var(--wo),inset 0 -1px 0 var(--wo)}
+.r .w.wl{box-shadow:inset 1px 0 0 var(--wo),inset 0 1px 0 var(--wo),inset 0 -1px 0 var(--wo);border-top-left-radius:2px;border-bottom-left-radius:2px}
+.r .w.wr{box-shadow:inset -1px 0 0 var(--wo),inset 0 1px 0 var(--wo),inset 0 -1px 0 var(--wo);border-top-right-radius:2px;border-bottom-right-radius:2px}
+.r .w.wl.wr{box-shadow:inset 0 0 0 1px var(--wo)}
+/* The filler: diagonal hatching on the row (the numbers keep the editor's background). 6.364 px = 18 px / 2√2, so the
+   stripes run on from row to row. */
+.r.fill{background:repeating-linear-gradient(-45deg,var(--d-hatch) 0 1px,transparent 1px 6.364px),var(--d-bg)}
+.z150 .r.fill{background:repeating-linear-gradient(-45deg,var(--d-hatch) 0 1.5px,transparent 1.5px 9.546px),var(--d-bg)}
+.r .g{position:absolute;top:0;bottom:0;width:0;border-left:1px dotted var(--d-guide)}
+.r .selbg{position:absolute;top:0;bottom:0;left:4px;background:var(--d-sel)}
+.r.chg .no{box-shadow:inset 3px 0 0 var(--d-chg)}
+.r.fold,.r.fold .no,.r.fold .stc{background:var(--header)}
+.r.fold{box-shadow:inset 0 1px 0 var(--soft-border),inset 0 -1px 0 var(--soft-border)}
+.r .foldt{position:relative;display:inline-flex;align-items:center;gap:5px;height:18px;color:var(--muted);font-family:var(--ui);font-size:11px}
+.r .foldt svg.i{width:12px;height:12px;color:var(--ic-blue)}
+.z150 .r{height:27px;line-height:27px;font-size:18px}
+.z150 .r .no{width:64px;padding-right:9px}
+.z150 .r .sg{width:20px}
+.hsc .r .cd .tx,.hsc .r .cd .g{margin-left:-12ch}
+.s-pu{color:var(--s-pu)}.s-kw{color:var(--s-kw)}.s-ck{color:var(--s-ck)}.s-ty{color:var(--s-ty)}.s-if{color:var(--s-if)}.s-fn{color:var(--s-fn)}
+.s-pa{color:var(--s-pa)}.s-st{color:var(--s-st)}.s-nu{color:var(--s-nu)}.s-cm{color:var(--s-cm)}
+.s-jk{color:var(--j-key)}.s-js{color:var(--j-str)}.s-jn{color:var(--j-num)}.s-jb{color:var(--j-kw)}
+
+/* The staging controls (DiffStagingMargin): a column between the numbers and the signs of the new side, with each change's
+   buttons at its first row in view. They sit on the editor's background and never cover code. */
+.r .stc{width:38px;flex:none;display:flex;align-items:center;gap:1px;padding-left:1px;box-sizing:border-box;background:var(--d-bg)}
+.stg1 .r .stc{width:20px}
+.gb{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:3px;box-sizing:border-box}
+.gb svg.i{width:14px;height:14px}
+.gb.hover{background:var(--tb-hover);border-color:var(--tb-hover-border)}
+.gb.is-disabled svg.i{opacity:.4}
+.scope{position:absolute;right:12px;border:1px solid var(--focus);border-radius:2px;pointer-events:none;z-index:1}
+.dtip{position:absolute;z-index:4;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:4px;box-shadow:var(--shadow);padding:3px 8px;font-family:var(--ui);font-size:12px;line-height:16px;white-space:nowrap;color:var(--fg)}
+
+/* A scroll bar map per pane (changes and the caret), a horizontal bar, and a status bar per side. */
+.vs{position:absolute;top:0;right:0;bottom:0;width:12px;background:var(--d-bg);box-shadow:inset 1px 0 0 var(--d-track)}
+.vs .th{position:absolute;left:3px;right:3px;border-radius:3px;background:var(--d-thumb);min-height:10px}
+.vs .mk{position:absolute;left:2px;width:4px;height:3px}
+.vs .mk.add{background:var(--d-add-mk)}
+.vs .mk.del{background:var(--d-del-mk)}
+.vs .mk.caret{left:1px;width:10px;height:2px;background:var(--d-fg)}
+.hs{flex:none;height:10px;position:relative;background:var(--d-bg)}
+.hs .th{position:absolute;top:3px;height:4px;border-radius:2px;background:var(--d-thumb)}
+.st{flex:none;height:24px;display:flex;align-items:center;gap:14px;padding:0 10px 0 3px;background:var(--panel);border-top:1px solid var(--border);white-space:nowrap;font-size:11px;overflow:hidden}
+.st .zoom{width:74px;height:18px;padding:0 4px;font-size:11px;gap:2px}
+.st .sp{flex:1 1 auto}
+.dd-menu{position:absolute;z-index:5}
+.dd-menu .mi .ck svg.i{width:14px;height:14px}
+
+/* States without lines. */
+.dd-empty{flex:1 1 auto;display:flex;align-items:center;justify-content:center;background:var(--d-bg)}
+.dd-empty .empty{gap:8px}
+.dd-empty .acts{display:flex;gap:8px;margin-top:4px}
+.dd-empty .msg{color:var(--fg)}
+.dd-empty .sub{color:var(--muted);max-width:420px}
+.pmsg{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);background:var(--d-bg)}
+.pmsg svg.i.big{width:32px;height:32px}
+.pstat{position:absolute;left:62px;top:4px;color:var(--muted);font-family:var(--ui)}
+.prog{height:2px;flex:none;position:relative;overflow:hidden;background:var(--soft-border)}
+.prog::after{content:'';position:absolute;top:0;bottom:0;left:22%;width:30%;border-radius:1px;background:var(--accent)}
+
+/* The confirmations (DialogView), as GitChanges.dc.html draws its Discard dialog, over the window's scrim. */
+.dstage{position:relative;display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--border)}
+.dstage::before{content:'';position:absolute;inset:0;background:var(--scrim)}
+.wdlg{position:relative;z-index:1;width:520px;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:8px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.fam-classic .wdlg{border-radius:6px}
+.kind-hc .wdlg{border-width:2px}
+.dh{display:flex;align-items:flex-start;gap:10px;padding:16px 12px 4px 20px}
+.dh .ttl{flex:1;min-width:0}
+.dh h4{margin:0;font-size:14px;line-height:20px;font-weight:600;color:var(--strong)}
+.dh .ctx{color:var(--muted);font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh .glyph{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:var(--chip-warn);flex:none;margin-top:-1px}
+.kind-hc .dh .glyph{background:transparent;border:1px solid var(--fg)}
+.dbody{padding:12px 20px 18px;display:flex;flex-direction:column;gap:8px}
+.dmsg,.dnote{color:var(--fg);line-height:18px}
+.dbox{background:var(--editor);color:var(--editor-fg);border:1px solid var(--input-border);border-radius:var(--radius);padding:4px 0;font-family:var(--mono);font-size:12px}
+.dbox .dl{display:flex;gap:10px;height:18px;align-items:center;padding:0 8px 0 9px;white-space:pre}
+.dbox .dl .lt{width:10px;flex:none}
+.dbox .dl .h{width:20px;flex:none;text-align:right;color:var(--muted)}
+.dfoot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px;background:var(--dlg-footer);border-top:1px solid var(--soft-border)}
+
+/* Colors compared. */
+.cols{display:flex;gap:20px}
+.col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:6px}
+.col .ttl{font-weight:600;color:var(--strong)}
+.col .mini{border:1px solid var(--border);background:var(--d-bg);padding:4px 0}
+.col ul{margin:0;padding-left:16px;color:var(--muted);font-size:11px;line-height:15px}
+
+/* The decisions at the bottom. */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);padding:14px 18px 16px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.card h2{font-size:14px;line-height:20px;margin:0;font-weight:600;color:var(--strong)}
+.decide{display:grid;grid-template-columns:1fr 1fr;gap:14px 32px}
+.dq{display:flex;gap:10px;align-items:flex-start}
+.dq .n{flex:none;width:20px;height:20px;border-radius:10px;background:var(--badge);color:var(--badge-fg);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.kind-hc .dq .n{border:1px solid var(--soft-border)}
+.dq b{font-weight:600;color:var(--strong)}
+.dq .tag{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{vars}}; min-height: 100vh">
+<main class="sheet">
+
+<header>
+  <h1>Git diff document: syntax colors and the classic layout</h1>
+  <div class="lead">Task #86, a design before it is built. The document that Git Changes, Compare with Unmodified, Compare with Branch or Commit, a commit's files in History, codalus diff and plugin source control open (DiffView.cs), redrawn on the classic IDE's diff layout, with syntax colors. The file is Startup.cs from the screenshots (BlazorSudoku.Server, two lines added at 47 and 48), then a second edit with four changes. The code uses the editor's own colors (EditorTheme; Classic's are Roslyn's scheme): the C# grammar colors the index side, and the C# host's semantic tokens color the working-tree side, because that side is the open document. The working-tree side shows the open buffer with its unsaved edits, so every Stage and Discard saves the file first, and what is staged is exactly what is drawn. {{t.name}}, {{t.p.family}} family.</div>
+  <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
+</header>
+
+<sc-for list="{{sections}}" as="sec">
+<div class="sec"><h2>{{sec.title}}</h2><div class="lead">{{sec.lead}}</div></div>
+<sc-for list="{{sec.rows}}" as="row">
+<section class="prow">
+<sc-for list="{{row.items}}" as="p">
+<article class="pnl" style="width:{{p.w}}px" aria-label="{{p.id}}: {{p.title}}">
+  <h3><span><span class="pid">{{p.id}}</span>{{p.title}}</span><span class="src">{{p.src}}</span></h3>
+  <div class="cap">{{p.cap}}</div>
+
+  <sc-if value="{{p.doc}}">
+  <div class="dd {{p.doc.cls}}" style="width:{{p.w}}px">
+    <sc-if value="{{p.doc.tabsOn}}">
+    <div class="doc-tabs" role="tablist" aria-label="Open documents">
+      <sc-for list="{{p.doc.tabs}}" as="tb"><span class="doc-tab {{tb.cls}}" role="tab" aria-selected="{{tb.on}}"><svg class="i md {{tb.c}}" aria-hidden="true"><use href="#i-{{tb.i}}"></use></svg>{{tb.t}}</span></sc-for>
+    </div>
+    </sc-if>
+    <section class="doc dd-doc" aria-label="{{p.doc.label}}">
+      <sc-if value="{{p.doc.tbOn}}">
+      <div class="toolbar bar dd-tb" role="toolbar" aria-label="Diff">
+        <sc-for list="{{p.doc.tb}}" as="it">
+          <sc-if value="{{it.btn}}"><span class="tb {{it.cls}}" role="button" aria-label="{{it.label}}" title="{{it.tip}}" aria-disabled="{{it.dis}}"><svg class="i {{it.c}}" aria-hidden="true"><use href="#i-{{it.icon}}"></use></svg><sc-if value="{{it.text}}"><span>{{it.text}}</span></sc-if><sc-if value="{{it.chev}}"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></sc-if></span></sc-if>
+          <sc-if value="{{it.toggle}}"><span class="tb {{it.cls}}" role="button" aria-pressed="{{it.pressed}}" aria-label="{{it.label}}" title="{{it.tip}}" aria-disabled="{{it.dis}}"><svg class="i {{it.c}}" aria-hidden="true"><use href="#i-{{it.icon}}"></use></svg><sc-if value="{{it.text}}"><span>{{it.text}}</span></sc-if></span></sc-if>
+          <sc-if value="{{it.count}}"><span class="dd-count {{it.cls}}" role="status" aria-live="polite">{{it.count}}</span></sc-if>
+          <sc-if value="{{it.chip}}"><span class="chip square {{it.cc}}" aria-label="{{it.label}}" title="{{it.label}}">{{it.chip}}</span></sc-if>
+          <sc-if value="{{it.sep}}"><span class="tb-sep"></span></sc-if>
+          <sc-if value="{{it.grow}}"><span class="grow"></span></sc-if>
+        </sc-for>
+      </div>
+      </sc-if>
+      <sc-if value="{{p.doc.prog}}"><div class="prog" role="progressbar" aria-label="{{p.doc.progLabel}}"></div></sc-if>
+      <div class="dd-body">
+        <sc-if value="{{p.doc.empty}}">
+          <div class="dd-empty"><div class="empty" role="status">
+            <svg class="i big {{p.doc.empty.c}}" aria-hidden="true"><use href="#i-{{p.doc.empty.icon}}"></use></svg>
+            <div class="msg">{{p.doc.empty.msg}}</div>
+            <div class="sub">{{p.doc.empty.sub}}</div>
+            <div class="acts"><sc-for list="{{p.doc.empty.acts}}" as="a"><span class="btn sm has-icon {{a.cls}}" role="button"><svg class="i {{a.c}}" aria-hidden="true"><use href="#i-{{a.i}}"></use></svg>{{a.t}}</span></sc-for></div>
+          </div></div>
+        </sc-if>
+        <sc-for list="{{p.doc.sides}}" as="s">
+          <div class="side {{s.cls}}" aria-label="{{s.label}}">
+            <sc-if value="{{s.head}}"><div class="sh"><svg class="i md {{s.c}}" aria-hidden="true"><use href="#i-{{s.icon}}"></use></svg><b>{{s.name}}</b><span class="lbl">{{s.lbl}}</span><span class="grow"></span><sc-if value="{{s.note}}"><span class="lbl note">{{s.note}}</span></sc-if></div></sc-if>
+            <sc-if value="{{s.nav}}"><div class="nav" role="navigation" aria-label="{{s.label}}: types and members">
+              <span class="field sm combo {{s.nav.cls}}" role="combobox" aria-label="Types" aria-disabled="{{s.nav.dis}}"><svg class="i md c-open" aria-hidden="true"><use href="#i-nav-class"></use></svg><span class="value trim {{s.nav.ph}}">{{s.nav.t}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+              <span class="field sm combo {{s.nav.cls}}" role="combobox" aria-label="Members" aria-disabled="{{s.nav.dis}}"><svg class="i md c-purple" aria-hidden="true"><use href="#i-nav-method"></use></svg><span class="value trim {{s.nav.ph}}">{{s.nav.m}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+            </div></sc-if>
+            <sc-if value="{{s.msg}}"><div class="pmsg" style="height:{{s.h}}px"><svg class="i big c-outline" aria-hidden="true"><use href="#i-{{s.msg.i}}"></use></svg><span>{{s.msg.t}}</span><span class="small">{{s.msg.sub}}</span></div></sc-if>
+            <sc-if value="{{s.rows}}">
+            <div class="pane {{s.paneCls}}" style="height:{{s.h}}px" role="document" aria-label="{{s.label}}">
+              <sc-if value="{{s.stat}}"><span class="pstat" role="status">{{s.stat}}</span></sc-if>
+              <sc-for list="{{s.rows}}" as="r">
+                <div class="r {{r.cls}}"><span class="no">{{r.no}}</span><sc-if value="{{s.two}}"><span class="no">{{r.no2}}</span></sc-if><sc-if value="{{s.stg}}"><span class="stc {{r.stc}}"><sc-for list="{{r.gl}}" as="gl"><span class="gb {{gl.cls}}" role="button" aria-label="{{gl.label}}" title="{{gl.label}}" aria-disabled="{{gl.dis}}"><svg class="i {{gl.c}}" aria-hidden="true"><use href="#i-{{gl.i}}"></use></svg></span></sc-for></span></sc-if><span class="sg">{{r.sign}}</span><span class="cd"><sc-for list="{{r.guides}}" as="g"><span class="g" style="left:calc(4px + {{g}}ch)"></span></sc-for><sc-if value="{{r.sel}}"><span class="selbg" style="width:{{r.sel}}ch"></span></sc-if><sc-if value="{{r.fold}}"><span class="foldt"><svg class="i" aria-hidden="true"><use href="#i-unfold"></use></svg>{{r.fold}}</span></sc-if><span class="tx"><sc-for list="{{r.toks}}" as="k"><sc-if value="{{k.nc}}"><span class="s-{{k.c}} {{k.w}}" data-nocheck>{{k.t}}</span></sc-if><sc-if value="{{k.ck}}"><span class="s-{{k.c}} {{k.w}}">{{k.t}}</span></sc-if></sc-for></span></span></div>
+              </sc-for>
+              <sc-if value="{{s.vs}}"><div class="vs" aria-hidden="true"><span class="th" style="top:{{s.vs.t}}%;height:{{s.vs.h}}%"></span><sc-for list="{{s.vs.marks}}" as="mk"><span class="mk {{mk.c}}" style="top:{{mk.t}}%"></span></sc-for></div></sc-if>
+              <sc-for list="{{s.scopes}}" as="sco"><span class="scope" style="{{sco.style}}" aria-hidden="true"></span></sc-for>
+              <sc-for list="{{s.tips}}" as="tp"><span class="dtip" role="tooltip" style="{{tp.style}}">{{tp.t}}</span></sc-for>
+            </div>
+            </sc-if>
+            <sc-if value="{{s.st}}">
+              <div class="hs" aria-hidden="true"><span class="th" style="left:{{s.hs.l}}%;width:{{s.hs.w}}%"></span></div>
+              <div class="st" role="status" aria-label="{{s.label}}: position">
+                <sc-if value="{{s.st.zoom}}"><span class="field sm combo zoom" role="combobox" aria-label="Zoom"><span class="value">{{s.st.zoom}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></sc-if>
+                <span class="sp"></span>
+                <sc-for list="{{s.st.items}}" as="si"><span>{{si}}</span></sc-for>
+              </div>
+            </sc-if>
+            <sc-for list="{{s.menus}}" as="m">
+              <div class="menu dd-menu" role="menu" style="{{m.style}}" aria-label="{{m.label}}"><sc-for list="{{m.rows}}" as="mr"><sc-if value="{{mr.sep}}"><div class="msep" role="separator"></div></sc-if><sc-if value="{{mr.t}}"><div class="mi {{mr.cls}}" role="menuitem" aria-disabled="{{mr.dis}}"><span class="ck"><sc-if value="{{mr.i}}"><svg class="i md {{mr.c}}" aria-hidden="true"><use href="#i-{{mr.i}}"></use></svg></sc-if></span><span>{{mr.t}}</span><sc-if value="{{mr.sc}}"><span class="sc">{{mr.sc}}</span></sc-if></div></sc-if></sc-for></div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+      <sc-for list="{{p.doc.menus}}" as="m">
+        <div class="menu dd-menu" role="menu" style="{{m.style}}" aria-label="{{m.label}}"><sc-for list="{{m.rows}}" as="mr"><sc-if value="{{mr.sep}}"><div class="msep" role="separator"></div></sc-if><sc-if value="{{mr.t}}"><div class="mi {{mr.cls}}" role="menuitemradio" aria-disabled="{{mr.dis}}"><span class="ck"><sc-if value="{{mr.i}}"><svg class="i md {{mr.c}}" aria-hidden="true"><use href="#i-{{mr.i}}"></use></svg></sc-if></span><span>{{mr.t}}</span><sc-if value="{{mr.sc}}"><span class="sc">{{mr.sc}}</span></sc-if></div></sc-if></sc-for></div>
+      </sc-for>
+    </section>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{p.dlg}}">
+  <div class="dstage" style="height:{{p.dlg.h}}px">
+    <div class="wdlg" role="dialog" aria-label="{{p.dlg.title}}">
+      <div class="dh">
+        <span class="glyph"><svg class="i" aria-hidden="true"><use href="#i-warning"></use></svg></span>
+        <div class="ttl"><h4>{{p.dlg.title}}</h4><div class="ctx">{{p.dlg.ctx}}</div></div>
+        <span class="btn subtle icon sm" role="button" aria-label="Close (Esc)" title="Close (Esc)"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span>
+      </div>
+      <div class="dbody">
+        <div class="dmsg">{{p.dlg.msg}}</div>
+        <sc-if value="{{p.dlg.lines}}"><div class="dbox" role="list" aria-label="Lines"><sc-for list="{{p.dlg.lines}}" as="dl"><div class="dl" role="listitem"><span class="lt">{{dl.l}}</span><span class="h">{{dl.n}}</span><span>{{dl.t}}</span></div></sc-for></div></sc-if>
+        <sc-for list="{{p.dlg.notes}}" as="nt"><div class="dnote">{{nt}}</div></sc-for>
+      </div>
+      <div class="dfoot"><sc-for list="{{p.dlg.buttons}}" as="bt"><span class="btn dlg {{bt.cls}}" role="button">{{bt.t}}</span></sc-for></div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{p.colors}}">
+  <div class="cols">
+    <sc-for list="{{p.colors}}" as="col">
+      <div class="col">
+        <div class="ttl">{{col.title}}</div>
+        <div class="mini"><sc-for list="{{col.rows}}" as="r"><div class="r {{r.cls}}"><span class="no">{{r.no}}</span><span class="sg"></span><span class="cd"><span class="tx"><sc-for list="{{r.toks}}" as="k"><sc-if value="{{k.nc}}"><span class="s-{{k.c}}" data-nocheck>{{k.t}}</span></sc-if><sc-if value="{{k.ck}}"><span class="s-{{k.c}}">{{k.t}}</span></sc-if></sc-for></span></span></div></sc-for></div>
+        <ul><sc-for list="{{col.notes}}" as="nt"><li>{{nt}}</li></sc-for></ul>
+      </div>
+    </sc-for>
+  </div>
+  </sc-if>
+</article>
+</sc-for>
+</section>
+</sc-for>
+</sc-for>
+
+<section class="card" aria-labelledby="h-decide">
+  <h2 id="h-decide">For the maintainer to decide (each with the recommendation drawn above)</h2>
+  <div class="decide">
+    <sc-for list="{{decisions}}" as="q">
+      <div class="dq"><span class="n">{{q.n}}</span><div><b>{{q.b}}</b> {{q.t}}<span class="tag">Instead: {{q.alt}}</span></div></div>
+    </sc-for>
+  </div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Classic Dark","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":12000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const hc = t.hc;
+
+    // ---- The editor's colors (EditorTheme.Dark/Light/HighContrast and the families' palettes; Tokens.axaml's
+    // Shell.Editor.*) and the proposed diff fills (Shell.Diff.Added.Line, .Removed.Line, .Added.Word, .Removed.Word,
+    // Shell.Diff.Filler) with the words' outline (.Added.WordBorder, .Removed.WordBorder). Fills are opaque; on each,
+    // Shell.Editor.Foreground keeps 4.5:1 and every syntax color 3:1.
+    const LIGHT_SYN = { pu: '#000000', kw: '#0000FF', ck: '#AF00DB', ty: '#267F99', if: '#2B91AF', fn: '#795E26', pa: '#1F377F', st: '#A31515', nu: '#098658', cm: '#008000' };
+    const DARK_SYN = { pu: '#DCDCDC', kw: '#569CD6', ck: '#C586C0', ty: '#4EC9B0', if: '#B8D7A3', fn: '#DCDCAA', pa: '#9CDCFE', st: '#CE9178', nu: '#B5CEA8', cm: '#6A9955' };
+    const HC_SYN = { pu: '#FFFFFF', kw: '#569CD6', ck: '#C586C0', ty: '#4EC9B0', if: '#B8D7A3', fn: '#DCDCAA', pa: '#9CDCFE', st: '#CE9178', nu: '#B5CEA8', cm: '#7CA668' };
+    const JSON_DARK = { key: '#9CDCFE', str: '#CE9178', num: '#B5CEA8', kw: '#569CD6' };
+    const JSON_LIGHT = { key: '#0451A5', str: '#A31515', num: '#098658', kw: '#0000FF' };
+    const lightEd = { bg: '#FFFFFF', fg: '#000000', ln: '#6E7681', cur: '#F0F0F0', guide: '#E0E0E0', sel: '#ADD6FF',
+      add: '#E3F4E6', addW: '#C4E8CC', addWo: '#8FCB9C', del: '#FCE8E8', delW: '#F6CCCC', delWo: '#E8A0A0', hatch: '#DADADA', addFg: '#116329', delFg: '#A1260D',
+      addMk: '#1E7F34', delMk: '#C62828', thumb: 'rgba(0,0,0,.22)', track: '#E8E8E8', syn: LIGHT_SYN, json: JSON_LIGHT, open: '#8A6320' };
+    const ED = {
+      'Classic Light': { ...lightEd, chg: '#007ACC' },
+      'Classic Blue': { ...lightEd, chg: '#0E70C0' },
+      'Classic Dark': { bg: '#1E1E1E', fg: '#DCDCDC', ln: '#2B91AF', cur: '#2E2E2E', guide: '#404040', sel: '#264F78',
+        add: '#1B3427', addW: '#0E4C2B', addWo: '#2F7048', del: '#4A2023', delW: '#6A2B2B', delWo: '#8E3B3B', hatch: '#333333', addFg: '#73C991', delFg: '#F48771',
+        addMk: '#73C991', delMk: '#F14C4C', thumb: 'rgba(255,255,255,.2)', track: '#2A2A2A', chg: '#3794FF', syn: DARK_SYN, json: JSON_DARK, open: '#DCB67A' },
+      'Classic High Contrast': { bg: '#000000', fg: '#FFFFFF', ln: '#FFFFFF', cur: '#000000', guide: '#7F7F7F', sel: '#0F4A85',
+        add: '#000000', addW: 'transparent', addWo: '#00FF00', del: '#000000', delW: 'transparent', delWo: '#FF6B6B', hatch: '#5C5C5C',
+        addFg: '#00FF00', delFg: '#FF6B6B', addMk: '#00FF00', delMk: '#FF6B6B', thumb: '#C0C0C0', track: '#6FC3DF', chg: '#1AEBFF', syn: HC_SYN, json: JSON_DARK, open: '#FFFFFF' },
+      'Harbor Light': { bg: '#FFFFFF', fg: '#1B1F2A', ln: '#6A7490', cur: '#F2F6FE', guide: '#BCC7E0', sel: '#ADD6FF',
+        add: '#E3F4E8', addW: '#C2E7CE', addWo: '#8CC9A0', del: '#FCE7E9', delW: '#F6C6CD', delWo: '#E59BA6', hatch: '#DCE2EF', addFg: '#116329', delFg: '#A1260D',
+        addMk: '#1E7F34', delMk: '#C62828', thumb: 'rgba(27,38,69,.25)', track: '#E3E8F3', chg: '#2B59C3', open: '#8A6320',
+        syn: { pu: '#1B1F2A', kw: '#1D3FBF', ck: '#AF00DB', ty: '#0F7068', if: '#0F7068', fn: '#74460A', pa: '#1F377F', st: '#A3361A', nu: '#6A3A9E', cm: '#3D6B2C' }, json: JSON_LIGHT },
+      'Harbor Dark': { bg: '#141A28', fg: '#D9DFEE', ln: '#7F8AA8', cur: '#1A2236', guide: '#2A3553', sel: '#264F78',
+        add: '#163430', addW: '#1F5143', addWo: '#2F7562', del: '#3A1E2A', delW: '#5A2A39', delWo: '#844056', hatch: '#222B40', addFg: '#73C991', delFg: '#F48771',
+        addMk: '#73C991', delMk: '#F14C4C', thumb: 'rgba(217,223,238,.22)', track: '#1F2840', chg: '#6E98FF', open: '#DCB67A',
+        syn: { pu: '#D9DFEE', kw: '#82A9FF', ck: '#C586C0', ty: '#6FD1C4', if: '#6FD1C4', fn: '#F0C97A', pa: '#9CDCFE', st: '#F29E7E', nu: '#C9A2FF', cm: '#84A676' }, json: JSON_DARK },
+      'Harbor High contrast': { bg: '#000000', fg: '#FFFFFF', ln: '#D6D6D6', cur: '#000000', guide: '#7F7F7F', sel: '#0F4A85',
+        add: '#000000', addW: 'transparent', addWo: '#00FF00', del: '#000000', delW: 'transparent', delWo: '#FF6B6B', hatch: '#5C5C5C',
+        addFg: '#00FF00', delFg: '#FF6B6B', addMk: '#00FF00', delMk: '#FF6B6B', thumb: '#C0C0C0', track: '#FFFFFF', chg: '#6CD2FF', open: '#FFFFFF',
+        syn: { pu: '#FFFFFF', kw: '#7CC7FF', ck: '#C586C0', ty: '#4FF0CF', if: '#4FF0CF', fn: '#FFE66D', pa: '#9CDCFE', st: '#FFA680', nu: '#E8AAFF', cm: '#9FE870' }, json: JSON_DARK }
+    };
+    const E = ED[t.name];
+    const vars = [t.vars, `--d-bg:${E.bg}`, `--d-fg:${E.fg}`, `--d-ln:${E.ln}`, `--d-cur:${E.cur}`, `--d-guide:${E.guide}`, `--d-sel:${E.sel}`,
+      `--d-add:${E.add}`, `--d-add-w:${E.addW}`, `--d-add-wo:${E.addWo}`, `--d-del:${E.del}`, `--d-del-w:${E.delW}`, `--d-del-wo:${E.delWo}`,
+      `--d-hatch:${E.hatch}`, `--d-add-fg:${E.addFg}`, `--d-del-fg:${E.delFg}`, `--d-add-mk:${E.addMk}`, `--d-del-mk:${E.delMk}`,
+      `--d-thumb:${E.thumb}`, `--d-track:${E.track}`, `--d-chg:${E.chg}`, `--ic-open:${E.open}`,
+      ...Object.entries(E.syn).map(([k, v]) => `--s-${k}:${v}`),
+      `--j-key:${E.json.key}`, `--j-str:${E.json.str}`, `--j-num:${E.json.num}`, `--j-kw:${E.json.kw}`].join(';');
+
+    // Which syntax colors miss AA on the editor's own background (the editor palette's, task #83's to fix): the check
+    // skips them. On a fill, the current line or a selection, only the plain text is checked, as contrast-pairs.txt
+    // checks Shell.Editor.Foreground on the editor's other fills.
+    const lum = (h) => { const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+    const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const minText = hc ? 7 : 4.5;
+    const colorOf = (c) => ({ jk: E.json.key, js: E.json.str, jn: E.json.num, jb: E.json.kw })[c] || E.syn[c];
+    const failsOnBg = (c) => ratio(colorOf(c), E.bg) < minText;
+
+    // ---- The C# colorizer, as the shell would color: 'grammar' is the C# TextMate grammar's scopes mapped by
+    // GrammarColorizer.TypeOf (with keyword.operator.expression mapped to keyword, so `new` is a keyword), 'semantic' the
+    // C# host's semantic tokens, 'none' today's plain text.
+    const KW = new Set('using namespace public private protected internal static readonly sealed class interface record void new var get set string int bool this null true false async await'.split(' '));
+    const CK = new Set('if else return foreach for while switch case break continue throw try catch finally'.split(' '));
+    const GTYPES = new Set(['IApplicationBuilder', 'IWebHostEnvironment', 'IConfiguration', 'IServiceCollection', 'IPuzzleSeedReader', 'PuzzleSeedReader', 'PuzzleOptions', 'IUserStore']);
+    const SEM = { app: 'pa', env: 'pa', services: 'pa', endpoints: 'pa', opts: 'pa', x: 'pa', configuration: 'pa', users: 'pa', name: 'pa', password: 'pa',
+      IApplicationBuilder: 'if', IWebHostEnvironment: 'if', IConfiguration: 'if', IServiceCollection: 'if', IPuzzleSeedReader: 'if', IUserStore: 'if',
+      PuzzleSeedReader: 'ty', ResponseCompressionDefaults: 'ty', PuzzleOptions: 'ty', Startup: 'ty', SignIn: 'ty' };
+    const lex = (src) => {
+      const re = /(\/\/.*$)|("(?:[^"\\]|\\.)*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|(=>)|(\s+)|([^\sA-Za-z0-9_"])/g;
+      const out = [];
+      let m;
+      while ((m = re.exec(src))) out.push({ t: m[0], k: m[1] ? 'cm' : m[2] ? 'st' : m[3] ? 'nu' : m[4] ? 'id' : m[5] ? 'arrow' : m[6] ? 'ws' : 'p' });
+      return out;
+    };
+    const csharp = (src, mode) => {
+      if (mode === 'none' || !src) return src ? [{ t: src, c: 'pu' }] : [];
+      const toks = lex(src);
+      const sig = (i, d) => { for (let j = i + d; j >= 0 && j < toks.length; j += d) if (toks[j].k !== 'ws') return toks[j]; return null; };
+      const first = toks.find((x) => x.k !== 'ws');
+      const directive = first && (first.t === 'using' || first.t === 'namespace');
+      let generic = false;
+      return toks.map((x, i) => {
+        let c = 'pu';
+        if (x.k === 'cm' || x.k === 'st' || x.k === 'nu') c = x.k;
+        else if (x.k === 'p') {
+          if (x.t === '>') generic = false;
+        } else if (x.k === 'id') {
+          const p = sig(i, -1), n = sig(i, 1);
+          if (KW.has(x.t)) c = 'kw';
+          else if (CK.has(x.t)) c = 'ck';
+          else if (directive) c = 'pu';
+          else if (mode === 'semantic' && SEM[x.t] && !(n && n.t === '(' && !/^[A-Z]/.test(x.t))) c = SEM[x.t];
+          else if (p && (p.t === 'new' || p.t === 'class')) c = 'ty';
+          else if (n && (n.t === '(' || n.t === '<') && !GTYPES.has(x.t)) { c = 'fn'; if (n.t === '<') generic = true; }
+          else if (generic) c = 'ty';
+          else if (GTYPES.has(x.t) && n && n.k === 'id') c = 'ty';
+          else if (p && p.k === 'id' && GTYPES.has(p.t) && /^[a-z]/.test(x.t)) c = 'pa';
+          else if (n && (n.k === 'arrow' || n.t === ':')) c = 'pa';
+          if (mode === 'semantic' && c === 'ty' && SEM[x.t]) c = SEM[x.t];
+        }
+        return { t: x.t, c };
+      });
+    };
+    const json = (src) => {
+      const re = /("(?:[^"\\]|\\.)*")(\s*:)?|(\b\d+\b)|(\btrue\b|\bfalse\b|\bnull\b)|(\s+)|([^\s"])/g;
+      const out = [];
+      let m;
+      while ((m = re.exec(src))) {
+        if (m[1]) { out.push({ t: m[1], c: m[2] ? 'jk' : 'js' }); if (m[2]) out.push({ t: m[2], c: 'pu' }); }
+        else out.push({ t: m[0], c: m[3] ? 'jn' : m[4] ? 'jb' : 'pu' });
+      }
+      return out;
+    };
+    // Splits tokens so the characters [s, e) carry the word tint.
+    const tint = (toks, range) => {
+      if (!range || range[0] >= range[1]) return toks.map((k) => ({ ...k, w: '' }));
+      const out = [];
+      let pos = 0;
+      for (const k of toks) {
+        const a = pos, b = pos + k.t.length;
+        pos = b;
+        const cuts = [a, Math.min(Math.max(range[0], a), b), Math.min(Math.max(range[1], a), b), b];
+        // The tinted run's outline is drawn round the whole run: its first piece takes the left edge, its last the right.
+        for (let q = 0; q < 3; q++) if (cuts[q + 1] > cuts[q]) out.push({ t: k.t.slice(cuts[q] - a, cuts[q + 1] - a), c: k.c, w: q === 1 ? 'w' + (cuts[1] === range[0] ? ' wl' : '') + (cuts[2] === range[1] ? ' wr' : '') : '' });
+      }
+      return out;
+    };
+    const finish = (toks, lit) => toks.map((k) => {
+      const nc = k.c !== 'pu' && (lit || failsOnBg(k.c));
+      return { ...k, nc, ck: !nc };
+    });
+
+    // ---- The diff: a line diff (prefix, suffix, then an LCS of the middle), runs paired row by row as Align pairs them
+    // ('~' rows), and a character diff of each pair widened to whole words.
+    const lineOps = (a, b) => {
+      let p = 0;
+      while (p < a.length && p < b.length && a[p] === b[p]) p++;
+      let s = 0;
+      while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+      const A = a.slice(p, a.length - s), B = b.slice(p, b.length - s);
+      const dp = Array.from({ length: A.length + 1 }, () => new Array(B.length + 1).fill(0));
+      for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--) dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      const ops = [];
+      for (let i = 0; i < p; i++) ops.push({ k: ' ', o: i + 1, n: i + 1 });
+      let i = 0, j = 0;
+      while (i < A.length || j < B.length) {
+        if (i < A.length && j < B.length && A[i] === B[j]) { ops.push({ k: ' ', o: p + i + 1, n: p + j + 1 }); i++; j++; }
+        else if (i < A.length && (j >= B.length || dp[i + 1][j] >= dp[i][j + 1])) { ops.push({ k: '-', o: p + i + 1 }); i++; }
+        else { ops.push({ k: '+', n: p + j + 1 }); j++; }
+      }
+      for (let q = 0; q < s; q++) ops.push({ k: ' ', o: a.length - s + q + 1, n: b.length - s + q + 1 });
+      return ops;
+    };
+    const wordRange = (a, b) => {
+      let p = 0;
+      while (p < a.length && p < b.length && a[p] === b[p]) p++;
+      let s = 0;
+      while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+      const widen = (str, x, y) => {
+        if (x === y) return [x, y];
+        while (x > 0 && /\w/.test(str[x - 1]) && /\w/.test(str[x])) x--;
+        while (y < str.length && /\w/.test(str[y]) && /\w/.test(str[y - 1])) y++;
+        return [x, y];
+      };
+      return [widen(a, p, a.length - s), widen(b, p, b.length - s)];
+    };
+    const align = (a, b) => {
+      const ops = lineOps(a, b);
+      const rows = [];
+      let i = 0;
+      while (i < ops.length) {
+        if (ops[i].k === ' ') { rows.push({ k: ' ', o: ops[i].o, n: ops[i].n }); i++; continue; }
+        const R = [], A = [];
+        while (i < ops.length && ops[i].k !== ' ') { if (ops[i].k === '-') R.push(ops[i].o); else A.push(ops[i].n); i++; }
+        const pairs = Math.min(R.length, A.length);
+        for (let q = 0; q < pairs; q++) {
+          const [ow, nw] = wordRange(a[R[q] - 1], b[A[q] - 1]);
+          rows.push({ k: '~', o: R[q], n: A[q], ow, nw });
+        }
+        for (let q = pairs; q < R.length; q++) rows.push({ k: '-', o: R[q] });
+        for (let q = pairs; q < A.length; q++) rows.push({ k: '+', n: A[q] });
+      }
+      let block = -1, prev = false;
+      for (const r of rows) { const ch = r.k !== ' '; if (ch && !prev) block++; r.b = ch ? block : -1; prev = ch; }
+      return { rows, a, b, changes: block + 1, added: rows.filter((r) => r.n && r.k !== ' ').length, removed: rows.filter((r) => r.o && r.k !== ' ').length };
+    };
+
+    // ---- The files: Startup.cs as the index holds it (BlazorSudoku.Server, the screenshots' file), and its edits.
+    const OLD = [
+      'using Microsoft.AspNetCore.Builder;', 'using Microsoft.AspNetCore.Hosting;', 'using Microsoft.AspNetCore.ResponseCompression;',
+      'using Microsoft.Extensions.Configuration;', 'using Microsoft.Extensions.DependencyInjection;', 'using Microsoft.Extensions.Hosting;',
+      'using BlazorSudoku.Server.Services;', 'using BlazorSudoku.Shared;', '', 'namespace BlazorSudoku.Server', '{', '    public class Startup', '    {',
+      '        public Startup(IConfiguration configuration)', '        {', '            Configuration = configuration;', '        }', '',
+      '        public IConfiguration Configuration { get; }', '',
+      '        // This method gets called by the runtime. Use this method to add services to the container.',
+      '        // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940',
+      '        public void ConfigureServices(IServiceCollection services)', '        {', '            services.AddResponseCompression(opts =>', '            {',
+      '                opts.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(', '                    new[] { "application/octet-stream" });', '            });', '',
+      '            services.Configure<PuzzleOptions>(Configuration.GetSection("Puzzles"));', '            services.AddHttpClient();', '',
+      '            services.AddControllersWithViews();', '            services.AddRazorPages();', '',
+      '            services.AddSingleton<IPuzzleSeedReader, PuzzleSeedReader>(x=> new PuzzleSeedReader("Data/puzzles.txt"));', '        }', '',
+      '        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.',
+      '        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)', '        {', '            if (env.IsDevelopment())', '            {',
+      '                app.UseDeveloperExceptionPage();', '                app.UseWebAssemblyDebugging();', '            }', '            else', '            {',
+      '                app.UseExceptionHandler("/Error");',
+      '                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.',
+      '                app.UseHsts();', '            }', '', '            app.UseHttpsRedirection();', '            app.UseBlazorFrameworkFiles();', '            app.UseStaticFiles();', '',
+      '            app.UseRouting();', '', '            app.UseEndpoints(endpoints =>', '            {', '                endpoints.MapRazorPages();',
+      '                endpoints.MapControllers();', '                endpoints.MapFallbackToFile("index.html");', '            });', '        }', '    }', '}'];
+    const ONE = [...OLD.slice(0, 46), '', '                asd', ...OLD.slice(46)];
+    const LOGGING = [...OLD.slice(0, 46), '                app.UseHttpLogging();', ...OLD.slice(46)];
+    const FOUR = [];
+    OLD.forEach((line, i) => {
+      const n = i + 1;
+      if (n === 37) FOUR.push(line.replace('AddSingleton', 'AddScoped'));
+      else if (n === 50) FOUR.push('                app.UseExceptionHandler("/Error", createScopeForErrors: true);');
+      else if (n === 51 || n === 52) return;
+      else if (n === 65) FOUR.push(line.replace('index.html', 'app.html'));
+      else FOUR.push(line);
+      if (n === 46) FOUR.push('                app.UseHttpLogging();');
+    });
+    const D_ONE = align(OLD, ONE), D_FOUR = align(OLD, FOUR), D_LOG = align(OLD, LOGGING);
+    const SIGNIN = ['namespace BuildAndRun.Auth;', '', 'public sealed class SignIn(IUserStore users)', '{',
+      '    public bool Check(string name, string password) => users.Verify(name, password);', '}'];
+    const D_NEWFILE = align([], SIGNIN);
+    const JSON_A = ['{', '  "Logging": {', '    "LogLevel": {', '      "Default": "Information",', '      "Microsoft.AspNetCore": "Warning"', '    }', '  },', '  "AllowedHosts": "*"', '}'];
+    const JSON_B = ['{', '  "Logging": {', '    "LogLevel": {', '      "Default": "Debug",', '      "Microsoft.AspNetCore": "Information"', '    }', '  }', '}'];
+    const D_JSON = align(JSON_A, JSON_B);
+
+    const D_DEL = align(OLD, []);
+
+    // ---- Building the panes.
+    const indentOf = (lines, idx) => {
+      for (let i = idx; i < lines.length; i++) if (lines[i].trim()) return lines[i].length - lines[i].trimStart().length;
+      return 0;
+    };
+    const guidesFor = (lines, no) => {
+      const ind = indentOf(lines, no - 1);
+      const g = [];
+      for (let col = 4; col < ind; col += 4) g.push(col);
+      return g;
+    };
+    const rowWindow = (D, from, to) => {
+      const rows = D.rows;
+      let a = rows.findIndex((r) => (r.n ?? 0) >= from);
+      if (a < 0) a = 0;
+      let b = rows.length - 1;
+      for (let i = rows.length - 1; i >= 0; i--) if (rows[i].n != null && rows[i].n <= to) { b = i; break; }
+      return [a, b];
+    };
+    const lineRow = (side, no, text, lines, mode, cls, range, opts) => {
+      const lit = /add|del|cur/.test(cls) || !!opts.sel;
+      const toks = finish(tint(opts.lang === 'json' ? json(text) : csharp(text, mode), range), lit);
+      return { no, no2: '', sign: /add/.test(cls) ? '+' : /del/.test(cls) ? '−' : '', cls, toks, guides: opts.lang === 'json' ? [] : guidesFor(lines, no), sel: opts.sel || '', gl: [], stc: '' };
+    };
+    const FILL = (cls) => ({ no: '', no2: '', sign: '', cls: 'fill ' + (cls || ''), toks: [], guides: [], gl: [], stc: '' });
+    const scrollMap = (D, side, a, b, caretRow) => {
+      const total = D.rows.length;
+      const marks = [];
+      D.rows.forEach((r, i) => {
+        if (side === 'left' && r.o && r.k !== ' ') marks.push({ c: 'del', t: (100 * i / total).toFixed(2) });
+        if (side !== 'left' && r.n && r.k !== ' ') marks.push({ c: 'add', t: (100 * i / total).toFixed(2) });
+      });
+      if (caretRow >= 0) marks.push({ c: 'caret', t: (100 * caretRow / total).toFixed(2) });
+      return { t: (100 * a / total).toFixed(2), h: Math.max(4, 100 * (b - a + 1) / total).toFixed(2), marks };
+    };
+
+    // The staging controls of one change: Stage and Discard (Unstage in a staged diff). With the selection inside the
+    // change they act on the selected lines, and their names say so.
+    const glyphsFor = (blk, o, selBlock) => {
+      const sel = selBlock === blk;
+      const hov = o.hoverBlock === blk ? o.hover : '';
+      if (o.staged) return [{ i: 'subtract', c: 'c-red', label: sel ? 'Unstage Selected Lines' : 'Unstage Change', cls: hov === 'unstage' ? 'hover' : '' }];
+      return [
+        { i: 'fl-add', c: 'c-green', label: sel ? 'Stage Selected Lines' : 'Stage Change', cls: hov === 'stage' ? 'hover' : '' },
+        { i: 'discard', c: 'c-red', label: sel ? 'Discard Selected Lines…' : 'Discard Change…', cls: hov === 'discard' ? 'hover' : '' }];
+    };
+
+    // A side-by-side document. o: { D, from, to, caretL, caretR, selR, modeL, modeR, lang, rh, stg, staged, hover, hoverBlock,
+    // busy, scopeLines, tip, menus, nav, st, ... }
+    const sideBySide = (o) => {
+      const D = o.D;
+      const [a, b] = o.win || rowWindow(D, o.from, o.to);
+      const curBlock = o.curBlock ?? (D.rows.find((r) => r.n === o.caretR && r.k !== ' ')?.b ?? -1);
+      const selBlock = o.selR ? (D.rows.find((r) => r.n === o.selR)?.b ?? -1) : -1;
+      const firstInView = {};
+      for (let i = a; i <= b; i++) { const r = D.rows[i]; if (r.b >= 0 && !r.fold && firstInView[r.b] == null) firstInView[r.b] = i; }
+      const rowsL = [], rowsR = [];
+      for (let i = a; i <= b; i++) {
+        const r = D.rows[i];
+        const chg = r.b >= 0 && r.b === curBlock ? ' chg' : '';
+        if (r.fold) {
+          rowsL.push({ no: '', no2: '', sign: '', cls: 'fold', toks: [], guides: [], fold: r.fold[0], gl: [], stc: '' });
+          rowsR.push({ no: '', no2: '', sign: '', cls: 'fold', toks: [], guides: [], fold: r.fold[1], gl: [], stc: '' });
+          continue;
+        }
+        if (r.o) {
+          const del = r.k === '-' || r.k === '~';
+          rowsL.push(lineRow('left', r.o, D.a[r.o - 1], D.a, o.modeL, (del ? 'del' : r.o === o.caretL ? 'cur' : 'ctx') + chg, r.k === '~' ? r.ow : null, { lang: o.lang }));
+        } else rowsL.push(FILL(chg));
+        let right;
+        if (r.n) {
+          const add = r.k === '+' || r.k === '~';
+          const sel = o.selR && o.selR === r.n ? D.b[r.n - 1].length + 1 : '';
+          right = lineRow('right', r.n, D.b[r.n - 1], D.b, o.modeR, (add ? 'add' : r.n === o.caretR ? 'cur' : 'ctx') + chg, r.k === '~' ? r.nw : null, { lang: o.lang, sel });
+        } else right = FILL(chg);
+        if (o.stg && r.b >= 0 && firstInView[r.b] === i) {
+          const busy = o.busy === r.b;
+          right.gl = glyphsFor(r.b, o, selBlock).map((g) => ({ ...g, cls: g.cls + (busy ? ' is-disabled' : ''), dis: busy ? 'true' : 'false' }));
+        }
+        rowsR.push(right);
+      }
+      const rh = o.rh || 18;
+      const h = (b - a + 1) * rh;
+      const caretRowR = D.rows.findIndex((r) => r.n === o.caretR);
+      const caretRowL = D.rows.findIndex((r) => r.o === o.caretL);
+      const gutter = 44 + (o.stg ? (o.staged ? 20 : 38) : 0);
+      const rowOfNew = (n) => D.rows.findIndex((r) => r.n === n);
+      const scopes = o.scopeLines ? [{ style: `top:${(rowOfNew(o.scopeLines[0]) - a) * rh}px;height:${(o.scopeLines[1] - o.scopeLines[0] + 1) * rh}px;left:${gutter + 14}px` }] : [];
+      const tips = o.tip ? [{ t: o.tip.t, style: `top:${(rowOfNew(o.tip.line) - a) * rh + (o.tip.below ? rh + 4 : -26)}px;left:${o.tip.x}px` }] : [];
+      const L = o.left, R = o.right;
+      const side = (spec, rows, map, extra) => ({ label: spec.label, icon: spec.icon || 'cl-csharp', c: spec.c || 'c-green', name: spec.name, lbl: spec.lbl, note: spec.note || '', head: true,
+        nav: o.nav ? spec.nav || null : null, rows, h, vs: o.noScroll ? null : map, hs: { l: 0, w: spec.hsw || 46 },
+        st: o.st === false ? null : { zoom: spec.zoom || '', items: spec.st || [] }, menus: extra.menus || [], scopes: extra.scopes || [], tips: extra.tips || [],
+        stg: !!extra.stg, cls: extra.stg && o.staged ? 'stg1' : '', paneCls: '' });
+      return {
+        sides: [
+          side(L, rowsL, scrollMap(D, 'left', a, b, caretRowL), {}),
+          side(R, rowsR, scrollMap(D, 'right', a, b, caretRowR), { menus: o.sideMenus || [], stg: o.stg, scopes, tips })
+        ],
+        h
+      };
+    };
+
+    // The inline document: one pane, two number columns (and the staging column when it is on).
+    const inline = (o) => {
+      const D = o.D;
+      const [a, b] = rowWindow(D, o.from, o.to);
+      const curBlock = D.rows.find((r) => r.n === o.caretR && r.k !== ' ')?.b ?? -1;
+      const rows = [];
+      let i = a;
+      while (i <= b) {
+        const r = D.rows[i];
+        if (r.k === ' ') { const x = lineRow('in', r.n, D.b[r.n - 1], D.b, o.modeR, (r.n === o.caretR ? 'cur' : 'ctx'), null, {}); x.no = r.o; x.no2 = r.n; rows.push(x); i++; continue; }
+        const run = [];
+        while (i <= b && D.rows[i].k !== ' ' && D.rows[i].b === r.b) run.push(D.rows[i++]);
+        const chg = r.b === curBlock ? ' chg' : '';
+        const start = rows.length;
+        for (const q of run) if (q.o) { const x = lineRow('in', q.o, D.a[q.o - 1], D.a, o.modeL, 'del' + chg, q.k === '~' ? q.ow : null, {}); x.no = q.o; x.no2 = ''; rows.push(x); }
+        for (const q of run) if (q.n) { const x = lineRow('in', q.n, D.b[q.n - 1], D.b, o.modeR, 'add' + chg, q.k === '~' ? q.nw : null, {}); x.no = ''; x.no2 = q.n; rows.push(x); }
+        if (o.stg && rows[start]) rows[start].gl = glyphsFor(r.b, o, -1).map((g) => ({ ...g, dis: 'false' }));
+      }
+      const total = D.rows.length + D.rows.filter((r) => r.k === '~').length;
+      const marks = [];
+      let y = 0;
+      D.rows.forEach((r) => {
+        if (r.k === '~') { marks.push({ c: 'del', t: (100 * y / total).toFixed(2) }); y++; marks.push({ c: 'add', t: (100 * y / total).toFixed(2) }); y++; return; }
+        if (r.k === '-') marks.push({ c: 'del', t: (100 * y / total).toFixed(2) });
+        if (r.k === '+') marks.push({ c: 'add', t: (100 * y / total).toFixed(2) });
+        y++;
+      });
+      return { rows, h: rows.length * 18, vs: { t: (100 * a / total).toFixed(2), h: (100 * rows.length / total).toFixed(2), marks } };
+    };
+
+    // ---- Toolbars, tabs, menus.
+    const tbFor = (kind, o) => {
+      const it = [];
+      const nd = o.navDis ? 'is-disabled' : '';
+      it.push({ btn: true, icon: 'arrow-down', c: 'c-blue', label: 'Next Change', tip: 'Next Change (F8)', cls: nd, dis: o.navDis ? 'true' : '' });
+      it.push({ btn: true, icon: 'arrow-up', c: 'c-blue', label: 'Previous Change', tip: 'Previous Change (Shift+F8)', cls: nd, dis: o.navDis ? 'true' : '' });
+      it.push({ count: o.count, cls: o.countCls || '' });
+      if (o.chips) {
+        it.push({ chip: '−' + o.chips[0], cc: 'err', label: `${o.chips[0]} line${o.chips[0] === 1 ? '' : 's'} removed` });
+        it.push({ chip: '+' + o.chips[1], cc: 'ok', label: `${o.chips[1]} line${o.chips[1] === 1 ? '' : 's'} added` });
+      }
+      const dis = o.actDis ? 'is-disabled' : '';
+      const txt = (s) => (o.compact ? '' : s);
+      const tcls = o.compact ? '' : 'text';
+      if (kind === 'work') {
+        it.push({ sep: true });
+        it.push({ btn: true, icon: 'fl-add', c: 'c-green', text: txt('Stage All'), label: 'Stage All', tip: o.allTip || 'Stage All: the whole file', cls: `${tcls} ${dis}`, dis: o.actDis ? 'true' : '' });
+        it.push({ btn: true, icon: 'discard', c: 'c-red', text: txt('Discard All…'), label: 'Discard All…', tip: 'Discard All: every change in the file (asks first)', cls: `${tcls} ${dis}`, dis: o.actDis ? 'true' : '' });
+      }
+      if (kind === 'staged') {
+        it.push({ sep: true });
+        it.push({ btn: true, icon: 'subtract', c: 'c-red', text: txt('Unstage All'), label: 'Unstage All', tip: 'Unstage All: the whole file', cls: `${tcls} ${dis}`, dis: o.actDis ? 'true' : '' });
+      }
+      it.push({ grow: true });
+      const tg = o.togDis ? 'is-disabled' : '';
+      if (kind === 'work' || kind === 'staged') it.push({ toggle: true, icon: 'staging-controls', c: 'c-blue', text: txt('Show Staging Controls'), label: 'Show Staging Controls', tip: 'Show Staging Controls', pressed: o.stg ? 'true' : 'false', cls: `${tcls} ${tg}`, dis: o.togDis ? 'true' : '' });
+      it.push({ toggle: true, icon: 'fold', c: 'c-blue', text: txt('Summary'), label: 'Summary', tip: 'Summary: fold the unchanged lines', pressed: o.sum ? 'true' : 'false', cls: `${tcls} ${tg}`, dis: o.togDis ? 'true' : '' });
+      it.push({ sep: true });
+      it.push({ btn: true, icon: 'gear', c: 'c-blue', chev: true, label: 'Diff Options', tip: 'Diff Options', cls: o.gearOpen ? 'is-pressed' : '' });
+      return it;
+    };
+    const tab = (t, i, c, on) => ({ t, i, c, cls: on ? 'on' : '', on: on ? 'true' : 'false' });
+    const tabsFor = (title) => [tab(title, 'compare', 'c-blue', true)];
+    const ST = (ln, ch, eol) => [`Ln: ${ln}`, `Ch: ${ch}`, 'SPC', eol || 'CRLF', 'UTF-8'];
+    // The navigation bar is the open document's: the working-tree side gets it, and the other side keeps the row, empty
+    // and disabled, so the lines stay aligned.
+    const NAV = { t: 'Startup', m: 'Configure(IApplicationBuilder, IWebHostEnvironment)', cls: '', ph: '', dis: 'false' };
+    const NAV_OFF = { t: 'Types', m: 'Members', cls: 'is-disabled', ph: 'ph', dis: 'true' };
+    const IDX = { label: 'Index', name: 'Startup.cs', lbl: '(Index)', nav: NAV_OFF };
+    const WT = { label: 'Working tree', name: 'Startup.cs', lbl: '(Working tree)', note: 'unsaved edits included', nav: NAV };
+    const doc = (o, body) => ({ tabsOn: o.tabs !== false, tabs: o.tabs || [], label: o.label, tbOn: o.tb !== false, tb: o.tb || [], cls: o.cls || '', menus: o.menus || [],
+      prog: !!o.prog, progLabel: o.progLabel || 'Comparing', empty: o.empty || null, sides: body ? body.sides : [] });
+    const M = (t, i, c, extra) => ({ t, i: i || '', c: c || '', ...extra });
+    const SEP = { sep: true };
+    const WORK_TITLE = 'Startup.cs (Working Tree)';
+
+    // ---- A: side by side, the screenshots' change.
+    const a1 = sideBySide({ D: D_ONE, from: 34, to: 60, caretL: 47, caretR: 47, modeL: 'grammar', modeR: 'semantic', nav: true,
+      left: { ...IDX, zoom: '100 %', st: ST(47, 1), hsw: 52 }, right: { ...WT, st: ST(47, 1), hsw: 48 } });
+    const A1 = { id: 'A1', w: 1240, title: 'Working tree against the index, staging controls hidden (the default)',
+      src: 'DiffView: toolbar, DiffPane | GridSplitter | DiffPane (header, NavigationBar, TextEditor + DiffLineNumberMargin + DiffSignMargin + DiffRenderer, scroll map, status bar)',
+      cap: 'The caret is on 47, as in the screenshot. Each side keeps its own caret and current line (the index side\'s 47 is the } under the filler). The accent bar beside the numbers marks the current change, the one F8 and the staging commands act on. The working-tree side shows the open buffer, unsaved edits included (its header says so); Stage and Discard save the file before they run (A9), so git gets exactly the lines drawn. That side is the open document, so it gets the editor\'s semantic colors and the navigation bar. The index side is a git blob: the grammar colors it, and its navigation row stays empty and disabled so the lines stay aligned. The numbers count each file\'s own lines (49 on the left after the filler; today it is 47). Between the sides is today\'s splitter (GridSplitter): drag it to resize, double-click it for half and half; the document keeps its position across tab switches, and a new diff starts at half.',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, tb: tbFor('work', { count: '1 change', chips: [D_ONE.removed, D_ONE.added] }) }, a1) };
+
+    // The context menu: right-click on the selected line 48 (Shift+F10 or the Menu key open it at the caret).
+    const winA = rowWindow(D_ONE, 34, 60);
+    const row48 = D_ONE.rows.findIndex((r) => r.n === 48) - winA[0];
+    const ctxMenu = { label: 'Code context menu', style: `top:${24 + 28 + (row48 + 1) * 18 - 2}px;left:250px;min-width:258px`, rows: [
+      M('Stage Selected Lines', 'fl-add', 'c-green', { cls: 'hover' }), M('Stage Change', 'fl-add', 'c-green'), SEP,
+      M('Discard Selected Lines…', 'discard', 'c-red'), M('Discard Change…', 'discard', 'c-red'), SEP,
+      M('Next Change', 'arrow-down', 'c-blue', { sc: 'F8' }), M('Previous Change', 'arrow-up', 'c-blue', { sc: 'Shift+F8' }), SEP,
+      M('Copy', 'copy', 'c-blue', { sc: 'Ctrl+C' }), M('Open Startup.cs', 'doc-text', 'c-blue')] };
+    const a2 = sideBySide({ D: D_ONE, from: 34, to: 60, caretL: 47, caretR: 48, selR: 48, modeL: 'grammar', modeR: 'semantic', nav: true, stg: true,
+      left: { ...IDX, zoom: '100 %', st: ST(47, 1), hsw: 52 }, right: { ...WT, st: ['Ln: 48', 'Ch: 20', '(1 line selected)', 'SPC', 'CRLF', 'UTF-8'], hsw: 48 },
+      sideMenus: [ctxMenu] });
+    const A2 = { id: 'A2', w: 1240, title: 'Staging controls shown, line 48 selected, the context menu open',
+      src: 'DiffStagingMargin (a margin of the new side, between DiffLineNumberMargin and DiffSignMargin) · git.diff.* commands',
+      cap: 'Show Staging Controls adds a column to the working-tree side, between the numbers and the signs, so the controls never cover code. Each change gets Stage and Discard at its first row. With the selection inside the change (here line 48), they act on the selected lines, and their names say so (Stage Selected Lines, Discard Selected Lines…). The code\'s context menu (right-click, Shift+F10 or the Menu key) has the same commands whether the column is shown or not, with the same names as in the command palette; today\'s six toolbar buttons map onto them (Stage Hunk is Stage Change). Both Discard commands ask first (A9).',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, tb: tbFor('work', { count: '1 change', chips: [D_ONE.removed, D_ONE.added], stg: true }) }, a2) };
+
+    // The close-ups: the working-tree side only, cropped.
+    const crop = (o) => { const sb = sideBySide({ modeL: 'grammar', modeR: 'semantic', ...o, st: false, noScroll: true, nav: false, left: IDX, right: o.right || WT }); return { sides: [sb.sides[1]] }; };
+    const closeDoc = (label, body, extra) => doc({ tabs: false, tb: extra && extra.tb ? extra.tb : false, label, prog: extra && extra.prog, progLabel: extra && extra.progLabel }, body);
+    const A3 = { id: 'A3', w: 400, title: 'At rest: two changes in view', src: 'DiffStagingMargin: one pair per change, at its first row in view',
+      cap: 'Each change has its pair at its first row; the caret is in the third change (accent bar). The glyphs are 14 px in 18 px buttons so a pair fits one row, in the palette\'s colors (Stage green, Discard red).',
+      doc: closeDoc('Staging controls at rest', crop({ D: D_FOUR, from: 45, to: 53, caretR: 51, stg: true })) };
+    const A4 = { id: 'A4', w: 400, title: 'Hovering Stage', src: 'tooltip from the command\'s title · the lines it acts on outlined',
+      cap: 'Hover outlines the lines the button acts on and the tooltip names them, with the save-first note when the buffer has unsaved edits. Margins in the editor are not tab stops: the keyboard reaches the same commands through the context menu on the caret\'s change, and F8 moves the caret there.',
+      doc: closeDoc('Hovering Stage', crop({ D: D_ONE, from: 44, to: 51, caretR: 50, stg: true, hover: 'stage', hoverBlock: 0, scopeLines: [47, 48], tip: { t: 'Stage Change: lines 47–48 (saves Startup.cs first)', line: 47, x: 46 } })) };
+    const A5 = { id: 'A5', w: 400, title: 'A selection inside the change', src: 'Stage acts on the selection ∩ the change',
+      cap: 'With line 48 selected, the pair acts on it: the tooltip says Stage Selected Lines and the outline covers line 48 alone. A selection across two changes: each pair takes its own part, and the context menu\'s Stage Selected Lines takes all of it in one patch.',
+      doc: closeDoc('Selection inside the change', crop({ D: D_ONE, from: 44, to: 51, caretR: 48, selR: 48, stg: true, hover: 'stage', hoverBlock: 0, scopeLines: [48, 48], tip: { t: 'Stage Selected Lines: line 48 (saves Startup.cs first)', line: 48, x: 46, below: true } })) };
+    const A6 = { id: 'A6', w: 400, title: 'A change that starts above the view', src: 'the pair follows the change\'s first row in view',
+      cap: 'Line 47 is scrolled out, so the pair moves down to line 48, the change\'s first row in view: every change on screen has its controls, and the pair never sits on another change\'s row.',
+      doc: closeDoc('A change scrolled partly out of view', crop({ D: D_ONE, from: 48, to: 55, caretR: 52, stg: true })) };
+    const busyTb = tbFor('work', { count: 'Staging…', chips: [D_ONE.removed, D_ONE.added], actDis: true, compact: true, stg: true });
+    const A7 = { id: 'A7', w: 400, title: 'While git runs', src: 'git apply off the UI thread · errors through ReportGitError, as today',
+      cap: 'The change\'s pair dims, Stage All and Discard All… are disabled, and the toolbar says Staging… over a progress line; the caret stays where it is. If git fails, its message goes where every git error goes today (ReportGitError\'s notification) and the diff reloads to show what git has.',
+      doc: closeDoc('While git runs', crop({ D: D_ONE, from: 44, to: 50, caretR: 48, stg: true, busy: 0 }), { tb: busyTb, prog: true, progLabel: 'Staging' }) };
+    const a8 = inline({ D: D_FOUR, from: 45, to: 53, caretR: 51, modeL: 'grammar', modeR: 'semantic', stg: true });
+    const A8 = { id: 'A8', w: 400, title: 'Inline, staging controls on', src: 'the same margin after the two number columns',
+      cap: 'In the inline view the column comes after the two number columns, with each change\'s pair at its first row (a removed row when the change has one).',
+      doc: closeDoc('Inline with staging controls', { sides: [{ label: 'Index and working tree', icon: 'cl-csharp', c: 'c-green', name: 'Startup.cs', lbl: '(Index → Working tree)', note: '', head: true, nav: null,
+        rows: a8.rows, h: a8.h, vs: null, st: null, menus: [], scopes: [], tips: [], cls: 'two', two: true, stg: true, paneCls: '' }] }) };
+
+    // The confirmations.
+    const CTX = 'BlazorSudoku.Server · Startup.cs (Working tree)';
+    const A9 = { id: 'A9', w: 610, title: 'Discard Change… asks first', src: 'DialogRequest(Discard, Cancel), Cancel the default · save, then git apply -R',
+      cap: 'Today Discard Hunk and Discard Selected Lines run without asking; here both ask, naming the lines. With unsaved edits, the dialog says the file is saved first. Discard Selected Lines… asks the same way: "Discard line 48 of Startup.cs?" and "This added line will be removed from the working tree. This can\'t be undone."',
+      dlg: { h: 290, title: 'Discard lines 47–48 of Startup.cs?', ctx: CTX, msg: 'These 2 added lines will be removed from the working tree. This can\'t be undone.',
+        lines: [{ l: '+', n: '47', t: '' }, { l: '+', n: '48', t: '    asd' }], notes: ['Startup.cs has unsaved edits: it is saved first, then the change is discarded.'],
+        buttons: [{ t: 'Discard', cls: '' }, { t: 'Cancel', cls: 'primary' }] } };
+    const A10 = { id: 'A10', w: 610, title: 'Discard All… asks first', src: 'ShellHost.DiscardAsync\'s dialog, one sentence added',
+      cap: 'Today\'s dialog for Discard, from Git Changes and the diff alike. With unsaved edits it adds that they go too, since the buffer is saved and then restored from the index. Cancel stays the default; on macOS the buttons keep the order GitChanges.dc.html gives them.',
+      dlg: { h: 290, title: 'Discard changes to Startup.cs?', ctx: CTX, msg: 'The changes to Startup.cs that are not staged will be lost.', lines: null,
+        notes: ['Startup.cs also has unsaved edits, and they will be lost too.'], buttons: [{ t: 'Discard', cls: '' }, { t: 'Cancel', cls: 'primary' }] } };
+
+    // ---- B: four changes.
+    const b1 = sideBySide({ D: D_FOUR, from: 34, to: 66, caretL: 50, caretR: 51, modeL: 'grammar', modeR: 'semantic', nav: true,
+      left: { ...IDX, zoom: '100 %', st: ST(50, 17), hsw: 40 }, right: { ...WT, st: ST(51, 17), hsw: 38 } });
+    const B1 = { id: 'B1', w: 1240, title: 'Four changes, the caret in the third, the splitter hovered',
+      src: 'DiffViewModel.Changes (runs of changed rows) · word ranges for paired (~) rows · DiffRenderer · patches built from the rows',
+      cap: 'A change is a run of changed rows. Line 47 (added) and lines 50–52 (one line changed, two deleted) are one git hunk at git\'s three lines of context, but they are two changes here. Each one stages on its own, because the patch is built from these rows (the index text and the saved text), not from git\'s hunk: Stage Change stages exactly the rows drawn, even where git\'s own diff would slide a run another way. Changed lines pair up row by row, and their changed words take a deeper tint with a thin outline (AddScoped, createScopeForErrors, app). The deleted lines are red on the index side, with hatched filler opposite. "Change 3 of 4" says where F8 is; the chips count lines (5 removed, 4 added). Today the toolbar reads "3 changes: +4 −5". The splitter between the sides is hovered (accent).',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, cls: 'sp-hover', tb: tbFor('work', { count: 'Change 3 of 4', chips: [D_FOUR.removed, D_FOUR.added] }) }, b1) };
+    const b2 = sideBySide({ D: D_FOUR, from: 48, to: 53, caretL: 50, caretR: 51, modeL: 'grammar', modeR: 'semantic', nav: false, rh: 27,
+      left: { ...IDX, zoom: '150 %', st: ST(50, 17), hsw: 26 }, right: { ...WT, st: ST(51, 17), hsw: 24 } });
+    b2.sides.forEach((s) => { s.hs.l = 18; });
+    const B2 = { id: 'B2', w: 1240, title: 'The same change at 150 % zoom',
+      src: 'the status bar\'s zoom box (50 to 400 %, Ctrl+wheel), as MergeEditorView\'s',
+      cap: 'Zoom sizes both sides together, as the merge editor\'s zoom does. The word tints, the signs and the filler scale with the text. Both sides are scrolled 12 columns to the right: horizontal scrolling stays in step, as vertical scrolling does. The navigation bars are left out here to save height.',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, cls: 'z150 hsc', tb: tbFor('work', { count: 'Change 3 of 4', chips: [D_FOUR.removed, D_FOUR.added] }) }, b2) };
+
+    // ---- C: inline.
+    const c1 = inline({ D: D_FOUR, from: 44, to: 66, caretR: 51, modeL: 'grammar', modeR: 'semantic' });
+    const gearMenu = (layout, opts) => ({ label: 'Diff Options', style: 'top:28px;right:4px;min-width:232px', rows: [
+      M('Side by Side', layout === 'sbs' ? 'radio' : '', 'c-fg'), M('Inline', layout === 'inline' ? 'radio' : '', 'c-fg', { cls: layout === 'inline' ? 'hover' : '' }), SEP,
+      ...(opts.staging === false ? [] : [M('Show Staging Controls', opts.stg ? 'check' : '', 'c-fg')]), M('Summary', opts.sum ? 'check' : '', 'c-fg'), SEP,
+      M('Refresh', 'refresh', 'c-green'), M('Open Startup.cs', 'doc-text', 'c-blue')] });
+    const C1 = { id: 'C1', w: 1240, title: 'Inline, chosen from the gear menu',
+      src: 'DiffView inline pane: DiffLineNumberMargin with two columns · gear DropDownButton (MergeEditorView\'s pattern) · git.diff.layout',
+      cap: 'Two number columns: the index\'s, then the working tree\'s. Each change shows its removed rows, then its added rows, with the changed words tinted. One header names both sides, and the navigation bar follows the working tree. Side by Side and Inline are radio entries in the gear menu, as in the classic IDE and the 0.5 merge editor; the choice is the git.diff.layout setting, so the next diff opens the same way. Refresh moves into this menu, since the diff now refreshes by itself. Open Startup.cs opens the file at the caret\'s line (git.diff.openFile, no default key).',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, tb: tbFor('work', { count: 'Change 3 of 4', chips: [D_FOUR.removed, D_FOUR.added], gearOpen: true }), menus: [gearMenu('inline', {})] },
+        { sides: [{ label: 'Index and working tree', icon: 'cl-csharp', c: 'c-green', name: 'Startup.cs', lbl: '(Index → Working tree)', note: 'unsaved edits included', head: true, nav: NAV, rows: c1.rows, h: c1.h, vs: c1.vs, hs: { l: 0, w: 40 },
+          st: { zoom: '100 %', items: ST(51, 17) }, menus: [], scopes: [], tips: [], cls: 'two', two: true, stg: false, paneCls: '' }] }) };
+
+    // ---- D: what is compared.
+    const strip = (o) => sideBySide({ ...o, st: false, noScroll: true });
+    const d1 = strip({ D: D_ONE, from: 45, to: 48, caretL: 0, caretR: 0, modeL: 'grammar', modeR: 'semantic', nav: true, left: IDX, right: WT });
+    const D1 = { id: 'D1', w: 1240, title: 'Working tree against the index (Git Changes → Changes, Compare with Unmodified)', src: 'DiffViewModel(git, path, staged: false) · Stage All = save, then GitService.StageAsync · Discard All… = ShellHost.DiscardAsync',
+      cap: 'Stage All and Discard All… act on the whole file. Both save the buffer first when it has unsaved edits, as Stage Active File does (ShellHost.StageActiveFileAsync). Discard All… asks first (A10).',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, tb: tbFor('work', { count: '1 change', chips: [0, 2] }) }, d1) };
+    const d2 = strip({ D: D_LOG, from: 45, to: 48, caretL: 0, caretR: 0, modeL: 'grammar', modeR: 'grammar', nav: false, stg: true, staged: true,
+      left: { label: 'HEAD', name: 'Startup.cs', lbl: '(HEAD)' }, right: { label: 'Index', name: 'Startup.cs', lbl: '(Index)', note: 'the working tree has more edits' } });
+    const D2 = { id: 'D2', w: 1240, title: 'Staged: the index against HEAD (Git Changes → Staged Changes)', src: 'DiffViewModel(git, path, staged: true) · Unstage All = GitService.UnstageAsync · Unstage Change = a patch from the rows, git apply --cached -R',
+      cap: 'Unstage All takes the place of Stage All and Discard All…, and the staging column holds one button, Unstage (20 px wide). Here the working tree has more edits than the index, so neither side is the open document: the grammar colors both sides, and there is no navigation bar on either.',
+      doc: doc({ tabs: tabsFor('Startup.cs (Staged)'), label: 'Startup.cs (Staged)', tb: tbFor('staged', { count: '1 change', chips: [0, 1], stg: true }) }, d2) };
+    const d3 = strip({ D: D_LOG, from: 45, to: 48, caretL: 0, caretR: 0, modeL: 'grammar', modeR: 'grammar', nav: false,
+      left: { label: '3f2a1c9', name: 'Startup.cs', lbl: '(3f2a1c9)' }, right: { label: '8b7e4d2', name: 'Startup.cs', lbl: '(8b7e4d2)', note: 'Log HTTP requests in development' } });
+    const D3 = { id: 'D3', w: 1240, title: 'A commit\'s file from History', src: 'ShellHost.GitDepth.OpenCommitFileAsync → DiffViewModel(path, key, oldTitle, oldText, newTitle, newText)',
+      cap: 'Read-only: no staging actions and no Show Staging Controls. The headers name the parent and the commit, with the commit\'s subject. The title says "→" where it says "↔" today, so the direction reads the way D38 reads it.',
+      doc: doc({ tabs: tabsFor('Startup.cs (3f2a1c9 → 8b7e4d2)'), label: 'Startup.cs (3f2a1c9 → 8b7e4d2)', tb: tbFor('rev', { count: '1 change', chips: [0, 1] }) }, d3) };
+    const d4 = strip({ D: D_NEWFILE, from: 1, to: 4, caretL: 0, caretR: 0, modeL: 'grammar', modeR: 'semantic', nav: true,
+      left: { label: 'main', name: 'SignIn.cs', lbl: '(main)', note: 'not on main', nav: NAV_OFF }, right: { label: 'feature/sign-in', name: 'SignIn.cs', lbl: '(feature/sign-in)', nav: { ...NAV, t: 'SignIn', m: 'Check(string, string)' } } });
+    const D4 = { id: 'D4', w: 1240, title: 'Compare with Current Branch (D38): a file that is new on feature/sign-in', src: 'GitChanges.dc.html C1 → OpenRevisionDiffAsync("main", "feature/sign-in")',
+      cap: 'Tip to tip, with main on the left, as D38 decided. The file isn\'t on main, so the whole left side is filler under "not on main". feature/sign-in is checked out and the file is unmodified, so the right side\'s text is the open document\'s: semantic colors and the navigation bar; the left keeps the empty row.',
+      doc: doc({ tabs: tabsFor('SignIn.cs (main → feature/sign-in)'), label: 'SignIn.cs (main → feature/sign-in)', tb: tbFor('rev', { count: '1 change', chips: [0, 6] }) }, d4) };
+    const d5 = strip({ D: D_JSON, from: 3, to: 7, caretL: 0, caretR: 0, lang: 'json', nav: false,
+      left: { label: 'appsettings.json', icon: 'cl-json', c: 'c-yellow', name: 'appsettings.json', lbl: '(samples/Web/WebApi)' },
+      right: { label: 'appsettings.Development.json', icon: 'cl-json', c: 'c-yellow', name: 'appsettings.Development.json', lbl: '(samples/Web/WebApi)' } });
+    const D5 = { id: 'D5', w: 1240, title: 'Two files (codalus diff, Compare Files…)', src: 'DiffViewModel(leftPath, rightPath) · DiffColorizer: TextMate theme rules for languages other than C# and VB',
+      cap: 'The headers show each file\'s folder. JSON is colored by its grammar in the editor\'s TextMate theme, the same way the JSON editor colors it. C# and Visual Basic use the editor\'s token colors.',
+      doc: doc({ tabs: tabsFor('appsettings.json ↔ appsettings.Development.json'), label: 'appsettings.json ↔ appsettings.Development.json', tb: tbFor('file', { count: '2 changes', chips: [4, 3] }) }, d5) };
+    const d6 = strip({ D: D_LOG, from: 45, to: 48, caretL: 0, caretR: 0, modeL: 'grammar', modeR: 'grammar', nav: false,
+      left: { label: 'HEAD', name: 'Startup.cs', lbl: '(HEAD)' }, right: { label: 'Index', name: 'AppStartup.cs', lbl: '(Index)', note: 'renamed from Startup.cs' } });
+    const D6 = { id: 'D6', w: 1240, title: 'A staged rename', src: 'GitFileStatus.OriginalPath → the old side\'s name and the note · Unstage All with both paths',
+      cap: 'Each header names its own path, and the new side says where it came from. The title is the new name. Unstage All unstages the rename as a whole (both paths), and Unstage Change unstages only the edit, leaving the rename staged.',
+      doc: doc({ tabs: tabsFor('AppStartup.cs (Staged)'), label: 'AppStartup.cs (Staged)', tb: tbFor('staged', { count: '1 change', chips: [0, 1] }) }, d6) };
+    const d7 = strip({ D: D_DEL, from: 0, to: 0, win: [0, 3], caretL: 0, caretR: 0, modeL: 'grammar', modeR: 'grammar', nav: false,
+      left: { label: 'Index', name: 'Startup.cs', lbl: '(Index)' }, right: { label: 'Working tree', name: 'Startup.cs', lbl: '(Working tree)', note: 'deleted' } });
+    const D7 = { id: 'D7', w: 1240, title: 'A file deleted in the working tree', src: 'the new side empty · Stage All stages the deletion · Discard All… restores the file',
+      cap: 'Every line is removed, so the new side is all filler under "deleted". No side is the open document, so there are no navigation bars. Stage All stages the deletion (its tooltip says so), and Discard All… restores the file from the index.',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, tb: tbFor('work', { count: '1 change', chips: [OLD.length, 0], allTip: 'Stage All: stage the deletion' }) }, d7) };
+
+    // ---- E: no lines to compare.
+    const emptySides = (L, R, h, extra) => ({ sides: [
+      { label: L.label, icon: L.icon || 'cl-csharp', c: L.c || 'c-green', name: L.name, lbl: L.lbl, note: '', head: true, nav: null, rows: extra && extra.rows ? extra.rows : null, msg: L.msg || null, h, vs: null, st: null, menus: [], scopes: [], tips: [], cls: '', paneCls: '', stat: extra && extra.stat },
+      { label: R.label, icon: R.icon || 'cl-csharp', c: R.c || 'c-green', name: R.name, lbl: R.lbl, note: R.note || '', head: true, nav: null, rows: extra && extra.rows ? extra.rows : null, msg: R.msg || null, h, vs: null, st: null, menus: [], scopes: [], tips: [], cls: '', paneCls: '' }] });
+    const E1 = { id: 'E1', w: 610, title: 'No changes left, some staged', src: 'Rows has no change, Diff is null, and the index differs from HEAD',
+      cap: 'After Stage All: the working tree matches the index, and the index has changes, so the document offers the staged diff.',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, cls: 'short', tb: tbFor('work', { count: 'No changes', navDis: true, actDis: true, togDis: true, compact: true }),
+        empty: { icon: 'check-circle', c: 'c-green', msg: 'No changes: the working tree matches the index.', sub: 'Startup.cs has staged changes.', acts: [{ i: 'compare', c: 'c-blue', t: 'Open Staged Changes' }, { i: 'doc-text', c: 'c-blue', t: 'Open File' }] } }, null) };
+    const E6 = { id: 'E6', w: 610, title: 'No changes at all', src: 'Rows has no change, Diff is null, and the index matches HEAD',
+      cap: 'After Discard All…, or when nothing is staged either: no Open Staged Changes. A file or revision comparison says "The files are identical." and offers Open File.',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, cls: 'short', tb: tbFor('work', { count: 'No changes', navDis: true, actDis: true, togDis: true, compact: true }),
+        empty: { icon: 'check-circle', c: 'c-green', msg: 'Startup.cs has no changes.', sub: 'The working tree, the index and HEAD all match.', acts: [{ i: 'doc-text', c: 'c-blue', t: 'Open File' }] } }, null) };
+    const E5 = { id: 'E5', w: 610, title: 'Only the line endings differ', src: 'Diff is not null but Rows has no change: the raw texts, a BOM, or Diff.Header\'s mode lines',
+      cap: 'git reports a change, but every line\'s text is the same (LineDiff.Lines drops \\r, and reading drops a BOM). The document says what differs instead of "No changes", and Stage All and Discard All… stay enabled. The same state reads "Only the encoding differs: UTF-8 with a BOM in the index, UTF-8 in the working tree." or "Only the file mode differs: 100644 in the index, 100755 in the working tree."',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, cls: 'short', tb: tbFor('work', { count: 'Line endings only', navDis: true, togDis: true, compact: true }),
+        empty: { icon: 'info', c: 'c-blue', msg: 'Only the line endings differ: CRLF in the index, LF in the working tree.', sub: 'Every line\'s text is the same. Stage All records the new line endings; Discard All… puts CRLF back.', acts: [{ i: 'doc-text', c: 'c-blue', t: 'Open File' }] } }, null) };
+    const binSide = (lbl, size) => ({ label: lbl, icon: 'cl-document', c: 'c-outline', name: 'logo.png', lbl: `(${lbl})`, msg: { i: 'file', t: 'Binary file', sub: size } });
+    const E2 = { id: 'E2', w: 610, title: 'A binary file', src: 'FileDiff.IsBinary',
+      cap: 'Each side shows its size. Stage All and Discard All… still work on the whole file.',
+      doc: doc({ tabs: tabsFor('logo.png (Working Tree)'), label: 'logo.png (Working Tree)', tb: tbFor('work', { count: 'Binary file', navDis: true, togDis: true, compact: true }) },
+        emptySides(binSide('Index', '14.2 KB'), binSide('Working tree', '15.0 KB'), 170)) };
+    const E3 = { id: 'E3', w: 610, title: 'A file too large to compare', src: 'DiffViewModel: over 10 MB or 100,000 lines, LoadAsync stops before LineDiff.Diff',
+      cap: 'Over 10 MB or 100,000 lines, the diff waits for Compare Anyway, so opening it doesn\'t keep Codalus busy. Stage All and Discard All… still work.',
+      doc: doc({ tabs: tabsFor('Generated.cs (Working Tree)'), label: 'Generated.cs (Working Tree)', cls: 'short', tb: tbFor('work', { count: 'Not compared', navDis: true, togDis: true, compact: true }),
+        empty: { icon: 'warning', c: 'c-fg', msg: 'Generated.cs is too large to compare here (18.4 MB, 412,000 lines).', sub: 'Comparing it could keep Codalus busy for a while.', acts: [{ i: 'compare', c: 'c-blue', t: 'Compare Anyway' }, { i: 'doc-text', c: 'c-blue', t: 'Open File' }] } }, null) };
+    const E4 = { id: 'E4', w: 610, title: 'Comparing', src: 'LoadAsync: texts, LineDiff.Diff and the tokens off the UI thread, cancellable',
+      cap: 'The texts load, and the diff and the colors run off the UI thread, with a progress bar under the toolbar, never a dialog. The headers show at once.',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, tb: tbFor('work', { count: 'Comparing…', navDis: true, actDis: true, togDis: true, compact: true }), prog: true },
+        emptySides({ label: 'Index', name: 'Startup.cs', lbl: '(Index)' }, { label: 'Working tree', name: 'Startup.cs', lbl: '(Working tree)' }, 168, { rows: [], stat: 'Comparing…' })) };
+
+    // ---- F: Summary.
+    const summarize = (D, ctx) => {
+      const keep = D.rows.map(() => false);
+      D.rows.forEach((r, i) => { if (r.k !== ' ') for (let j = Math.max(0, i - ctx); j <= Math.min(D.rows.length - 1, i + ctx); j++) keep[j] = true; });
+      const rows = [];
+      let i = 0;
+      while (i < D.rows.length) {
+        if (keep[i]) { rows.push(D.rows[i]); i++; continue; }
+        let j = i;
+        while (j < D.rows.length && !keep[j]) j++;
+        const run = D.rows.slice(i, j);
+        if (run.length >= 4) {
+          const o0 = run[0].o, o1 = run[run.length - 1].o, n0 = run[0].n, n1 = run[run.length - 1].n;
+          rows.push({ k: ' ', b: -1, fold: [`${run.length} unchanged lines, ${o0}–${o1}`, `${run.length} unchanged lines, ${n0}–${n1}`] });
+        } else rows.push(...run);
+        i = j;
+      }
+      return { ...D, rows };
+    };
+    const SUM = summarize(D_FOUR, 3);
+    const f1 = sideBySide({ D: SUM, win: [0, SUM.rows.length - 1], caretL: 50, caretR: 51, modeL: 'grammar', modeR: 'semantic', nav: true,
+      left: { ...IDX, zoom: '100 %', st: ST(50, 17), hsw: 40 }, right: { ...WT, st: ST(51, 17), hsw: 38 } });
+    // The scroll map stays the file's: the folded document fits.
+    f1.sides.forEach((s) => { s.vs = { t: 0, h: 100, marks: s.vs.marks.filter((m) => m.c !== 'caret') }; });
+    const F1 = { id: 'F1', w: 1240, title: 'Summary: unchanged runs folded to three lines of context',
+      src: 'Summary toggle → FoldingManager on both panes, kept in step (fold rows over the composed text)',
+      cap: 'Summary folds every unchanged run that would hide four lines or more after three lines of context, as one row on each side. A click or Enter on that row opens it. F8 still moves through the changes, and Summary turns off as it does in the classic IDE.',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, tb: tbFor('work', { count: 'Change 3 of 4', chips: [D_FOUR.removed, D_FOUR.added], sum: true }) }, f1) };
+
+    // ---- G: narrow.
+    const g1 = sideBySide({ D: D_ONE, from: 42, to: 53, caretL: 47, caretR: 47, modeL: 'grammar', modeR: 'semantic', nav: false,
+      left: { ...IDX, zoom: '100 %', st: ['Ln: 47', 'Ch: 1'], hsw: 30 }, right: { ...WT, note: '', st: ['Ln: 47', 'Ch: 1'], hsw: 28 } });
+    const G1 = { id: 'G1', w: 640, title: 'The document at 640 px',
+      src: 'DiffView: toolbar items collapse to icons; NavigationBar hidden under 360 px per side',
+      cap: 'The toolbar labels give way to icons with tooltips (Stage All, Discard All…, Show Staging Controls, Summary). The navigation bars hide when a side is narrower than 360 px, and each status bar keeps Ln and Ch. The headers trim from the end.',
+      doc: doc({ tabs: tabsFor(WORK_TITLE), label: WORK_TITLE, tb: tbFor('work', { count: '1 change', chips: [0, 2], compact: true }) }, g1) };
+    const G2 = { id: 'G2', w: 580, title: 'The staged diff at 580 px, staging controls on', src: 'the same rules, with Unstage in the staging column',
+      cap: 'The staging column is the same at any width (20 px with Unstage alone), so nothing covers code; Unstage Change sits at line 47, beside the line it unstages, and its tooltip names it.',
+      doc: doc({ tabs: tabsFor('Startup.cs (Staged)'), label: 'Startup.cs (Staged)', tb: tbFor('staged', { count: '1 change', chips: [0, 1], compact: true, stg: true }) },
+        sideBySide({ D: D_LOG, from: 42, to: 53, caretL: 0, caretR: 47, modeL: 'grammar', modeR: 'grammar', nav: false, stg: true, staged: true,
+          left: { label: 'HEAD', name: 'Startup.cs', lbl: '(HEAD)', zoom: '100 %', st: ['Ln: 47', 'Ch: 1'], hsw: 30 }, right: { label: 'Index', name: 'Startup.cs', lbl: '(Index)', st: ['Ln: 47', 'Ch: 17'], hsw: 28 } })) };
+
+    // ---- H: colors.
+    const colorRows = (mode) => [14, 16, 19, 27, 37, 41, 43, 45, 48].map((n) => {
+      const text = ONE[n - 1].trimStart();
+      const toks = finish(tint(csharp(text, mode), null), false);
+      return { no: n, cls: '', toks };
+    });
+    const H1 = { id: 'H1', w: 1240, title: 'The same lines today, colored by the grammar, and colored by the C# host', src: 'nine lines of the working tree, indentation trimmed',
+      cap: 'Tier 1, the grammar, colors every side and every language with a grammar. Tier 2, the semantic tokens, colors only the side that is the open document. Either way the colors are the editor\'s (EditorTheme), so a theme change only needs a redraw.',
+      colors: [
+        { title: 'Today (0.5): no colorizer', rows: colorRows('none'), notes: ['DiffView.Editor() adds only DiffLineRenderer and DiffSignMargin: no TextMate installation, no GrammarColorizer, no SemanticColorizer.', 'DiffView doesn\'t know the file\'s language and gets no services (its constructor takes the view model and the font).'] },
+        { title: 'Grammar: every side (tier 1)', rows: colorRows('grammar'), notes: ['The C# grammar\'s scopes mapped by GrammarColorizer.TypeOf into EditorTheme\'s token colors, as Add New Item\'s preview colors C#.', 'Interfaces in type positions take the class color. Receivers at their uses (app, env, services) stay plain.', 'The keyword new needs keyword.operator.expression mapped to keyword (today it maps to operator).', 'Tokenized from the real old and new texts, carrying the grammar\'s state, never from the composed text with its fillers.'] },
+        { title: 'Semantic: the open document\'s side (tier 2)', rows: colorRows('semantic'), notes: ['The C# host\'s textDocument/semanticTokens/range for the document\'s URI, as CodeEditorController.TokensAsync asks for it, mapped from rows to lines.', 'It applies only while the side\'s text is the open document\'s. Otherwise the side keeps the grammar\'s colors.', 'Interfaces (IApplicationBuilder) and parameters at every use (app, env), as in the editor and the classic IDE\'s working-tree side.'] }
+      ] };
+
+    const sections = [
+      { title: 'A. Side by side, in the classic IDE\'s layout', lead: 'The toolbar has the changes, the line counts, Stage All and Discard All…, then Show Staging Controls, Summary and the gear menu. Each side has a header, a navigation bar row, line numbers that count its own file\'s lines, hatched filler where the other side has lines, + and − signs, a scroll bar that maps the changes, and its own status bar; the splitter sits between them. The file is the screenshots\' Startup.cs, with lines 47 and 48 added.', rows: [{ items: [A1] }, { items: [A2] }] },
+      { title: 'A3–A10. The staging controls up close, and the confirmations', lead: 'Crops of the working-tree side with Show Staging Controls on: where the buttons sit, how they react, and what Discard asks.', rows: [{ items: [A3, A4, A5] }, { items: [A6, A7, A8] }, { items: [A9, A10] }] },
+      { title: 'B. Several changes', lead: 'The second edit has four changes: a changed line (37), an added line (47), a changed line with two deleted lines (50–52), and a changed line (65).', rows: [{ items: [B1] }, { items: [B2] }] },
+      { title: 'C. Inline', lead: 'The inline view is a first-class layout in Codalus. It stays, as a radio entry in the gear menu.', rows: [{ items: [C1] }] },
+      { title: 'D. What is compared: tab, toolbar and headers', lead: 'Each kind of comparison names its sides in the headers and keeps only the actions that apply to it. Each strip is cropped to four rows; the status bars are the same as in A1.', rows: [{ items: [D1] }, { items: [D2] }, { items: [D3] }, { items: [D4] }, { items: [D5] }, { items: [D6] }, { items: [D7] }] },
+      { title: 'E. When there are no lines to compare', lead: 'Each of these states says what happened and offers a next step.', rows: [{ items: [E1, E6] }, { items: [E5, E2] }, { items: [E3, E4] }] },
+      { title: 'F. Summary', lead: 'Summary folds the unchanged lines (the classic IDE\'s Summary button). It is off by default.', rows: [{ items: [F1] }] },
+      { title: 'G. Narrow', lead: 'At narrow widths, the document drops labels before it drops actions.', rows: [{ items: [G1, G2] }] },
+      { title: 'H. Colors: what each side gets', lead: 'The missing colors have one root cause: the diff panes are bare TextEditors with no colorizer. The fix is a colorizer that colors displayed rows by their source lines.', rows: [{ items: [H1] }] }
+    ];
+
+    const decisions = [
+      { n: 1, b: 'Colors: the grammar on every side, plus the C# host\'s semantic tokens on the side that is the open document', t: '(the working tree, or a revision side whose text is the open document\'s), as drawn (H1). The colors are the editor\'s, so they match the classic IDE\'s working-tree side, and its index side is grammar-colored too.', alt: 'grammar only in 0.6 (interfaces in the class color and receivers plain on both sides, TODO(issue) for the rest); or the working-tree side as a live editor with CodeLens, squiggles and editing, which needs the filler rows as view zones (tier 3).' },
+      { n: 2, b: 'One status bar per side, as in the classic IDE;', t: 'the zoom box sits in the left one and sizes both sides. Each side shows its own Ln and Ch, indentation, line endings and encoding. When line endings, the encoding or the file mode is all that differs, the document says so instead (E5).', alt: 'one shared bar under both sides, like the merge editor\'s.' },
+      { n: 3, b: 'Side by Side and Inline are radio entries in the gear menu,', t: 'as in the classic IDE and the 0.5 merge editor, kept in a git.diff.layout setting (C1). Today\'s splitter stays between the sides: drag to resize, double-click for half and half, the position kept per document while it is open (A1, B1).', alt: 'a segmented control on the toolbar; or today\'s Side by side toggle button.' },
+      { n: 4, b: 'The per-change and per-line actions move into the staging controls and the code\'s context menu (A2–A8),', t: 'as registered commands with one set of names: Stage Change, Stage Selected Lines, Discard Change…, Discard Selected Lines…, Unstage Change, Unstage Selected Lines (git.diff.*). The controls are a column between the numbers and the signs, so they never cover code. F8 and Shift+F8 move between changes while the diff has focus, as in the merge editor; the staging commands have no default keys.', alt: 'today\'s six text buttons on the toolbar; or a floating bar at the right edge of each change (it covers long lines); or the context menu only.' },
+      { n: 5, b: 'The staging controls are hidden by default, as in the classic IDE,', t: 'and the toggle is kept in a git.diff.showStagingControls setting. With them hidden, the commands are still on the context menu and in the command palette.', alt: 'shown by default, since today\'s toolbar always shows the actions.' },
+      { n: 6, b: '"Discard All…", not "Undo All":', t: 'Codalus says Discard everywhere else (Git Changes, Discard Hunk).', alt: '"Undo All", the classic IDE\'s word.' },
+      { n: 7, b: 'A change is a run of changed rows, and its patch is built from those rows:', t: 'F8 stops at it, the count counts it, and Stage Change stages it (B1). The patch comes from Codalus\'s rows over the index text and the saved text, not from git\'s hunk, so two changes in one git hunk stage separately and nothing is dropped where git would slide a run differently (its indent heuristic, or the user\'s diff.algorithm). Today ApplyToLinesAsync matches rows to git\'s hunk lines and stops after the first hunk.', alt: 'rows built from git\'s own hunks (git diff -U0, so the drawing matches the terminal), which can\'t show unsaved edits; or git\'s -U3 hunk as today ("3 changes", and Stage Hunk on line 47 also stages lines 50–52).' },
+      { n: 8, b: 'The navigation bar on the side that is the open document only;', t: 'the other side keeps the row, empty and disabled, so the lines stay aligned (A1, D4). With no open side (D2, D3, D6, D7), or a side narrower than 360 px, neither side has the row.', alt: 'the open side\'s symbols mapped through the rows onto the other side (over a renamed member it names a symbol that side doesn\'t contain); or no navigation bars in 0.6 (NavigationBar must first take a symbol source instead of a CodeEditorController).' },
+      { n: 9, b: 'Tab titles stay descriptive, with the compare icon:', t: '"Startup.cs (Working Tree)", "Startup.cs (Staged)", "AppStartup.cs (Staged)" for a rename, "Startup.cs (3f2a1c9 → 8b7e4d2)", "SignIn.cs (main → feature/sign-in)", and "a ↔ b" for two files. Revisions get "→" where they get "↔" today.', alt: '"Diff - Startup.cs", as in the classic IDE (the staged and the working-tree diffs of one file would look the same).' },
+      { n: 10, b: 'New tokens in all 16 themes: Shell.Diff.Added.Line, .Removed.Line, .Added.Word, .Removed.Word, .Added.WordBorder, .Removed.WordBorder and Shell.Diff.Filler,', t: 'opaque, held to the editor\'s fill rule: Shell.Editor.Foreground at 4.5:1 on each (contrast-pairs.txt), every syntax color measured at 3:1 or more. A changed word differs from its line by a tint of only 1.16–1.48:1 (measured), so it also gets a 1 px border round the whole word (High contrast: the border alone, no fills). Classic and Harbor take the values drawn here; Graphite, Daylight and Ember (three of them High Contrast) take values made the same way, and PolishTests\' pairs gate all 16. The hard-coded alpha brushes go.', alt: 'the fills without the word border; or the classic IDE\'s own brighter fills (#265E4D: comments at 2.3:1, keywords at 2.6:1 on it).' },
+      { n: 11, b: 'The working-tree side shows the open buffer, and every Stage, Discard, Stage All and Discard All… saves the file first,', t: 'as Stage Active File does: it saves, waits for the diff to reload, checks the saved text is the text drawn (format on save can change it; then it stops and says so), and only then builds the patch. So the unsaved edits are both shown and what gets staged. Either way the diff refreshes by itself (debounced edits, saves, IndexChanged, StatusChanged) and keeps the caret and scroll position after actions and tab switches.', alt: 'the file on disk, with a bar "Startup.cs has unsaved changes. Save to compare them." and a Save button, and the Discard actions disabled until it is saved, so no action saves for the user.' },
+      { n: 12, b: 'Summary folds unchanged runs to three lines of context, both sides in step (F1);', t: 'off by default.', alt: 'no Summary in 0.6.' },
+      { n: 13, b: 'Files over 10 MB or 100,000 lines wait for Compare Anyway (E3);', t: 'binary files show their sizes (E2).', alt: 'no limit (today a large file freezes nothing but takes a long time, and its texts load whole); or a setting.' },
+      { n: 14, b: 'Changed words are tinted on paired lines,', t: 'from a character diff of each pair widened to whole words (B1, B2). This is new: today a pair gets whole-line tints only.', alt: 'whole lines only, as today.' },
+      { n: 15, b: 'Discard asks first, every time:', t: 'Discard Change… and Discard Selected Lines… get a confirmation naming the lines (A9), and Discard All… keeps today\'s (A10). Each says when unsaved edits are saved first or lost; Discard / Cancel, with Cancel the default. Today Discard Hunk and Discard Selected Lines don\'t ask.', alt: 'ask only for Discard All…, as today.' },
+      { n: 16, b: 'Deferred, each with a TODO(issue):', t: 'CodeLens and diagnostics on the working-tree side, editing inside the diff, Ignore Trim Whitespace (it would make staging inexact), image previews for binary files, and the classic IDE\'s project drop-down.', alt: 'Ignore Trim Whitespace now, with staging turned off while it is on.' }
+    ];
+
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+    return { t, vars, themes, sections, decisions };
+  }
+}
+</script>
+</body>
+</html>
