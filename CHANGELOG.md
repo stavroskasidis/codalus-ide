@@ -4,6 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.6.0
 
+- **Fixed: dimmed editor colors.** After switching documents or tool windows, the editor and the compare view were often drawn at 85% opacity, so every color, the Classic themes' most visibly, looked muted next to the classic IDE's. A tab's view now appears at once, as in the classic IDE, without the docking library's fade.
 - **Fixed: Reset in the Settings editor kept the Modified mark** when the setting's value was the same as its default (or as the value another settings file gives it): the line was removed from settings.json, but the row still said Modified and offered Reset, and the page's count of modified settings stayed the same.
 
 ## 0.5.0
