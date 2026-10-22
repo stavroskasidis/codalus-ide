@@ -4,6 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.6.0
 
+- **Fixed: dimmed editor colors.** After switching documents or tool windows, the editor and the compare view were often drawn at 85% opacity, so every color, the Classic themes' most visibly, looked muted next to the classic IDE's. A tab's view now appears at once, as in the classic IDE, without the docking library's fade.
 - **New Project is the classic IDE's three-page wizard** ([user guide](docs/user-guide/solutions.md#new-projects-and-solutions)): File → New → Project (`Ctrl+Shift+N`), the start window's Create a new project, and Solution Explorer's Add → New Project… open one window instead of a row of pickers and prompts.
   - **Create a new project** lists your recent templates (pin them, or remove them) and every installed template with its icon, description and tags, with search (`Alt+S`) and filters by language, platform and project type. A template whose projects run only on Windows says so on Linux and macOS, and a missing template pack (Avalonia, CoreWCF) installs in place.
   - **Configure your new project** asks for the project name, the location (your recent locations, or Browse…), the solution name, whether to place the solution and project in the same directory, and whether to trust the location; with a solution or folder open you can add the project to it, and Add → New Project adds it in the selected solution folder.

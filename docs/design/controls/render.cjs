@@ -5,7 +5,9 @@
 // every visible text in every mockup and theme, takes its color and the color under it (the backgrounds of its
 // ancestors, composited), and fails under 4.5:1 (7:1 in the High contrast themes). Icons, focus rings and check box
 // outlines are graphics, held to 3:1. Disabled controls are exempt (WCAG 1.4.3), and so are the "Now" pictures of
-// the current views on the before/after sheet (data-nocheck).
+// the current views on the before/after sheet (data-nocheck). A page with cues: true also has its non-text state cues
+// held to 3:1 against what is behind them (WCAG 1.4.11): the rounded corners' selected tab, frames, pill and bar.
+//   node docs/design/controls/render.cjs --only=DataTip   only the pages whose file starts with that
 'use strict';
 const path = require('path');
 const fs = require('fs');
@@ -28,7 +30,52 @@ const PAGES = [
   { file: 'ChecklistDialog.dc.html', name: 'checklist-dialog', width: 1280, height: 800, themes: VIEW_THEMES },
   { file: 'ChecklistDialog.dc.html', name: 'checklist-dialog-macos', query: 'os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
   { file: 'AiChat.dc.html', name: 'ai-chat', width: 1280, height: 800, themes: VIEW_THEMES },
-  { file: 'Options.dc.html', name: 'options', width: 1280, height: 800, themes: VIEW_THEMES }
+  { file: 'Options.dc.html', name: 'options', width: 1280, height: 800, themes: VIEW_THEMES },
+  { file: 'WinFormsDesignerMenus.dc.html', name: 'winforms-designer-menus', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-color', query: 'state=Color', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  // The font editor keeps the Properties window inactive: Classic High Contrast shows the selected name's outline there.
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-font', query: 'state=Font', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light', 'Classic High Contrast'] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-invalid', query: 'state=Invalid', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  // The window's other states, checked in every theme but not rendered: the sheet above shows each of them.
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-alignment', query: 'state=Alignment', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-strings', query: 'state=Strings', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-resource', query: 'state=Resource', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-file', query: 'state=File', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-events', query: 'state=Events', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-multiple', query: 'state=Multiple', width: 1280, height: 800, themes: [] },
+  { file: 'PropertiesWindow.dc.html', name: 'properties-window-reference', query: 'state=Reference', width: 1280, height: 800, themes: [] },
+  { file: 'GitChanges.dc.html', name: 'git-changes', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-folder', query: 'state=folder', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-branch-menu', query: 'state=branch-menu', width: 1280, height: 800, themes: ['Classic Dark', 'Harbor Light'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-delete-unmerged', query: 'state=delete-unmerged', width: 1280, height: 800, themes: ['Classic Light'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-folder-macos', query: 'state=folder&os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
+  // A danger dialog's buttons on macOS: Cancel, the default, stays at the trailing edge.
+  { file: 'GitChanges.dc.html', name: 'git-changes-delete-macos', query: 'state=delete&os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] },
+  // Update (question 21, the maintainer's request after D38's approval): the entry, and a branch that has diverged.
+  { file: 'GitChanges.dc.html', name: 'git-changes-update-menu', query: 'state=update-menu', width: 1280, height: 800, themes: ['Classic Light', 'Harbor Dark'] },
+  { file: 'GitChanges.dc.html', name: 'git-changes-update-diverged', query: 'state=update-diverged', width: 1280, height: 800, themes: ['Harbor Light'] },
+  // The other states in the whole window, checked in every theme but not rendered: the sheet above shows each of them.
+  ...['changes', 'staged-folder', 'deleted-folder', 'untracked-folder', 'filtered', 'file-menu', 'staged-file', 'deleted-file', 'repo-menu', 'conflict-file',
+    'conflict-folder', 'discard', 'discard-filtered', 'stash', 'new-branch', 'new-branch-operation', 'rename', 'delete', 'delete-upstream',
+    'delete-unmerged-upstream', 'delete-remote', 'compare', 'compare-loading', 'compare-same', 'branches', 'search', 'nomatch', 'loading', 'error', 'many',
+    'branch-actions', 'current-menu', 'remote-menu', 'remote-twin', 'worktree', 'worktree-enter', 'detached', 'operation', 'unborn', 'noremote',
+    'noremote-link', 'long-row', 'long-name', 'narrow', 'updating', 'updated', 'update-worktree']
+    .map((state) => ({ file: 'GitChanges.dc.html', name: `git-changes-${state}`, query: `state=${state}`, width: 1280, height: 800, themes: [] })),
+  { file: 'PackageManager.dc.html', name: 'package-manager', width: 1280, height: 800, full: true, themes: ALL },
+  { file: 'DataTip.dc.html', name: 'data-tip', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  // Single states, each its panel alone (a small viewport, the full page: the picture is the panel's size): the keyboard's
+  // selection with the row's menu (in Classic High Contrast, whose overlays have 2 px borders), the Dictionary view and the
+  // View drop-down, two pinned tips while the program runs, Ctrl's see-through tips.
+  { file: 'DataTip.dc.html', name: 'data-tip-keyboard', query: 'state=keyboard', width: 400, height: 300, full: true, themes: ['Classic High Contrast'] },
+  { file: 'DataTip.dc.html', name: 'data-tip-dictionary-view', query: 'state=dictionary-view', width: 400, height: 300, full: true, themes: ['Classic Dark', 'Harbor Light'] },
+  { file: 'DataTip.dc.html', name: 'data-tip-collection-view', query: 'state=collection-view', width: 400, height: 300, full: true, themes: ['Classic Light'] },
+  { file: 'DataTip.dc.html', name: 'data-tip-pinned-more', query: 'state=pinned-more', width: 400, height: 300, full: true, themes: ['Classic Light', 'Harbor Dark'] },
+  { file: 'DataTip.dc.html', name: 'data-tip-ctrl', query: 'state=ctrl', width: 400, height: 300, full: true, themes: ['Classic Dark'] },
+  { file: 'DiffDocument.dc.html', name: 'diff-document', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
+  // Harbor's sheets draw the window as Harbor keeps it, then the Classic theme of the same kind for the rest (only Classic changes shape).
+  { file: 'RoundedCorners.dc.html', name: 'rounded-corners', width: 1280, height: 800, full: true, cues: true, themes: ['Classic Blue', ...VIEW_THEMES, 'Classic High Contrast'] },
+  { file: 'RoundedCorners.dc.html', name: 'rounded-corners-proposed', query: 'state=proposed', width: 400, height: 300, full: true, cues: true, themes: ['Classic Light', 'Classic Dark'] }
 ];
 
 // New Project (0.6.0): each page in the view themes, its main states in Harbor Light and Classic Dark, the others in
@@ -50,7 +97,30 @@ for (const [page, states] of Object.entries(NEW_PROJECT)) {
 
 const slug = (s) => s.toLowerCase().replace(/\s+/g, '-');
 
-function checkInPage(minText) {
+// Connecting an agent (0.6.0, controls.md#connect-an-agent): the dialog's states, AI Chat's states and Options' AI page.
+// The main states in the view themes and Classic High Contrast, the others in one or two; every state in the check.
+const FIVE = ['Classic Light', 'Classic Dark', 'Classic High Contrast', 'Harbor Light', 'Harbor Dark'];
+const TWO = ['Harbor Light', 'Classic Dark'];
+const AGENT_CONNECT = {
+  connect: FIVE, apikey: FIVE, ok: FIVE, progress: TWO, signin: TWO, missing: TWO, disconnect: TWO,
+  codex: ['Harbor Light'], gemini: ['Classic Dark'], unconfirmed: ['Classic Light'], failed: ['Harbor Dark'],
+  'apikey-memory': ['Classic Light'], installing: ['Classic Light'], offline: ['Classic Light'], remote: ['Classic Light']
+};
+for (const [state, themes] of Object.entries(AGENT_CONNECT)) {
+  PAGES.push({ file: 'AgentConnect.dc.html', name: `agent-connect-${state}`, query: `state=${state}`, width: 1280, height: 800, themes });
+}
+PAGES.push({ file: 'AgentConnect.dc.html', name: 'agent-connect-missing-windows', query: 'state=missing&os=Windows', width: 1280, height: 800, themes: ['Classic Light'] });
+PAGES.push({ file: 'AgentConnect.dc.html', name: 'agent-connect-missing-macos', query: 'state=missing&os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] });
+const AI_CHAT_CONNECT = {
+  off: FIVE, picker: FIVE, connected: TWO, 'no-provider': ['Harbor Dark'], more: ['Classic Light'], manage: ['Harbor Light'],
+  'manage-claude': ['Classic Dark'], commands: ['Classic Light'], remote: ['Classic Light']
+};
+for (const [state, themes] of Object.entries(AI_CHAT_CONNECT)) {
+  PAGES.push({ file: 'AiChat.dc.html', name: `ai-chat-${state}`, query: `state=${state}`, width: 1280, height: 800, themes });
+}
+PAGES.push({ file: 'Options.dc.html', name: 'options-ai', query: 'page=ai', width: 1280, height: 800, themes: VIEW_THEMES });
+
+function checkInPage({ minText, cues }) {
   const parse = (c) => {
     const m = /rgba?\(([^)]+)\)/.exec(c);
     if (!m) return null;
@@ -117,6 +187,28 @@ function checkInPage(minText) {
     if (exempt(el) || !visible(el)) continue;
     test(el.parentElement, getComputedStyle(el).borderTopColor, 'outline', 3, el.parentElement.textContent.trim());
   }
+  if (cues) {
+    // Each cue against what is behind it; of several colors (a tab found by its fill or by its outline) the best counts.
+    const cue = (el, under, colors, kind, text) => {
+      if (exempt(el) || !visible(el)) return;
+      const bg = bgUnder(under);
+      let best = null;
+      for (const c of colors.map(parse).filter(Boolean)) {
+        const shown = over(c, bg);
+        const r = ratio(shown, bg);
+        if (!best || r > best.r) best = { r, shown };
+      }
+      if (!best) return;
+      checked++;
+      if (best.r + 1e-6 < 3) fails.push({ kind, text: (text || '').slice(0, 60), fg: hex(best.shown), bg: hex(bg), ratio: Math.round(best.r * 100) / 100, min: 3 });
+    };
+    const cs = (el, pseudo) => getComputedStyle(el, pseudo);
+    for (const el of document.querySelectorAll('.v-new .dt.on')) cue(el, el.parentElement, [cs(el).backgroundColor, cs(el).borderTopColor], 'selected tab', el.textContent.trim());
+    for (const el of document.querySelectorAll('.v-new.outline .well:not(.idle) > .wd')) cue(el, el.parentElement.parentElement, [cs(el).borderLeftColor], 'document frame', 'active document');
+    for (const el of document.querySelectorAll('.v-new.outline:not(.capfill) .pn.focus')) cue(el, el.parentElement, [cs(el).borderLeftColor], 'tool window frame', el.getAttribute('aria-label'));
+    for (const el of document.querySelectorAll('.v-new .trow .pill')) cue(el, el.parentElement, [cs(el).backgroundColor], 'selection pill', el.parentElement.textContent.trim());
+    for (const el of document.querySelectorAll('.v-new .atab.on')) cue(el, el, [cs(el, '::after').backgroundColor], 'auto-hide bar', el.textContent.trim());
+  }
   return { checked, fails };
 }
 
@@ -135,7 +227,7 @@ function checkInPage(minText) {
       await page.waitForSelector('html[data-rendered="true"]');
       await page.evaluate(() => document.fonts.ready);
       const hc = theme.toLowerCase().includes('high contrast');
-      const { checked, fails } = await page.evaluate(checkInPage, hc ? 7 : 4.5);
+      const { checked, fails } = await page.evaluate(checkInPage, { minText: hc ? 7 : 4.5, cues: !!p.cues });
       total += checked;
       for (const f of fails) {
         failures++;
