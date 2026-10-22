@@ -221,7 +221,7 @@ public sealed class GitDepthShellTests
         var view = f.Window.GetVisualDescendants().OfType<DiffView>().Single(v => v.RightText.StartsWith("// first", StringComparison.Ordinal));
         var right = view.ActiveEditor;
         right.TextArea.Caret.Line = 1; // the first added line only
-        await view.LineActionAsync("stage");
+        Assert.True(await view.ApplyToSelectedLinesAsync(DiffAction.Stage));
 
         var staged = Git(folder, "diff", "--cached");
         Assert.Contains("+// first added line", staged, StringComparison.Ordinal);

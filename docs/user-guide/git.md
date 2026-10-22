@@ -107,13 +107,20 @@ Git asks your credential helper first (Git Credential Manager, the macOS Keychai
 
 ## Diffs
 
-A file's diff opens in a document:
-- **Side by side**, with the two versions aligned and scrolling together, or **inline**.
-- **Previous Change** and **Next Change** move between changes.
-- **Stage Hunk**, **Unstage Hunk** and **Discard Hunk** act on the change at the caret.
-- **Stage Selected Lines**, **Unstage Selected Lines** and **Discard Selected Lines** act on just the selected lines (or the caret's line) of a change.
+A file's diff opens in a document, laid out like the classic IDE's:
+- **The toolbar**: **Next Change** and **Previous Change** (`F8` and `Shift+F8` while the diff has the focus), the count ("Change 3 of 4"; a change is a run of changed lines) and the number of lines removed and added. The gear menu (**Diff Options**) switches between **Side by Side** and **Inline** (remembered in the `git.diff.layout` setting), refreshes the diff, and opens the file at the caret's line.
+- **Side by side**, the two versions are aligned and scroll together; drag the splitter between them to resize them, or double-click it for half and half. **Inline**, each change shows its removed lines, then its added lines, with two columns of line numbers.
+- **Each side** has a header with its file and what it is ("(Index)", "(Working tree)", "(HEAD)", a revision), line numbers that count its own file's lines, its own caret and current line, and a status bar with the caret's line and character, the indentation, the line endings and the encoding. The zoom box in the left one (or `Ctrl+wheel`) sizes both sides. The side that is the open document has the editor's navigation bar.
+- **In the editor's colors**: each side is colored by its language's grammar, and the side whose text is the open document's (usually the working tree) by the language service too, as the editor colors it.
+- **Changed words**: where a line was changed, the words that changed are marked on both sides, with a deeper fill and a thin border. Rows where only the other side has lines are hatched.
+- **Staging**: a change is a run of changed lines, as drawn. The code's context menu has **Stage Change** and **Discard Change…** for the change at the caret, and **Stage Selected Lines** and **Discard Selected Lines…** for just the changed lines among the selected ones (or the caret's line); in a staged diff, **Unstage Change** and **Unstage Selected Lines**. The toolbar has **Stage All** and **Discard All…** (**Unstage All** in a staged diff). All of them are in the Command Palette too; none has a default key.
+- **Show Staging Controls** (on the toolbar and in the gear menu; the `git.diff.showStagingControls` setting, off by default) adds a column between the line numbers and the signs with each change's **Stage** and **Discard** buttons (**Unstage** in a staged diff), at the change's first line in view. With a selection inside the change, they act on the selected lines. Hovering a button outlines the lines it acts on.
+- **The working-tree side is the file's open buffer**, unsaved edits included (its header says so). Stage, Discard, Stage All and Discard All… save the file first, then check that the saved text is the text drawn: if saving changed it (format on save, for example), nothing is applied and you're told, so you can check the diff and try again.
+- **Summary** (on the toolbar and in the gear menu, off by default) folds every unchanged run to three lines of context, on both sides in step. Click a folded run, or press `Enter` on it, to open it.
+- **When there are no lines to compare**, the diff says why: the file has no changes; the working tree matches the index but the file has staged changes (**Open Staged Changes**); or only the line endings, the encoding, the file mode or the last newline differ, which Stage All still records. A binary file shows each side's size. A file over 10 MB or 100,000 lines waits for **Compare Anyway**.
+- **Discarding asks first, every time**, naming the lines, with Cancel the default, and says when unsaved edits are saved first (or, for Discard All…, lost).
 
-Git → Compare with Unmodified opens the active file's diff.
+The diff refreshes by itself after edits, saves and changes to the index, and keeps its caret, scroll position and splitter when you switch tabs. Git → Compare with Unmodified opens the active file's diff.
 
 ## In the editor
 

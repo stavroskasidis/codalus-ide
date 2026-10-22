@@ -3,6 +3,7 @@
 # geometries (eng/icons/CompileIcons.cs), so nothing parses SVG at runtime. Our icon names map onto these
 # in Controls/Icon.cs.
 add_16_regular
+add_subtract_circle_16_regular
 alert_16_regular
 alert_badge_16_regular
 archive_16_regular

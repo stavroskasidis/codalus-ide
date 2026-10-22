@@ -70,6 +70,12 @@ Shell.Editor.Foreground Shell.Merge.Conflict 4.5
 Shell.Merge.Conflict.Border Shell.Editor.Background 3
 Shell.Merge.Conflict.Border Shell.Merge.Conflict 3
 Shell.Merge.Resolved.Border Shell.Editor.Background 3
+# The diff document (#86, D45): the code on the removed and added lines' fills and the changed words' (the syntax
+# colors at 3:1 on them: PolishTests' The_diff_fills_keep_the_syntax_colors_readable).
+Shell.Editor.Foreground Shell.Diff.Added.Line 4.5
+Shell.Editor.Foreground Shell.Diff.Removed.Line 4.5
+Shell.Editor.Foreground Shell.Diff.Added.Word 4.5
+Shell.Editor.Foreground Shell.Diff.Removed.Word 4.5
 
 # State colors: icons and borders (graphics).
 Shell.Error Shell.Panel 3

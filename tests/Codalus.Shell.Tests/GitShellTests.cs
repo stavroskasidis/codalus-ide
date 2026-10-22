@@ -66,7 +66,7 @@ public sealed class GitShellTests
         var view = f.Window.GetVisualDescendants().OfType<DiffView>().Single();
         Assert.StartsWith("// a new first line", view.RightText, StringComparison.Ordinal);
         Assert.StartsWith("\n", view.LeftText, StringComparison.Ordinal); // a filler row on the old side
-        await view.HunkActionAsync("stage");
+        Assert.True(await view.ApplyToChangeAsync(DiffAction.Stage));
         await ShellFixture.PumpUntil(() => f.Shell.GitChanges.Staged.Any(r => r.Name == "Greeter.cs") && !f.Shell.GitChanges.Changes.Any(r => r.Name == "Greeter.cs"));
 
         // Commit from the Changes view.
