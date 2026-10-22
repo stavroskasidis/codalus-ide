@@ -91,6 +91,13 @@ public sealed class SettingsService : IDisposable
 
     public event EventHandler<SettingsChangedEventArgs>? Changed;
 
+    /// <summary>
+    /// Keys whose entry in a settings file appeared, went or changed while their effective value didn't (a value equal to
+    /// the default removed by Reset, or one the other layer overrides): only what shows where a value is set needs them,
+    /// such as the Settings editor's Modified mark. Keys whose effective value changed are in <see cref="Changed"/>.
+    /// </summary>
+    public event EventHandler<SettingsChangedEventArgs>? LayersChanged;
+
     public IReadOnlyList<string> Diagnostics
     {
         get
@@ -482,9 +489,12 @@ public sealed class SettingsService : IDisposable
     {
         HashSet<string> changed;
         HashSet<string> registered;
+        HashSet<string> layers;
         lock (_gate)
         {
+            var (user, workspace) = (_user, _workspace);
             change();
+            layers = [.. LayerChanges(user, _user).Concat(LayerChanges(workspace, _workspace))];
             var diagnostics = fileDiagnostics ?? _diagnostics.Where(d => d.StartsWith("[file]", StringComparison.Ordinal)).ToList();
             var effective = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
             foreach (var (key, descriptor) in _descriptors)
@@ -569,7 +579,17 @@ public sealed class SettingsService : IDisposable
         {
             Changed?.Invoke(this, new SettingsChangedEventArgs(changed, registered));
         }
+
+        layers.ExceptWith(changed);
+        if (layers.Count > 0)
+        {
+            LayersChanged?.Invoke(this, new SettingsChangedEventArgs(layers));
+        }
     }
+
+    /// <summary>The keys a settings file added, removed or set to another value.</summary>
+    private static IEnumerable<string> LayerChanges(Dictionary<string, JsonElement> before, Dictionary<string, JsonElement> after) =>
+        before.Keys.Union(after.Keys).Where(k => !(before.TryGetValue(k, out var b) && after.TryGetValue(k, out var a) && b.GetRawText() == a.GetRawText()));
 
     private static Dictionary<string, JsonElement> ReadLayer(string file, List<string> diagnostics)
     {

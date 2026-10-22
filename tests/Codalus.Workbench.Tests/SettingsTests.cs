@@ -135,6 +135,32 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Removing_a_value_equal_to_the_default_reports_the_layer_change()
+    {
+        File.WriteAllText(UserFile, """{ "telemetry.enabled": false }""");
+        using var settings = new SettingsService(UserFile);
+        settings.Register(Schema());
+        var changed = new List<string>();
+        var layers = new List<string>();
+        settings.Changed += (_, e) => changed.AddRange(e.Keys);
+        settings.LayersChanged += (_, e) => layers.AddRange(e.Keys);
+        Assert.NotNull(settings.GetLayerValue("telemetry.enabled", SettingScope.User));
+
+        // Reset: the entry goes, the effective value (the default, false) stays.
+        await settings.SetAsync("telemetry.enabled", (JsonElement?)null, SettingScope.User, TestContext.Current.CancellationToken);
+
+        Assert.Null(settings.GetLayerValue("telemetry.enabled", SettingScope.User));
+        Assert.Empty(changed);
+        Assert.Equal(["telemetry.enabled"], layers);
+
+        // A value that changes the effective one is a Changed key, not a layer-only one.
+        layers.Clear();
+        await settings.SetAsync("telemetry.enabled", true, SettingScope.User, TestContext.Current.CancellationToken);
+        Assert.Equal(["telemetry.enabled"], changed);
+        Assert.Empty(layers);
+    }
+
+    [Fact]
     public async Task Registering_settings_is_reported_apart_from_value_changes()
     {
         using var settings = new SettingsService(UserFile);
