@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Codalus.Shell.ViewModels;
 using static Codalus.Shell.Tests.WinFormsDesignerTestHost;
 
@@ -98,7 +99,17 @@ public sealed class WinFormsPropertiesShellTests
         var fore = await RowAsync(f, "ForeColor");
         Assert.True(fore is { IsColor: true, IsSet: true, Value: "White" });
         Assert.NotNull(fore.Swatch);
-        fore.Text = "Red";
+        // The color drop-down (D41 question 18): the System tab has GrayText; a Web color is written as Color's.
+        f.Shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.PropertiesWindowView>().Any(v => v.IsEffectivelyVisible));
+        var view = f.Window.GetVisualDescendants().OfType<Views.PropertiesWindowView>().First(v => v.IsEffectivelyVisible);
+        view.Grid.OpenDropDown(fore);
+        var color = Assert.IsType<Views.PropertyEditors.ColorDropDown>(view.Grid.OpenDropDownControl);
+        Assert.Equal(PropertyColors.WebTab, color.Tab);
+        color.SelectTab(PropertyColors.SystemTab);
+        Assert.Contains(color.SystemColors, c => c.Name == "GrayText");
+        color.SelectTab(PropertyColors.WebTab);
+        color.PickNamed("Red");
         await ShellFixture.PumpUntil(() => Code(designer).Contains("placeOrderButton.ForeColor = Color.Red;", StringComparison.Ordinal), seconds: 30);
         (await RowAsync(f, "ForeColor", r => r.Value == "Red")).Text = "255, 128, 0";
         await ShellFixture.PumpUntil(() => Code(designer).Contains("placeOrderButton.ForeColor = Color.FromArgb(255, 128, 0);", StringComparison.Ordinal), seconds: 30);
@@ -107,7 +118,8 @@ public sealed class WinFormsPropertiesShellTests
 
         var align = await RowAsync(f, "TextAlign");
         Assert.Equal(PropertyRowKind.ContentAlignment, align.Kind);
-        align.Text = "MiddleRight";
+        view.Grid.OpenDropDown(align);
+        Assert.IsType<Views.PropertyEditors.ContentAlignmentDropDown>(view.Grid.OpenDropDownControl).Pick("MiddleRight");
         await ShellFixture.PumpUntil(() => Code(designer).Contains("placeOrderButton.TextAlign = ContentAlignment.MiddleRight;", StringComparison.Ordinal), seconds: 30);
 
         // The multi-line Text row is typed through its text box; a value with a line break isn't (D41 question 16).

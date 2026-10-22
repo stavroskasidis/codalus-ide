@@ -4,6 +4,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Codalus.Shell.ViewModels;
 
 namespace Codalus.Shell.Views.PropertyEditors;
@@ -23,6 +24,21 @@ internal interface IPropertyDropDown
 /// <summary>The drop-downs' kinds and their factory: a control is made the first time a grid opens one of its kind.</summary>
 internal static class PropertyDropDowns
 {
+    /// <summary>A drop-down's list: 20 px rows in the UI font, as the mockup draws them (the shell's lists are taller).</summary>
+    public static void CompactRows(ListBox list)
+    {
+        list.FontSize = 12;
+        list.Styles.Add(new Avalonia.Styling.Style(x => x.OfType<ListBoxItem>())
+        {
+            Setters =
+            {
+                new Avalonia.Styling.Setter(ListBoxItem.PaddingProperty, new Thickness(6, 0)),
+                new Avalonia.Styling.Setter(ListBoxItem.MinHeightProperty, 20d),
+                new Avalonia.Styling.Setter(ListBoxItem.HeightProperty, 22d),
+            },
+        });
+    }
+
     public static string KindOf(PropertyRowViewModel row) => row.Kind switch
     {
         PropertyRowKind.Dock or PropertyRowKind.Anchor => "dockAnchor",
@@ -39,6 +55,11 @@ internal static class PropertyDropDowns
     {
         "dockAnchor" => new DockAnchorDropDown(),
         "flags" => new FlagsDropDown(),
+        "color" => new ColorDropDown(),
+        "alignment" => new ContentAlignmentDropDown(),
+        "multiline" => new MultilineTextDropDown(),
+        "shortcutKeys" => new ShortcutKeysDropDown(),
+        "date" => new DateDropDown(),
         _ => new ChoiceDropDown(),
     };
 }
@@ -53,6 +74,7 @@ internal sealed class ChoiceDropDown : Border, IPropertyDropDown
     public ChoiceDropDown()
     {
         Padding = new Thickness(4);
+        PropertyDropDowns.CompactRows(_list);
         _list.ItemTemplate = new FuncDataTemplate<PropertyOption>((option, _) => Item(option));
         _list.AddHandler(PointerReleasedEvent, (_, _) => Pick(), Avalonia.Interactivity.RoutingStrategies.Bubble);
         _list.KeyDown += (_, e) =>
@@ -75,9 +97,16 @@ internal sealed class ChoiceDropDown : Border, IPropertyDropDown
     /// <summary>The list (tests).</summary>
     public ListBox List => _list;
 
-    private static TextBlock Item(PropertyOption? option)
+    private Control Item(PropertyOption? option)
     {
-        return new TextBlock { Text = option?.Label, VerticalAlignment = VerticalAlignment.Center };
+        var text = new TextBlock { Text = option?.Label, VerticalAlignment = VerticalAlignment.Center };
+        if (_row is { IsCursor: true } && option is not null)
+        {
+            // Each cursor beside its picture (D41 question 13).
+            return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { new CursorPicture { CursorName = option.Value, VerticalAlignment = VerticalAlignment.Center }, text } };
+        }
+
+        return text;
     }
 
     public void Open(PropertyRowViewModel row, PropertyGridViewModel grid, Action close)

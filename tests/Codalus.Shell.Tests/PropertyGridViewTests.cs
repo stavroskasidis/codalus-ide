@@ -31,6 +31,12 @@ public sealed class PropertyGridViewTests
             ["Font.Bold"] = "False",
             ["Dock"] = "None",
             ["TabIndex"] = "3",
+            ["ForeColor"] = "SteelBlue",
+            ["TextAlign"] = "MiddleCenter",
+            ["Notes"] = "first",
+            ["ShortcutKeys"] = "Ctrl+N",
+            ["Value"] = "10/21/2026 15:38:00",
+            ["Cursor"] = "Default",
         };
 
         public List<string> Commits { get; } = [];
@@ -85,6 +91,12 @@ public sealed class PropertyGridViewTests
             new("Behavior", Row("Enabled", PropertyRowKind.Choice, ["True", "False"])),
             new("Behavior", Row("TabIndex", PropertyRowKind.Text)),
             new("Layout", Row("Dock", PropertyRowKind.Dock, ["None", "Top", "Bottom", "Left", "Right", "Fill"])),
+            new("Appearance", Row("ForeColor", PropertyRowKind.Color, ["Control", "GrayText", "Red", "SteelBlue", "Transparent", "White"])),
+            new("Appearance", Row("TextAlign", PropertyRowKind.ContentAlignment, ["TopLeft", "TopCenter", "TopRight", "MiddleLeft", "MiddleCenter", "MiddleRight", "BottomLeft", "BottomCenter", "BottomRight"])),
+            new("Appearance", Row("Notes", PropertyRowKind.Multiline)),
+            new("Misc", Row("ShortcutKeys", PropertyRowKind.ShortcutKeys, ["None", "N", "S", "F4"])),
+            new("Behavior", Row("Value", PropertyRowKind.Date)),
+            new("Appearance", new PropertyRowViewModel("Cursor", _values["Cursor"], PropertyRowKind.Choice, "The Cursor.", Commit("Cursor"), [new("Default", "Default"), new("Hand", "Hand"), new("IBeam", "IBeam")]) { ChoicesEditable = true, IsCursor = true }),
         ]);
 
         public Task<IReadOnlyList<DesignerPropertyRow>> EventRowsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<DesignerPropertyRow>>([]);
@@ -159,7 +171,7 @@ public sealed class PropertyGridViewTests
         Assert.False(grid.Find("Font")!.IsExpanded);
 
         // Down from the last Appearance row crosses Behavior's header.
-        grid.SelectedRow = grid.Find("Text");
+        grid.SelectedRow = grid.Find("TextAlign");
         f.Press(Key.Down);
         Assert.Same(grid.Categories.Single(c => c.Title == "Behavior"), grid.SelectedItem);
         f.Press(Key.Down);
@@ -253,5 +265,86 @@ public sealed class PropertyGridViewTests
         source.HasOpenEditor = false;
         source.Changed();
         await ShellFixture.PumpUntil(() => properties.IsInputEnabled && properties.Grid.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task The_drop_downs_edit_colors_alignment_text_keys_dates_and_cursors()
+    {
+        var (f, source, view) = await ShowAsync();
+        await using var _f = f;
+        var grid = f.Shell.PropertiesWindow.Grid;
+        Assert.Empty(f.Window.GetVisualDescendants().OfType<ColorDropDown>());
+
+        // F4 on a color: its drop-down, on the tab of its value; a Web color commits its name.
+        var fore = grid.Find("ForeColor")!;
+        Editor(view, fore)!.Focus();
+        f.Press(Key.F4);
+        var color = Assert.IsType<ColorDropDown>(view.Grid.OpenDropDownControl);
+        Assert.Equal(PropertyColors.WebTab, color.Tab);
+        Assert.DoesNotContain(color.WebColors, c => c.Name == "Control");
+        color.SelectTab(PropertyColors.SystemTab);
+        Assert.Equal(["Control", "GrayText"], color.SystemColors.Select(c => c.Name));
+        color.SelectTab(PropertyColors.WebTab);
+        color.PickNamed("Red");
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("ForeColor=Red") && view.Grid.OpenDropDownControl is null);
+
+        // A custom slot: Define Color in the grid's place, OK commits "R, G, B" and keeps it in the slot for the session.
+        view.Grid.OpenDropDown(grid.Find("ForeColor")!);
+        color = Assert.IsType<ColorDropDown>(view.Grid.OpenDropDownControl);
+        color.SelectTab(PropertyColors.CustomTab);
+        color.Define(0);
+        Assert.True(color.IsDefining);
+        color.SetChannels(Avalonia.Media.Color.FromRgb(255, 128, 0));
+        color.AcceptDefine();
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("ForeColor=255, 128, 0") && view.Grid.OpenDropDownControl is null);
+        Assert.Equal(Avalonia.Media.Color.FromRgb(255, 128, 0), grid.CustomColors[0]);
+        Assert.Single(view.Grid.MadeDropDowns, d => d.Value is ColorDropDown);
+
+        // ContentAlignment: the 3×3 picker.
+        view.Grid.OpenDropDown(grid.Find("TextAlign")!);
+        Assert.IsType<ContentAlignmentDropDown>(view.Grid.OpenDropDownControl).Pick("MiddleRight");
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("TextAlign=MiddleRight"));
+
+        // Multi-line text: committed with CRLF when it closes; Esc cancels.
+        view.Grid.OpenDropDown(grid.Find("Notes")!);
+        var multiline = Assert.IsType<MultilineTextDropDown>(view.Grid.OpenDropDownControl);
+        multiline.Box.Text = "a\nb";
+        view.Grid.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.Popup>().Single(p => p.Name == "DropDown").IsOpen = false;
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("Notes=a\r\nb"));
+        view.Grid.OpenDropDown(grid.Find("Notes")!);
+        multiline = Assert.IsType<MultilineTextDropDown>(view.Grid.OpenDropDownControl);
+        ShellFixture.Pump();
+        multiline.Box.Focus();
+        multiline.Box.Text = "discarded";
+        f.Press(Key.Escape);
+        await ShellFixture.PumpUntil(() => view.Grid.OpenDropDownControl is null);
+        Assert.DoesNotContain(source.Commits, c => c.Contains("discarded", StringComparison.Ordinal));
+
+        // Shortcut keys: modifiers and a key, committed when it closes.
+        view.Grid.OpenDropDown(grid.Find("ShortcutKeys")!);
+        var keys = Assert.IsType<ShortcutKeysDropDown>(view.Grid.OpenDropDownControl);
+        Assert.Equal("Ctrl+N", keys.Composed);
+        keys.Set(ctrl: true, shift: true, alt: false, "S");
+        Assert.Equal("Ctrl+Shift+S", keys.Composed);
+        view.Grid.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.Popup>().Single(p => p.Name == "DropDown").IsOpen = false;
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("ShortcutKeys=Ctrl+Shift+S"));
+
+        // A date: a picked day keeps the time.
+        view.Grid.OpenDropDown(grid.Find("Value")!);
+        Assert.IsType<DateDropDown>(view.Grid.OpenDropDownControl).Pick(new DateTime(2026, 10, 23));
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("Value=10/23/2026 15:38:00"));
+
+        // Cursor: a choice that takes typing, each with its picture.
+        var cursor = grid.Find("Cursor")!;
+        Assert.True(cursor.ShowsTextBox);
+        view.Grid.OpenDropDown(cursor);
+        var list = Assert.IsType<ChoiceDropDown>(view.Grid.OpenDropDownControl);
+        ShellFixture.Pump();
+        Assert.Contains(list.GetVisualDescendants().OfType<CursorPicture>(), p => p.CursorName == "Hand");
+        Assert.True(CursorPicture.HasDrawing("IBeam"));
+        list.List.SelectedItem = cursor.Options.Single(o => o.Value == "Hand");
+        list.Pick();
+        await ShellFixture.PumpUntil(() => source.Commits.Contains("Cursor=Hand"));
+        NavigationDepthTests.Screenshot(f, "m68-properties-drop-downs");
     }
 }

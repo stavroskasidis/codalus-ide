@@ -96,7 +96,7 @@ public sealed partial class PropertyGridView : UserControl
     }
 
     /// <summary>The drop-down that is open, or null (tests).</summary>
-    public Control? OpenDropDownControl => DropDown.IsOpen ? DropDown.Child : null;
+    public Control? OpenDropDownControl => DropDown.IsOpen ? DropDownHost.Content as Control : null;
 
     /// <summary>The drop-downs made so far, by kind (tests: none until one opens).</summary>
     public IReadOnlyDictionary<string, Control> MadeDropDowns => _dropDowns;
@@ -457,7 +457,7 @@ public sealed partial class PropertyGridView : UserControl
         Rows.UpdateLayout();
         var anchor = ContainerOf(row)?.GetVisualDescendants().OfType<Border>().FirstOrDefault(b => b.Classes.Contains("valueCell"));
         DropDown.PlacementTarget = anchor ?? (Control)Rows;
-        DropDown.Child = control;
+        DropDownHost.Content = control;
         _dropDownRow = row;
         ((IPropertyDropDown)control).Open(row, vm, () => DropDown.IsOpen = false);
         DropDown.IsOpen = true;
@@ -466,7 +466,7 @@ public sealed partial class PropertyGridView : UserControl
 
     private void OnDropDownClosed(object? sender, EventArgs e)
     {
-        if (DropDown.Child is IPropertyDropDown dropDown)
+        if (DropDownHost.Content is IPropertyDropDown dropDown)
         {
             dropDown.Closed();
         }

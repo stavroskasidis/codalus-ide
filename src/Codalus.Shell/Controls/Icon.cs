@@ -567,6 +567,7 @@ public static class IconSet
         ["chevron-right"] = "M6,3.5 L10.5,8 L6,12.5",
         ["chevron-down"] = "M3.5,6 L8,10.5 L12.5,6",
         ["chevron-up"] = "M3.5,10 L8,5.5 L12.5,10",
+        ["chevron-left"] = "M10,3.5 L5.5,8 L10,12.5",
         ["zoom-in"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14 M4.75,6.75 H8.75 M6.75,4.75 V8.75",
         ["zoom-out"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14 M4.75,6.75 H8.75",
         ["fit"] = "M2,5.5 V2 H5.5 M10.5,2 H14 V5.5 M14,10.5 V14 H10.5 M5.5,14 H2 V10.5",

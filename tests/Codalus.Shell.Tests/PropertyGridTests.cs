@@ -273,6 +273,45 @@ public sealed class PropertyGridTests
     }
 
     [AvaloniaFact]
+    public void The_color_tabs_alignment_text_keys_and_dates_follow_the_classic_editors()
+    {
+        // Web: the named colors (Transparent first, then by hue), no system color; System: the system colors by name.
+        var web = PropertyColors.WebColors();
+        Assert.Contains(web, c => c.Name == "SteelBlue");
+        Assert.DoesNotContain(web, c => c.Name == "Control");
+        Assert.Equal("Transparent", web[0].Name);
+        var system = PropertyColors.SystemColors();
+        Assert.Contains(system, c => c.Name == "Control");
+        Assert.Contains(system, c => c.Name == "GrayText");
+        Assert.Equal(system.Select(c => c.Name).Order(StringComparer.OrdinalIgnoreCase), system.Select(c => c.Name));
+        Assert.Equal(48, PropertyColors.Basic.Count);
+        Assert.Equal(16, PropertyColors.CustomSlots);
+        Assert.Equal(16, new PropertyGridViewModel().CustomColors.Length);
+        Assert.Equal("255, 128, 0", PropertyColors.Text(Avalonia.Media.Color.FromRgb(255, 128, 0)));
+        Assert.Equal((PropertyColors.SystemTab, PropertyColors.WebTab, PropertyColors.CustomTab), (PropertyColors.TabOf("GrayText"), PropertyColors.TabOf("SteelBlue"), PropertyColors.TabOf("255, 255, 224")));
+
+        // A host's list restricts them.
+        Assert.Equal(["Red"], PropertyColors.WebColors(["Red", "Control"]).Select(c => c.Name));
+
+        // Multi-line text in CRLF; a String Collection Editor's lines on any line ending.
+        Assert.Equal("a\r\nb\r\nc", PropertyText.WithCrLf("a\nb\r\nc"));
+        Assert.Equal("a\r\nb", PropertyText.WithCrLf("a\rb"));
+        Assert.Equal(["one", "two", "three"], PropertyText.Lines("one\r\ntwo\nthree"));
+        Assert.Equal(["one", "", "two"], PropertyText.Lines("one\n\ntwo\n"));
+        Assert.Empty(PropertyText.Lines(string.Empty));
+
+        // Shortcut keys as KeysConverter writes them.
+        Assert.Equal("Ctrl+Shift+S", ShortcutKeysText.Compose(ctrl: true, shift: true, alt: false, "S"));
+        Assert.Equal("None", ShortcutKeysText.Compose(ctrl: true, shift: false, alt: false, null));
+        Assert.Equal((true, false, true, "F4"), ShortcutKeysText.Parse("Ctrl+Alt+F4"));
+        Assert.Equal((true, false, false, "N"), ShortcutKeysText.Parse("Control+N"));
+
+        // A date keeps its time.
+        Assert.Equal("10/23/2026 15:38:00", PropertyDates.WithDay("10/21/2026 15:38:00", new DateTime(2026, 10, 23)));
+        Assert.Equal("2026-10-23", PropertyDates.WithDay("2026-10-21", new DateTime(2026, 10, 23)));
+    }
+
+    [AvaloniaFact]
     public void Colors_are_parsed_by_name_numbers_and_system_names()
     {
         Assert.NotNull(PropertyRowViewModel.ParseColor("GrayText"));

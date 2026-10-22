@@ -252,7 +252,12 @@
           </Thumb.Template>
         </Thumb>
       </Canvas>
-      <Popup x:Name="DropDown" IsLightDismissEnabled="True" Placement="BottomEdgeAlignedRight" />
+      <!-- The drop-down: the overlays' look (the menus' corners, border and shadow), its editor made when it first opens. -->
+      <Popup x:Name="DropDown" IsLightDismissEnabled="True" Placement="BottomEdgeAlignedRight">
+        <Border Classes="overlay" Margin="0,2,8,8">
+          <ContentControl x:Name="DropDownHost" FontSize="{DynamicResource Shell.FontSize.Body}" />
+        </Border>
+      </Popup>
     </Panel>
   </DockPanel>
 </UserControl>
