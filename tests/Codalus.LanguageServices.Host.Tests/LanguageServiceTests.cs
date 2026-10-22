@@ -481,6 +481,9 @@ public sealed class UntrustedLanguageServiceTests(UntrustedLanguageFixture fixtu
         // JsonSerializer resolves (framework references); Lib does not, and there are no implicit usings.
         var hover = await fixture.Client.HoverAsync(DocumentUris.FromPath(program), fixture.At(program, "JsonSerializer.Serialize", 2), TestContext.Current.CancellationToken);
         Assert.Contains("JsonSerializer", hover?.Contents.Value, StringComparison.Ordinal);
+
+        // With the documentation of the reference pack that Miscellaneous Files compile against.
+        Assert.Contains("Provides functionality to serialize objects", hover?.Contents.Value, StringComparison.Ordinal);
         await LanguageFixture.WaitUntilAsync(() => fixture.Languages.Diagnostics.For(program).Any(d => d.Code == "CS0246"), TimeSpan.FromSeconds(60));
     }
 }

@@ -5,6 +5,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 ## 0.6.0
 
 - **Fixed: dimmed editor colors.** After switching documents or tool windows, the editor and the compare view were often drawn at 85% opacity, so every color, the Classic themes' most visibly, looked muted next to the classic IDE's. A tab's view now appears at once, as in the classic IDE, without the docking library's fade.
+- **Fixed:** Quick Info, the completion list's description and parameter info showed only the declaration of a method or type from a referenced assembly, such as a NuGet package's or .NET's own (`app.UseWebAssemblyDebugging()`, `Console.WriteLine`), without its summary ([user guide](docs/user-guide/editing.md#intellisense)). They now show its documentation from the XML file next to the assembly, as the classic IDE does, or from a localized one for your OS's language beside it (in a `de`, `pt-br` or `zh-hans` folder) when one is installed. XAML and Razor completion show these summaries too (Avalonia's and WPF's controls, Blazor's components), read when you select an item so the list doesn't wait for a large documentation file. Files outside a project, and the files of a folder you don't trust, get .NET's documentation too: they now compile against .NET's reference assemblies, as a project does.
 
 ## 0.5.0
 
