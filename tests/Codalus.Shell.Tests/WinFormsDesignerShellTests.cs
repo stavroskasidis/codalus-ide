@@ -23,7 +23,7 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class WinFormsDesignerShellTests
 {
-    private static async Task<(ShellFixture Fixture, string App)> OpenAsync()
+    internal static async Task<(ShellFixture Fixture, string App)> OpenAsync()
     {
         var f = ShellFixture.Create();
         var folder = f.CopySample("WindowsDesktop");
@@ -87,18 +87,21 @@ public sealed class WinFormsDesignerShellTests
 
     /// <summary>
     /// The fake designer host (any OS: the real one is Windows only, D31) for the forms opened from now on; each host it
-    /// starts goes to <paramref name="hosts"/>, after <paramref name="starting"/> (a slow start, such as the build for the
-    /// designer) when there is one.
+    /// starts goes to <paramref name="hosts"/>, after <paramref name="starting"/> (a slow start, or one that fails) when
+    /// there is one. <paramref name="build"/> is the designer's own build when the output needs one (by default it
+    /// succeeds at once). Whether a build runs (#66: the designer waits for it) is the shell's own answer, the build
+    /// service's.
     /// </summary>
-    private static void UseFakeDesignerHost(ShellFixture f, List<FakeWinFormsDesignerHost> hosts, Func<Task>? starting = null)
+    internal static void UseFakeDesignerHost(ShellFixture f, List<FakeWinFormsDesignerHost> hosts, Func<Task>? starting = null, Func<Task<bool>>? build = null)
     {
-        f.Shell.WinFormsDesigner = new WinFormsDesignerService(f.Shell.Solutions, _ => true, (_, _) => Task.FromResult(true), async (project, names, ct) =>
+        f.Shell.WinFormsDesigner = new WinFormsDesignerService(f.Shell.Solutions, _ => true, (_, _) => build?.Invoke() ?? Task.FromResult(true), async (project, names, ct) =>
         {
             var properties = await f.Shell.ProjectManagement.GetPropertiesAsync(project, names, null, ct);
             return properties.Properties.ToDictionary(p => p.Name, p => p.Value, StringComparer.OrdinalIgnoreCase);
         })
         {
             IsWindows = () => true,
+            IsBuilding = f.Shell.WinFormsDesigner.IsBuilding,
             DesignerHost = () => typeof(WinFormsDesignerShellTests).Assembly.Location,
             HostFactory = async (_, _) =>
             {
@@ -125,7 +128,7 @@ public sealed class WinFormsDesignerShellTests
     /// whether the C# service hadn't loaded the restored inputs or the Toolbox hadn't asked again since (macOS CI, PR
     /// #100 and #55).
     /// </summary>
-    private static string DescribeToolbox(ShellFixture f, string? waitingFor = null)
+    internal static string DescribeToolbox(ShellFixture f, string? waitingFor = null)
     {
         var inputs = f.Shell.Solutions.CompilerInputs.Values.Select(i => $"{Path.GetFileName(i.Path)} {i.State} {(ReferencesWindowsForms(i) ? "with" : "without")} System.Windows.Forms.dll").ToList();
         var status = f.Shell.Languages.Status(ShellHost.CSharpLanguageId);

@@ -294,16 +294,28 @@ internal sealed partial class SmokeTest
         WriteGalleryIndex();
     }
 
-    /// <summary>The Windows Forms designer with a new button selected, the Toolbox and the Properties window (Windows).</summary>
+    /// <summary>
+    /// The Windows Forms designer with a new button selected, the Toolbox with the Button armed (drawn as the selection,
+    /// the designer's status line saying what a click does: #66) and the Properties window (Windows).
+    /// </summary>
     private async Task GalleryWinFormsAsync(WinFormsDesignerDocument designer)
     {
-        await GalleryThemesAsync(async theme =>
+        shell.Toolbox.Armed = shell.Toolbox.Items.FirstOrDefault(i => i.Type == "System.Windows.Forms.Button");
+        try
         {
-            GalleryShot("winforms-designer", "data", theme, PaneOf(designer));
-            GalleryTool(ToolboxViewModel.ToolWindowId, "data", theme);
-            GalleryTool(PropertiesWindowViewModel.ToolWindowId, "data", theme);
-            await Task.CompletedTask.ConfigureAwait(true);
-        }, settle: true).ConfigureAwait(true);
+            await GalleryThemesAsync(async theme =>
+            {
+                GalleryShot("winforms-designer", "data", theme, PaneOf(designer));
+                GalleryTool(ToolboxViewModel.ToolWindowId, "data", theme);
+                GalleryTool(PropertiesWindowViewModel.ToolWindowId, "data", theme);
+                await Task.CompletedTask.ConfigureAwait(true);
+            }, settle: true).ConfigureAwait(true);
+        }
+        finally
+        {
+            shell.Toolbox.Disarm();
+        }
+
         WriteGalleryIndex();
     }
 

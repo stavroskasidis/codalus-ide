@@ -208,6 +208,97 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
         Assert.Empty(invalid.Changes);
     }
 
+    /// <summary>
+    /// #66: every Toolbox gesture creates as the classic IDE does, through the type's Toolbox item and the container
+    /// designer's CreateTool. A double-click (or Enter) goes into the selection's container at its default place, a
+    /// grid step below and right of a selected control (back to the corner when it would run off); a tab control hands
+    /// it to its selected page; a label sizes itself to its text; a split container fills an empty panel; the first
+    /// menu strip becomes the form's main menu; a timer goes to the tray; a drop on a table takes the cell under the
+    /// point. The expected places come from the render (Windows Forms' own AddControl placed them), not typed numbers.
+    /// </summary>
+    [Fact]
+    public async Task Toolbox_items_are_created_as_the_classic_ide_creates_them()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var (host, render, source) = await LoadAsync("OrderForm.cs");
+        await using var _ = host;
+        var root = render.Components[0];
+        DesignerCreateParams Add(string type, string name, params string[] selected) =>
+            new("System.Windows.Forms." + type, name, null, root.ClientX, root.ClientY) { AtDefaultLocation = true, Selected = selected };
+        static DesignerComponentView View(DesignerChangeResult result, string name) => result.Render.Components.Single(c => c.Name == name);
+        static string? Value(DesignerCreated created, string property) => created.Properties.SingleOrDefault(p => p.Name == property)?.Value switch
+        {
+            null => null,
+            { Kind: DesignerValueKinds.New } v => string.Join(", ", v.Arguments!.Select(a => a.Value)),
+            { Members: { } members } => string.Join(", ", members),
+            var v => v.Value,
+        };
+
+        async Task<DesignerChangeResult> CreateAsync(DesignerCreateParams parameters)
+        {
+            var result = await host.CreateAsync(parameters, Ct);
+            Assert.True(result.Error is null, $"{parameters.Name}: {result.Error}");
+            Assert.Equal(parameters.Name, result.Created?.Name);
+            return result;
+        }
+
+        // The form selected: at its default place (the client area's top-left corner), at the default size.
+        var first = await CreateAsync(Add("Button", "button1", "OrderForm"));
+        Assert.Equal((string.Empty, (string?)null), (first.Created!.Parent, first.Created.ParentPath));
+        var button1 = View(first, "button1");
+        Assert.Equal((root.ClientX, root.ClientY, 75d, 23d), (button1.X, button1.Y, button1.Width, button1.Height));
+
+        // A control selected: a grid step below and right of it, so repeated double-clicks cascade.
+        var second = await CreateAsync(Add("Button", "button2", "button1"));
+        var button2 = View(second, "button2");
+        Assert.Equal(string.Empty, second.Created!.Parent);
+        Assert.Equal((button1.X + 8, button1.Y + 8), (button2.X, button2.Y));
+
+        // A control in a panel selected: into that panel, the step below and right, or the panel's corner when that would run off it.
+        var check = await CreateAsync(Add("CheckBox", "checkBox1", "placeOrderButton"));
+        Assert.Equal("buttonPanel", check.Created!.Parent);
+        var panel = View(check, "buttonPanel");
+        var place = View(check, "placeOrderButton");
+        var box = View(check, "checkBox1");
+        var cascaded = (X: place.X + 8, Y: place.Y + 8);
+        var fits = cascaded.X + box.Width < panel.ClientX + panel.Width && cascaded.Y + box.Height < panel.ClientY + panel.Height;
+        Assert.Equal(fits ? cascaded : (panel.ClientX, panel.ClientY), (box.X, box.Y));
+
+        // A label sizes itself to its text, as the classic IDE's AutoSizeToolboxItem makes it.
+        var label = await CreateAsync(Add("Label", "label1", "OrderForm"));
+        Assert.Equal("true", Value(label.Created!, "AutoSize"));
+        Assert.Contains("            label1.AutoSize = true;\n", Apply(source, [.. Edits(label)]), StringComparison.Ordinal);
+
+        // A tab control selected: the button goes to its selected page.
+        var tabs = await CreateAsync(Add("TabControl", "tabControl1", "OrderForm"));
+        Assert.Contains(tabs.Added, a => a.Name == "tabPage1");
+        var inTab = await CreateAsync(Add("Button", "button3", "tabControl1"));
+        Assert.Equal("tabPage1", inTab.Created!.Parent);
+
+        // A split container added to an empty panel fills it (AutoDock).
+        await CreateAsync(Add("Panel", "panel1", "OrderForm"));
+        var split = await CreateAsync(Add("SplitContainer", "splitContainer1", "panel1"));
+        Assert.Equal("panel1", split.Created!.Parent);
+        Assert.Equal("Fill", Value(split.Created, "Dock"));
+
+        // The first menu strip becomes the form's main menu.
+        var menu = await CreateAsync(Add("MenuStrip", "menuStrip1", "OrderForm"));
+        Assert.Contains(menu.Changes, c => c.Component.Length == 0 && c.Property == "MainMenuStrip" && c.Value?.Value == "menuStrip1");
+        Assert.Contains("            MainMenuStrip = menuStrip1;\n", Apply(source, [.. Edits(menu)]), StringComparison.Ordinal);
+
+        // A timer isn't a control: the tray.
+        var timer = await CreateAsync(Add("Timer", "timer1", "OrderForm"));
+        Assert.False(timer.Created!.IsControl);
+        Assert.Null(timer.Created.Parent);
+        Assert.False(View(timer, "timer1").IsControl);
+
+        // A drop on a table: the cell under the point (a new table is two by two).
+        var table = View(await CreateAsync(Add("TableLayoutPanel", "tableLayoutPanel1", "OrderForm")), "tableLayoutPanel1");
+        var dropped = await CreateAsync(new DesignerCreateParams("System.Windows.Forms.Button", "button4", "tableLayoutPanel1", table.ClientX + (table.Width * 3 / 4), table.ClientY + (table.Height * 3 / 4)));
+        Assert.Equal("tableLayoutPanel1", dropped.Created!.Parent);
+        Assert.Equal([1, 1], dropped.Created.Cell ?? []);
+    }
+
     [Fact]
     public async Task Reparenting_and_deleting_come_back_as_code()
     {

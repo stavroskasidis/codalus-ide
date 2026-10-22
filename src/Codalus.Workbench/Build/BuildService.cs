@@ -100,8 +100,14 @@ public sealed class BuildService
     /// cancellation: the result says what happened, and host errors become a failed result with the message in the
     /// Build channel.
     /// </summary>
-    public Task<BuildResultInfo> BuildAsync(string target, string? project, CancellationToken cancellationToken) =>
-        RunAsync(new BuildRequest(target, project), token => _solutions.BuildAsync(target, project, token, Options()), cancellationToken);
+    public Task<BuildResultInfo> BuildAsync(string target, string? project, CancellationToken cancellationToken)
+    {
+        var request = new BuildRequest(target, project);
+        return RunAsync(request, token => Runner is { } runner ? runner(request, token) : _solutions.BuildAsync(target, project, token, Options()), cancellationToken);
+    }
+
+    /// <summary>Runs a build of the solution or a project in place of the build host (tests: a build that ends when they say, with the result they give).</summary>
+    internal Func<BuildRequest, CancellationToken, Task<BuildResultInfo>>? Runner { get; set; }
 
     /// <summary>
     /// A build of <paramref name="project"/> with more global properties (a publish with its profile, M17c), over the
