@@ -186,7 +186,7 @@ public sealed class MergeEditorViewModel : ObservableObject
         var (display, currentText, incomingText) = Build(result, conflicts);
         CurrentText = currentText;
         IncomingText = incomingText;
-        IndentationName = DetectIndentation(result);
+        IndentationName = TextFiles.IndentationName(result);
 
         Result = new TextDocument(display);
         Result.UndoStack.ClearAll();
@@ -773,24 +773,6 @@ public sealed class MergeEditorViewModel : ObservableObject
         }
 
         return text.ToString();
-    }
-
-    private static string DetectIndentation(string text)
-    {
-        int tabs = 0, spaces = 0;
-        foreach (var line in text.Split('\n'))
-        {
-            if (line.StartsWith('\t'))
-            {
-                tabs++;
-            }
-            else if (line.StartsWith("  ", StringComparison.Ordinal))
-            {
-                spaces++;
-            }
-        }
-
-        return tabs > spaces ? "TABS" : "SPC";
     }
 
     /// <summary>A line diff from A to B, mapping ranges of A's lines to B's.</summary>

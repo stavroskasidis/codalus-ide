@@ -31,6 +31,26 @@ public sealed record DiffPane(DiffPaneSide Side, string Text, IReadOnlyList<Diff
     public static DiffPane Empty { get; } = new(DiffPaneSide.New, string.Empty, []);
 
     /// <summary>
+    /// The line numbers a 0-based pane line shows (0 for none): a side's own file's number (none on filler and folded
+    /// lines); in the inline view, the old file's and the new file's columns.
+    /// </summary>
+    public (int Old, int New) NumbersOf(int index)
+    {
+        if ((uint)index >= (uint)Lines.Count || Lines[index].Kind is 'f' or 'z')
+        {
+            return (0, 0);
+        }
+
+        var line = Lines[index];
+        return Side switch
+        {
+            DiffPaneSide.Old => (line.OldLine, 0),
+            DiffPaneSide.New => (0, line.NewLine),
+            _ => (line.Kind == '+' ? 0 : line.OldLine, line.Kind == '-' ? 0 : line.NewLine),
+        };
+    }
+
+    /// <summary>
     /// The file line a 0-based pane line shows: whether it is the old file's, and its 1-based number (0 for a filler or
     /// folded line, or past the end).
     /// </summary>
@@ -51,9 +71,41 @@ public sealed record DiffPane(DiffPaneSide Side, string Text, IReadOnlyList<Diff
     }
 }
 
+/// <summary>
+/// A change of a diff document (D45 question 7): a run of changed rows, first and last inclusive. F8 stops at it, the
+/// toolbar counts it, and Stage Change stages it.
+/// </summary>
+public readonly record struct DiffChange(int FirstRow, int LastRow)
+{
+    public bool Contains(int row) => row >= FirstRow && row <= LastRow;
+}
+
 /// <summary>Rows, changes and the panes' texts of a diff document (#86).</summary>
 public static class DiffRows
 {
+    /// <summary>The changes: each run of changed rows.</summary>
+    public static IReadOnlyList<DiffChange> Changes(IReadOnlyList<DiffRow> rows)
+    {
+        var changes = new List<DiffChange>();
+        for (var i = 0; i < rows.Count; i++)
+        {
+            if (!rows[i].IsChange)
+            {
+                continue;
+            }
+
+            var first = i;
+            while (i + 1 < rows.Count && rows[i + 1].IsChange)
+            {
+                i++;
+            }
+
+            changes.Add(new DiffChange(first, i));
+        }
+
+        return changes;
+    }
+
     /// <summary>
     /// Pairs the removed and added lines of each run of an edit script line by line (<c>'~'</c> rows), so the sides line
     /// up; the rest of the longer side gets filler opposite.

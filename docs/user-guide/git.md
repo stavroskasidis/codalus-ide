@@ -107,15 +107,15 @@ Git asks your credential helper first (Git Credential Manager, the macOS Keychai
 
 ## Diffs
 
-A file's diff opens in a document:
-- **Side by side**, with the two versions aligned and scrolling together, or **inline**.
+A file's diff opens in a document, laid out like the classic IDE's:
+- **The toolbar**: **Next Change** and **Previous Change** (`F8` and `Shift+F8` while the diff has the focus), the count ("Change 3 of 4"; a change is a run of changed lines) and the number of lines removed and added. The gear menu (**Diff Options**) switches between **Side by Side** and **Inline** (remembered in the `git.diff.layout` setting), refreshes the diff, and opens the file at the caret's line.
+- **Side by side**, the two versions are aligned and scroll together; drag the splitter between them to resize them, or double-click it for half and half. **Inline**, each change shows its removed lines, then its added lines, with two columns of line numbers.
+- **Each side** has a header with its file and what it is ("(Index)", "(Working tree)", "(HEAD)", a revision), line numbers that count its own file's lines, its own caret and current line, and a status bar with the caret's line and character, the indentation, the line endings and the encoding. The zoom box in the left one (or `Ctrl+wheel`) sizes both sides. The side that is the open document has the editor's navigation bar.
 - **In the editor's colors**: each side is colored by its language's grammar, and the side whose text is the open document's (usually the working tree) by the language service too, as the editor colors it.
 - **Changed words**: where a line was changed, the words that changed are marked on both sides, with a deeper fill and a thin border. Rows where only the other side has lines are hatched.
-- **Previous Change** and **Next Change** move between changes.
-- **Stage Hunk**, **Unstage Hunk** and **Discard Hunk** act on the change at the caret.
-- **Stage Selected Lines**, **Unstage Selected Lines** and **Discard Selected Lines** act on just the selected lines (or the caret's line) of a change.
+- The code's context menu has **Stage Hunk**, **Unstage Hunk** and **Discard Hunk** for the change at the caret, and **Stage Selected Lines**, **Unstage Selected Lines** and **Discard Selected Lines** for just the selected lines (or the caret's line).
 
-Git → Compare with Unmodified opens the active file's diff.
+The diff keeps its caret, scroll position and splitter when you switch tabs. Git → Compare with Unmodified opens the active file's diff.
 
 ## In the editor
 

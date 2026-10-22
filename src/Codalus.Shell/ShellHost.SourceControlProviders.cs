@@ -124,7 +124,7 @@ public sealed partial class ShellHost
         var viewModel = new DiffViewModel(path, $"scm:{provider.Id}:{path}", $"{name} ({provider.Label})",
             async () => await Plugins.GetSourceControlOriginalAsync(provider.Id, path, CancellationToken.None).ConfigureAwait(false) ?? string.Empty,
             name, async () => File.Exists(path) ? await File.ReadAllTextAsync(path).ConfigureAwait(false) : string.Empty);
-        var document = new DiffDocument(viewModel, EditorFont, DiffServices);
+        var document = NewDiffDocument(viewModel);
         await document.ViewModel.LoadAsync().ConfigureAwait(true);
         Layout.OpenDocument(document, focus: true);
     }

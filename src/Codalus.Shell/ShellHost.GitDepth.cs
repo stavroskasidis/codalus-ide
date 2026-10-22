@@ -162,7 +162,7 @@ public sealed partial class ShellHost
     private async Task OpenRevisionDiffAsync(string path, string key, string oldTitle, Func<Task<string>> oldText, string newTitle, Func<Task<string>> newText)
     {
         var viewModel = new DiffViewModel(path, key, oldTitle, oldText, newTitle, newText);
-        var document = Layout.FindDocument<DiffDocument>("diff:revisions:" + key) ?? new DiffDocument(viewModel, EditorFont, DiffServices);
+        var document = Layout.FindDocument<DiffDocument>("diff:revisions:" + key) ?? NewDiffDocument(viewModel);
         await document.ViewModel.LoadAsync().ConfigureAwait(true);
         Layout.OpenDocument(document, focus: true);
     }

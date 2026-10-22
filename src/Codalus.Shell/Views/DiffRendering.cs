@@ -132,3 +132,122 @@ internal sealed class DiffSignMargin(Func<DiffPane> pane) : AvaloniaEdit.Editing
         }
     }
 }
+
+/// <summary>
+/// A diff pane's line numbers (#86): each side counts its own file's lines (blank on filler rows, which the editor's
+/// own margin would count), and the inline view has two columns, the old file's then the new file's. The caret's line
+/// is bold, and an accent bar at the left marks the change at the caret, the one F8 and the staging commands act on.
+/// </summary>
+internal sealed class DiffLineNumberMargin(Func<DiffPane> pane, Func<DiffChange?> currentChange) : AvaloniaEdit.Editing.AbstractMargin
+{
+    private const double BarWidth = 3;
+    private double _digitWidth = 8;
+
+    protected override void OnTextViewChanged(TextView? oldTextView, TextView? newTextView)
+    {
+        if (oldTextView is not null)
+        {
+            oldTextView.VisualLinesChanged -= OnVisualLinesChanged;
+        }
+
+        base.OnTextViewChanged(oldTextView, newTextView);
+        if (newTextView is not null)
+        {
+            newTextView.VisualLinesChanged += OnVisualLinesChanged;
+        }
+
+        InvalidateMeasure();
+    }
+
+    private void OnVisualLinesChanged(object? sender, EventArgs e) => InvalidateVisual();
+
+    /// <summary>The digits of the largest line number a column shows.</summary>
+    private int Digits()
+    {
+        var max = 1;
+        foreach (var line in pane().Lines)
+        {
+            max = Math.Max(max, Math.Max(line.OldLine, line.NewLine));
+        }
+
+        return Math.Max(2, max.ToString(System.Globalization.CultureInfo.InvariantCulture).Length);
+    }
+
+    private Typeface Typeface => new(GetValue(Avalonia.Controls.Documents.TextElement.FontFamilyProperty));
+
+    private double FontSize => GetValue(Avalonia.Controls.Documents.TextElement.FontSizeProperty);
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        _digitWidth = new FormattedText("9", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface, FontSize, Brushes.Black).WidthIncludingTrailingWhitespace;
+        var columns = pane().Side == DiffPaneSide.Inline ? 2 : 1;
+        return new Size(BarWidth + 4 + (columns * ((Digits() * _digitWidth) + 8)), 0);
+    }
+
+    /// <summary>The panes' texts changed: the width follows the largest number.</summary>
+    public void Refresh()
+    {
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    public override void Render(DrawingContext context)
+    {
+        var current = pane();
+        if (TextView is not { VisualLinesValid: true } view)
+        {
+            return;
+        }
+
+        var foreground = this.TryFindResource("Shell.Editor.LineNumbers", ActualThemeVariant, out var f) && f is IBrush numbers ? numbers : Brushes.Gray;
+        var accent = this.TryFindResource("Shell.Accent", ActualThemeVariant, out var a) && a is IBrush accentBrush ? accentBrush : Brushes.SteelBlue;
+        var caretLine = CaretLine?.Invoke() ?? -1;
+        var change = currentChange();
+        var columnWidth = (Digits() * _digitWidth) + 8;
+        var lines = current.Lines;
+        foreach (var line in view.VisualLines)
+        {
+            var index = line.FirstDocumentLine.LineNumber - 1;
+            if ((uint)index >= (uint)lines.Count)
+            {
+                continue;
+            }
+
+            var paneLine = lines[index];
+            var top = line.VisualTop - view.VerticalOffset;
+            if (change is { } c && c.Contains(paneLine.Row) && paneLine.Kind is not 'z')
+            {
+                context.DrawRectangle(accent, null, new Rect(0, top, BarWidth, line.Height));
+            }
+
+            var bold = index + 1 == caretLine;
+            var (oldNumber, newNumber) = current.NumbersOf(index);
+            if (current.Side == DiffPaneSide.Inline)
+            {
+                Number(oldNumber, 0);
+                Number(newNumber, 1);
+            }
+            else
+            {
+                Number(Math.Max(oldNumber, newNumber), 0);
+            }
+
+            void Number(int number, int column)
+            {
+                if (number <= 0)
+                {
+                    return;
+                }
+
+                var text = new FormattedText(
+                    number.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                    bold ? new Typeface(Typeface.FontFamily, weight: FontWeight.Bold) : Typeface, FontSize, foreground);
+                var right = BarWidth + 4 + ((column + 1) * columnWidth) - 8;
+                context.DrawText(text, new Point(right - text.WidthIncludingTrailingWhitespace, top));
+            }
+        }
+    }
+
+    /// <summary>The caret's 1-based line, bold.</summary>
+    public Func<int>? CaretLine { get; set; }
+}

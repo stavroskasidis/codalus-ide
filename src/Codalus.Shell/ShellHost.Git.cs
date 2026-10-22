@@ -141,7 +141,7 @@ public sealed partial class ShellHost
     {
         if (Layout.FindDocument<DiffDocument>(DiffDocument.IdFor(left, right)) is not { } document)
         {
-            document = new DiffDocument(new DiffViewModel(left, right), EditorFont, DiffServices);
+            document = NewDiffDocument(new DiffViewModel(left, right));
         }
 
         await document.ViewModel.LoadAsync().ConfigureAwait(true);
@@ -159,7 +159,7 @@ public sealed partial class ShellHost
             return open;
         }
 
-        var document = new DiffDocument(new DiffViewModel(Git, path, staged), EditorFont, DiffServices);
+        var document = NewDiffDocument(new DiffViewModel(Git, path, staged));
         try
         {
             await document.ViewModel.LoadAsync().ConfigureAwait(true);

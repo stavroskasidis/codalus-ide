@@ -80,6 +80,25 @@ public static class TextFiles
         return text[index] == '\n' ? "\n" : index + 1 < text.Length && text[index + 1] == '\n' ? "\r\n" : "\r";
     }
 
+    /// <summary><c>SPC</c> or <c>TABS</c>, as the status bar names how a text indents: what most of its indented lines start with.</summary>
+    public static string IndentationName(string text)
+    {
+        int tabs = 0, spaces = 0;
+        foreach (var line in text.AsSpan().EnumerateLines())
+        {
+            if (line.StartsWith('\t'))
+            {
+                tabs++;
+            }
+            else if (line.StartsWith("  ", StringComparison.Ordinal))
+            {
+                spaces++;
+            }
+        }
+
+        return tabs > spaces ? "TABS" : "SPC";
+    }
+
     public static byte[] Encode(string text, TextFileFormat format)
     {
         var body = format.Encoding.GetBytes(text);

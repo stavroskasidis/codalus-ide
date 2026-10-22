@@ -77,6 +77,15 @@ public sealed class DiffDocumentTests
     private static int ColumnOf(string text, int line, string word) =>
         text.Split('\n')[line - 1].IndexOf(word, StringComparison.Ordinal);
 
+    [Fact]
+    public void The_diff_settings_default_to_side_by_side()
+    {
+        var layout = Assert.Single(BuiltIns.GitSettings(), d => d.Key == BuiltIns.DiffLayoutSetting);
+        Assert.Equal(DiffViewModel.LayoutSideBySide, layout.Default.GetString());
+        Assert.Equal([DiffViewModel.LayoutSideBySide, DiffViewModel.LayoutInline], layout.Enum);
+        Assert.Equal(Workbench.Settings.SettingScope.User, layout.Scope);
+    }
+
     [AvaloniaFact]
     public async Task Both_sides_and_the_inline_view_are_colored_by_the_grammar()
     {
@@ -152,6 +161,7 @@ public sealed class DiffDocumentTests
         var services = new DiffServices(f.Shell)
         {
             LanguageOf = _ => "csharp",
+            OpenText = (file, text) => file == path && text == NewText,
             SemanticTokensAsync = (file, text, _) => Task.FromResult(file == path && text == NewText ? new[] { 0, 10, 6, interfaceType, 0 } : null),
         };
         var vm = new DiffViewModel(path, "test", "old", () => Task.FromResult("class A : IThing { int x; }\n"), "new", () => Task.FromResult(NewText)) { Services = services };
@@ -230,6 +240,131 @@ public sealed class DiffDocumentTests
         Assert.Contains(Token("Shell.Diff.Added.Word", variant), row);
         Assert.Contains(Token("Shell.Diff.Added.WordBorder", variant), row);
         Assert.Contains(Token("Shell.Diff.Filler", variant), Row(frame, editor, removedRow, 0, editor.Bounds.Width - 1));
+    }
+
+    [AvaloniaFact]
+    public async Task Each_side_numbers_its_own_lines_and_has_its_own_status_bar_and_header()
+    {
+        var (f, folder, file) = await RepositoryAsync();
+        await using var fixture = f;
+
+        // The working tree with a byte order mark and CRLF line endings, and a line added.
+        var text = Original.Replace("    // Says hello.\n", "    // Says hello.\n    // Twice.\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
+        await File.WriteAllBytesAsync(file, [0xEF, 0xBB, 0xBF, .. System.Text.Encoding.UTF8.GetBytes(text)]);
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var document = await f.Shell.OpenDiffAsync(file, staged: false);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<DiffView>().Single();
+
+        Assert.Equal("Greeter.cs (Working Tree)", document!.Title);
+        Assert.Equal("compare", document.TabIcon);
+        Assert.Equal("Greeter.cs (Index)", view.HeaderOf(DiffPaneSide.Old));
+        Assert.Equal("Greeter.cs (Working tree)", view.HeaderOf(DiffPaneSide.New));
+        Assert.Equal(["SPC", "LF", "UTF-8"], view.StatusOf(DiffPaneSide.Old).Skip(1));
+        Assert.Equal(["SPC", "CRLF", "UTF-8 with BOM"], view.StatusOf(DiffPaneSide.New).Skip(1));
+
+        // The added line has a filler opposite: the old side's numbers skip it, so its next line keeps its own number.
+        var added = LineOf(view.RightText, "// Twice.");
+        Assert.Equal((0, 0), view.NumbersAt(DiffPaneSide.Old, added));
+        Assert.Equal((0, added), view.NumbersAt(DiffPaneSide.New, added));
+        Assert.Equal((added, 0), view.NumbersAt(DiffPaneSide.Old, added + 1));
+        Assert.Equal((0, added + 1), view.NumbersAt(DiffPaneSide.New, added + 1));
+
+        // The caret's line in each status bar: the file's line, not the pane's.
+        view.EditorOf(DiffPaneSide.Old).TextArea.Caret.Line = added + 1;
+        view.EditorOf(DiffPaneSide.Old).TextArea.Caret.Column = 3;
+        Assert.Equal($"Ln: {added}   Ch: 3", view.StatusOf(DiffPaneSide.Old)[0]);
+        Assert.Equal("1 change", view.CountText);
+        Assert.Equal(("−0", "+1"), view.LineCounts);
+
+        // Staged: HEAD against the index.
+        Git(folder, "add", ".");
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var staged = await f.Shell.OpenDiffAsync(file, staged: true);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any(v => v.ViewModel == staged!.ViewModel));
+        var stagedView = f.Window.GetVisualDescendants().OfType<DiffView>().Single(v => v.ViewModel == staged!.ViewModel);
+        Assert.Equal("Greeter.cs (Staged)", staged!.Title);
+        Assert.Equal("Greeter.cs (HEAD)", stagedView.HeaderOf(DiffPaneSide.Old));
+        Assert.Equal("Greeter.cs (Index)", stagedView.HeaderOf(DiffPaneSide.New));
+
+        // A revision comparison's title reads in its direction.
+        var revisions = new DiffDocument(new DiffViewModel(file, "k", "3f2a1c9", () => Task.FromResult("a\n"), "8b7e4d2", () => Task.FromResult("b\n")), f.Shell.EditorFont);
+        Assert.Equal("Greeter.cs (3f2a1c9 → 8b7e4d2)", revisions.Title);
+    }
+
+    [AvaloniaFact]
+    public async Task The_layout_is_a_setting_F8_moves_between_changes_and_the_view_keeps_its_place()
+    {
+        var (f, _, file) = await RepositoryAsync();
+        await using var fixture = f;
+        await File.WriteAllTextAsync(file, Original.Replace("namespace Greetings;", "namespace Greetings.Core;", StringComparison.Ordinal).Replace("\"o/\"", "\"\\o/\"", StringComparison.Ordinal));
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var document = await f.Shell.OpenDiffAsync(file, staged: false);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<DiffView>().Single();
+        Assert.True(document!.ViewModel.SideBySide);
+
+        // F8 and Shift+F8 (the commands their keys run while the diff has the focus).
+        Assert.Equal(2, document.ViewModel.Changes.Count);
+        Assert.Equal("Change 1 of 2", view.CountText); // the first change is shown when the diff opens
+        await f.RunAsync("git.diff.nextChange");
+        Assert.Equal("Change 2 of 2", view.CountText);
+        await f.RunAsync("git.diff.previousChange");
+        Assert.Equal("Change 1 of 2", view.CountText);
+        Assert.Contains(f.Shell.Workbench.Keybindings.EffectiveRules, r => r.Command == "git.diff.nextChange" && r.When.Text == "focusedView == diff");
+
+        // The splitter: dragged, then double-clicked for half and half.
+        document.ViewModel.SplitRatio = 0.3;
+        view.ResetSplit();
+        Assert.Equal(0.5, document.ViewModel.SplitRatio);
+
+        // Inline from the gear menu: saved in git.diff.layout, so the next diff opens inline.
+        document.ViewModel.SideBySide = false;
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetString(BuiltIns.DiffLayoutSetting, "") == DiffViewModel.LayoutInline);
+        f.Shell.Layout.CloseDocument(document);
+        var again = await f.Shell.OpenDiffAsync(file, staged: false);
+        Assert.False(again!.ViewModel.SideBySide);
+        await f.RunAsync("git.diff.sideBySide");
+        Assert.True(again.ViewModel.SideBySide);
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetString(BuiltIns.DiffLayoutSetting, "") == DiffViewModel.LayoutSideBySide);
+
+        // A tab switch keeps the caret where it was.
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any(v => v.ViewModel == again.ViewModel));
+        view = f.Window.GetVisualDescendants().OfType<DiffView>().Single(v => v.ViewModel == again.ViewModel);
+        await f.RunAsync("git.diff.nextChange");
+        var row = view.CurrentRow;
+        await f.Shell.OpenFileAsync(file);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is not null);
+        f.Shell.Layout.OpenDocument(again, focus: true);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any(v => v.ViewModel == again.ViewModel));
+        var rebuilt = f.Window.GetVisualDescendants().OfType<DiffView>().Single(v => v.ViewModel == again.ViewModel);
+        await ShellFixture.PumpUntil(() => rebuilt.CurrentRow == row);
+    }
+
+    [AvaloniaFact]
+    public async Task The_navigation_bar_row_is_on_the_open_documents_side_with_an_empty_row_opposite()
+    {
+        var (f, _, file) = await RepositoryAsync();
+        await using var fixture = f;
+        await File.WriteAllTextAsync(file, Original.Replace("Hello from", "Hi from", StringComparison.Ordinal));
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+
+        // The file isn't open: neither side is the open document, and neither has the row.
+        var document = await f.Shell.OpenDiffAsync(file, staged: false);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any() && document!.ViewModel.NewColors is not null);
+        var view = f.Window.GetVisualDescendants().OfType<DiffView>().Single();
+        Assert.Null(document!.ViewModel.OpenSideIsOld);
+        Assert.False(view.NavigationOf(DiffPaneSide.Old).Row);
+        Assert.False(view.NavigationOf(DiffPaneSide.New).Row);
+
+        // Open in the editor: the working tree is its text, so both sides get the row and only that side the bar's place.
+        await f.Shell.OpenFileAsync(file);
+        f.Shell.Layout.OpenDocument(document, focus: true);
+        await document.ViewModel.ColorAsync();
+        await ShellFixture.PumpUntil(() => document.ViewModel.OpenSideIsOld == false);
+        view = f.Window.GetVisualDescendants().OfType<DiffView>().Single(v => v.ViewModel == document.ViewModel);
+        await ShellFixture.PumpUntil(() => view.NavigationOf(DiffPaneSide.New).Row && view.NavigationOf(DiffPaneSide.Old).Row);
+        Assert.False(view.NavigationOf(DiffPaneSide.Old).Bar); // the empty, disabled row
     }
 
     private static Color Token(string key, Avalonia.Styling.ThemeVariant variant) =>

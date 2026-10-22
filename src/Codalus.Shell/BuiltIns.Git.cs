@@ -16,7 +16,9 @@ internal static partial class BuiltIns
           { "key": "ctrl+shift+alt+b", "mac": "cmd+alt+b", "command": "git.toggleBlame", "when": "editorTextFocus && gitRepository" },
           { "key": "primary+0 primary+h", "command": "git.history", "when": "gitRepository" },
           { "key": "f8", "command": "git.mergeEditor.nextConflict", "when": "focusedView == mergeEditor" },
-          { "key": "shift+f8", "command": "git.mergeEditor.previousConflict", "when": "focusedView == mergeEditor" }
+          { "key": "shift+f8", "command": "git.mergeEditor.previousConflict", "when": "focusedView == mergeEditor" },
+          { "key": "f8", "command": "git.diff.nextChange", "when": "focusedView == diff" },
+          { "key": "shift+f8", "command": "git.diff.previousChange", "when": "focusedView == diff" }
         ]
         """;
 
@@ -25,6 +27,9 @@ internal static partial class BuiltIns
 
     /// <summary>Whether the merge editor shows the incoming version on the left (the default) or the current one.</summary>
     public const string MergeEditorIncomingOnLeftSetting = "git.mergeEditor.incomingOnLeft";
+
+    /// <summary>The diff document's layout (#86, D45): the two versions side by side, or one inline pane.</summary>
+    public const string DiffLayoutSetting = "git.diff.layout";
 
     public static IReadOnlyList<SettingDescriptor> GitSettings()
     {
@@ -48,6 +53,16 @@ internal static partial class BuiltIns
                 Description = "Show the incoming version on the left and the current one on the right. Off: the current version on the left.",
                 Scope = SettingScope.User,
                 Order = 21,
+            },
+            SettingDescriptor.Create(DiffLayoutSetting, "\"sideBySide\"", SettingType.String, shell) with
+            {
+                Title = "Diff Layout",
+                Category = "Source Control",
+                Description = "How a file's diff shows its two versions. The diff's gear menu changes it too.",
+                Enum = [DiffViewModel.LayoutSideBySide, DiffViewModel.LayoutInline],
+                EnumDescriptions = ["Side by side, aligned row by row", "Inline: each change's removed lines, then its added lines"],
+                Scope = SettingScope.User,
+                Order = 22,
             },
         ];
     }
@@ -109,6 +124,15 @@ internal static partial class BuiltIns
         Add("git.mergeEditor.takeAllIncoming", "Take All Incoming", () => shell.OnMergeEditorAsync(vm => vm.TakeAll(MergeSide.Incoming, true)), Merge);
         Add("git.mergeEditor.takeAllCurrent", "Take All Current", () => shell.OnMergeEditorAsync(vm => vm.TakeAll(MergeSide.Current, true)), Merge);
         Add("git.mergeEditor.acceptMerge", "Accept Merge", shell.AcceptActiveMergeAsync, Merge);
+
+        // The diff document (#86, D45): its toolbar, gear menu and context menu, from the keyboard and the palette.
+        const string Diff = "activeDocumentKind == diff";
+        Add("git.diff.nextChange", "Next Change", () => shell.OnDiff(view => view.GoToChange(1)), Diff);
+        Add("git.diff.previousChange", "Previous Change", () => shell.OnDiff(view => view.GoToChange(-1)), Diff);
+        Add("git.diff.sideBySide", "Diff: Side by Side", () => shell.OnDiffDocument(vm => vm.SideBySide = true), Diff);
+        Add("git.diff.inline", "Diff: Inline", () => shell.OnDiffDocument(vm => vm.SideBySide = false), Diff);
+        Add("git.diff.refresh", "Refresh Diff", () => shell.OnDiff(view => view.Refresh()), Diff);
+        Add("git.diff.openFile", "Open File from Diff", () => shell.OnDiff(view => view.OpenFile()), Diff);
 
         // M13b: hosting, worktrees, LFS, several repositories.
         RegisterHostingCommands(shell);

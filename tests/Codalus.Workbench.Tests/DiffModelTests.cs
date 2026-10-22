@@ -56,4 +56,30 @@ public sealed class DiffModelTests
         Assert.Equal(([], []), WordDiff.Ranges("same", "same"));
         Assert.Equal(([], []), WordDiff.Ranges(new string('a', WordDiff.MaxLineLength + 1), "b"));
     }
+
+    [Fact]
+    public void A_change_is_a_run_of_changed_rows_and_each_side_numbers_its_own_lines()
+    {
+        // Two edits three lines apart: one git hunk at git's three lines of context, two changes here.
+        string[] old = ["a", "b", "c", "d", "e", "f", "g"];
+        string[] now = ["a", "x", "b", "c", "d", "E", "f", "g"];
+        var rows = Rows(old, now);
+        var changes = DiffRows.Changes(rows);
+        Assert.Equal([new DiffChange(1, 1), new DiffChange(5, 5)], changes);
+        Assert.True(changes[1].Contains(5));
+        Assert.False(changes[1].Contains(4));
+
+        // The old side's numbers skip its filler line: "b" is line 2 of the old file on the third pane line.
+        var (left, right) = DiffRows.SideBySide(rows, old, now);
+        Assert.Equal((0, 0), left.NumbersOf(1)); // filler opposite the added "x"
+        Assert.Equal((2, 0), left.NumbersOf(2));
+        Assert.Equal((0, 3), right.NumbersOf(2));
+
+        // Inline: two columns, the old file's then the new file's.
+        var inline = DiffRows.Inline(rows, old, now);
+        Assert.Equal((0, 2), inline.NumbersOf(1)); // the added "x"
+        Assert.Equal((2, 3), inline.NumbersOf(2)); // "b", unchanged
+        Assert.Equal((5, 0), inline.NumbersOf(5)); // the removed "e"
+        Assert.Equal((0, 6), inline.NumbersOf(6)); // the added "E"
+    }
 }
