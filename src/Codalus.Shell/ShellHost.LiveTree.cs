@@ -128,7 +128,9 @@ public sealed partial class ShellHost
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             var client = await Languages.ClientAsync(editor.Model.LanguageId ?? XamlLanguageId).ConfigureAwait(true);
             var tree = client is null ? null : await client.XamlLogicalTreeAsync(editor.Model.Uri, timeout.Token).ConfigureAwait(true);
-            if (tree is null || PreviewSelection.NodeFor(tree.Nodes, path.Steps) is not { } xaml || editor.Controller is not { } controller)
+            // The editor's view of a file just opened appears on a later layout pass.
+            var controller = await editor.ControllerAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+            if (tree is null || PreviewSelection.NodeFor(tree.Nodes, path.Steps) is not { } xaml || controller is null)
             {
                 StatusBar.ShowMessage(Localizer.Get("msg.liveTree.theElementIsntInTheWindows", "The element isn't in the window's XAML (a template or code made it)."), TimeSpan.FromSeconds(6));
                 return;

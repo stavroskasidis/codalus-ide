@@ -261,7 +261,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # The publish takes 10 to 31 minutes on a macOS runner and the smoke test up to its own 40: at 60, a slow runner ran out
+    # of time in the middle of a passing smoke test (#111, run 39668401109).
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
