@@ -419,6 +419,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, "language.ready").ConfigureAwait(true);
 
         await StepAsync("shell.themeFamilies", "M45", "Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, over the open solution; Harbor follows the system; the family picker in Options", ThemeFamiliesStepAsync, "language.ready").ConfigureAwait(true);
+        await StepAsync("shell.roundedCorners", "D46", "Classic's rounded cards, tabs and toolbar, and menus whose 6 px corners keep the theme's color on X11 without a compositor", RoundedCornersStepAsync).ConfigureAwait(true);
 
         // M34a: the menus as trees with icons, Ctrl+Space through the keyboard, output that follows.
         await UxPassStepsAsync().ConfigureAwait(true);

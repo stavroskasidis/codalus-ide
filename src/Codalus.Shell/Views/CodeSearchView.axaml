@@ -41,7 +41,7 @@
 
   <!-- Code Search (Ctrl+T, Ctrl+,) and Feature Search (Ctrl+Q), M47: floats over the editor under the title row; drag
        it by its tabs' row, resize it from its corner. Docked, the same view fills a tool window. -->
-  <Border x:Name="Frame" Classes="overlay" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{l:T codeSearch.codeSearch}">
+  <Border x:Name="Frame" Classes="overlay" CornerRadius="{DynamicResource Shell.CornerRadius.Dialog}" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{l:T codeSearch.codeSearch}">
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
       <Grid x:Name="TitleRow" ColumnDefinitions="*,Auto" Background="Transparent" Margin="6,4,6,0">
         <TabStrip SelectedIndex="{Binding TabIndex}" AutomationProperties.Name="{l:T codeSearch.searchKind}">

@@ -104,8 +104,10 @@
 
     <Grid>
       <!-- InitializeFactory gives the factory this control's host window locators: without them a floated tool
-           window or document gets a window with no host, never shown. -->
-      <DockControl x:Name="Dock" Layout="{Binding Layout.Root}" Factory="{Binding Layout.Factory}" InitializeFactory="True" />
+           window or document gets a window with no host, never shown. Classic keeps 6 px of window around the dock
+           area (Shell.Dock.Margin, D46); floating windows fill their frame. -->
+      <DockControl x:Name="Dock" Layout="{Binding Layout.Root}" Factory="{Binding Layout.Factory}" InitializeFactory="True"
+                   Margin="{DynamicResource Shell.Dock.Margin}" />
 
       <ItemsControl x:Name="Toasts"
                     ItemsSource="{Binding Notifications.Toasts}"

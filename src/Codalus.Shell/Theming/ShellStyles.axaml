@@ -5,7 +5,10 @@
         xmlns:core="using:Dock.Model.Core"
         xmlns:docking="using:Codalus.Shell.Docking"
         xmlns:editing="using:AvaloniaEdit.Editing"
-        xmlns:collections="using:System.Collections">
+        xmlns:collections="using:System.Collections"
+        xmlns:dmc="using:Dock.Model.Controls"
+        xmlns:dockControls="using:Dock.Avalonia.Controls"
+        xmlns:dockConverters="using:Dock.Avalonia.Converters">
   <Styles.Resources>
     <!-- Dock's document tab strip takes its panel from this resource (a style can't replace it): ours fits (M34e). -->
     <ItemsPanelTemplate x:Key="DockDocumentTabStripHorizontalItemsPanel">
@@ -17,6 +20,38 @@
       Its glyph, Visual Studio's thin X: Dock stretches the geometry over the button less a 2 px margin (12 px), so the
       geometry spans a 12-unit box (the two specks in its corners) with the X in its middle 8 units, about 1 px thick.
     -->
+    <!--
+      The document well as one card holding its tab strip (rounded corners, D46 question 7): Dock's DocumentDockControl
+      template (Dock.Avalonia.Themes.Fluent 12.1.0.7, MIT) inside a Border with the card's radius, outline and fill, the
+      tab strip's (transparent in Classic, so the card's corners round it). It doesn't clip: DocumentControl's frame
+      paints over its sides and bottom, and the frame clips the document to the card's bottom corners. In the families
+      the card has no radius, outline or fill (Shell.Card.*), so the well looks as before.
+    -->
+    <ControlTheme x:Key="{x:Type DocumentDockControl}" TargetType="DocumentDockControl" x:DataType="dmc:IDocumentDock">
+      <Setter Property="(AutomationProperties.AutomationId)" Value="{Binding Id}" />
+      <Setter Property="(AutomationProperties.Name)" Value="{Binding Title}" />
+      <Setter Property="(DockProperties.IsDragEnabled)" Value="{Binding CanDrag}" />
+      <Setter Property="(DockProperties.IsDropEnabled)" Value="{Binding CanDrop}" />
+      <Setter Property="(DockProperties.DockGroup)" Value="{Binding DockGroup}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="PART_Card"
+                  CornerRadius="{DynamicResource Shell.Card.CornerRadius}"
+                  BorderThickness="{DynamicResource Shell.Card.BorderThickness}"
+                  BorderBrush="{DynamicResource Shell.Border}"
+                  Background="{DynamicResource Shell.Card.Background}">
+            <DockableControl TrackingMode="Visible">
+              <Panel>
+                <DocumentControl IsActive="{Binding IsActive}"
+                                 IsVisible="{Binding LayoutMode, Converter={x:Static dockConverters:DocumentLayoutModeMatchConverter.Instance}, ConverterParameter=Tabbed}" />
+                <dockControls:MdiDocumentControl IsActive="{Binding IsActive}"
+                                                 IsVisible="{Binding LayoutMode, Converter={x:Static dockConverters:DocumentLayoutModeMatchConverter.Instance}, ConverterParameter=Mdi}" />
+              </Panel>
+            </DockableControl>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
     <StreamGeometry x:Key="DockIconCloseGeometry">M0,0 L0.01,0 L0,0.01 Z M12,12 L11.99,12 L12,11.99 Z M2.75,2 L6,5.25 L9.25,2 L10,2.75 L6.75,6 L10,9.25 L9.25,10 L6,6.75 L2.75,10 L2,9.25 L5.25,6 L2,2.75 Z</StreamGeometry>
   </Styles.Resources>
 
@@ -141,6 +176,32 @@
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Tab.Active.IndicatorBrush}" />
   </Style>
   <!--
+    Rounded corners (D46): Classic outlines the selected tab, in the accent in the active group and at 3:1 against the
+    strip in the others (Shell.Tab.Selected.IndicatorBrush, transparent in the families), with a semibold title; the
+    frame's top edge beside it is TabStripEdge's, a row under the strip.
+  -->
+  <Style Selector="DocumentTabStripItem:selected:not(:active) /template/ Border#PART_TabGutter">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Tab.Selected.IndicatorBrush}" />
+  </Style>
+  <Style Selector="DocumentTabStripItem:selected">
+    <Setter Property="FontWeight" Value="{DynamicResource Shell.Tab.Selected.FontWeight}" />
+  </Style>
+  <Style Selector="DocumentTabStrip">
+    <Setter Property="BottomContent">
+      <Template>
+        <controls:TabStripEdge />
+      </Template>
+    </Setter>
+  </Style>
+  <Style Selector="controls|TabStripEdge">
+    <Setter Property="Height" Value="{DynamicResource Shell.TabStripEdge.Height}" />
+    <Setter Property="Margin" Value="{DynamicResource Shell.TabStripEdge.Margin}" />
+    <Setter Property="ActiveBrush" Value="{DynamicResource Shell.Well.Frame.Active}" />
+    <Setter Property="InactiveBrush" Value="{DynamicResource DockDocumentContentBorderBrush}" />
+    <Setter Property="ActiveTabBrush" Value="{DynamicResource Shell.Tab.Active.IndicatorBrush}" />
+    <Setter Property="InactiveTabBrush" Value="{DynamicResource Shell.Tab.Selected.IndicatorBrush}" />
+  </Style>
+  <!--
     The tab's pin and close buttons, as Visual Studio's: 16 px squares with a hover background, a thin 8 px glyph in the
     tab's text color (Dock's close glyph was a heavy one).
   -->
@@ -150,7 +211,7 @@
     <Setter Property="Padding" Value="0" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius.Compact}" />
     <Setter Property="Foreground" Value="{Binding $parent[DocumentTabStripItem].Foreground}" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -164,6 +225,17 @@
     instead of Dock's sideways scrolling that took pinned tabs out of view.
   -->
 
+  <!--
+    Auto-hidden tool windows (D46 question 13): Classic's tabs are text on the window's color with a 3 px bar
+    (Shell.AutoHide.*, none in the families). The panel that slides out is a tool window card like the others.
+    TODO(issue): the accent bar for the open one, the control radius under the pointer and the popup shadow on the
+    sliding panel (Dock's ToolPinItemControl has no open state, and its button's corners are set by its template).
+  -->
+  <Style Selector="ToolPinItemControl /template/ Border">
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.AutoHide.BarThickness}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.AutoHide.Bar}" />
+  </Style>
+
   <!-- Tool window tabs: a hover that keeps its text readable, and the selected tab's title in the link color. -->
   <Style Selector="ToolTabStripItem:pointerover:not(:selected)">
     <Setter Property="Background" Value="{DynamicResource Shell.Tab.Hover}" />
@@ -171,6 +243,10 @@
   </Style>
   <Style Selector="ToolTabStripItem:selected">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Link}" />
+  </Style>
+  <!-- Rounded corners (D46): Classic's selected tool window tab hangs from the content with rounded bottom corners. -->
+  <Style Selector="ToolTabStripItem:selected /template/ Border">
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.ToolTab.CornerRadius}" />
   </Style>
 
   <!-- Tool window captions: Shell.Caption.Active with the focus, Shell.Caption.Inactive without (M34d). -->
@@ -198,6 +274,28 @@
   <Style Selector="DocumentControl /template/ Border#PART_Border">
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.Panel.CornerRadius.Bottom}" />
     <Setter Property="ClipToBounds" Value="True" />
+    <!-- Classic's frame paints over the well card's sides and bottom (D46); the accent while the group is active. -->
+    <Setter Property="Margin" Value="{DynamicResource Shell.Well.Frame.Margin}" />
+    <!-- What a document doesn't cover inside the frame (an empty minimap's column) is the card's, not the window's. -->
+    <Setter Property="Background" Value="{DynamicResource Shell.Well.Background}" />
+  </Style>
+  <Style Selector="DocumentControl:active /template/ Border#PART_Border">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Well.Frame.Active}" />
+  </Style>
+  <!--
+    Rounded corners (D46): Classic's tool windows are cards outlined all round. The content takes the card's sides and
+    bottom (Shell.Card.Content.BorderThickness, through ToolChromeControl's BorderThickness, which its template gives
+    the content), Dock's ToolControl drops its own sides, and the focused one is framed in the accent
+    (Shell.Card.Focus.BorderBrush, the families' border color).
+  -->
+  <Style Selector="ToolChromeControl">
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.Card.Content.BorderThickness}" />
+  </Style>
+  <Style Selector="ToolChromeControl:active">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Card.Focus.BorderBrush}" />
+  </Style>
+  <Style Selector="ToolControl /template/ Border#PART_Border">
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.ToolControl.BorderThickness}" />
   </Style>
   <Style Selector="ToolChromeControl /template/ TextBlock#PART_Title">
     <Setter Property="Padding" Value="{DynamicResource Shell.Caption.Active.MarkerPadding}" />
@@ -504,6 +602,28 @@
   </Style>
   <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+  </Style>
+  <!-- Rounded corners (D46): Classic insets its rows 3 px with the control radius (Shell.Row.*, 0 in the families). -->
+  <Style Selector="ListBoxItem">
+    <Setter Property="Margin" Value="{DynamicResource Shell.Row.Margin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Row.CornerRadius}" />
+  </Style>
+  <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
+    <Setter Property="Margin" Value="{DynamicResource Shell.Row.Margin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Row.CornerRadius}" />
+  </Style>
+  <!-- Solution Explorer's selection pill (D46 question 12): the accent with the focus, muted without; transparent in the families. -->
+  <Style Selector="Border.selectionPill">
+    <Setter Property="Width" Value="3" />
+    <Setter Property="Height" Value="14" />
+    <Setter Property="CornerRadius" Value="1.5" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Indicator.Inactive}" />
+  </Style>
+  <Style Selector="ListBox:focus-within Border.selectionPill">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Indicator}" />
   </Style>
   <Style Selector="ListBox.rows ListBoxItem">
     <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Row}" />
@@ -860,6 +980,8 @@
   </Style>
   <Style Selector="ToolTip">
     <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+    <!-- Tooltips take the control radius, as the editor's popups (D46 question 16); menus and lists the overlay's. -->
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
   </Style>
   <!-- A selected row's text is Shell.Selection.Foreground (M45: a High contrast family selects with its accent, black text). -->
   <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
@@ -977,10 +1099,17 @@
   <Style Selector="WindowDrawnDecorations:not(:fullscreen) /template/ Panel#PART_TitleTextPanel">
     <Setter Property="IsVisible" Value="False" />
   </Style>
+  <!--
+    The standard toolbar: a full-width band in the families, a card as wide as its buttons in Classic (D46 question 10),
+    which still wraps when the window is narrow.
+  -->
   <Style Selector="Border.standardToolbar">
     <Setter Property="Background" Value="{DynamicResource Shell.Toolbar}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Border}" />
-    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.Toolbar.BorderThickness}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Toolbar.CornerRadius}" />
+    <Setter Property="Margin" Value="{DynamicResource Shell.Toolbar.Margin}" />
+    <Setter Property="HorizontalAlignment" Value="{DynamicResource Shell.Toolbar.HorizontalAlignment}" />
   </Style>
   <Style Selector="Border.toolbarSeparator">
     <Setter Property="Width" Value="1" />
@@ -1008,7 +1137,7 @@
     <Setter Property="Padding" Value="6,0,4,0" />
     <Setter Property="Margin" Value="1,0" />
     <Setter Property="FontSize" Value="12" />
-    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius.Compact}" />
     <Setter Property="HorizontalAlignment" Value="Stretch" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
@@ -1197,12 +1326,21 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
   </Style>
 
+  <!--
+    A popup that is a window of its own (menus, drop-down lists, tooltips) where the window system can't make its
+    corners transparent (X11 without a compositor): what its rounded border leaves uncovered takes the window's color
+    instead of black (D46 question 17; the smoke step shell.roundedCorners checks it).
+  -->
+  <Style Selector="PopupRoot">
+    <Setter Property="TransparencyBackgroundFallback" Value="{DynamicResource Shell.Background}" />
+  </Style>
+
   <!-- Floating surfaces: command palette and toasts. -->
   <Style Selector="Border.overlay">
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
     <Setter Property="BoxShadow" Value="0 6 18 0 #40000000" />
   </Style>
 
@@ -1236,7 +1374,7 @@
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
     <Setter Property="Padding" Value="8,6" />
   </Style>
   <!--

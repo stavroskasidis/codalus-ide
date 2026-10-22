@@ -288,6 +288,22 @@ Measured in the classic IDE's Dark theme (#83), after the document view's 0.85 o
 - **Bracket pair colors' default follows the family**: `editor.bracketPairColorization` is registered with `false` while a Classic theme is active and again with `true` when a family is (`BuiltIns.BracketPairColorizationSetting`, `ShellHost.UseFamilyDefaults`). A value in `settings.json` wins in any theme, and the Settings UI shows the active family's default.
 - The families and High Contrast set `.LineNumbers.Current` to their line numbers' color and `.CodeLens.Foreground` to their inlay hints', so they look as before.
 
+### Classic's shapes (D46)
+
+Classic takes the classic IDE's current shapes, drawn and decided in [`controls/RoundedCorners.dc.html`](controls/RoundedCorners.dc.html) ([controls.md](controls.md#rounded-corners-06), superseding D33's 2 px): one 4 px radius on cards, tabs and controls (check boxes 3, the focus ring 6), 6 px gaps on the window's color and 6 px of window around the dock area. The tokens are in [`ui-guidelines.md`'s Shapes table](../ui-guidelines.md#shapes-m45).
+
+| | Classic Light and Dark | Classic Blue | Classic High Contrast |
+|---|---|---|---|
+| Document well | one card holding its tabs, 1 px `Shell.Border` | the same | the same, cyan border |
+| Selected tab, active group | outlined in the accent, the content's fill, semibold, open into the active document's 1 px accent frame (`TabStripEdge`) | today's gold fill, a gold frame | today's accent fill, an accent frame |
+| Selected tab, other groups | outlined at 3:1 against the strip, semibold; the frame in `Shell.Border` | today's fill | outlined in cyan |
+| Tool windows | cards outlined all round; the focused one framed in the accent, its caption on the card with a semibold title | today's solid captions | today's solid captions |
+| Toolbar | a card as wide as its buttons | the same | the same |
+| Rows | inset 3 px, 4 px corners; Solution Explorer's selected row has the accent pill (muted without the focus) | the same | the same |
+| Popups | menus and lists 6, dialogs 8, tooltips and the editor's popups 4 (every family takes the shared 6 and 8) | the same | the same |
+
+The colors that moved with it: Light's and Dark's toolbar, strip and unselected tabs take `Shell.Panel`'s value (`#F5F5F5`, `#252526`), the selected tab the content's (`#FFFFFF` with black text, `#252526` with white), a tab under the pointer the toolbar's hover (`#DCEAF8`, `#3E3E40`), the focused caption the card's (`#EEEEF2`, `#252526`); the gaps show `Shell.Background`. Window frames stay the system's.
+
 ## The first-run setup: appearance
 
 ![The setup's appearance step](shell-themes/previews/setup-appearance.png)
