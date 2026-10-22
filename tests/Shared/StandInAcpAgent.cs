@@ -14,6 +14,26 @@ namespace Codalus.Tests;
 /// makes <c>session/new</c> answer <c>auth_required</c> until <c>authenticate</c> with <c>fake-login</c>;
 /// <c>ACP_FAKE_PROTOCOL</c> changes the version it answers <c>initialize</c> with.
 /// </para>
+/// <para>
+/// Sign-in modes (ADR 0083), for the Connect flow and terminal sign-in:
+/// <list type="bullet">
+/// <item><c>ACP_FAKE_INIT_FILE</c>: answer <c>initialize</c> with a recorded answer (tests/Shared/AcpRecordings); its
+/// methods count as offered, and <c>authenticate</c> with one of them signs in.</item>
+/// <item><c>ACP_FAKE_REQUIRE_ENV=NAME=VALUE</c>: <c>session/new</c> answers <c>auth_required</c> unless that variable has that value
+/// (or, for <c>sha256:HEX</c>, a value with that SHA-256).</item>
+/// <item><c>ACP_FAKE_AUTH_ON_PROMPT=1</c>: <c>session/new</c> succeeds and <c>session/prompt</c> answers <c>auth_required</c> until signed in (Claude's adapter).</item>
+/// <item><c>ACP_FAKE_AUTH_STATUS=none|account|silent</c>: the <c>authStatus</c> marker, <c>auth.logout</c>, and a
+/// <c>_auth/status_update</c> push after <c>initialize</c> (none: signed out; account: signed in; silent: no push).</item>
+/// <item><c>ACP_FAKE_TERMINAL_AUTH=1</c>: a terminal method <c>fake-terminal-login</c> (<c>--login</c>, with
+/// <c>ACP_FAKE_LOGIN_MODE=1</c>) when the client advertises <c>auth.terminal</c>.</item>
+/// <item><c>--login</c> on the command line: the terminal sign-in itself: it writes <c>ACP_FAKE_LOGIN_MARKER</c> (unless
+/// <c>ACP_FAKE_LOGIN_FAILS=1</c>) and exits with <c>ACP_FAKE_LOGIN_EXIT</c> (0); a start that finds the marker is signed in.</item>
+/// <item><c>ACP_FAKE_PROBE_CLIENT=1</c>: before answering <c>session/new</c>, it asks the client to read a file, run a command and allow
+/// something, and logs the answers (the connection test refuses them all).</item>
+/// <item><c>ACP_FAKE_STDERR</c>: a line on standard error at start; <c>ACP_FAKE_START_DELAY</c>: milliseconds before it reads.</item>
+/// <item><c>logout</c> deletes the marker and pushes <c>none</c>.</item>
+/// </list>
+/// </para>
 /// The prompt's last line picks the script:
 /// <list type="bullet">
 /// <item><c>hello</c>: a thought, two message chunks and a plan.</item>
@@ -34,10 +54,43 @@ public static class StandInAcpAgent
 
     public static async Task<int> RunAsync(Stream input, Stream output)
     {
+        // The terminal sign-in (a terminal method's --login): it signs in by writing the marker, then exits.
+        if (Environment.GetCommandLineArgs().Contains("--login"))
+        {
+            if (Environment.GetEnvironmentVariable("ACP_FAKE_LOGIN_MARKER") is { Length: > 0 } marker && Environment.GetEnvironmentVariable("ACP_FAKE_LOGIN_FAILS") != "1")
+            {
+                await File.WriteAllTextAsync(marker, Environment.GetEnvironmentVariable("ACP_FAKE_LOGIN_MODE") ?? "").ConfigureAwait(false);
+            }
+
+            if (Environment.GetEnvironmentVariable("ACP_FAKE_LOG") is { Length: > 0 } loginLog)
+            {
+                await File.AppendAllTextAsync(loginLog, new JsonObject { ["login"] = string.Join(' ', Environment.GetCommandLineArgs().Skip(1)), ["cwd"] = Environment.CurrentDirectory, ["mode"] = Environment.GetEnvironmentVariable("ACP_FAKE_LOGIN_MODE") }.ToJsonString() + "\n").ConfigureAwait(false);
+            }
+
+            return int.TryParse(Environment.GetEnvironmentVariable("ACP_FAKE_LOGIN_EXIT"), CultureInfo.InvariantCulture, out var code) ? code : 0;
+        }
+
+        if (Environment.GetEnvironmentVariable("ACP_FAKE_STDERR") is { Length: > 0 } stderr)
+        {
+            await Console.Error.WriteLineAsync(stderr).ConfigureAwait(false);
+            await Console.Error.FlushAsync().ConfigureAwait(false);
+        }
+
+        if (int.TryParse(Environment.GetEnvironmentVariable("ACP_FAKE_START_DELAY"), CultureInfo.InvariantCulture, out var delay))
+        {
+            await Task.Delay(delay).ConfigureAwait(false);
+        }
+
         var agent = new Agent(output, Environment.GetEnvironmentVariable("ACP_FAKE_LOG"));
 
-        // Where the IDE started it (a neutral folder, not the workspace: a cloned repository's .npmrc mustn't steer npx).
-        agent.Log(new JsonObject { ["cwd"] = Environment.CurrentDirectory }.ToJsonString());
+        // Where the IDE started it (a neutral folder, not the workspace: a cloned repository's .npmrc mustn't steer npx),
+        // and the variables a test looks for (secretEnv's, unsetEnv's): present or not, never their values in a real agent.
+        agent.Log(new JsonObject
+        {
+            ["cwd"] = Environment.CurrentDirectory,
+            ["env"] = new JsonObject(((Environment.GetEnvironmentVariable("ACP_FAKE_REPORT_ENV") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+                .Select(n => KeyValuePair.Create(n, (JsonNode?)(Environment.GetEnvironmentVariable(n) is { } v ? JsonValue.Create(v) : null)))),
+        }.ToJsonString());
         using var reader = new StreamReader(input, new UTF8Encoding(false));
         while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
         {
@@ -69,6 +122,26 @@ public static class StandInAcpAgent
         private long _next = 100;
         private bool _authenticated;
         private string _sessionId = "";
+        private string[] _offered = ["fake-login"];
+
+        private static string? Marker => Environment.GetEnvironmentVariable("ACP_FAKE_LOGIN_MARKER") is { Length: > 0 } m ? m : null;
+
+        private static string? StatusMode => Environment.GetEnvironmentVariable("ACP_FAKE_AUTH_STATUS") is { Length: > 0 } m ? m : null;
+
+        /// <summary>Signed in: authenticated, or the terminal sign-in's marker is there.</summary>
+        private bool SignedIn => _authenticated || (Marker is { } m && File.Exists(m));
+
+        private Task PushStatusAsync(bool signedIn) =>
+            SendAsync(new JsonObject
+            {
+                ["method"] = "_auth/status_update",
+                ["params"] = new JsonObject
+                {
+                    ["authStatus"] = signedIn
+                        ? new JsonObject { ["kind"] = "subscription", ["label"] = "Claude Max", ["detail"] = "tester@example.com" }
+                        : new JsonObject { ["kind"] = "none", ["label"] = "Not logged in" },
+                },
+            });
 
         public void Log(string line)
         {
@@ -126,6 +199,12 @@ public static class StandInAcpAgent
             return answer["error"] is JsonObject error ? new JsonObject { ["error"] = error.DeepClone() } : answer["result"] as JsonObject ?? [];
         }
 
+        /// <summary>A variable's value against the expected one, or its SHA-256 (<c>sha256:HEX</c>, so a test's settings never hold the key).</summary>
+        private static bool Matches(string? actual, string expected) =>
+            actual is not null && (expected.StartsWith("sha256:", StringComparison.Ordinal)
+                ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(actual))) == expected["sha256:".Length..]
+                : actual == expected);
+
         private static string ErrorText(JsonObject answer) => answer["error"]?["message"]?.GetValue<string>() ?? "";
 
         public async Task HandleAsync(JsonObject message)
@@ -135,30 +214,93 @@ public static class StandInAcpAgent
             switch (message["method"]!.GetValue<string>())
             {
                 case "initialize":
-                    var protocol = int.TryParse(Environment.GetEnvironmentVariable("ACP_FAKE_PROTOCOL"), CultureInfo.InvariantCulture, out var p) ? p : 1;
-                    var auth = Environment.GetEnvironmentVariable("ACP_FAKE_AUTH") == "1"
-                        ? new JsonArray(new JsonObject { ["id"] = "fake-login", ["name"] = "Fake login", ["description"] = "Signs in to nothing." })
-                        : [];
-                    await RespondAsync(id, new JsonObject
+                    if (Environment.GetEnvironmentVariable("ACP_FAKE_INIT_FILE") is { Length: > 0 } recorded)
                     {
-                        ["protocolVersion"] = protocol,
-                        ["agentCapabilities"] = new JsonObject { ["loadSession"] = false, ["promptCapabilities"] = new JsonObject { ["embeddedContext"] = true } },
-                        ["agentInfo"] = new JsonObject { ["name"] = "stand-in", ["title"] = "Stand-in agent", ["version"] = "1.0.0" },
-                        ["authMethods"] = auth,
-                    }).ConfigureAwait(false);
+                        var answer = JsonNode.Parse(await File.ReadAllTextAsync(recorded).ConfigureAwait(false))!.AsObject();
+                        answer.Remove("_source");
+                        _offered = [.. (answer["authMethods"]?.AsArray() ?? []).Select(m => m!["id"]!.GetValue<string>())];
+                        await RespondAsync(id, answer).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        var protocol = int.TryParse(Environment.GetEnvironmentVariable("ACP_FAKE_PROTOCOL"), CultureInfo.InvariantCulture, out var p) ? p : 1;
+                        var auth = new JsonArray();
+                        if (Environment.GetEnvironmentVariable("ACP_FAKE_AUTH") == "1" || Environment.GetEnvironmentVariable("ACP_FAKE_AUTH_ON_PROMPT") == "1")
+                        {
+                            auth.Add(new JsonObject { ["id"] = "fake-login", ["name"] = "Fake login", ["description"] = "Signs in to nothing." });
+                        }
+
+                        if (Environment.GetEnvironmentVariable("ACP_FAKE_TERMINAL_AUTH") == "1" && parameters["clientCapabilities"]?["auth"]?["terminal"]?.GetValue<bool>() == true)
+                        {
+                            auth.Add(new JsonObject { ["id"] = "fake-terminal-login", ["name"] = "Fake terminal login", ["type"] = "terminal", ["args"] = new JsonArray("--login"), ["env"] = new JsonObject { ["ACP_FAKE_LOGIN_MODE"] = "1" } });
+                        }
+
+                        var capabilities = new JsonObject { ["loadSession"] = false, ["promptCapabilities"] = new JsonObject { ["embeddedContext"] = true } };
+                        if (StatusMode is not null)
+                        {
+                            capabilities["_meta"] = new JsonObject { ["authStatus"] = new JsonObject() };
+                            capabilities["auth"] = new JsonObject { ["logout"] = new JsonObject() };
+                        }
+
+                        await RespondAsync(id, new JsonObject
+                        {
+                            ["protocolVersion"] = protocol,
+                            ["agentCapabilities"] = capabilities,
+                            ["agentInfo"] = new JsonObject { ["name"] = "stand-in", ["title"] = "Stand-in agent", ["version"] = "1.0.0" },
+                            ["authMethods"] = auth,
+                        }).ConfigureAwait(false);
+                    }
+
+                    // Claude's adapter: who is signed in, pushed after the answer (never before it).
+                    if (StatusMode is { } mode && (mode != "silent" || SignedIn))
+                    {
+                        await PushStatusAsync(SignedIn || mode == "account").ConfigureAwait(false);
+                    }
+
                     break;
                 case "authenticate":
-                    _authenticated = parameters["methodId"]?.GetValue<string>() == "fake-login";
+                    var method = parameters["methodId"]?.GetValue<string>();
+                    _authenticated = method is not null && _offered.Contains(method);
                     await RespondAsync(id, new JsonObject()).ConfigureAwait(false);
                     break;
+                case "logout":
+                    _authenticated = false;
+                    if (Marker is { } signedIn && File.Exists(signedIn))
+                    {
+                        File.Delete(signedIn);
+                    }
+
+                    await RespondAsync(id, new JsonObject()).ConfigureAwait(false);
+                    if (StatusMode is not null)
+                    {
+                        await PushStatusAsync(false).ConfigureAwait(false);
+                    }
+
+                    break;
                 case "session/new":
-                    if (Environment.GetEnvironmentVariable("ACP_FAKE_AUTH") == "1" && !_authenticated)
+                    if (Environment.GetEnvironmentVariable("ACP_FAKE_AUTH") == "1" && !SignedIn)
+                    {
+                        await ErrorAsync(id, -32000, "Authentication required").ConfigureAwait(false);
+                        break;
+                    }
+
+                    if (Environment.GetEnvironmentVariable("ACP_FAKE_REQUIRE_ENV") is { Length: > 0 } required
+                        && required.Split('=', 2) is [var name, var value] && !Matches(Environment.GetEnvironmentVariable(name), value) && !_authenticated)
                     {
                         await ErrorAsync(id, -32000, "Authentication required").ConfigureAwait(false);
                         break;
                     }
 
                     _sessionId = "sess_stand_in";
+                    if (Environment.GetEnvironmentVariable("ACP_FAKE_PROBE_CLIENT") == "1")
+                    {
+                        // What the connection test must refuse, asked before the answer so the client is still there: each
+                        // answer is logged (as a response) for the test to read.
+                        await RequestAsync("fs/read_text_file", new JsonObject { ["sessionId"] = _sessionId, ["path"] = Path.Combine(Environment.CurrentDirectory, "probe.txt") }).ConfigureAwait(false);
+                        await RequestAsync("terminal/create", new JsonObject { ["sessionId"] = _sessionId, ["command"] = "echo", ["args"] = new JsonArray("probe") }).ConfigureAwait(false);
+                        await PermissionAsync("perm_probe").ConfigureAwait(false);
+                    }
+
                     await RespondAsync(id, new JsonObject
                     {
                         ["sessionId"] = _sessionId,
@@ -183,6 +325,12 @@ public static class StandInAcpAgent
                     _cancelled.TrySetResult();
                     break;
                 case "session/prompt":
+                    if (Environment.GetEnvironmentVariable("ACP_FAKE_AUTH_ON_PROMPT") == "1" && !SignedIn)
+                    {
+                        await ErrorAsync(id, -32000, "Authentication required. Please run /login").ConfigureAwait(false);
+                        break;
+                    }
+
                     _cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                     var text = parameters["prompt"]?.AsArray().Select(b => b?["text"]?.GetValue<string>() ?? "").LastOrDefault() ?? "";
                     var command = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Last().Trim();

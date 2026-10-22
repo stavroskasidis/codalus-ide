@@ -78,6 +78,11 @@ public sealed class LocalProcessLauncher : IProcessLauncher
             psi.ArgumentList.Add(argument);
         }
 
+        foreach (var name in launch.UnsetEnvironment ?? [])
+        {
+            psi.Environment.Remove(name);
+        }
+
         foreach (var (key, value) in launch.Environment ?? new Dictionary<string, string>())
         {
             psi.Environment[key] = value;

@@ -36,16 +36,16 @@ public sealed record AcpKnownAgent(string Id, string Name, string Description, s
 public static class AcpAgentCatalog
 {
     /// <summary>When the entries were last checked against the ACP registry.</summary>
-    public const string RegistryChecked = "2026-10-19";
+    public const string RegistryChecked = "2026-10-22";
 
     /// <summary>The known agents, in the order the list shows them.</summary>
     public static IReadOnlyList<AcpKnownAgent> Agents { get; } =
     [
         Npx("pi", "pi", "ACP adapter for the pi coding agent", "pi-acp", "0.0.34", [], "pi"),
-        Npx("claude", "Claude", "ACP wrapper for Anthropic's Claude", "@agentclientprotocol/claude-agent-acp", "0.93.0", [], "claude"),
+        Npx("claude", "Claude", "ACP wrapper for Anthropic's Claude", "@agentclientprotocol/claude-agent-acp", "0.94.0", [], "claude"),
         Npx("codex", "Codex", "ACP adapter for OpenAI's coding assistant", "@agentclientprotocol/codex-acp", "2.2.2", [], "codex"),
-        Npx("gemini", "Gemini CLI", "Google's official CLI for Gemini", "@google/gemini-cli", "0.64.0", ["--acp"], "gemini"),
-        Npx("copilot", "GitHub Copilot", "GitHub's AI pair programmer", "@github/copilot", "1.0.98", ["--acp"], "copilot"),
+        Npx("gemini", "Gemini CLI", "Google's official CLI for Gemini", "@google/gemini-cli", "0.65.0", ["--acp"], "gemini"),
+        Npx("copilot", "GitHub Copilot", "GitHub's AI pair programmer", "@github/copilot", "1.0.103", ["--acp"], "copilot"),
         Installed("opencode", "OpenCode", "The open source coding agent", "1.19.3", "opencode", ["acp"]),
         Installed("goose", "goose", "A local, extensible, open source AI agent", "1.55.0", "goose", ["acp"]),
     ];
@@ -95,7 +95,7 @@ public static class AcpAgentCatalog
         return found.Keys.ToHashSet(StringComparer.Ordinal);
     }
 
-    private static bool IsProgram(string file)
+    internal static bool IsProgram(string file)
     {
         try
         {
@@ -123,40 +123,63 @@ public static class AcpAgentCatalog
     /// </summary>
     public static async Task<bool> AddAsync(SettingsService settings, AcpKnownAgent agent, CancellationToken cancellationToken, bool replace = false)
     {
-        var current = settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User);
         if (!replace && HasEntry(settings, agent.Id))
         {
             return false;
         }
 
+        // One entry of ai.agents: the others, and the comments inside the object, stay as they are.
+        await settings.SetMemberAsync(AcpAgents.AgentsSetting, agent.Id, Entry(agent.Command, agent.Args), SettingScope.User, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// An <c>ai.agents</c> entry: <c>{ "command", "args", "secretEnv"?, "unsetEnv"?, "template"?, "node"? }</c>; names only,
+    /// never a key's value (ADR 0083).
+    /// </summary>
+    public static JsonElement Entry(string command, IReadOnlyList<string> args, IReadOnlyList<string>? secretEnv = null, IReadOnlyList<string>? unsetEnv = null, string? template = null, string? node = null)
+    {
         using var buffer = new MemoryStream();
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
-            if (current is { ValueKind: JsonValueKind.Object } others)
+            writer.WriteString("command", command);
+            Strings("args", args);
+            if (secretEnv is { Count: > 0 })
             {
-                foreach (var property in others.EnumerateObject().Where(p => p.Name != agent.Id))
+                Strings("secretEnv", secretEnv);
+            }
+
+            if (unsetEnv is { Count: > 0 })
+            {
+                Strings("unsetEnv", unsetEnv);
+            }
+
+            if (template is not null)
+            {
+                writer.WriteString("template", template);
+            }
+
+            if (node is not null)
+            {
+                writer.WriteString("node", node);
+            }
+
+            writer.WriteEndObject();
+
+            void Strings(string name, IReadOnlyList<string> values)
+            {
+                writer.WriteStartArray(name);
+                foreach (var value in values)
                 {
-                    property.WriteTo(writer);
+                    writer.WriteStringValue(value);
                 }
-            }
 
-            writer.WritePropertyName(agent.Id);
-            writer.WriteStartObject();
-            writer.WriteString("command", agent.Command);
-            writer.WriteStartArray("args");
-            foreach (var arg in agent.Args)
-            {
-                writer.WriteStringValue(arg);
+                writer.WriteEndArray();
             }
-
-            writer.WriteEndArray();
-            writer.WriteEndObject();
-            writer.WriteEndObject();
         }
 
         using var document = JsonDocument.Parse(buffer.ToArray());
-        await settings.SetAsync(AcpAgents.AgentsSetting, document.RootElement.Clone(), SettingScope.User, cancellationToken).ConfigureAwait(false);
-        return true;
+        return document.RootElement.Clone();
     }
 }

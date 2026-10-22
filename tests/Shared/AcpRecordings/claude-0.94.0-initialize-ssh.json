@@ -1,0 +1,15 @@
+{
+  "_source": "Read from the code of @agentclientprotocol/claude-agent-acp (acp-agent.js, initialize) for Codalus's client capabilities with SSH_CONNECTION set: only its remote sign-in, claude-login (its own TUI). Not yet recorded from a run: refresh it with eng/record-acp-initialize.sh claude --ssh.",
+  "protocolVersion": 1,
+  "agentCapabilities": {
+    "_meta": { "claudeCode": { "promptQueueing": true }, "authStatus": {} },
+    "promptCapabilities": { "image": true, "embeddedContext": true },
+    "mcpCapabilities": { "http": true, "sse": true },
+    "auth": { "logout": {} },
+    "loadSession": true
+  },
+  "agentInfo": { "name": "@agentclientprotocol/claude-agent-acp", "title": "Claude Agent", "version": "0.94.0" },
+  "authMethods": [
+    { "description": "Run `claude /login` in the terminal", "name": "Log in with Claude", "id": "claude-login", "type": "terminal", "args": ["--cli"] }
+  ]
+}
