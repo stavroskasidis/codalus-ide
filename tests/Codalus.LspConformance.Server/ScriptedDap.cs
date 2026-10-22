@@ -52,7 +52,7 @@ internal static class ScriptedDap
             switch (command)
             {
                 case "initialize":
-                    body = new JsonObject { ["supportsConfigurationDoneRequest"] = true };
+                    body = new JsonObject { ["supportsConfigurationDoneRequest"] = true, ["supportsSetVariable"] = true };
                     await RespondAsync(output, requestSeq, command, body);
                     await EventAsync(output, "initialized", null);
                     continue;

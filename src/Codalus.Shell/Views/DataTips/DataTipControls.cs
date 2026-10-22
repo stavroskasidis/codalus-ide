@@ -47,11 +47,17 @@ public interface IDataTipHost
     /// <summary>The pointer is on another row of <paramref name="owner"/>: the child tip of the row it left closes.</summary>
     void PointerOnRow(DataTipPanel owner, DataTipRow row);
 
-    /// <summary>Edits a value (F2, Enter, a double-click on it, the menu's Edit Value); null when it can't change.</summary>
-    Action? EditAction(VariableNode node);
+    /// <summary>Why a value can't be changed (its tooltip says so); empty when there's nothing to change; null when it can, in place.</summary>
+    string? ReadOnlyReason(VariableNode node);
+
+    /// <summary>Sets a value typed in its box; the engine's error, or null.</summary>
+    Task<string?> SetValueAsync(VariableNode node, string value);
 
     /// <summary>Pins a value to its line; null where it can't be pinned.</summary>
     Action? PinAction(VariableNode node);
+
+    /// <summary>A value's menu (Shift+F10, a right-click); <paramref name="edit"/> opens its box, null when it can't change.</summary>
+    IReadOnlyList<Control> MenuItems(VariableNode node, Action? edit);
 
     /// <summary>The wheel over a tip that doesn't scroll: the editor scrolls, and the tips close.</summary>
     void Wheel(PointerWheelEventArgs e);
@@ -100,6 +106,189 @@ internal static class DataTipIcons
             }
         };
         return button;
+    }
+}
+
+/// <summary>
+/// A value edited in place (D44, decision 6, A11, A12, A14): a click on it, F2 or Enter swaps it for a box with the value
+/// selected; Enter sets it, Esc puts it back, and the engine's error keeps the box open, its edge red and the message
+/// under it. A value that can't change opens no box: its tooltip says why.
+/// </summary>
+public sealed class ValueEditor
+{
+    private readonly Panel _cell;
+    private readonly TextBlock _display;
+    private readonly VariableNode _node;
+    private readonly IDataTipHost _host;
+    private Popup? _message;
+    private bool _committing;
+
+    public ValueEditor(Panel cell, TextBlock display, VariableNode node, IDataTipHost host)
+    {
+        _cell = cell;
+        _display = display;
+        _node = node;
+        _host = host;
+        Tooltip();
+        node.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(VariableNode.Value) or nameof(VariableNode.IsError))
+            {
+                Tooltip();
+            }
+        };
+    }
+
+    /// <summary>The box while the value is edited (tests).</summary>
+    public TextBox? Box { get; private set; }
+
+    public bool IsEditing => Box is not null;
+
+    /// <summary>The engine's message for the last value it refused, while the box is open.</summary>
+    public string? Error { get; private set; }
+
+    /// <summary>The value in the tooltip, and why it can't be changed when it can't (A14).</summary>
+    private void Tooltip()
+    {
+        var reason = _host.ReadOnlyReason(_node);
+        var value = _node.IsPlaceholder || _node.Value.Length == 0 ? null : _node.Value;
+        ToolTip.SetTip(_display, reason is { Length: > 0 } ? (value is null ? reason : value + "\n" + reason) : value);
+    }
+
+    /// <summary>Opens the box, unless the value can't change.</summary>
+    public bool Begin()
+    {
+        if (Box is not null)
+        {
+            Box.Focus();
+            return true;
+        }
+
+        if (_host.ReadOnlyReason(_node) is not null)
+        {
+            return false;
+        }
+
+        var box = new TextBox
+        {
+            Classes = { "dataTipEdit" },
+            Text = _node.Value,
+            MinWidth = Math.Max(80, _display.Bounds.Width + 24),
+            MaxWidth = DataTipMetrics.MaxValueWidth,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        AutomationProperties.SetName(box, Localizer.Format("dataTip.valueOf", "Value of {0}", _node.Name));
+        box.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            switch (e.Key)
+            {
+                case Key.Enter:
+                    e.Handled = true;
+                    _ = CommitAsync();
+                    break;
+                case Key.Escape:
+                    e.Handled = true;
+                    Cancel();
+                    break;
+            }
+        }, RoutingStrategies.Tunnel);
+        box.LostFocus += (_, _) =>
+        {
+            if (!_committing && Error is null)
+            {
+                Cancel();
+            }
+        };
+        Box = box;
+        _display.IsVisible = false;
+        _cell.Children.Insert(_cell.Children.IndexOf(_display) + 1, box);
+        Dispatcher.UIThread.Post(() =>
+        {
+            box.Focus();
+            box.SelectAll();
+        });
+        return true;
+    }
+
+    /// <summary>Sets the typed value (Enter).</summary>
+    public async Task CommitAsync()
+    {
+        if (Box is not { } box)
+        {
+            return;
+        }
+
+        _committing = true;
+        try
+        {
+            if (await _host.SetValueAsync(_node, box.Text ?? string.Empty).ConfigureAwait(true) is { } error)
+            {
+                ShowError(error);
+            }
+            else
+            {
+                End();
+            }
+        }
+        finally
+        {
+            _committing = false;
+        }
+    }
+
+    /// <summary>Puts the value back (Esc).</summary>
+    public void Cancel() => End();
+
+    private void End()
+    {
+        if (_message is { } message)
+        {
+            message.IsOpen = false;
+            _cell.Children.Remove(message);
+            _message = null;
+        }
+
+        if (Box is { } box)
+        {
+            Box = null;
+            _cell.Children.Remove(box);
+        }
+
+        Error = null;
+        _display.IsVisible = true;
+    }
+
+    private void ShowError(string error)
+    {
+        Error = error;
+        if (Box is not { } box)
+        {
+            return;
+        }
+
+        box.Classes.Add("error");
+        if (_message is null)
+        {
+            _message = new Popup
+            {
+                PlacementTarget = box,
+                Placement = PlacementMode.Bottom,
+                IsLightDismissEnabled = false,
+                Focusable = false,
+                Child = new Border
+                {
+                    Classes = { "editorHover", "dataTipError" },
+                    Padding = new Thickness(6, 3),
+                    Child = new TextBlock { Classes = { "error" }, TextWrapping = TextWrapping.Wrap, MaxWidth = DataTipMetrics.MaxValueWidth },
+                },
+            };
+            _cell.Children.Add(_message);
+        }
+
+        ((TextBlock)((Border)_message.Child!).Child!).Text = error;
+        _message.IsOpen = true;
+        box.Focus();
+        box.SelectAll();
     }
 }
 
@@ -215,7 +404,7 @@ public sealed class DataTipRow : Border
                 new ColumnDefinition(1, GridUnitType.Pixel),
                 new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "V" },
                 new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "A" },
-                new ColumnDefinition(4, GridUnitType.Pixel),
+                new ColumnDefinition(22, GridUnitType.Pixel),
             },
         };
         _chevronIcon = new Icon { Width = 16, Height = 16 };
@@ -278,16 +467,18 @@ public sealed class DataTipRow : Border
         };
         _value.Classes.Set("error", node.IsError);
         _value.Classes.Set("muted", node.IsDisplayPending);
-        ToolTip.SetTip(_value, node.IsPlaceholder || node.Value.Length == 0 ? null : node.Value);
-        _value.DoubleTapped += (_, e) =>
+        _value.Classes.Set("changed", node.IsChanged && !node.IsError);
+        var valueCell = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Children = { _value } };
+        Editor = new ValueEditor(valueCell, _value, node, host);
+        valueCell.PointerPressed += (_, e) =>
         {
-            if (_host.EditAction(Node) is { } edit)
+            // A click on the value edits it, where it can change (A11).
+            if (e.GetCurrentPoint(valueCell).Properties.IsLeftButtonPressed && !node.IsPlaceholder && !Editor.IsEditing && Editor.Begin())
             {
                 e.Handled = true;
-                edit();
+                Panel.Select(this);
             }
         };
-        var valueCell = new StackPanel { Orientation = Orientation.Horizontal, Children = { _value } };
         if (DataTipIcons.Reevaluate(node) is { } reevaluate)
         {
             valueCell.Children.Add(reevaluate);
@@ -295,6 +486,21 @@ public sealed class DataTipRow : Border
 
         Grid.SetColumn(valueCell, 8);
         grid.Children.Add(valueCell);
+        if (host.PinAction(node) is { } pin)
+        {
+            // Any row with an evaluate name pins (decision 7); the button shows on the row under the pointer.
+            PinButton = new Button { Classes = { "dataTipPin", "dataTipRowPin" }, Content = new Icon { Kind = "pin", Width = 14, Height = 14 } };
+            ToolTip.SetTip(PinButton, Localizer.Get("dataTip.pinToSource", "Pin to source"));
+            AutomationProperties.SetName(PinButton, Localizer.Format("dataTip.pin", "Pin {0} to source", node.EvaluateName ?? node.Name));
+            PinButton.Click += (_, e) =>
+            {
+                e.Handled = true;
+                pin();
+            };
+            Grid.SetColumn(PinButton, 9);
+            grid.Children.Add(PinButton);
+        }
+
         Child = grid;
         AutomationProperties.SetName(this, Accessible(node));
         PointerEntered += (_, _) => _host.PointerOnRow(Panel, this);
@@ -311,7 +517,7 @@ public sealed class DataTipRow : Border
             {
                 e.Handled = true;
                 Panel.Select(this);
-                new ContextMenu { ItemsSource = VariableTreeSupport.MenuItems(node, _host.EditAction(node), _host.PinAction(node)) }.Open(this);
+                OpenMenu();
             }
         };
         Node.PropertyChanged += OnNodeChanged;
@@ -324,6 +530,16 @@ public sealed class DataTipRow : Border
 
     /// <summary>The value as shown (tests).</summary>
     public TextBlock ValueBlock => _value;
+
+    /// <summary>The value's box, in place (F2, Enter, a click on it).</summary>
+    public ValueEditor Editor { get; }
+
+    /// <summary>Pin to source, on the row under the pointer; null for a row that can't be pinned.</summary>
+    public Button? PinButton { get; }
+
+    /// <summary>The row's menu (a right-click, Shift+F10).</summary>
+    public void OpenMenu() =>
+        new ContextMenu { ItemsSource = _host.MenuItems(Node, _host.ReadOnlyReason(Node) is null ? () => Editor.Begin() : null) }.Open(this);
 
     /// <summary>Whether this row's child tip is open (its chevron points down and the row stays marked).</summary>
     public bool IsOpen
@@ -347,12 +563,12 @@ public sealed class DataTipRow : Border
         if (e.PropertyName is nameof(VariableNode.Value))
         {
             _value.Text = Node.Value;
-            ToolTip.SetTip(_value, Node.Value);
             AutomationProperties.SetName(this, Accessible(Node));
         }
-        else if (e.PropertyName is nameof(VariableNode.IsError))
+        else if (e.PropertyName is nameof(VariableNode.IsError) or nameof(VariableNode.IsChanged))
         {
             _value.Classes.Set("error", Node.IsError);
+            _value.Classes.Set("changed", Node.IsChanged && !Node.IsError);
         }
         else if (e.PropertyName is nameof(VariableNode.IsDisplayPending))
         {
@@ -540,6 +756,11 @@ public sealed class DataTipPanel : Border
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Source is TextBox)
+        {
+            return; // a value's box takes its own keys
+        }
+
         var rows = Rows.Where(r => !r.Node.IsPlaceholder).ToList();
         var index = _selected is null ? -1 : rows.IndexOf(_selected);
         switch (e.Key)
@@ -559,14 +780,13 @@ public sealed class DataTipPanel : Border
             case Key.Left:
                 _host.FocusParent(this);
                 break;
-            case Key.F2 or Key.Enter when _selected is { } row && _host.EditAction(row.Node) is { } edit:
-                edit();
+            case Key.F2 or Key.Enter when _selected is { } row && row.Editor.Begin():
                 break;
             case Key.C when e.KeyModifiers.HasFlag(KeyModifiers.Control) && _selected is { } row:
                 _ = VariableActions.CopyText?.Invoke(row.Node.Value);
                 break;
             case Key.F10 when e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _selected is { } row:
-                new ContextMenu { ItemsSource = VariableTreeSupport.MenuItems(row.Node, _host.EditAction(row.Node), _host.PinAction(row.Node)) }.Open(row);
+                row.OpenMenu();
                 break;
             case Key.Escape:
                 _host.CloseAll();
@@ -585,7 +805,8 @@ public sealed class DataTipPanel : Border
 /// <summary>
 /// The header over the hovered expression: chevron, icon, the name over the code's, a separator, the View slot and the
 /// value in a box. Its name stands for the code's word: a double-click selects it, Ctrl+click goes to its definition and
-/// the wheel scrolls the editor, each passed on to the text view at the same point.
+/// the wheel scrolls the editor, each passed on to the text view at the same point. A pinned tip (A15, A16) is the same
+/// header at the end of its line, with a strip to unpin it on its left; muted, and not expanding, while the program runs.
 /// </summary>
 public sealed class DataTipHeader : Border
 {
@@ -595,15 +816,35 @@ public sealed class DataTipHeader : Border
     private readonly Icon _chevronIcon;
     private readonly Border _chevron;
     private readonly TextBlock _value;
+    private readonly bool _muted;
 
-    public DataTipHeader(VariableNode node, IDataTipHost host)
+    /// <param name="unpin">For a pinned tip: its strip's action.</param>
+    /// <param name="muted">A pinned tip while the program runs: the last stop's value, muted, nothing expands.</param>
+    public DataTipHeader(VariableNode node, IDataTipHost host, Action? unpin = null, bool muted = false)
     {
         Node = node;
         _host = host;
+        _muted = muted;
         Classes.Add("dataTipHeader");
+        Classes.Set("pinned", unpin is not null);
         Height = DataTipMetrics.Header;
         Focusable = true;
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        if (unpin is not null)
+        {
+            var strip = new Button { Classes = { "dataTipPin", "dataTipUnpin" }, Content = new Icon { Kind = "pin", Width = 14, Height = 14 } };
+            ToolTip.SetTip(strip, Localizer.Get("dataTip.unpin", "Unpin"));
+            AutomationProperties.SetName(strip, Localizer.Format("dataTip.unpinExpression", "Unpin {0}", node.Name));
+            strip.Click += (_, e) =>
+            {
+                e.Handled = true;
+                unpin();
+            };
+            panel.Children.Add(strip);
+            panel.Children.Add(new Border { Classes = { "dataTipSeparator" } });
+            UnpinButton = strip;
+        }
+
         _chevronIcon = new Icon { Kind = "chevron-right", Width = 16, Height = 16 };
         _chevron = new Border
         {
@@ -612,14 +853,13 @@ public sealed class DataTipHeader : Border
             Margin = new Thickness(3, 0, 2, 0),
             Background = Brushes.Transparent,
             Child = _chevronIcon,
-            Opacity = node.HasChildren ? 1 : 0,
-            IsHitTestVisible = node.HasChildren,
         };
+        UpdateChevron();
         AutomationProperties.SetName(_chevron, Localizer.Format("dataTip.expand", "Expand {0}", node.Name));
         DispatcherTimer? timer = null;
         _chevron.PointerEntered += (_, _) =>
         {
-            if (Node.HasChildren && !_host.IsOpen(Node))
+            if (CanExpand && !_host.IsOpen(Node))
             {
                 timer ??= new DispatcherTimer(DataTipMetrics.HoverOpen, DispatcherPriority.Input, (_, _) =>
                 {
@@ -635,7 +875,7 @@ public sealed class DataTipHeader : Border
         _chevron.PointerExited += (_, _) => timer?.Stop();
         _chevron.PointerPressed += (_, e) =>
         {
-            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && Node.HasChildren)
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && CanExpand)
             {
                 e.Handled = true;
                 timer?.Stop();
@@ -673,15 +913,15 @@ public sealed class DataTipHeader : Border
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        _value.Classes.Set("error", node.IsError);
-        ToolTip.SetTip(_value, node.Value);
-        var box = new Border { Classes = { "dataTipValueBox" }, Child = _value, Margin = new Thickness(4, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
-        box.DoubleTapped += (_, e) =>
+        UpdateValueClasses();
+        var cell = new StackPanel { Orientation = Orientation.Horizontal, Children = { _value } };
+        var box = new Border { Classes = { "dataTipValueBox" }, Child = cell, Margin = new Thickness(4, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center, Background = Brushes.Transparent };
+        Editor = new ValueEditor(cell, _value, node, host);
+        box.PointerPressed += (_, e) =>
         {
-            if (_host.EditAction(Node) is { } edit)
+            if (e.GetCurrentPoint(box).Properties.IsLeftButtonPressed && !Editor.IsEditing && Editor.Begin())
             {
                 e.Handled = true;
-                edit();
             }
         };
         panel.Children.Add(box);
@@ -690,7 +930,7 @@ public sealed class DataTipHeader : Border
             panel.Children.Add(reevaluate);
         }
 
-        if (_host.PinAction(node) is { } pin)
+        if (unpin is null && _host.PinAction(node) is { } pin)
         {
             var button = new Button { Classes = { "dataTipPin" }, Content = new Icon { Kind = "pin", Width = 14, Height = 14 }, Margin = new Thickness(0, 0, 2, 0) };
             ToolTip.SetTip(button, Localizer.Get("dataTip.pinToSource", "Pin to source"));
@@ -714,17 +954,24 @@ public sealed class DataTipHeader : Border
         ContextRequested += (_, e) =>
         {
             e.Handled = true;
-            new ContextMenu { ItemsSource = VariableTreeSupport.MenuItems(node, _host.EditAction(node), _host.PinAction(node)) }.Open(this);
+            OpenMenu();
         };
         KeyDown += (_, e) =>
         {
+            if (e.Source is TextBox)
+            {
+                return;
+            }
+
             switch (e.Key)
             {
-                case Key.Right or Key.Down when Node.HasChildren:
+                case Key.Right or Key.Down when CanExpand:
                     _host.SetOpen(null, this, Node, true);
                     break;
-                case Key.F2 or Key.Enter when _host.EditAction(Node) is { } edit:
-                    edit();
+                case Key.F2 or Key.Enter when Editor.Begin():
+                    break;
+                case Key.F10 when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                    OpenMenu();
                     break;
                 case Key.Escape:
                     _host.CloseAll();
@@ -740,12 +987,14 @@ public sealed class DataTipHeader : Border
             if (e.PropertyName is nameof(VariableNode.Value))
             {
                 _value.Text = Node.Value;
-                ToolTip.SetTip(_value, Node.Value);
             }
             else if (e.PropertyName is nameof(VariableNode.HasChildren))
             {
-                _chevron.Opacity = Node.HasChildren ? 1 : 0;
-                _chevron.IsHitTestVisible = Node.HasChildren;
+                UpdateChevron();
+            }
+            else if (e.PropertyName is nameof(VariableNode.IsChanged) or nameof(VariableNode.IsError))
+            {
+                UpdateValueClasses();
             }
         };
     }
@@ -757,6 +1006,32 @@ public sealed class DataTipHeader : Border
     public ViewButton View { get; }
 
     public Button? PinButton { get; }
+
+    /// <summary>A pinned tip's strip, which unpins it.</summary>
+    public Button? UnpinButton { get; }
+
+    /// <summary>The value's box, in place (F2, Enter, a click on it).</summary>
+    public ValueEditor Editor { get; }
+
+    /// <summary>Whether the value has members to show now (a pinned tip's don't while the program runs).</summary>
+    private bool CanExpand => Node.HasChildren && !_muted;
+
+    private void UpdateChevron()
+    {
+        // No chevron when there's nothing to expand; a pinned tip's is dimmed while the program runs (A16).
+        _chevron.Opacity = Node.HasChildren ? (_muted ? 0.4 : 1) : 0;
+        _chevron.IsHitTestVisible = CanExpand;
+    }
+
+    private void UpdateValueClasses()
+    {
+        _value.Classes.Set("error", Node.IsError && !_muted);
+        _value.Classes.Set("changed", Node.IsChanged && !Node.IsError && !_muted);
+        _value.Classes.Set("muted", _muted);
+    }
+
+    public void OpenMenu() =>
+        new ContextMenu { ItemsSource = _host.MenuItems(Node, _host.ReadOnlyReason(Node) is null ? () => Editor.Begin() : null) }.Open(this);
 
     /// <summary>The value as shown (tests).</summary>
     public TextBlock ValueBlock => _value;

@@ -108,6 +108,7 @@ public class VariableSource
             node.SetFixedChildren(await NodesAsync(children, node, container, cancellationToken).ConfigureAwait(true));
         }
 
+        Track(node);
         return node;
     }
 
@@ -131,6 +132,15 @@ public class VariableSource
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
         {
             // netcoredbg's value stays.
+        }
+    }
+
+    /// <summary>Notes a node's value at this stop, and marks it changed when it differs from the last stop's (decision 12).</summary>
+    public void Track(VariableNode node)
+    {
+        if (Debugger is { State: DebugState.Stopped } debugger && node.EvaluateName is { } expression && !node.IsPlaceholder && !node.IsGroup)
+        {
+            node.IsChanged = !node.IsError && debugger.Values.Record(expression, node.Value);
         }
     }
 
@@ -250,6 +260,7 @@ public sealed class VariableNode : ObservableObject
     private bool _isError;
     private bool _canReevaluate;
     private bool _displayPending;
+    private bool _isChanged;
 
     public VariableNode(string name, string value, string? type, int reference, VariableSource? source, int? parentReference = null, string? evaluateName = null)
     {
@@ -329,8 +340,24 @@ public sealed class VariableNode : ObservableObject
     public string Value
     {
         get => _value;
-        private set => SetField(ref _value, value);
+        private set
+        {
+            if (SetField(ref _value, value))
+            {
+                _source?.Track(this);
+            }
+        }
     }
+
+    /// <summary>Whether the value differs from its value at the last stop (by evaluate name): drawn in red (decision 12).</summary>
+    public bool IsChanged
+    {
+        get => _isChanged;
+        set => SetField(ref _isChanged, value);
+    }
+
+    /// <summary>The source the node's children come from (pinned tips and the windows track their roots' changes through it).</summary>
+    public VariableSource? Source => _source;
 
     public string? Type
     {
@@ -1121,9 +1148,41 @@ public sealed class BreakpointsViewModel : ObservableObject
     }
 }
 
-/// <summary>Editing values in the debugger's trees (ADR 0021).</summary>
+/// <summary>Editing values in the debugger's trees (ADR 0021) and in the data tip, in place (D44, decision 6).</summary>
 internal static class VariableEditing
 {
+    /// <summary>
+    /// Why a value can't be changed (a property without a setter, a constant, a read-only field, an engine that changes
+    /// nothing), said in its tooltip; empty for a row with nothing to change (a group, a placeholder, an error); null when
+    /// it can be changed, in place.
+    /// </summary>
+    public static string? ReadOnlyReason(DebugService debugger, VariableNode node)
+    {
+        if (node.IsGroup || node.IsPlaceholder || node.IsError || debugger.State != DebugState.Stopped)
+        {
+            return string.Empty;
+        }
+
+        if (!debugger.CanSetValues)
+        {
+            return Localizer.Get("dataTip.engineCantChange", "This debugger can't change values.");
+        }
+
+        if (node.CanWrite == false)
+        {
+            return node.Kind switch
+            {
+                MemberKind.Property => Localizer.Format("dataTip.noSetter", "{0} can't be changed: it has no setter.", node.Name),
+                MemberKind.Constant => Localizer.Format("dataTip.constant", "{0} can't be changed: it's a constant.", node.Name),
+                _ => Localizer.Format("dataTip.readOnly", "{0} can't be changed: it's read-only.", node.Name),
+            };
+        }
+
+        return node.EvaluateName is null && node.ParentReference is null
+            ? Localizer.Format("dataTip.cantChange", "{0} can't be changed here.", node.Name)
+            : null;
+    }
+
     /// <summary>
     /// A root of Watch or QuickWatch is assigned with <c>setExpression</c>; a variable with <c>setVariable</c> in its
     /// container, or by its evaluate name when it has none. Returns an error message, or null.

@@ -165,12 +165,22 @@ internal sealed class DataTipScenario : IAsyncDisposable
     public void Click(Visual control, Point? point = null, RawInputModifiers modifiers = RawInputModifiers.None)
     {
         var host = HostOf(control);
+        CloseToolTips(host);
         ShellFixture.RenderFrame(host);
         var at = InHost(control, point ?? new Point(control.Bounds.Width / 2, control.Bounds.Height / 2));
         host.MouseMove(at, modifiers);
         host.MouseDown(at, MouseButton.Left, modifiers);
         host.MouseUp(at, MouseButton.Left, modifiers);
         ShellFixture.Pump();
+    }
+
+    /// <summary>Closes the tooltips a slow machine has had time to open: a click aims at what's under them.</summary>
+    private static void CloseToolTips(TopLevel host)
+    {
+        foreach (var control in host.GetVisualDescendants().OfType<Control>().Where(ToolTip.GetIsOpen).ToList())
+        {
+            ToolTip.SetIsOpen(control, false);
+        }
     }
 
     /// <summary>Every text shown under a control (its rows' names and values…).</summary>

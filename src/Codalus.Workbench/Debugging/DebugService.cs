@@ -1302,6 +1302,12 @@ public sealed class DebugService : IAsyncDisposable
 
     private string[] ModulePaths() => [.. Modules.Select(m => m.Path).OfType<string>()];
 
+    /// <summary>The values seen at the last stop, by evaluate name: what changed since is drawn in red (D44).</summary>
+    public StopValues Values { get; } = new();
+
+    /// <summary>Whether the adapter changes values (setVariable): the Mono engine doesn't.</summary>
+    public bool CanSetValues => _adapter?.Capabilities.SupportsSetVariable ?? false;
+
     /// <summary>
     /// Whether a module (a path) is one of the solution's projects' outputs: the data tip lists the non-public members its
     /// code declares inline, and a library's under Non-Public members (D44). The shell sets it; netcoredbg sends no
@@ -1727,6 +1733,7 @@ public sealed class DebugService : IAsyncDisposable
             SelectedFrame = frames.FirstOrDefault(f => f.Source?.Path is not null) ?? (frames.Length > 0 ? frames[0] : null);
             var info = new StopInfo(stopped.Reason, threadId, stopped.Description ?? stopped.Text, exception, elapsed);
             CurrentStop = info;
+            Values.NextStop();
             SetState(DebugState.Stopped);
             Stopped?.Invoke(this, info);
             RefreshPinnedTips();
@@ -1980,6 +1987,7 @@ public sealed class DebugService : IAsyncDisposable
         else if (state == DebugState.Idle)
         {
             Displays?.SessionEnded();
+            Values.Clear();
         }
 
         State = state;

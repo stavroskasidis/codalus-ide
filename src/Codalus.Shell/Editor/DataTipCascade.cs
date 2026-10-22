@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using AvaloniaEdit.Rendering;
 using Codalus.Shell.ViewModels;
+using Codalus.Shell.Views;
 using Codalus.Shell.Views.DataTips;
 
 namespace Codalus.Shell.Editor;
@@ -26,11 +27,24 @@ internal sealed class DataTipActions
     /// <summary>A click on a faded tip, at a point of the text view: Ctrl+click on the code under it.</summary>
     public required Action<Point, KeyModifiers> FadedPress { get; init; }
 
-    public required Func<VariableNode, Action?> Edit { get; init; }
+    /// <summary>Sets a value typed in place; the engine's error, or null.</summary>
+    public required Func<VariableNode, string, Task<string?>> SetValue { get; init; }
+
+    /// <summary>Why a value can't be changed (empty: nothing to say), or null.</summary>
+    public required Func<VariableNode, string?> ReadOnlyReason { get; init; }
 
     public required Func<VariableNode, Action?> Pin { get; init; }
 
     public required Action Close { get; init; }
+
+    /// <summary>A value's menu; null for the variable windows' (copy, Add Watch, QuickWatch, Pin to Source, View).</summary>
+    public Func<VariableNode, Action?, IReadOnlyList<Control>?>? Menu { get; init; }
+
+    /// <summary>A pinned tip's unpin (its strip); null for the hover's header.</summary>
+    public Action? Unpin { get; init; }
+
+    /// <summary>A pinned tip while the program runs: muted, nothing expands.</summary>
+    public bool Muted { get; init; }
 }
 
 /// <summary>
@@ -38,14 +52,15 @@ internal sealed class DataTipActions
 /// own for each expanded level, its top on the expanded row's bottom edge and 24 px in. The tips are placed against
 /// the text view, as one: near its bottom edge they all open upwards, their bottoms on the row's top edge (A18), and
 /// near its right edge each moves left. The child tips are popups inside the header's, so a click in one doesn't
-/// light-dismiss it. While Ctrl is held they fade and let the pointer through to the code (A19).
+/// light-dismiss it. While Ctrl is held they fade and let the pointer through to the code (A19). A pinned tip's header
+/// is in the editor's pinned layer instead, and its child tips open from it the same way (A15).
 /// </summary>
 internal sealed class DataTipCascade : IDataTipHost
 {
     private readonly TextView _view;
-    private readonly Popup _popup;
+    private readonly Popup? _popup;
     private readonly DataTipActions _actions;
-    private readonly Panel _root = new();
+    private readonly Panel _root;
     private readonly List<Level> _levels = [];
     private Rect _header;
     private Point _name;
@@ -60,16 +75,40 @@ internal sealed class DataTipCascade : IDataTipHost
         public Rect Bounds { get; set; }
     }
 
+    /// <summary>The hover's tip: its header in <paramref name="popup"/>, the editor's hover popup.</summary>
     public DataTipCascade(TextView view, Popup popup, VariableNode root, DataTipActions actions)
     {
         _view = view;
         _popup = popup;
         _actions = actions;
+        _root = new Panel();
         Root = root;
         Header = new DataTipHeader(root, this);
         _root.Children.Add(Header);
         _popup.Closed += OnClosed;
     }
+
+    /// <summary>A pinned tip: its header is placed by the pinned layer, and its child tips' popups go in <paramref name="popups"/>.</summary>
+    public DataTipCascade(TextView view, Panel popups, VariableNode root, DataTipActions actions)
+    {
+        _view = view;
+        _actions = actions;
+        _root = popups;
+        Root = root;
+        Header = new DataTipHeader(root, this, actions.Unpin, actions.Muted);
+
+        // The pinned layer moves its tips as the text scrolls and lines change: the child tips follow their header.
+        Header.LayoutUpdated += (_, _) =>
+        {
+            if (_levels.Count > 0 && HeaderBounds != _arrangedFrom)
+            {
+                Arrange();
+            }
+        };
+    }
+
+    /// <summary>The header's bounds the child tips were last placed from.</summary>
+    private Rect _arrangedFrom;
 
     public VariableNode Root { get; }
 
@@ -98,6 +137,11 @@ internal sealed class DataTipCascade : IDataTipHost
         var x = Math.Max(0, Math.Min(name.X - DataTipMetrics.NameX, _view.Bounds.Width - size.Width));
         var y = name.Y + ((lineHeight - DataTipMetrics.Header) / 2);
         _header = new Rect(x, y, size.Width, size.Height);
+        if (_popup is null)
+        {
+            return;
+        }
+
         _popup.Placement = PlacementMode.AnchorAndGravity;
         _popup.PlacementTarget = _view;
         _popup.PlacementAnchor = PopupAnchor.TopLeft;
@@ -129,13 +173,18 @@ internal sealed class DataTipCascade : IDataTipHost
     }
 
     /// <summary>Every popup the tip shows: the header's, the diagnostics' and each child tip's (the smoke test's screenshot).</summary>
-    public IReadOnlyList<Popup> Popups => [_popup, .. _strip is null ? [] : new[] { _strip }, .. _levels.Select(l => l.Popup)];
+    public IReadOnlyList<Popup> Popups => [.. _popup is null ? [] : new[] { _popup }, .. _strip is null ? [] : new[] { _strip }, .. _levels.Select(l => l.Popup)];
 
     /// <summary>The diagnostics' popup (tests).</summary>
     public Popup? Strip => _strip;
 
     /// <summary>The header's and each open tip's bounds, in the text view's coordinates.</summary>
-    public IEnumerable<Rect> Bounds => [_header, .. _levels.Select(l => l.Bounds), .. StripBounds()];
+    public IEnumerable<Rect> Bounds => [HeaderBounds, .. _levels.Select(l => l.Bounds), .. StripBounds()];
+
+    /// <summary>The header's bounds in the text view's coordinates: where the hover placed it, or where the pinned layer did.</summary>
+    private Rect HeaderBounds => _popup is null && Header.Bounds.Width > 0 && TopLevel.GetTopLevel(Header) is not null
+        ? new Rect(_view.PointToClient(Header.PointToScreen(default)), Header.Bounds.Size)
+        : _header;
 
     private IEnumerable<Rect> StripBounds()
     {
@@ -204,7 +253,12 @@ internal sealed class DataTipCascade : IDataTipHost
         }
     }
 
-    public Action? EditAction(VariableNode node) => _actions.Edit(node);
+    public string? ReadOnlyReason(VariableNode node) => _actions.ReadOnlyReason(node);
+
+    public Task<string?> SetValueAsync(VariableNode node, string value) => _actions.SetValue(node, value);
+
+    public IReadOnlyList<Control> MenuItems(VariableNode node, Action? edit) =>
+        _actions.Menu?.Invoke(node, edit) ?? VariableTreeSupport.MenuItems(node, edit, _actions.Pin(node));
 
     public Action? PinAction(VariableNode node) => _actions.Pin(node);
 
@@ -261,7 +315,9 @@ internal sealed class DataTipCascade : IDataTipHost
     {
         var width = _view.Bounds.Width;
         var height = _view.Bounds.Height;
-        Rect parent = _header;
+        var header = HeaderBounds;
+        _arrangedFrom = header;
+        Rect parent = header;
         for (var i = 0; i < _levels.Count; i++)
         {
             var level = _levels[i];
@@ -269,7 +325,7 @@ internal sealed class DataTipCascade : IDataTipHost
             double top, bottom;
             if (i == 0)
             {
-                (top, bottom) = (_header.Top, _header.Bottom);
+                (top, bottom) = (header.Top, header.Bottom);
                 _flip = bottom + size.Height > height && top - size.Height >= 0;
             }
             else
@@ -291,8 +347,8 @@ internal sealed class DataTipCascade : IDataTipHost
         if (_strip is { Child: { } strip } popup)
         {
             strip.Measure(Size.Infinity);
-            popup.HorizontalOffset = _header.Left;
-            popup.VerticalOffset = _header.Top - strip.DesiredSize.Height - 2;
+            popup.HorizontalOffset = header.Left;
+            popup.VerticalOffset = header.Top - strip.DesiredSize.Height - 2;
         }
     }
 
@@ -369,7 +425,7 @@ internal sealed class DataTipCascade : IDataTipHost
 
     private void OnClosed(object? sender, EventArgs e)
     {
-        _popup.Closed -= OnClosed;
+        _popup!.Closed -= OnClosed;
         CloseFrom(0);
         if (_strip is { } strip)
         {

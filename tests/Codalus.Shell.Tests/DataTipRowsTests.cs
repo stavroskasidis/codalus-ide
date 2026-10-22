@@ -86,8 +86,8 @@ public sealed class DataTipRowsTests
         Assert.Equal("Couldn't evaluate", rows[3].ValueBlock.Text);
         Assert.Contains("error", rows[3].ValueBlock.Classes);
         var reevaluate = rows[3].GetVisualDescendants().OfType<Button>().Single(b => b.GetVisualDescendants().OfType<Icon>().Any(i => i.Kind == "refresh"));
-        s.Click(reevaluate);
-        await ShellFixture.PumpUntil(() => rows[3].ValueBlock.Text == "42");
+        reevaluate.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); // a click: a tooltip left open under load can take a real one
+        await ShellFixture.PumpUntil(() => rows[3].ValueBlock.Text == "42", describe: () => $"value {rows[3].ValueBlock.Text}, tip open {s.Editor.DataTip is not null}, row attached {TopLevel.GetTopLevel(rows[3]) is not null}, button visible {reevaluate.IsEffectivelyVisible}, trace {s.Editor.QuickInfoTrace}");
         Assert.DoesNotContain("error", rows[3].ValueBlock.Classes);
         Assert.False(reevaluate.IsVisible);
 
@@ -98,7 +98,7 @@ public sealed class DataTipRowsTests
         Assert.Equal(("symbol-field", null), (IconOf(tip.Panels[1].Rows[0]).Kind, IconOf(tip.Panels[1].Rows[0]).Badge));
         Assert.Equal("Private field of ControllerBase · Lib.TempData", tip.Panels[1].Rows[0].Node.NameTip);
         tip.SetOpen(tip.Panels[0], rows[5], rows[5].Node, true);
-        await ShellFixture.PumpUntil(() => tip.Panels is [_, { Rows: [{ Node.IsPlaceholder: false }] }]);
+        await ShellFixture.PumpUntil(() => tip.Panels is [_, { Rows: [{ Node.IsPlaceholder: false }] }], describe: () => $"panels {tip.Panels.Count}: {string.Join(" | ", tip.Panels.Select(p => string.Join(", ", p.Rows.Select(r => r.Node.Name + "=" + r.Node.Value))))}");
         Assert.Equal(("Summaries", "symbol-field"), (tip.Panels[1].Rows[0].Node.Name, tip.Panels[1].Rows[0].Node.Icon));
     }
 

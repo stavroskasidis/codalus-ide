@@ -2037,10 +2037,12 @@ public sealed partial class CodeEditorController : IDisposable
             var line = Model.Text.GetLineByOffset(offset).LineNumber;
             return new ViewModels.DataTipViewModel(debugger, expression, result, DataTipIcon(range))
             {
-                PinToSource = Model.IsReadOnly ? null : () =>
+                PinExpression = Model.IsReadOnly ? null : (pinned, value) =>
                 {
-                    debugger.PinnedTips.Pin(Model.Path, line, expression, result.Result);
+                    debugger.PinnedTips.Pin(Model.Path, line, pinned, value);
                     _hoverPopup.IsOpen = false;
+                    // Evaluated now for its type and members: the pinned tip expands while the program is paused (A15).
+                    _ = debugger.PinnedTips.RefreshAsync((e, token) => debugger.EvaluateAsync(e, "watch", token));
                 },
             };
         }
@@ -2112,8 +2114,9 @@ public sealed partial class CodeEditorController : IDisposable
                     GoToDefinitionAt(point);
                 }
             },
-            Edit = node => CanEdit(node) ? () => _ = Views.VariableTreeSupport.EditAsync(node, tip.SetValueAsync) : null,
-            Pin = node => ReferenceEquals(node, tip.Root) && tip.CanPin ? tip.Pin : null,
+            SetValue = tip.SetValueAsync,
+            ReadOnlyReason = tip.ReadOnlyReason,
+            Pin = tip.PinAction,
             Close = () => _hoverPopup.IsOpen = false,
         });
         _dataTip = cascade;
@@ -2138,9 +2141,6 @@ public sealed partial class CodeEditorController : IDisposable
             scroll.Offset = new Vector(scroll.Offset.X, Math.Clamp(scroll.Offset.Y + delta, 0, Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height)));
         }
     }
-
-    private static bool CanEdit(ViewModels.VariableNode node) =>
-        !node.IsError && !node.IsPlaceholder && (node.EvaluateName is not null || node.ParentReference is not null);
 
     /// <summary>The data tip's cascade while one shows (tests).</summary>
     internal DataTipCascade? DataTip => _hoverPopup.IsOpen ? _dataTip : null;

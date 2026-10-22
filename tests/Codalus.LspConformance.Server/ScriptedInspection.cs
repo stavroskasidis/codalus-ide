@@ -13,7 +13,8 @@ namespace Codalus.LspConformance.Server;
 ///     "scopes": [ { "name": "Locals", "variablesReference": 1 } ],   (optional: this one is the default)
 ///     "variables": { "1": [ { "name", "value", "type", "variablesReference", "evaluateName" } ] },
 ///     "evaluate": { "app": { "result", "type", "variablesReference" } },
-///     "errors": { "app.Name": "error: ..." }              (setVariable or setExpression by evaluateName fail with it)
+///     "errors": { "app.Name": "error: ..." }              (setVariable or setExpression by evaluateName fail with it;
+///                                                          "app.Name=Production": only for that value)
 /// } ] }
 /// </code>
 /// An expression <c>evaluate</c> doesn't list is answered from the variable with that <c>evaluateName</c>, else with
@@ -144,7 +145,7 @@ internal sealed class ScriptedInspection
 
     private async Task SetAsync(Stream output, int requestSeq, string command, string evaluateName, string value, JsonObject? variable)
     {
-        if (Stop["errors"]?[evaluateName]?.GetValue<string>() is { } error)
+        if ((Stop["errors"]?[evaluateName + "=" + value] ?? Stop["errors"]?[evaluateName])?.GetValue<string>() is { } error)
         {
             await ScriptedDap.FailAsync(output, requestSeq, command, error);
             return;

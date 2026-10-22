@@ -116,20 +116,56 @@ public sealed class QuickWatchViewModel : ObservableObject
 /// </summary>
 public sealed class DataTipViewModel(DebugService debugger, string expression, EvaluateResponse result, string icon = "symbol-local") : ObservableObject
 {
-    public VariableNode Root { get; } =
-        new(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(debugger), evaluateName: expression) { Icon = icon };
+    public VariableNode Root { get; } = Tracked(new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(debugger), evaluateName: expression) { Icon = icon });
+
+    private static VariableNode Tracked(VariableNode node)
+    {
+        node.Source?.Track(node);
+        return node;
+    }
 
     /// <summary>The root, as a list (the tests' and the tool windows' shape).</summary>
     public IReadOnlyList<VariableNode> Roots => [Root];
 
-    public Task<string?> SetValueAsync(VariableNode node, string value) => VariableEditing.SetAsync(debugger, node, value, ReferenceEquals(node, Root));
+    /// <summary>
+    /// Sets a value (setExpression for the header, setVariable or setExpression for a row); then the header is read again,
+    /// as its display can show the member that changed. Returns the engine's error, or null.
+    /// </summary>
+    public async Task<string?> SetValueAsync(VariableNode node, string value)
+    {
+        var error = await VariableEditing.SetAsync(debugger, node, value, ReferenceEquals(node, Root)).ConfigureAwait(true);
+        if (error is null && !ReferenceEquals(node, Root))
+        {
+            try
+            {
+                var again = await debugger.EvaluateAsync(expression, "hover").ConfigureAwait(true);
+                Root.SetValue(again.Result, again.Type);
+            }
+            catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
+            {
+                // The header keeps its value.
+            }
+        }
 
-    /// <summary>Pins the tip to its line (M14b); null where it can't be pinned (read-only documents).</summary>
-    public Action? PinToSource { get; init; }
+        return error;
+    }
 
-    public bool CanPin => PinToSource is not null;
+    /// <summary>Why a value can't be changed in place, or null (D44, decision 6).</summary>
+    public string? ReadOnlyReason(VariableNode node) => VariableEditing.ReadOnlyReason(debugger, node);
 
-    public void Pin() => PinToSource?.Invoke();
+    /// <summary>Pins an expression and its value to the tip's line (M14b); null where nothing can be pinned (read-only documents).</summary>
+    public Action<string, string?>? PinExpression { get; init; }
+
+    public bool CanPin => PinExpression is not null;
+
+    /// <summary>Pins the header's expression.</summary>
+    public void Pin() => PinExpression?.Invoke(expression, Root.Value);
+
+    /// <summary>Pins a row: any with an evaluate name, but not a group or netcoredbg's "name (Owner)" duplicate (decision 7).</summary>
+    public Action? PinAction(VariableNode node) =>
+        PinExpression is { } pin && node.EvaluateName is { } evaluateName && !node.IsGroup && !node.IsDuplicate && !node.IsPlaceholder && !node.IsError
+            ? () => pin(evaluateName, node.Value)
+            : null;
 }
 
 /// <summary>A row of the Threads window.</summary>
