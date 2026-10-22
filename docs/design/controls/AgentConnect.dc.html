@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Connect an agent: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+/* Connect to <agent> (0.6.0, docs/design/controls.md#connect-an-agent): the in-window dialog that checks what an
+   external agent needs, installs what's missing with the user's own package manager, signs it in, tests the connection
+   and only then writes ai.agents.<id> (and ai.enabled) to the user's settings; and Disconnect. ?state= picks the state,
+   ?os= the OS (paths, the credential store, install options and the button order). */
+.canvas{width:1280px;height:800px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+.wtitle{height:34px;display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--title-bar);color:var(--title-bar-fg);flex:none}
+.wtitle .menu-items{display:flex;gap:14px}
+.tbar{height:32px;background:var(--toolbar);border-bottom:1px solid var(--toolbar-border);flex:none;display:flex;align-items:center;gap:4px;padding:0 8px}
+.work{flex:1;display:flex;gap:6px;padding:6px;min-height:0}
+.fam-classic .work{gap:4px;padding:4px}
+.ed{flex:1;display:flex;flex-direction:column;min-width:0}
+.ed .code{flex:1;padding:6px 0;border:1px solid var(--border);border-top:0}
+.ed .code .ln{height:19px}
+.chatw{width:420px;flex:none}
+.chatw .empty{flex:1}
+.status{height:24px;background:var(--accent);color:var(--accent-fg);display:flex;align-items:center;padding:0 10px;flex:none}
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:720px;max-height:784px;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:8px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.fam-classic .dialog{border-radius:6px}
+.kind-hc .dialog{border-width:2px}
+.dh{display:flex;align-items:flex-start;gap:10px;padding:16px 12px 4px 20px}
+.dh .ttl{flex:1;min-width:0}
+.dh h1{margin:0;font-size:14px;line-height:20px;font-weight:600;color:var(--strong)}
+.dh .ctx{color:var(--muted);font-size:11px;line-height:16px}
+.dh .glyph{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:var(--chip-info);flex:none;margin-top:-1px}
+.dh .glyph.danger{background:var(--chip-err)}
+.kind-hc .dh .glyph{background:transparent;border:1px solid var(--fg)}
+.db{padding:10px 20px 16px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.sec{display:flex;flex-direction:column;gap:6px}
+.sec > h2{margin:0;display:flex;align-items:center;gap:8px;font-size:12px;line-height:16px;font-weight:600;color:var(--strong)}
+.sec > h2 .tb{margin-left:auto}
+.sec > h2 .aside{font-weight:400;color:var(--muted);font-size:11px}
+
+/* Requirements: a bordered list, one row per program, each with its state as an icon and a word. */
+.box{border:1px solid var(--input-border);border-radius:var(--radius);background:var(--input);overflow:hidden}
+.rq{display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;column-gap:8px;min-height:30px;padding:4px 10px;border-bottom:1px solid var(--rule)}
+.rq .line{display:flex;align-items:baseline;gap:8px;min-width:0}
+.rq:last-child{border-bottom:0}
+.rq .nm{font-weight:600;color:var(--strong)}
+.rq .det{color:var(--muted);font-size:11px;line-height:14px}
+.rq .det.mono{font-family:var(--mono);font-size:11px}
+.rq .chip{font-weight:600}
+
+/* Choices: radio buttons with a line of description; the chosen one may open a field or a note under it. */
+.opts{display:flex;flex-direction:column;gap:2px}
+.opt{display:grid;grid-template-columns:16px minmax(0,1fr);column-gap:8px;padding:4px 8px;border-radius:var(--radius)}
+.opt .line{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
+.opt .rad{min-height:16px}
+.opt .on-t{font-weight:600;color:var(--strong)}
+.opt .d{color:var(--muted);grid-column:2}
+.opt .more{grid-column:2;display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.opt.sel{background:var(--header)}
+.opt .cmd{margin-top:4px}
+.cmd{display:block;font-family:var(--mono);font-size:11.5px;line-height:16px;padding:5px 8px;border:1px solid var(--soft-border);border-radius:var(--radius);background:var(--editor);color:var(--editor-fg);white-space:pre-wrap;overflow-wrap:anywhere}
+.kind-hc .cmd{border-color:var(--soft-border)}
+.meta{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;line-height:14px}
+.keyf{width:100%}
+.keyf .value{font-family:var(--mono);letter-spacing:1px}
+
+/* What runs: the exact command lines, labeled. */
+.runs{display:grid;grid-template-columns:118px minmax(0,1fr);gap:4px 10px;align-items:center}
+.runs .lbl{color:var(--muted);font-size:11px;line-height:14px}
+.runs .meta{grid-column:1 / -1}
+.runs .plain{color:var(--fg)}
+
+/* Notices on the status tints (outlined in High contrast, like chips). */
+.notice{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:var(--radius);font-size:11px;line-height:15px;border:1px solid transparent}
+.notice svg.i{margin-top:0}
+.notice.info{background:var(--chip-info);color:var(--chip-info-fg)}
+.notice.warn{background:var(--chip-warn);color:var(--chip-warn-fg)}
+.notice.err{background:var(--chip-err);color:var(--chip-err-fg)}
+.kind-hc .notice{border-color:currentColor}
+.notice .grow{display:flex;flex-direction:column;gap:4px}
+.notice .btn{align-self:flex-start}
+
+/* The consent: a required check box, shown only while AI is off. */
+.consent{border:1px solid var(--input-border);border-radius:var(--radius);padding:8px 10px;display:flex;flex-direction:column;gap:2px;background:var(--header)}
+.consent .chk{font-weight:600;color:var(--strong)}
+.consent .d{padding-left:24px;color:var(--muted)}
+
+/* The test: a checklist of steps, the running one with its last line of output. */
+.st{display:grid;grid-template-columns:16px minmax(0,1fr);column-gap:10px;padding:7px 10px;border-bottom:1px solid var(--rule)}
+.st:last-child{border-bottom:0}
+.st .nm{font-weight:600;color:var(--strong)}
+.st.todo .nm{font-weight:400;color:var(--muted)}
+.st .det{grid-column:2;color:var(--muted);font-size:11px;line-height:14px}
+.st .det.mono{font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .pbar{grid-column:2;position:relative;height:4px;border-radius:2px;background:var(--soft-border);overflow:hidden;margin-top:6px}
+.st .pbar span{position:absolute;left:30%;width:36%;top:0;bottom:0;border-radius:2px;background:var(--accent)}
+.st .call{grid-column:2;margin-top:6px}
+.scope{color:var(--muted);font-size:11px;line-height:15px}
+
+/* The result: an icon, a sentence, what was found, and the fixes as buttons. */
+.res{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:12px;align-items:start}
+.res svg.big{width:32px;height:32px}
+.res h2{margin:4px 0 2px;font-size:14px;line-height:20px;font-weight:600;color:var(--strong)}
+.res .txt{color:var(--fg)}
+.kv{grid-column:2;display:grid;grid-template-columns:92px minmax(0,1fr);gap:4px 12px;margin-top:10px}
+.kv .k{color:var(--muted)}
+.kv .v{color:var(--fg);min-width:0}
+.kv .v .mono{font-size:11.5px}
+.fixes{grid-column:2;display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.res .cmd{grid-column:2;margin-top:10px}
+
+/* Disconnect: what goes and what stays. */
+.list{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.list li{display:grid;grid-template-columns:16px minmax(0,1fr);column-gap:8px;align-items:start}
+.list li .mono{font-size:11.5px}
+
+.df{display:flex;align-items:center;gap:8px;padding:12px 20px;background:var(--dlg-footer);border-top:1px solid var(--soft-border);flex:none}
+.df .hint{flex:1;min-width:0;color:var(--muted);font-size:11px;line-height:14px;display:flex;gap:6px;align-items:center}
+.df .hint .mono{font-size:11px}
+
+.states{width:1280px;box-sizing:border-box;padding:12px 16px 16px;background:var(--panel);border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+.states div{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline}
+.states b{color:var(--strong);min-width:70px}
+.states a{color:var(--link);text-decoration:none}
+.states a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}">
+<div class="canvas">
+  <div aria-hidden="true" data-nocheck style="display:contents">
+    <div class="wtitle"><svg class="i" style="width:18px;height:18px" viewBox="0 0 256 256"><polygon fill="#A47BFF" points="20,218 124,38 124,92 58,208"></polygon><polygon fill="#F0662A" points="236,218 132,38 132,92 198,208"></polygon></svg><span class="menu-items"><span>File</span><span>Edit</span><span>View</span><span>Git</span><span>Project</span><span>Build</span><span>Debug</span><span>Test</span><span>Tools</span><span>Window</span><span>Help</span></span></div>
+    <div class="tbar"><svg class="i c-blue"><use href="#i-arrow-up"></use></svg><svg class="i c-blue"><use href="#i-save"></use></svg><span class="tb-sep"></span><svg class="i c-green"><use href="#i-play"></use></svg><span>CalculatorService</span></div>
+    <div class="work">
+      <div class="ed">
+        <div class="doc-tabs"><span class="doc-tab on"><svg class="i md"><use href="#i-cs-file"></use></svg>CalculatorService.cs</span></div>
+        <div class="code"><sc-for list="{{code}}" as="l"><div class="ln"><span class="no">{{l.n}}</span><span><sc-for list="{{l.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span></div></sc-for></div>
+      </div>
+      <div class="tw chatw"><div class="tw-cap"><span class="title">AI Chat</span></div>
+        <div class="empty"><svg class="i big c-purple"><use href="#i-sparkle"></use></svg><div class="msg">{{bdChat}}</div></div>
+      </div>
+    </div>
+    <div class="status">Ready</div>
+  </div>
+  <div class="scrim"></div>
+
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+    <div class="dh">
+      <span class="glyph {{dlg.tile}}"><svg class="i {{dlg.ic}}" aria-hidden="true"><use href="#i-{{dlg.icon}}"></use></svg></span>
+      <div class="ttl">
+        <h1 id="dlg-title">{{dlg.title}}</h1>
+        <div class="ctx">{{dlg.ctx}}</div>
+      </div>
+      <button class="btn subtle icon sm" aria-label="Close (Esc)" title="Close (Esc)"><svg class="i" aria-hidden="true"><use href="#i-close"></use></svg></button>
+    </div>
+    <div class="db">
+
+      <sc-if value="{{req}}">
+        <section class="sec" aria-labelledby="h-req">
+          <h2 id="h-req">Requirements<button class="tb" aria-label="Check Again" title="Check Again"><svg class="i c-green" aria-hidden="true"><use href="#i-refresh"></use></svg></button></h2>
+          <div class="box" role="list">
+            <sc-for list="{{req.rows}}" as="r">
+              <div class="rq" role="listitem">
+                <svg class="i {{r.ic}}" aria-hidden="true"><use href="#i-{{r.icon}}"></use></svg>
+                <div class="line"><span class="nm">{{r.name}}</span><span class="det {{r.detCls}}">{{r.detail}}</span></div>
+                <sc-if value="{{r.chip}}"><span class="chip {{r.chipCls}}">{{r.chip}}</span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{install}}">
+        <section class="sec" aria-labelledby="h-inst">
+          <h2 id="h-inst">{{install.title}}</h2>
+          <div class="opts" role="radiogroup" aria-labelledby="h-inst">
+            <sc-for list="{{install.opts}}" as="o">
+              <div class="opt {{o.sel}}">
+                <span class="rad {{o.on}}" role="radio" aria-checked="{{o.checked}}"><span class="dot"></span></span>
+                <span class="on-t">{{o.name}}</span>
+                <span class="d">{{o.desc}}</span>
+                <sc-if value="{{o.cmd}}"><span class="more"><code class="cmd">{{o.cmd}}</code></span></sc-if>
+                <span class="more" style="margin-top:4px"><span class="meta"><svg class="i sm {{o.metaIc}}" aria-hidden="true"><use href="#i-{{o.metaIcon}}"></use></svg>{{o.meta}}</span></span>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{install.note}}"><div class="meta"><svg class="i sm c-info" aria-hidden="true"><use href="#i-info"></use></svg>{{install.note}}</div></sc-if>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{signin}}">
+        <section class="sec" aria-labelledby="h-sign">
+          <h2 id="h-sign">Sign in<span class="aside">{{signin.aside}}</span></h2>
+          <div class="opts" role="radiogroup" aria-labelledby="h-sign">
+            <sc-for list="{{signin.opts}}" as="o">
+              <div class="opt {{o.sel}}">
+                <span class="rad {{o.on}} {{o.focus}}" role="radio" aria-checked="{{o.checked}}"><span class="dot"></span></span>
+                <span class="line"><span class="on-t">{{o.name}}</span><span class="d">{{o.desc}}</span></span>
+                <sc-if value="{{o.key}}">
+                  <span class="more">
+                    <span class="field keyf {{o.key.cls}}"><svg class="i lead c-yellow" aria-hidden="true"><use href="#i-key"></use></svg><span class="value fill" role="textbox" aria-label="{{o.key.label}}">{{o.key.value}}</span><span class="caret"></span></span>
+                    <span class="notice {{o.key.noteCls}}"><svg class="i {{o.key.noteIc}}" aria-hidden="true"><use href="#i-{{o.key.noteIcon}}"></use></svg><span>{{o.key.note}}</span></span>
+                  </span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{signin.warn}}"><div class="notice warn"><svg class="i warning" aria-hidden="true"><use href="#i-warning"></use></svg><span>{{signin.warn}}</span></div></sc-if>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{runs}}">
+        <section class="sec" aria-labelledby="h-runs">
+          <h2 id="h-runs">What runs</h2>
+          <div class="runs">
+            <sc-for list="{{runs.lines}}" as="r"><span class="lbl">{{r.label}}</span><sc-if value="{{r.cmd}}"><code class="cmd">{{r.cmd}}</code></sc-if><sc-if value="{{r.text}}"><span class="plain">{{r.text}}</span></sc-if></sc-for>
+            <span class="meta">{{runs.note}}</span>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{consent}}">
+        <div class="consent">
+          <span class="chk {{consent.on}}" role="checkbox" aria-checked="{{consent.checkedStr}}"><span class="box"><sc-if value="{{consent.checked}}"><svg aria-hidden="true"><use href="#i-check"></use></svg></sc-if></span>Turn on AI assistance</span>
+          <span class="d">{{consent.desc}}</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{steps}}">
+        <section class="sec" aria-labelledby="h-steps">
+          <h2 id="h-steps">{{steps.title}}</h2>
+          <div class="box" role="list">
+            <sc-for list="{{steps.rows}}" as="s">
+              <div class="st {{s.cls}}" role="listitem">
+                <svg class="i {{s.ic}}" aria-hidden="true"><use href="#i-{{s.icon}}"></use></svg>
+                <span class="nm">{{s.name}}</span>
+                <sc-if value="{{s.detail}}"><span class="det {{s.detCls}}">{{s.detail}}</span></sc-if>
+                <sc-if value="{{s.bar}}"><span class="pbar" role="progressbar" aria-label="{{s.name}}"><span></span></span></sc-if>
+                <sc-if value="{{s.call}}">
+                  <div class="call notice info">
+                    <svg class="i c-blue" aria-hidden="true"><use href="#i-terminal"></use></svg>
+                    <span class="grow"><span>{{s.call.text}}</span><code class="cmd">{{s.call.cmd}}</code><button class="btn sm has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-terminal"></use></svg>Show Terminal</button></span>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <span class="scope">{{steps.scope}}</span>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{result}}">
+        <section class="res" role="status" aria-labelledby="h-res">
+          <svg class="i big {{result.ic}}" aria-hidden="true"><use href="#i-{{result.icon}}"></use></svg>
+          <div><h2 id="h-res">{{result.title}}</h2><div class="txt">{{result.text}}</div></div>
+          <sc-if value="{{result.cmd}}"><code class="cmd">{{result.cmd}}</code></sc-if>
+          <div class="kv">
+            <sc-for list="{{result.rows}}" as="r"><span class="k">{{r.k}}</span><span class="v">{{r.v}}</span></sc-for>
+          </div>
+          <sc-if value="{{result.fixes}}">
+            <div class="fixes">
+              <sc-for list="{{result.fixes}}" as="f"><button class="btn has-icon"><svg class="i {{f.ic}}" aria-hidden="true"><use href="#i-{{f.icon}}"></use></svg>{{f.label}}</button></sc-for>
+              <button class="btn link">Show Output</button>
+            </div>
+          </sc-if>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{remote}}">
+        <section class="res" role="alert">
+          <svg class="i big c-blue" aria-hidden="true"><use href="#i-window-remote"></use></svg>
+          <div><h2>{{remote.title}}</h2><div class="txt">{{remote.text}}</div></div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{disc}}">
+        <section class="sec" aria-labelledby="h-disc">
+          <h2 id="h-disc">Disconnecting removes</h2>
+          <ul class="list">
+            <sc-for list="{{disc.items}}" as="i"><li><svg class="i {{i.ic}}" aria-hidden="true"><use href="#i-{{i.icon}}"></use></svg><span>{{i.a}}<span class="mono">{{i.code}}</span>{{i.b}}</span></li></sc-for>
+          </ul>
+          <span class="meta">{{disc.keeps}}</span>
+        </section>
+        <div class="consent">
+          <span class="chk is-focus" role="checkbox" aria-checked="false"><span class="box"></span>{{disc.signout}}</span>
+          <span class="d">{{disc.signoutDesc}}</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{label}}">
+        <div class="notice info"><svg class="i info" aria-hidden="true"><use href="#i-info"></use></svg><span>External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for.</span></div>
+      </sc-if>
+    </div>
+    <div class="df">
+      <span class="hint"><sc-if value="{{foot.hintIcon}}"><svg class="i sm {{foot.hintIc}}" aria-hidden="true"><use href="#i-{{foot.hintIcon}}"></use></svg></sc-if><span>{{foot.hint}}</span><sc-if value="{{foot.output}}"><button class="btn link small">{{foot.output}}</button></sc-if></span>
+      <sc-for list="{{foot.buttons}}" as="b"><button class="btn dlg {{b.cls}}" aria-disabled="{{b.dis}}" title="{{b.tip}}">{{b.label}}</button></sc-for>
+    </div>
+  </div>
+</div>
+<nav class="states" aria-label="States, themes and OS">
+  <div><b>State</b><sc-for list="{{nav.states}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for></div>
+  <div><b>Theme</b><sc-for list="{{nav.themes}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for></div>
+  <div><b>OS</b><sc-for list="{{nav.oses}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for></div>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Classic Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"state":{"editor":"string","default":""},"os":{"editor":"enum","default":"","options":["","Windows","Linux","macOS"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const STATES = ['connect', 'apikey', 'apikey-memory', 'codex', 'gemini', 'missing', 'installing', 'progress', 'signin', 'ok', 'unconfirmed', 'failed', 'offline', 'remote', 'disconnect'];
+    const state = STATES.includes(this.props.state) ? this.props.state : 'connect';
+    const os = ['Windows', 'Linux', 'macOS'].includes(this.props.os) ? this.props.os : 'Linux';
+    const mac = os === 'macOS';
+
+    // What the OS gives: the credential store (SecretStorage's names), the user settings file and the test folder
+    // (AppPaths), where node and npx were found.
+    const store = { Windows: 'Windows Credential Manager', macOS: 'macOS Keychain', Linux: 'Secret Service (libsecret)' }[os];
+    const settings = { Windows: '%APPDATA%\\Codalus\\settings.json', macOS: '~/Library/Application Support/Codalus/settings.json', Linux: '~/.config/codalus/settings.json' }[os];
+    const testDir = { Windows: '%LOCALAPPDATA%\\Codalus\\State\\external-agents\\connect-test', macOS: '~/Library/Application Support/Codalus/State/external-agents/connect-test', Linux: '~/.local/state/codalus/external-agents/connect-test' }[os];
+    const nodeAt = { Windows: 'C:\\Program Files\\nodejs\\node.exe', macOS: '/opt/homebrew/bin/node', Linux: '/usr/bin/node' }[os];
+    const npxAt = { Windows: 'C:\\Program Files\\nodejs\\npx.cmd', macOS: '/opt/homebrew/bin/npx', Linux: '/usr/bin/npx' }[os];
+
+    // The templates drawn here, pinned as on 2026-10-21's registry (re-pinned on the day of implementation).
+    const AGENTS = {
+      claude: { name: 'Claude', vendor: 'Anthropic', pkg: '@agentclientprotocol/claude-agent-acp', ver: '0.94.0', extra: '', node: 22, env: 'ANTHROPIC_API_KEY' },
+      codex: { name: 'Codex', vendor: 'OpenAI', pkg: '@agentclientprotocol/codex-acp', ver: '2.2.2', extra: '', node: 0 },
+      gemini: { name: 'Gemini CLI', vendor: 'Google', pkg: '@google/gemini-cli', ver: '0.65.0', extra: ' --acp', node: 20, env: 'GEMINI_API_KEY' }
+    };
+    const id = state === 'codex' ? 'codex' : state === 'gemini' ? 'gemini' : 'claude';
+    const a = AGENTS[id];
+    const start = `npx -y ${a.pkg}@${a.ver}${a.extra}`;
+    const aiOff = !['codex', 'gemini', 'disconnect'].includes(state);
+
+    const ok = (name, detail) => ({ icon: 'check-circle', ic: 'c-ok', name, detail, detCls: '', chip: '', chipCls: '' });
+    const reqOk = { rows: [ok('Node.js 24.11.1', `${nodeAt} · ${a.name} needs ${a.node || 18} or later`), ok('npx 11.6.2', npxAt)] };
+    if (!a.node) reqOk.rows[0] = ok('Node.js 24.11.1', nodeAt);
+
+    const opt = (name, desc, on, extra) => ({ name, desc, on: on ? 'on' : '', checked: String(!!on), sel: on ? 'sel' : '', focus: on && extra?.focus ? 'is-focus' : '', key: extra?.key ?? null });
+    const keyField = (label, memory, codex) => ({
+      label, value: '•'.repeat(32), cls: 'is-focus',
+      noteCls: memory ? 'warn' : 'info', noteIc: memory || codex ? '' : 'c-yellow', noteIcon: memory ? 'warning' : codex ? 'info' : 'lock',
+      note: codex
+        ? 'Sent to Codex once, when you connect. Codex keeps it in its own sign-in store (~/.codex); Disconnect can sign it out. Codalus doesn\'t keep it.'
+        : memory
+          ? `Lasts until Codalus closes: the OS credential store isn't available, so the key is kept in memory only. ${a.name} gets it as ${a.env} when it starts; it's never written to a file.`
+          : `Kept in ${store}. ${a.name} gets it as ${a.env} when it starts; it's never written to a file.`
+    });
+    const consent = (checked) => ({
+      checked, checkedStr: String(checked), on: checked ? 'on' : '',
+      desc: 'External agents run only while it\'s on. This also turns the built-in assistant back on with Ollama, and inline suggestions.'
+    });
+    const btn = (label, primary, extra) => ({ label, cls: (primary ? 'primary ' : '') + (extra?.dis ? 'is-disabled' : ''), dis: String(!!extra?.dis), tip: extra?.tip ?? '' });
+    // Windows and Linux put the primary first, macOS last (controls.md, Sizes, spacing and order).
+    const order = (list) => (mac ? [...list].reverse() : list);
+    const writes = aiOff ? `Writes ai.agents.${id} and ai.enabled to your user settings after the test passes` : `Writes ai.agents.${id} to your user settings after the test passes`;
+
+    const v = { t, dlg: { title: `Connect to ${a.name}`, ctx: `External agent · ${a.vendor} · ${a.pkg} ${a.ver}`, icon: 'bot', ic: 'c-purple', tile: '' } };
+    v.req = null; v.install = null; v.signin = null; v.runs = null; v.consent = null; v.steps = null; v.result = null; v.remote = null; v.disc = null; v.label = false;
+    v.foot = { hint: writes, hintIcon: '', hintIc: '', output: false, buttons: order([btn('Connect', true), btn('Cancel')]) };
+
+    const claudeSignIn = (chosen, memory) => ({
+      aside: `How ${a.name} signs in. Only an API key passes through Codalus.`,
+      warn: '',
+      opts: [
+        opt('Claude subscription', 'Pro or Max plan. Claude signs you in in the Terminal, with your browser.', chosen === 'sub', { focus: true }),
+        opt('Anthropic Console account', 'Pay as you go. Signs in in the Terminal, with your browser.', chosen === 'console'),
+        opt('API key', 'A key from the Anthropic Console.', chosen === 'key', chosen === 'key' ? { key: keyField('Anthropic API key', memory) } : null),
+        opt('I\'m signed in already', 'Claude Code is signed in on this computer. The test checks it.', chosen === 'already')
+      ]
+    });
+
+    if (state === 'connect' || state === 'apikey' || state === 'apikey-memory') {
+      const key = state !== 'connect';
+      v.req = reqOk;
+      v.signin = claudeSignIn(key ? 'key' : 'sub', state === 'apikey-memory');
+      v.runs = {
+        lines: key
+          ? [{ label: 'Starts', cmd: start }, { label: 'With the variable', cmd: `${a.env}=<from ${state === 'apikey-memory' ? 'memory, this session only' : store}>` }]
+          : [{ label: 'Starts', cmd: start }, { label: 'Signs in (Terminal)', cmd: `${start} --cli auth login --claudeai` }],
+        note: 'npx downloads the package from npm the first time. It runs as you, with your account\'s access to your files.'
+      };
+      v.consent = consent(key);
+      v.label = true;
+      if (!key) v.foot.buttons = order([btn('Connect', true, { dis: true, tip: 'Check Turn on AI assistance first' }), btn('Cancel')]);
+    }
+
+    if (state === 'codex') {
+      v.req = reqOk;
+      v.signin = {
+        aside: 'How Codex signs in. Its sign-in stays with Codex.', warn: '',
+        opts: [
+          opt('ChatGPT', 'Sign in with your ChatGPT plan, with your browser.', false),
+          opt('API key', 'An OpenAI API key.', true, { focus: true, key: keyField('OpenAI API key', false, true) }),
+          opt('I\'m signed in already', 'Codex is signed in on this computer. The test checks it.', false)
+        ]
+      };
+      v.runs = { lines: [{ label: 'Starts', cmd: start }, { label: 'Signs in', text: 'With the key in its sign-in request (authenticate, api-key), never in its environment' }], note: 'npx downloads the package from npm the first time. It runs as you, with your account\'s access to your files.' };
+      v.label = true;
+    }
+
+    if (state === 'gemini') {
+      v.req = reqOk;
+      v.signin = {
+        aside: 'How Gemini CLI signs in. Its sign-in stays with Gemini CLI.',
+        warn: 'Gemini CLI is set to sign in with a Gemini API key. Signing in a different way resets its saved Google sign-in and changes its own settings file (~/.gemini/settings.json).',
+        opts: [
+          opt('Google account', 'Log in with Google, with your browser.', true, { focus: true }),
+          opt('Gemini API key', 'A key from Google AI Studio.', false),
+          opt('I\'m signed in already', 'Gemini CLI is signed in on this computer. The test checks it.', false)
+        ]
+      };
+      v.runs = { lines: [{ label: 'Starts', cmd: start }, { label: 'Signs in', text: 'Gemini CLI opens your browser (authenticate, oauth-personal)' }], note: 'npx downloads the package from npm the first time. It runs as you, with your account\'s access to your files.' };
+      v.label = true;
+    }
+
+    if (state === 'missing') {
+      const bad = (name, detail, chip, icon) => ({ icon: icon ?? 'error', ic: icon === 'warning' ? '' : 'c-error', name, detail, detCls: '', chip, chipCls: chip === 'Too old' ? 'warn' : 'err' });
+      if (os === 'Linux') {
+        v.req = { rows: [bad('Node.js 18.19.1', '/usr/bin/node · Claude needs 22 or later', 'Too old', 'warning'), ok('npx 9.2.0', '/usr/bin/npx')] };
+        v.install = {
+          title: 'Install Node.js 22 or later',
+          note: 'apt isn\'t offered: Ubuntu\'s nodejs package is 18.19.1.',
+          opts: [
+            { name: 'Snap', desc: 'Node.js 24 from the Snap Store, beside Ubuntu\'s 18.19.1.', cmd: 'sudo snap install node --classic --channel=24/stable', meta: 'Runs in the Terminal: it asks for your password.', metaIcon: 'terminal', metaIc: 'c-blue', on: 'on is-focus', checked: 'true', sel: 'sel' },
+            { name: 'nodejs.org', desc: 'Download an installer or an archive yourself.', cmd: '', meta: 'Opens nodejs.org in your browser.', metaIcon: 'link-external', metaIc: 'c-blue', on: '', checked: 'false', sel: '' }
+          ]
+        };
+        v.foot = { hint: 'Codalus checks again when it finishes.', hintIcon: 'info', hintIc: 'c-info', output: false, buttons: order([btn('Install in Terminal', true), btn('Cancel')]) };
+      } else if (os === 'Windows') {
+        v.req = { rows: [bad('Node.js', 'Not found on the PATH · Claude needs 22 or later', 'Missing'), bad('npx', 'Not found (it comes with Node.js)', 'Missing')] };
+        v.install = {
+          title: 'Install Node.js 22 or later',
+          note: '',
+          opts: [
+            { name: 'winget', desc: 'Node.js LTS for this computer, from the winget repository.', cmd: 'winget install --exact --id OpenJS.NodeJS.LTS', meta: 'Runs here; Windows may ask for permission. Codalus reads the new PATH when it finishes.', metaIcon: 'play', metaIc: 'c-green', on: 'on is-focus', checked: 'true', sel: 'sel' },
+            { name: 'nodejs.org', desc: 'Download the Windows installer yourself.', cmd: '', meta: 'Opens nodejs.org in your browser.', metaIcon: 'link-external', metaIc: 'c-blue', on: '', checked: 'false', sel: '' }
+          ]
+        };
+        v.foot = { hint: 'Codalus checks again when it finishes.', hintIcon: 'info', hintIc: 'c-info', output: false, buttons: order([btn('Install', true), btn('Cancel')]) };
+      } else {
+        v.req = { rows: [bad('Node.js', 'Not found on the PATH · Claude needs 22 or later', 'Missing'), bad('npx', 'Not found (it comes with Node.js)', 'Missing')] };
+        v.install = {
+          title: 'Install Node.js 22 or later',
+          note: 'Homebrew isn\'t installed, so brew install node isn\'t offered.',
+          opts: [
+            { name: 'nodejs.org', desc: 'Download the macOS installer (.pkg) yourself.', cmd: '', meta: 'Opens nodejs.org in your browser.', metaIcon: 'link-external', metaIc: 'c-blue', on: 'on is-focus', checked: 'true', sel: 'sel' },
+            { name: 'Codalus\'s Node.js 24.21.0', desc: 'The checksum-verified Node.js Codalus already uses for npm scripts, for external agents only. Your own stays as it is.', cmd: '', meta: 'Downloads about 50 MB from nodejs.org once.', metaIcon: 'cloud-download', metaIc: 'c-blue', on: '', checked: 'false', sel: '' }
+          ]
+        };
+        v.foot = { hint: 'Once it\'s installed, Check Again finds it.', hintIcon: 'info', hintIc: 'c-info', output: false, buttons: order([btn('Open Page', true), btn('Cancel')]) };
+      }
+    }
+
+    if (state === 'installing') {
+      v.req = { rows: [{ icon: 'progress', ic: 'c-accent', name: 'Installing Node.js in the Terminal', detail: 'sudo snap install node --classic --channel=24/stable', detCls: 'mono', chip: '', chipCls: '' }, ok('npx 9.2.0', '/usr/bin/npx')] };
+      v.steps = {
+        title: 'Waiting for the Terminal',
+        rows: [{ icon: 'terminal', ic: 'c-blue', name: 'Finish in the Terminal: type your password if snap asks for it.', detail: 'Codalus checks Node.js again when the command ends, then continues.', detCls: '', cls: '', bar: true, call: null }],
+        scope: 'Cancel stops waiting; the install goes on in the Terminal.'
+      };
+      v.foot = { hint: '', hintIcon: '', hintIc: '', output: 'Show Terminal', buttons: order([btn('Connect', true, { dis: true, tip: 'Waiting for the install' }), btn('Cancel')]) };
+    }
+
+    const step = (state, name, detail, extra) => {
+      const icons = { done: ['check-circle', 'c-ok'], run: ['progress', 'c-accent'], todo: ['circle-outline', 'c-outline'] };
+      return { icon: icons[state][0], ic: icons[state][1], cls: state === 'todo' ? 'todo' : '', name, detail, detCls: extra?.mono ? 'mono' : '', bar: !!extra?.bar, call: extra?.call ?? null };
+    };
+    const scope = `In an empty folder (${testDir}), with no workspace, no MCP servers and no prompt; anything ${a.name} asks the IDE for is refused.`;
+
+    if (state === 'progress') {
+      v.dlg.ctx = `External agent · ${a.vendor} · Claude subscription`;
+      v.steps = {
+        title: 'Testing the connection',
+        rows: [
+          step('done', 'Requirements', 'Node.js 24.11.1, npx 11.6.2'),
+          step('run', `Downloading ${a.pkg}@${a.ver}`, 'npm http fetch GET 200 https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.2.31.tgz 412ms (cache miss)', { mono: true, bar: true }),
+          step('todo', 'Starting', 'The agent answers initialize'),
+          step('todo', 'Signing in', 'Claude subscription, in the Terminal'),
+          step('todo', 'Checking sign-in', 'Claude reports who is signed in'),
+          step('todo', 'Done', '')
+        ],
+        scope
+      };
+      v.foot = { hint: 'Nothing is saved until the test passes.', hintIcon: '', hintIc: '', output: 'Show Output', buttons: order([btn('Connect', true, { dis: true, tip: 'Testing' }), btn('Cancel')]) };
+    }
+
+    if (state === 'signin') {
+      v.dlg.ctx = `External agent · ${a.vendor} · Claude subscription`;
+      v.steps = {
+        title: 'Testing the connection',
+        rows: [
+          step('done', 'Requirements', 'Node.js 24.11.1, npx 11.6.2'),
+          step('done', `Downloaded ${a.pkg}@${a.ver}`, 'Kept in npm\'s cache, so the agent starts without downloading it again'),
+          step('done', 'Started', 'claude-agent-acp 0.94.0 · ACP v1 · offers Claude subscription, Anthropic Console'),
+          step('run', 'Signing in', '', { call: { text: 'Finish signing in in the Terminal; Codalus continues when it closes.', cmd: `${start} --cli auth login --claudeai` } }),
+          step('todo', 'Checking sign-in', 'Claude reports who is signed in'),
+          step('todo', 'Done', '')
+        ],
+        scope
+      };
+      v.foot = { hint: 'Nothing is saved until the test passes.', hintIcon: '', hintIc: '', output: 'Show Output', buttons: order([btn('Connect', true, { dis: true, tip: 'Testing' }), btn('Cancel')]) };
+    }
+
+    if (state === 'ok') {
+      v.result = {
+        icon: 'check-circle', ic: 'c-ok', title: 'Claude is connected',
+        text: 'Its entry is in your user settings, and AI assistance is on. Pick Claude in AI Chat\'s agent menu, or start a chat now.',
+        cmd: '',
+        rows: [
+          { k: 'Agent', v: 'claude-agent-acp 0.94.0 · ACP v1' },
+          { k: 'Signed in', v: 'Claude reports: Claude Max · alex@example.com' },
+          { k: 'Mode', v: 'Default (AI Chat lists the others)' },
+          { k: 'Saved', v: `ai.agents.claude and ai.enabled in ${settings}` },
+          { k: 'Sign-in kept by', v: 'Claude Code, on this computer (no key in Codalus)' }
+        ],
+        fixes: null
+      };
+      v.foot = { hint: 'Manage Agents… in the agent menu checks or disconnects it.', hintIcon: '', hintIc: '', output: false, buttons: order([btn('Start a Chat', true), btn('Close')]) };
+    }
+
+    if (state === 'unconfirmed') {
+      v.dlg.ctx = `External agent · ${a.vendor} · I'm signed in already`;
+      v.result = {
+        icon: 'warning', ic: 'warning', title: 'Claude started, but it didn\'t say whether you\'re signed in',
+        text: 'It didn\'t report who is signed in within 8 seconds: its own check may be slow, or offline. If you aren\'t signed in, your first question asks you to sign in.',
+        cmd: '',
+        rows: [
+          { k: 'Agent', v: 'claude-agent-acp 0.94.0 · ACP v1' },
+          { k: 'Checked', v: 'Started, answered initialize and created a session' },
+          { k: 'Signed in', v: 'Not reported' }
+        ],
+        fixes: null
+      };
+      v.foot = { hint: 'Save Anyway writes the entry now.', hintIcon: '', hintIc: '', output: 'Show Output', buttons: order([btn('Save Anyway', true), btn('Sign In…'), btn('Cancel')]) };
+    }
+
+    if (state === 'failed') {
+      v.dlg.ctx = `External agent · ${a.vendor} · I'm signed in already`;
+      v.result = {
+        icon: 'error', ic: 'c-error', title: 'Claude says you aren\'t signed in',
+        text: 'You chose I\'m signed in already, but Claude reports: Not logged in. Nothing was saved.',
+        cmd: '',
+        rows: [
+          { k: 'Agent', v: 'claude-agent-acp 0.94.0 · ACP v1' },
+          { k: 'Signed in', v: 'Claude reports: Not logged in' }
+        ],
+        fixes: [
+          { icon: 'terminal', ic: 'c-blue', label: 'Sign In with Claude Subscription…' },
+          { icon: 'key', ic: 'c-yellow', label: 'Use an API Key…' }
+        ]
+      };
+      v.foot = { hint: 'Try Again tests it again, for a sign-in made elsewhere.', hintIcon: '', hintIc: '', output: false, buttons: order([btn('Try Again', true), btn('Cancel')]) };
+    }
+
+    if (state === 'offline') {
+      v.dlg.ctx = `External agent · ${a.vendor} · Claude subscription`;
+      v.result = {
+        icon: 'error', ic: 'c-error', title: `Couldn't download ${a.pkg}`,
+        text: 'npm couldn\'t reach registry.npmjs.org: the connection timed out. Behind a proxy, npm needs it in its own settings (npm config set proxy). Nothing was saved.',
+        cmd: 'npm error code ETIMEDOUT\nnpm error network request to https://registry.npmjs.org/@agentclientprotocol%2fclaude-agent-acp failed, reason: connect ETIMEDOUT 104.16.2.35:443',
+        rows: [{ k: 'Step', v: 'Downloading, after 30 seconds' }],
+        fixes: [{ icon: 'link-external', ic: 'c-blue', label: 'npm\'s Proxy Settings' }]
+      };
+      v.foot = { hint: '', hintIcon: '', hintIc: '', output: false, buttons: order([btn('Try Again', true), btn('Cancel')]) };
+    }
+
+    if (state === 'remote') {
+      v.dlg.ctx = `External agent · ${a.vendor}`;
+      v.remote = {
+        title: 'Agents can\'t be connected from a remote window',
+        text: 'They would run on this computer while this folder is on build-01, and their sign-in would open a terminal on build-01. Connect it from a local window.'
+      };
+      v.foot = { hint: '', hintIcon: '', hintIc: '', output: false, buttons: [btn('Close', true)] };
+    }
+
+    if (state === 'disconnect') {
+      v.dlg = { title: 'Disconnect Claude?', ctx: 'External agent · ai.agents.claude in your user settings', icon: 'plug-off', ic: 'c-red', tile: 'danger' };
+      v.disc = {
+        items: [
+          { icon: 'braces', ic: 'c-blue', a: 'Its entry, ', code: 'ai.agents.claude', b: ', from your user settings. The other agents and your comments stay.' },
+          { icon: 'key', ic: 'c-yellow', a: 'Its API key, ', code: 'ANTHROPIC_API_KEY', b: `, from ${store}.` },
+          { icon: 'stop', ic: 'c-red', a: 'Its chat, which stops now.', code: '', b: '' }
+        ],
+        keeps: 'AI assistance stays on, and npm keeps the package in its cache.',
+        signout: 'Also sign out of Claude on this computer',
+        signoutDesc: 'Runs Claude\'s own sign-out (logout). Claude Code in a terminal is signed out too.'
+      };
+      v.foot = { hint: '', hintIcon: '', hintIc: '', output: false, buttons: order([btn('Disconnect', true), btn('Cancel')]) };
+    }
+
+    v.bdChat = aiOff && state !== 'ok' ? 'AI assistance is off.' : 'Ask a question about your solution.';
+    const src = [
+      'public sealed class CalculatorService : ICalculatorService',
+      '{',
+      '    public double Add(double a, double b) => a + b;',
+      '',
+      '    public double Divide(double a, double b) =>',
+      '        b == 0 ? throw new FaultException<CalculationFault>(new()) : a / b;',
+      '',
+      '    public string Greet(Person person) =>',
+      '        $"Hello {person.Name}, {person.Age}";',
+      '}'
+    ];
+    v.code = src.map((s, i) => ({ n: i + 1, toks: s ? C.csharp(s) : [{ t: ' ', cls: '' }] }));
+
+    const q = (patch) => {
+      const p = { theme: t.name, state, os: this.props.os || '', ...patch };
+      return '?' + Object.entries(p).filter(([, x]) => x).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+    };
+    v.nav = {
+      states: STATES.map((s) => ({ label: s, href: q({ state: s }), cls: s === state ? 'on' : '' })),
+      themes: C.ORDER.map((n) => ({ label: n, href: q({ theme: n }), cls: n === t.name ? 'on' : '' })),
+      oses: ['Linux', 'Windows', 'macOS'].map((o) => ({ label: o, href: q({ os: o }), cls: o === os ? 'on' : '' }))
+    };
+    return v;
+  }
+}
+</script>
+</body>
+</html>

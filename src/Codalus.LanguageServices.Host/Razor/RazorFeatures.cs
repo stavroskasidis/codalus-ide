@@ -90,14 +90,13 @@ internal sealed class RazorFeatures
         var text = mapping.RazorText.ToString();
         var context = RazorContext.At(text, offset);
         var word = new Range(Positions.ToPosition(mapping.RazorText, context.WordStart), Positions.ToPosition(mapping.RazorText, offset));
-        CompletionItem Item(string label, int kind, string? detail = null, string? insert = null, string? sort = null, string? documentation = null) => new(label)
+        CompletionItem Item(string label, int kind, string? detail = null, string? insert = null, string? sort = null) => new(label)
         {
             Kind = kind,
             Detail = detail,
             SortText = sort ?? label,
             TextEdit = new TextEdit(word, insert ?? label),
             InsertTextFormat = insert is not null && insert.Contains('$', StringComparison.Ordinal) ? InsertTextFormat.Snippet : null,
-            Documentation = documentation is null ? null : MarkupContent.Markdown(documentation),
         };
 
         switch (context.Kind)
@@ -107,24 +106,26 @@ internal sealed class RazorFeatures
 
             case RazorContextKind.TagName:
             {
+                // Components' summaries come when an item is resolved (CompletionFeature.SummarizeOnResolve).
                 var components = await ComponentsAsync(mapping.Razor.Project, cancellationToken).ConfigureAwait(false);
-                var items = components.Select(c => Item(c.Name, CompletionItemKind.Class, c.ToDisplayString(), sort: "0" + c.Name, documentation: Summary(c)))
-                    .Concat(s_htmlElements.Select(e => Item(e, CompletionItemKind.Property, "HTML element", sort: "1" + e)));
-                return new CompletionList(false, [.. items.DistinctBy(i => i.Label)]);
+                var items = components.Select(c => (Item(c.Name, CompletionItemKind.Class, c.ToDisplayString(), sort: "0" + c.Name), (ISymbol?)c))
+                    .Concat(s_htmlElements.Select(e => (Item(e, CompletionItemKind.Property, "HTML element", sort: "1" + e), (ISymbol?)null)));
+                return new CompletionList(false, _completion.SummarizeOnResolve([.. items.DistinctBy(i => i.Item1.Label)], Summary));
             }
 
             case RazorContextKind.Attribute:
             {
-                var items = new List<CompletionItem>();
+                // Parameters' summaries come when an item is resolved (CompletionFeature.SummarizeOnResolve).
+                var items = new List<(CompletionItem, ISymbol?)>();
                 if (await ComponentAsync(mapping.Razor.Project, context.TagName!, cancellationToken).ConfigureAwait(false) is { } component)
                 {
                     items.AddRange(Parameters(component).Where(p => !context.ExistingAttributes.Contains(p.Name))
-                        .Select(p => Item(p.Name, CompletionItemKind.Property, $"{p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)} {component.Name}.{p.Name}",
-                            insert: p.Name + "=\"$1\"", sort: "0" + p.Name, documentation: Summary(p))));
+                        .Select(p => (Item(p.Name, CompletionItemKind.Property, $"{p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)} {component.Name}.{p.Name}",
+                            insert: p.Name + "=\"$1\"", sort: "0" + p.Name), (ISymbol?)p)));
                 }
 
-                items.AddRange(s_directiveAttributes.Where(a => !context.ExistingAttributes.Contains(a)).Select(a => Item(a, CompletionItemKind.Keyword, "Blazor directive attribute", sort: "1" + a)));
-                return new CompletionList(false, [.. items]);
+                items.AddRange(s_directiveAttributes.Where(a => !context.ExistingAttributes.Contains(a)).Select(a => (Item(a, CompletionItemKind.Keyword, "Blazor directive attribute", sort: "1" + a), (ISymbol?)null)));
+                return new CompletionList(false, _completion.SummarizeOnResolve(items, Summary));
             }
 
             default:
@@ -150,7 +151,7 @@ internal sealed class RazorFeatures
         var display = symbol is IPropertySymbol property
             ? $"{property.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)} {property.ContainingType.Name}.{property.Name}"
             : $"component {symbol.ToDisplayString()}";
-        var summary = Summary(symbol);
+        var summary = Summary(symbol, cancellationToken);
         return new Hover(MarkupContent.Markdown("```csharp\n" + display + "\n```" + (summary is null ? string.Empty : "\n\n" + summary)), Positions.ToRange(mapping.RazorText, span));
     }
 
@@ -272,9 +273,9 @@ internal sealed class RazorFeatures
         }
     }
 
-    private static string? Summary(ISymbol symbol)
+    private static string? Summary(ISymbol symbol, CancellationToken cancellationToken)
     {
-        var xml = symbol.GetDocumentationCommentXml();
+        var xml = symbol.GetDocumentationCommentXml(cancellationToken: cancellationToken);
         if (string.IsNullOrWhiteSpace(xml))
         {
             return null;

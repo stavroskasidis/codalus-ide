@@ -18,7 +18,8 @@ namespace Codalus.LanguageServices.Host.Features;
 /// <summary>
 /// Completion with Roslyn's <see cref="CompletionService"/>. The list carries labels, kinds and sort/filter text; the
 /// edit (including any <c>using</c> it adds) and the description come from <c>completionItem/resolve</c>, which finds
-/// the item in the last list computed (one per server, like Roslyn's own LSP server).
+/// the item in the last list computed (one per server, like Roslyn's own LSP server). XAML's and Razor's own lists get
+/// their summaries the same way (<see cref="SummarizeOnResolve"/>).
 /// </summary>
 internal sealed class CompletionFeature
 {
@@ -27,6 +28,7 @@ internal sealed class CompletionFeature
 
     private readonly Lock _gate = new();
     private Cached? _last;
+    private Summarized? _lastSummarized;
     private long _nextResultId;
 
     /// <summary>A list's items; <see cref="MapRange"/> maps the edits of a Razor file's list (ADR 0023).</summary>
@@ -50,7 +52,58 @@ internal sealed class CompletionFeature
         }
     }
 
-    internal sealed record ItemData(long ResultId, int Index);
+    /// <summary>The symbols a XAML or Razor list's items describe (<see cref="SummarizeOnResolve"/>), and how to summarize one.</summary>
+    private sealed record Summarized(long ResultId, ISymbol?[] Symbols, Func<ISymbol, CancellationToken, string?> Summary);
+
+    /// <param name="ResultId">The list the item is from.</param>
+    /// <param name="Index">The item's index in the list.</param>
+    /// <param name="Summary">A XAML or Razor item whose summary comes on resolve (<see cref="SummarizeOnResolve"/>); else a C# item.</param>
+    internal sealed record ItemData(long ResultId, int Index, bool? Summary = null);
+
+    /// <summary>
+    /// A XAML or Razor list (<paramref name="items"/>, each with the symbol it describes or null) whose summaries come from
+    /// <c>completionItem/resolve</c>, as a C# item's description does, instead of with the list. Most items' summaries are
+    /// never shown, and the first summary from a referenced assembly reads its whole XML file (PresentationCore's 4.5 MB
+    /// takes about 0.3 s, without cancellation), which the list mustn't wait for. The summary is then read for the
+    /// selected item only.
+    /// </summary>
+    public LspCompletionItem[] SummarizeOnResolve(IReadOnlyList<(LspCompletionItem Item, ISymbol? Symbol)> items, Func<ISymbol, CancellationToken, string?> summary)
+    {
+        if (items.All(i => i.Symbol is null))
+        {
+            return [.. items.Select(i => i.Item)];
+        }
+
+        long resultId;
+        lock (_gate)
+        {
+            resultId = ++_nextResultId;
+            _lastSummarized = new Summarized(resultId, [.. items.Select(i => i.Symbol)], summary);
+        }
+
+        return [.. items.Select((i, index) => i.Symbol is null ? i.Item : i.Item with
+        {
+            Data = JsonSerializer.SerializeToElement(new ItemData(resultId, index, Summary: true), HostJsonContext.Default.ItemData),
+        })];
+    }
+
+    /// <summary>A XAML or Razor item with its summary (<see cref="SummarizeOnResolve"/>); one being committed needs none.</summary>
+    private LspCompletionItem Summarize(LspCompletionItem item, ItemData key, CancellationToken cancellationToken)
+    {
+        Summarized? summarized;
+        lock (_gate)
+        {
+            summarized = _lastSummarized;
+        }
+
+        if (item.CommitCharacter is not null || summarized is null || summarized.ResultId != key.ResultId
+            || key.Index >= summarized.Symbols.Length || summarized.Symbols[key.Index] is not { } symbol)
+        {
+            return item;
+        }
+
+        return summarized.Summary(symbol, cancellationToken) is { } text ? item with { Documentation = MarkupContent.Markdown(text) } : item;
+    }
 
     public static CompletionOptions Options => new(TriggerCharacters: [".", " ", "<", "#", "(", "[", ",", "\"", ":", "~", "@", "$"], AllCommitCharacters: s_commitCharacters, ResolveProvider: true);
 
@@ -191,6 +244,11 @@ internal sealed class CompletionFeature
         if (item.Data is not { } data || data.Deserialize(HostJsonContext.Default.ItemData) is not { } key)
         {
             return item;
+        }
+
+        if (key.Summary == true)
+        {
+            return Summarize(item, key, cancellationToken);
         }
 
         Cached? cached;
@@ -358,7 +416,7 @@ internal sealed class CompletionFeature
 }
 
 /// <summary>Host-only JSON (completion item data).</summary>
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(CompletionFeature.ItemData))]
 internal sealed partial class HostJsonContext : JsonSerializerContext;
 
