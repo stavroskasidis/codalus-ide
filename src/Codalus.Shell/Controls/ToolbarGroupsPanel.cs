@@ -26,6 +26,12 @@ public sealed class ToolbarGroupsPanel : Panel
     /// <summary>The groups' items (no separators) in order, from the last measure.</summary>
     private readonly List<List<Control>> _groups = [];
 
+    /// <summary>
+    /// A "…" drop-down's width, once one has been measured on the row. A hidden control measures as nothing, so until a
+    /// drop-down shows, its width isn't known.
+    /// </summary>
+    private double _overflowWidth;
+
     public ToolbarGroupsPanel()
     {
         ClipToBounds = true;
@@ -83,7 +89,6 @@ public sealed class ToolbarGroupsPanel : Panel
     {
         _groups.Clear();
         _groups.Add([]);
-        var widths = new Dictionary<Control, double>();
         var height = 0.0;
         var total = 0.0;
         foreach (var child in Children)
@@ -106,7 +111,6 @@ public sealed class ToolbarGroupsPanel : Panel
                 _groups[^1].Add(child);
             }
 
-            widths[child] = child.DesiredSize.Width;
             total += child.DesiredSize.Width;
             height = Math.Max(height, child.DesiredSize.Height);
         }
@@ -116,45 +120,79 @@ public sealed class ToolbarGroupsPanel : Panel
             _groups.RemoveAt(_groups.Count - 1);
         }
 
-        var overflowWidth = 0.0;
         for (var g = 0; g < _groups.Count; g++)
         {
             var overflow = Overflow(g);
             overflow.Measure(Size.Infinity);
-            overflowWidth = Math.Max(overflowWidth, overflow.DesiredSize.Width);
+            _overflowWidth = Math.Max(_overflowWidth, overflow.DesiredSize.Width);
         }
 
-        // Fold items from the right until the row fits; a group's first folded item brings its "…".
-        _folded.Clear();
-        if (!double.IsInfinity(availableSize.Width))
+        // Fold items from the right until the row fits; a group's first folded item brings its "…". A hidden "…" measures
+        // as nothing, so the first time any show, they're measured on the row and the items folded again with their width
+        // (that only folds more, so no "…" shown hides again); else the row ends a "…" past the panel, clipped.
+        var row = Fold(availableSize.Width, total, _overflowWidth);
+        var shown = ShowOverflows();
+        var measured = shown.Count == 0 ? 0 : shown.Max(o => o.DesiredSize.Width);
+        if (measured > _overflowWidth + 0.5)
         {
-            for (var g = _groups.Count - 1; g >= 0 && total > availableSize.Width + 0.5; g--)
-            {
-                for (var i = _groups[g].Count - 1; i >= 0 && total > availableSize.Width + 0.5; i--)
-                {
-                    if (i == _groups[g].Count - 1)
-                    {
-                        total += overflowWidth;
-                    }
+            _overflowWidth = measured;
+            row = Fold(availableSize.Width, total, _overflowWidth);
+            shown = ShowOverflows();
+        }
 
-                    _folded.Add(_groups[g][i]);
-                    total -= widths[_groups[g][i]];
+        foreach (var overflow in shown)
+        {
+            height = Math.Max(height, overflow.DesiredSize.Height);
+        }
+
+        return new Size(double.IsInfinity(availableSize.Width) ? row : Math.Min(row, availableSize.Width), height);
+    }
+
+    /// <summary>
+    /// Folds items from the right until the row (<paramref name="total"/> wide unfolded) fits in <paramref name="available"/>,
+    /// each group with folded items taking <paramref name="overflowWidth"/> for its "…"; the row's width after folding.
+    /// </summary>
+    private double Fold(double available, double total, double overflowWidth)
+    {
+        _folded.Clear();
+        if (double.IsInfinity(available))
+        {
+            return total;
+        }
+
+        for (var g = _groups.Count - 1; g >= 0 && total > available + 0.5; g--)
+        {
+            for (var i = _groups[g].Count - 1; i >= 0 && total > available + 0.5; i--)
+            {
+                if (i == _groups[g].Count - 1)
+                {
+                    total += overflowWidth;
                 }
+
+                _folded.Add(_groups[g][i]);
+                total -= _groups[g][i].DesiredSize.Width;
             }
         }
 
+        return total;
+    }
+
+    /// <summary>Shows the "…" of each group with folded items, measured, and hides the others; the ones shown.</summary>
+    private List<Button> ShowOverflows()
+    {
+        var shown = new List<Button>();
         for (var g = 0; g < _overflows.Count; g++)
         {
-            var shown = g < _groups.Count && _groups[g].Any(_folded.Contains);
-            _overflows[g].IsVisible = shown;
-            if (shown)
+            var show = g < _groups.Count && _groups[g].Any(_folded.Contains);
+            _overflows[g].IsVisible = show;
+            if (show)
             {
                 _overflows[g].Measure(Size.Infinity);
-                height = Math.Max(height, _overflows[g].DesiredSize.Height);
+                shown.Add(_overflows[g]);
             }
         }
 
-        return new Size(double.IsInfinity(availableSize.Width) ? total : Math.Min(total, availableSize.Width), height);
+        return shown;
     }
 
     protected override Size ArrangeOverride(Size finalSize)

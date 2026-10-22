@@ -250,9 +250,10 @@ public sealed partial class MainWindow : Window, IShellWindow
                 problems.Add($"the standard toolbar is {row.Height} px tall: on more than one row");
             }
 
+            // The row clips: an item past its right end is cut off, even when it's still inside the window.
             foreach (var item in toolbar.Panel.Children.Where(c => c.IsVisible && !toolbar.Panel.Folded.Contains(c)).Concat(toolbar.Panel.Overflows))
             {
-                if (In(item) is var rect && (rect.Right > width + 0.5 || rect.Y < row.Y - 0.5 || rect.Bottom > row.Bottom + 0.5))
+                if (In(item) is var rect && (rect.Right > Math.Min(row.Right, width) + 0.5 || rect.Y < row.Y - 0.5 || rect.Bottom > row.Bottom + 0.5))
                 {
                     problems.Add($"the toolbar's {Avalonia.Automation.AutomationProperties.GetName(item) ?? item.GetType().Name} is at {rect}, off its row of {row}");
                 }

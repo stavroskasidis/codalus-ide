@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Codalus.Platform;
+using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 
@@ -146,8 +147,8 @@ public class NarrowWindowTests
             var folded = items.Except(shown).ToList();
             var overflows = toolbar.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("overflow") && b.IsEffectivelyVisible).ToList();
 
-            // One row: everything shown sits on it, inside the window.
-            Assert.All(shown.Concat(overflows), c => Assert.True(Rect(c, f.Window) is var r && r.Right <= width + 0.5 && r.Bottom <= row.Bottom + 0.5 && r.Y >= row.Y - 0.5, $"{at}: {Describe(c)} at {Rect(c, f.Window)}, the row is {row}"));
+            // One row: everything shown sits on it, inside the window and the row (which clips).
+            Assert.All(shown.Concat(overflows), c => Assert.True(Rect(c, f.Window) is var r && r.Right <= Math.Min(row.Right, width) + 0.5 && r.Bottom <= row.Bottom + 0.5 && r.Y >= row.Y - 0.5, $"{at}: {Describe(c)} at {Rect(c, f.Window)}, the row is {row}"));
             Assert.True(row.Height < 40, $"{at}: the toolbar is {row.Height} px tall");
 
             if (width >= 1400)
@@ -196,6 +197,43 @@ public class NarrowWindowTests
         // Wide again: everything is back on the row.
         Resize(f, 1400);
         Assert.DoesNotContain(toolbar.GetVisualDescendants().OfType<Button>(), b => b.Classes.Contains("overflow") && b.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public void The_toolbar_leaves_room_for_its_first_overflow_drop_down()
+    {
+        // A "…" that hasn't shown yet measures as nothing (a hidden control's size). The first time the row folds, from a
+        // width where nothing did, it still makes room for it: the smoke test's 650 px window, after 800 px, had More
+        // commands at 627 in a row 642 px wide. Two groups of three 100 px items: 601 px with the separator; at 510 px,
+        // folding one item leaves 501, room for the items but not for the "…" after them, so two fold.
+        var panel = new ToolbarGroupsPanel { HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left, Width = 700 };
+        for (var i = 0; i < 7; i++)
+        {
+            panel.Children.Add(i == 3 ? new Border { Classes = { "toolbarSeparator" }, Width = 1, Height = 20 } : new Border { Width = 100, Height = 20 });
+        }
+
+        var window = new Window { Width = 800, Height = 100, Content = panel };
+        window.Show();
+        try
+        {
+            ShellFixture.Pump();
+            Assert.Empty(panel.Folded);
+            Assert.Empty(panel.Overflows);
+
+            panel.Width = 510;
+            ShellFixture.Pump();
+            var overflow = Assert.Single(panel.Overflows);
+            Assert.True(overflow.Bounds.Width > 0, "the \"…\" has no width");
+            Assert.Equal(2, panel.Folded.Count);
+            foreach (var item in panel.Children.Where(c => !panel.Folded.Contains(c)).Append(overflow))
+            {
+                Assert.True(item.Bounds.X >= 0 && item.Bounds.Right <= panel.Bounds.Width + 0.5, $"{Describe(item)} at {item.Bounds}, the row {panel.Bounds.Width} px wide");
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
