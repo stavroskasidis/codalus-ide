@@ -31,7 +31,7 @@ On Linux and macOS, Start, Start Without Debugging and the Performance Profiler 
 
 ## New projects and items
 
-File → New Project lists **WPF Application**, **WPF Class Library**, **WPF User Control Library**, **WPF Custom Control Library**, **Windows Forms App**, **Windows Forms Class Library** and **Windows Forms Control Library**. On Linux and macOS they come last, marked "Windows only".
+File → New Project lists **WPF Application**, **WPF Class Library**, **WPF User Control Library**, **WPF Custom Control Library**, **Windows Forms App**, **Windows Forms Class Library** and **Windows Forms Control Library** (the **Desktop** project type filter shows them). On Linux and macOS they have a **Windows only** tag: their projects build there but run on Windows.
 
 **Add New Item** (`Ctrl+Shift+A`) offers, in a WPF project:
 - **Window**, **Page** and **User Control**: the `.xaml` file and its `.xaml.cs` code-behind;

@@ -18,6 +18,7 @@ Codalus still runs on the current .NET. Its build host rolls forward onto the ne
   - the property pages' hints that name a framework;
   - `DotnetSupport` (the SDK status): add the new channel, and fill in end-of-support dates from `releases-index.json` as Microsoft announces them.
 - [ ] **Schemas:** new `global.json`, `runtimeconfig.json` and MSBuild properties in the markup host's schemas, if the release adds any.
+- [ ] **New Project** ([ADR 0082](../adr/0082-new-project-wizard.md)): the template engine's cache isn't a contract, so check that the new SDK's still reads (`ProjectTemplateCatalogSdkTests` and `NewProjectServiceIntegrationTests` on the new SDK, and the smoke test's `projects.newProject`), and give the new channel a row in `DotnetSupport` so New Project labels its framework (Preview, then Standard or Long Term Support at GA).
 - [ ] **Analyzers and generators:** check which Roslyn version the new SDK's generators reference (the Razor generator, the targeting pack's generators). Those newer than the language host's Roslyn don't load until the next step. Document them as gaps.
 - [ ] **The user guide:** the prerequisites, and the known gaps in "Solutions and projects".
 

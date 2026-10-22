@@ -84,7 +84,7 @@ internal static partial class BuiltIns
             Clipboard = platform == Codalus.Platform.PlatformKind.MacOS ? "0b-clipboard" : "3-clipboard";
         menus.Add(
         [
-            // File. New ▸ is filled by the templates plugin.
+            // File. New ▸ holds New Project and New Solution (BuiltIns.Templates.cs).
             Sub(File, FileNewMenu, "New", "1-open"),
             Sub(File, FileOpenMenu, "Open", "1-open"),
             Item(FileOpenMenu, "workbench.openSolution", "1-open", "Project/Solution…"),

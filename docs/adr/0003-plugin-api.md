@@ -139,7 +139,7 @@ public interface IPluginContext
 ### Built-ins on the API
 - In M1, the **Welcome** start page (tree view, commands, a setting, a status item) is a built-in plugin that uses only the public API.
 - From M2 on, new built-in features default to plugins when they don't sit on a latency-critical path:
-  - project templates (M2)
+  - project templates (M2); amended by [ADR 0082](0082-new-project-wizard.md) (0.6.0): project templates moved into the shell as the New Project wizard, because a wizard needs UI the declarative views don't offer, and D2 put richer plugin UI after 1.0
   - the Error List population (M3/M4)
   - the Git UI (M6)
 - The editor, language-service plumbing and debugger core stay in the shell or dedicated hosts for latency reasons. That justification is recorded per feature.

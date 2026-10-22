@@ -53,7 +53,7 @@ A file added any other way goes last, or, in a program, before the last file, wh
   - other compiler flags (`OtherFlags`).
 
   The Build page has **Tail calls**.
-- **New Project** lists the F# templates and asks for the language when a template comes in several.
+- **New Project** lists the F# templates as their own rows (F# their first tag); the **F#** language filter shows them alone ([New projects and solutions](solutions.md#new-projects-and-solutions)).
 
 ## F# Interactive
 

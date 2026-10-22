@@ -89,7 +89,7 @@ internal static partial class BuiltIns
             explorer.RequestSearch();
         }), Open);
 
-        // For plugins (Templates): the open solution, and adding a project to it.
+        // For plugins: the open solution, and adding a project to it.
         commands.Register(
             new CommandDescriptor("solution.getInfo", "Solution Info", ContributionSource.Shell) { ShowInPalette = false },
             async (_, _) => await Infrastructure.Ui.RunAsync(shell.SolutionInfoJsonForPlugins).ConfigureAwait(false));

@@ -31,8 +31,8 @@ public sealed partial class CommandSweepTests
         "editor.activePosition",        // plugins: the active editor's position
         "editor.action.showReferences", // C# CodeLens
         "fsharp.showReferences",        // F# CodeLens
-        "project.addReferenceTo",       // plugins and the templates plugin: a reference between two projects
-        "solution.addProjectFile",      // the templates plugin: adds a created project
+        "project.addReferenceTo",       // plugins: a reference between two projects
+        "solution.addProjectFile",      // plugins: adds a created project
         "solution.getInfo",             // plugins: the solution's projects
         "welcome.nextTip",              // the start page's tip
         "workbench.getRecentSolutions", // the start page
@@ -301,7 +301,8 @@ public sealed partial class CommandSweepTests
     {
         Assert.True(Directory.Exists(PluginsDir), $"{PluginsDir} has the built-in plugins (the shell's build copies them)");
         var f = ShellFixture.Create(builtInPlugins: PluginsDir);
-        Assert.True(f.Shell.Plugins.Plugins.Count(p => p.IsBuiltIn) >= 8, "every built-in plugin is discovered");
+        Assert.True(f.Shell.Plugins.Plugins.Count(p => p.IsBuiltIn) >= 7, "every built-in plugin is discovered");
+        Assert.DoesNotContain(f.Shell.Plugins.Plugins, p => p.Id == "codalus.templates"); // retired: New Project is the IDE's (ADR 0082)
         return f;
     }
 

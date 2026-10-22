@@ -1,6 +1,9 @@
 using System.Text.RegularExpressions;
+using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
@@ -147,6 +150,80 @@ public sealed partial class PathBoxTests
             Assert.Equal("out", model.Folder);
             model.Folder = "dist";
             Assert.Equal("dist", box.TextBox.Text);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void Recent_paths_drop_down_from_the_field_and_a_label_focuses_its_text()
+    {
+        // New Project's location (0.6.0, ADR 0082): the recent locations in the field's own chevron; Location's access key.
+        var box = new PathBox { Text = "/work/start" };
+        var label = new Label { Content = "_Location", Target = box };
+        var before = new TextBox { Text = "before" };
+        var window = new Window { Width = 640, Height = 320, Content = new StackPanel { Children = { before, label, box } } };
+        window.Show();
+        try
+        {
+            ShellFixture.Pump();
+            Assert.Null(box.TextBox.InnerRightContent); // no recent paths: no chevron
+            box.Recent = ["/work/one", "/work/two_folder"];
+            ShellFixture.Pump();
+            Assert.Same(box.RecentButton, box.TextBox.InnerRightContent);
+            Assert.True(box.RecentButton.IsEffectivelyVisible);
+            Assert.Equal("Recent locations", AutomationProperties.GetName(box.RecentButton));
+            Assert.Equal("Recent locations (Alt+Down)", ToolTip.GetTip(box.RecentButton));
+            Assert.False(box.RecentButton.IsTabStop);
+
+            // Alt+Down in the field opens the list, newest first, a path's underscore kept (no access keys); choosing one
+            // puts it in the field, raises RecentChosen and gives the field the focus back.
+            var chosen = 0;
+            box.RecentChosen += (_, _) => chosen++;
+            box.TextBox.Focus();
+            window.KeyPress(Key.Down, RawInputModifiers.Alt, PhysicalKey.ArrowDown, null);
+            ShellFixture.Pump();
+            Assert.True(box.RecentMenu.IsOpen);
+            var items = box.RecentMenu.Items.OfType<MenuItem>().ToList();
+            Assert.Equal(["/work/one", "/work/two_folder"], items.Select(AutomationProperties.GetName));
+            Assert.Equal("/work/two_folder", Assert.IsType<TextBlock>(items[1].Header).Text);
+            Assert.Equal("folder", Assert.IsType<Icon>(items[1].Icon).Kind);
+            items[1].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            ShellFixture.Pump();
+            Assert.Equal("/work/two_folder", box.Text);
+            Assert.Equal(1, chosen);
+            Assert.False(box.RecentMenu.IsOpen);
+            Assert.True(box.TextBox.IsFocused);
+
+            // F4 opens it too; closing it keeps the text.
+            window.KeyPress(Key.F4, RawInputModifiers.None, PhysicalKey.F4, null);
+            ShellFixture.Pump();
+            Assert.True(box.RecentMenu.IsOpen);
+            box.RecentMenu.Hide();
+            ShellFixture.Pump();
+            Assert.Equal("/work/two_folder", box.Text);
+
+            // The label's access key lands in the text box (the box forwards its focus), and Tab goes straight there.
+            before.Focus();
+            window.KeyPress(Key.L, RawInputModifiers.Alt, PhysicalKey.L, "l");
+            window.KeyRelease(Key.L, RawInputModifiers.Alt, PhysicalKey.L, "l");
+            ShellFixture.Pump();
+            Assert.True(box.TextBox.IsFocused, $"focused: {window.FocusManager?.GetFocusedElement()}");
+            before.Focus();
+            window.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+            ShellFixture.Pump();
+            Assert.True(box.TextBox.IsFocused, $"focused: {window.FocusManager?.GetFocusedElement()}");
+            Assert.False(box.IsTabStop);
+
+            // Fields without recent paths don't change.
+            box.Recent = null;
+            ShellFixture.Pump();
+            Assert.Null(box.TextBox.InnerRightContent);
+            window.KeyPress(Key.F4, RawInputModifiers.None, PhysicalKey.F4, null);
+            ShellFixture.Pump();
+            Assert.False(box.RecentMenu.IsOpen);
         }
         finally
         {

@@ -360,7 +360,15 @@
     'cs-file': `<path d="M3.6 1.6h6l3 3v9.8H3.6z" fill="none" stroke="var(--ic-outline)"/><rect x="0.8" y="8.2" width="9" height="6.6" rx="1" fill="var(--ic-green)"/><text x="5.3" y="13.3" text-anchor="middle" font-size="5.4" font-weight="700" font-family="Inter, sans-serif" fill="var(--badge-mark, #FFFFFF)">C#</text>`,
     'json-file': `<path d="M3.6 1.6h6l3 3v9.8H3.6z" fill="none" stroke="var(--ic-outline)"/><rect x="0.8" y="8.2" width="9" height="6.6" rx="1" fill="var(--ic-yellow)"/><text x="5.3" y="13.3" text-anchor="middle" font-size="5.4" font-weight="700" font-family="Inter, sans-serif" fill="var(--badge-mark, #FFFFFF)">{}</text>`,
     method: `<g ${S}><path d="M8 2.2 13 5v6L8 13.8 3 11V5z" fill="var(--ic2, none)"/><path d="m3 5 5 2.8L13 5M8 7.8v6"/></g>`,
-    plug: `<g ${S}><path d="M5.6 1.8v3M10.4 1.8v3M3.6 4.8h8.8v2.4a4.4 4.4 0 0 1-8.8 0zM8 11.6v2.6"/></g>`
+    plug: `<g ${S}><path d="M5.6 1.8v3M10.4 1.8v3M3.6 4.8h8.8v2.4a4.4 4.4 0 0 1-8.8 0zM8 11.6v2.6"/></g>`,
+    // New Project's template kinds (NewProject.dc.html): library, desktop, mobile, service, cloud, generic.
+    library: `<g ${S}><path d="M2.4 2.6h2.8v10.8H2.4zM6.4 2.6h2.8v10.8H6.4z"/><path d="m10.2 3.5 2.6-.7 2.8 10.3-2.6.7z"/></g>`,
+    desktop: `<g ${S}><rect x="1.6" y="2.4" width="12.8" height="8.8" rx="1.4"/><path d="M5.8 13.8h4.4M8 11.2v2.6"/></g>`,
+    phone: `<g ${S}><rect x="4.2" y="1.6" width="7.6" height="12.8" rx="1.6"/><path d="M7.1 12.2h1.8"/></g>`,
+    server: `<g ${S}><rect x="2.2" y="2.2" width="11.6" height="4.8" rx="1"/><rect x="2.2" y="9" width="11.6" height="4.8" rx="1"/><path d="M4.6 4.6h.1M4.6 11.4h.1M7 4.6h4.4M7 11.4h4.4"/></g>`,
+    cloud: `<path ${S} d="M4.6 12.6a3 3 0 0 1-.2-6 3.9 3.9 0 0 1 7.6-.8 2.9 2.9 0 0 1 .3 5.8z"/>`,
+    apps: `<g ${S}><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></g>`,
+    maximize: `<rect ${S} x="3.4" y="3.4" width="9.2" height="9.2" rx="1"/>`
   };
 
   function sprite() {

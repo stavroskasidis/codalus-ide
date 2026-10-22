@@ -177,7 +177,8 @@ public partial class PolishTests
         var rootRect = new Rect(root.Bounds.Size);
         foreach (var text in root.GetVisualDescendants().OfType<TextBlock>())
         {
-            var content = text.Text ?? text.Inlines?.Text;
+            // An access key's text (a button's "_Next") draws without its underscore.
+            var content = text is Avalonia.Controls.Primitives.AccessText ? WithoutAccessKey(text.Text) : text.Text ?? text.Inlines?.Text;
             if (!text.IsEffectivelyVisible || string.IsNullOrWhiteSpace(content) || text.Bounds.Width < 1 || text.Bounds.Height < 1
                 || text.TextWrapping != TextWrapping.NoWrap || text.FindAncestorOfType<TextBox>() is not null || InThemePreview(text))
             {
@@ -238,6 +239,36 @@ public partial class PolishTests
                 yield return $"\"{label}\" is trimmed without a tooltip ({Describe(text, root)})";
             }
         }
+    }
+
+    /// <summary>An access key's text as drawn: its first single underscore gone, a doubled one a literal underscore.</summary>
+    private static string? WithoutAccessKey(string? text)
+    {
+        if (text is null)
+        {
+            return null;
+        }
+
+        var drawn = new System.Text.StringBuilder(text.Length);
+        var marked = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '_' && i + 1 < text.Length && text[i + 1] == '_')
+            {
+                drawn.Append('_');
+                i++;
+            }
+            else if (text[i] == '_' && !marked)
+            {
+                marked = true;
+            }
+            else
+            {
+                drawn.Append(text[i]);
+            }
+        }
+
+        return drawn.ToString();
     }
 
     /// <summary>Whether the text is on a toolbar item that moved into the toolbar's overflow menu.</summary>

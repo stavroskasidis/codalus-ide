@@ -47,7 +47,6 @@
     <RemoteServer Include="..\Codalus.Remote.Server\Codalus.Remote.Server.csproj" />
     <ProjectReference Include="@(RemoteServer)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Welcome\Codalus.Plugins.Welcome.csproj" PluginId="codalus.welcome" />
-    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Templates\Codalus.Plugins.Templates.csproj" PluginId="codalus.templates" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.DotNetTest\Codalus.Plugins.DotNetTest.csproj" PluginId="codalus.dotnettest" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" PluginId="codalus.github" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" PluginId="codalus.azuredevops" />

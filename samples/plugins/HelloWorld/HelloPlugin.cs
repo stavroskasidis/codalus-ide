@@ -90,6 +90,19 @@ public sealed class HelloPlugin : ICodalusPlugin
             return Task.FromResult<object?>(null);
         }));
 
+        // Prompts (API 1.1): a quick pick, then input boxes for a folder and a file, each with a Browse button that opens
+        // the OS's picker. Returns the answers; the integration tests answer through the host.
+        context.Subscriptions.Add(context.Commands.Register("hello.ask", async (_, ct) =>
+        {
+            var picked = await context.Window.ShowQuickPickAsync(
+                [new QuickPickItem("Hello") { Description = "hello", Detail = "A greeting" }, new QuickPickItem("Goodbye") { Description = "goodbye" }],
+                "Pick a word",
+                ct);
+            var folder = await context.Window.ShowInputBoxAsync(new InputBoxOptions("Folder") { Prompt = "A folder to greet.", Browse = InputBoxBrowse.Folder }, ct);
+            var file = await context.Window.ShowInputBoxAsync(new InputBoxOptions("File") { Prompt = "A file to greet.", Browse = InputBoxBrowse.File }, ct);
+            return new { picked = picked?.Description, folder, file };
+        }));
+
         // Simulates a fatal plugin bug, so the shell's host supervision can be exercised.
         context.Subscriptions.Add(context.Commands.Register("hello.crashHost", () => Environment.Exit(42)));
 

@@ -429,6 +429,21 @@ public static class IconSet
         ["control-save-file-dialog"] = "save_16_regular",
         ["control-generic"] = "window_16_regular",
         ["control-component"] = "settings_16_regular",
+
+        // New Project's template kinds (0.6.0, ADR 0082; TemplateTags.IconKind), as docs/design/controls/NewProject.dc.html
+        // draws them: a console, a library, a test, a service, a web app, a mobile app, a desktop app, a cloud app, a
+        // solution, any other template, and a template pack to install.
+        ["template-console"] = "window_console_20_regular",
+        ["template-library"] = "library_16_regular",
+        ["template-test"] = "beaker_16_regular",
+        ["template-service"] = "server_16_regular",
+        ["template-web"] = "globe_16_regular",
+        ["template-mobile"] = "phone_16_regular",
+        ["template-desktop"] = "desktop_16_regular",
+        ["template-cloud"] = "cloud_16_regular",
+        ["template-solution"] = "stack_16_regular",
+        ["template-generic"] = "apps_16_regular",
+        ["template-install"] = "arrow_download_16_regular",
     };
 
     private static readonly Dictionary<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);

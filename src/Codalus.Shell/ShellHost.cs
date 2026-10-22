@@ -76,7 +76,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
         UseUserDotnet();
-        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.GitSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings()]);
+        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.GitSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings(), .. BuiltIns.TemplatesSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
         Theme.Changed += (_, _) => UseFamilyDefaults();
@@ -186,6 +186,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterPackageCommands(this);
         BuiltIns.RegisterProjectManagementCommands(this);
         BuiltIns.RegisterProjectSystemCommands(this);
+        BuiltIns.RegisterTemplatesCommands(this);
         BuiltIns.RegisterEditCommands(this);
         BuiltIns.RegisterMenuBar(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterEditorContextMenu(Workbench.Menus, Workbench.Platform);
@@ -205,6 +206,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
         BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
         BuiltIns.RegisterProjectSystemMenus(Workbench.Menus);
+        BuiltIns.RegisterTemplatesMenus(Workbench.Menus);
         BuiltIns.RegisterTerminalMenus(Workbench.Menus);
         BuiltIns.RegisterInteractiveMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
@@ -476,7 +478,9 @@ public sealed partial class ShellHost : IAsyncDisposable
         var roots = Options.PluginDirs.Select(d => (d, false))
             .Append((Paths.PluginsDirectory, false))
             .Append((builtIn, true));
-        Plugins.AddPlugins(PluginDiscovery.Scan(roots, Workbench.Platform, Options.EnableProposedApi));
+        var retired = new List<(string Id, string Directory)>();
+        Plugins.AddPlugins(PluginDiscovery.Scan(roots, Workbench.Platform, Options.EnableProposedApi, retired));
+        Plugins.ReportRetired(retired);
 
         // Plugins' file icon themes (API 1.0): the setting, applied.
         RegisterIconThemes();

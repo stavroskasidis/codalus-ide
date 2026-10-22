@@ -82,7 +82,7 @@ Pages in a plain class library work too: MAUI's packages have `net10.0` versions
 
 ## New MAUI projects
 
-With the MAUI workload installed, File → New Project lists **.NET MAUI App**, **.NET MAUI Blazor Hybrid App** and **.NET MAUI Class Library**.
+With the MAUI workload installed, File → New Project lists **.NET MAUI App**, **.NET MAUI Blazor Hybrid App** and **.NET MAUI Class Library** (the **Mobile** project type filter shows them).
 
 ## Not available yet
 

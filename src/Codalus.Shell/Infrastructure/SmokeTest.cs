@@ -211,7 +211,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("plugins.host", "M1", "Built-in plugins load and run in the plugin host", async () =>
         {
             var builtIn = shell.Plugins.Plugins.Where(p => p.IsBuiltIn).ToList();
-            Check(builtIn.Any(p => p.Id == "codalus.welcome") && builtIn.Any(p => p.Id == "codalus.templates"), $"the built-in plugins are discovered (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
+            Check(builtIn.Any(p => p.Id == "codalus.welcome") && builtIn.Any(p => p.Id == "codalus.dotnettest"), $"the built-in plugins are discovered (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
+            Check(builtIn.All(p => p.Id != "codalus.templates"), "the retired Templates plugin isn't loaded (New Project is the IDE's, ADR 0082)");
             var broken = builtIn.Where(p => p.State is PluginState.Invalid or PluginState.Incompatible or PluginState.Failed).ToList();
             Check(broken.Count == 0, $"no built-in plugin is broken ({string.Join(", ", broken.Select(p => $"{p.Id}: {p.State}"))})");
 
@@ -282,6 +283,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M34d: the UI gallery's empty states, before a solution opens.
         await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Classic's four themes and Harbor's three (M34h)", GalleryEmptyStepAsync).ConfigureAwait(true);
+
+        // 0.6.0: New Project, the classic IDE's three-page wizard (ADR 0082); the website's screenshot.
+        await StepAsync("projects.newProject", "0.6.0", "File → New Project: the three-page wizard finds Console App by search and the C# filter, configures it with its solution in a new trusted folder, picks the framework and creates it; the solution opens with the project and Program.cs (on Windows, Add → New Project adds a WPF Application)", NewProjectStepAsync).ConfigureAwait(true);
 
         // M2: project system (build host, MSBuild evaluation, Solution Explorer).
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>

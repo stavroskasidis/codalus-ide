@@ -67,6 +67,20 @@ public static class CommandIcons
         ["symbol-text"] = Blue,
         ["symbol-target-type"] = Blue,
 
+        // New Project's template kinds (0.6.0, ADR 0082): apps blue, libraries, services and solutions purple, tests and
+        // a pack to install green.
+        ["template-console"] = Blue,
+        ["template-web"] = Blue,
+        ["template-desktop"] = Blue,
+        ["template-mobile"] = Blue,
+        ["template-cloud"] = Blue,
+        ["template-generic"] = Blue,
+        ["template-library"] = Purple,
+        ["template-service"] = Purple,
+        ["template-solution"] = Purple,
+        ["template-test"] = Green,
+        ["template-install"] = Green,
+
         // The control set's views (M34h).
         ["add"] = Green,
         ["subtract"] = Red,
@@ -311,6 +325,7 @@ public static class CommandIcons
         // File.
         ["templates.newProject"] = new("new"),
         ["templates.newSolution"] = new("new-solution"),
+        ["solution.addNewProject"] = new("new"),
         ["workbench.openSolution"] = new("folder-open", Open),
         ["workbench.openFolder"] = new("folder", Open),
         ["workbench.openRecent"] = new("history"),

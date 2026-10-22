@@ -24,6 +24,8 @@
     <PackageReference Include="Avalonia.Remote.Protocol" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Recorded template packages' files (New Project, ADR 0082): data, not code of the tests. -->
+    <Compile Remove="TestData\**" />
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
     <!-- Properties and items of the fixtures' projects, read from MSBuild's answer file. -->
     <Compile Include="..\Shared\MSBuildQuery.cs" Link="Shared\MSBuildQuery.cs" />
