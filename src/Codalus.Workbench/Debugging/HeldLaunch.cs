@@ -71,7 +71,7 @@ public sealed class HeldLaunch
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (File.Exists(pidFile) && int.TryParse(await File.ReadAllTextAsync(pidFile, cancellationToken).ConfigureAwait(false), NumberStyles.Integer, CultureInfo.InvariantCulture, out var pid))
+                if (await ReadProcessIdAsync(pidFile, cancellationToken).ConfigureAwait(false) is { } pid)
                 {
                     return new HeldLaunch(folder, pid);
                 }
@@ -106,6 +106,23 @@ public sealed class HeldLaunch
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // The folder is gone: the hook stopped waiting already.
+        }
+    }
+
+    /// <summary>
+    /// The process id in <paramref name="pidFile"/>; null while it isn't there or can't be read yet. The hook renames the
+    /// file into place whole, but on Windows another process (an antivirus scanner) can hold the new file open for a
+    /// moment, and reading it then fails with a sharing violation: the next poll reads it.
+    /// </summary>
+    internal static async Task<int?> ReadProcessIdAsync(string pidFile, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return File.Exists(pidFile) && int.TryParse(await File.ReadAllTextAsync(pidFile, cancellationToken).ConfigureAwait(false), NumberStyles.Integer, CultureInfo.InvariantCulture, out var pid) ? pid : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 
