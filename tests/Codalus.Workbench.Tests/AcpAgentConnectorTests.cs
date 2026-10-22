@@ -360,14 +360,19 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
     {
         await _workbench.Settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, Ct);
         StandIns(modes: "ACP_FAKE_START_DELAY=4000");
-        var test = TestAsync(new AcpConnectRequest(Template(AcpSignInCheck.SessionNew), Already));
-        for (var i = 0; i < 200 && Received("initialize").Count == 0 && !File.Exists(_log); i++)
+        var starting = new TaskCompletionSource();
+        var test = _connector.TestAsync(new AcpConnectRequest(Template(AcpSignInCheck.SessionNew), Already), _host, new SyncProgress<AcpTestProgress>(p =>
         {
-            await Task.Delay(50, Ct);
-        }
+            if (p is { Step: AcpTestStep.Start, State: AcpStepState.Running })
+            {
+                starting.TrySetResult();
+            }
+        }), Ct);
+        await starting.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
 
+        // The agent waits 4 s before it answers: AI goes off meanwhile.
         await _workbench.Settings.SetAsync(AiService.EnabledSetting, false, SettingScope.User, Ct);
-        var (result, _) = await test;
+        var result = await test;
         Assert.Equal("AI assistance was turned off, so the test stopped. Nothing was saved.", result.Message);
         Assert.Null(Agents);
     }

@@ -3816,6 +3816,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Program("node", "v24.11.1");
         Program("npx", "11.6.2");
         shell.AgentSearchPath = bin;
+        var remoteSession = shell.IsRemoteSession;
+        shell.IsRemoteSession = false; // the runner's own SSH_* (a CI runner over SSH) mustn't change the picture
         try
         {
             shell.ShowAiChat();
@@ -3825,7 +3827,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var buttons = view.GetVisualDescendants().OfType<Avalonia.Controls.ItemsControl>().First(c => c.Name == "ConnectButtons").GetVisualDescendants().OfType<Avalonia.Controls.Button>().ToList();
             Check(buttons.Select(b => b.Content as string).SequenceEqual(["Claude", "Codex", "Gemini CLI", "GitHub Copilot"]), "the four one-click agents are buttons");
             await RenderedAsync().ConfigureAwait(true);
-            Screenshot("smoke-test-ai-connect-off.png");
+            Screenshot("ai-chat-connect.png");
 
             buttons[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
             var dialog = shell.ConnectAgent;
@@ -3836,7 +3838,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(dialog.ShowConsent && !dialog.CanConnect, "Connect waits for the consent while AI is off");
             Check(dialog.SignInOptions.Select(o => o.Name).SequenceEqual(["Claude subscription", "Anthropic Console account", "API key", "I'm signed in already"]), "Claude's ways to sign in");
             await RenderedAsync().ConfigureAwait(true);
-            Screenshot("smoke-test-agent-connect.png");
+            Screenshot("agent-connect.png");
 
             dialog.Cancel();
             await WaitAsync(() => !dialog.IsOpen, "Cancel closes it").ConfigureAwait(true);
@@ -3846,6 +3848,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         finally
         {
             shell.AgentSearchPath = null;
+            shell.IsRemoteSession = remoteSession;
             if (shell.ConnectAgent.IsOpen)
             {
                 shell.ConnectAgent.Cancel();

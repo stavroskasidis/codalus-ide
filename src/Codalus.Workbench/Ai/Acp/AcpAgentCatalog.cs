@@ -4,8 +4,9 @@ using Codalus.Workbench.Settings;
 namespace Codalus.Workbench.Ai.Acp;
 
 /// <summary>
-/// A known ACP agent that AI Chat's "Add agent…" offers (M48, ADR 0079): its <c>ai.agents</c> entry, pinned to the version
-/// the ACP registry lists, and the CLI whose presence on the PATH marks it installed.
+/// A known ACP agent (M48, ADR 0079), the run part of a template (<see cref="AcpAgentTemplate"/>, ADR 0083): its
+/// <c>ai.agents</c> entry, pinned to the version the ACP registry lists, and the CLI whose presence on the PATH marks it
+/// installed.
 /// </summary>
 /// <param name="Id">Its key in <c>ai.agents</c> (<c>claude</c>).</param>
 /// <param name="Name">How the list names it.</param>
@@ -25,13 +26,14 @@ public sealed record AcpKnownAgent(string Id, string Name, string Description, s
 }
 
 /// <summary>
-/// The ACP agents AI Chat can set up in one step (M48), committed here: no list is fetched at runtime. Each entry is pinned
+/// The ACP agents AI Chat can connect (M48; Connect from templates, ADR 0083), committed here: no list is fetched at runtime. Each entry is pinned
 /// to the version in the ACP registry (<see cref="RegistryChecked"/>): an npx package with its exact version, or, for an
 /// agent the registry distributes as a binary archive (goose, OpenCode), its installed CLI, whatever version is installed
 /// (the entry says which it was tested with; Codalus never downloads one).
 /// To update it, read the registry (<c>https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json</c>, shown at
 /// agentclientprotocol.com/get-started/registry), check each package and command, change the versions here and in
-/// docs/user-guide/ai.md, and set <see cref="RegistryChecked"/>. <c>AcpAgentCatalogTests</c> refuses an unpinned entry.
+/// docs/user-guide/ai.md (and the templates' recordings in tests/Shared/AcpRecordings), and set <see cref="RegistryChecked"/>.
+/// <c>AcpAgentCatalogTests</c> refuses an unpinned entry.
 /// </summary>
 public static class AcpAgentCatalog
 {
