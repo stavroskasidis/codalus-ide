@@ -11,7 +11,7 @@ namespace Codalus.Workbench.Tests;
 /// </summary>
 public sealed class GitBranchMenuTests : IAsyncLifetime
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-git-branches-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-git-branches-" + Guid.NewGuid().ToString("N"));
     private readonly GitService _git = new(watch: false);
 
     private string Repo => Path.Combine(_root, "repo");
