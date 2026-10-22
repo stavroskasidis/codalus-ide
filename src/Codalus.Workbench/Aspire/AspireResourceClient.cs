@@ -40,23 +40,34 @@ public sealed record AspireLogLine(int Number, string Text, bool IsError);
 /// protocol buffers reader, so the Native AOT shell needs neither Grpc.Net.Client nor generated code; unknown fields
 /// are skipped, so newer AppHosts still read.
 /// </summary>
-public sealed class AspireResourceClient(Uri endpoint, string? apiKey) : IDisposable
+public sealed class AspireResourceClient : IDisposable
 {
     private const string Service = "/aspire.v1.DashboardService/";
     private const string ApiKeyHeader = "x-resource-service-api-key";
 
-    private readonly HttpClient _http = new(new SocketsHttpHandler
-    {
-        // The resource service of a local AppHost uses the development certificate (or none).
-        SslOptions = { RemoteCertificateValidationCallback = (_, _, _, errors) => errors == System.Net.Security.SslPolicyErrors.None || endpoint.IsLoopback },
-        EnableMultipleHttp2Connections = true,
-        PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan,
-    })
-    {
-        Timeout = Timeout.InfiniteTimeSpan,
-    };
+    private readonly string? _apiKey;
+    private readonly HttpClient _http;
 
-    public Uri Endpoint { get; } = endpoint;
+    public AspireResourceClient(Uri endpoint, string? apiKey)
+        : this(endpoint, apiKey, new SocketsHttpHandler
+        {
+            // The resource service of a local AppHost uses the development certificate (or none).
+            SslOptions = { RemoteCertificateValidationCallback = (_, _, _, errors) => errors == System.Net.Security.SslPolicyErrors.None || endpoint.IsLoopback },
+            EnableMultipleHttp2Connections = true,
+            PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan,
+        })
+    {
+    }
+
+    /// <summary>A client whose calls go through <paramref name="handler"/> (the tests' stand-in resource service).</summary>
+    internal AspireResourceClient(Uri endpoint, string? apiKey, HttpMessageHandler handler)
+    {
+        Endpoint = endpoint;
+        _apiKey = apiKey;
+        _http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+    }
+
+    public Uri Endpoint { get; }
 
     /// <summary>The resource tree: the initial list, then each change, until cancelled or the AppHost ends.</summary>
     public async IAsyncEnumerable<AspireResourceChange> WatchResourcesAsync([EnumeratorCancellation] CancellationToken cancellationToken)
@@ -111,9 +122,9 @@ public sealed class AspireResourceClient(Uri endpoint, string? apiKey) : IDispos
         };
         message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/grpc");
         message.Headers.TE.Add(new TransferCodingWithQualityHeaderValue("trailers"));
-        if (apiKey is not null)
+        if (_apiKey is not null)
         {
-            message.Headers.Add(ApiKeyHeader, apiKey);
+            message.Headers.Add(ApiKeyHeader, _apiKey);
         }
 
         using var response = await _http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);

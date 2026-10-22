@@ -60,6 +60,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Fixed: Reset in the Settings editor kept the Modified mark** when the setting's value was the same as its default (or as the value another settings file gives it): the line was removed from settings.json, but the row still said Modified and offered Reset, and the page's count of modified settings stayed the same.
 - **Fixed:** Start Debugging (`F5`) on an Aspire AppHost on a busy machine could leave a project stuck short of Running in the Aspire window while it ran under the debugger: Codalus IDE answered the orchestrator's request to start the project only once the debugger had attached, and the orchestrator gave up after 120 seconds. It now answers at once, and the program joins the debug session meanwhile.
 - **Fixed:** the completion list, its description, parameter info, Quick Info and other popups that open in a window of their own drew their text at 14 px instead of the 12 px of the rest of the IDE.
+- **Fixed:** the Aspire window's console output could stay empty for a running project: when the AppHost's log stream for it ended early, the window never asked again. It now follows the stream again while the resource runs (a few times, waiting longer each time), without repeating lines already shown, and again when the resource is restarted.
 
 ## 0.5.0
 
