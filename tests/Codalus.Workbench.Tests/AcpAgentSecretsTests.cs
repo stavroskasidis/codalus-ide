@@ -20,7 +20,7 @@ public sealed class AcpAgentSecretsTests : IAsyncDisposable
 {
     private const string Key = "s3cret-agent-key-1234";
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-acp-secrets-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-acp-secrets-" + Guid.NewGuid().ToString("N"));
     private readonly string _log;
     private readonly WorkbenchServices _workbench;
     private readonly AiService _ai;

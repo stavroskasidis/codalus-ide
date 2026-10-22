@@ -78,7 +78,7 @@ public sealed class WinFormsPropertiesShellTests
         Assert.Equal("Segoe UI, 9pt, style=Italic", font.Value);
         Assert.Equal(["Name", "Size", "Unit", "Bold", "GdiCharSet", "GdiVerticalFont", "Italic", "Strikeout", "Underline"], font.Children.Select(c => c.Name));
         var name = font.Children[0];
-        Assert.True(name is { IsChoice: true, ChoicesEditable: false });
+        Assert.True(name is { IsChoice: true, ChoicesEditable: true }); // FontNameConverter's list isn't exclusive: any name can be typed
         Assert.Contains(name.Options, o => o.Value == "Segoe UI");
         // GdiCharSet is a settable byte and GdiVerticalFont a True/False choice, as the real host reports them and the mockup draws them.
         Assert.True(font.Children.Single(c => c.Name == "GdiCharSet") is { IsReadOnly: false, IsText: true });
@@ -241,7 +241,9 @@ public sealed class WinFormsPropertiesShellTests
         editor.Text = "one\ntwo\n";
         await editor.OkAsync();
         Assert.Null(designer.StringsEditor);
-        await ShellFixture.PumpUntil(() => Code(designer).Contains("notesTextBox.Lines = new string[] { \"one\", \"two\" };", StringComparison.Ordinal), seconds: 30);
+        // Lines is hidden from serialization: the lines are written as the box's Text, as the classic IDE writes them.
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("notesTextBox.Text = \"one\\r\\ntwo\";", StringComparison.Ordinal), seconds: 30);
+        Assert.DoesNotContain("notesTextBox.Lines", Code(designer), StringComparison.Ordinal);
 
         // Opened again, it shows the array's items a line each, with CRLF.
         (await RowAsync(f, "Lines", r => r.IsSet)).ModalEditor!.Execute(null);

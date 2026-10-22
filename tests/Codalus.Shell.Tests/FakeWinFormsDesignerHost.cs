@@ -701,8 +701,16 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                 return null;
 
             case "Lines":
-                Change("Lines", edit.Reset ? null : edit.Value ?? DesignerValue.ArrayOf("System.String", [.. text.Split('\n').Select(l => DesignerValue.String(l.TrimEnd('\r')))]));
+            {
+                // As the real host: TextBoxBase.Lines is hidden from serialization, so the lines are the box's Text, a line
+                // each with CRLF (TextBoxDesigner's shadowed Text), as the classic IDE writes them.
+                var lines = edit.Value is { Arguments: { } items } ? items.Select(i => i.Value ?? string.Empty) : text.Split('\n').Select(l => l.TrimEnd('\r'));
+                var joined = edit.Reset ? null : string.Join("\r\n", lines);
+                _controls[component] = _controls[component] with { Text = joined };
+                changes.RemoveAll(c => c.Component == edit.Component && c.Property == "Text");
+                changes.Add(new DesignerPropertyChange(edit.Component, "Text", joined is null ? null : DesignerValue.String(joined)));
                 return null;
+            }
 
             case "AcceptButton" or "CancelButton":
                 if (!edit.Reset && text != "(none)" && !_controls.ContainsKey(text))
@@ -846,7 +854,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             Description = "The font used to display text in the control.",
             SubProperties =
             [
-                new("Name", "Misc", "System.String", name) { Editor = DesignerEditors.Enum, StandardValues = FontFamilies, IsSet = font is not null },
+                new("Name", "Misc", "System.String", name) { Editor = DesignerEditors.Enum, StandardValues = FontFamilies, ChoicesEditable = true, IsSet = font is not null },
                 new("Size", "Misc", "System.Single", size.ToString(CultureInfo.InvariantCulture)) { IsSet = font is not null },
                 new("Unit", "Misc", "System.Drawing.GraphicsUnit", "Point") { Editor = DesignerEditors.Enum, StandardValues = s_units, IsSet = font is not null },
                 Style("Bold"),
@@ -1014,7 +1022,8 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             });
         if (isTextBox)
         {
-            rows.Add(new("Lines", "Appearance", "System.String[]", "String[] Array") { Editor = DesignerEditors.Strings, IsSet = Assigned(name, "Lines") is not null, Description = "The lines of text in a multiline edit, as an array of String values." });
+            // Set, as the real host reports it: Lines has no default value or ShouldSerializeLines, so ShouldSerializeValue is true.
+            rows.Add(new("Lines", "Appearance", "System.String[]", "String[] Array") { Editor = DesignerEditors.Strings, IsSet = true, Description = "The lines of text in a multiline edit, as an array of String values." });
         }
 
         if (control.Type == Forms + "Button")

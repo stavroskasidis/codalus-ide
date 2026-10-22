@@ -17,7 +17,7 @@ namespace Codalus.Workbench.Tests;
 /// </summary>
 public sealed class AcpAgentTests : IAsyncDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-acp-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-acp-" + Guid.NewGuid().ToString("N"));
     private readonly string _log;
     private readonly WorkbenchServices _workbench;
     private readonly AiService _ai;

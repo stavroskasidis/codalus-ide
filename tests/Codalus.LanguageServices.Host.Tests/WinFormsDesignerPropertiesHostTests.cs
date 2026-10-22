@@ -85,7 +85,7 @@ public sealed class WinFormsDesignerPropertiesHostTests(WinFormsHostFixture fixt
         Assert.Equal(["Name", "Size", "Unit", "Bold", "GdiCharSet", "GdiVerticalFont", "Italic", "Strikeout", "Underline"], font.SubProperties!.Select(p => p.Name));
         Assert.Equal("True", font.SubProperties!.Single(p => p.Name == "Italic").Value);
         var name = font.SubProperties![0];
-        Assert.True(name is { Editor: DesignerEditors.Enum, ChoicesEditable: false, IsReadOnly: false });
+        Assert.True(name is { Editor: DesignerEditors.Enum, ChoicesEditable: true, IsReadOnly: false }, $"{name.Editor}, choices editable {name.ChoicesEditable}, read-only {name.IsReadOnly}"); // FontNameConverter's list isn't exclusive
         Assert.Contains("Segoe UI", name.StandardValues!);
         Assert.All(font.SubProperties!, p => Assert.True(p.IsSet, p.Name));
 
@@ -266,8 +266,11 @@ public sealed class WinFormsDesignerPropertiesHostTests(WinFormsHostFixture fixt
         var none = await SetAsync(host, new DesignerPropertyEdit(string.Empty, "AcceptButton") { Text = "(none)" });
         Assert.DoesNotContain("AcceptButton =", Apply("OrderForm.cs", source, none).Code, StringComparison.Ordinal);
 
+        // TextBoxBase.Lines is hidden from serialization: the lines go to the box's Text (TextBoxDesigner shadows it), a line
+        // each with CRLF, as the classic IDE writes them.
         var lines = await SetAsync(host, new DesignerPropertyEdit("notesTextBox", "Lines") { Value = DesignerValue.ArrayOf("System.String", DesignerValue.String("one"), DesignerValue.String("two")) });
-        Assert.Contains("notesTextBox.Lines = new string[] { \"one\", \"two\" };", Apply("OrderForm.cs", source, lines).Code, StringComparison.Ordinal);
+        var code = Apply("OrderForm.cs", source, lines).Code;
+        Assert.True(code.Contains("notesTextBox.Text = \"one\\r\\ntwo\";", StringComparison.Ordinal) && !code.Contains("notesTextBox.Lines", StringComparison.Ordinal), code);
     }
 
     [Fact]

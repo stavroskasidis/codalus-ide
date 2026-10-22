@@ -15,7 +15,7 @@ namespace Codalus.Workbench.Tests;
 /// </summary>
 public sealed partial class AcpAgentCatalogTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-acp-catalog-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-acp-catalog-" + Guid.NewGuid().ToString("N"));
     private readonly string _workspaceFile;
     private readonly WorkbenchServices _workbench;
 

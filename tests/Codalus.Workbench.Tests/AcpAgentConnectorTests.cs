@@ -22,7 +22,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
 {
     private const string Key = "sk-stand-in-key-9876";
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-acp-connect-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-acp-connect-" + Guid.NewGuid().ToString("N"));
     private readonly string _log;
     private readonly WorkbenchServices _workbench;
     private readonly AiService _ai;
