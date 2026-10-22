@@ -52,6 +52,65 @@ public sealed record GitStatus(
 
 public sealed record GitBranch(string Name, bool IsRemote, bool IsCurrent, string? Upstream, string Commit);
 
+/// <summary>
+/// A branch as the Git Changes window's branch drop-down lists it (#23, D38): <see cref="FullRef"/> (<c>refs/heads/main</c>,
+/// <c>refs/remotes/origin/main</c>), <see cref="Name"/> as git shortens it (<c>main</c>, <c>origin/main</c>), and for a local
+/// branch its upstream and the commits each side has that the other doesn't (from the last fetch).
+/// </summary>
+public sealed record GitBranchDetails(string FullRef, string Name, bool IsRemote, bool IsCurrent)
+{
+    /// <summary>A remote branch's remote (<c>origin</c>); null for a local branch.</summary>
+    public string? Remote { get; init; }
+
+    /// <summary>The name without its remote (<c>feature/sign-in</c> for <c>origin/feature/sign-in</c>); a local branch's name.</summary>
+    public string ShortName => Remote is { } remote && Name.StartsWith(remote + "/", StringComparison.Ordinal) ? Name[(remote.Length + 1)..] : Name;
+
+    /// <summary>The upstream's short name (<c>origin/main</c>, or <c>main</c> for a local upstream), or null.</summary>
+    public string? Upstream { get; init; }
+
+    /// <summary>The upstream's full ref (<c>refs/remotes/origin/main</c>), or null.</summary>
+    public string? UpstreamRef { get; init; }
+
+    /// <summary>The upstream is configured but its remote-tracking branch is gone (deleted on the remote and pruned).</summary>
+    public bool UpstreamGone { get; init; }
+
+    /// <summary>The commits this branch has that its upstream doesn't (outgoing).</summary>
+    public int Ahead { get; init; }
+
+    /// <summary>The upstream's commits this branch doesn't have (incoming).</summary>
+    public int Behind { get; init; }
+
+    /// <summary>
+    /// Where it's checked out when that's another worktree, or where a rebase or bisect works on it there (with the OS's
+    /// separators); null when it's checked out nowhere else.
+    /// </summary>
+    public string? WorktreePath { get; init; }
+
+    /// <summary>A rebase in this worktree works on it: it counts as the current branch (D38, question 21).</summary>
+    public bool IsRebasingHere { get; init; }
+
+    /// <summary>Its commit (the full id).</summary>
+    public string Commit { get; init; } = string.Empty;
+}
+
+/// <summary>A commit in a list of commits a dialog names: the short id and the subject.</summary>
+public sealed record GitCommitSummary(string Hash, string Subject);
+
+/// <summary>
+/// Whether a branch is merged by git's rule for <c>git branch -d</c> (D38, question 8): compared with its upstream when it has
+/// one, otherwise with HEAD, and with HEAD when the upstream is deleted too. <see cref="ComparedWith"/> names what it was
+/// compared with (<c>origin/feature</c>, or HEAD's branch or <c>HEAD</c>), <see cref="Commits"/> are the branch's commits that
+/// aren't there (newest first), and <see cref="UpstreamOnly"/>, when the upstream goes too, the upstream's commits that
+/// neither the branch nor HEAD has.
+/// </summary>
+public sealed record GitMergeCheck(bool Merged, string ComparedWith, bool ComparedWithUpstream, IReadOnlyList<GitCommitSummary> Commits)
+{
+    public IReadOnlyList<GitCommitSummary> UpstreamOnly { get; init; } = [];
+}
+
+/// <summary>A file two revisions differ in: its name-status letter (A, M, D, R, C, T), its path and, for a rename or copy, its old path.</summary>
+public sealed record GitChangedFile(char Status, string Path, string? OldPath);
+
 /// <summary>What <see cref="GitService.UpdateBranchAsync"/> did to a local branch.</summary>
 public enum GitBranchUpdateOutcome
 {
