@@ -47,10 +47,14 @@ public sealed class PackageService
         _solutions.RequestAsync(PackageMethods.Search, new PackageSearchParams(query, prerelease, skip, take, source, Offline, refresh), Json.PackageSearchParams, Json.PackageSearchResult, cancellationToken, s_networkTimeout);
 
     /// <param name="targetFrameworks">A project's frameworks: each version says whether it supports them (M33).</param>
-    public Task<PackageDetails> DetailsAsync(string id, bool prerelease, string? version, string? source, CancellationToken cancellationToken, IReadOnlyList<string>? targetFrameworks = null) =>
+    /// <param name="verified">
+    /// What a search said of the package's verified owner (a Browse row's <see cref="PackageSummary.Verified"/>, D39); null
+    /// makes the host ask nuget.org for <see cref="PackageDetails.Verified"/>.
+    /// </param>
+    public Task<PackageDetails> DetailsAsync(string id, bool prerelease, string? version, string? source, CancellationToken cancellationToken, IReadOnlyList<string>? targetFrameworks = null, bool? verified = null) =>
         _solutions.RequestAsync(
             PackageMethods.Details,
-            new PackageDetailsParams(id, prerelease, version, source, Offline, targetFrameworks is { Count: > 0 } ? [.. targetFrameworks] : null),
+            new PackageDetailsParams(id, prerelease, version, source, Offline, targetFrameworks is { Count: > 0 } ? [.. targetFrameworks] : null, verified),
             Json.PackageDetailsParams,
             Json.PackageDetails,
             cancellationToken,
