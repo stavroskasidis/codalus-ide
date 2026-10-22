@@ -1260,6 +1260,18 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("winforms.designerDepth", "M41b", winFormsDepthTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the shell's side runs against a fake designer host in the tests on every OS.");
         }
 
+        // 0.6 (#66): the Toolbox's Enter and a drop through the real host; the designer runs on a copy of the build output,
+        // so the app builds with a form open, and the form loads on the new build.
+        const string winFormsToolboxTitle = "OrderForm in the designer: a TextBox added from the Toolbox with Enter and a CheckBox dropped on the form become code; the app builds while the designer is open (no MSB3027) and the designer loads the form on the new build";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.toolboxAndBuild", "0.6", winFormsToolboxTitle, WinFormsToolboxAndBuildStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.toolboxAndBuild", "0.6", winFormsToolboxTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the copy, the Toolbox's drag, double-click and Enter, and the reload after a build are tested on every OS against a fake designer host.");
+        }
+
         // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
         const string winUITitle = "The WinUI 3 app opens, its XAML completes x:Bind paths from the page's class, and it builds and runs unpackaged";
         if (OperatingSystem.IsWindows())
@@ -2477,6 +2489,87 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(code.Text.Text == original, "undo takes the designer file back to the original");
         shell.Layout.CloseDocument(designer);
         shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+    }
+
+    /// <summary>
+    /// The Toolbox and building with a form open in the shipped app (0.6, #66): OrderForm opened; Enter on the Toolbox's
+    /// TextBox (the form selected) adds textBox1 at the form's default place through the real host's classic creation,
+    /// with the designer active again and nothing armed; a CheckBox dropped on the form (the drop handler's own method: a
+    /// real drag can't be scripted, and the Avalonia drop is tested headless); the app built through Build Project (which
+    /// saves the designer file first), with neither MSB3027 nor MSB3026 (before, the designer host held the app's assembly
+    /// and the build's copy step retried ten times and failed), then the form loaded on a new host with both controls;
+    /// the designer file put back as it was.
+    /// </summary>
+    private async Task WinFormsToolboxAndBuildStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Builds.IsBuilding, "the previous run and build have stopped", 120).ConfigureAwait(true);
+        var app = Path.Combine(Work, "WindowsDesktop", "WinFormsApp");
+        var project = Path.Combine(app, "WinFormsApp.csproj");
+        var form = Path.Combine(app, "OrderForm.cs");
+        Check(shell.Solutions.Projects.Values.Any(p => p.UsesWindowsForms), "the WindowsDesktop solution is still open");
+        await shell.OpenFileAsync(form).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath == form);
+        Check(designer is not null, "OrderForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0 && designer.Host is not null, () => "the designer loads the form and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        var code = designer!.DesignerCode!;
+        var original = await File.ReadAllTextAsync(designer.DesignerPath).ConfigureAwait(true);
+        var root = designer.Root!;
+
+        // Enter on the Toolbox's TextBox, the form selected: textBox1 at the form's default place, selected, the designer active.
+        shell.Layout.ShowToolWindow(ViewModels.ToolboxViewModel.ToolWindowId, focus: false);
+        await WaitAsync(() => window.GetVisualDescendants().OfType<ToolboxView>().Any(v => v.IsEffectivelyVisible), "the Toolbox shows", 30).ConfigureAwait(true);
+        var toolbox = window.GetVisualDescendants().OfType<ToolboxView>().First(v => v.IsEffectivelyVisible);
+        Button? textItem = null;
+        await WaitAsync(() => (textItem = toolbox.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.DataContext is ViewModels.ToolboxItemViewModel { Type: "System.Windows.Forms.TextBox" })) is not null,
+            "the Toolbox lists the TextBox", 30).ConfigureAwait(true);
+        var item = textItem!;
+        item.BringIntoView();
+        designer.SetSelection([root.Name], notify: true);
+        item.Focus();
+        await RenderedAsync().ConfigureAwait(true);
+        item.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter, Source = item });
+        item.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyUpEvent, Key = Avalonia.Input.Key.Enter, Source = item });
+        await WaitAsync(() => code.Text.Text.Contains("textBox1 = new TextBox();", StringComparison.Ordinal) && designer.Selection is ["textBox1"] && designer.Find("textBox1") is not null,
+            () => "Enter on the Toolbox's TextBox adds textBox1: " + designer.Status, 60).ConfigureAwait(true);
+        var textBox = designer.Find("textBox1")!;
+        Check(code.Text.Text.Contains("Controls.Add(textBox1);", StringComparison.Ordinal) && textBox.Parent == root.Name, "textBox1 is on the form: " + textBox.Parent);
+        Check(textBox.X == root.ClientX && textBox.Y == root.ClientY, $"textBox1 is at the form's default place, its client area's corner: {textBox.X}, {textBox.Y}, not {root.ClientX}, {root.ClientY}");
+        Check(shell.Layout.ActiveDocument == designer && shell.Toolbox.Armed is null, "the designer is active again and nothing is armed");
+
+        // A CheckBox dropped on the form's free space.
+        var surface = window.GetVisualDescendants().OfType<DesignerSurface>().First(s => s.IsEffectivelyVisible);
+        await surface.DropToolboxItemAsync("System.Windows.Forms.CheckBox", new Point(root.ClientX + 48, root.ClientY + 300)).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("checkBox1 = new CheckBox();", StringComparison.Ordinal), "the dropped check box is in OrderForm.Designer.cs: " + designer.Status);
+        shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+
+        var host = designer.Host;
+        var frames = designer.FrameCount;
+        var before = shell.Builds.LastBuild;
+        var built = await shell.BuildProjectAsync(Codalus.Projects.Protocol.BuildTargets.Build, project).WaitAsync(TimeSpan.FromMinutes(10)).ConfigureAwait(true);
+        await WaitAsync(() => BuildDone(before), "the build finishes", 60).ConfigureAwait(true);
+        var output = shell.Builds.Channel.GetText();
+        Check(built, "the app builds with OrderForm open in the designer:\n" + Tail(output, 3000));
+        Check(!output.Contains("MSB3027", StringComparison.Ordinal) && !output.Contains("MSB3026", StringComparison.Ordinal), "no build step waited for or failed on a file the designer holds:\n" + Tail(output, 3000));
+
+        // The build replaced the app's assembly: the designer loads the form on a new host, with the saved check box.
+        await WaitAsync(() => designer.Host != host && designer.FrameCount > frames && !designer.IsRestarting,
+            () => "the designer loads the form on the new build: " + designer.Status + "\n" + Tail(shell.WinFormsDesignerLog.GetText(), 2000), 180).ConfigureAwait(true);
+        Check(designer.Problems is null, "every statement applied after the restart: " + designer.Problems);
+        Check(designer.Components.Any(c => c.Name == "checkBox1") && designer.Components.Any(c => c.Name == "textBox1"), "the text box and the check box are on the form after the restart");
+        foreach (var line in shell.WinFormsDesignerLog.GetText().Split('\n').Where(l => l.StartsWith("Copied the build output", StringComparison.Ordinal) || l.StartsWith("A build replaced", StringComparison.Ordinal)).TakeLast(3))
+        {
+            Console.Out.WriteLine("  " + line.TrimEnd());
+        }
+
+        // The designer file as it was, saved (the build saved the check box).
+        while (code.Text.UndoStack.CanUndo)
+        {
+            code.Text.UndoStack.Undo();
+        }
+
+        await shell.SaveAllAsync().ConfigureAwait(true);
+        Check(await File.ReadAllTextAsync(designer.DesignerPath).ConfigureAwait(true) == original, "undo and save take OrderForm.Designer.cs back to the original");
+        shell.Layout.CloseDocument(designer);
     }
 
     /// <summary>

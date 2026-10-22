@@ -75,7 +75,8 @@ const PAGES = [
   { file: 'DiffDocument.dc.html', name: 'diff-document', width: 1280, height: 800, full: true, themes: [...VIEW_THEMES, 'Classic High Contrast'] },
   // Harbor's sheets draw the window as Harbor keeps it, then the Classic theme of the same kind for the rest (only Classic changes shape).
   { file: 'RoundedCorners.dc.html', name: 'rounded-corners', width: 1280, height: 800, full: true, cues: true, themes: ['Classic Blue', ...VIEW_THEMES, 'Classic High Contrast'] },
-  { file: 'RoundedCorners.dc.html', name: 'rounded-corners-proposed', query: 'state=proposed', width: 400, height: 300, full: true, cues: true, themes: ['Classic Light', 'Classic Dark'] }
+  { file: 'RoundedCorners.dc.html', name: 'rounded-corners-proposed', query: 'state=proposed', width: 400, height: 300, full: true, cues: true, themes: ['Classic Light', 'Classic Dark'] },
+  { file: 'Toolbox.dc.html', name: 'toolbox', width: 1280, height: 800, full: true, themes: ['Classic Light', 'Classic Dark', 'Classic High Contrast', 'Harbor Light', 'Harbor Dark'] }
 ];
 
 // New Project (0.6.0): each page in the view themes, its main states in Harbor Light and Classic Dark, the others in

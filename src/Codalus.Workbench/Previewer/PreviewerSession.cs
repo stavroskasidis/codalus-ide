@@ -167,6 +167,9 @@ public sealed class PreviewerSession : IAsyncDisposable
             WorkingDirectory = Path.GetDirectoryName(launch.AppAssembly)!,
         };
         var sessionId = Guid.NewGuid().ToString("N");
+
+        // TODO(issue): start on a BuildOutputShadowCopy of the app's output, as the Windows Forms designer does (#66): on the
+        // output's own deps file the app's assemblies load from bin/, so on Windows a build while the previewer runs can't replace them.
         foreach (var argument in new[]
                  {
                      "exec", "--runtimeconfig", launch.RuntimeConfig, "--depsfile", launch.DepsFile, launch.HostApp,
