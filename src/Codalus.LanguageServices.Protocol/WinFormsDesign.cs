@@ -144,6 +144,9 @@ public static class DesignerCollections
     public const string Locals = "locals";
     public const string Images = "images";
 
+    /// <summary>A new menu item's type: what typed text in a menu's Type Here makes.</summary>
+    public const string MenuItemType = Forms + "ToolStripMenuItem";
+
     private const string Forms = "System.Windows.Forms.";
 
     private static readonly string[] s_menuItems = [Forms + "ToolStripMenuItem", Forms + "ToolStripComboBox", Forms + "ToolStripTextBox", Forms + "ToolStripSeparator"];
@@ -183,6 +186,14 @@ public static class DesignerCollections
     ];
 
     public static DesignerCollectionInfo? Find(string key) => All.FirstOrDefault(c => c.Key == key);
+
+    /// <summary>
+    /// Whether a collection key is a tool strip's items (#67): a <c>MenuStrip</c>'s, <c>ToolStrip</c>'s,
+    /// <c>StatusStrip</c>'s or <c>ContextMenuStrip</c>'s, or a strip derived from them such as a <c>BindingNavigator</c>
+    /// (the host names a derived strip by the type that declares the collection). A list's items (a <c>ListBox</c>'s,
+    /// <c>ComboBox</c>'s, <c>DomainUpDown</c>'s or <c>ListView</c>'s) are not: the surface's Type Here is a strip's alone.
+    /// </summary>
+    public static bool IsStripItems(string key) => Find(key) is { Property: "Items", Kind: Components, ElementType: Forms + "ToolStripItem" };
 
     /// <summary>A strip's or a menu item's items property (<c>Items</c>, <c>DropDownItems</c>), from a collection key.</summary>
     public static string PropertyOf(string key) => key[(key.IndexOf(':', StringComparison.Ordinal) + 1)..];

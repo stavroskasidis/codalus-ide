@@ -91,7 +91,7 @@ Running or debugging a WPF app loads a small agent into it (a .NET startup hook)
 
 On Windows, a form's or user control's `.cs` file opens in the **Windows Forms designer**: double-click it in Solution Explorer (it has a form icon) or open it. **View Code** (`F7`) shows its code, and **View Designer** (`Shift+F7`, or the Solution Explorer's and the editor's context menu) shows the designer again. The `.Designer.cs` file itself opens as code. To open forms as code by default, turn **Open Forms in the Designer** off (Settings → Windows Forms, `windowsForms.openInDesigner`).
 
-The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply.
+The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply. A form you open while its project is still loading opens in the designer too; once the project has loaded, the designer reads it again.
 - **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent, `Ctrl+A` everything on the form.
 - **Move** the selected controls by dragging them; dropped on a panel, a group box, a tab page or a split container's panel, a control moves into it. The arrow keys move them a pixel, `Shift`+arrows resize them.
 - **Resize** the selected control with its grab handles (the form from its right and bottom ones).
@@ -112,7 +112,7 @@ With the designer active, the **Format** menu (and the surface's context menu) l
 - **Make Same Size**: Width, Height, both, and Size to Grid;
 - **Horizontal Spacing** and **Vertical Spacing**: Make Equal, Increase, Decrease, Remove;
 - **Center in Form**: Horizontally, Vertically;
-- **Order**: **Bring to Front** and **Send to Back**, which change the order of the parent's `Controls.Add` (its z-order).
+- **Order**: **Bring to Front** and **Send to Back**, which change the order of the parent's `Controls.Add` (its z-order). Controls that overlap are drawn in that order, the front one over the others, as your app shows them.
 
 View → **Tab Order** numbers every control with its `TabIndex` (a group box's controls as `5.0`, `5.1`…). Click the controls in the order the `Tab` key should visit them: each container counts from 0. `Esc` or View → Tab Order again ends it.
 
@@ -122,7 +122,7 @@ A control or component with designer tasks shows a small arrow at its top right 
 
 ### Menus and tool strips
 
-Select a menu strip, a tool strip, a status strip or a context menu strip to edit it on the form: **Type Here** at its end adds an item. In a menu, type the item's text (`&File`; a `-` makes a separator); in a tool strip or a status strip, choose the item's type (a button, a label, a combo box, a drop-down button…). Items are named as in Visual Studio (`fileToolStripMenuItem`, `toolStripButton1`).
+Select a menu strip, a tool strip, a status strip or a context menu strip to edit it on the form: **Type Here** at its end adds an item. In a menu, type the item's text (`&File`; a `-` makes a separator); in a tool strip or a status strip, choose the item's type (a button, a label, a combo box, a drop-down button…). Items are named as in Visual Studio (`fileToolStripMenuItem`, `toolStripButton1`). Only these strips have **Type Here**: a list box's, combo box's, domain up-down's or list view's items are edited in its **Items** [collection editor](#collections) (a list box's, combo box's and list view's smart tag also has **Edit Items…**).
 - Select a menu item to open its drop-down, with its own **Type Here**; `Enter` or a click on the selected item edits its text in place.
 - `Ctrl`+arrows move the selected item among its siblings; `Delete` deletes it (and its drop-down's items).
 - An item's properties are in the Properties window; its items are also in the **Items** collection editor.

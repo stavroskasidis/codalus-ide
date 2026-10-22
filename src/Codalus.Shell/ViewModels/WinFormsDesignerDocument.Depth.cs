@@ -803,14 +803,18 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>The items of a strip or a menu item, in their order.</summary>
     public IReadOnlyList<DesignerComponentView> ItemsOf(string owner) => [.. _components.Where(c => c.IsItem && c.Owner == owner).OrderBy(c => c.ItemIndex)];
 
-    /// <summary>The strip a component is or is in (through its items' owners), or null.</summary>
+    /// <summary>
+    /// The tool strip a component is or is in (through its items' owners), or null. A strip is a component whose
+    /// <c>Items</c> hold tool strip items, by the collection table (#67): a list box's, combo box's, domain up-down's or
+    /// list view's items are a list's, which take no Type Here; nor does a control whose type name merely ends in "Strip".
+    /// </summary>
     private DesignerComponentView? StripOf(string name)
     {
         for (var view = Find(name); view is not null; view = view.Owner is { } owner ? Find(owner) : null)
         {
             if (!view.IsItem)
             {
-                return view.Type.EndsWith("Strip", StringComparison.Ordinal) || view.Collections?.Any(c => c.EndsWith(":Items", StringComparison.Ordinal)) == true ? view : null;
+                return view.Collections?.Any(DesignerCollections.IsStripItems) == true ? view : null;
             }
         }
 
@@ -820,7 +824,7 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>What a strip's Type Here adds: typed text makes a menu item; a tool strip or status strip picks a type.</summary>
     private static (string Property, string[] Types) ItemsInfo(DesignerComponentView owner)
     {
-        var key = owner.Collections?.FirstOrDefault(c => c.EndsWith(":Items", StringComparison.Ordinal) || c.EndsWith(":DropDownItems", StringComparison.Ordinal));
+        var key = owner.Collections?.FirstOrDefault(c => DesignerCollections.IsStripItems(c) || DesignerCollections.Find(c) is { Property: "DropDownItems" });
         var info = key is null ? null : DesignerCollections.Find(key);
         return info is null ? ("Items", [.. DesignerCollections.All.First(c => c.Property == "Items" && c.OwnerType.EndsWith("MenuStrip", StringComparison.Ordinal)).ItemTypes]) : (info.Property, info.ItemTypes);
     }
@@ -842,7 +846,7 @@ public sealed partial class WinFormsDesignerDocument
             var x = items.Count == 0 ? strip.X + 2 : items.Max(i => i.X + i.Width) + 2;
             var (property, types) = ItemsInfo(strip);
             _stripTypeHere = new DesignerTypeHere(strip.Name, property, types, new DesignerRect(x, strip.Y + 2, 96, Math.Max(16, strip.Height - 4)),
-                CanType: strip.Type.EndsWith("MenuStrip", StringComparison.Ordinal));
+                CanType: types.Length > 0 && types[0] == DesignerCollections.MenuItemType);
         }
 
         // The open drop-downs: the selected item's (when it has one) and its owners', from the strip down.
@@ -918,7 +922,8 @@ public sealed partial class WinFormsDesignerDocument
     /// </summary>
     public async Task AddItemAsync(DesignerTypeHere typeHere, string? text, string? type = null)
     {
-        if (_model is null)
+        // Only a strip's or a menu item's items take one: a stale box over a list (#67) would replace its items.
+        if (_model is null || (StripOf(typeHere.Owner) is null && Find(typeHere.Owner) is not { IsItem: true, HasDropDown: true }))
         {
             return;
         }

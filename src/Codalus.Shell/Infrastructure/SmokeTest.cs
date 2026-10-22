@@ -1239,7 +1239,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         // M41a: the Windows Forms designer (ADR 0073, D31: Windows only).
-        const string winFormsDesignerTitle = "The WinForms app's OrderForm opens in the Windows Forms designer; a Button from the Toolbox and its Text set in the Properties window become code in OrderForm.Designer.cs";
+        const string winFormsDesignerTitle = "The WinForms app's OrderForm opens in the Windows Forms designer; a Button from the Toolbox and its Text set in the Properties window become code in OrderForm.Designer.cs; moved onto the counter control, it's drawn in front of it";
         if (OperatingSystem.IsWindows())
         {
             await StepAsync("winforms.designer", "M41a", winFormsDesignerTitle, WinFormsDesignerStepAsync, "windows.desktop").ConfigureAwait(true);
@@ -2480,6 +2480,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await RenderedAsync().ConfigureAwait(true);
         Screenshot("winforms-designer.png");
         await GalleryWinFormsAsync(designer).ConfigureAwait(true); // M34g: the designer, the Toolbox and Properties in the gallery
+        await WinFormsDesignerOverlapAsync(designer).ConfigureAwait(true);
 
         while (code.Text.UndoStack.CanUndo)
         {
@@ -2489,6 +2490,58 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(code.Text.Text == original, "undo takes the designer file back to the original");
         shell.Layout.CloseDocument(designer);
         shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+    }
+
+    /// <summary>
+    /// #78: button1 moved onto the counter control through the Properties window is drawn in front of it. The designer
+    /// host's frame is Control.DrawToBitmap, which draws a container's controls in reverse order, so the 2026-10-18
+    /// picture showed the counter's own "+1" where the button was; the host now draws overlapping controls again, back
+    /// to front, and says how many (the button and the counter). The region looked at is inside both, right of the "+1".
+    /// </summary>
+    private async Task WinFormsDesignerOverlapAsync(ViewModels.WinFormsDesignerDocument designer)
+    {
+        var root = designer.Root!;
+        var region = new PixelRect((int)root.ClientX + 318, (int)root.ClientY + 301, 47, 21);
+        designer.SetSelection(["button1"], notify: true);
+        shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
+        await shell.PropertiesWindow.RefreshAsync().ConfigureAwait(true);
+        var location = shell.PropertiesWindow.Categories.Where(c => c.Title != "(DataBindings)").SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "Location");
+        Check(location is not null, "the Properties window shows button1's Location");
+        var before = FramePixels(designer, region);
+        var frames = designer.FrameCount;
+        location!.Text = "290, 300";
+        await WaitAsync(() => designer.DesignerCode!.Text.Text.Contains("button1.Location = new Point(290, 300);", StringComparison.Ordinal) && designer.FrameCount > frames,
+            "button1 moved onto the counter control, in the code and drawn", 60).ConfigureAwait(true);
+        var after = FramePixels(designer, region);
+        var differing = 0;
+        for (var i = 0; i < before.Length; i += 4)
+        {
+            differing += before.AsSpan(i, 4).SequenceEqual(after.AsSpan(i, 4)) ? 0 : 1;
+        }
+
+        var area = region.Width * region.Height;
+        Check(differing * 10 >= area * 3 && designer.FrameRestacked == 2,
+            $"button1 on the counter control is drawn in front of it: {differing} of {area} pixels changed (at least 30 % expected), {designer.FrameRestacked} controls drawn again (2 expected)");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer-overlap.png");
+    }
+
+    /// <summary>The designer's frame's pixels in <paramref name="region"/>, 4 bytes each, as its bitmap holds them.</summary>
+    private static byte[] FramePixels(ViewModels.WinFormsDesignerDocument designer, PixelRect region)
+    {
+        var stride = region.Width * 4;
+        var pixels = new byte[stride * region.Height];
+        var handle = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
+        try
+        {
+            designer.Frame!.CopyPixels(region, handle.AddrOfPinnedObject(), pixels.Length, stride);
+        }
+        finally
+        {
+            handle.Free();
+        }
+
+        return pixels;
     }
 
     /// <summary>
