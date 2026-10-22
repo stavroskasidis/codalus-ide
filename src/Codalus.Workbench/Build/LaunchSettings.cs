@@ -417,6 +417,8 @@ public static class LaunchPlanner
             return (url, inspectUri);
         }
 
+        // TODO(issue): .NET 11's Blazor template has no inspectUri: the IDE is expected to start the WebAssembly debugging
+        // proxy (BrowserDebugHost) itself; until then its components' breakpoints don't bind (the page's scripts do).
         return javaScript && profile.LaunchBrowser ? (url, null) : null;
     }
 

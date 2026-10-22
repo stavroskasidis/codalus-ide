@@ -1318,6 +1318,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         const string wasmTitle = "F5 debugs a Blazor WebAssembly app in the browser: a breakpoint in a .razor file stops";
         const string compoundTitle = "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each";
+        const string compoundHotReloadTitle = "F5 on a Blazor Web App with Hot Reload: the debugger attaches to the server dotnet watch runs, a WebAssembly edit runs in the browser under the debugger, and a rude edit restarts the app with debugging following it";
         if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null)
         {
             // Skipped here, a failure in CI (which must prove it), at once rather than after the steps' timeouts.
@@ -1326,11 +1327,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 : ("skipped", "No Chrome, Edge or Chromium is installed.");
             Report("blazor.wasmDebug", "M16", wasmTitle, outcome, 0, reason);
             Report("blazor.compoundDebug", "M16", compoundTitle, outcome, 0, reason);
+            Report("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, outcome, 0, reason);
         }
         else
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", compoundTitle, CompoundDebugStepAsync).ConfigureAwait(true);
+            await StepAsync("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, CompoundHotReloadStepAsync, "blazor.compoundDebug").ConfigureAwait(true);
         }
 
         // M21: a remote window on the local stand-in server (the shipped remote/server); it disconnects at its end.
@@ -3237,6 +3240,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await shell.OpenSolutionAsync(Path.Combine(target, "BlazorHosted.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Blazor Web App is open", 300).ConfigureAwait(true);
         shell.Runs.SetStartupProject(Path.Combine(target, "BlazorHosted", "BlazorHosted.csproj"));
+
+        // The launched session: netcoredbg starts the server (blazor.compoundHotReload covers Hot Reload while debugging).
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugHotReloadSetting, false, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
         var line = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [initialized]", StringComparison.Ordinal)) + 1;
         shell.Debugger.Breakpoints.Toggle(counter, line);
@@ -3262,6 +3268,79 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         await WaitAsync(() => !shell.Debugger.IsActive, "the session ends", 60).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Hot Reload while debugging a Blazor Web App (#75, ADR 0040): on the BlazorHosted copy blazor.compoundDebug opened, F5
+    /// runs the server under dotnet watch and attaches netcoredbg to it; the server stops at the breakpoint, an edit to the
+    /// WebAssembly component runs in the browser under the debugger, and a rude edit restarts the app, which debugging
+    /// follows. It ends with dotnet watch and the server gone.
+    /// </summary>
+    private async Task CompoundHotReloadStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous session has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "BlazorHosted");
+        Check(shell.Solutions.Solution?.Path == Path.Combine(target, "BlazorHosted.slnx"), "BlazorHosted is still open");
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugHotReloadSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
+        int Line(string marker) => Array.FindIndex(File.ReadAllLines(counter), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
+        string Thread() => shell.Debugger.Threads.FirstOrDefault(t => t.Id == shell.Debugger.CurrentStop?.ThreadId)?.Name ?? string.Empty;
+        string Log() => "Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + "\nRun:\n" + Tail(shell.HotReloadProgram?.Channel?.GetText() ?? string.Empty, 2000);
+        var original = File.ReadAllText(counter);
+        shell.Debugger.Breakpoints.Toggle(counter, Line("initialized"));
+        shell.Run("debug.start");
+        try
+        {
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, () => "the server under dotnet watch stops at the breakpoint (" + Log() + ")", 600).ConfigureAwait(true);
+            Check(shell.Debugger.IsCompound && shell.HotReloadProgram is not null && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's, which dotnet watch runs: " + Thread());
+            var server = shell.Debugger.ProcessId;
+            var watch = shell.HotReloadProgram!;
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+
+            // A WebAssembly edit: the browser runs it under the debugger; the server refuses it and says so.
+            File.WriteAllText(counter, original.Replace("ticks++;", "ticks += 1000;", StringComparison.Ordinal));
+            await WaitAsync(() => watch.HotReload!.UpdatesRefused, () => "the server refuses the update under the debugger (" + Log() + ")", 180).ConfigureAwait(true);
+            // The browser applies the update on its own and nothing reports when (as in BlazorWebAppHotReloadDebugTests),
+            // and the breakpoint stops before the line runs: the first stop after the update can still read the count the
+            // old code left (0 on a fast runner). So the tick is looked at until the edited line has run.
+            var ticks = string.Empty;
+            var deadline = Stopwatch.StartNew();
+            var previous = shell.Debugger.CurrentStop; // null while it runs
+            while (true)
+            {
+                shell.Debugger.Breakpoints.Toggle(counter, Line("tick"));
+                await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.CurrentStop != previous && Thread().StartsWith("Browser:", StringComparison.Ordinal), () => "the page stops in the edited tick (" + Log() + ")", 180).ConfigureAwait(true);
+                previous = shell.Debugger.CurrentStop;
+                ticks = (await shell.Debugger.EvaluateAsync("ticks", "watch").ConfigureAwait(true)).Result;
+                if ((int.TryParse(ticks, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count) && count >= 1000) || deadline.Elapsed > TimeSpan.FromSeconds(90))
+                {
+                    break;
+                }
+
+                shell.Debugger.Breakpoints.Clear();
+                await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+                await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            }
+
+            Check(int.TryParse(ticks, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value) && value >= 1000, $"the edit runs in the browser: ticks is {ticks} after 90 s");
+            Screenshot("smoke-test-blazor-compound-hot-reload.png");
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+
+            // A rude edit: dotnet watch restarts the app, and debugging follows the new server.
+            File.WriteAllText(counter, original.Replace("private int ticks;", "private long ticks;", StringComparison.Ordinal));
+            await WaitAsync(() => watch.HotReload!.Restarts >= 1 && shell.WatchedServerDebugSession is { State: Workbench.Debugging.WatchedServerState.Attached } session && session.ProcessId != server && shell.Debugger.IsCompound,
+                () => "debugging follows the restarted server (" + Log() + ")", 300).ConfigureAwait(true);
+        }
+        finally
+        {
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.StopAsync().ConfigureAwait(true);
+            File.WriteAllText(counter, original);
+        }
+
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive && shell.WatchedServerDebugSession is null, "the session, dotnet watch and the server end", 120).ConfigureAwait(true);
     }
 
     /// <summary>

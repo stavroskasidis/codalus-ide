@@ -25,7 +25,10 @@ public sealed partial class ShellHost
     /// <summary>Whether Start Debugging debugs an ASP.NET Core app's page with its server (ADR 0027).</summary>
     public const string JavaScriptDebugSetting = "debug.javaScript";
 
-    /// <summary>Whether a Blazor WebAssembly app's dev server runs under <c>dotnet watch</c> while it's debugged (ADR 0040, 2026-10-20).</summary>
+    /// <summary>
+    /// Whether a Blazor WebAssembly app's dev server (ADR 0040, 2026-10-20), and a Blazor Web App's server (#75), run under
+    /// <c>dotnet watch</c> while they're debugged.
+    /// </summary>
     public const string DebugHotReloadSetting = "debug.hotReload";
 
     private static readonly TimeSpan s_devServerTimeout = TimeSpan.FromMinutes(2);
@@ -52,6 +55,10 @@ public sealed partial class ShellHost
             {
                 _ = Task.Run(server.Stop);
             }
+
+            // A Blazor Web App's server under dotnet watch (#75): a Stop ends dotnet watch too; another end follows the
+            // server dotnet watch starts next. Decided here, on the debugger's thread, before anything else can start.
+            Volatile.Read(ref _watchedServer)?.OnDebugEnded(Debugger.StopRequested);
 
             Interlocked.Exchange(ref _serverListening, null)?.TrySetCanceled();
         };
@@ -202,20 +209,7 @@ public sealed partial class ShellHost
             return; // the session ended meanwhile
         }
 
-        DebugLog.AppendLine($"> {browser.Display} {page.Url}");
-        try
-        {
-            await Debugger.AddBrowserAsync(StartJsDebug(browser), BrowserArguments(browser, page.Url, WebRoot(project), page.InspectUri), CancellationToken.None).ConfigureAwait(true);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
-        {
-            DebugLog.AppendLine("The page couldn't be debugged: " + ex.Message);
-            Workbench.Notifications.Warning(Localizer.Format("msg.browserDebug.thePageCouldntBeDebuggedIn", "The page couldn't be debugged in {0}: {1} It opened without the debugger; the server is still debugged.", browser.Display, ex.Message));
-            if (Uri.TryCreate(page.Url, UriKind.Absolute, out var uri))
-            {
-                OpenExternalUrl(uri);
-            }
-        }
+        await AddPageAsync(project, browser, page).ConfigureAwait(true);
     }
 
     /// <summary>"Now listening on: http://localhost:5000" in the server's output: the browser can open.</summary>

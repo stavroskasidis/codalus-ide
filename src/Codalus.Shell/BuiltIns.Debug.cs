@@ -97,7 +97,7 @@ internal static partial class BuiltIns
         {
             Title = "Hot Reload while debugging",
             Category = "Debugging",
-            Description = "Start Debugging runs a Blazor WebAssembly app's dev server under dotnet watch, so saving a file (or Apply Code Changes, Alt+F10) applies the edit to the app in the browser while you debug it. The .NET runtime refuses edits to a program the debugger runs, so other apps restart instead.",
+            Description = "Start Debugging runs a Blazor WebAssembly app's dev server, and a Blazor Web App's server, under dotnet watch, so saving a file (or Apply Code Changes, Alt+F10) applies an edit to WebAssembly components in the browser while you debug them. In a Blazor Web App the debugger attaches to the server once it starts (breakpoints in its Program.cs debug it from the start, without Hot Reload); the server keeps the code it started with until you restart, and edits that need a restart restart the app. The .NET runtime doesn't apply edits to a program the debugger runs, so other apps don't take edits while debugged: use Start with Hot Reload for them.",
             Order = 5,
         },
         SettingDescriptor.Create(Codalus.Shell.Editor.EditorOptions.PerfTipsKey, "true", SettingType.Boolean, ContributionSource.Shell) with

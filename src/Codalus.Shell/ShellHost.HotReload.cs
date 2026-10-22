@@ -93,11 +93,13 @@ public sealed partial class ShellHost
             return;
         }
 
+        session.Refused += () => Ui.Post(UpdateHotReloadStatus);
         session.Changed += (_, e) => Ui.Post(() =>
         {
             UpdateHotReloadStatus();
-            if (e.State == HotReloadState.Restarting)
+            if (e.State == HotReloadState.Restarting && !ReferenceEquals(program, Volatile.Read(ref _watchedProgram)))
             {
+                // (A Blazor Web App debugged under dotnet watch says it when debugging follows the restart, #75.)
                 Workbench.Notifications.Info(Localizer.Format("msg.hotReload.anEditCouldntBeAppliedTo", "An edit couldn't be applied to the running {0}, so it is restarting (a rude edit).", program.Name));
             }
         });
@@ -123,8 +125,14 @@ public sealed partial class ShellHost
             return;
         }
 
+        // A Blazor Web App's server under the debugger refuses updates; the browser applies its own (#75), and whether it
+        // did isn't reported back: "sent", not "applied".
+        var debugged = ReferenceEquals(program, Volatile.Read(ref _watchedProgram));
         var text = session.State switch
         {
+            HotReloadState.Applying when debugged => "Hot Reload: sent to the browser",
+            HotReloadState.Watching when debugged && (session.LastApplied is not null || session.UpdatesRefused) => "Hot Reload: sent to the browser",
+            HotReloadState.NotApplied => "Hot Reload: not applied (see the output)",
             HotReloadState.Starting => "Hot Reload: starting…",
             HotReloadState.Applying => "Hot Reload: applying…",
             HotReloadState.Errors => "Hot Reload: compile errors",

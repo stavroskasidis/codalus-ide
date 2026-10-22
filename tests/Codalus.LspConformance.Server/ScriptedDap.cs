@@ -21,6 +21,19 @@ internal static class ScriptedDap
     /// <summary>How many requests arrived (<c>runtimeAfter</c> with <c>+request</c>).</summary>
     private static int s_requests;
 
+    /// <summary>
+    /// Where each request is written once an attach named a process that has a request log: the file
+    /// <c>codalus-scripted-requests-&lt;process id&gt;</c> in the temp folder, when it exists (#75's owned attach tests).
+    /// </summary>
+    private static string? s_requestLog;
+
+    private static string? RequestLog(JsonElement attach)
+    {
+        var processId = attach.GetProperty("arguments").GetProperty("processId").GetInt32();
+        var log = Path.Combine(Path.GetTempPath(), "codalus-scripted-requests-" + processId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return File.Exists(log) ? log : null;
+    }
+
     /// <summary>The attached program's threads, once a slow attach has the process (<see cref="AttachLateAsync"/>).</summary>
     private static JsonElement[]? s_attachedThreads;
 
@@ -40,6 +53,15 @@ internal static class ScriptedDap
             var command = message.GetProperty("command").GetString();
             var requestSeq = message.GetProperty("seq").GetInt32();
             Interlocked.Increment(ref s_requests);
+            if (command == "attach" && RequestLog(message) is { } log)
+            {
+                s_requestLog = log;
+            }
+
+            if (s_requestLog is { } logging)
+            {
+                await File.AppendAllTextAsync(logging, command + " " + (message.TryGetProperty("arguments", out var logged) ? logged.GetRawText() : "{}") + "\n");
+            }
             JsonNode? body = null;
             switch (command)
             {
@@ -51,6 +73,10 @@ internal static class ScriptedDap
                 case "launch":
                     launch = message.TryGetProperty("arguments", out var arguments) ? arguments.Clone() : null;
                     break;
+                case "attach" when !configured && AttachScript(message) is { RuntimeAfter: "fail" }:
+                    // An attach netcoredbg refuses (not its startup timeout: the start isn't made again).
+                    await FailAsync(output, requestSeq, command, "Failed command 'attach' : 0x80070057");
+                    continue;
                 case "attach" when !configured && AttachScript(message) is { Slow: true } slow:
                     // As netcoredbg: it only takes the process id, and attaches in configurationDone.
                     slowAttach = slow;

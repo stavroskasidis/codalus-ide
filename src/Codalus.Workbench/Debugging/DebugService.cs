@@ -58,6 +58,7 @@ public sealed class DebugService : IAsyncDisposable
     private long _resumedAt;
     private IDebugAdapter? _adapter;
     private bool _attached;
+    private volatile bool _stopRequested;
     private int _exitCode;
     private CancellationTokenSource _session = new();
 
@@ -144,6 +145,15 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Whether the session attached to a running process (Stop detaches instead of terminating).</summary>
     public bool IsAttached => _attached;
+
+    /// <summary>
+    /// Whether the session's end was asked for (Stop, Detach All), and not the program's or the debugger's: read in the
+    /// <see cref="Ended"/> handler (#75 tells a Stop from <c>dotnet watch</c> restarting the server).
+    /// </summary>
+    public bool StopRequested => _stopRequested;
+
+    /// <summary>Completes when the current session has ended (at once when there is none).</summary>
+    public Task Completion => _ended.Task;
 
     /// <summary>Starts programs in the integrated terminal (M14c); without it, launches use the Debug Console.</summary>
     public ITerminalLauncher? Terminal { get; set; }
@@ -579,6 +589,64 @@ public sealed class DebugService : IAsyncDisposable
             [new DebugProcess(ProgramName(plan), null, DebugProcess.Launched, null)],
             cancellationToken);
 
+    /// <summary>
+    /// Attaches to <paramref name="processId"/>, a Blazor Web App's server that <c>dotnet watch</c> started (#75), as the
+    /// first adapter of a compound session its page joins (<see cref="AddBrowserAsync"/>). The session owns the server as
+    /// a launch does: Stop ends it and Restart is allowed (not <see cref="IsAttached"/>). Its start fails as an attach
+    /// does: it detaches, never ends the server, and starts again only while the server runs.
+    /// </summary>
+    public async Task AttachOwnedCompoundAsync(int processId, string name, LaunchPlan plan, CancellationToken cancellationToken)
+    {
+        await StartAsync(
+            async ct => new CompoundDebugAdapter(await (plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
+            adapter => ((DebugAdapter)adapter.Primary).AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
+            attached: true,
+            [new DebugProcess(name, processId, DebugProcess.Launched, null)],
+            cancellationToken,
+            owned: true).ConfigureAwait(false);
+        OnProcess(processId);
+    }
+
+    /// <summary>
+    /// Leaves the server of an owned compound session (<see cref="AttachOwnedCompoundAsync"/>) running and ends the session:
+    /// the page's browser closes. <c>dotnet watch</c> is about to restart the server for an edit, and a server held by the
+    /// debugger would outlive the restart on Linux and macOS, keeping its port (#75). Completes when the session ended.
+    /// </summary>
+    public async Task ReleaseOwnedServerAsync()
+    {
+        if (_adapter is not CompoundDebugAdapter compound)
+        {
+            await _ended.Task.ConfigureAwait(false);
+            return;
+        }
+
+        await PrepareDetachAsync(compound).ConfigureAwait(false);
+        await compound.DetachPrimaryAsync(CancellationToken.None).ConfigureAwait(false);
+        await EndAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Keeps <paramref name="paths"/>' breakpoints out of a compound session's server (#75: the server runs the code it
+    /// started with); they still bind in the page, or show <paramref name="reason"/>. Until the session ends.
+    /// </summary>
+    public async Task ExcludeFromServerAsync(IReadOnlyList<string> paths, string reason)
+    {
+        if (_adapter is not CompoundDebugAdapter compound)
+        {
+            return;
+        }
+
+        foreach (var path in paths)
+        {
+            compound.ExcludeFromPart(0, path, reason);
+        }
+
+        foreach (var path in paths.Where(p => Breakpoints.Files.Contains(p, StringComparer.OrdinalIgnoreCase)))
+        {
+            await SyncBreakpointsAsync(path).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Whether the session is a compound one that a browser can join.</summary>
     public bool IsCompound => _adapter is CompoundDebugAdapter;
 
@@ -738,7 +806,8 @@ public sealed class DebugService : IAsyncDisposable
         bool attached,
         IReadOnlyList<DebugProcess> processes,
         CancellationToken cancellationToken,
-        Func<Task>? configured = null)
+        Func<Task>? configured = null,
+        bool owned = false)
         where TAdapter : class, IDebugAdapter
     {
         if (IsActive)
@@ -757,7 +826,8 @@ public sealed class DebugService : IAsyncDisposable
         SetState(DebugState.Starting);
         _session = new CancellationTokenSource();
         _ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _attached = attached;
+        _attached = attached && !owned;
+        _stopRequested = false;
         _exitCode = 0;
         ProcessId = null;
         _process = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1004,6 +1074,7 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>Ends the session: terminates a launched program, detaches from an attached one.</summary>
     public async Task StopAsync()
     {
+        _stopRequested = true;
         if (_adapter is not { } adapter)
         {
             // Ending already (the adapter reported it terminated): done when that is.
@@ -1103,6 +1174,7 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public async Task DetachAsync()
     {
+        _stopRequested = true;
         if (_adapter is not { } adapter || !CanDetach)
         {
             await StopAsync().ConfigureAwait(false);

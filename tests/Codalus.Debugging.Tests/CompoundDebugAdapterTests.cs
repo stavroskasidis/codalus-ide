@@ -115,6 +115,52 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task A_file_excluded_from_the_server_keeps_its_breakpoints_in_the_page_with_the_reason_elsewhere()
+    {
+        // #75: dotnet watch reported the file updated; the server runs the code it started with, so its lines no
+        // longer match: its breakpoints leave the server and stay in the page.
+        var (compound, server, browser, _) = await CreateAsync();
+        await compound.SetBreakpointsAsync("/app/Counter.razor", [new SourceBreakpoint(12)], Ct);
+        compound.ExcludeFromPart(0, "/app/Counter.razor", "The server runs the code it started with until a restart.");
+        Assert.Equal(["/app/Counter.razor"], compound.ExcludedFrom(0));
+
+        var bound = await compound.SetBreakpointsAsync("/app/Counter.razor", [new SourceBreakpoint(12)], Ct);
+        Assert.Equal("setBreakpoints /app/Counter.razor ", server.Requests.Last(r => r.StartsWith("setBreakpoints", StringComparison.Ordinal)));
+        Assert.Equal("setBreakpoints /app/Counter.razor 12", browser.Requests.Last(r => r.StartsWith("setBreakpoints", StringComparison.Ordinal)));
+        Assert.True(bound[0].Verified); // the page binds it
+
+        // A file only the server could bind shows why it doesn't.
+        var serverOnly = new CompoundDebugAdapter(new FakeAdapter([]), "Server");
+        await serverOnly.AddAsync(new FakeAdapter([]) { Binds = false }, "Browser", _ => Task.CompletedTask, Ct);
+        serverOnly.ExcludeFromPart(0, "/APP/program.cs", "The server runs the code it started with until a restart.");
+        var unbound = await serverOnly.SetBreakpointsAsync("/app/Program.cs", [new SourceBreakpoint(3)], Ct);
+        Assert.False(unbound[0].Verified);
+        Assert.Equal("The server runs the code it started with until a restart.", unbound[0].Message);
+
+        // Cleared (a new server after a restart), the server gets the file again.
+        compound.ClearExclusions(0);
+        Assert.Empty(compound.ExcludedFrom(0));
+        await compound.SetBreakpointsAsync("/app/Counter.razor", [new SourceBreakpoint(12)], Ct);
+        Assert.Equal("setBreakpoints /app/Counter.razor 12", server.Requests.Last(r => r.StartsWith("setBreakpoints", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task Detaching_the_primary_leaves_its_program_running_and_closes_the_page()
+    {
+        // #75: before dotnet watch restarts the server, the debugger leaves it; the page's browser closes.
+        var (compound, server, browser, events) = await CreateAsync();
+        await compound.DetachPrimaryAsync(Ct);
+        Assert.Contains("disconnect True", browser.Requests);
+        Assert.Contains("disconnect False", server.Requests);
+        Assert.DoesNotContain("disconnect True", server.Requests);
+        // The page's end doesn't reach the server (no terminate after the fact): the session closes with the primary.
+        await compound.Closed.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        await Task.Delay(100, Ct);
+        Assert.Equal(1, server.Requests.Count(r => r.StartsWith("disconnect", StringComparison.Ordinal)));
+        _ = events;
+    }
+
+    [Fact]
     public async Task A_stop_waits_while_another_one_shows_and_shows_when_it_resumes()
     {
         var (compound, server, browser, events) = await CreateAsync();
