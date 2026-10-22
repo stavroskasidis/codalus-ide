@@ -53,6 +53,12 @@ internal sealed class DataTipScenario : IAsyncDisposable
             var path = System.IO.Path.Combine(folder, "Program.cs");
             await File.WriteAllTextAsync(path, code, TestContext.Current.CancellationToken);
             f.Window.Width = 1800; // room for a tip's 400 px values beside the tool windows
+
+            // The C# service's navigation bar (shown above the text once the file's symbols come) and CodeLens rows (over
+            // the class and its members) come at no set time and push the text down, from under a resting pointer: the
+            // tests go without them (one moves the text under an open tip on purpose).
+            await f.Shell.Workbench.Settings.SetAsync(EditorOptions.NavigationBarKey, false, Codalus.Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+            await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CodeLensKey, false, Codalus.Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
             before?.Invoke(f);
             await f.Shell.OpenFileAsync(path);
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null);

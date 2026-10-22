@@ -95,6 +95,9 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>The data tip's cascade while the hover shows one (D44).</summary>
     private DataTipCascade? _dataTip;
 
+    /// <summary>Where the hover's data tip's expression starts, and its line's top and height when the tip was last placed.</summary>
+    private (TextViewPosition Start, Point Top, double Height) _dataTipPlace;
+
     /// <summary>Quick Info's last decisions (asked, refused and why, opened, closed and why), for a test's failure message.</summary>
     private readonly Queue<string> _quickInfoTrace = new();
     private DocumentOptions? _documentOptions;
@@ -187,6 +190,7 @@ public sealed partial class CodeEditorController : IDisposable
         view.ScrollOffsetChanged += OnViewChanged;
         view.ScrollOffsetChanged += OnViewScrolled;
         view.VisualLinesChanged += OnViewChanged;
+        view.VisualLinesChanged += OnDataTipLinesChanged;
         editor.TextArea.Caret.PositionChanged += OnCaretChanged;
         editor.TextArea.SelectionChanged += OnCaretChanged;
         editor.TextArea.TextEntering += OnTextEntering;
@@ -2080,8 +2084,9 @@ public sealed partial class CodeEditorController : IDisposable
         var view = Editor.TextArea.TextView;
         var start = ExpressionRangeAt(offset)?.Start ?? offset;
         view.EnsureVisualLines();
-        var top = view.GetVisualPosition(new TextViewPosition(Model.Text.GetLocation(start)), VisualYPosition.LineTop) - view.ScrollOffset;
-        var bottom = view.GetVisualPosition(new TextViewPosition(Model.Text.GetLocation(start)), VisualYPosition.LineBottom) - view.ScrollOffset;
+        var at = new TextViewPosition(Model.Text.GetLocation(start));
+        var top = view.GetVisualPosition(at, VisualYPosition.LineTop) - view.ScrollOffset;
+        var bottom = view.GetVisualPosition(at, VisualYPosition.LineBottom) - view.ScrollOffset;
         var cascade = new DataTipCascade(view, _hoverPopup, tip.Root, new DataTipActions
         {
             Wheel = e =>
@@ -2129,8 +2134,33 @@ public sealed partial class CodeEditorController : IDisposable
         _hoverPopup.WindowManagerAddShadowHint = true;
         _hoverPopup.OverlayInputPassThroughElement = view.GetVisualParent() as IInputElement ?? Editor.TextArea;
         cascade.Place(top, bottom.Y - top.Y);
+        _dataTipPlace = (at, top, bottom.Y - top.Y);
         _hoverPopup.IsOpen = true;
         cascade.Opened();
+    }
+
+    /// <summary>
+    /// The hover's data tip stays over its expression (D44): when the lines above it change height while it's open
+    /// (the C# service's CodeLens rows or inlay hints arriving, another font size), the tips move with the text, so the header's double-click
+    /// and Ctrl+click still act on the code under it. A scroll closes them instead (<see cref="OnViewScrolled"/>).
+    /// </summary>
+    private void OnDataTipLinesChanged(object? sender, EventArgs e)
+    {
+        var view = Editor.TextArea.TextView;
+        var (start, placed, height) = _dataTipPlace;
+        if (_dataTip is not { } tip || !_hoverPopup.IsOpen || !view.VisualLinesValid || start.Line > Editor.Document.LineCount || view.GetVisualLine(start.Line) is null)
+        {
+            return;
+        }
+
+        var top = view.GetVisualPosition(start, VisualYPosition.LineTop) - view.ScrollOffset;
+        var bottom = view.GetVisualPosition(start, VisualYPosition.LineBottom) - view.ScrollOffset;
+        if (Math.Abs(top.X - placed.X) > 0.5 || Math.Abs(top.Y - placed.Y) > 0.5 || Math.Abs(bottom.Y - top.Y - height) > 0.5)
+        {
+            TraceQuickInfo($"the data tip's line moved from {placed} to {top}");
+            _dataTipPlace = (start, top, bottom.Y - top.Y);
+            tip.Place(top, bottom.Y - top.Y);
+        }
     }
 
     /// <summary>Scrolls the text by <paramref name="delta"/> pixels, down when positive (TextEditor.ScrollToVerticalOffset doesn't move its scroll viewer).</summary>
@@ -2332,6 +2362,7 @@ public sealed partial class CodeEditorController : IDisposable
         view.ScrollOffsetChanged -= OnViewChanged;
         view.ScrollOffsetChanged -= OnViewScrolled;
         view.VisualLinesChanged -= OnViewChanged;
+        view.VisualLinesChanged -= OnDataTipLinesChanged;
         view.PointerMoved -= OnPointerMoved;
         view.PointerExited -= OnPointerExited;
         _hoverPopup.Closed -= OnQuickInfoClosed;

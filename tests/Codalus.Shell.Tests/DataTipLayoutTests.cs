@@ -211,8 +211,18 @@ public sealed class DataTipLayoutTests
         await using var s = await StartAsync(Code(), StopLine, Stops());
         var word = s.OffsetOf(StopLine, "app");
 
-        // A double-click on the header's name selects the word under it.
         var tip = await s.HoverAsync(word + 1);
+
+        // When the text moves while the tip is open (CodeLens rows arriving above it, a larger font), the tip moves with it.
+        var before = s.InView(word);
+        await s.F.Shell.Workbench.Settings.SetAsync("editor.fontSize", 18.0, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => s.InView(word).Y > before.Y + 10, describe: () => $"the text at {s.InView(word)}, was {before}");
+        ShellFixture.RenderFrame(s.F.Window);
+        Assert.Same(tip, s.Editor.DataTip);
+        var name = s.InTextView(tip.Header.NameBlock);
+        Assert.True(name.Top <= s.InView(word).Y && s.InView(word).Y <= name.Bottom, $"the header's name at {name}, app at {s.InView(word)}");
+
+        // A double-click on the header's name selects the word under it.
         var host = HostOf(tip.Header.NameBlock);
         var at = InHost(tip.Header.NameBlock, new Point(6, 8));
         host.MouseDown(at, MouseButton.Left);
