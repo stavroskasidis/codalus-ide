@@ -11,10 +11,20 @@ namespace Codalus.Shell.Tests;
 
 public static class TestAppBuilder
 {
-    public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>()
+    public static AppBuilder BuildAvaloniaApp()
+    {
+        var builder = AppBuilder.Configure<App>()
             .UseSkia()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }); // real rendering, so frames can be captured
+
+        // Each test from an empty root locator (HeadlessIsolation). The name stays "Headless", or the session sets it up again.
+        var headless = builder.WindowingSubsystemInitializer!;
+        return builder.UseWindowingSubsystem(() =>
+        {
+            HeadlessIsolation.ClearRootLocator();
+            headless();
+        }, builder.WindowingSubsystemName!);
+    }
 }
 
 /// <summary>A shell and its main window on a fresh user-data directory, running headless.</summary>

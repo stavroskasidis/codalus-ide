@@ -135,7 +135,10 @@ internal sealed class ProjectLoader
         }
     }
 
-    /// <summary>A metadata reference to a file, shared by every project that references it while the file is unchanged.</summary>
+    /// <summary>
+    /// A metadata reference to a file, shared by every project that references it while the file is unchanged, with the
+    /// assembly's XML documentation (<see cref="DocumentationFiles"/>) when it has some.
+    /// </summary>
     public MetadataReference? Metadata(string path, MetadataReferenceProperties properties)
     {
         DateTime stamp;
@@ -154,10 +157,13 @@ internal sealed class ProjectLoader
 
         var entry = _metadata.AddOrUpdate(
             path,
-            p => (stamp, MetadataReference.CreateFromFile(p)),
-            (p, existing) => existing.Stamp == stamp ? existing : (stamp, MetadataReference.CreateFromFile(p)));
+            p => (stamp, Reference(p)),
+            (p, existing) => existing.Stamp == stamp ? existing : (stamp, Reference(p)));
         return properties == MetadataReferenceProperties.Assembly ? entry.Reference : entry.Reference.WithProperties(properties);
     }
+
+    private static PortableExecutableReference Reference(string path) =>
+        MetadataReference.CreateFromFile(path, documentation: DocumentationFiles.For(path, System.Globalization.CultureInfo.CurrentUICulture));
 
     private AnalyzerFileReference Analyzer(string path) => _analyzers.GetOrAdd(path, p =>
     {
