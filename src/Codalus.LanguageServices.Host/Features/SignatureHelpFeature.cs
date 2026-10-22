@@ -267,6 +267,9 @@ internal static class SignatureHelpFeature
     private static (string? Summary, Dictionary<string, string> Parameters) Documentation(IMethodSymbol method)
     {
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // TODO(issue): <inheritdoc/> isn't expanded here, as Roslyn expands it for Quick Info and completion, so a member
+        // documented only by it (common in NuGet packages' XML files) shows no summary or parameter descriptions.
         var xml = (method.AssociatedSymbol ?? method).GetDocumentationCommentXml(expandIncludes: true);
         if (string.IsNullOrWhiteSpace(xml))
         {
