@@ -405,6 +405,8 @@ Gaps of today's NuGet view that the pictures show, not this design's (each a TOD
 
 ## The data tip (0.6)
 
+**Approved by the maintainer on 2026-10-22, as drawn, every question as recommended ([D44](../roadmap.md#decision-register)).**
+
 `DataTip.dc.html` is the design step of #82: the debugger's data tip as the classic IDE's (the user's screenshot 2). Nothing is built until the maintainer approves it, and the decision goes into the roadmap's [decision register](../roadmap.md#decision-register). One finding shapes it: netcoredbg 3.2 can't construct a `[DebuggerTypeProxy]`. It has no `new` or `typeof` (both E_NOTIMPL, `evalstackmachine.cpp:1270` and `:1875`), and it matches a method's arguments by their exact runtime type (`ArgElementType::areEqual`, `evaluator.cpp:52-61`), so neither `Activator.CreateInstance` nor `MakeGenericType` binds. What it can do is read private fields and indexers, as the sample Dictionary Visualizer plugin reads `_count` and `_entries[i]` today; section A builds the collections' element rows that way, and section P waits for a changed netcoredbg.
 
 Questions for the maintainer, each as drawn and with what was rejected:
@@ -431,6 +433,8 @@ The icon kinds the tip adds, each with its color in `CommandIcons.s_kindColors`:
 
 ## The Git diff document (0.6)
 
+**Approved by the maintainer on 2026-10-22, as drawn, every question as recommended ([D45](../roadmap.md#decision-register)).**
+
 `DiffDocument.dc.html` is the design step of #86: the user's report that Git compare is missing its code coloring and that "the whole page needs redesign", with the classic IDE's diff document (their second screenshot) as the model. The missing colors have one root cause: the diff panes are bare `TextEditor`s with no colorizer (`DiffView.Editor()` adds only `DiffLineRenderer` and `DiffSignMargin`, and `DiffView` knows neither the file's language nor the editor's services). Nothing is built until the maintainer approves it, and the decision goes into the roadmap's [decision register](../roadmap.md#decision-register).
 
 Questions for the maintainer, each as drawn and with what was rejected:
@@ -455,6 +459,8 @@ Questions for the maintainer, each as drawn and with what was rejected:
 Show Staging Controls is a new icon kind, `staging-controls` (Fluent's `add_subtract_circle_16_regular`, Blue); Summary and the folded runs use the existing `fold` and `unfold` (`text_collapse`, `text_expand`), the tab `compare` and Stage `add`.
 
 ## Rounded corners (0.6)
+
+**Approved by the maintainer on 2026-10-22, as drawn, every question as recommended ([D46](../roadmap.md#decision-register)).**
 
 `RoundedCorners.dc.html` is the design step of #84, the user's "Add rounded corners for tabs/panels/windows etc (screenshot 4 comparison again)". Nothing is built until the maintainer approves it; the decision goes into the roadmap's [decision register](../roadmap.md#decision-register) as a new decision, numbered at merge, which supersedes D33's 2 px Classic corners ([Decided](#decided)). Most of it is token values and styles. One part needs code: Dock's `DocumentControl` stacks the tab strip, a 2 px separator and a whole `Border`, so styles alone can't leave the frame open under the selected tab. A new control, `TabStripEdge`, a 1 px row in `DocumentTabStrip.BottomContent` (which spans the whole strip, unused by Codalus today), draws that edge. Tool windows need no such control: Dock 12.1.0.7's `ToolTabStrip` already ends its top line at the selected tab, so only the radius is new there, on `ToolTabStripItem:selected /template/ Border`, since the template doesn't bind `CornerRadius`. One deliberate departure from the screenshot: every card gets the same 1 px `Shell.Border`, where the classic IDE's document well has none, because Classic Dark's panel and window colors are only 1.08:1 apart.
 
