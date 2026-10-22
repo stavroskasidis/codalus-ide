@@ -32,6 +32,21 @@ public sealed class DiffServices
     /// <summary>Whether a side's text is the open document's: that side gets the language service's colors and the navigation bar.</summary>
     public bool IsOpenText(string path, string text) => OpenText?.Invoke(path, text) ?? OpenDocument(path)?.Text.Text == text;
 
+    /// <summary>Saves an open document as the editor saves it (format on save and all); false when it couldn't.</summary>
+    public Func<CodeDocument, Task<bool>> SaveAsync { get; init; } = _ => Task.FromResult(false);
+
+    /// <summary>Shows a dialog (a discard's confirmation) and returns the button chosen.</summary>
+    public Func<ViewModels.DialogRequest, Task<ViewModels.DialogResult>> ShowDialogAsync { get; init; } = _ => Task.FromResult(new ViewModels.DialogResult(null, null));
+
+    /// <summary>Tells the user something that stopped an action (a save that changed the text).</summary>
+    public Action<string> ShowMessage { get; init; } = _ => { };
+
+    /// <summary>
+    /// Discard All… on a file: today's confirmation (with a sentence when the open document's unsaved edits go too),
+    /// then the working tree back to the index; true when it was discarded.
+    /// </summary>
+    public Func<string, bool, Task<bool>> DiscardAllAsync { get; init; } = (_, _) => Task.FromResult(false);
+
     /// <summary>
     /// The language service's semantic tokens (in the shell's legend) for a file whose open document's text is
     /// <c>text</c>, or null: the file isn't open, its text is another, or its language service has none.

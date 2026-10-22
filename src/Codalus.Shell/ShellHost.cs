@@ -222,6 +222,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         ApplyKeyboardScheme();
         Workbench.Settings.Changed += (_, e) => Ui.Post(() => OnSettingsChanged(e));
         Layout.ActiveDocumentChanged += (_, document) => Workbench.Context.Set("activeDocumentKind", document?.Kind);
+        Layout.ActiveDocumentChanged += (_, _) => UpdateDiffContext();
         Layout.ActiveDocumentChanged += (_, _) => OnSqlEditorActivated();
         Notifications.Changed += (_, _) => UpdateStatusItems();
         Theme.Changed += (_, _) => UpdateStatusItems();

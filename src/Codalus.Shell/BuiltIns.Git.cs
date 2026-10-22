@@ -31,6 +31,9 @@ internal static partial class BuiltIns
     /// <summary>The diff document's layout (#86, D45): the two versions side by side, or one inline pane.</summary>
     public const string DiffLayoutSetting = "git.diff.layout";
 
+    /// <summary>Whether the diff document shows its staging column (D45 question 5, off by default).</summary>
+    public const string DiffStagingControlsSetting = "git.diff.showStagingControls";
+
     public static IReadOnlyList<SettingDescriptor> GitSettings()
     {
         var shell = ContributionSource.Shell;
@@ -63,6 +66,14 @@ internal static partial class BuiltIns
                 EnumDescriptions = ["Side by side, aligned row by row", "Inline: each change's removed lines, then its added lines"],
                 Scope = SettingScope.User,
                 Order = 22,
+            },
+            SettingDescriptor.Create(DiffStagingControlsSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "Diff: Show Staging Controls",
+                Category = "Source Control",
+                Description = "Show each change's Stage and Discard (or Unstage) buttons in a column of the diff, between the line numbers and the signs. Hidden, the commands are still on the code's context menu.",
+                Scope = SettingScope.User,
+                Order = 23,
             },
         ];
     }
@@ -133,6 +144,18 @@ internal static partial class BuiltIns
         Add("git.diff.inline", "Diff: Inline", () => shell.OnDiffDocument(vm => vm.SideBySide = false), Diff);
         Add("git.diff.refresh", "Refresh Diff", () => shell.OnDiff(view => view.Refresh()), Diff);
         Add("git.diff.openFile", "Open File from Diff", () => shell.OnDiff(view => view.OpenFile()), Diff);
+        const string Stage = Diff + " && diffCanStage";
+        const string Unstage = Diff + " && diffCanUnstage";
+        Add("git.diff.stageChange", "Stage Change", () => shell.OnDiffAsync(view => view.ApplyToChangeAsync(DiffAction.Stage)), Stage);
+        Add("git.diff.stageSelectedLines", "Stage Selected Lines", () => shell.OnDiffAsync(view => view.ApplyToSelectedLinesAsync(DiffAction.Stage)), Stage);
+        Add("git.diff.discardChange", "Discard Change…", () => shell.OnDiffAsync(view => view.ApplyToChangeAsync(DiffAction.Discard)), Stage);
+        Add("git.diff.discardSelectedLines", "Discard Selected Lines…", () => shell.OnDiffAsync(view => view.ApplyToSelectedLinesAsync(DiffAction.Discard)), Stage);
+        Add("git.diff.unstageChange", "Unstage Change", () => shell.OnDiffAsync(view => view.ApplyToChangeAsync(DiffAction.Unstage)), Unstage);
+        Add("git.diff.unstageSelectedLines", "Unstage Selected Lines", () => shell.OnDiffAsync(view => view.ApplyToSelectedLinesAsync(DiffAction.Unstage)), Unstage);
+        Add("git.diff.stageAll", "Stage All", () => shell.OnDiffAsync(view => view.StageAllAsync()), Stage);
+        Add("git.diff.discardAll", "Discard All…", () => shell.OnDiffAsync(view => view.DiscardAllAsync()), Stage);
+        Add("git.diff.unstageAll", "Unstage All", () => shell.OnDiffAsync(view => view.UnstageAllAsync()), Unstage);
+        Add("git.diff.toggleStagingControls", "Show Staging Controls", () => shell.OnDiffDocument(vm => vm.ShowStagingControls = !vm.ShowStagingControls), Diff + " && (diffCanStage || diffCanUnstage)");
 
         // M13b: hosting, worktrees, LFS, several repositories.
         RegisterHostingCommands(shell);

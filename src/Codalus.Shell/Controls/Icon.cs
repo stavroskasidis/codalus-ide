@@ -293,6 +293,7 @@ public static class IconSet
         ["arrow-up"] = "arrow_up_16_regular",
         ["select-expand"] = "select_all_on_16_regular",
         ["fold"] = "text_collapse_16_regular",
+        ["staging-controls"] = "add_subtract_circle_16_regular",
         ["unfold"] = "text_expand_16_regular",
         ["fold-all"] = "arrow_collapse_all_16_regular",
         ["unfold-all"] = "arrow_expand_all_16_regular",

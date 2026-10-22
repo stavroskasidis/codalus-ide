@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
+using Codalus.Shell.Controls;
+using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Git;
 
 namespace Codalus.Shell.Views;
@@ -13,7 +15,7 @@ namespace Codalus.Shell.Views;
 /// (<c>.Removed.Word</c>, <c>.Added.Word</c>, <c>.WordBorder</c>; High Contrast's fills are the background, so only the
 /// borders show), and hatching on filler lines, where the other side has lines (<c>Shell.Diff.Filler</c>).
 /// </summary>
-internal sealed class DiffRenderer(Control owner, Func<DiffPane> pane, Func<int, IReadOnlyList<(int Start, int Length)>> words) : IBackgroundRenderer
+internal sealed class DiffRenderer(Control owner, Func<DiffPane> pane, Func<int, IReadOnlyList<(int Start, int Length)>> words, Func<IReadOnlySet<int>?>? outlined = null) : IBackgroundRenderer
 {
     private const double HatchSpacing = 6;
 
@@ -35,6 +37,8 @@ internal sealed class DiffRenderer(Control owner, Func<DiffPane> pane, Func<int,
         var removedBorder = Brush("Shell.Diff.Removed.WordBorder") is { } r ? new Pen(r, 1) : null;
         var hatch = Brush("Shell.Diff.Filler") is { } f ? new Pen(f, 1) : null;
         var width = textView.Bounds.Width;
+        var outline = outlined?.Invoke();
+        var outlinePen = outline is { Count: > 0 } && Brush("Shell.Accent") is { } accent ? new Pen(accent, 1) : null;
         foreach (var line in textView.VisualLines)
         {
             var index = line.FirstDocumentLine.LineNumber - 1;
@@ -79,6 +83,26 @@ internal sealed class DiffRenderer(Control owner, Func<DiffPane> pane, Func<int,
                     }
 
                     break;
+            }
+
+            if (outlinePen is not null && outline!.Contains(lines[index].Row) && kind is '-' or '+')
+            {
+                // The lines a staging button acts on: an outline round them (left and right edges, top and bottom at the run's ends).
+                var top0 = Math.Floor(line.VisualTop - textView.VerticalOffset) + 0.5;
+                var bottom = top0 + Math.Round(line.Height) - 1;
+                var above = index > 0 && outline.Contains(lines[index - 1].Row) && lines[index - 1].Kind is '-' or '+';
+                var below = index + 1 < lines.Count && outline.Contains(lines[index + 1].Row) && lines[index + 1].Kind is '-' or '+';
+                drawingContext.DrawLine(outlinePen, new Point(0.5, top0), new Point(0.5, bottom + 1));
+                drawingContext.DrawLine(outlinePen, new Point(width - 0.5, top0), new Point(width - 0.5, bottom + 1));
+                if (!above)
+                {
+                    drawingContext.DrawLine(outlinePen, new Point(0.5, top0), new Point(width - 0.5, top0));
+                }
+
+                if (!below)
+                {
+                    drawingContext.DrawLine(outlinePen, new Point(0.5, bottom), new Point(width - 0.5, bottom));
+                }
             }
         }
     }
@@ -250,4 +274,150 @@ internal sealed class DiffLineNumberMargin(Func<DiffPane> pane, Func<DiffChange?
 
     /// <summary>The caret's 1-based line, bold.</summary>
     public Func<int>? CaretLine { get; set; }
+}
+
+/// <summary>
+/// The staging column (D45 questions 4 and 5): between the line numbers and the signs, so it never covers code, each
+/// change gets its buttons at its first row in view, Stage and Discard (working tree) or Unstage (staged). The buttons
+/// aren't tab stops: the keyboard reaches the same commands through the code's context menu. Hovering one outlines the
+/// lines it acts on, and its tooltip names them.
+/// </summary>
+internal sealed class DiffStagingMargin : Canvas, ITextViewConnect
+{
+    private const double ButtonSize = 18;
+    private readonly Func<DiffPane> _pane;
+    private readonly Func<IReadOnlyList<DiffChange>> _changes;
+    private readonly IReadOnlyList<(DiffAction Action, string Icon)> _actions;
+    private readonly Func<DiffChange, DiffAction, string> _tooltip;
+    private readonly Action<DiffChange, DiffAction> _click;
+    private readonly Action<DiffChange?, DiffAction> _hover;
+    private readonly List<(DiffChange Change, DiffAction Action, Button Button)> _buttons = [];
+    private TextView? _textView;
+    private double _height;
+
+    public DiffStagingMargin(Func<DiffPane> pane, Func<IReadOnlyList<DiffChange>> changes, IReadOnlyList<(DiffAction Action, string Icon)> actions,
+        Func<DiffChange, DiffAction, string> tooltip, Action<DiffChange, DiffAction> click, Action<DiffChange?, DiffAction> hover)
+    {
+        _pane = pane;
+        _changes = changes;
+        _actions = actions;
+        _tooltip = tooltip;
+        _click = click;
+        _hover = hover;
+        Width = (actions.Count * (ButtonSize + 2)) + 4;
+        ClipToBounds = true;
+    }
+
+    /// <summary>The buttons shown now (tests): each change's, at its first row in view.</summary>
+    public IReadOnlyList<(DiffChange Change, DiffAction Action, Button Button)> Buttons => [.. _buttons.Where(b => b.Button.IsVisible)];
+
+    /// <summary>The changes moved: a pair of buttons for each.</summary>
+    public void Rebuild()
+    {
+        Children.Clear();
+        _buttons.Clear();
+        foreach (var change in _changes())
+        {
+            foreach (var (action, icon) in _actions)
+            {
+                var button = new Button { Width = ButtonSize, Height = ButtonSize, MinWidth = 0, MinHeight = 0, Padding = default, Focusable = false, IsTabStop = false };
+                button.Classes.AddRange(["toolbar", "icon"]);
+                ButtonIcon.SetKind(button, icon);
+                var (c, a) = (change, action);
+                button.Click += (_, _) => _click(c, a);
+                button.PointerEntered += (_, _) =>
+                {
+                    var tip = _tooltip(c, a);
+                    ToolTip.SetTip(button, tip);
+                    Avalonia.Automation.AutomationProperties.SetName(button, tip);
+                    _hover(c, a);
+                };
+                button.PointerExited += (_, _) => _hover(null, a);
+                Avalonia.Automation.AutomationProperties.SetName(button, _tooltip(c, a));
+                _buttons.Add((change, action, button));
+                Children.Add(button);
+            }
+        }
+
+        Reposition();
+    }
+
+    /// <summary>While git runs, the buttons wait.</summary>
+    public void SetBusy(bool busy)
+    {
+        foreach (var (_, _, button) in _buttons)
+        {
+            button.IsEnabled = !busy;
+        }
+    }
+
+    void ITextViewConnect.AddToTextView(TextView textView)
+    {
+        _textView = textView;
+        textView.VisualLinesChanged += OnVisualLinesChanged;
+        textView.ScrollOffsetChanged += OnVisualLinesChanged;
+    }
+
+    void ITextViewConnect.RemoveFromTextView(TextView textView)
+    {
+        textView.VisualLinesChanged -= OnVisualLinesChanged;
+        textView.ScrollOffsetChanged -= OnVisualLinesChanged;
+        _textView = null;
+    }
+
+    private void OnVisualLinesChanged(object? sender, EventArgs e) => Reposition();
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        _height = finalSize.Height;
+        Reposition();
+        return base.ArrangeOverride(finalSize);
+    }
+
+    /// <summary>Each change's buttons at its first line in view (a change that starts above the view: its first visible line).</summary>
+    private void Reposition()
+    {
+        if (_textView is not { Document: not null } view)
+        {
+            return;
+        }
+
+        var lines = _pane().Lines;
+        var lineHeight = view.DefaultLineHeight;
+        var firstVisible = view.VisualLinesValid && view.VisualLines.Count > 0 ? view.VisualLines[0].FirstDocumentLine.LineNumber - 1 : 0;
+        var height = Math.Max(_height, Bounds.Height);
+        foreach (var (change, action, button) in _buttons)
+        {
+            var line = -1;
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (change.Contains(lines[i].Row) && lines[i].Kind is not 'z' && i >= firstVisible)
+                {
+                    line = i;
+                    break;
+                }
+            }
+
+            if (line < 0 || line + 1 > view.Document.LineCount)
+            {
+                button.IsVisible = false;
+                continue;
+            }
+
+            // The change's first line must be in it: a line after its end belongs to another.
+            var top = view.GetVisualTopByDocumentLine(line + 1) - view.ScrollOffset.Y;
+            button.IsVisible = top + lineHeight > 0 && top < height;
+            var index = 0;
+            for (var k = 0; k < _actions.Count; k++)
+            {
+                if (_actions[k].Action == action)
+                {
+                    index = k;
+                }
+            }
+
+            SetLeft(button, 2 + (index * (ButtonSize + 2)));
+            SetTop(button, top + Math.Max(0, (lineHeight - ButtonSize) / 2));
+        }
+    }
 }

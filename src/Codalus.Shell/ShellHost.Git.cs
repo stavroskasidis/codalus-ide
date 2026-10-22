@@ -29,6 +29,8 @@ public sealed partial class ShellHost
         Git = new GitService(watch: Options.WatchFiles);
         Git.Log += (_, line) => GitLog.AppendLine(line);
         Git.StatusChanged += (_, _) => Ui.Post(UpdateGitStatus);
+        Git.StatusChanged += (_, _) => Ui.Post(ReloadGitDiffs);
+        Git.IndexChanged += (_, _) => Ui.Post(ReloadGitDiffs);
         GitChanges = new GitChangesViewModel(Git, (path, staged) => OpenDiffAsync(path, staged), command => RunGitCommandAsync(command));
         GitChanges.OpenFile = path => OpenFileAsync(path);
         GitChangesView.ReportError = ReportGitError;
@@ -178,18 +180,48 @@ public sealed partial class ShellHost
     public Task ShowActiveFileDiffAsync() =>
         ActiveEditor?.Model.Path is { } path ? GitActionAsync(() => OpenDiffAsync(path, staged: false)) : Task.CompletedTask;
 
-    public async Task DiscardAsync(string path)
+    /// <summary>
+    /// Discards a file's working-tree changes after asking (Git Changes, the diff's Discard All…). With
+    /// <paramref name="unsavedEditsLost"/>, the question says the open document's unsaved edits go too: it is saved, then
+    /// restored from the index (D45 question 15). True when it was discarded.
+    /// </summary>
+    public async Task<bool> DiscardAsync(string path, bool unsavedEditsLost = false)
     {
         var name = Path.GetFileName(path);
         var untracked = Git.Status?.Files.Any(f => f.IsUntracked && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, path)) == true;
         var choice = await Dialogs.ShowAsync(new DialogRequest(
             $"Discard changes to {name}?",
             untracked ? $"{name} is not tracked by git: it will be deleted." : $"The changes to {name} that are not staged will be lost.",
-            ["Discard", "Cancel"]) { DefaultButton = "Cancel" }).ConfigureAwait(true);
-        if (choice.Button == "Discard")
+            ["Discard", "Cancel"])
         {
-            await GitActionAsync(() => Git.DiscardAsync([path])).ConfigureAwait(true);
+            DefaultButton = "Cancel",
+            IsDanger = true,
+            Details = unsavedEditsLost ? [new DetailLine(Localizer.Format("msg.git.unsavedEditsLostToo", "{0} also has unsaved edits, and they will be lost too.", name), "note")] : null,
+        }).ConfigureAwait(true);
+        if (choice.Button != "Discard")
+        {
+            return false;
         }
+
+        var discarded = false;
+        await GitActionAsync(async () =>
+        {
+            // From the diff, the open document is saved first (its edits are in the diff, and go with the rest).
+            var model = unsavedEditsLost ? DiffServices.OpenDocument(path) : null;
+            if (model is { IsModified: true } && !await SaveAsync(model).ConfigureAwait(true))
+            {
+                return;
+            }
+
+            await Git.DiscardAsync([path]).ConfigureAwait(true);
+            if (model is not null && File.Exists(path))
+            {
+                await model.ReloadAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+
+            discarded = true;
+        }).ConfigureAwait(true);
+        return discarded;
     }
 
     public Task ToggleBlameAsync() => ActiveEditor?.Controller is { } controller ? controller.ToggleBlameAsync() : Task.CompletedTask;

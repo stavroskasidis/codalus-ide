@@ -269,6 +269,13 @@ public sealed class DiffView : UserControl, IPaneView
     private readonly Button _previous;
     private readonly ComboBox _zoom;
     private readonly ComboBox _inlineZoom;
+    private readonly ToolbarPanel _toolbar;
+    private readonly ProgressBar _progress;
+    private readonly List<(ContentControl Control, string Text)> _labeled = [];
+    private readonly ToggleButton? _stagingToggle;
+    private readonly DiffStagingMargin? _rightStaging;
+    private readonly DiffStagingMargin? _inlineStaging;
+    private IReadOnlySet<int>? _outlined;
     private DiffPane _leftPane = DiffPane.Empty;
     private DiffPane _rightPane = DiffPane.Empty;
     private DiffPane _inlinePane = DiffPane.Empty;
@@ -289,6 +296,11 @@ public sealed class DiffView : UserControl, IPaneView
         _right = Pane(DiffPaneSide.New, Localizer.Get("diff.newText", "New text"), _rightColors, () => _rightPane, null);
         _inline = Pane(DiffPaneSide.Inline, Localizer.Get("diff.inlineText", "Diff"), _inlineColors, () => _inlinePane, _inlineZoom);
         _active = _right;
+        if (viewModel.CanStage || viewModel.CanUnstage)
+        {
+            _rightStaging = StagingMargin(_right, () => _rightPane);
+            _inlineStaging = StagingMargin(_inline, () => _inlinePane);
+        }
 
         _splitter = new GridSplitter { ResizeDirection = GridResizeDirection.Columns };
         _splitter.DoubleTapped += (_, _) => ResetSplit();
@@ -306,6 +318,7 @@ public sealed class DiffView : UserControl, IPaneView
         Grid.SetColumn(_right, 2);
         _sideBySide.Children.AddRange([_left, _splitter, _right]);
         _sideBySide.SizeChanged += (_, _) => UpdateWidths();
+        SizeChanged += (_, _) => SetCompact(Bounds.Width is > 0 and < 760);
         _inline.SizeChanged += (_, _) => UpdateWidths();
         ApplySplit();
         _left.Editor.TextArea.TextView.ScrollOffsetChanged += (_, _) => Sync(_left, _right);
@@ -320,15 +333,45 @@ public sealed class DiffView : UserControl, IPaneView
         _previous = IconButton("arrow-up", Localizer.Get("diff.previousChange", "Previous Change"), "git.diff.previousChange", () => GoToChange(-1));
         var spacer = new Border();
         spacer.Classes.Add("toolbarSpacer");
-        var separator = new Border();
-        separator.Classes.Add("toolbarSeparator");
-        var toolbar = new ToolbarPanel();
-        toolbar.Children.AddRange([_next, _previous, _count, _removedChip, _addedChip, spacer, separator, GearMenu()]);
+        _toolbar = new ToolbarPanel();
+        _toolbar.Children.AddRange([_next, _previous, _count, _removedChip, _addedChip]);
+        if (viewModel.CanStage)
+        {
+            _toolbar.Children.Add(Separator());
+            _toolbar.Children.Add(LabeledButton("add", Localizer.Get("diff.stageAll", "Stage All"), Localizer.Get("diff.stageAllTip", "Stage All: the whole file"), "git.diff.stageAll", () => _ = StageAllAsync()));
+            _toolbar.Children.Add(LabeledButton("discard", Localizer.Get("diff.discardAll", "Discard All…"), Localizer.Get("diff.discardAllTip", "Discard All: every change in the file (asks first)"), "git.diff.discardAll", () => _ = DiscardAllAsync()));
+        }
+        else if (viewModel.CanUnstage)
+        {
+            _toolbar.Children.Add(Separator());
+            _toolbar.Children.Add(LabeledButton("subtract", Localizer.Get("diff.unstageAll", "Unstage All"), Localizer.Get("diff.unstageAllTip", "Unstage All: the whole file"), "git.diff.unstageAll", () => _ = UnstageAllAsync()));
+        }
+
+        _toolbar.Children.Add(spacer);
+        if (viewModel.CanStage || viewModel.CanUnstage)
+        {
+            var name = Localizer.Get("diff.showStagingControls", "Show Staging Controls");
+            _stagingToggle = new ToggleButton { Content = name, IsChecked = viewModel.ShowStagingControls };
+            _stagingToggle.Classes.AddRange(["toolbar", "iconText"]);
+            ButtonIcon.SetKind(_stagingToggle, "staging-controls");
+            AutomationProperties.SetName(_stagingToggle, name);
+            ToolTip.SetTip(_stagingToggle, name);
+            _stagingToggle.IsCheckedChanged += (_, _) => viewModel.ShowStagingControls = _stagingToggle.IsChecked == true;
+            _labeled.Add((_stagingToggle, name));
+            _toolbar.Children.Add(_stagingToggle);
+        }
+
+        _toolbar.Children.Add(Separator());
+        _toolbar.Children.Add(GearMenu());
+        _progress = new ProgressBar { IsIndeterminate = true, Height = 2, MinHeight = 2, IsVisible = false };
+        AutomationProperties.SetName(_progress, Localizer.Get("diff.working", "Working"));
 
         var body = new Panel { Children = { _sideBySide, _inline } };
         var root = new DockPanel();
-        DockPanel.SetDock(toolbar, Avalonia.Controls.Dock.Top);
-        root.Children.Add(toolbar);
+        DockPanel.SetDock(_toolbar, Avalonia.Controls.Dock.Top);
+        DockPanel.SetDock(_progress, Avalonia.Controls.Dock.Top);
+        root.Children.Add(_toolbar);
+        root.Children.Add(_progress);
         root.Children.Add(body);
         Content = root;
 
@@ -360,7 +403,7 @@ public sealed class DiffView : UserControl, IPaneView
         editor.Options.HighlightCurrentLine = true;
         editor.Bind(BackgroundProperty, editor.GetResourceObservable("Shell.Editor.Background"));
         editor.Bind(ForegroundProperty, editor.GetResourceObservable("Shell.Editor.Foreground"));
-        editor.TextArea.TextView.BackgroundRenderers.Add(new DiffRenderer(editor, pane, i => WordsOf(pane(), i)));
+        editor.TextArea.TextView.BackgroundRenderers.Add(new DiffRenderer(editor, pane, i => WordsOf(pane(), i), () => _outlined));
         editor.TextArea.TextView.LineTransformers.Add(colors);
         var numbers = new DiffLineNumberMargin(pane, CurrentChange);
         numbers.CaretLine = () => editor.TextArea.Caret.Line;
@@ -456,10 +499,52 @@ public sealed class DiffView : UserControl, IPaneView
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(DiffViewModel.Zoom))
+        switch (e.PropertyName)
         {
-            ApplyZoom();
+            case nameof(DiffViewModel.Zoom):
+                ApplyZoom();
+                break;
+            case nameof(DiffViewModel.ShowStagingControls):
+                ApplyStagingControls();
+                break;
+            case nameof(DiffViewModel.IsBusy) or nameof(DiffViewModel.BusyText):
+                ApplyBusy();
+                break;
         }
+    }
+
+    /// <summary>The staging column shown or hidden (the toolbar's toggle, the gear menu, the setting).</summary>
+    private void ApplyStagingControls()
+    {
+        foreach (var margin in new[] { _rightStaging, _inlineStaging })
+        {
+            if (margin is not null)
+            {
+                margin.IsVisible = _viewModel.ShowStagingControls;
+            }
+        }
+
+        if (_stagingToggle is not null && _stagingToggle.IsChecked != _viewModel.ShowStagingControls)
+        {
+            _stagingToggle.IsChecked = _viewModel.ShowStagingControls;
+        }
+    }
+
+    /// <summary>While git runs (A7): a progress line, "Staging…" in the toolbar, and the actions waiting.</summary>
+    private void ApplyBusy()
+    {
+        _progress.IsVisible = _viewModel.IsBusy;
+        _rightStaging?.SetBusy(_viewModel.IsBusy);
+        _inlineStaging?.SetBusy(_viewModel.IsBusy);
+        foreach (var (control, _) in _labeled)
+        {
+            if (control != _stagingToggle)
+            {
+                control.IsEnabled = !_viewModel.IsBusy;
+            }
+        }
+
+        UpdateCount();
     }
 
     private void OnFontChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => ApplyZoom();
@@ -546,6 +631,10 @@ public sealed class DiffView : UserControl, IPaneView
             UpdatePosition(pane);
         }
 
+        _rightStaging?.Rebuild();
+        _inlineStaging?.Rebuild();
+        ApplyStagingControls();
+        ApplyBusy();
         UpdateCount();
         UpdateNavigation();
         UpdateWidths();
@@ -624,7 +713,7 @@ public sealed class DiffView : UserControl, IPaneView
         }
     }
 
-    private void UpdateCount() => _count.Text = _viewModel.CountText(CurrentRow);
+    private void UpdateCount() => _count.Text = _viewModel.BusyText ?? _viewModel.CountText(CurrentRow);
 
     private void UpdatePosition(DiffPaneView pane)
     {
@@ -675,6 +764,7 @@ public sealed class DiffView : UserControl, IPaneView
         }
 
         _widths = widths;
+        SetCompact(Bounds.Width is > 0 and < 760);
         _left.SetNarrow(widths.Item1 is > 0 and < StatusMinWidth);
         _right.SetNarrow(widths.Item2 is > 0 and < StatusMinWidth);
         _inline.SetNarrow(widths.Item3 is > 0 and < StatusMinWidth);
@@ -688,6 +778,89 @@ public sealed class DiffView : UserControl, IPaneView
         var chip = new Border { Child = text, Padding = new Thickness(5, 0), Margin = new Thickness(2, 0), CornerRadius = new CornerRadius(3), VerticalAlignment = VerticalAlignment.Center, MinHeight = 18 };
         chip.Bind(Border.BackgroundProperty, chip.GetResourceObservable(background));
         return (chip, text);
+    }
+
+    private static Border Separator()
+    {
+        var separator = new Border();
+        separator.Classes.Add("toolbarSeparator");
+        return separator;
+    }
+
+    /// <summary>An icon and text button (Stage All…); at narrow widths the icon alone, its name in the tooltip (G1).</summary>
+    private Button LabeledButton(string icon, string text, string tooltip, string command, Action action)
+    {
+        var button = new Button { Content = text };
+        button.Classes.AddRange(["toolbar", "iconText"]);
+        ButtonIcon.SetKind(button, icon);
+        AutomationProperties.SetName(button, text);
+        ToolTip.SetTip(button, WithShortcut(tooltip, command));
+        button.Click += (_, _) => action();
+        _labeled.Add((button, text));
+        return button;
+    }
+
+    /// <summary>The toolbar's labels give way to icons when the document is narrow (G1).</summary>
+    private void SetCompact(bool compact)
+    {
+        foreach (var (control, text) in _labeled)
+        {
+            control.Content = compact ? null : text;
+            control.Classes.Set("iconText", !compact);
+            control.Classes.Set("icon", compact);
+        }
+    }
+
+    /// <summary>The staging column of a pane, between its numbers and its signs.</summary>
+    private DiffStagingMargin StagingMargin(DiffPaneView pane, Func<DiffPane> lines)
+    {
+        IReadOnlyList<(DiffAction, string)> actions = _viewModel.CanStage ? [(DiffAction.Stage, "add"), (DiffAction.Discard, "discard")] : [(DiffAction.Unstage, "subtract")];
+        var margin = new DiffStagingMargin(lines, () => _viewModel.Changes, actions, StagingTooltip, (change, action) => _ = ApplyAsync(action, RowsFor(change), selected: SelectionInChange(change)),
+            (change, _) =>
+            {
+                _outlined = change is { } c ? RowsFor(c).ToHashSet() : null;
+                pane.Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
+            })
+        {
+            IsVisible = _viewModel.ShowStagingControls,
+        };
+        pane.Editor.TextArea.LeftMargins.Insert(1, margin);
+        return margin;
+    }
+
+    /// <summary>The rows a change's button acts on: the selected rows in it, or all of its rows.</summary>
+    private List<int> RowsFor(DiffChange change)
+    {
+        var selected = SelectedRows().Where(change.Contains).ToList();
+        return selected.Count > 0 && !ActivePane.Editor.TextArea.Selection.IsEmpty ? selected : [.. Enumerable.Range(change.FirstRow, change.LastRow - change.FirstRow + 1)];
+    }
+
+    private bool SelectionInChange(DiffChange change) => !ActivePane.Editor.TextArea.Selection.IsEmpty && SelectedRows().Any(change.Contains);
+
+    /// <summary>A staging button's tooltip: the command, the lines it acts on, and the save-first note (A4, A5).</summary>
+    private string StagingTooltip(DiffChange change, DiffAction action)
+    {
+        var selected = SelectionInChange(change);
+        var title = (action, selected) switch
+        {
+            (DiffAction.Stage, false) => Localizer.Get("diff.stageChange", "Stage Change"),
+            (DiffAction.Stage, true) => Localizer.Get("diff.stageSelectedLines", "Stage Selected Lines"),
+            (DiffAction.Discard, false) => Localizer.Get("diff.discardChange", "Discard Change…"),
+            (DiffAction.Discard, true) => Localizer.Get("diff.discardSelectedLines", "Discard Selected Lines…"),
+            (DiffAction.Unstage, false) => Localizer.Get("diff.unstageChange", "Unstage Change"),
+            _ => Localizer.Get("diff.unstageSelectedLines", "Unstage Selected Lines"),
+        };
+        var tip = $"{title}: {LinesPhrase(RowsFor(change))}";
+        return action != DiffAction.Unstage && _viewModel.HasUnsavedEdits
+            ? Localizer.Format("diff.savesFirst", "{0} (saves {1} first)", tip, System.IO.Path.GetFileName(_viewModel.Path))
+            : tip;
+    }
+
+    /// <summary>"line 48", "lines 47–48" (the new side's numbers; the old side's for removed lines alone).</summary>
+    private string LinesPhrase(IReadOnlyCollection<int> rows)
+    {
+        var lines = _viewModel.LinesText(rows, old: false) ?? _viewModel.LinesText(rows, old: true) ?? string.Empty;
+        return lines.Contains('–', StringComparison.Ordinal) ? Localizer.Format("diff.lines", "lines {0}", lines) : Localizer.Format("diff.line", "line {0}", lines);
     }
 
     private string WithShortcut(string text, string command) =>
@@ -710,6 +883,8 @@ public sealed class DiffView : UserControl, IPaneView
         var name = Localizer.Get("diff.options", "Diff Options");
         var sideBySide = Item(Localizer.Get("diff.sideBySide", "Side by Side"), () => _viewModel.SideBySide = true, MenuItemToggleType.Radio);
         var inline = Item(Localizer.Get("diff.inline", "Inline"), () => _viewModel.SideBySide = false, MenuItemToggleType.Radio);
+        var staging = Item(Localizer.Get("diff.showStagingControls", "Show Staging Controls"), () => _viewModel.ShowStagingControls = !_viewModel.ShowStagingControls, MenuItemToggleType.CheckBox);
+        staging.IsVisible = _viewModel.CanStage || _viewModel.CanUnstage;
         var menu = new MenuFlyout
         {
             Items =
@@ -717,6 +892,8 @@ public sealed class DiffView : UserControl, IPaneView
                 sideBySide,
                 inline,
                 new Separator(),
+                staging,
+                new Separator { IsVisible = staging.IsVisible },
                 MenuEntry.Create(Localizer.Get("diff.refresh", "Refresh"), "refresh", click: Refresh),
                 MenuEntry.Create(OpenFileTitle, "document-text", click: OpenFile),
             },
@@ -725,6 +902,7 @@ public sealed class DiffView : UserControl, IPaneView
         {
             sideBySide.IsChecked = _viewModel.SideBySide;
             inline.IsChecked = !_viewModel.SideBySide;
+            staging.IsChecked = _viewModel.ShowStagingControls;
         };
         var button = new DropDownButton { Content = new Icon { Kind = "gear" }, Flyout = menu };
         button.Classes.Add("toolbar");
@@ -746,19 +924,28 @@ public sealed class DiffView : UserControl, IPaneView
     private void FillContextMenu(ContextMenu menu)
     {
         menu.Items.Clear();
-        if (_viewModel.CanStage)
+        var changeRows = _viewModel.ChangeRows(CurrentRow);
+        var selectedChanged = SelectedRows().Any(r => (uint)r < (uint)_viewModel.Rows.Count && _viewModel.Rows[r].IsChange);
+        MenuItem Entry(string key, string title, string icon, string command, Func<Task<bool>> action, bool enabled)
         {
-            menu.Items.Add(MenuEntry.Create(Localizer.Get("diff.stageHunk", "Stage Hunk"), "add", click: () => _ = HunkActionAsync("stage")));
-            menu.Items.Add(MenuEntry.Create(Localizer.Get("diff.stageSelectedLines", "Stage Selected Lines"), "add", click: () => _ = LineActionAsync("stage")));
-            menu.Items.Add(MenuEntry.Create(Localizer.Get("diff.discardHunk", "Discard Hunk"), "discard", click: () => _ = HunkActionAsync("discard")));
-            menu.Items.Add(MenuEntry.Create(Localizer.Get("diff.discardSelectedLines", "Discard Selected Lines"), "discard", click: () => _ = LineActionAsync("discard")));
-            menu.Items.Add(new Separator());
+            var item = MenuEntry.Create(Localizer.Get(key, title), icon, keys: _viewModel.ShortcutFor?.Invoke(command), click: () => _ = action());
+            item.IsEnabled = enabled && !_viewModel.IsBusy;
+            return item;
         }
 
-        if (_viewModel.CanUnstage)
+        if (_viewModel.CanStage)
         {
-            menu.Items.Add(MenuEntry.Create(Localizer.Get("diff.unstageHunk", "Unstage Hunk"), "subtract", click: () => _ = HunkActionAsync("unstage")));
-            menu.Items.Add(MenuEntry.Create(Localizer.Get("diff.unstageSelectedLines", "Unstage Selected Lines"), "subtract", click: () => _ = LineActionAsync("unstage")));
+            menu.Items.Add(Entry("diff.stageSelectedLines", "Stage Selected Lines", "add", "git.diff.stageSelectedLines", () => ApplyToSelectedLinesAsync(DiffAction.Stage), selectedChanged));
+            menu.Items.Add(Entry("diff.stageChange", "Stage Change", "add", "git.diff.stageChange", () => ApplyToChangeAsync(DiffAction.Stage), changeRows.Count > 0));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Entry("diff.discardSelectedLines", "Discard Selected Lines…", "discard", "git.diff.discardSelectedLines", () => ApplyToSelectedLinesAsync(DiffAction.Discard), selectedChanged));
+            menu.Items.Add(Entry("diff.discardChange", "Discard Change…", "discard", "git.diff.discardChange", () => ApplyToChangeAsync(DiffAction.Discard), changeRows.Count > 0));
+            menu.Items.Add(new Separator());
+        }
+        else if (_viewModel.CanUnstage)
+        {
+            menu.Items.Add(Entry("diff.unstageSelectedLines", "Unstage Selected Lines", "subtract", "git.diff.unstageSelectedLines", () => ApplyToSelectedLinesAsync(DiffAction.Unstage), selectedChanged));
+            menu.Items.Add(Entry("diff.unstageChange", "Unstage Change", "subtract", "git.diff.unstageChange", () => ApplyToChangeAsync(DiffAction.Unstage), changeRows.Count > 0));
             menu.Items.Add(new Separator());
         }
 
@@ -994,49 +1181,134 @@ public sealed class DiffView : UserControl, IPaneView
         _ = _viewModel.OpenFile?.Invoke(_viewModel.Path, line);
     }
 
-    /// <summary>Stages, unstages or discards the changed lines of the selection (per-line staging).</summary>
-    public async Task LineActionAsync(string action)
+    /// <summary>
+    /// Stage Change, Discard Change… or Unstage Change: the change at the caret (the context menu's, the command's).
+    /// Discard asks first. False when nothing was applied.
+    /// </summary>
+    public Task<bool> ApplyToChangeAsync(DiffAction action) =>
+        _viewModel.ChangeRows(CurrentRow) is { Count: > 0 } rows ? ApplyAsync(action, rows, selected: false) : Task.FromResult(false);
+
+    /// <summary>Stage, Discard… or Unstage Selected Lines: the changed lines among the selected ones (the caret's line without a selection).</summary>
+    public Task<bool> ApplyToSelectedLinesAsync(DiffAction action) =>
+        SelectedRows().Where(r => (uint)r < (uint)_viewModel.Rows.Count && _viewModel.Rows[r].IsChange).ToList() is { Count: > 0 } rows
+            ? ApplyAsync(action, rows, selected: true)
+            : Task.FromResult(false);
+
+    private async Task<bool> ApplyAsync(DiffAction action, IReadOnlyList<int> rows, bool selected)
     {
-        try
+        if (!_viewModel.Allows(action) || _viewModel.IsBusy)
         {
-            await _viewModel.ApplyToLinesAsync(SelectedRows(), action).ConfigureAwait(true);
-        }
-        catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
-        {
-            ReportError?.Invoke(ex);
-        }
-    }
-
-    /// <summary>Stages, unstages or discards the hunk at the caret.</summary>
-    public async Task HunkActionAsync(string action)
-    {
-        var index = CurrentRow;
-        if (index < 0 || index >= _viewModel.Rows.Count)
-        {
-            return;
+            return false;
         }
 
-        // On a context row, use the next change.
-        if (_viewModel.Rows[index].Kind == ' ' && _viewModel.NextChange(index, 1) is { } next)
+        if (action == DiffAction.Discard && !await ConfirmDiscardAsync(rows).ConfigureAwait(true))
         {
-            index = next;
-        }
-
-        var row = _viewModel.Rows[index];
-        if (_viewModel.HunkAt(row.NewLine, row.OldLine) is not { } hunk)
-        {
-            return;
+            return false;
         }
 
         try
         {
-            await _viewModel.ApplyToHunkAsync(hunk, action).ConfigureAwait(true);
+            return await _viewModel.ApplyAsync(action, rows).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
         {
             ReportError?.Invoke(ex);
+            return false;
+        }
+        finally
+        {
+            _outlined = null;
         }
     }
+
+    /// <summary>
+    /// Discard Change… and Discard Selected Lines… ask first, every time (D45 question 15, A9): the lines, what happens to
+    /// them, and whether the unsaved edits are saved first; Cancel is the default.
+    /// </summary>
+    private async Task<bool> ConfirmDiscardAsync(IReadOnlyList<int> rows)
+    {
+        if (_viewModel.Services is not { } services)
+        {
+            return false;
+        }
+
+        var name = System.IO.Path.GetFileName(_viewModel.Path);
+        var changed = rows.Where(r => (uint)r < (uint)_viewModel.Rows.Count && _viewModel.Rows[r].IsChange).Select(r => _viewModel.Rows[r]).ToList();
+        var added = changed.Count(r => r.Kind == '+');
+        var removed = changed.Count(r => r.Kind == '-');
+        var message = added == changed.Count
+            ? added == 1 ? Localizer.Get("diff.discardAddedLine", "This added line will be removed from the working tree.") : Localizer.Format("diff.discardAddedLines", "These {0} added lines will be removed from the working tree.", added)
+            : removed == changed.Count
+                ? removed == 1 ? Localizer.Get("diff.discardRemovedLine", "This removed line will be put back in the working tree.") : Localizer.Format("diff.discardRemovedLines", "These {0} removed lines will be put back in the working tree.", removed)
+                : Localizer.Get("diff.discardChangedLines", "These lines will go back to the index's version in the working tree.");
+        var details = new List<DetailLine>();
+        foreach (var row in changed)
+        {
+            if (row.OldLine is { } o)
+            {
+                details.Add(new DetailLine($"− {o,4}  {_viewModel.OldLines[o - 1]}", "removed"));
+            }
+        }
+
+        foreach (var row in changed)
+        {
+            if (row.NewLine is { } n)
+            {
+                details.Add(new DetailLine($"+ {n,4}  {_viewModel.NewLines[n - 1]}", "added"));
+            }
+        }
+
+        if (_viewModel.HasUnsavedEdits)
+        {
+            details.Insert(0, new DetailLine(Localizer.Format("diff.discardSavesFirst", "{0} has unsaved edits: it is saved first, then the lines are discarded.", name), "note"));
+        }
+
+        var discard = Localizer.Get("diff.discard", "Discard");
+        var cancel = Localizer.Get("diff.cancel", "Cancel");
+        var answer = await services.ShowDialogAsync(new DialogRequest(
+            Localizer.Format("diff.discardTitle", "Discard {0} of {1}?", LinesPhrase(rows), name),
+            message + " " + Localizer.Get("diff.cannotBeUndone", "This can't be undone."),
+            [discard, cancel])
+        {
+            DefaultButton = cancel,
+            IsDanger = true,
+            Icon = "discard",
+            Context = $"{name} ({_viewModel.NewSide.Label})",
+            Details = details,
+        }).ConfigureAwait(true);
+        return answer.Button == discard;
+    }
+
+    /// <summary>Stage All: the whole file, saved first.</summary>
+    public async Task<bool> StageAllAsync()
+    {
+        try
+        {
+            return await _viewModel.StageAllAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
+        {
+            ReportError?.Invoke(ex);
+            return false;
+        }
+    }
+
+    /// <summary>Unstage All: the whole file (a staged rename's both paths).</summary>
+    public async Task<bool> UnstageAllAsync()
+    {
+        try
+        {
+            return await _viewModel.UnstageAllAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
+        {
+            ReportError?.Invoke(ex);
+            return false;
+        }
+    }
+
+    /// <summary>Discard All…: today's confirmation (saying when unsaved edits go too), then the file back to the index.</summary>
+    public Task<bool> DiscardAllAsync() => _viewModel.DiscardAllAsync();
 
     public void FocusPrimary() => ActiveEditor.TextArea.Focus();
 
@@ -1068,6 +1340,24 @@ public sealed class DiffView : UserControl, IPaneView
 
     /// <summary>The line numbers drawn beside a 1-based pane line of a side (the inline view's two columns; 0 for none).</summary>
     public (int Old, int New) NumbersAt(DiffPaneSide side, int line) => PaneLinesOf(PaneOf(side)).NumbersOf(line - 1);
+
+    /// <summary>The staging column's buttons shown now on the new side (or inline), or none when it is hidden (tests).</summary>
+    internal IReadOnlyList<(DiffChange Change, DiffAction Action, Button Button)> StagingButtons =>
+        (_viewModel.SideBySide ? _rightStaging : _inlineStaging) is { IsVisible: true } margin ? margin.Buttons : [];
+
+    /// <summary>The staging column's tooltip for a change's button (tests).</summary>
+    internal string StagingTooltipOf(DiffChange change, DiffAction action) => StagingTooltip(change, action);
+
+    /// <summary>The code's context menu as it opens at the caret (tests): its entries' headers and whether each is enabled.</summary>
+    internal IReadOnlyList<(string Header, bool Enabled)> ContextMenuEntries()
+    {
+        var menu = new ContextMenu();
+        FillContextMenu(menu);
+        return [.. menu.Items.OfType<MenuItem>().Select(i => (AutomationProperties.GetName(i) ?? string.Empty, i.IsEnabled))];
+    }
+
+    /// <summary>The toolbar's buttons and toggles, by name (tests).</summary>
+    internal IReadOnlyList<string> ToolbarNames => [.. _toolbar.Children.OfType<Control>().Select(AutomationProperties.GetName).Where(n => !string.IsNullOrEmpty(n))!];
 
     /// <summary>The left side's share of the width (tests).</summary>
     public double SplitRatio => _left.Bounds.Width + _right.Bounds.Width is > 0 and var total ? _left.Bounds.Width / total : _viewModel.SplitRatio;

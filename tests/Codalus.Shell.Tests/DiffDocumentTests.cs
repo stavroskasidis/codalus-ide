@@ -367,6 +367,195 @@ public sealed class DiffDocumentTests
         Assert.False(view.NavigationOf(DiffPaneSide.Old).Bar); // the empty, disabled row
     }
 
+    private const string TwoChanges = """
+        namespace Greetings;
+
+        public static class Greeter
+        {
+            // Says hi.
+            public static string Greet(string name) => $"Hello from {name}";
+
+            public static string Wave() => "\\o/";
+        }
+
+        """;
+
+    /// <summary>Clicks a button of the open dialog.</summary>
+    private static void Answer(ShellFixture f, string button) => f.Shell.Dialogs.Buttons.Single(b => b.Label == button).Command.Execute(null);
+
+    private static async Task<DiffView> OpenDiffViewAsync(ShellFixture f, string file, bool staged)
+    {
+        var document = await f.Shell.OpenDiffAsync(file, staged);
+        Assert.NotNull(document);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any(v => v.ViewModel == document.ViewModel) && document.View is not null);
+        return f.Window.GetVisualDescendants().OfType<DiffView>().Single(v => v.ViewModel == document.ViewModel);
+    }
+
+    [AvaloniaFact]
+    public async Task Stage_Change_stages_the_rows_drawn_even_when_git_puts_two_changes_in_one_hunk()
+    {
+        var (f, folder, file) = await RepositoryAsync();
+        await using var fixture = f;
+        await File.WriteAllTextAsync(file, TwoChanges);
+        Assert.Single(Git(folder, "diff").Split('\n'), l => l.StartsWith("@@", StringComparison.Ordinal)); // one git hunk
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var view = await OpenDiffViewAsync(f, file, staged: false);
+        Assert.Equal(2, view.ViewModel.Changes.Count);
+
+        // The second change: F8, then Stage Change (the command the context menu runs).
+        await f.RunAsync("git.diff.nextChange");
+        Assert.Equal("Change 2 of 2", view.CountText);
+        await f.RunAsync("git.diff.stageChange");
+        await ShellFixture.PumpUntil(() => !view.ViewModel.IsBusy && view.ViewModel.Changes.Count == 1);
+        var staged = Git(folder, "diff", "--cached");
+        Assert.Contains("\\o/", staged, StringComparison.Ordinal);
+        Assert.DoesNotContain("Says hi", staged, StringComparison.Ordinal);
+        Assert.Contains("Says hi", Git(folder, "diff"), StringComparison.Ordinal);
+
+        // The staged diff unstages it: Unstage Change, then nothing is staged.
+        var stagedView = await OpenDiffViewAsync(f, file, staged: true);
+        Assert.Equal("1 change", stagedView.CountText);
+        Assert.Equal(["Unstage Selected Lines", "Unstage Change", "Next Change", "Previous Change", "Copy", "Open Greeter.cs"], stagedView.ContextMenuEntries().Select(e => e.Header));
+        Assert.True(await stagedView.ApplyToChangeAsync(DiffAction.Unstage));
+        Assert.Equal(string.Empty, Git(folder, "diff", "--cached"));
+    }
+
+    [AvaloniaFact]
+    public async Task The_working_tree_side_is_the_open_buffer_and_staging_saves_it_first()
+    {
+        var (f, folder, file) = await RepositoryAsync();
+        await using var fixture = f;
+        var editor = await f.Shell.OpenFileAsync(file);
+        await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+        editor!.Model.Text.Insert(0, "// unsaved\n");
+        Assert.True(editor.Model.IsModified);
+
+        var view = await OpenDiffViewAsync(f, file, staged: false);
+        Assert.StartsWith("// unsaved", view.RightText, StringComparison.Ordinal);
+        Assert.Equal("Greeter.cs (Working tree) unsaved edits included", view.HeaderOf(DiffPaneSide.New));
+        var change = view.ViewModel.Changes[0];
+        Assert.Equal("Stage Change: line 1 (saves Greeter.cs first)", view.StagingTooltipOf(change, DiffAction.Stage));
+
+        Assert.True(await view.ApplyToChangeAsync(DiffAction.Stage));
+        Assert.False(editor.Model.IsModified);
+        Assert.StartsWith("// unsaved", await File.ReadAllTextAsync(file), StringComparison.Ordinal);
+        Assert.Contains("+// unsaved", Git(folder, "diff", "--cached"), StringComparison.Ordinal);
+
+        // The diff follows the editor by itself: an edit shows after a pause.
+        editor.Model.Text.Insert(0, "// again\n");
+        await ShellFixture.PumpUntil(() => view.RightText.StartsWith("// again", StringComparison.Ordinal));
+    }
+
+    [AvaloniaFact]
+    public async Task A_save_that_changes_the_text_stops_the_action_and_says_so()
+    {
+        var (repo, _, file) = await RepositoryAsync();
+        await using var repoFixture = repo;
+        var model = CodeDocument.Create(file, await File.ReadAllTextAsync(file));
+        model.Text.Insert(0, "// typed\n");
+        string? message = null;
+        var services = new DiffServices(repo.Shell)
+        {
+            OpenDocument = path => path == file ? model : null,
+            // Format on save: what is written isn't what was typed.
+            SaveAsync = async _ =>
+            {
+                await File.WriteAllTextAsync(file, "// formatted\n" + Original);
+                return true;
+            },
+            ShowMessage = text => message = text,
+        };
+        var vm = new DiffViewModel(repo.Shell.Git, file, staged: false) { Services = services };
+        await vm.LoadAsync();
+        Assert.StartsWith("// typed", vm.NewText, StringComparison.Ordinal);
+
+        Assert.False(await vm.ApplyAsync(DiffAction.Stage, vm.ChangeRows(vm.Changes[0].FirstRow)));
+        Assert.Contains("changed as it was saved", message, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, Git(Path.GetDirectoryName(file)!, "diff", "--cached"));
+    }
+
+    [AvaloniaFact]
+    public async Task Discard_asks_first_with_cancel_the_default_and_names_the_lines()
+    {
+        var (f, folder, file) = await RepositoryAsync();
+        await using var fixture = f;
+        await File.WriteAllTextAsync(file, TwoChanges);
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var view = await OpenDiffViewAsync(f, file, staged: false);
+
+        // Discard Change… on the first change (the caret's): asked, cancelled, nothing changed.
+        var discarding = view.ApplyToChangeAsync(DiffAction.Discard);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Assert.Equal("Discard line 5 of Greeter.cs?", f.Shell.Dialogs.Title);
+        Assert.Contains("can't be undone", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        Assert.True(f.Shell.Dialogs.Buttons.Single(b => b.Label == "Cancel").IsDefault);
+        Assert.Contains(f.Shell.Dialogs.Changes, d => d.IsAdded && d.Text.Contains("Says hi", StringComparison.Ordinal));
+        Answer(f, "Cancel");
+        Assert.False(await discarding);
+        Assert.Equal(TwoChanges, await File.ReadAllTextAsync(file));
+
+        // Again, answered Discard: only that change goes.
+        discarding = view.ApplyToChangeAsync(DiffAction.Discard);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Answer(f, "Discard");
+        Assert.True(await discarding);
+        var text = await File.ReadAllTextAsync(file);
+        Assert.Contains("Says hello.", text, StringComparison.Ordinal);
+        Assert.Contains("\\o/", text, StringComparison.Ordinal);
+
+        // Discard All… keeps today's question; Cancel leaves the file.
+        var all = view.DiscardAllAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Assert.Equal("Discard changes to Greeter.cs?", f.Shell.Dialogs.Title);
+        Answer(f, "Cancel");
+        Assert.False(await all);
+        Assert.Equal(text, await File.ReadAllTextAsync(file));
+    }
+
+    [AvaloniaFact]
+    public async Task The_staging_column_is_hidden_by_default_and_its_toggle_is_a_setting()
+    {
+        var (f, folder, file) = await RepositoryAsync();
+        await using var fixture = f;
+        await File.WriteAllTextAsync(file, TwoChanges);
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var view = await OpenDiffViewAsync(f, file, staged: false);
+
+        Assert.False(view.ViewModel.ShowStagingControls);
+        Assert.Empty(view.StagingButtons);
+        Assert.Contains("Stage All", view.ToolbarNames);
+        Assert.Contains("Discard All…", view.ToolbarNames);
+        Assert.Contains("Show Staging Controls", view.ToolbarNames);
+        Assert.Equal(["Stage Selected Lines", "Stage Change", "Discard Selected Lines…", "Discard Change…", "Next Change", "Previous Change", "Copy", "Open Greeter.cs"], view.ContextMenuEntries().Select(e => e.Header));
+
+        // On an unchanged line, the change commands are off.
+        view.EditorOf(DiffPaneSide.New).TextArea.Caret.Line = 1;
+        view.EditorOf(DiffPaneSide.New).TextArea.Focus();
+        Assert.All(view.ContextMenuEntries().Take(4), e => Assert.False(e.Enabled));
+
+        // Shown (the command, as the toolbar's toggle and the gear menu run it): saved, and each change has Stage and Discard.
+        await f.RunAsync("git.diff.toggleStagingControls");
+        Assert.True(view.ViewModel.ShowStagingControls);
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetBoolean(BuiltIns.DiffStagingControlsSetting, false));
+        await ShellFixture.PumpUntil(() => view.StagingButtons.Count == 4);
+        Assert.Equal([DiffAction.Stage, DiffAction.Discard, DiffAction.Stage, DiffAction.Discard], view.StagingButtons.Select(b => b.Action));
+        Assert.Equal("Stage Change: line 5", view.StagingTooltipOf(view.ViewModel.Changes[0], DiffAction.Stage));
+
+        // Clicking a change's Stage stages that change.
+        view.StagingButtons[2].Button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        await ShellFixture.PumpUntil(() => Git(folder, "diff", "--cached").Contains("\\o/", StringComparison.Ordinal) && !view.ViewModel.IsBusy);
+
+        // Stage All, then the staged diff's column has Unstage alone, and Unstage All empties the index.
+        Assert.True(await view.StageAllAsync());
+        Assert.Equal(string.Empty, Git(folder, "diff"));
+        var stagedView = await OpenDiffViewAsync(f, file, staged: true);
+        await ShellFixture.PumpUntil(() => stagedView.StagingButtons.Count == 2);
+        Assert.All(stagedView.StagingButtons, b => Assert.Equal(DiffAction.Unstage, b.Action));
+        Assert.Contains("Unstage All", stagedView.ToolbarNames);
+        Assert.True(await stagedView.UnstageAllAsync());
+        Assert.Equal(string.Empty, Git(folder, "diff", "--cached"));
+    }
+
     private static Color Token(string key, Avalonia.Styling.ThemeVariant variant) =>
         Application.Current!.TryGetResource(key, variant, out var value) && value is ISolidColorBrush brush ? brush.Color : throw new InvalidOperationException($"{key} in {variant}");
 

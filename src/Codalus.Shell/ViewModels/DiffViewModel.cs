@@ -12,6 +12,19 @@ public sealed record DiffSide(string Path, string Label, string? Note, string In
     public string Name => System.IO.Path.GetFileName(Path);
 }
 
+/// <summary>What a staging command does to the lines it acts on.</summary>
+public enum DiffAction
+{
+    /// <summary>The working tree's lines into the index.</summary>
+    Stage,
+
+    /// <summary>The index's lines back to HEAD's.</summary>
+    Unstage,
+
+    /// <summary>The working tree's lines back to the index's.</summary>
+    Discard,
+}
+
 /// <summary>
 /// A diff document (ADR 0008, #86, D45): two versions of a file, aligned row by row, side by side or inline, each side
 /// colored like the editor: by its language's grammar, and by the language service where the side is the open
@@ -29,6 +42,12 @@ public sealed class DiffViewModel : ObservableObject
     private string _summary = string.Empty;
     private double _zoom = 1;
     private int _colorsVersion;
+    private int _reloadVersion;
+    private bool _showStagingControls;
+    private bool _isBusy;
+    private string? _busyText;
+    private byte[] _oldBytes = [];
+    private byte[] _newBytes = [];
     private readonly Dictionary<int, (IReadOnlyList<(int Start, int Length)> Old, IReadOnlyList<(int Start, int Length)> New)> _words = [];
 
     public DiffViewModel(GitService git, string path, bool staged)
@@ -83,6 +102,48 @@ public sealed class DiffViewModel : ObservableObject
 
     /// <summary>Opens a file at a 1-based line (Open in the gear menu and the context menu).</summary>
     public Func<string, int, Task>? OpenFile { get; set; }
+
+    /// <summary>Saves the staging controls' toggle to the settings.</summary>
+    public Action<DiffViewModel>? SaveStagingControls { get; set; }
+
+    /// <summary>
+    /// Whether the staging column shows each change's Stage and Discard (or Unstage) buttons (D45 question 5, the
+    /// <c>git.diff.showStagingControls</c> setting, off by default). Hidden, the commands are still on the context menu.
+    /// </summary>
+    public bool ShowStagingControls
+    {
+        get => _showStagingControls;
+        set
+        {
+            if (SetField(ref _showStagingControls, value))
+            {
+                SaveStagingControls?.Invoke(this);
+            }
+        }
+    }
+
+    /// <summary>Sets the staging controls' toggle from the setting, without saving it back.</summary>
+    public void LoadStagingControls(bool shown) => _showStagingControls = shown;
+
+    /// <summary>While git stages, unstages or discards: the actions wait, and the toolbar says so.</summary>
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set => SetField(ref _isBusy, value);
+    }
+
+    /// <summary>What the toolbar says while busy ("Staging…"), or null.</summary>
+    public string? BusyText
+    {
+        get => _busyText;
+        private set => SetField(ref _busyText, value);
+    }
+
+    /// <summary>Whether the working tree's side has edits in its editor that aren't saved (they're shown; actions save them first).</summary>
+    public bool HasUnsavedEdits => !Staged && IsGitDiff && Services?.OpenDocument(Path) is { IsModified: true };
+
+    /// <summary>Whether the old side's file exists (an untracked file's index side doesn't).</summary>
+    public bool OldExists { get; private set; } = true;
 
     /// <summary>A revision comparison's document key; null otherwise.</summary>
     public string? Key { get; }
@@ -232,28 +293,39 @@ public sealed class DiffViewModel : ObservableObject
         }
 
         var oldBytes = await _git.ShowBytesAsync(OldPath, Staged ? "HEAD" : ":").ConfigureAwait(true);
+        OldExists = oldBytes is not null;
         var old = oldBytes is null ? Text(string.Empty) : TextFiles.Decode(oldBytes);
         (string Text, TextFileFormat Format) now;
+        byte[] nowBytes;
+        var buffer = Staged ? null : Services?.OpenDocument(Path);
         if (Staged)
         {
-            var newBytes = await _git.ShowBytesAsync(Path, ":").ConfigureAwait(true);
-            now = newBytes is null ? Text(string.Empty) : TextFiles.Decode(newBytes);
+            nowBytes = await _git.ShowBytesAsync(Path, ":").ConfigureAwait(true) ?? [];
+            now = nowBytes.Length == 0 ? Text(string.Empty) : TextFiles.Decode(nowBytes);
+        }
+        else if (buffer is not null)
+        {
+            // The working tree's side is the open buffer, unsaved edits included (D45 question 11).
+            now = (buffer.Text.Text, buffer.Format);
+            nowBytes = TextFiles.Encode(now.Text, now.Format);
         }
         else
         {
-            now = await ReadAsync(Path).ConfigureAwait(true);
+            nowBytes = File.Exists(Path) ? await ReadBytesAsync(Path).ConfigureAwait(true) : [];
+            now = nowBytes.Length == 0 ? Text(string.Empty) : TextFiles.Decode(nowBytes);
         }
 
         Diff = await _git.DiffAsync(Path, Staged).ConfigureAwait(true);
         await SetTextsAsync(old, now).ConfigureAwait(true);
-        string? newNote = null;
+        (_oldBytes, _newBytes) = (oldBytes ?? [], nowBytes);
+        string? newNote = buffer is { IsModified: true } ? Localizer.Get("diff.unsavedEditsIncluded", "unsaved edits included") : null;
         if (Staged)
         {
             newNote = OldPath != Path
                 ? Localizer.Format("diff.renamedFrom", "renamed from {0}", System.IO.Path.GetFileName(OldPath))
                 : status is { WorkTree: not '.' } ? Localizer.Get("diff.workingTreeHasMoreEdits", "the working tree has more edits") : null;
         }
-        else if (!File.Exists(Path))
+        else if (!File.Exists(Path) && buffer is null)
         {
             newNote = Localizer.Get("diff.deleted", "deleted");
         }
@@ -284,6 +356,18 @@ public sealed class DiffViewModel : ObservableObject
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Text(string.Empty);
+        }
+    }
+
+    private static async Task<byte[]> ReadBytesAsync(string path)
+    {
+        try
+        {
+            return await File.ReadAllBytesAsync(path).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
         }
     }
 
@@ -467,117 +551,173 @@ public sealed class DiffViewModel : ObservableObject
             : Localizer.Format("diff.changes", "{0} changes", Changes.Count);
     }
 
-    /// <summary>The git hunk that covers a new-side (or, for removals, old-side) line.</summary>
-    public DiffHunk? HunkAt(int? newLine, int? oldLine)
+    /// <summary>The rows of the change at a row (none on an unchanged row).</summary>
+    public IReadOnlyList<int> ChangeRows(int row) =>
+        ChangeIndexAt(row) is var index and >= 0 ? [.. Enumerable.Range(Changes[index].FirstRow, Changes[index].LastRow - Changes[index].FirstRow + 1)] : [];
+
+    /// <summary>Whether an action applies to this document: Stage and Discard to the working tree's diff, Unstage to the staged one.</summary>
+    public bool Allows(DiffAction action) => action == DiffAction.Unstage ? CanUnstage : CanStage;
+
+    /// <summary>
+    /// Reads the texts again after a pause (an edit in the open document, a save, the index or the status changed),
+    /// so the diff refreshes by itself; a later request replaces an earlier one.
+    /// </summary>
+    public void RequestReload(TimeSpan delay) => _ = ReloadAfterAsync(delay);
+
+    private async Task ReloadAfterAsync(TimeSpan delay)
     {
-        if (Diff is null)
+        var version = ++_reloadVersion;
+        await Task.Delay(delay).ConfigureAwait(true);
+        if (version != _reloadVersion || IsBusy)
         {
-            return null;
+            return;
         }
 
-        foreach (var hunk in Diff.Hunks)
+        try
         {
-            if (newLine is { } n && n >= hunk.NewStart && n < hunk.NewStart + Math.Max(1, hunk.NewCount))
-            {
-                return hunk;
-            }
-
-            if (oldLine is { } o && o >= hunk.OldStart && o < hunk.OldStart + Math.Max(1, hunk.OldCount))
-            {
-                return hunk;
-            }
+            await LoadAsync().ConfigureAwait(true);
         }
-
-        return null;
+        catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
+        {
+            // The next change reloads it again; a git error here has no one to tell.
+        }
     }
 
     /// <summary>
-    /// Stages, unstages or discards only the changed lines in the given rows (per-line staging, M13): a removal is
-    /// chosen by its old line, an addition by its new line.
+    /// Stages, unstages or discards the changed lines among <paramref name="rows"/> (D45 questions 7 and 11): the patch is
+    /// built from these rows over the old side's bytes and the new side's, and applied by git. In the working tree's diff
+    /// the open document is saved first, as Stage Active File does; once the diff has read the file again, the saved
+    /// text must be the text drawn (format on save can change it), else nothing is applied and the user is told.
+    /// False when nothing was applied.
     /// </summary>
-    public async Task ApplyToLinesAsync(IReadOnlyCollection<int> rows, string action)
+    public async Task<bool> ApplyAsync(DiffAction action, IReadOnlyCollection<int> rows)
     {
-        if (Diff is null || _git is null)
+        if (_git is null || IsBusy || !Allows(action) || Diff is { IsBinary: true })
         {
-            return;
+            return false;
         }
 
-        var oldLines = rows.Where(r => r >= 0 && r < Rows.Count).Select(r => Rows[r].OldLine).OfType<int>().ToHashSet();
-        var newLines = rows.Where(r => r >= 0 && r < Rows.Count).Select(r => Rows[r].NewLine).OfType<int>().ToHashSet();
-        foreach (var hunk in Diff.Hunks)
+        var chosen = rows.Where(r => (uint)r < (uint)Rows.Count && Rows[r].IsChange).ToHashSet();
+        if (chosen.Count == 0)
         {
-            var chosen = new HashSet<int>();
-            int oldNo = hunk.OldStart, newNo = hunk.NewStart;
-            for (var i = 0; i < hunk.Lines.Count; i++)
-            {
-                switch (hunk.Lines[i].Kind)
-                {
-                    case ' ':
-                        oldNo++;
-                        newNo++;
-                        break;
-                    case '-':
-                        if (oldLines.Contains(oldNo++))
-                        {
-                            chosen.Add(i);
-                        }
-
-                        break;
-                    case '+':
-                        if (newLines.Contains(newNo++))
-                        {
-                            chosen.Add(i);
-                        }
-
-                        break;
-                }
-            }
-
-            if (chosen.Count == 0)
-            {
-                continue;
-            }
-
-            switch (action)
-            {
-                case "stage":
-                    await _git.StageLinesAsync(Diff, hunk, chosen).ConfigureAwait(true);
-                    break;
-                case "unstage":
-                    await _git.UnstageLinesAsync(Diff, hunk, chosen).ConfigureAwait(true);
-                    break;
-                case "discard":
-                    await _git.DiscardLinesAsync(Diff, hunk, chosen).ConfigureAwait(true);
-                    break;
-            }
-
-            break; // the diff changed: one hunk per action
+            return false;
         }
 
-        await LoadAsync().ConfigureAwait(true);
+        IsBusy = true;
+        BusyText = action switch
+        {
+            DiffAction.Stage => Localizer.Get("diff.staging", "Staging…"),
+            DiffAction.Unstage => Localizer.Get("diff.unstaging", "Unstaging…"),
+            _ => Localizer.Get("diff.discarding", "Discarding…"),
+        };
+        try
+        {
+            if (!await SaveFirstAsync().ConfigureAwait(true))
+            {
+                return false;
+            }
+
+            var patch = DiffPatch.Build(_git.RelativePath(OldPath), _git.RelativePath(Path), OldExists, _oldBytes, _newBytes, Rows, chosen, reverse: action != DiffAction.Stage);
+            if (patch is null)
+            {
+                return false;
+            }
+
+            await _git.ApplyPatchAsync(patch, cached: action != DiffAction.Discard, reverse: action != DiffAction.Stage).ConfigureAwait(true);
+            if (action == DiffAction.Discard && Services?.OpenDocument(Path) is { IsModified: false } model)
+            {
+                await model.ReloadAsync(CancellationToken.None).ConfigureAwait(true); // the file changed under its saved buffer
+            }
+
+            return true;
+        }
+        finally
+        {
+            IsBusy = false;
+            BusyText = null;
+            await LoadAsync().ConfigureAwait(true);
+        }
     }
 
-    public async Task ApplyToHunkAsync(DiffHunk hunk, string action)
+    /// <summary>Stage All: the whole file into the index, the open document saved first.</summary>
+    public Task<bool> StageAllAsync() => WholeFileAsync(DiffAction.Stage, Localizer.Get("diff.staging", "Staging…"), git => git.StageAsync([Path]));
+
+    /// <summary>Unstage All: the whole file out of the index (a staged rename: both its paths).</summary>
+    public Task<bool> UnstageAllAsync() =>
+        WholeFileAsync(DiffAction.Unstage, Localizer.Get("diff.unstaging", "Unstaging…"), git => git.UnstageAsync(OldPath != Path ? [Path, OldPath] : [Path]));
+
+    /// <summary>Discard All…: the shell's confirmation (it says when the unsaved edits go too), then the file back to the index.</summary>
+    public async Task<bool> DiscardAllAsync()
     {
-        if (Diff is null || _git is null)
+        if (Services is not { } services || !CanStage || IsBusy)
         {
-            return;
+            return false;
         }
 
-        switch (action)
+        var discarded = await services.DiscardAllAsync(Path, HasUnsavedEdits).ConfigureAwait(true);
+        await LoadAsync().ConfigureAwait(true);
+        return discarded;
+    }
+
+    private async Task<bool> WholeFileAsync(DiffAction action, string busy, Func<GitService, Task> run)
+    {
+        if (_git is null || !Allows(action) || IsBusy)
         {
-            case "stage":
-                await _git.StageHunkAsync(Diff, hunk).ConfigureAwait(true);
-                break;
-            case "unstage":
-                await _git.UnstageHunkAsync(Diff, hunk).ConfigureAwait(true);
-                break;
-            case "discard":
-                await _git.DiscardHunkAsync(Diff, hunk).ConfigureAwait(true);
-                break;
+            return false;
+        }
+
+        IsBusy = true;
+        BusyText = busy;
+        try
+        {
+            if (!await SaveFirstAsync().ConfigureAwait(true))
+            {
+                return false;
+            }
+
+            await run(_git).ConfigureAwait(true);
+            return true;
+        }
+        finally
+        {
+            IsBusy = false;
+            BusyText = null;
+            await LoadAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Saves the working tree's open document when it has unsaved edits, reads the diff again, and checks that the saved
+    /// text is the one drawn. False (and the user told why) when it couldn't save, or saving changed the text.
+    /// </summary>
+    public async Task<bool> SaveFirstAsync()
+    {
+        if (Staged || Services is not { } services || services.OpenDocument(Path) is not { IsModified: true } model)
+        {
+            return true;
+        }
+
+        var drawn = NewText;
+        if (!await services.SaveAsync(model).ConfigureAwait(true))
+        {
+            return false;
         }
 
         await LoadAsync().ConfigureAwait(true);
+        if (NewText != drawn || (File.Exists(Path) && TextFiles.Decode(await ReadBytesAsync(Path).ConfigureAwait(true)).Text != drawn))
+        {
+            services.ShowMessage(Localizer.Format("diff.changedOnSave", "{0} changed as it was saved (format on save, for example), so nothing was applied. Check the diff, then try again.", System.IO.Path.GetFileName(Path)));
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>The 1-based lines of a side the rows show, as a range for a title ("47–48"), or null when that side has none.</summary>
+    public string? LinesText(IReadOnlyCollection<int> rows, bool old)
+    {
+        var lines = rows.Where(r => (uint)r < (uint)Rows.Count && Rows[r].IsChange).Select(r => old ? Rows[r].OldLine : Rows[r].NewLine).OfType<int>().Order().ToList();
+        return lines.Count == 0 ? null : lines[0] == lines[^1] ? lines[0].ToString(System.Globalization.CultureInfo.InvariantCulture) : $"{lines[0]}–{lines[^1]}";
     }
 }
 

@@ -336,6 +336,9 @@ public sealed partial class GitService : IDisposable
 
     private string Relative(string path) => Path.GetRelativePath(Root!, Real(path)).Replace('\\', '/');
 
+    /// <summary>A file's path relative to the repository, with <c>/</c>, as patches and git's specs name it.</summary>
+    public string RelativePath(string path) => Relative(path);
+
     /// <summary>Git reports real paths (symbolic links resolved); callers may pass another spelling of the same file.</summary>
     private static string Real(string path) => Codalus.Platform.RealPath.Resolve(path);
 
