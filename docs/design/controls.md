@@ -465,7 +465,7 @@ The new 16 px drawings (merge, compare, rename, stash, upload, mention, expand-a
 
 ## NuGet's verified owner (0.6)
 
-**Approved by the maintainer on 2026-10-21, as drawn (D39).**
+**Approved by the maintainer on 2026-10-21, as drawn (D39). Built on 2026-10-22: `VerifiedOwner` and `NuGetClient` in the build host, the badges in `PackageManagerView.axaml`; the gaps listed at the end are TODO(issue)s in the roadmap's [deferred work](../roadmap.md#deferred-work).**
 
 
 `PackageManager.dc.html` is the design step of #78's item 4. nuget.org's search already says when a package's ID prefix is reserved for one of its owners (its `verified` field, which NuGet.Protocol reads as `PrefixReserved`); the build host will pass it on as `PackageSummary.Verified` only for results from https://api.nuget.org that can be nobody else's copy (questions 7, 9 and 10), and the package manager will show a badge after the ID. The protocol and host parts don't wait for this; the badge's UI is built only once the maintainer approves the design, and the decision goes into the roadmap's [decision register](../roadmap.md#decision-register) as D39.

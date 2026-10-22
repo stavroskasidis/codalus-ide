@@ -59,7 +59,7 @@ public sealed class PackageIntegrationTests : IAsyncLifetime
         }
     }
 
-    private static void Copy(string source, string target)
+    internal static void Copy(string source, string target)
     {
         Directory.CreateDirectory(target);
         foreach (var file in Directory.EnumerateFiles(source))
@@ -172,7 +172,10 @@ public sealed class PackageIntegrationTests : IAsyncLifetime
             """);
         WriteExtracted(folder, "Codalus.Folder.Broken", "1.0.0", string.Empty);
         var config = Path.Combine(Fixture, "nuget.config");
-        File.WriteAllText(config, File.ReadAllText(config).Replace("<add key=\"local\" value=\"feed\" />", "<add key=\"local\" value=\"feed\" /><add key=\"folder\" value=\"v3feed\" />", StringComparison.Ordinal));
+        // The folder is mapped for its packages: search leaves out copies package source mapping wouldn't restore (D39).
+        File.WriteAllText(config, File.ReadAllText(config)
+            .Replace("<add key=\"local\" value=\"feed\" />", "<add key=\"local\" value=\"feed\" /><add key=\"folder\" value=\"v3feed\" />", StringComparison.Ordinal)
+            .Replace("<packageSourceMapping>", "<packageSourceMapping><packageSource key=\"folder\"><package pattern=\"Codalus.Folder.*\" /></packageSource>", StringComparison.Ordinal));
         await OpenRestoredAsync();
 
         var result = await _packages.SearchAsync("Codalus.Folder", prerelease: false, 0, 20, "folder", Timeout());

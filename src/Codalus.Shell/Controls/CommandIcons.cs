@@ -192,6 +192,8 @@ public static class CommandIcons
         ["type-hierarchy"] = Blue,
         ["undo"] = Blue,
         ["update"] = Blue,
+        // NuGet's verified-owner badge (D39 question 3): blue, also on a selected row; High contrast: the text's color.
+        ["verified"] = Blue,
         ["watch"] = Blue,
         ["comment"] = Blue,
         ["uncomment"] = Blue,

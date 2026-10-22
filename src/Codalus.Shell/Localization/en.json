@@ -2980,6 +2980,8 @@
   "packageManager.update": "Update",
   "packageManager.updateAvailable": "Update available",
   "packageManager.updateSelectedPackages": "Update selected packages",
+  "packageManager.verifiedOwner": "verified owner",
+  "packageManager.verifiedOwnerTip": "Verified owner: nuget.org reserved this ID prefix for one of the package's owners. The authors shown are not verified.",
   "packageManager.version": "Version:",
   "packageManager.version2": "Version",
   "packageManager.viewLicense": "View License",

@@ -8,6 +8,7 @@ using NuGet.Packaging.Core;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
+using NuGetSourceMapping = NuGet.Configuration.PackageSourceMapping;
 using WirePackageDependency = Codalus.Projects.Protocol.PackageDependency;
 using WirePackageDependencyGroup = Codalus.Projects.Protocol.PackageDependencyGroup;
 using WirePackageSourceMapping = Codalus.Projects.Protocol.PackageSourceMapping;
@@ -22,6 +23,9 @@ namespace Codalus.Projects.Host.Packages;
 internal sealed partial class NuGetClient(string root, Func<string, string, Task> log)
 {
     private const string ReadmeTemplateType = "ReadmeUriTemplate/6.13.0";
+
+    /// <summary>The name offline requests give the global packages folder, searched as a source.</summary>
+    private const string GlobalPackagesFolderName = "Global packages folder";
     private static int s_credentialsConfigured;
 
     private readonly ConcurrentDictionary<string, SourceRepository> _repositories = new(StringComparer.OrdinalIgnoreCase);
@@ -64,7 +68,7 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
             sources = [.. sources.Where(s => s.IsLocal)];
             if (name is null)
             {
-                sources.Add(new PackageSource(SettingsUtility.GetGlobalPackagesFolder(settings), "Global packages folder"));
+                sources.Add(new PackageSource(SettingsUtility.GetGlobalPackagesFolder(settings), GlobalPackagesFolderName));
             }
         }
 
@@ -143,6 +147,16 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
 
     private static SourceCacheContext Cache(bool refresh) => new() { NoCache = refresh, DirectDownload = false };
 
+    /// <summary>The package tests' mock feed that counts as nuget.org (<see cref="VerifiedOwner.TestIndexVariable"/>).</summary>
+    private static string? TestNuGetOrgIndex => Environment.GetEnvironmentVariable(VerifiedOwner.TestIndexVariable) is { Length: > 0 } index ? index : null;
+
+    /// <summary>
+    /// The names of <paramref name="sources"/> that package source mapping lets restore take <paramref name="id"/> from
+    /// (D39 question 10): search and the details leave out copies restore would refuse.
+    /// </summary>
+    private static IReadOnlyList<string> AllowedSources(NuGetSourceMapping mapping, IEnumerable<PackageSource> sources, string id) =>
+        VerifiedOwner.Allowed(sources.Select(s => s.Name), mapping.IsEnabled ? mapping.GetConfiguredPackageSources(id) : null, GlobalPackagesFolderName);
+
     // ------------------------------------------------------------------ search
 
     /// <summary>
@@ -200,6 +214,11 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
         using var cache = Cache(parameters.Refresh);
         var take = Math.Clamp(parameters.Take, 1, 100);
         var filter = new SearchFilter(parameters.Prerelease) { IncludeDelisted = false };
+        var mapping = NuGetSourceMapping.GetPackageSourceMapping(settings);
+        var testIndex = TestNuGetOrgIndex;
+        var allowed = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<string> AllowedFor(string id) =>
+            allowed.TryGetValue(id, out var names) ? names : allowed[id] = AllowedSources(mapping, sources, id);
         var perSource = await Task.WhenAll(sources.Select(async source =>
         {
             try
@@ -221,19 +240,25 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
             }
         })).ConfigureAwait(false);
 
-        // Merged by id, in the order of the highest-priority source that has the package; the highest version wins.
-        var merged = new Dictionary<string, (int Order, IPackageSearchMetadata Metadata, string Source)>(StringComparer.OrdinalIgnoreCase);
+        // Merged by id, in the order of the highest-priority source that has the package; the highest version wins. A copy
+        // from a source that package source mapping doesn't map the id to is left out: restore would refuse it (D39).
+        var merged = new Dictionary<string, (int Order, IPackageSearchMetadata Metadata, PackageSource Source)>(StringComparer.OrdinalIgnoreCase);
         foreach (var (source, results, _) in perSource)
         {
             foreach (var result in results)
             {
+                if (!AllowedFor(result.Identity.Id).Contains(source.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 if (!merged.TryGetValue(result.Identity.Id, out var existing))
                 {
-                    merged[result.Identity.Id] = (merged.Count, result, source.Name);
+                    merged[result.Identity.Id] = (merged.Count, result, source);
                 }
                 else if (result.Identity.Version > existing.Metadata.Identity.Version)
                 {
-                    merged[result.Identity.Id] = (existing.Order, result, source.Name);
+                    merged[result.Identity.Id] = (existing.Order, result, source);
                 }
             }
         }
@@ -251,7 +276,8 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
                 metadata.DownloadCount,
                 deprecation is not null,
                 Severity(metadata.Vulnerabilities),
-                source));
+                source.Name,
+                metadata.PrefixReserved && VerifiedOwner.MayBadge(source.Name, source.Source, AllowedFor(metadata.Identity.Id), testIndex)));
         }
 
         return new PackageSearchResult(
@@ -265,7 +291,21 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
     public async Task<PackageDetails> DetailsAsync(PackageDetailsParams parameters, CancellationToken cancellationToken)
     {
         var settings = LoadSettings();
-        var sources = Sources(settings, parameters.Source, parameters.Offline);
+        var searched = Sources(settings, parameters.Source, parameters.Offline);
+        var allowed = AllowedSources(NuGetSourceMapping.GetPackageSourceMapping(settings), searched, parameters.Id);
+        var sources = searched.Where(s => allowed.Contains(s.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (sources.Count == 0 && searched.Count > 0)
+        {
+            throw new InvalidOperationException($"Package source mapping lets no {(parameters.Source is null ? "enabled source" : "source named " + parameters.Source)} provide {parameters.Id}.");
+        }
+
+        // D39: the heading's badge. nuget.org is asked (one packageid: search beside the metadata) only when it is the one
+        // source that may serve the id, and only when no search already said.
+        var testIndex = TestNuGetOrgIndex;
+        var nugetOrg = sources.Count == 1 && VerifiedOwner.MayBadge(sources[0].Name, sources[0].Source, allowed, testIndex) ? sources[0] : null;
+        var verified = nugetOrg is null || parameters.Verified is false ? Task.FromResult(false)
+            : parameters.Verified is true ? Task.FromResult(true)
+            : PrefixReservedAsync(nugetOrg, parameters.Id, cancellationToken);
         NuGetVersion? requested = parameters.Version is null ? null : NuGetVersion.Parse(parameters.Version);
         var prerelease = parameters.Prerelease || requested?.IsPrerelease == true;
         using var cache = Cache(refresh: false);
@@ -354,7 +394,31 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
                     deprecation.AlternatePackage?.PackageId,
                     deprecation.AlternatePackage?.Range?.PrettyPrint()),
             [.. (m.Vulnerabilities ?? []).Select(v => new PackageVulnerability(v.Severity, v.AdvisoryUrl.AbsoluteUri))],
-            chosen.Source.Name);
+            chosen.Source.Name,
+            ReferenceEquals(chosen.Source, nugetOrg) && await verified.ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Whether nuget.org says <paramref name="id"/>'s prefix is reserved for one of its owners (its search's
+    /// <c>verified</c>, NuGet's <c>PrefixReserved</c>). False, silently, when the search fails.
+    /// </summary>
+    private async Task<bool> PrefixReservedAsync(PackageSource nugetOrg, string id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (await Repository(nugetOrg).GetResourceAsync<PackageSearchResource>(cancellationToken).ConfigureAwait(false) is not { } search)
+            {
+                return false;
+            }
+
+            var results = await search.SearchAsync("packageid:" + id, new SearchFilter(includePrerelease: true) { IncludeDelisted = false }, 0, 1, _logger, cancellationToken).ConfigureAwait(false);
+            return results.FirstOrDefault(r => string.Equals(r.Identity.Id, id, StringComparison.OrdinalIgnoreCase))?.PrefixReserved == true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await log("debug", $"No verified-owner answer for {id} from {nugetOrg.Name}: {ex.Message}").ConfigureAwait(false);
+            return false;
+        }
     }
 
     /// <summary>

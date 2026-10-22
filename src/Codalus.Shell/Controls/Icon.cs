@@ -398,6 +398,8 @@ public static class IconSet
         ["align-middle"] = "align_center_horizontal_16_regular",
         ["align-bottom"] = "align_bottom_16_regular",
         ["locked"] = "lock_closed_16_filled",
+        // NuGet's verified owner (D39): a badge with a check, filled because it is a mark; drawn at 14 px after the ID.
+        ["verified"] = "checkmark_starburst_16_filled",
         ["document-text"] = "document_text_16_regular",
         ["update"] = "arrow_sync_circle_16_regular",
         ["sparkle"] = "sparkle_16_regular",
