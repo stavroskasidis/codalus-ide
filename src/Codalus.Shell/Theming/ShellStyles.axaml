@@ -1224,11 +1224,17 @@
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Search.Border}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="4" />
-    <Setter Property="MinWidth" Value="220" />
     <Setter Property="MinHeight" Value="24" />
     <Setter Property="Padding" Value="8,2" />
     <Setter Property="HorizontalContentAlignment" Value="Left" />
     <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <!-- In a narrow window (0.6.0) the title row shrinks the search box to its icon (TitleBarPanel.CompactClass). -->
+  <Style Selector="Button.searchBox:not(.compact)">
+    <Setter Property="MinWidth" Value="220" />
+  </Style>
+  <Style Selector="Button.searchBox.compact TextBlock.searchText">
+    <Setter Property="IsVisible" Value="False" />
   </Style>
   <Style Selector="Border.solutionName">
     <Setter Property="Background" Value="{DynamicResource Shell.TitleBar.Chip}" />

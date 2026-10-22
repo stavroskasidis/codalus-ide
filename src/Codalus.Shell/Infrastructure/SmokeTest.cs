@@ -418,6 +418,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         }, "language.ready").ConfigureAwait(true);
 
+        await StepAsync("shell.narrowWindow", "0.6.0", "A narrow window: the title row keeps the caption buttons clear and wraps the menu, the toolbar folds its groups into \"…\" drop-downs", NarrowWindowStepAsync).ConfigureAwait(true);
+
         await StepAsync("shell.themeFamilies", "M45", "Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, over the open solution; Harbor follows the system; the family picker in Options", ThemeFamiliesStepAsync, "language.ready").ConfigureAwait(true);
 
         // M34a: the menus as trees with icons, Ctrl+Space through the keyboard, output that follows.

@@ -30,25 +30,35 @@
 
   <DockPanel>
     <!-- The title row (M29): the menu, the search box and the solution's name. On Windows it is the window's title
-         bar (the client area extends into it); elsewhere it sits under the system's title bar. -->
+         bar (the client area extends into it); elsewhere it sits under the system's title bar. In a narrow window
+         (0.6.0) the name trims, the search box shrinks to its icon, then the menu wraps onto a second row with the
+         search box at its end; the caption buttons' room stays clear at the first row's right end (TitleBarPanel). -->
     <Border x:Name="TitleBar" DockPanel.Dock="Top" Classes="titleBar">
-      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
-        <Image x:Name="TitleIcon" Width="16" Height="16" Margin="10,0,2,0" VerticalAlignment="Center" IsVisible="False"
+      <controls:TitleBarPanel x:Name="TitleRow">
+        <Image x:Name="TitleIcon" controls:TitleBarPanel.Role="Icon" Width="16" Height="16" Margin="10,0,2,0" VerticalAlignment="Center" IsVisible="False"
                Source="avares://codalus/Assets/codalus.ico" />
-        <Menu Grid.Column="1" x:Name="MenuBar" VerticalAlignment="Center" AutomationProperties.Name="{l:T main.menuBar}" />
-        <Button Grid.Column="2" x:Name="SearchBox" Classes="searchBox" Command="{Binding Toolbar.SearchCommand}" Margin="8,3"
+        <!-- Its height is its rows' (the theme's is one row's, 32 px): TitleMenuPanel keeps one row 32 px tall. -->
+        <Menu x:Name="MenuBar" controls:TitleBarPanel.Role="Menu" Height="NaN" VerticalAlignment="Center" AutomationProperties.Name="{l:T main.menuBar}">
+          <Menu.ItemsPanel>
+            <ItemsPanelTemplate>
+              <controls:TitleMenuPanel />
+            </ItemsPanelTemplate>
+          </Menu.ItemsPanel>
+        </Menu>
+        <Button x:Name="SearchBox" controls:TitleBarPanel.Role="Search" Classes="searchBox" Command="{Binding Toolbar.SearchCommand}" Margin="8,3"
                 ToolTip.Tip="{l:T main.searchCommandsSettingsFilesAndCode}" AutomationProperties.Name="{l:T main.searchCtrlQ}">
           <Grid ColumnDefinitions="Auto,*">
             <controls:Icon Kind="search" VerticalAlignment="Center" />
             <TextBlock Grid.Column="1" Classes="searchText" Text="{l:T main.searchCtrlQ}" Margin="6,0,0,0" VerticalAlignment="Center" />
           </Grid>
         </Button>
-        <Border Grid.Column="3" Classes="solutionName" IsVisible="{Binding Toolbar.HasSolution}" VerticalAlignment="Center">
-          <TextBlock Text="{Binding Toolbar.SolutionName}" AutomationProperties.Name="{l:T main.solutionName}" />
+        <Border controls:TitleBarPanel.Role="Name" Classes="solutionName" IsVisible="{Binding Toolbar.HasSolution}" VerticalAlignment="Center"
+                ToolTip.Tip="{Binding Toolbar.SolutionName}">
+          <TextBlock Text="{Binding Toolbar.SolutionName}" TextTrimming="CharacterEllipsis" AutomationProperties.Name="{l:T main.solutionName}" />
         </Border>
-        <Panel Grid.Column="4" x:Name="TitleDragArea" Background="Transparent" />
-        <Panel Grid.Column="5" x:Name="CaptionButtonsSpace" Width="0" />
-      </Grid>
+        <Panel x:Name="TitleDragArea" controls:TitleBarPanel.Role="DragArea" Background="Transparent" ZIndex="-1" />
+        <Panel x:Name="CaptionButtonsSpace" controls:TitleBarPanel.Role="Caption" Width="0" />
+      </controls:TitleBarPanel>
     </Border>
     <views:StandardToolbar DockPanel.Dock="Top" DataContext="{Binding Toolbar}" IsVisible="{Binding IsVisible}" />
 

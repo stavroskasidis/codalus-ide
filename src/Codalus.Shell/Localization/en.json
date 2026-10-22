@@ -2272,6 +2272,7 @@
   "msg.themePicture.ready": "Ready",
   "msg.themePicture.search": "Search",
   "msg.themePicture.start": "Start",
+  "msg.toolbarGroupsPanel.moreCommands": "More commands",
   "msg.toolbox.armed": "Click or drag on the form to add a {0} (Esc cancels).",
   "msg.toolbox.commonControls": "Common Controls",
   "msg.toolbox.components": "Components",
