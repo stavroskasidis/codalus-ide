@@ -165,21 +165,90 @@ public class NavigationDepthTests
             return Avalonia.VisualExtensions.TranslatePoint(view, new Avalonia.Point(visual.X + 2, visual.Y), f.Window)!.Value;
         }
 
+        string Describe()
+        {
+            var log = f.Shell.LanguageLog.GetText();
+            return $"{program.Link.State}; Quick Info open: {program.IsQuickInfoOpen}; pointer over the text: {view.IsPointerOver}; C#: {f.Shell.Languages.Status(ShellHost.CSharpLanguageId)}; "
+                + $"restore: {f.Shell.Solutions.RestoreState}; design-time builds: {f.Shell.Solutions.DesignTimeProgress}. Language log: {log[Math.Max(0, log.Length - 3000)..]}";
+        }
+
+        // Ctrl+hover over a symbol until the condition holds, as a user would: the pointer stays on the symbol, moving
+        // within it every so often (the first move at once, or after a wait without moving). While the service loads the
+        // projects again it can briefly not know the symbol, and the link asks again on a later move (as the Navigation
+        // test asks Peek again, with the same kind of budget: CI's runners can take minutes).
+        async Task HoverUntil(string text, Func<bool> condition, string what, TimeSpan every, int seconds, bool moveFirst = true)
+        {
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var sinceMove = System.Diagnostics.Stopwatch.StartNew();
+            var moves = 0;
+            for (var due = moveFirst; !condition(); due = true)
+            {
+                if (started.Elapsed >= TimeSpan.FromSeconds(seconds))
+                {
+                    Assert.Fail($"No {what} after {moves} moves within '{text}' in {seconds} s: {Describe()}");
+                }
+
+                if (due)
+                {
+                    ShellFixture.RenderFrame(f.Window);
+                    f.Window.MouseMove(At(text, 2 + moves++ % 2), Avalonia.Input.RawInputModifiers.Control);
+                    sinceMove.Restart();
+                }
+
+                await ShellFixture.PumpUntil(() => condition() || sinceMove.Elapsed >= every || started.Elapsed >= TimeSpan.FromSeconds(seconds));
+            }
+        }
+
+        // The restore on open, the design-time builds after it and the C# service's load of their results: while the
+        // service loads the projects again, a symbol's definition can be briefly unknown. DefinitionLinkTests covers the
+        // link through that; here it's waited out (the first "ready" comes before the restore).
+        await ShellFixture.PumpUntil(
+            () => f.Shell.Solutions.RestoreState is "succeeded" or "failed" && f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Projects.Values.All(p => p.Restored)
+                && f.Shell.Solutions.DesignTimeProgress is { Completed: true } && f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 2 },
+            seconds: 180,
+            describe: Describe);
+        program.Editor.TextArea.Focus(); // where Ctrl's release is seen
+
         // Without Ctrl, nothing; with Ctrl over Scale, the method is a link: underlined, the pointer a hand.
         var scale = program.Model.Text.Text.IndexOf("Scale(", StringComparison.Ordinal);
+        ShellFixture.RenderFrame(f.Window);
         f.Window.MouseMove(At("Scale(", 1));
         ShellFixture.Pump();
         Assert.Null(program.Link.Link);
-        f.Window.MouseMove(At("Scale(", 2), Avalonia.Input.RawInputModifiers.Control);
-        await ShellFixture.PumpUntil(() => program.Link.Link is not null, seconds: 30);
+        await HoverUntil("Scale(", () => program.Link.Link is not null, "link", TimeSpan.FromSeconds(2), seconds: 120);
         Assert.Equal((scale, scale + "Scale".Length), program.Link.Link);
         Assert.Equal("Hand", view.Cursor?.ToString());
 
-        // Text in a string isn't a link, and letting go of Ctrl takes the link away.
+        // Resting there opens Quick Info, which leaves the link alone: its light dismiss lets the pointer through to the
+        // text (it took the pointer, and the link with it). The pointer rests: a move would ask for Quick Info again,
+        // cancelling the answer on its way, so it moves again only if none came for a long while (an empty answer). Moving
+        // off the symbol, above Quick Info past the end of a line, closes Quick Info and takes the link away.
+        await HoverUntil("Scale(", () => program.IsQuickInfoOpen, "Quick Info", TimeSpan.FromSeconds(20), seconds: 60, moveFirst: false);
+        ShellFixture.RenderFrame(f.Window);
+        ShellFixture.Pump();
+        Assert.True(view.IsPointerOver, Describe());
+        Assert.Equal((scale, scale + "Scale".Length), program.Link.Link);
+        var endOfLine = At("new Circle(2);", "new Circle(2);".Length);
+        ShellFixture.RenderFrame(f.Window);
+        f.Window.MouseMove(new Avalonia.Point(endOfLine.X + 100, endOfLine.Y), Avalonia.Input.RawInputModifiers.Control);
+        await ShellFixture.PumpUntil(() => program.Link.Link is null && !program.IsQuickInfoOpen, describe: Describe);
+
+        // Text in a string isn't a link: the service answers, and there's none.
+        var ada = program.Model.Text.Text.IndexOf("\"Ada\"", StringComparison.Ordinal) + 1;
+        ShellFixture.RenderFrame(f.Window);
         f.Window.MouseMove(At("\"Ada\"", 2), Avalonia.Input.RawInputModifiers.Control);
-        await ShellFixture.PumpUntil(() => program.Link.Link is null);
-        f.Window.MouseMove(At("Scale(", 2), Avalonia.Input.RawInputModifiers.Control);
-        await ShellFixture.PumpUntil(() => program.Link.Link is not null, seconds: 30);
+        await ShellFixture.PumpUntil(() => program.Link.Missed == (ada, ada + "Ada".Length), seconds: 60, describe: Describe);
+        Assert.Null(program.Link.Link);
+
+        // The language service's refresh (on "ready", or a restart) asks again with the pointer resting, without a move.
+        var asked = program.Link.Requests;
+        program.RefreshAll();
+        Assert.Equal(asked + 1, program.Link.Requests);
+        await ShellFixture.PumpUntil(() => program.Link.Missed == (ada, ada + "Ada".Length), seconds: 60, describe: Describe);
+        Assert.Null(program.Link.Link);
+
+        // Back on Scale, the link again; letting go of Ctrl takes it away.
+        await HoverUntil("Scale(", () => program.Link.Link is not null, "link", TimeSpan.FromSeconds(2), seconds: 120);
         f.Window.KeyReleaseQwerty(Avalonia.Input.PhysicalKey.ControlLeft, Avalonia.Input.RawInputModifiers.None);
         await ShellFixture.PumpUntil(() => program.Link.Link is null);
         Assert.NotEqual("Hand", view.Cursor?.ToString());
