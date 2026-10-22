@@ -74,7 +74,7 @@ The mockups draw text in Inter as a stand-in for the system UI font (Segoe UI on
 - One height per context: **28 px** (`Shell.Size.Control`) for buttons, text boxes and combo boxes in dialogs, documents and pages; **24 px** (`Shell.Size.ToolbarButton`, `Shell.Size.Input`) in tool windows, toolbars, form grids and dense rows. Text buttons in a button row are at least 80 px wide.
 - Inside a button: 12 px on each side, 10 px before an icon, 6 px between the icon and the text; 8 px at 24 px. Icons are 16 px, chevrons 12 px.
 - A dialog's buttons are right-aligned in its footer. The primary is the default (Enter) and Cancel answers Escape. **Windows and Linux** put the primary first (`OK` `Cancel`); **macOS** puts it last (`Cancel` `OK`). A hint or secondary link goes on the left of the footer.
-- Corners: `Shell.Control.CornerRadius` (Classic 2 px, Harbor 3 px); overlays and dialogs keep `Shell.CornerRadius.Overlay`.
+- Corners: `Shell.Control.CornerRadius` (Classic 2 px, Harbor 3 px; Classic 4 px since [Rounded corners](#rounded-corners-06), D46); overlays keep `Shell.CornerRadius.Overlay`, dialogs `Shell.CornerRadius.Dialog` since D46.
 
 ### Focus
 
@@ -240,7 +240,7 @@ Mixed from each variant's own colors (its window, panel, text, muted text, borde
 | `Shell.Padding.Button` | 12,0 | Inside a text button (10 before an icon) |
 | `Shell.Padding.ButtonCompact` | 8,0 | Inside a 24 px text or icon + text button |
 | `Shell.Space.ButtonIcon` | 6 | Between a button's icon and its text |
-| `Shell.Control.CornerRadius` | Classic 2, Harbor 3, Graphite 3, Daylight 6, Ember 6 | Buttons, fields, segments; a family value (`Shell.Check.CornerRadius`: check boxes, at most 4; `Shell.Focus.CornerRadius`: the ring) |
+| `Shell.Control.CornerRadius` | Classic 4 (2 until D46), Harbor 3, Graphite 3, Daylight 6, Ember 6 | Buttons, fields, segments; a family value (`Shell.Check.CornerRadius`: check boxes, at most 4; `Shell.Focus.CornerRadius`: the ring) |
 | `Shell.Focus.Thickness`, `Shell.Focus.Offset` | 2, 1 | The focus ring, in `Shell.Focus`, 1 px outside the control |
 | `Shell.Padding.Dialog` | 20,16 | Around a dialog's header and body; its footer is 20,12 on `Shell.Dialog.Footer` |
 | `Shell.Size.Dialog.Width` | 520 | An in-window dialog's width; it grows with its content up to 720 |
@@ -334,7 +334,7 @@ The maintainer approved these on 2026-10-18, all as proposed ([D33](../roadmap.m
 - **Dialog titles:** 14 px with an icon tile and a close button, instead of the guidelines' 18 px heading for dialogs, for the in-window dialog.
 - **Switches:** only for AI Chat's Agent mode; Options keeps check boxes, as the classic IDE does.
 - **Segmented controls** replace the `TabControl`s used as view switches (the WCF Test Client's Request and XML, its Response and XML) and Options' User and Workspace toggle buttons; tabs stay for different content.
-- **Classic's corners** go to 2 px (`Shell.Control.CornerRadius`) from today's 3 px, closer to the classic IDE; Harbor keeps 3 px.
+- **Classic's corners** go to 2 px (`Shell.Control.CornerRadius`) from today's 3 px, closer to the classic IDE; Harbor keeps 3 px. (Superseded by D46 on 2026-10-22: Classic takes the classic IDE's current 4 px, [Rounded corners](#rounded-corners-06).)
 - **Classic Dark's selection** stays its gray `#3F3F46`; the classic IDE's focused selection is blue, which would be a change to an existing token.
 - **Counters** merges its process id box and process list into one editable combo box (a behavior change, not only a style).
 - **Find Results** gets a Tree or List segmented control in place of the List View toggle, and colorized code.
@@ -550,3 +550,11 @@ Questions for the maintainer, each as drawn and with what was rejected:
 16. **Two overlay radii and one control radius**: `Shell.CornerRadius.Overlay` 6 for menus, context menus, drop-down lists and toasts (overriding Fluent's 5), a new `Shell.CornerRadius.Dialog` 8 for dialogs and Code Search (10 today), and the control radius for the editor's popups and tooltips, with Fluent's `ControlCornerRadius` set to 4 in Classic. Rejected: today's four overlay radii (5, 6, 8, 10).
 17. **Window frames stay the system's**: Windows 11 and macOS round them, Windows 10 doesn't, and on Linux it's the window manager's choice; floating windows fill their frame with no margin. A smoke-test step checks rounded popups on X11 without a compositor. Rejected: drawing our own rounded frames (transparent windows, without the system's shadow or snapping).
 18. **The colors are coordinated with #83**: the design moves Classic Light's and Dark's toolbar, tab strip and unselected tabs to `Shell.Panel`'s value, the selected tab to the content's color and the focused caption onto the card (the page's colors card lists all twelve tokens with their Light, Dark, Blue and High Contrast values). #83 reworks the same palette, so its palette lands first or in the same release, and these values move onto it. If #83 adopts the classic IDE's #1C1C1C window with #262626 and #282828 cards, the document card can drop its border, as the classic IDE does. Rejected: changing no colors here (the toolbar and strip cards would be invisible in Classic Dark: #1F1F1F on a #1F1F1F window).
+
+**Built in 0.6** (#84, on #83's palette): as drawn, with these notes.
+- **Implementation details the design left open:** the families' "today's" values are explicit tokens in each family dictionary (Classic's would otherwise leak in through the variant a family inherits), so a few helper tokens joined the seven new ones: `Shell.Card.Background` and `Shell.Card.Content.BorderThickness`, `Shell.ToolControl.BorderThickness`, `Shell.Toolbar.BorderThickness` and `.CornerRadius`, `Shell.Well.Frame.Active`, `.Margin` and `Shell.Well.Background`, `Shell.TabStripEdge.Height` and `.Margin`, `Shell.Tab.Selected.FontWeight`, `Shell.Row.Margin` and `.CornerRadius`, `Shell.AutoHide.BarThickness` and `.Bar`, and `Shell.Control.CornerRadius.Compact` (the tab's pin and the navigation bar, 2 px in the families as before, so their hard-coded values didn't move to the family's control radius). `Shell.Card.CornerRadius` is 0 in Ember: its 10 px cards stay `Shell.Panel.CornerRadius.*`, and its tabs and toolbar stay on the window. Classic Blue's active frame is its gold tab color (`#F5CC84`).
+- **The strip's fill is the card's:** Classic's `DockDocumentTabStripBackgroundBrush` is transparent and the card (`DocumentDockControl`'s theme) is filled with the strip's color, so the card's own corners round the strip. The card doesn't clip: Avalonia's `Border` clips its child inside its border, which would have hidden the frame painted over the card's sides.
+- **Square joins first (question 6):** the curved feet are drawn outside the edge's row, under the strip's tabs, which paint over them; they need an adorner above the strip. `TODO(issue)`.
+- **Auto-hidden tool windows (question 13):** the tabs' 3 px bar is built; the accent bar for the open tab, the control radius under the pointer and the sliding panel's shadow aren't (Dock's `ToolPinItemControl` has no open state, and its button's corners are set by its template). `TODO(issue)`.
+- **Popups on X11 without a compositor (question 17):** a popup window there is opaque, and its rounded border's corners showed the popup's fallback fill (white in Light, black in Dark). `PopupRoot`'s `TransparencyBackgroundFallback` is now the window's color, and the smoke step `shell.roundedCorners` checks it (it failed before the fix on Xvfb).
+

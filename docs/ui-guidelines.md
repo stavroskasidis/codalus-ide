@@ -90,7 +90,7 @@ All tokens are in `src/Codalus.Shell/Theming/Tokens.axaml`. Colors and the famil
 | `Shell.Tab.Active`, `.Selected`, `.Inactive`, `.Hover`, `.Preview` (each with `.Foreground`) | Document tabs: the active tab, the selected tab of a pane without the focus, other tabs, pointer over, the preview tab |
 | `Shell.TabColor.1`–`8` | Tabs colored by project (`workbench.editor.colorTabsByProject`) |
 | `Shell.Caption.Active`, `Shell.Caption.Inactive` (with `.Foreground`) | Tool window captions with and without the focus |
-| `Shell.Editor.*` | The editor: text, line numbers, inlay hints, guides, brackets, folding; the current line, the breakpoint glyph and line, and the current statement's line (`.CurrentLine`, `.Breakpoint`, `.Breakpoint.Line`, `.CurrentStatement`) |
+| `Shell.Editor.*` | The editor: text, line numbers and the caret line's number (`.LineNumbers`, `.LineNumbers.Current`), inlay hints, CodeLens (`.CodeLens.Foreground`), guides, brackets, folding; the current line, the breakpoint glyph and line, and the current statement's line (`.CurrentLine`, `.Breakpoint`, `.Breakpoint.Line`, `.CurrentStatement`) |
 | `Shell.Icon.Run`, `.Stop`, `.Save`, `.Open`, `.Build`, `.Git`, `.Test`, `.Navigate` | Command icon families (white in High Contrast) |
 | `Shell.Icon.Outline` | The gray of the classic file icons' pages and outlines |
 
@@ -100,11 +100,21 @@ The design's layout differences between the families, as values each theme sets 
 
 | Token | Harbor | Graphite | Daylight | Ember | Classic |
 |---|---|---|---|---|---|
-| `Shell.Gutter`, `Shell.Gutter.Background` (between docked windows) | 6, window | 1, border | 1, border | 8, window | 4, none |
-| `Shell.Panel.CornerRadius.Top`, `.Bottom` (tool windows, the document well) | 0 | 0 | 0 | 10 | 0 |
-| `DockDocumentTabItemCornerRadius` (Dock's, document tabs) | 0 | 0 | 6 | 7 | 0 |
-| `Shell.Tab.Active.Indicator`, `.IndicatorBrush` (the active tab's border) | 3 on top, accent | 2 below, accent | none | 1 around, accent | none |
-| `Shell.Caption.Active.FontWeight`, `.Marker` (the focused tool window's title) | normal (an accent caption) | bold, an accent dot | bold | bold | normal |
+| `Shell.Gutter`, `Shell.Gutter.Background` (between docked windows) | 6, window | 1, border | 1, border | 8, window | 6, window (D46; was 4, none) |
+| `Shell.Panel.CornerRadius.Top`, `.Bottom` (tool windows, the document well's content) | 0 | 0 | 0 | 10 | 4 |
+| `Shell.Card.CornerRadius`, `.BorderThickness`, `.Background` (the document well as one card holding its tabs, D46) | none | none | none | none | 4, 1 px `Shell.Border`, the strip's fill |
+| `Shell.Card.Content.BorderThickness`, `Shell.ToolControl.BorderThickness` (a tool window outlined all round) | Dock's | Dock's | Dock's | Dock's | 1,0,1,1 on the content, none on Dock's `ToolControl` |
+| `Shell.Card.Focus.BorderBrush` (the focused tool window's frame) | the border | the border | the border | the border | the accent (Light, Dark) |
+| `DockDocumentTabItemCornerRadius` (Dock's, document tabs) | 0 | 0 | 6 | 7 | 4,4,0,0 |
+| `Shell.Tab.Active.Indicator`, `.IndicatorBrush` (the active tab's border) | 3 on top, accent | 2 below, accent | none | 1 around, accent | 1,1,1,0, accent (Blue and High Contrast keep their filled tab) |
+| `Shell.Tab.Selected.IndicatorBrush`, `Shell.Tab.Selected.FontWeight` (the selected tab of a group without the focus) | none, normal | none, normal | none, normal | none, normal | 3:1 against the strip, semibold |
+| `Shell.TabStripEdge.Height`, `Shell.Well.Frame.Active`, `Shell.Well.Frame.Margin`, `DockDocumentTabStripSeparatorSize`, `DockDocumentContentBorderThickness` (the active document's frame and its edge beside the selected tab, `TabStripEdge`) | 0, Dock's 2 px separator and frame | the same | the same | the same | 1 px edge, the accent while active, no separator, the frame over the card's sides and bottom |
+| `Shell.Dock.Margin`, `Shell.Toolbar.Margin`, `.HorizontalAlignment`, `.BorderThickness`, `.CornerRadius` (the dock area and the toolbar) | 0, a full-width band | the same | the same | the same | 6 px of window, a card as wide as its buttons |
+| `Shell.ToolTab.CornerRadius` (the selected tool window tab) | 0 | 0 | 0 | 0 | 0,0,4,4 |
+| `Shell.Row.Margin`, `Shell.Row.CornerRadius`, `Shell.Selection.Indicator`, `.Inactive` (list and tree rows, Solution Explorer's pill) | full width, none | the same | the same | the same | inset 3 px, 4 px corners, the accent pill (muted without the focus) |
+| `Shell.AutoHide.BarThickness`, `Shell.AutoHide.Bar` (auto-hidden tool windows' tabs) | none | none | none | none | a 3 px bar |
+| `Shell.Control.CornerRadius.Compact` (the tab's pin, the navigation bar) | 2 | 2 | 2 | 2 | 4 |
+| `Shell.Caption.Active.FontWeight`, `.Marker` (the focused tool window's title) | normal (an accent caption) | bold, an accent dot | bold | bold | semibold on the card in Light and Dark (D46), normal on Blue's and High Contrast's captions |
 | `Shell.StatusBar.ShowDot` (a dot for the state) | no | no | no | yes | no |
 
 ### Spacing, sizes and type
@@ -124,7 +134,7 @@ The design's layout differences between the families, as values each theme sets 
 | `Shell.Size.Row` | 22 | List and tree rows |
 | `Shell.Size.ToolWindowMinWidth` | 280 | The narrowest a docked tool window is designed for |
 | `Shell.FontSize.Body`, `Small`, `Heading`, `Title` | 12, 11, 14, 18 | Text (see Typography) |
-| `Shell.CornerRadius`, `Shell.CornerRadius.Overlay` | 3, 6 | Toolbar chrome from before M34h; popups and dialogs (controls take `Shell.Control.CornerRadius`, below) |
+| `Shell.CornerRadius`, `Shell.CornerRadius.Overlay`, `Shell.CornerRadius.Dialog` | 3, 6, 8 | Toolbar chrome from before M34h; menus, drop-down lists, flyouts and toasts (Fluent's `OverlayCornerRadius` is set to it); in-window dialogs and Code Search (D46; controls take `Shell.Control.CornerRadius`, below) |
 
 ### Classes
 
@@ -166,7 +176,7 @@ Patterns the views use (M34h):
 
 - One height per context: **28 px** (`Shell.Size.Control`, the default) for buttons, text boxes and combo boxes in dialogs, documents and pages; **24 px** in tool windows, toolbars, form grids and dense rows (`Classes="compact"` on a button; inside a `controls:ToolbarPanel` buttons, text boxes and combo boxes are 24 px on their own).
 - Inside a button: 12 px on each side (`Shell.Padding.Button`), 10 before an icon, 6 between the icon and the text (`Shell.Space.ButtonIcon`); 8 at 24 px (`Shell.Padding.ButtonCompact`). Icons 16 px, chevrons 12 px.
-- Corners: `Shell.Control.CornerRadius` (Classic 2, Harbor and Graphite 3, Daylight and Ember 6); dialogs and popups `Shell.CornerRadius.Overlay`.
+- Corners: `Shell.Control.CornerRadius` (Classic 4 since D46, was 2 under D33; Harbor and Graphite 3, Daylight and Ember 6); menus, drop-down lists and toasts `Shell.CornerRadius.Overlay` (6), dialogs and Code Search `Shell.CornerRadius.Dialog` (8), the editor's popups and tooltips the control radius.
 - A dialog's buttons are right-aligned in its footer, the primary is the default (Enter) and Cancel answers Escape. **Windows and Linux** put the primary first (`OK` `Cancel`); **macOS** puts it last (`Cancel` `OK`). A request lists its buttons primary first; `DialogViewModel` reverses them on macOS (`PrimaryLast`).
 
 ### Focus
@@ -254,7 +264,7 @@ Sizes and shapes:
 | `Shell.Size.Button.MinWidth` | 80 | A button row's text buttons (`Button.dialog`) |
 | `Shell.Padding.Button`, `Shell.Padding.ButtonCompact` | 12,0; 8,0 | Inside a button at 28 and 24 px |
 | `Shell.Space.ButtonIcon` | 6 | Between a button's icon and its text |
-| `Shell.Control.CornerRadius` | Classic 2, Harbor 3, Graphite 3, Daylight 6, Ember 6 | Buttons, fields, segments (per family; `Shell.Check.CornerRadius` for check boxes) |
+| `Shell.Control.CornerRadius` | Classic 4 (D46), Harbor 3, Graphite 3, Daylight 6, Ember 6 | Buttons, fields, segments, tooltips and the editor's popups (per family; `Shell.Check.CornerRadius` for check boxes: Classic 3; Fluent's `ControlCornerRadius` matches in Classic) |
 | `Shell.Focus.Thickness`, `Shell.Focus.Offset` (`Shell.Focus.Margin`, `.CornerRadius`) | 2, 1 (−3) | The focus ring |
 | `Shell.Padding.Dialog`, `Shell.Padding.DialogFooter` | 20,16; 20,12 | A dialog's header and body; its footer |
 | `Shell.Size.Dialog.Width`, `Shell.Size.Dialog.MaxWidth` | 520, 720 | The in-window dialog |

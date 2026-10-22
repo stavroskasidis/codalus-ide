@@ -35,7 +35,7 @@
 
   <!-- Code Search (Ctrl+T, Ctrl+,) and Feature Search (Ctrl+Q), M47: floats over the editor under the title row; drag
        it by its tabs' row, resize it from its corner. Docked, the same view fills a tool window. -->
-  <Border x:Name="Frame" Classes="overlay" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{l:T codeSearch.codeSearch}">
+  <Border x:Name="Frame" Classes="overlay" CornerRadius="{DynamicResource Shell.CornerRadius.Dialog}" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{l:T codeSearch.codeSearch}">
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
       <!-- The two kinds are tabs inside a view (TabStrip.viewTabs): the row draws their hairline, under the buttons too,
            and the tabs reach over it. -->

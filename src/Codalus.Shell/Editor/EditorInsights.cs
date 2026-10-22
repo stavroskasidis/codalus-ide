@@ -930,6 +930,7 @@ public sealed class EditorInsights : IDisposable
             var text = (hintText ?? string.Empty) + (eol?.Text ?? string.Empty);
             var color = eol?.Review is not null ? owner.Brush("Shell.Info")
                 : owner._diagnosticsByLine.ContainsKey(line.LineNumber) ? owner.Brush("Shell.Warning")
+                : eol?.Lens is not null ? owner.Brush("Shell.Editor.CodeLens.Foreground")
                 : owner.Brush("Shell.Editor.InlayHint.Foreground");
             Action? click = eol?.Review is { } review ? () => owner._services.ShowReviewThreads(review.Threads, owner._editor.TextArea)
                 : eol?.Lens is { } lens ? () => owner.RunLens(lens)
@@ -985,7 +986,7 @@ public sealed class EditorInsights : IDisposable
             at -= _text.Length + 1;
             return at < _row.Indent.Length
                 ? Run(_row.Indent[at..], _color, small: false)
-                : Run(_row.Text[(at - _row.Indent.Length)..], _owner.Brush("Shell.Editor.InlayHint.Foreground"), small: true);
+                : Run(_row.Text[(at - _row.Indent.Length)..], _owner.Brush("Shell.Editor.CodeLens.Foreground"), small: true);
         }
 
         private TextCharacters Run(string text, IBrush foreground, bool small)

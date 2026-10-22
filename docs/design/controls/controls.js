@@ -29,7 +29,7 @@
       capActive: '#FFF29D', capActiveFg: '#1E1E1E', capInactive: '#4D6082', capInactiveFg: '#FFFFFF',
       tabs: '#4D6082', tabsFg: '#FFFFFF', tabOn: '#F5F5F5', tabOnFg: '#1E1E1E', tabIndicator: '#F5CC84',
       header: '#EAEDF5', rule: '#E2E6F0',
-      editor: '#FFFFFF', editorFg: '#1E1E1E', lineNo: '#6E7681', curLine: '#F0F0F0',
+      editor: '#FFFFFF', editorFg: '#1E1E1E', lineNo: '#727272', curLine: '#F0F0F0',
       chipOk: '#E3F2E6', chipOkFg: '#116329', chipErr: '#FBE7E3', chipErrFg: '#9A220B', chipWarn: '#FFF2CC', chipWarnFg: '#6E4B00', chipInfo: '#E1ECF8', chipInfoFg: '#0054A0',
       badge: '#DDE2EF', badgeFg: '#1E1E1E', dlgFooter: '#EEF0F6', userBubble: '#DCE6F6', userBubbleFg: '#1E1E1E', codeHeader: '#EEF0F6',
       titleBar: '#CCD5F0', titleBarFg: '#1E1E1E',
@@ -54,7 +54,7 @@
       capActive: '#007ACC', capActiveFg: '#FFFFFF', capInactive: '#EEEEF2', capInactiveFg: '#3C3C3C',
       tabs: '#EEEEF2', tabsFg: '#1E1E1E', tabOn: '#F5F5F5', tabOnFg: '#0E5A9C', tabIndicator: '#007ACC',
       header: '#F0F0F3', rule: '#EBEBEF',
-      editor: '#FFFFFF', editorFg: '#1E1E1E', lineNo: '#6E7681', curLine: '#F0F0F0',
+      editor: '#FFFFFF', editorFg: '#1E1E1E', lineNo: '#727272', curLine: '#F0F0F0',
       chipOk: '#E3F2E6', chipOkFg: '#116329', chipErr: '#FBE7E3', chipErrFg: '#9A220B', chipWarn: '#FFF2CC', chipWarnFg: '#6E4B00', chipInfo: '#E1EEF9', chipInfoFg: '#005A9E',
       badge: '#E4E6EE', badgeFg: '#1E1E1E', dlgFooter: '#F2F2F5', userBubble: '#E1EEF9', userBubbleFg: '#1E1E1E', codeHeader: '#F2F2F5',
       titleBar: '#EEEEF2', titleBarFg: '#1E1E1E',
@@ -79,12 +79,12 @@
       capActive: '#007ACC', capActiveFg: '#FFFFFF', capInactive: '#252526', capInactiveFg: '#D0D0D0',
       tabs: '#1F1F1F', tabsFg: '#D0D0D0', tabOn: '#252526', tabOnFg: '#4DAAFC', tabIndicator: '#3794FF',
       header: '#2A2A2C', rule: '#2E2E31',
-      editor: '#1E1E1E', editorFg: '#DCDCDC', lineNo: '#2B91AF', curLine: '#2E2E2E',
+      editor: '#1E1E1E', editorFg: '#DCDCDC', lineNo: '#8A8A8A', curLine: '#272727',
       chipOk: '#1F3A28', chipOkFg: '#8FDBA8', chipErr: '#4A2420', chipErrFg: '#F8A08F', chipWarn: '#3D3412', chipWarnFg: '#E5C24A', chipInfo: '#1B3550', chipInfoFg: '#8CC8FF',
       badge: '#3F3F46', badgeFg: '#F1F1F1', dlgFooter: '#2A2A2C', userBubble: '#1E3A5C', userBubbleFg: '#F1F1F1', codeHeader: '#2A2A2C',
       titleBar: '#1F1F1F', titleBarFg: '#F1F1F1',
       icBlue: '#75BEFF', icGreen: '#89D185', icRed: '#F48771', icOrange: '#E8AB53', icPurple: '#B180D7', icYellow: '#FFCC00', icFolder: '#DCB67A', icOutline: '#C5C5C5',
-      kw: '#569CD6', ty: '#4EC9B0', fn: '#DCDCAA', st: '#D69D85', nu: '#B5CEA8', cm: '#6A9955', pu: '#DCDCDC'
+      kw: '#569CD6', ty: '#4EC9B0', fn: '#DCDCAA', st: '#D69D85', nu: '#B5CEA8', cm: '#57A64A', pu: '#DCDCDC'
     },
     'Classic High Contrast': {
       family: 'Classic', kind: 'hc', radius: 2,

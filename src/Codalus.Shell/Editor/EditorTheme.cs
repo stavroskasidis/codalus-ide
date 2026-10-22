@@ -155,6 +155,11 @@ public sealed class EditorTheme
     private static readonly Dictionary<string, Lazy<EditorTheme>> s_families = FamilyPalettes.ToDictionary(
         p => p.Key, p => new Lazy<EditorTheme>(() => Family(p.Key, p.Value)), StringComparer.Ordinal);
 
+    /// <summary>The families' control keywords (VS Code's Dark+ and Light+), which Classic had until D47.</summary>
+    internal const uint FamilyDarkControlKeyword = 0xFFC586C0;
+
+    internal const uint FamilyLightControlKeyword = 0xFFAF00DB;
+
     private static EditorTheme Family(string id, FamilyColors colors)
     {
         var kind = Theming.ThemeService.KindOf(id);
@@ -174,6 +179,13 @@ public sealed class EditorTheme
         Set(colors.String, "string", "stringVerbatim", "markupAttributeQuote", "markupAttributeValue");
         Set(colors.Number, "number");
         Set(colors.Comment, "comment", "xmlDocComment", "xmlDocText", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation");
+
+        // Control keywords keep the color the families shipped with (Classic's before D47 matched it to the classic IDE).
+        if (kind != "highContrast")
+        {
+            Set(kind == "light" ? FamilyLightControlKeyword : FamilyDarkControlKeyword, "controlKeyword");
+        }
+
         var elements = new Dictionary<string, uint>(baseTheme._elementColors, StringComparer.Ordinal) { ["editor.lineHighlightBackground"] = colors.CurrentLine };
         return new EditorTheme(id, tokens, elements);
     }
@@ -183,7 +195,9 @@ public sealed class EditorTheme
         new()
         {
             // Visual Studio 2022's Dark: Roslyn's color scheme (ColorSchemes/VisualStudio2019.xml) over the plain text,
-            // #DCDCDC, which namespaces, fields, properties, events, labels and punctuation keep.
+            // #DCDCDC, which namespaces, fields, properties, events, labels and punctuation keep. Control keywords,
+            // comments (XML doc text, Razor's and markup's too) and strings are the classic IDE's, measured in the
+            // maintainer's screenshots (#83, D47); before, they were #C586C0, #6A9955 (#608B4E for XML doc text) and #CE9178.
             ["namespace"] = 0xFFDCDCDC,
             ["class"] = 0xFF4EC9B0, ["record"] = 0xFF4EC9B0, ["type"] = 0xFF4EC9B0, ["delegate"] = 0xFF4EC9B0,
             ["struct"] = 0xFF86C691, ["recordStruct"] = 0xFF86C691, ["enum"] = 0xFFB8D7A3, ["interface"] = 0xFFB8D7A3,
@@ -192,9 +206,9 @@ public sealed class EditorTheme
             ["field"] = 0xFFDCDCDC, ["property"] = 0xFFDCDCDC, ["event"] = 0xFFDCDCDC, ["constant"] = 0xFF4FC1FF,
             ["enumMember"] = 0xFF4FC1FF,
             ["method"] = 0xFFDCDCAA, ["extensionMethod"] = 0xFFDCDCAA, ["function"] = 0xFFDCDCAA,
-            ["keyword"] = 0xFF569CD6, ["modifier"] = 0xFF569CD6, ["controlKeyword"] = 0xFFC586C0,
-            ["comment"] = 0xFF6A9955, ["xmlDocComment"] = 0xFF608B4E, ["xmlDocText"] = 0xFF608B4E,
-            ["string"] = 0xFFCE9178, ["stringVerbatim"] = 0xFFCE9178, ["stringEscape"] = 0xFFFFD68F,
+            ["keyword"] = 0xFF569CD6, ["modifier"] = 0xFF569CD6, ["controlKeyword"] = 0xFFD8A0DF,
+            ["comment"] = 0xFF57A64A, ["xmlDocComment"] = 0xFF608B4E, ["xmlDocText"] = 0xFF57A64A,
+            ["string"] = 0xFFD69D85, ["stringVerbatim"] = 0xFFD69D85, ["stringEscape"] = 0xFFFFD68F,
             ["number"] = 0xFFB5CEA8, ["regexp"] = 0xFFD16969,
             ["operator"] = 0xFFD4D4D4, ["punctuation"] = 0xFFDCDCDC,
             ["preprocessor"] = 0xFF9B9B9B, ["excludedCode"] = 0xFF767676, ["label"] = 0xFFDCDCDC,
@@ -203,19 +217,20 @@ public sealed class EditorTheme
             ["razorTransition"] = 0xFFA699E6, ["razorDirective"] = 0xFFA699E6, ["razorDirectiveAttribute"] = 0xFFA699E6, ["razorDirectiveColon"] = 0xFFA699E6,
             ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFF9CDCFE,
             ["razorTagHelperElement"] = 0xFF4EC9B0, ["razorTagHelperAttribute"] = 0xFF9CDCFE,
-            ["razorComment"] = 0xFF6A9955, ["razorCommentTransition"] = 0xFF6A9955, ["razorCommentStar"] = 0xFF6A9955,
+            ["razorComment"] = 0xFF57A64A, ["razorCommentTransition"] = 0xFF57A64A, ["razorCommentStar"] = 0xFF57A64A,
             ["markupTagDelimiter"] = 0xFF808080, ["markupElement"] = 0xFF569CD6, ["markupAttribute"] = 0xFF9CDCFE,
             ["markupAttributeQuote"] = 0xFFCE9178, ["markupAttributeValue"] = 0xFFCE9178, ["markupOperator"] = 0xFFD4D4D4,
-            ["markupComment"] = 0xFF6A9955, ["markupCommentPunctuation"] = 0xFF6A9955,
+            ["markupComment"] = 0xFF57A64A, ["markupCommentPunctuation"] = 0xFF57A64A,
         },
-        selection: 0xFF264F78, currentLine: 0x12FFFFFF, highlightRead: 0x48575757, highlightWrite: 0x48004972,
+        selection: 0xFF264F78, currentLine: 0x0AFFFFFF, highlightRead: 0x48575757, highlightWrite: 0x48004972,
         bracket: 0x500064C8, error: 0xFFF14C4C, warning: 0xFFCCA700, info: 0xFF3794FF, hint: 0xA0A0A0A0, findMatch: 0x80623315);
 
     public static EditorTheme Light { get; } = new(
         "light",
         new()
         {
-            // Visual Studio 2022's Light (and Blue): Roslyn's color scheme over the plain text, black.
+            // Visual Studio 2022's Light (and Blue): Roslyn's color scheme over the plain text, black. Control keywords
+            // are the classic IDE's Light value (#83, D47; VS Code's Light+ #AF00DB before).
             ["namespace"] = 0xFF000000,
             ["class"] = 0xFF267F99, ["record"] = 0xFF267F99, ["type"] = 0xFF267F99, ["delegate"] = 0xFF267F99,
             ["struct"] = 0xFF2B91AF, ["recordStruct"] = 0xFF2B91AF, ["enum"] = 0xFF2B91AF, ["interface"] = 0xFF2B91AF,
@@ -224,7 +239,7 @@ public sealed class EditorTheme
             ["field"] = 0xFF000000, ["property"] = 0xFF000000, ["event"] = 0xFF000000, ["constant"] = 0xFF0070C1,
             ["enumMember"] = 0xFF0070C1,
             ["method"] = 0xFF795E26, ["extensionMethod"] = 0xFF795E26, ["function"] = 0xFF795E26,
-            ["keyword"] = 0xFF0000FF, ["modifier"] = 0xFF0000FF, ["controlKeyword"] = 0xFFAF00DB,
+            ["keyword"] = 0xFF0000FF, ["modifier"] = 0xFF0000FF, ["controlKeyword"] = 0xFF8F08C4,
             ["comment"] = 0xFF008000, ["xmlDocComment"] = 0xFF808080, ["xmlDocText"] = 0xFF008000,
             ["string"] = 0xFFA31515, ["stringVerbatim"] = 0xFFA31515, ["stringEscape"] = 0xFFEE0000,
             ["number"] = 0xFF098658, ["regexp"] = 0xFF811F3F,

@@ -53,7 +53,9 @@
       <SolidColorBrush x:Key="Shell.Modified" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#000000" />
-      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#727272" />
+      <!-- The current line's number, brighter than the others, and CodeLens: the classic IDE's (#83, D47). -->
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#3F3F3F" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
       <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
@@ -80,6 +82,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#5F6670" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#5E5E5E" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F3F3F3" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#E0E0E0" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -89,21 +92,21 @@
       <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#BC4B00" />
       <SolidColorBrush x:Key="Shell.TitleBar" Color="#EEEEF2" />
       <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#1E1E1E" />
-      <SolidColorBrush x:Key="Shell.Toolbar" Color="#EEEEF2" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#F5F5F5" />
       <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#CCCEDB" />
       <SolidColorBrush x:Key="Shell.Search" Color="#F5F5F5" />
       <SolidColorBrush x:Key="Shell.Search.Border" Color="#CCCEDB" />
-      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#007ACC" />
-      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#EEEEF2" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#F5F5F5" />
       <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#1E1E1E" />
-      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#007ACC" />
-      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#EEEEF2" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#000000" />
       <!-- M34d: the selected tab of a pane without the focus, hover, the preview tab, captions without the focus. -->
-      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#CCCEDB" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#1E1E1E" />
-      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#0E70C0" />
-      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#DCEAF8" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#1E1E1E" />
       <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#68217A" />
       <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#EEEEF2" />
@@ -128,7 +131,7 @@
       <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#005A9E" />
       <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#D7D7DA" />
       <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#C9DEF5" />
-      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#EEEEF2" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#F5F5F5" />
       <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#1E1E1E" />
       <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#646464" />
@@ -136,28 +139,62 @@
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#E51400" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#F9C4BF" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFEEAA" />
-      <!-- Shapes (M45): Dock's splitter, square panels and tabs, no tab indicator, captions in their color without a dot. -->
-      <x:Double x:Key="Shell.Gutter">4</x:Double>
-      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="Transparent" />
-      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
-      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
-      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
-      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
+      <!-- Shapes (M45; rounded corners since 0.6, D46): 4 px cards and tabs on 6 px of window, the selected tab outlined, captions without a dot. -->
+      <x:Double x:Key="Shell.Gutter">6</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#EEEEF2" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">4,4,0,0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0,0,4,4</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">1,1,1,0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#007ACC" />
       <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
-      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">SemiBold</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46, design/controls/RoundedCorners.dc.html): the classic IDE's 4 px cards, tabs and controls on 6 px of window. -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">4</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">1</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">1,0,1,1</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="#F5F5F5" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="#F5F5F5" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#007ACC" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0,0,4,4</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">6,0,6,6</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">6,0,6,6</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Left</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">4</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="#80838F" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#007ACC" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">-1,0,-1,-1</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">1</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">-1,0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">SemiBold</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">4</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="#007ACC" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="#646464" />
+      <Thickness x:Key="Shell.Row.Margin">3,0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">4</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0,0,0,3</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="#646464" />
+      <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">4,4,0,0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#CCCEDB" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1,0,1,1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">0</x:Double>
       <!-- Dock's document well and tool window captions. -->
-      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#007ACC" />
-      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#000000" />
       <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#007ACC" />
-      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#EEEEF2" />
+      <!-- The strip is drawn on the well card's fill (Shell.Card.Background), so the card's corners round it (D46). -->
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="Transparent" />
       <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#EEEEF2" />
       <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#EEEEF2" />
       <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#EEEEF2" />
-      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#007ACC" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#EEEEF2" />
       <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#F5F5F5" />
       <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="DockSeparatorBrush" Color="#CCCEDB" />
@@ -210,9 +247,9 @@
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#E1EEF9" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#1E1E1E" />
       <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#F2F2F5" />
-      <CornerRadius x:Key="Shell.Control.CornerRadius">2</CornerRadius>
-      <CornerRadius x:Key="Shell.Check.CornerRadius">2</CornerRadius>
-      <CornerRadius x:Key="Shell.Focus.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Control.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">6</CornerRadius>
       <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
       <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
       <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
@@ -256,7 +293,9 @@
       <SolidColorBrush x:Key="Shell.Modified" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1E1E1E" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#DCDCDC" />
-      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#2B91AF" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8A8A8A" />
+      <!-- The current line's number, brighter than the others, and CodeLens: the classic IDE's (#83, D47). -->
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#CCCCCC" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
       <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
@@ -283,6 +322,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#969696" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#A1A1A1" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#2A2A2A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#404040" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -292,21 +332,21 @@
       <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#BC4B00" />
       <SolidColorBrush x:Key="Shell.TitleBar" Color="#1F1F1F" />
       <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#F1F1F1" />
-      <SolidColorBrush x:Key="Shell.Toolbar" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#252526" />
       <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#3F3F46" />
       <SolidColorBrush x:Key="Shell.Search" Color="#333337" />
       <SolidColorBrush x:Key="Shell.Search.Border" Color="#434346" />
-      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#007ACC" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#252526" />
       <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#252526" />
       <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#F1F1F1" />
-      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#007ACC" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#252526" />
       <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#FFFFFF" />
       <!-- M34d: the selected tab of a pane without the focus, hover, the preview tab, captions without the focus. -->
-      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#3F3F46" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#252526" />
       <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#F1F1F1" />
-      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#1177BB" />
-      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#3E3E40" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#F1F1F1" />
       <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#68217A" />
       <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#252526" />
@@ -331,36 +371,70 @@
       <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#005A9E" />
       <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#353535" />
       <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#3E3E40" />
-      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#252526" />
       <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#F1F1F1" />
       <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#A6A6A6" />
-      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#2E2E2E" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#272727" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#E51400" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#501C16" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#695814" />
-      <!-- Shapes (M45): Dock's splitter, square panels and tabs, no tab indicator, captions in their color without a dot. -->
-      <x:Double x:Key="Shell.Gutter">4</x:Double>
-      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="Transparent" />
-      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
-      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
-      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
-      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
+      <!-- Shapes (M45; rounded corners since 0.6, D46): 4 px cards and tabs on 6 px of window, the selected tab outlined, captions without a dot. -->
+      <x:Double x:Key="Shell.Gutter">6</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#1F1F1F" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">4,4,0,0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0,0,4,4</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">1,1,1,0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#3794FF" />
       <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
-      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">SemiBold</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46, design/controls/RoundedCorners.dc.html): the classic IDE's 4 px cards, tabs and controls on 6 px of window. -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">4</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">1</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">1,0,1,1</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="#252526" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="#252526" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#3794FF" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0,0,4,4</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">6,0,6,6</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">6,0,6,6</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Left</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">4</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="#75757C" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#3794FF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">-1,0,-1,-1</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">1</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">-1,0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">SemiBold</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">4</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="#A6A6A6" />
+      <Thickness x:Key="Shell.Row.Margin">3,0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">4</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0,0,0,3</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="#A6A6A6" />
+      <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">4,4,0,0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#3F3F46" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1,0,1,1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">0</x:Double>
       <!-- Dock's document well and tool window captions. -->
-      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#007ACC" />
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#252526" />
       <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#007ACC" />
-      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#1F1F1F" />
+      <!-- The strip is drawn on the well card's fill (Shell.Card.Background), so the card's corners round it (D46). -->
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="Transparent" />
       <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#1F1F1F" />
       <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#1F1F1F" />
       <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#1F1F1F" />
-      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#007ACC" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#252526" />
       <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#252526" />
       <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#1E1E1E" />
       <SolidColorBrush x:Key="DockSeparatorBrush" Color="#3F3F46" />
@@ -413,9 +487,9 @@
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#1E3A5C" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#F1F1F1" />
       <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#2A2A2C" />
-      <CornerRadius x:Key="Shell.Control.CornerRadius">2</CornerRadius>
-      <CornerRadius x:Key="Shell.Check.CornerRadius">2</CornerRadius>
-      <CornerRadius x:Key="Shell.Focus.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Control.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">6</CornerRadius>
       <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
       <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
       <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
@@ -499,24 +573,58 @@
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#E51400" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#F9C4BF" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFEEAA" />
-      <!-- Shapes (M45): Dock's splitter, square panels and tabs, no tab indicator, captions in their color without a dot. -->
-      <x:Double x:Key="Shell.Gutter">4</x:Double>
-      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="Transparent" />
-      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
-      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
-      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
+      <!-- Shapes (M45; rounded corners since 0.6, D46): 4 px cards and tabs on 6 px of window, the selected tab outlined, captions without a dot. -->
+      <x:Double x:Key="Shell.Gutter">6</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#CCD5F0" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">4,4,0,0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0,0,4,4</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">1,1,1,0</Thickness>
       <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
       <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46, design/controls/RoundedCorners.dc.html): the classic IDE's 4 px cards, tabs and controls on 6 px of window. -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">4</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">1</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">1,0,1,1</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="#364E6F" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="#F5F5F5" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#8E9BBC" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0,0,4,4</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">6,0,6,6</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">6,0,6,6</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Left</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">4</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#F5CC84" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">-1,0,-1,-1</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">1</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">-1,0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">SemiBold</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">4</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="#0E70C0" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="#4D5A73" />
+      <Thickness x:Key="Shell.Row.Margin">3,0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">4</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0,0,0,3</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="#4D5A73" />
+      <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">4,4,0,0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#8E9BBC" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1,0,1,1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">0</x:Double>
       <!-- Dock's document well and tool window captions. -->
       <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#F5CC84" />
       <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#1E1E1E" />
       <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#1E1E1E" />
       <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#1E1E1E" />
       <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#F5CC84" />
-      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#CCD5F0" />
+      <!-- The strip is drawn on the well card's fill (Shell.Card.Background), so the card's corners round it (D46). -->
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="Transparent" />
       <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#CCD5F0" />
       <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#CCD5F0" />
       <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#CCD5F0" />
@@ -573,9 +681,9 @@
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#DCE6F6" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#1E1E1E" />
       <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#EEF0F6" />
-      <CornerRadius x:Key="Shell.Control.CornerRadius">2</CornerRadius>
-      <CornerRadius x:Key="Shell.Check.CornerRadius">2</CornerRadius>
-      <CornerRadius x:Key="Shell.Focus.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Control.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">6</CornerRadius>
       <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
       <BoxShadows x:Key="Shell.Row.Hover.Outline">0 0 0 0 #00000000</BoxShadows>
       <Thickness x:Key="Shell.Chip.BorderThickness">0</Thickness>
@@ -620,6 +728,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#FFFFFF" />
       <!-- Fluent colors (palettes cannot target custom variants). The accent fills selected tabs and checkboxes
            under white text, so it is a blue with about 5:1 contrast against white rather than cyan. -->
       <Color x:Key="SystemAccentColor">#0F6CBD</Color>
@@ -693,6 +802,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D0D0D0" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D0D0D0" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -749,24 +859,58 @@
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#E51400" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A0500" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#554400" />
-      <!-- Shapes (M45): Dock's splitter, square panels and tabs, no tab indicator, captions in their color without a dot. -->
-      <x:Double x:Key="Shell.Gutter">4</x:Double>
-      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="Transparent" />
-      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
-      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
-      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
+      <!-- Shapes (M45; rounded corners since 0.6, D46): 4 px cards and tabs on 6 px of window, the selected tab outlined, captions without a dot. -->
+      <x:Double x:Key="Shell.Gutter">6</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#000000" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">4,4,0,0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0,0,4,4</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">1,1,1,0</Thickness>
       <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
       <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46, design/controls/RoundedCorners.dc.html): the classic IDE's 4 px cards, tabs and controls on 6 px of window. -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">4</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">1</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">1,0,1,1</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#6FC3DF" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0,0,4,4</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">6,0,6,6</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">6,0,6,6</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Left</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">4</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="#6FC3DF" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#1AEBFF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">-1,0,-1,-1</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">1</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">-1,0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">SemiBold</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">4</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="#FFFFFF" />
+      <Thickness x:Key="Shell.Row.Margin">3,0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">4</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0,0,0,3</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="#FFFFFF" />
+      <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">4,4,0,0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#6FC3DF" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1,0,1,1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">0</x:Double>
       <!-- Dock's document well and tool window captions. -->
       <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#1AEBFF" />
       <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#000000" />
       <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#000000" />
       <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#000000" />
       <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#1AEBFF" />
-      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#000000" />
+      <!-- The strip is drawn on the well card's fill (Shell.Card.Background), so the card's corners round it (D46). -->
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="Transparent" />
       <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#000000" />
       <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#000000" />
       <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#000000" />
@@ -823,9 +967,9 @@
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
-      <CornerRadius x:Key="Shell.Control.CornerRadius">2</CornerRadius>
-      <CornerRadius x:Key="Shell.Check.CornerRadius">2</CornerRadius>
-      <CornerRadius x:Key="Shell.Focus.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Control.CornerRadius">4</CornerRadius>
+      <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
+      <CornerRadius x:Key="Shell.Focus.CornerRadius">6</CornerRadius>
       <!-- High contrast outlines what the others fill: a row under the pointer, chips and badges (Avalonia's borders draw no dashes). -->
       <BoxShadows x:Key="Shell.Row.Hover.Outline">inset 0 0 0 1 #FFFFFF</BoxShadows>
       <Thickness x:Key="Shell.Chip.BorderThickness">1</Thickness>
@@ -872,6 +1016,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1B1F2A" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6A7490" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#6A7490" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F2F6FE" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCE9EC" />
@@ -901,6 +1046,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#4E5873" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#4E5873" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#E8EBF4" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#BCC7E0" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -951,6 +1097,37 @@
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#BCC7E0" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66000000" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66000000" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -1103,6 +1280,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#141A28" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#D9DFEE" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#7F8AA8" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#7F8AA8" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#1A2236" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A6E" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1E2A" />
@@ -1132,6 +1310,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#9AA5C2" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#9AA5C2" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1C2337" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#2A3553" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -1182,6 +1361,37 @@
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#2A3553" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66FFFFFF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -1334,6 +1544,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
@@ -1363,6 +1574,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -1413,6 +1625,37 @@
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#FFFFFF" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66FFFFFF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -1585,6 +1828,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1F2226" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6B7079" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#6B7079" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F4F5F7" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCE9EA" />
@@ -1614,6 +1858,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#555A63" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#555A63" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F0F1F2" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#D3D6DB" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -1669,6 +1914,37 @@
         </DrawingBrush.Drawing>
       </DrawingBrush>
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">11,0,0,0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#D3D6DB" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66000000" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66000000" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -1821,6 +2097,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1A1B1F" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#D5D8DE" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8A8F9A" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#8A8F9A" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#202227" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A6E" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1E22" />
@@ -1850,6 +2127,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#9A9FAA" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#9A9FAA" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#202126" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#2A2D34" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -1905,6 +2183,37 @@
         </DrawingBrush.Drawing>
       </DrawingBrush>
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">11,0,0,0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#2A2D34" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66FFFFFF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -2057,6 +2366,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
@@ -2086,6 +2396,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -2141,6 +2452,37 @@
         </DrawingBrush.Drawing>
       </DrawingBrush>
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">11,0,0,0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#FFFFFF" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66FFFFFF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -2313,6 +2655,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1F1F24" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6B6B76" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#6B6B76" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F7F5FC" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCEDEC" />
@@ -2342,6 +2685,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#5C5C66" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#5C5C66" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F4F4F6" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#E0E0E6" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -2392,6 +2736,37 @@
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#E0E0E6" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66000000" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66000000" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">6</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -2544,6 +2919,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#222029" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#E4E2EC" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8E8AA0" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#8E8AA0" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#29263A" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A6E" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1E26" />
@@ -2573,6 +2949,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#A7A3B8" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#A7A3B8" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#282631" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#34313F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -2623,6 +3000,37 @@
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#34313F" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66FFFFFF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">6</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -2775,6 +3183,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
@@ -2804,6 +3213,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -2854,6 +3264,37 @@
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#FFFFFF" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66FFFFFF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">6</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -3026,6 +3467,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#2A211B" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#7A6C60" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#7A6C60" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#FBF5EE" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCE9E7" />
@@ -3055,6 +3497,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#6B5E53" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#6B5E53" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F3F0EE" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#DDD5CD" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -3105,6 +3548,37 @@
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#DDD5CD" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66000000" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66000000" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">7</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -3257,6 +3731,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#171513" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#E6DFD8" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8F867D" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#8F867D" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#211E1B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A5A" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1C1C" />
@@ -3286,6 +3761,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#A39A90" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#A39A90" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1E1B19" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#2B2724" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -3336,6 +3812,37 @@
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#2B2724" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66FFFFFF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">7</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -3488,6 +3995,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
@@ -3517,6 +4025,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -3567,6 +4076,37 @@
       <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
       <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
       <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <!-- Rounded corners (0.6, D46) change only Classic's shapes: these keep this family's, Dock's values included (Classic's would leak in through the variant it inherits). -->
+      <CornerRadius x:Key="Shell.Card.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Card.BorderThickness">0</Thickness>
+      <Thickness x:Key="Shell.Card.Content.BorderThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Card.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Background" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Card.Focus.BorderBrush" Color="#FFFFFF" />
+      <Thickness x:Key="Shell.ToolControl.BorderThickness">1,0,1,0</Thickness>
+      <CornerRadius x:Key="Shell.ToolTab.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.Dock.Margin">0</Thickness>
+      <Thickness x:Key="Shell.Toolbar.Margin">0</Thickness>
+      <HorizontalAlignment x:Key="Shell.Toolbar.HorizontalAlignment">Stretch</HorizontalAlignment>
+      <Thickness x:Key="Shell.Toolbar.BorderThickness">0,0,0,1</Thickness>
+      <CornerRadius x:Key="Shell.Toolbar.CornerRadius">0</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Tab.Selected.IndicatorBrush" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Well.Frame.Active" Color="#66FFFFFF" />
+      <Thickness x:Key="Shell.Well.Frame.Margin">0</Thickness>
+      <x:Double x:Key="Shell.TabStripEdge.Height">0</x:Double>
+      <Thickness x:Key="Shell.TabStripEdge.Margin">0</Thickness>
+      <FontWeight x:Key="Shell.Tab.Selected.FontWeight">Normal</FontWeight>
+      <CornerRadius x:Key="Shell.Control.CornerRadius.Compact">2</CornerRadius>
+      <SolidColorBrush x:Key="Shell.Selection.Indicator" Color="Transparent" />
+      <SolidColorBrush x:Key="Shell.Selection.Indicator.Inactive" Color="Transparent" />
+      <Thickness x:Key="Shell.Row.Margin">0</Thickness>
+      <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
+      <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
+      <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
+      <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
+      <Thickness x:Key="DockDocumentContentBorderThickness">1</Thickness>
+      <x:Double x:Key="DockDocumentTabStripSeparatorSize">2</x:Double>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">7</CornerRadius>
       <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
       <!-- Dock's document well and tool window captions. -->
@@ -3728,6 +4268,9 @@
   <Thickness x:Key="Shell.Padding.Row">0,1</Thickness>
   <CornerRadius x:Key="Shell.CornerRadius">3</CornerRadius>
   <CornerRadius x:Key="Shell.CornerRadius.Overlay">6</CornerRadius>
+  <!-- Two overlay radii (0.6, D46): menus, drop-down lists, flyouts and toasts 6 (Fluent's own 5 too), dialogs and Code Search 8. -->
+  <CornerRadius x:Key="OverlayCornerRadius">6</CornerRadius>
+  <CornerRadius x:Key="Shell.CornerRadius.Dialog">8</CornerRadius>
   <!--
     The control set (M34h, docs/design/controls.md): one height per context (28 px in dialogs, documents and pages,
     24 px in tool windows and toolbars), a button's padding and the gap before its text, the focus ring (2 px in

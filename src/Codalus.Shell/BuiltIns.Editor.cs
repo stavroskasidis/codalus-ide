@@ -104,6 +104,20 @@ internal static partial class BuiltIns
         ]
         """;
 
+    /// <summary>
+    /// Bracket pair colors, whose default follows the theme's family (D47): off in Classic, as the classic IDE has none, and
+    /// on in the families. The shell registers it again with the active family's default when the family changes; a
+    /// value in settings.json wins either way.
+    /// </summary>
+    public static SettingDescriptor BracketPairColorizationSetting(string family) =>
+        SettingDescriptor.Create(EditorOptions.BracketPairColorizationKey, family == Theming.ThemeService.Classic ? "false" : "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Bracket Pair Colorization",
+            Category = "Text Editor",
+            Description = "Color matching brackets by nesting depth. By default it's off in the Classic themes and on in the others.",
+            Order = 19,
+        };
+
     public static IReadOnlyList<SettingDescriptor> EditorSettings()
     {
         var shell = ContributionSource.Shell;
@@ -142,7 +156,7 @@ internal static partial class BuiltIns
             Setting(EditorOptions.InlineDiagnosticsKey, "false", SettingType.Boolean, "Inline Diagnostics", "Show error and warning messages at the end of their line.", 16),
             Setting(EditorOptions.InheritanceMarginKey, "true", SettingType.Boolean, "Inheritance Margin", "Show glyphs for members that implement, override or are overridden, with navigation.", 17),
             Setting(EditorOptions.IndentGuidesKey, "true", SettingType.Boolean, "Indentation Guides", "Draw vertical lines at indentation levels.", 18),
-            Setting(EditorOptions.BracketPairColorizationKey, "true", SettingType.Boolean, "Bracket Pair Colorization", "Color matching brackets by nesting depth.", 19),
+            BracketPairColorizationSetting(Theming.ThemeService.Classic),
             Setting(EditorOptions.StickyScrollKey, "true", SettingType.Boolean, "Sticky Scroll", "Keep the headers of the enclosing scopes at the top of the editor while scrolling.", 20),
             Setting(EditorOptions.OverviewRulerKey, "true", SettingType.Boolean, "Overview Ruler", "Mark errors, warnings, changes, breakpoints, find results and the caret beside the scroll bar.", 21),
             Setting(EditorOptions.NavigationBarKey, "true", SettingType.Boolean, "Navigation Bar", "Show the type and member drop-downs above the editor.", 22),

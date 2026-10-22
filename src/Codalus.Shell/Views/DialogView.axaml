@@ -62,7 +62,7 @@
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
   </UserControl.Styles>
-  <Border x:Name="Frame" Classes="overlay" CornerRadius="8" Padding="0" ClipToBounds="True"
+  <Border x:Name="Frame" Classes="overlay" CornerRadius="{DynamicResource Shell.CornerRadius.Dialog}" Padding="0" ClipToBounds="True"
           KeyboardNavigation.TabNavigation="Cycle"
           AutomationProperties.Name="{Binding Title}">
     <DockPanel>

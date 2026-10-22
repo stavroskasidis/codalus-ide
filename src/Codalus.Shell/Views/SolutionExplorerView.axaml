@@ -68,6 +68,9 @@
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:ExplorerRowViewModel">
           <!-- The name trims with an ellipsis in a narrow pane (the root's was cut off, M29); the tooltip has the path (M34d). -->
+          <!-- The selected row's pill at its left edge, before the indentation (D46: Classic's; transparent in the families). -->
+          <Panel>
+          <Border Classes="selectionPill" IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
           <DockPanel Margin="{Binding Indent}" Background="Transparent" ToolTip.Tip="{Binding ToolTip}">
             <Border DockPanel.Dock="Left" Classes="chevron" Width="16" Height="18" Background="Transparent">
               <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -78,6 +81,7 @@
               <Run Text="{Binding Detail}" FontSize="{DynamicResource Shell.FontSize.Small}" FontWeight="Normal" Classes="muted" />
             </TextBlock>
           </DockPanel>
+          </Panel>
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
