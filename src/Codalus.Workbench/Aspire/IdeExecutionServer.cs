@@ -86,6 +86,13 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     private readonly ConcurrentDictionary<WebSocket, SemaphoreSlim> _sockets = new();
 
     /// <summary>
+    /// Each notification socket's request. Aborting the WebSocket doesn't always drop its connection on Windows: http.sys
+    /// keeps the upgraded connection with the request, and the orchestrator's pending read never ends. Aborting the
+    /// request's response closes the connection itself.
+    /// </summary>
+    private readonly ConcurrentDictionary<WebSocket, HttpListenerContext> _connections = new();
+
+    /// <summary>
     /// Notifications sent while no socket listens, oldest first, for the next socket that does. The orchestrator connects
     /// the notification socket before it asks for a run session, but its connection completes when the handshake's answer
     /// arrives, before the server has registered the socket: a run session asked for at once can start, and its
@@ -386,6 +393,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     {
         var accepted = await context.AcceptWebSocketAsync(null).ConfigureAwait(false);
         var socket = accepted.WebSocket;
+        _connections[socket] = context;
 
         // The socket's gate is held until the notifications that waited for a socket are sent, so they go first.
         var gate = new SemaphoreSlim(0, 1);
@@ -434,6 +442,21 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         {
             _sockets.TryRemove(socket, out _);
             socket.Dispose();
+            if (_connections.TryRemove(socket, out _))
+            {
+                AbortConnection(context);
+            }
+        }
+    }
+
+    private static void AbortConnection(HttpListenerContext context)
+    {
+        try
+        {
+            context.Response.Abort();
+        }
+        catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException)
+        {
         }
     }
 
@@ -536,6 +559,14 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         {
             socket.Abort(); // no closing handshake to wait for
             socket.Dispose();
+        }
+
+        foreach (var socket in _connections.Keys)
+        {
+            if (_connections.TryRemove(socket, out var context))
+            {
+                AbortConnection(context);
+            }
         }
     }
 }
