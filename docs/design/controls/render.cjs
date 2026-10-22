@@ -80,6 +80,29 @@ const PAGES = [
 
 const slug = (s) => s.toLowerCase().replace(/\s+/g, '-');
 
+// Connecting an agent (0.6.0, controls.md#connect-an-agent): the dialog's states, AI Chat's states and Options' AI page.
+// The main states in the view themes and Classic High Contrast, the others in one or two; every state in the check.
+const FIVE = ['Classic Light', 'Classic Dark', 'Classic High Contrast', 'Harbor Light', 'Harbor Dark'];
+const TWO = ['Harbor Light', 'Classic Dark'];
+const AGENT_CONNECT = {
+  connect: FIVE, apikey: FIVE, ok: FIVE, progress: TWO, signin: TWO, missing: TWO, disconnect: TWO,
+  codex: ['Harbor Light'], gemini: ['Classic Dark'], unconfirmed: ['Classic Light'], failed: ['Harbor Dark'],
+  'apikey-memory': ['Classic Light'], installing: ['Classic Light'], offline: ['Classic Light'], remote: ['Classic Light']
+};
+for (const [state, themes] of Object.entries(AGENT_CONNECT)) {
+  PAGES.push({ file: 'AgentConnect.dc.html', name: `agent-connect-${state}`, query: `state=${state}`, width: 1280, height: 800, themes });
+}
+PAGES.push({ file: 'AgentConnect.dc.html', name: 'agent-connect-missing-windows', query: 'state=missing&os=Windows', width: 1280, height: 800, themes: ['Classic Light'] });
+PAGES.push({ file: 'AgentConnect.dc.html', name: 'agent-connect-missing-macos', query: 'state=missing&os=macOS', width: 1280, height: 800, themes: ['Harbor Light'] });
+const AI_CHAT_CONNECT = {
+  off: FIVE, picker: FIVE, connected: TWO, 'no-provider': ['Harbor Dark'], more: ['Classic Light'], manage: ['Harbor Light'],
+  'manage-claude': ['Classic Dark'], commands: ['Classic Light'], remote: ['Classic Light']
+};
+for (const [state, themes] of Object.entries(AI_CHAT_CONNECT)) {
+  PAGES.push({ file: 'AiChat.dc.html', name: `ai-chat-${state}`, query: `state=${state}`, width: 1280, height: 800, themes });
+}
+PAGES.push({ file: 'Options.dc.html', name: 'options-ai', query: 'page=ai', width: 1280, height: 800, themes: VIEW_THEMES });
+
 function checkInPage({ minText, cues }) {
   const parse = (c) => {
     const m = /rgba?\(([^)]+)\)/.exec(c);

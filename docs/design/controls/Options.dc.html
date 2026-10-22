@@ -49,6 +49,15 @@
 .num .steps span+span{border-top:1px solid var(--input-border)}
 .set .chk{font-weight:600;color:var(--strong)}
 .divider{height:1px;background:var(--soft-border);margin:2px 0 2px 16px;max-width:764px}
+/* ?page=ai (0.6.0, controls.md#connect-an-agent): External Agents with the entries Connect wrote and its two commands. */
+.scrolled{margin:0 0 4px 16px}
+.field.json{display:block;height:auto;width:620px;padding:6px 8px;font-family:var(--mono);font-size:12px;line-height:18px;white-space:pre}
+.field.json.one{width:220px;padding:4px 8px}
+.jl{white-space:pre}
+/* A plain text box, as Options draws an object setting today: no colors. */
+.jk,.js,.jc,.jp{color:var(--fg)}
+.acts{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.acts .keys{display:inline-flex;align-items:center;gap:6px;margin-left:4px}
 </style>
 </helmet>
 <div class="{{t.cls}}" style="{{t.vars}}">
@@ -76,6 +85,7 @@
       </sc-for>
     </nav>
     <div class="page">
+      <sc-if value="{{te}}">
       <div class="ph"><span class="tile"><svg class="i c-blue" aria-hidden="true"><use href="#i-doc-text"></use></svg></span><div><h1>Text Editor</h1><div class="sub">27 settings · 2 modified</div></div></div>
 
       <div class="set">
@@ -118,19 +128,41 @@
         <div class="ctl"><span class="field" style="width:220px"><input aria-label="Rulers" value="120"></span></div>
         <div class="k">editor.rulers</div>
       </div>
+      </sc-if>
+      <sc-if value="{{ai}}">
+      <div class="ph"><span class="tile"><svg class="i c-purple" aria-hidden="true"><use href="#i-sparkle"></use></svg></span><div><h1>AI</h1><div class="sub">14 settings · 3 modified</div></div></div>
+      <div class="scrolled small muted">Enable AI Assistance, Provider, MCP Servers and 9 more above</div>
+      <div class="set mod hover">
+        <div class="t">External Agents<span class="chip info">Modified</span><button class="btn link small" aria-label="Reset External Agents">Reset</button></div>
+        <div class="d">Coding agents AI Chat can run over the Agent Client Protocol (ACP), each your own CLI. Connect one from AI Chat or Tools &gt; AI: Codalus checks what it needs, signs it in and tests it, then writes its entry here. By hand: { "name": { "command": "…", "args": ["…"], "env": { }, "secretEnv": ["NAME"] } }, where secretEnv names variables whose values Codalus keeps in the OS credential store, never in this file. They run only while AI assistance is on, in trusted folders. Read from your user settings only.</div>
+        <div class="ctl"><div class="field json" role="textbox" aria-multiline="true" aria-label="External Agents"><sc-for list="{{json}}" as="l"><div class="jl"><sc-for list="{{l}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></div></sc-for></div></div>
+        <div class="acts">
+          <button class="btn sm has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-plug"></use></svg>Connect to an Agent…</button>
+          <button class="btn sm has-icon"><svg class="i c-blue" aria-hidden="true"><use href="#i-gear"></use></svg>Manage Agents…</button>
+          <span class="small muted keys"><svg class="i sm c-yellow" aria-hidden="true"><use href="#i-lock"></use></svg>claude's ANTHROPIC_API_KEY is in Secret Service (libsecret)</span>
+        </div>
+        <div class="k">ai.agents</div>
+      </div>
+      <div class="set">
+        <span class="chk"><span class="box"></span>MCP Server</span>
+        <div class="d" style="padding-left:24px">Let AI agents that run outside the IDE reach it through `codalus mcp` (an MCP server over stdio): the solution, the open files, the Error List and the build output; a build asks you first. For your user only; off by default.</div>
+        <div class="k" style="padding-left:24px">ai.mcpServer.enabled</div>
+      </div>
+      </sc-if>
     </div>
   </div>
 </section>
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":800}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"page":{"editor":"enum","default":"","options":["","ai"]},"$preview":{"width":1280,"height":800}}'>
 class Component extends DCLogic {
   renderVals() {
     const C = window.CodalusControls;
     const t = C.theme(this.props.theme);
+    const ai = this.props.page === 'ai';
     const g = (name, icon, ic, open, count, state) => ({ name, icon, ic, count, cls: 'grp ' + (state ?? ''), chev: open ? 'chevron-down' : 'chevron-right', leaf: false, expanded: String(open), selected: String(state === 'sel') });
-    const c = (name, icon, ic, count, state) => ({ name, icon, ic, count, cls: 'child ' + (state ?? ''), chev: '', leaf: true, expanded: 'false', selected: 'false' });
+    const c = (name, icon, ic, count, state) => ({ name, icon, ic, count, cls: 'child ' + (state ?? ''), chev: '', leaf: true, expanded: 'false', selected: String(state === 'sel') });
     const nav = [
       { name: 'All Settings', icon: 'list', ic: 'c-blue', count: '', cls: 'grp', chev: '', leaf: true, expanded: 'false', selected: 'false' },
       g('Environment', 'window', 'c-blue', true, ''),
@@ -138,21 +170,40 @@ class Component extends DCLogic {
       c('Keyboard', 'keyboard', 'c-blue', ''),
       c('Notifications', 'bell', 'c-yellow', ''),
       c('Updates', 'cloud-download', 'c-blue', ''),
-      g('Text Editor', 'doc-text', 'c-blue', true, '', 'sel'),
+      g('Text Editor', 'doc-text', 'c-blue', true, '', ai ? '' : 'sel'),
       c('Code Cleanup', 'broom', 'c-blue', ''),
       c('JSON', 'braces', 'c-blue', ''),
-      c('Navigation', 'arrow-sort', 'c-blue', '', 'hover'),
+      c('Navigation', 'arrow-sort', 'c-blue', '', ai ? '' : 'hover'),
       c('XML', 'code', 'c-blue', ''),
       g('Projects and Solutions', 'cube', 'c-purple', false, ''),
       g('Debugging', 'bug', 'c-orange', false, ''),
       g('Source Control', 'branch', 'c-orange', false, ''),
       g('Testing', 'beaker', 'c-green', false, ''),
       g('Terminal and Interactive', 'terminal', 'c-blue', false, ''),
-      g('Other', 'more', 'c-blue', false, ''),
-      c('AI', 'sparkle', 'c-purple', ''),
+      g('Other', 'more', 'c-blue', true, ''),
+      c('AI', 'sparkle', 'c-purple', '', ai ? 'sel' : ''),
       c('Containers', 'container', 'c-blue', '')
     ];
-    return { t, nav };
+    // ai.agents as Connect leaves it: one entry added, the other entries and the user's comment kept.
+    const P = (t) => ({ t, cls: 'jp' }), K = (t) => ({ t, cls: 'jk' }), S = (t) => ({ t, cls: 'js' }), M = (t) => ({ t, cls: 'jc' });
+    const json = [
+      [P('{')],
+      [P('  '), M('// work laptop: the API key, not my subscription')],
+      [P('  '), K('"claude"'), P(': {')],
+      [P('    '), K('"command"'), P(': '), S('"npx"'), P(',')],
+      [P('    '), K('"args"'), P(': ['), S('"-y"'), P(', '), S('"@agentclientprotocol/claude-agent-acp@0.94.0"'), P('],')],
+      [P('    '), K('"secretEnv"'), P(': ['), S('"ANTHROPIC_API_KEY"'), P('],')],
+      [P('    '), K('"template"'), P(': '), S('"claude@0.94.0"')],
+      [P('  },')],
+      [P('  '), K('"codex"'), P(': {')],
+      [P('    '), K('"command"'), P(': '), S('"npx"'), P(',')],
+      [P('    '), K('"args"'), P(': ['), S('"-y"'), P(', '), S('"@agentclientprotocol/codex-acp@2.2.2"'), P('],')],
+      [P('    '), K('"template"'), P(': '), S('"codex@2.2.2"')],
+      [P('  }')],
+      [P('}')]
+    ];
+    if (!ai) nav.forEach((n) => { if (n.name === 'Other') { n.chev = 'chevron-right'; n.expanded = 'false'; } });
+    return { t, nav, te: !ai, ai, json };
   }
 }
 </script>

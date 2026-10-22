@@ -55,9 +55,48 @@
 .box .caret{display:inline-block;width:1px;height:14px;background:var(--fg);vertical-align:-2px}
 .box .bar{display:flex;align-items:center;gap:6px}
 .send{width:28px;height:28px;padding:0}
+/* Connecting an agent (0.6.0, controls.md#connect-an-agent): ?state= draws the empty states with the agents to connect,
+   the agent menu, the connected chat, and the palettes of More agents…, Manage Agents… and the commands. */
+.canvas{position:relative}
+.chat{position:relative}
+.estate{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:18px;padding:16px 28px}
+.estate .empty{padding:0 12px;gap:10px}
+.estate .empty .msg{max-width:400px}
+.agents{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:420px;padding-top:16px;border-top:1px solid var(--soft-border)}
+.ag-h{font-weight:600;color:var(--strong);text-align:center}
+.ag-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}
+.ag-grid .btn{justify-content:flex-start}
+.ag-note{color:var(--muted);font-size:11px;line-height:14px;text-align:center;max-width:360px}
+.ag-why{display:flex;align-items:flex-start;gap:6px;color:var(--muted);font-size:11px;line-height:14px;max-width:380px}
+.xbanner{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:var(--radius);background:var(--chip-info);color:var(--chip-info-fg);font-size:11px;line-height:15px;border:1px solid transparent}
+.kind-hc .xbanner{border-color:currentColor}
+.box .txt.ph{color:var(--placeholder)}
+.menu.pick{position:absolute;top:52px;width:250px;z-index:5}
+.menu .mi .ck{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;flex:none}
+.menu .mi .rdot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.qp{position:absolute;left:50%;top:8px;transform:translateX(-50%);width:640px;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:6px;box-shadow:var(--shadow);padding:6px;z-index:6;display:flex;flex-direction:column;gap:6px}
+.kind-hc .qp{border-width:2px}
+.qp .field .value.fill{color:var(--fg)}
+.qt{padding:2px 8px 0;color:var(--muted);font-size:11px}
+.ql{display:flex;flex-direction:column;gap:1px}
+.qr{display:flex;align-items:center;gap:8px;min-height:28px;padding:4px 8px;border-radius:var(--radius)}
+.qr .ql1{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;overflow:hidden}
+.qr .lab{white-space:nowrap}
+.qr .det{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.qr .rt{color:var(--muted);font-size:11px;white-space:nowrap;padding-left:16px}
+.qr.sel{background:var(--sel);color:var(--sel-fg)}
+.qr.sel .det,.qr.sel .rt{color:inherit}
+.qr.sel .hl{background:transparent;color:inherit;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:2px}
+.kind-hc .qr.sel svg.i{color:var(--sel-fg)}
+.kind-light .qr.sel svg.c-orange,.th-classic-blue .qr.sel svg.c-green{color:var(--sel-fg)}
+.states{width:1280px;box-sizing:border-box;padding:12px 16px 16px;background:var(--panel);border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+.states div{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline}
+.states b{color:var(--strong);min-width:70px}
+.states a{color:var(--link);text-decoration:none}
+.states a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
 </style>
 </helmet>
-<div class="{{t.cls}}" style="{{t.vars}}">
+<div class="{{t.cls}} {{themeCls}}" style="{{t.vars}}">
 <div class="canvas">
 <div class="ed" data-nocheck>
   <div class="doc-tabs"><span class="doc-tab on"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>CalculatorService.cs</span><span class="doc-tab"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>ICalculatorService.cs</span></div>
@@ -66,6 +105,7 @@
 
 <section class="tw chat" aria-label="AI Chat">
   <div class="tw-cap active"><span class="title">AI Chat</span><span class="cb"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="cb"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+  <sc-if value="{{conv}}">
   <div class="toolbar bar" role="toolbar" aria-label="AI Chat">
     <button class="tb" aria-label="New Chat" title="Start a new chat (Ctrl+N)"><svg class="i c-green" aria-hidden="true"><use href="#i-chat-add"></use></svg></button>
     <span class="tb-sep"></span>
@@ -121,12 +161,118 @@
       <div class="bar"><span class="small muted">Enter sends · Shift+Enter new line</span><span class="grow"></span><button class="btn primary icon send" aria-label="Send the question (Enter)" title="Send (Enter)"><svg class="i" aria-hidden="true"><use href="#i-send"></use></svg></button></div>
     </div>
   </div>
+  </sc-if>
+  <sc-if value="{{alt}}">
+  <div class="toolbar bar" role="toolbar" aria-label="AI Chat">
+    <button class="tb is-disabled" aria-disabled="true" aria-label="New Chat" title="Start a new chat (Ctrl+N)"><svg class="i c-green" aria-hidden="true"><use href="#i-chat-add"></use></svg></button>
+    <span class="tb-sep"></span>
+    <sc-if value="{{tb.provider}}"><button class="tb text" title="Choose the provider and model"><svg class="i c-purple" aria-hidden="true"><use href="#i-sparkle"></use></svg>{{tb.provider}}<svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></sc-if>
+    <sc-if value="{{tb.agent}}"><button class="tb text {{tb.agentCls}}" aria-haspopup="menu" aria-expanded="{{tb.agentOpen}}" title="Who answers: the built-in assistant, or an external agent you connected"><sc-if value="{{tb.agentIcon}}"><svg class="i c-purple" aria-hidden="true"><use href="#i-bot"></use></svg></sc-if>{{tb.agent}}<svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></sc-if>
+    <sc-if value="{{tb.mode}}"><button class="tb text" aria-haspopup="menu" title="The agent's mode">{{tb.mode}}<svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></button></sc-if>
+    <span class="grow"></span>
+    <sc-if value="{{tb.builtin}}"><span class="sw on" title="Agent mode: the AI may read and search the workspace and build; every change shows in a preview first, and every command asks you first"><span class="track"></span>Agent</span><span class="tb-sep"></span></sc-if>
+    <button class="tb" aria-label="Request Log" title="Request Log: what was sent, and when, in the Output window"><svg class="i c-orange" aria-hidden="true"><use href="#i-history"></use></svg></button>
+    <sc-if value="{{tb.builtin}}"><button class="tb" aria-label="Configure the provider" title="Configure the provider"><svg class="i c-blue" aria-hidden="true"><use href="#i-gear"></use></svg></button></sc-if>
+  </div>
+
+  <div class="estate">
+    <sc-if value="{{es.off}}">
+      <div class="empty">
+        <svg class="i big c-purple" aria-hidden="true"><use href="#i-sparkle"></use></svg>
+        <div class="msg">AI assistance is off. Turn it on, then choose a provider: nothing is sent anywhere until you do. Files that .gitignore or a .codalusignore excludes, and secrets, are never sent.</div>
+        <button class="btn primary">Turn On AI Assistance</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{es.provider}}">
+      <div class="empty">
+        <svg class="i big c-purple" aria-hidden="true"><use href="#i-sparkle"></use></svg>
+        <div class="msg">Choose a provider and a model to start. Nothing is sent until you do.</div>
+        <button class="btn has-icon"><svg class="i c-purple" aria-hidden="true"><use href="#i-sparkle"></use></svg>Choose Provider…</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{es.connectRow}}">
+      <div class="agents" role="group" aria-labelledby="ag-h">
+        <div class="ag-h" id="ag-h">Or connect a coding agent that brings its own provider</div>
+        <div class="ag-grid">
+          <sc-for list="{{es.agents}}" as="g"><button class="btn has-icon {{g.cls}}" aria-disabled="{{g.dis}}" aria-label="Connect to {{g.name}}…" title="Connect to {{g.name}}…"><svg class="i c-purple" aria-hidden="true"><use href="#i-bot"></use></svg>{{g.name}}</button></sc-for>
+        </div>
+        <sc-if value="{{es.remote}}"><div class="ag-why"><svg class="i sm c-blue" aria-hidden="true"><use href="#i-window-remote"></use></svg><span>Agents can't be connected from a remote window: they would run on this machine.</span></div></sc-if>
+        <sc-if value="{{es.local}}">
+          <button class="btn link">More agents…</button>
+          <div class="ag-note">Codalus checks what the agent needs, signs it in and tests it before anything is saved.</div>
+        </sc-if>
+      </div>
+    </sc-if>
+    <sc-if value="{{es.ready}}">
+      <div class="empty">
+        <svg class="i big c-purple" aria-hidden="true"><use href="#i-sparkle"></use></svg>
+        <div class="msg">Ask a question about your solution. What goes with it is listed above the box, and you can turn each part off.</div>
+        <div class="small">Turn on Agent to let it read, search and build the workspace: every change shows in a preview first.</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{es.external}}">
+      <div class="empty">
+        <svg class="i big c-purple" aria-hidden="true"><use href="#i-bot"></use></svg>
+        <div class="msg">Ask Claude about your solution. It answers with its own provider; Codalus asks you before it changes a file or runs a command.</div>
+        <div class="small">What goes with your question is listed above the box.</div>
+      </div>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{es.composer}}">
+  <div class="composer">
+    <div class="ctx" role="group" aria-label="What goes with your question">
+      <button class="tb text is-checked" aria-pressed="true" title="Send the selection"><svg class="i c-blue" aria-hidden="true"><use href="#i-insert"></use></svg>Selection</button>
+      <button class="tb text is-checked" aria-pressed="true" title="Send the current file"><svg class="i c-blue" aria-hidden="true"><use href="#i-doc-text"></use></svg>Current file</button>
+      <button class="tb text" aria-pressed="false" title="Send the other open files"><svg class="i c-blue" aria-hidden="true"><use href="#i-file"></use></svg>Open files</button>
+      <button class="tb text" aria-pressed="false" title="Send the errors and warnings of the open files"><svg class="i c-red" aria-hidden="true"><use href="#i-clear-all"></use></svg>Errors</button>
+      <button class="tb text" aria-pressed="false" title="Send the last build's output"><svg class="i c-purple" aria-hidden="true"><use href="#i-cube"></use></svg>Build output</button>
+      <button class="tb text" aria-pressed="false" title="Send the solution's projects and frameworks"><svg class="i c-purple" aria-hidden="true"><use href="#i-solution"></use></svg>Solution</button>
+    </div>
+    <div class="prev">Sent with your question: CalculatorService.cs</div>
+    <sc-if value="{{es.banner}}"><div class="xbanner"><svg class="i info" aria-hidden="true"><use href="#i-info"></use></svg><span>External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for.</span></div></sc-if>
+    <div class="box">
+      <div class="txt ph" role="textbox" aria-multiline="true" aria-label="Question"><span class="caret"></span> Ask about your code</div>
+      <div class="bar"><span class="small muted">Enter sends · Shift+Enter new line</span><span class="grow"></span><button class="btn primary icon send is-disabled" aria-disabled="true" aria-label="Send the question (Enter)" title="Send (Enter)"><svg class="i" aria-hidden="true"><use href="#i-send"></use></svg></button></div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{menu}}">
+    <div class="menu pick" role="menu" aria-label="Agent" style="left:{{menu.left}}">
+      <sc-for list="{{menu.items}}" as="m">
+        <sc-if value="{{m.sep}}"><div class="msep" role="separator"></div></sc-if>
+        <sc-if value="{{m.radio}}"><div class="mi {{m.cls}}" role="menuitemradio" aria-checked="{{m.checked}}"><span class="ck"><sc-if value="{{m.on}}"><span class="rdot"></span></sc-if></span>{{m.label}}</div></sc-if>
+        <sc-if value="{{m.cmd}}"><div class="mi {{m.cls}}" role="menuitem"><svg class="i {{m.ic}}" aria-hidden="true"><use href="#i-{{m.icon}}"></use></svg>{{m.label}}</div></sc-if>
+      </sc-for>
+    </div>
+  </sc-if>
+  </sc-if>
   <div class="tw-tabs" role="tablist" aria-label="Right tool windows"><span class="on">AI Chat</span><span>Solution Explorer</span><span>Git Changes</span></div>
 </section>
+<sc-if value="{{qp}}">
+  <div class="qp" role="dialog" aria-label="{{qp.ph}}">
+    <span class="field is-focus"><sc-if value="{{qp.q}}"><span class="value fill">{{qp.q}}</span></sc-if><sc-if value="{{qp.noq}}"><span class="ph">{{qp.ph}}</span></sc-if><span class="caret"></span></span>
+    <sc-if value="{{qp.title}}"><div class="qt">{{qp.title}}</div></sc-if>
+    <div class="ql" role="listbox" aria-label="Results">
+      <sc-for list="{{qp.rows}}" as="r">
+        <div class="qr {{r.cls}}" role="option" aria-selected="{{r.selected}}">
+          <svg class="i {{r.ic}}" aria-hidden="true"><use href="#i-{{r.icon}}"></use></svg>
+          <span class="ql1"><span class="lab"><sc-for list="{{r.label}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span><sc-if value="{{r.detail}}"><span class="det">{{r.detail}}</span></sc-if></span>
+          <sc-if value="{{r.right}}"><span class="rt">{{r.right}}</span></sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</sc-if>
 </div>
+<nav class="states" aria-label="States and themes">
+  <div><b>State</b><sc-for list="{{nav.states}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for></div>
+  <div><b>Theme</b><sc-for list="{{nav.themes}}" as="n"><a class="{{n.cls}}" href="{{n.href}}">{{n.label}}</a></sc-for></div>
+</nav>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":800}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"state":{"editor":"string","default":""},"$preview":{"width":1280,"height":800}}'>
 class Component extends DCLogic {
   renderVals() {
     const C = window.CodalusControls;
@@ -178,7 +324,102 @@ class Component extends DCLogic {
       '}'
     ];
     const answer = ans.map((s) => ({ toks: s ? C.csharp(s) : [{ t: ' ', cls: '' }] }));
-    return { t, code, answer };
+
+    // Connecting an agent (0.6.0): the states AI Chat offers it in, the agent menu, the connected chat and the palettes.
+    const STATES = ['conversation', 'off', 'no-provider', 'picker', 'connected', 'more', 'manage', 'manage-claude', 'commands', 'remote'];
+    const state = STATES.includes(this.props.state) ? this.props.state : 'conversation';
+    const conv = state === 'conversation';
+    const on = !['off', 'remote', 'commands'].includes(state);
+    const external = ['connected', 'manage', 'manage-claude'].includes(state);
+    const tb = {
+      provider: on && !external ? (state === 'no-provider' ? 'Choose Provider…' : 'Ollama · qwen2.5-coder:7b') : '',
+      agent: on ? (external ? 'Claude' : 'Built-in') : '',
+      agentIcon: external, agentCls: state === 'picker' ? 'is-pressed' : '', agentOpen: String(state === 'picker'),
+      mode: external ? 'Default' : '',
+      builtin: on && !external
+    };
+    const ONE_CLICK = ['Claude', 'Codex', 'Gemini CLI', 'GitHub Copilot'];
+    const es = {
+      off: state === 'off' || state === 'remote' || state === 'commands',
+      provider: state === 'no-provider',
+      ready: state === 'picker',
+      external,
+      remote: state === 'remote',
+      local: state !== 'remote',
+      agents: ONE_CLICK.map((name) => ({ name, cls: state === 'remote' ? 'is-disabled' : '', dis: String(state === 'remote') })),
+      composer: on,
+      banner: external
+    };
+    es.connectRow = es.off || es.provider;
+    // The agent menu: who answers, then connecting and managing agents (Codex is connected already).
+    const radio = (label, checked) => ({ radio: true, label, checked: String(checked), on: checked, cls: '' });
+    const cmd = (label, icon, ic, cls) => ({ cmd: true, label, icon, ic, cls: cls ?? '' });
+    const menu = state === 'picker' ? {
+      left: '248px',
+      items: [
+        radio('Built-in', true), radio('Codex', false),
+        { sep: true },
+        cmd('Connect to Claude…', 'plug', 'c-blue', 'hover'), cmd('Connect to Gemini CLI…', 'plug', 'c-blue'), cmd('Connect to GitHub Copilot…', 'plug', 'c-blue'),
+        { sep: true },
+        cmd('More agents…', 'list', 'c-blue'), cmd('Manage Agents…', 'gear', 'c-blue')
+      ]
+    } : null;
+
+    // The palettes (the shell's quick pick: an icon, the label, a muted detail, a muted note on the right).
+    const lab = (...parts) => parts.map((p) => (typeof p === 'string' ? { t: p, cls: '' } : { t: p.hl, cls: 'hl' }));
+    const row = (icon, ic, label, detail, right, sel) => ({ icon, ic, label, detail, right, cls: sel ? 'sel' : '', selected: String(!!sel) });
+    let qp = null;
+    if (state === 'more') {
+      qp = { ph: 'Choose an agent to connect', q: '', title: '', rows: [
+        row('bot', 'c-purple', lab('Claude'), 'Anthropic · npx @agentclientprotocol/claude-agent-acp@0.94.0', 'Connected'),
+        row('bot', 'c-purple', lab('Codex'), 'OpenAI · npx @agentclientprotocol/codex-acp@2.2.2', 'Connected'),
+        row('bot', 'c-purple', lab('Gemini CLI'), 'Google · npx @google/gemini-cli@0.65.0', '', true),
+        row('bot', 'c-purple', lab('GitHub Copilot'), 'GitHub · npx @github/copilot@1.0.101', ''),
+        row('bot', 'c-purple', lab('pi'), 'npx pi-acp@0.0.34 · needs the pi CLI 0.81 or later', 'pi not installed'),
+        row('bot', 'c-purple', lab('OpenCode'), 'Its own CLI: opencode acp (tested with 1.19.3)', 'opencode not installed'),
+        row('bot', 'c-purple', lab('goose'), 'Its own CLI: goose acp (tested with 1.55.0)', 'goose not installed')
+      ] };
+    }
+    if (state === 'manage') {
+      qp = { ph: 'Manage agents', q: '', title: '', rows: [
+        row('bot', 'c-purple', lab('Claude'), 'claude@0.94.0 · API key in Secret Service (libsecret)', 'Chatting now', true),
+        row('bot', 'c-purple', lab('Codex'), 'codex@2.2.2 · Codex keeps its own sign-in', ''),
+        row('bot', 'c-purple', lab('my-agent'), 'Added by hand: ./tools/agent --acp', ''),
+        row('plug', 'c-blue', lab('Connect to an Agent…'), '', '')
+      ] };
+    }
+    if (state === 'manage-claude') {
+      qp = { ph: 'What to do with Claude', q: '', title: 'Claude · claude@0.94.0 · connected 2026-10-21', rows: [
+        row('check-circle', 'c-green', lab('Check Connection'), 'Starts it in an empty folder and checks its sign-in; sends no prompt', '', true),
+        row('key', 'c-yellow', lab('Change API Key…'), 'ANTHROPIC_API_KEY in Secret Service (libsecret)', ''),
+        row('terminal', 'c-blue', lab('Sign In Again…'), 'In the Terminal', ''),
+        row('braces', 'c-blue', lab('Edit in settings.json'), 'ai.agents.claude', ''),
+        row('plug-off', 'c-red', lab('Disconnect…'), 'Removes its entry and its key; can also sign it out', '')
+      ] };
+    }
+    if (state === 'commands') {
+      qp = { ph: 'Search commands', q: 'connect', title: '', rows: [
+        row('plug', 'c-blue', lab('AI: ', { hl: 'Connect' }, ' to Claude…'), '', '', true),
+        row('plug', 'c-blue', lab('AI: ', { hl: 'Connect' }, ' to Codex…'), '', ''),
+        row('plug', 'c-blue', lab('AI: ', { hl: 'Connect' }, ' to Gemini CLI…'), '', ''),
+        row('plug', 'c-blue', lab('AI: ', { hl: 'Connect' }, ' to GitHub Copilot…'), '', ''),
+        row('bot', 'c-purple', lab('AI: ', { hl: 'Connect' }, ' to an Agent…'), 'pi, OpenCode, goose and the others', '')
+      ] };
+    }
+    if (qp) qp.noq = !qp.q;
+
+    const q = (patch) => {
+      const p = { theme: t.name, state, ...patch };
+      return '?' + Object.entries(p).filter(([k, x]) => x && !(k === 'state' && x === 'conversation')).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+    };
+    const nav = {
+      states: STATES.map((x) => ({ label: x, href: q({ state: x }), cls: x === state ? 'on' : '' })),
+      themes: C.ORDER.map((n) => ({ label: n, href: q({ theme: n }), cls: n === t.name ? 'on' : '' }))
+    };
+    // An icon under 3:1 on a selected row takes the selection's text color (controls.md): orange on the light
+    // selections, and green on Classic Blue's.
+    const themeCls = 'th-' + t.name.toLowerCase().replace(/\s+/g, '-');
+    return { t, themeCls, code, answer, conv, alt: !conv, tb, es, menu, qp, nav };
   }
 }
 </script>
