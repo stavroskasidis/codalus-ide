@@ -54,8 +54,23 @@ public sealed partial class ShellHost
         WinFormsDesigner = new WinFormsDesignerService(Solutions, path => Trust.IsTrusted(path), BuildForPreviewAsync, PreviewPropertiesAsync)
         {
             StartupProject = () => Runs.StartupProject,
+            IsBuilding = () => Builds.IsBuilding,
         };
+
+        if (OperatingSystem.IsWindows())
+        {
+            // Copies of build outputs an earlier session couldn't delete (it crashed, or its exit was cut short) go now, not only at the next copy (#66).
+            _ = Task.Run(() => Codalus.Workbench.Previewer.BuildOutputShadowCopy.Sweep(Codalus.Workbench.Previewer.BuildOutputShadowCopy.DefaultRoot));
+        }
     }
+
+    /// <summary>
+    /// The IDE exits (#66): the open designers' hosts stop and their copies of the build output go, while the rest shuts
+    /// down. Closing the window doesn't close the documents (the session reopens them), so without this every exit
+    /// left a copy behind. Started on the UI thread, which then waits for the exit: nothing here needs it.
+    /// </summary>
+    private Task StopWinFormsDesignersAsync() =>
+        Task.WhenAll(Layout.Documents.OfType<WinFormsDesignerDocument>().ToList().Select(d => d.ShutDownAsync().AsTask()));
 
     /// <summary>The designer's hooks into the layout (once it exists).</summary>
     private void WireWinFormsDesigner()
@@ -67,6 +82,7 @@ public sealed partial class ShellHost
             {
                 PropertySource = designer;
                 _ = designer.LoadToolboxAsync(); // the Toolbox has the active designer's project's controls
+                _ = designer.OnActivatedAsync(); // a build made while another tab was active (#66)
             }
 
             Workbench.Context.Set("editorHasWinFormsDesigner", ActiveEditor?.Model.Path is { } path && WinFormsDesignerService.CodeFileOf(path) is { } code && WinFormsDesigner.HasDesigner(code));
@@ -79,6 +95,16 @@ public sealed partial class ShellHost
             }
         };
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnWinFormsLanguageStatus(e.LanguageId, e.Status));
+        Builds.Finished += (_, completed) => Ui.Post(() => OnWinFormsBuildFinished(completed));
+
+        // The Toolbox's double-click or Enter (#66): the active designer adds the item (it stays active while the Toolbox has the focus).
+        Toolbox.ItemPicked += (_, item) =>
+        {
+            if (Layout.ActiveDocument is WinFormsDesignerDocument designer)
+            {
+                _ = designer.AddFromToolboxAsync(item.Type);
+            }
+        };
         Explorer.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SolutionExplorerViewModel.Selected))
@@ -90,10 +116,12 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// The C# service has loaded the projects again (loading, then ready): the active designer asks again for the
-    /// project's own controls, which a compilation from before the restore lacked (off Windows, Windows Forms' reference
-    /// pack comes with the restore, and the C# service is ready before it). Only on that change: the service is also
-    /// ready after each pass over the diagnostics (each edit, each change in the designer), which changes no project.
+    /// The C# service has loaded the projects again (loading, then ready): a designer whose last read lacked the
+    /// project's types reads the form again (#76: opened before the C# host had the project, or before the restore), and
+    /// the active designer asks again for the project's own controls, which a compilation from before the restore lacked
+    /// (off Windows, Windows Forms' reference pack comes with the restore, and the C# service is ready before it). Only
+    /// on that change: the service is also ready after each pass over the diagnostics (each edit, each change in the
+    /// designer), which changes no project.
     /// </summary>
     internal void OnWinFormsLanguageStatus(string languageId, WorkspaceStatusParams status)
     {
@@ -104,9 +132,37 @@ public sealed partial class ShellHost
 
         var was = _winFormsCSharpState;
         _winFormsCSharpState = status.State;
-        if (status.State == WorkspaceStates.Ready && was != WorkspaceStates.Ready && Layout.ActiveDocument is WinFormsDesignerDocument designer)
+        if (status.State != WorkspaceStates.Ready || was == WorkspaceStates.Ready)
+        {
+            return;
+        }
+
+        if (status.Projects > 0)
+        {
+            foreach (var document in Layout.Documents.OfType<WinFormsDesignerDocument>().ToList())
+            {
+                _ = document.ReadAgainIfPartialAsync();
+            }
+        }
+
+        if (Layout.ActiveDocument is WinFormsDesignerDocument designer)
         {
             _ = designer.LoadToolboxAsync();
+        }
+    }
+
+    /// <summary>
+    /// A build finished (#66): the active designer loads its form on the new build when the build replaced what its host
+    /// loaded (the others check when they become active). Whatever the result: a failed or canceled build may have
+    /// replaced the app's or a referenced library's assembly before it stopped, and the check skips builds that changed
+    /// nothing. A designer whose start failed starts again after a successful build. The designer's own build before
+    /// its host starts is checked once the start is over.
+    /// </summary>
+    internal void OnWinFormsBuildFinished(Codalus.Workbench.Build.BuildCompleted completed)
+    {
+        if (Layout.ActiveDocument is WinFormsDesignerDocument designer)
+        {
+            _ = designer.ReloadIfOutdatedAsync(completed.Result.Succeeded && !completed.Result.Canceled ? completed.Number : null);
         }
     }
 

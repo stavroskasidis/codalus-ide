@@ -2,6 +2,7 @@ using System.Collections;
 using System.ComponentModel;
 using System.ComponentModel.Design;
 using System.ComponentModel.Design.Serialization;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.Reflection;
@@ -42,12 +43,19 @@ internal sealed partial class DesignerSession : IDisposable
     private string _className = string.Empty;
     private string[] _searchFolders = [];
     private string? _phase;
+    private readonly DesignerUIService _ui;
+
+    /// <summary>The name the IDE chose for the component a Toolbox item creates next (#66), with its type: the name service gives it once.</summary>
+    private (string Name, Type Type)? _pendingName;
 
     public DesignerSession(HostWindow window)
     {
         _window = window;
         _values = new DesignerValues(_types, Target, NameOf, Resource);
+        _ui = new DesignerUIService(window);
         _services.AddService(typeof(INameCreationService), new NameCreation(this));
+        _services.AddService(typeof(IUIService), _ui);
+        _services.AddService(typeof(ITypeResolutionService), new DesignerTypeResolution(_types));
     }
 
     private IDesignerHost Host => _host ?? throw new InvalidOperationException("No form is loaded.");
@@ -101,6 +109,9 @@ internal sealed partial class DesignerSession : IDisposable
             project = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => !a.IsDynamic && string.Equals(a.Location, parameters.ProjectAssembly, StringComparison.OrdinalIgnoreCase))
                 ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(parameters.ProjectAssembly);
             _types.Add(project);
+
+            // The IDE's Windows Forms Designer output: where the project came from (#66: the shell's copy of the build output, not bin/).
+            Console.Error.WriteLine($"[designer] {project.GetName().Name} loaded from {project.Location}");
         }
         else
         {
@@ -361,9 +372,10 @@ internal sealed partial class DesignerSession : IDisposable
         {
             using var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
             root.DrawToBitmap(bitmap, new Rectangle(0, 0, width, height));
+            var restacked = Restack(bitmap, root);
             using var png = new MemoryStream();
             bitmap.Save(png, ImageFormat.Png);
-            frame = new DesignerFrame(Convert.ToBase64String(png.ToArray()), width, height);
+            frame = new DesignerFrame(Convert.ToBase64String(png.ToArray()), width, height, restacked);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.Runtime.InteropServices.ExternalException)
         {
@@ -374,6 +386,104 @@ internal sealed partial class DesignerSession : IDisposable
     }
 
     private static Point WindowOrigin(Control control) => control.Parent is { } parent ? parent.PointToScreen(control.Location) : control.Location;
+
+    /// <summary>
+    /// Draws overlapping controls again, back to front, over the first pass (#78), and says how many it drew.
+    /// Control.DrawToBitmap draws a container's controls in reverse order (its documented limitation: "Controls inside
+    /// containers are rendered in reverse order"), so of two overlapping siblings the front one came out behind: the
+    /// 2026-10-18 smoke picture showed a button dropped on the counter control under the counter's own "+1", and Send
+    /// to Back seemed to bring a control to the front. Only siblings that overlap are drawn again, each by its own
+    /// DrawToBitmap copied pixel for pixel, at every depth (a group box's, a panel's, a tab page's, a split container
+    /// panel's controls), placed as <see cref="Views"/> places them. A form without overlaps draws nothing more (0), so
+    /// its frame is the first pass's.
+    /// </summary>
+    private static int Restack(Bitmap bitmap, Control root)
+    {
+        var origin = WindowOrigin(root);
+        var client = root.PointToScreen(Point.Empty);
+        Graphics? graphics = null;
+        try
+        {
+            return Restack(bitmap, root, origin, new Rectangle(client.X - origin.X, client.Y - origin.Y, root.ClientSize.Width, root.ClientSize.Height), ref graphics);
+        }
+        finally
+        {
+            graphics?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Restack(Bitmap, Control)"/> in <paramref name="parent"/>: its visible controls from the back (the last
+    /// in Controls) to the front, each one that overlaps a sibling drawn again inside the parent's client area (and
+    /// <paramref name="clip"/>, its ancestors'), and each one with controls of its own looked into right after it is
+    /// (drawn again or not), before the siblings in front of it. Which are drawn again, and in what order, is
+    /// <see cref="Restacking.BackToFront"/>.
+    /// </summary>
+    private static int Restack(Bitmap bitmap, Control parent, Point origin, Rectangle clip, ref Graphics? graphics)
+    {
+        var children = new List<Control>();
+        var bounds = new List<Rectangle>();
+        foreach (Control child in parent.Controls)
+        {
+            if (child.Visible && child.Width > 0 && child.Height > 0)
+            {
+                var at = WindowOrigin(child);
+                children.Add(child);
+                bounds.Add(new Rectangle(at.X - origin.X, at.Y - origin.Y, child.Width, child.Height));
+            }
+        }
+
+        var client = parent.PointToScreen(Point.Empty);
+        var area = Rectangle.Intersect(clip, new Rectangle(client.X - origin.X, client.Y - origin.Y, parent.ClientSize.Width, parent.ClientSize.Height));
+        if (children.Count == 0 || area.IsEmpty)
+        {
+            return 0;
+        }
+
+        var restacked = 0;
+        foreach (var (index, redraw) in Restacking.BackToFront(bounds, area))
+        {
+            var child = children[index];
+            if (redraw && Redraw(bitmap, child, bounds[index], area, ref graphics))
+            {
+                restacked++;
+            }
+
+            if (child.Controls.Count > 0)
+            {
+                restacked += Restack(bitmap, child, origin, area, ref graphics);
+            }
+        }
+
+        return restacked;
+    }
+
+    /// <summary>
+    /// Draws <paramref name="child"/> again at <paramref name="bounds"/>, inside <paramref name="area"/>, as the first pass
+    /// drew it (the child's own WM_PRINT), copied without scaling or blending: a transparent control shows its parent, not
+    /// the siblings behind it, as at run time. A child that can't be drawn alone (GDI+ refuses a bitmap that large, or
+    /// runs out of memory for it) keeps the first pass's pixels, out of order, and the frame stays; false then.
+    /// </summary>
+    private static bool Redraw(Bitmap bitmap, Control child, Rectangle bounds, Rectangle area, ref Graphics? graphics)
+    {
+        try
+        {
+            using var drawn = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+            child.DrawToBitmap(drawn, new Rectangle(0, 0, bounds.Width, bounds.Height));
+            graphics ??= Graphics.FromImage(bitmap);
+            graphics.CompositingMode = CompositingMode.SourceCopy;
+            graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+            graphics.PixelOffsetMode = PixelOffsetMode.Half;
+            graphics.SetClip(area);
+            graphics.DrawImage(drawn, bounds, 0, 0, bounds.Width, bounds.Height, GraphicsUnit.Pixel);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.Runtime.InteropServices.ExternalException or OutOfMemoryException)
+        {
+            Console.Error.WriteLine($"[designer] {child.Name} ({bounds.Width}x{bounds.Height}) couldn't be drawn again in its order: {ex.Message}");
+            return false;
+        }
+    }
 
     /// <summary>
     /// The root, its controls (front first, parents before children; a SplitContainer's panels as parts), the tool
@@ -636,6 +746,17 @@ internal sealed partial class DesignerSession : IDisposable
         return [Index(table.GetColumnWidths(), at.X), Index(table.GetRowHeights(), at.Y)];
     }
 
+    /// <summary>
+    /// A Toolbox item, created as the classic IDE creates it (#66), for every gesture: the type's Toolbox item, named
+    /// as the IDE chose, created by the container designer's <c>CreateToolCore</c>. A drop or a drawing goes to the
+    /// designer of the container under the point, at that point (in screen coordinates, as the drag and drop handler
+    /// takes it) and drawn size; the Toolbox's double-click or Enter goes to the selection's container (as
+    /// DocumentDesigner's tool pick does: the primary selection, else the first selected control, walked up to a
+    /// container designer, else the form's) at its default place. The container may route it (a tab control to its
+    /// selected page, a split container to its panel), and the designers' defaults apply (a label sizes itself to its
+    /// text, a split container fills an empty container, the first menu strip becomes the form's main menu);
+    /// components that aren't controls go to the tray. What a designer refused comes back as the change's error.
+    /// </summary>
     public DesignerChangeResult Create(DesignerCreateParams parameters)
     {
         var before = Capture();
@@ -645,27 +766,117 @@ internal sealed partial class DesignerSession : IDisposable
             throw new InvalidOperationException($"The form already has a component named {parameters.Name}.");
         }
 
-        var component = Host.CreateComponent(type, parameters.Name);
-        if (Host.GetDesigner(component) is IComponentInitializer initializer)
+        var tool = ToolInvoker.ToolFor(type, _types);
+        ParentControlDesigner designer;
+        Point screen = default;
+        Size size = default;
+        var hasSize = false;
+        if (parameters.AtDefaultLocation)
         {
-            // As the Toolbox's creation does: the designer sets its defaults (a button's Text is its name).
-            initializer.InitializeNewComponent(new Hashtable());
+            designer = SelectedParentDesigner(parameters.Selected);
         }
-
-        if (component is Control control and not ToolStripDropDown)
+        else
         {
             var (parent, _, _) = Parent(parameters.Parent);
-            var siblings = parent.Controls.Cast<Control>().Where(c => !ReferenceEquals(c, control)).ToList();
-            AddTo(parent, control, ClientPoint(parent, parameters.X, parameters.Y));
+            designer = Host.GetDesigner(parent) as ParentControlDesigner ?? throw new InvalidOperationException($"{parameters.Parent} can't contain controls.");
+            var origin = WindowOrigin(Root);
+            screen = new Point(origin.X + (int)Math.Round(parameters.X), origin.Y + (int)Math.Round(parameters.Y));
             if (parameters is { Width: { } width, Height: { } height } && width >= 1 && height >= 1)
             {
-                control.Size = new Size((int)Math.Round(width), (int)Math.Round(height));
+                size = new Size((int)Math.Round(width), (int)Math.Round(height));
+                hasSize = true;
+            }
+        }
+
+        _ui.Clear();
+        _pendingName = (parameters.Name, type);
+        string? failure = null;
+        try
+        {
+            ToolInvoker.Create(designer, tool, screen.X, screen.Y, size.Width, size.Height, hasLocation: !parameters.AtDefaultLocation, hasSize);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            failure = ex.Message;
+            Console.Error.WriteLine($"[designer] {parameters.Type} couldn't be created: {ex}");
+        }
+        finally
+        {
+            _pendingName = null;
+        }
+
+        var component = Host.Container.Components[parameters.Name] ?? Host.Container.Components.Cast<IComponent>().FirstOrDefault(c => !before.Components.ContainsKey(c.Site?.Name ?? string.Empty) && c.GetType() == type);
+        if (component is null)
+        {
+            var reason = _ui.Messages.Count > 0 ? string.Join(" ", _ui.Messages) : failure ?? $"The designer didn't create {type.Name}.";
+            return Result(before) with { Error = reason };
+        }
+
+        if (component.Site is { } site && site.Name != parameters.Name)
+        {
+            // A Toolbox item that named it itself: the IDE's name, which the code will use.
+            site.Name = parameters.Name;
+        }
+
+        if (component is Control control and not ToolStripDropDown && control.Parent is { } parentControl)
+        {
+            if (!parameters.AtDefaultLocation && parentControl is TableLayoutPanel table)
+            {
+                // A drop on a table: the cell under the point (a double-click takes the table's first free cell).
+                var cell = CellAt(table, ClientPoint(table, parameters.X, parameters.Y));
+                table.SetCellPosition(control, new TableLayoutPanelCellPosition(cell[0], cell[1]));
             }
 
+            var siblings = parentControl.Controls.Cast<Control>().Where(c => !ReferenceEquals(c, control)).ToList();
             control.TabIndex = siblings.Count == 0 ? 0 : siblings.Max(c => c.TabIndex) + 1;
         }
 
+        // TODO(issue): insert a control dropped on a FlowLayoutPanel at the insertion point under the cursor, as the classic FlowLayoutPanelDesigner does.
         return Result(before, created: parameters.Name);
+    }
+
+    /// <summary>
+    /// The container designer a Toolbox double-click or Enter creates in, as DocumentDesigner's tool pick finds it: the
+    /// primary selection if it is a control, else the first selected control, walked up to the first control whose
+    /// designer takes controls (no CanParent filter); else the form's. The design surface's selection becomes the IDE's,
+    /// since the container designer places the control by its primary selection.
+    /// </summary>
+    private ParentControlDesigner SelectedParentDesigner(IReadOnlyList<string> selected)
+    {
+        var components = new List<IComponent>();
+        foreach (var name in selected)
+        {
+            IComponent? component;
+            try
+            {
+                component = name.Contains('.', StringComparison.Ordinal) ? Parent(name).Control : Target(name) as IComponent;
+            }
+            catch (InvalidOperationException)
+            {
+                component = null;
+            }
+
+            if (component is not null && !components.Contains(component))
+            {
+                components.Add(component);
+            }
+        }
+
+        if (_surface?.GetService(typeof(ISelectionService)) is ISelectionService selection)
+        {
+            selection.SetSelectedComponents(components.Count > 0 ? components.ToArray() : [Root], SelectionTypes.Replace);
+        }
+
+        var start = components.FirstOrDefault() as Control ?? components.OfType<Control>().FirstOrDefault();
+        for (var control = start; control is not null; control = ReferenceEquals(control, Root) ? null : control.Parent)
+        {
+            if (Host.GetDesigner(control) is ParentControlDesigner designer)
+            {
+                return designer;
+            }
+        }
+
+        return Host.GetDesigner(Root) as ParentControlDesigner ?? throw new InvalidOperationException("The form's designer can't contain controls.");
     }
 
     public DesignerChangeResult SetProperties(DesignerSetPropertiesParams parameters)

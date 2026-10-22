@@ -91,8 +91,12 @@ public sealed record DesignerLoadParams(DesignerModel Model, string ProjectAssem
 /// <summary>A <c>.resx</c> file's text and its culture (empty: the default resources).</summary>
 public sealed record DesignerResourceText(string Culture, string Text);
 
-/// <summary>A drawn surface: a PNG (base64) of the root as it shows at design time, in pixels (96 DPI, 1 pixel per unit of the code).</summary>
-public sealed record DesignerFrame(string Png, int Width, int Height);
+/// <summary>
+/// A drawn surface: a PNG (base64) of the root as it shows at design time, in pixels (96 DPI, 1 pixel per unit of the
+/// code). <see cref="Restacked"/> counts the controls drawn again, back to front, because they overlap a sibling (#78:
+/// Control.DrawToBitmap draws a container's controls in reverse order); 0 when none overlap, and from an older host.
+/// </summary>
+public sealed record DesignerFrame(string Png, int Width, int Height, int Restacked = 0);
 
 /// <summary>
 /// A component on the surface: its bounds in the frame (<see cref="X"/>…), its parent control's name (null for the
@@ -162,12 +166,28 @@ public sealed record DesignerComponentView(string Name, string Type, string? Par
 /// <summary>The surface after a load or a change: its frame, its components (in z-order, front first, parents before children), and what went wrong.</summary>
 public sealed record DesignerRenderResult(DesignerFrame? Frame, DesignerComponentView[] Components, string[] Errors);
 
-/// <summary>A component to create from the Toolbox: its type, name, parent (null: the root), where it was dropped (in the frame) and the size it was drawn at, if any.</summary>
+/// <summary>
+/// A component to create from the Toolbox: its type, name, parent (null: the root), where it was dropped (in the frame)
+/// and the size it was drawn at, if any. The host creates it as the classic IDE does (#66): through the type's Toolbox
+/// item and the container designer's CreateTool, so a container routes it (a tab control to its selected page) and the
+/// designers' defaults apply (a label sizes itself to its text, the first menu strip becomes the form's main menu).
+/// </summary>
 public sealed record DesignerCreateParams(string Type, string Name, string? Parent, double X, double Y)
 {
     public double? Width { get; init; }
 
     public double? Height { get; init; }
+
+    /// <summary>
+    /// The Toolbox's double-click or Enter (#66): into the container of <see cref="Selected"/> (walked up to one that
+    /// takes controls, else the form), at its default location (the container's top-left corner when it's selected
+    /// itself, else a grid step below and right of the selected control). Parent, Width and Height are ignored; X and Y
+    /// are the form's client origin, so a host that doesn't know this field puts the control at the form's top-left.
+    /// </summary>
+    public bool AtDefaultLocation { get; init; }
+
+    /// <summary>The IDE's selection, the primary selection first (for <see cref="AtDefaultLocation"/>).</summary>
+    public string[] Selected { get; init; } = [];
 }
 
 /// <summary>A new component as the code must say it: what the C# host's <c>addComponent</c> edit takes.</summary>

@@ -73,6 +73,10 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     private readonly ShellHost _shell;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <summary>Canceled when the designer closes (or the IDE exits): a wait for a build, the designer's own build, the copy and the host's start stop.</summary>
+    private readonly CancellationTokenSource _closing = new();
+    private readonly CancellationToken _closed;
     private readonly List<CodeDocument> _resourceModels = [];
     private readonly Dictionary<CodeDocument, int> _expectedResources = [];
     private readonly List<(CodeDocument Model, int Version)[]> _undo = [];
@@ -92,11 +96,21 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     private string _status;
     private string? _problems;
     private bool _isBusy;
+    private bool _isRestarting;
     private bool _disposed;
+    private HostFailure? _hostFailure;
+
+    /// <summary>
+    /// A start or restart that left the designer without a host (#66: the designer's build failed, a file of the output
+    /// was held, the host didn't get ready): the number of the last build that had ended, and the target's assemblies
+    /// as they were then (<see cref="WinFormsDesignerService.OutputStamp"/>).
+    /// </summary>
+    private sealed record HostFailure(long Build, Task<string> Output);
 
     public WinFormsDesignerDocument(ShellHost shell, string codePath)
     {
         _shell = shell;
+        _closed = _closing.Token;
         CodePath = codePath;
         DesignerPath = codePath[..^".cs".Length] + ".Designer.cs";
         Id = IdFor(codePath);
@@ -155,6 +169,12 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>How many frames have arrived (tests).</summary>
     public int FrameCount { get; private set; }
 
+    /// <summary>How many controls the host drew again in the last frame because they overlap a sibling (#78; tests and the smoke test).</summary>
+    internal int FrameRestacked { get; private set; }
+
+    /// <summary>The C# host's last read of the form (tests).</summary>
+    internal WinFormsReadResult? LastRead => _read;
+
     /// <summary>The surface's components: the root first, then controls (front first, parents before children), then non-visual components.</summary>
     public IReadOnlyList<DesignerComponentView> Components => _components;
 
@@ -194,6 +214,16 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         private set => SetProperty(ref _isBusy, value);
     }
 
+    /// <summary>
+    /// The designer host is starting again (#66: after a build replaced the form's output, or Refresh): the surface
+    /// takes no gestures meanwhile, and the Toolbox's and the Properties window's changes wait and apply on the new host.
+    /// </summary>
+    public bool IsRestarting
+    {
+        get => _isRestarting;
+        private set => SetProperty(ref _isRestarting, value);
+    }
+
     /// <summary>The surface changed (a frame, the components, the selection): the view draws again.</summary>
     public event EventHandler? SurfaceChanged;
 
@@ -214,16 +244,36 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             _designerCode.PropertyChanged += OnDesignerCodePropertyChanged;
             await HoldResourcesAsync().ConfigureAwait(true);
             IsModified = _designerCode.IsModified || _resourceModels.Any(m => m.IsModified);
-            if (!await ReadAsync(closeOnProblem: true).ConfigureAwait(true))
+            if (_disposed)
             {
                 return;
             }
 
-            await StartHostAsync().ConfigureAwait(true);
+            // The first start holds the gate like a restart: a reload, a check after a build or a change made meanwhile waits for it.
+            await _gate.WaitAsync().ConfigureAwait(true);
+            try
+            {
+                if (_disposed || !await ReadAsync(closeOnProblem: true).ConfigureAwait(true))
+                {
+                    return;
+                }
+
+                await StartHostAsync().ConfigureAwait(true);
+            }
+            finally
+            {
+                NoteHostState();
+                ReleaseGate();
+            }
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+            // Closed while it waited for a build, built or started: nothing more to do.
         }
         catch (PreviewerException ex)
         {
             Status = ex.Message;
+            _shell.WinFormsDesignerLog.AppendLine(ex.Message);
         }
         catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -236,14 +286,38 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
     }
 
-    /// <summary>Reads the model from the code. Code it can't read: the first time, the file opens as code with the reason (as Visual Studio does); later, the designer says so.</summary>
-    private async Task<bool> ReadAsync(bool closeOnProblem)
+    /// <summary>
+    /// After a start, a restart or a reload with the gate held: without a host (and still open), what the next build's
+    /// end or activation compares to start it again (<see cref="ReloadIfOutdatedAsync"/>); with one, nothing.
+    /// </summary>
+    private void NoteHostState()
     {
-        Status = Localizer.Format("msg.winFormsDesigner.reading", "Reading {0}…", System.IO.Path.GetFileName(DesignerPath));
+        if (_disposed || _host is not null)
+        {
+            _hostFailure = null;
+            return;
+        }
+
+        var target = _target;
+        _hostFailure = new HostFailure(_shell.Builds.LastBuild?.Number ?? 0, Task.Run(() => WinFormsDesignerService.OutputStamp(target)));
+    }
+
+    /// <summary>
+    /// Reads the model from the code. Code it can't read: the first time, the file opens as code with the reason (as the
+    /// classic IDE does); later, the designer says so. <paramref name="quiet"/>: the status says nothing while it reads (a
+    /// read again in the background keeps what the status said, such as why the host didn't start).
+    /// </summary>
+    private async Task<bool> ReadAsync(bool closeOnProblem, bool quiet = false)
+    {
+        if (!quiet)
+        {
+            Status = Localizer.Format("msg.winFormsDesigner.reading", "Reading {0}…", System.IO.Path.GetFileName(DesignerPath));
+        }
+
         var client = await _shell.Languages.ClientAsync(ShellHost.CSharpLanguageId).ConfigureAwait(true)
             ?? throw new PreviewerException(Localizer.Get("msg.winFormsDesigner.noCSharp", "The C# language service isn't available: the designer reads the form through it."));
         var version = _designerCode!.Version;
-        var read = await client.WinFormsReadAsync(new WinFormsReadParams(new TextDocumentIdentifier(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(CodePath))) { ResourceFiles = HeldResourceFiles() }, CancellationToken.None).ConfigureAwait(true)
+        var read = await client.WinFormsReadAsync(new WinFormsReadParams(new TextDocumentIdentifier(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(CodePath))) { ResourceFiles = HeldResourceFiles() }, _closed).ConfigureAwait(true)
             ?? throw new PreviewerException(Localizer.Get("msg.winFormsDesigner.noAnswer", "The C# language service didn't read the form."));
         _read = read;
         if (read.Model is not { } model)
@@ -273,8 +347,26 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     private async Task StartHostAsync()
     {
-        _target = await _shell.WinFormsDesigner.ResolveAsync(CodePath, CancellationToken.None).ConfigureAwait(true);
-        var host = await _shell.WinFormsDesigner.StartAsync(_target, message => Ui.Post(() => Status = message), CancellationToken.None).ConfigureAwait(true);
+        // Canceled when the designer closes: a wait for a running build, the designer's own build, the copy of the output and the host's start.
+        _target = await _shell.WinFormsDesigner.ResolveAsync(CodePath, _closed).ConfigureAwait(true);
+
+        // The start's progress shows while it runs: a message posted just before the start failed doesn't hide the reason.
+        var starting = true;
+        IWinFormsDesignerHost host;
+        try
+        {
+            host = await _shell.WinFormsDesigner.StartAsync(_target, message => Ui.Post(() =>
+            {
+                if (starting && !_disposed)
+                {
+                    Status = message;
+                }
+            }), _closed).ConfigureAwait(true);
+        }
+        finally
+        {
+            starting = false;
+        }
         if (_disposed)
         {
             await host.DisposeAsync().ConfigureAwait(true);
@@ -286,6 +378,9 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         host.Restarted += (_, _) => Ui.Post(() => _ = ReloadAsync(restartHost: false));
         await LoadFormAsync().ConfigureAwait(true);
         _ = LoadToolboxAsync();
+
+        // A build that ended while the host started (after its copy was made): checked once the gate is free.
+        Ui.Post(() => _ = ReloadIfOutdatedAsync());
     }
 
     private async Task LoadFormAsync()
@@ -312,6 +407,18 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     /// <summary>The designer's newest request for the Toolbox's project items (tests).</summary>
     internal Task ToolboxLoad => _toolboxLoad;
+
+    /// <summary>Waits until what holds or waits for the designer's gate now (a start, a reload, a read again, a change) is done (tests).</summary>
+    internal async Task WhenIdleAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        await _gate.WaitAsync().ConfigureAwait(true);
+        ReleaseGate();
+    }
 
     /// <summary>
     /// Asks the C# host for the project's own controls and components, for the Toolbox: when the designer has started,
@@ -347,24 +454,52 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
     }
 
-    /// <summary>The code changed (typed, undone, another tool): read it again and load the form from it.</summary>
+    /// <summary>The code changed (typed, undone, another tool): read it again and load the form from it (Refresh: on a new designer host).</summary>
     public async Task ReloadAsync(bool restartHost)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         await _gate.WaitAsync().ConfigureAwait(true);
         try
         {
-            if (_disposed || _designerCode is null)
+            await ReloadCoreAsync(restartHost).ConfigureAwait(true);
+        }
+        finally
+        {
+            ReleaseGate();
+        }
+    }
+
+    /// <summary><see cref="ReloadAsync"/> with the gate held.</summary>
+    private async Task ReloadCoreAsync(bool restartHost)
+    {
+        if (_disposed || _designerCode is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (restartHost)
             {
-                return;
+                IsRestarting = true;
+                IsBusy = true;
+                if (_host is { } old)
+                {
+                    _host = null;
+                    await old.DisposeAsync().ConfigureAwait(true);
+                }
+
+                if (_disposed)
+                {
+                    return; // closed while the old host stopped
+                }
             }
 
-            if (restartHost && _host is not null)
-            {
-                await _host.DisposeAsync().ConfigureAwait(true);
-                _host = null;
-            }
-
-            if (!await ReadAsync(closeOnProblem: false).ConfigureAwait(true))
+            if (!await ReadAsync(closeOnProblem: false).ConfigureAwait(true) || _disposed)
             {
                 return;
             }
@@ -377,16 +512,167 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             {
                 await LoadFormAsync().ConfigureAwait(true);
             }
+
+            if (restartHost)
+            {
+                // The Properties window shows the new host's values.
+                PropertiesChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+            // Closed while the host started again.
         }
         catch (PreviewerException ex)
         {
             Status = ex.Message;
+            _shell.WinFormsDesignerLog.AppendLine(ex.Message);
         }
         catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or IOException or InvalidOperationException)
         {
             Status = Localizer.Format("msg.winFormsDesigner.failed", "The designer failed: {0}", ex.Message);
+            _shell.WinFormsDesignerLog.AppendLine(ex.ToString());
         }
         finally
+        {
+            if (restartHost)
+            {
+                IsRestarting = false;
+                IsBusy = false;
+            }
+
+            NoteHostState();
+        }
+    }
+
+    /// <summary>
+    /// After a build, or when the designer becomes the active document (#66): when the build replaced what the host
+    /// loaded (the app's or a referenced library's assemblies, not content written into the output), the form loads on
+    /// a new host, so the project's own controls show their changes. The check runs with the gate held, so however
+    /// many triggers come (a build's end and an activation in the same turn), the host starts again once: the next
+    /// check sees the new host's copy, which is current. Unsaved designer changes stay (the form is read from the
+    /// editor's text).
+    /// A designer left without a host by a start that failed (its build failed, a file was held, the host didn't get
+    /// ready) starts again after the next successful build that ended after the failure (<paramref name="build"/>, the
+    /// build's number), or when it becomes active and the target's assemblies changed since (a build in another tab or
+    /// outside the IDE): not on every activation, which would build again a project that doesn't build.
+    /// </summary>
+    internal async Task ReloadIfOutdatedAsync(long? build = null)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        await _gate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (_host is { } host)
+            {
+                if (!await host.IsOutdatedAsync(CancellationToken.None).ConfigureAwait(true) || _disposed)
+                {
+                    return;
+                }
+
+                Status = Localizer.Format("msg.winFormsDesigner.reloadingAfterBuild", "The project was built: loading {0} on the new build…", System.IO.Path.GetFileName(CodePath));
+                _shell.WinFormsDesignerLog.AppendLine($"A build replaced {System.IO.Path.GetFileName(_target?.HostAssembly ?? _target?.ProjectAssembly)}: loading {System.IO.Path.GetFileName(CodePath)} on a new designer host.");
+                await ReloadCoreAsync(restartHost: true).ConfigureAwait(true);
+            }
+            else if (_hostFailure is { } failure && _designerCode is not null && _model is not null)
+            {
+                var built = build is { } number && number > failure.Build;
+                if (!built)
+                {
+                    var target = _target;
+                    var now = await Task.Run(() => WinFormsDesignerService.OutputStamp(target)).ConfigureAwait(true);
+                    if (now == await failure.Output.ConfigureAwait(true) || _disposed)
+                    {
+                        return;
+                    }
+                }
+
+                Status = Localizer.Format("msg.winFormsDesigner.startingAfterBuild", "The project was built: starting the designer for {0} again…", System.IO.Path.GetFileName(CodePath));
+                _shell.WinFormsDesignerLog.AppendLine(built
+                    ? $"A build ended after the designer for {System.IO.Path.GetFileName(CodePath)} failed to start: starting it again."
+                    : $"{System.IO.Path.GetFileName(_target?.HostAssembly ?? _target?.ProjectAssembly)} changed after the designer for {System.IO.Path.GetFileName(CodePath)} failed to start: starting it again.");
+                await ReloadCoreAsync(restartHost: true).ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            ReleaseGate();
+        }
+    }
+
+    /// <summary>
+    /// The C# service has loaded the projects (#76): a form read without all of its project's types (from Miscellaneous
+    /// Files before the C# host had the project, or before the restore) is read again and loads again on its host. It
+    /// never starts a host: a start in progress holds the gate (and then loads the new model), and a start that failed
+    /// starts again after the next build (<see cref="ReloadIfOutdatedAsync"/>), so a project that doesn't build isn't
+    /// built again on every load. Only a complete read returns at once: a first read still on its way (it holds the
+    /// gate) may have been made before the projects loaded, so it's waited for and read again if it's partial.
+    /// </summary>
+    internal Task ReadAgainIfPartialAsync() => _disposed || _read is { IsPartial: false } ? Task.CompletedTask : ReadAgainCoreAsync();
+
+    private async Task ReadAgainCoreAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            // Nothing read (the first read hasn't started, and will be made with the projects loaded, or it failed), or complete.
+            if (_disposed || _designerCode is null || _read is not { IsPartial: true })
+            {
+                return;
+            }
+
+            _shell.WinFormsDesignerLog.AppendLine($"The C# service loaded the projects: reading {System.IO.Path.GetFileName(CodePath)} again (its last read lacked the project's types).");
+
+            // Quietly: without a host (its start failed) the status keeps the failure's reason. A form that turns out not to
+            // be designable says why in the status and stays open.
+            if (!await ReadAsync(closeOnProblem: false, quiet: true).ConfigureAwait(true) || _disposed)
+            {
+                return;
+            }
+
+            if (_host is not null)
+            {
+                await LoadFormAsync().ConfigureAwait(true);
+            }
+
+            _ = LoadToolboxAsync();
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+            // Closed while it read.
+        }
+        catch (PreviewerException ex)
+        {
+            Status = ex.Message;
+            _shell.WinFormsDesignerLog.AppendLine(ex.Message);
+        }
+        catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or IOException or InvalidOperationException)
+        {
+            Status = Localizer.Format("msg.winFormsDesigner.failed", "The designer failed: {0}", ex.Message);
+            _shell.WinFormsDesignerLog.AppendLine(ex.ToString());
+        }
+        finally
+        {
+            ReleaseGate();
+        }
+    }
+
+    /// <summary>The designer became the active document: a build made meanwhile (in another tab, outside the IDE) shows now; a running build's end will tell.</summary>
+    internal Task OnActivatedAsync() => _shell.WinFormsDesigner.IsBuilding() ? Task.CompletedTask : ReloadIfOutdatedAsync();
+
+    /// <summary>Lets the next change in (a designer closed meanwhile has let go of its gate).</summary>
+    private void ReleaseGate()
+    {
+        if (!_disposed)
         {
             _gate.Release();
         }
@@ -438,6 +724,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             old?.Dispose();
             FrameWidth = frame.Width;
             FrameHeight = frame.Height;
+            FrameRestacked = frame.Restacked;
             FrameCount++;
         }
 
@@ -676,6 +963,35 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         _shell.Toolbox.Disarm();
     }
 
+    /// <summary>
+    /// The Toolbox's double-click or Enter (#66), as the classic IDE's tool pick: the item goes into the selected
+    /// container (the selection's, walked up to one that takes controls, else the form) at its default place (its
+    /// top-left corner, or a grid step below and right of the selected control, so repeated adds cascade), and is
+    /// selected; then the designer is activated with its surface focused, so the arrow keys, Delete and F4 act on it.
+    /// Nothing in tab order mode, as there. During a restart it waits and applies on the new host.
+    /// </summary>
+    public async Task AddFromToolboxAsync(string type)
+    {
+        if (_model is null || IsTabOrderMode)
+        {
+            return;
+        }
+
+        string? name = null;
+        await RunAsync(host =>
+        {
+            // Named once the host is there: a restart in between may have loaded other components.
+            name = NewName(type);
+            var root = Root;
+            return host.CreateAsync(new DesignerCreateParams(type, name, null, root?.ClientX ?? 0, root?.ClientY ?? 0) { AtDefaultLocation = true, Selected = [.. _selection] }, CancellationToken.None);
+        }, after: () => SetSelection([name!], notify: true)).ConfigureAwait(true);
+        _shell.Toolbox.Disarm();
+        if (!_disposed)
+        {
+            _shell.Layout.OpenDocument(this, preview: false, focus: true);
+        }
+    }
+
     /// <summary>Visual Studio's name for a new component: its type's name, first letter lowercased, and the first free number (<c>button1</c>).</summary>
     public string NewName(string type)
     {
@@ -704,15 +1020,28 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// </summary>
     private async Task RunAsync(Func<IWinFormsDesignerHost, Task<DesignerChangeResult>> change, Action? after = null)
     {
-        if (_host is not { } host || _designerCode is null || _model is null)
+        if (_disposed)
         {
             return;
         }
 
+        // A change made while the host starts (again) waits here, then applies on the new host (#66).
         await _gate.WaitAsync().ConfigureAwait(true);
+        var busy = false;
         try
         {
-            IsBusy = true;
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (_host is not { } host || _designerCode is null || _model is null)
+            {
+                Status = Localizer.Get("msg.winFormsDesigner.notReady", "The designer isn't running, so the change wasn't made: see the Windows Forms Designer output, or click Load the form again on the designer's toolbar.");
+                return;
+            }
+
+            IsBusy = busy = true;
             var result = await change(host).ConfigureAwait(true);
             if (result.Error is { } error)
             {
@@ -742,8 +1071,12 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
         finally
         {
-            IsBusy = false;
-            _gate.Release();
+            if (busy)
+            {
+                IsBusy = false;
+            }
+
+            ReleaseGate();
         }
     }
 
@@ -1382,6 +1715,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
 
         _disposed = true;
+        _closing.Cancel();
         _reload?.Cancel();
         if (_designerCode is { } model)
         {
@@ -1406,9 +1740,29 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         Dispose();
     }
 
+    /// <summary>
+    /// The IDE exits (#66): the designer host stops and its copy of the build output goes. Nothing else is let go (the
+    /// process is ending), and nothing here needs the UI thread, which waits for the exit.
+    /// </summary>
+    internal ValueTask ShutDownAsync()
+    {
+        if (_disposed)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        _disposed = true;
+        _closing.Cancel();
+        _reload?.Cancel();
+        var host = _host;
+        _host = null;
+        return host?.DisposeAsync() ?? ValueTask.CompletedTask;
+    }
+
     public void Dispose()
     {
         _reload?.Dispose();
+        _closing.Dispose();
         _gate.Dispose();
     }
 }
@@ -1421,6 +1775,11 @@ public sealed record ToolboxItemViewModel(string Name, string Type, string Categ
     public string? Description { get; init; }
 
     public string ToolTip => IsPointer ? Name : Description is { } description ? $"{Type}\n{description}" : Type;
+
+    /// <summary>What the item does, for a screen reader (#66): the Pointer only cancels the armed item; the others are added, armed or dragged.</summary>
+    public string HelpText => IsPointer
+        ? Localizer.Get("msg.toolbox.pointerHelp", "Click it, or press Enter or Space, to cancel the armed item: a click on the form then selects.")
+        : Localizer.Get("msg.toolbox.itemHelp", "Double-click it or press Enter to add it to the form. Click it or press Space, then click or drag on the form. Or drag it onto the form.");
 }
 
 public sealed class ToolboxCategoryViewModel(string title, IReadOnlyList<ToolboxItemViewModel> items) : ObservableObject
@@ -1441,7 +1800,8 @@ public sealed class ToolboxCategoryViewModel(string title, IReadOnlyList<Toolbox
 /// <summary>
 /// The Toolbox (Ctrl+Alt+X, M41a): Windows Forms' common controls by Visual Studio's categories, and the project's own
 /// controls and components (from the C# host). Selecting an item arms it: the next click or drag on the designer's
-/// surface creates it there (the Pointer, or creating it, disarms). Items can also be dragged onto the surface.
+/// surface creates it there (the Pointer, or creating it, disarms). Items can also be dragged onto the surface, and
+/// since 0.6 (#66) a double-click or Enter adds one at once into the selected container, as the classic IDE does.
 /// </summary>
 public sealed class ToolboxViewModel : ObservableObject
 {
@@ -1607,6 +1967,21 @@ public sealed class ToolboxViewModel : ObservableObject
     public bool HasArmed => _armed is not null;
 
     public void Disarm() => Armed = null;
+
+    /// <summary>An item double-clicked or Enter pressed on (#66): the active designer adds it at once, as the classic IDE does.</summary>
+    public event EventHandler<ToolboxItemViewModel>? ItemPicked;
+
+    /// <summary>The Toolbox's double-click or Enter on an item (#66): nothing stays armed, and the active designer adds it at its default place.</summary>
+    public void Pick(ToolboxItemViewModel item)
+    {
+        if (item.IsPointer || !_isAvailable)
+        {
+            return;
+        }
+
+        Disarm();
+        ItemPicked?.Invoke(this, item);
+    }
 
     /// <summary>A Windows Forms designer is the active document.</summary>
     public bool IsAvailable

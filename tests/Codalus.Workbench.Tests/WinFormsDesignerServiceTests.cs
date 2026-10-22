@@ -120,6 +120,12 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Equal(2, back.Changes.Length);
         Assert.Null(back.Changes[1].Value);
         Assert.Equal((300, 200), (back.Render.Frame!.Width, back.Render.Frame.Height));
+
+        // #78: the controls drawn again because they overlap; a frame from an older host, without it, reads as none.
+        var restacked = JsonSerializer.Serialize(new DesignerRenderResult(new DesignerFrame("iVBORw0KGgo=", 300, 200, 2), [], []), json.DesignerRenderResult);
+        Assert.Contains("\"restacked\":2", restacked, StringComparison.Ordinal);
+        Assert.Equal(2, JsonSerializer.Deserialize(restacked, json.DesignerRenderResult)!.Frame!.Restacked);
+        Assert.Equal(0, JsonSerializer.Deserialize("{\"frame\":{\"png\":\"iVBORw0KGgo=\",\"width\":300,\"height\":200},\"components\":[],\"errors\":[]}", json.DesignerRenderResult)!.Frame!.Restacked);
         Assert.Equal(31, back.Render.Components[0].ClientY);
         Assert.Equal("button1", back.Created!.Properties[0].Value.Value);
         Assert.Equal(["label1"], back.Removed);
@@ -145,6 +151,39 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Equal("&Edit", collection.Items[0].Text);
         var actions = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerActionsResult([new DesignerActionItem(DesignerActionKinds.Method, "verb:Add Tab", "Add Tab") { Collection = "TabControl:TabPages" }]), json.DesignerActionsResult), json.DesignerActionsResult)!;
         Assert.Equal(("verb:Add Tab", "TabControl:TabPages"), (actions.Items[0].Member, actions.Items[0].Collection));
+
+        // #66: the Toolbox's double-click or Enter (the selection's container, its default place), and a drop's defaults.
+        var add = JsonSerializer.Serialize(new DesignerCreateParams("System.Windows.Forms.CheckBox", "checkBox1", null, 8, 31) { AtDefaultLocation = true, Selected = ["placeOrderButton", "buttonPanel"] }, json.DesignerCreateParams);
+        Assert.Contains("\"atDefaultLocation\":true", add, StringComparison.Ordinal);
+        Assert.Contains("\"selected\":[\"placeOrderButton\",\"buttonPanel\"]", add, StringComparison.Ordinal);
+        var addBack = JsonSerializer.Deserialize(add, json.DesignerCreateParams)!;
+        Assert.True(addBack is { AtDefaultLocation: true, X: 8, Y: 31, Parent: null });
+        Assert.Equal(["placeOrderButton", "buttonPanel"], addBack.Selected);
+        var drop = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerCreateParams("System.Windows.Forms.Button", "button1", "buttonPanel", 56, 331), json.DesignerCreateParams), json.DesignerCreateParams)!;
+        Assert.False(drop.AtDefaultLocation);
+        Assert.Empty(drop.Selected);
+        Assert.Equal("buttonPanel", drop.Parent);
+    }
+
+    [Fact]
+    public void Only_tool_strips_items_take_Type_Here()
+    {
+        // #67: a strip is a component whose Items hold tool strip items, by the collection table, not by type names.
+        const string Forms = "System.Windows.Forms.";
+        foreach (var strip in new[] { "MenuStrip", "ToolStrip", "StatusStrip", "ContextMenuStrip" })
+        {
+            Assert.True(DesignerCollections.IsStripItems(Forms + strip + ":Items"), strip);
+        }
+
+        foreach (var key in new[] { "ListBox:Items", "ComboBox:Items", "DomainUpDown:Items", "ListView:Items", "ListView:Columns", "ToolStripDropDownItem:DropDownItems", "TabControl:TabPages", "DataGridView:Columns" })
+        {
+            Assert.False(DesignerCollections.IsStripItems(Forms + key), key);
+        }
+
+        Assert.False(DesignerCollections.IsStripItems("Contoso.FilmStrip:Items"));
+        Assert.False(DesignerCollections.IsStripItems("Items"));
+        Assert.Equal(Forms + "ToolStripMenuItem", DesignerCollections.MenuItemType);
+        Assert.Equal(DesignerCollections.MenuItemType, DesignerCollections.Find(Forms + "MenuStrip:Items")!.ItemTypes[0]);
     }
 
     [Fact]
@@ -199,9 +238,255 @@ public sealed class WinFormsDesignerServiceTests
         await fake.Stopped.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
     }
 
+    /// <summary>An app's build output in a temp folder: its assembly, runtimeconfig and deps files.</summary>
+    private static (string Folder, WinFormsDesignerTarget Target) AppOutput()
+    {
+        var folder = Directory.CreateTempSubdirectory("codalus-winforms-copy-").FullName;
+        var output = Path.Combine(folder, "bin");
+        Directory.CreateDirectory(output);
+        var app = Path.Combine(output, "App.dll");
+        File.WriteAllText(app, "app");
+        File.WriteAllText(Path.Combine(output, "App.runtimeconfig.json"), "{}");
+        File.WriteAllText(Path.Combine(output, "App.deps.json"), "{}");
+        return (folder, new WinFormsDesignerTarget(Path.Combine(folder, "Form1.cs"), Path.Combine(folder, "App.csproj"), app, app, "/ide/winformsdesigner/codalus-winformsdesigner.dll"));
+    }
+
+    private static async Task AssertNoCopyAsync(string root)
+    {
+        var until = DateTime.UtcNow.AddSeconds(5);
+        while (Directory.Exists(root) && Directory.EnumerateDirectories(root).Any() && DateTime.UtcNow < until)
+        {
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(!Directory.Exists(root) || !Directory.EnumerateDirectories(root).Any(), $"a copy was left in {root}");
+    }
+
+    [Fact]
+    public async Task A_target_starts_on_the_copys_runtime_loads_the_copy_and_takes_the_copy_with_it()
+    {
+        // #66 on every OS: the host is launched on the copy's runtimeconfig, deps file and folder (never the build
+        // output's, which would lock it again), designer/load names the copy's assemblies, and the copy goes with the host.
+        var (folder, target) = AppOutput();
+        var root = Path.Combine(folder, "copies");
+        var output = Path.GetDirectoryName(target.ProjectAssembly)!;
+        try
+        {
+            await using var fake = new FakeDesignerHost(ready: true, answerLoad: true);
+            var host = (WinFormsDesignerProcess)await WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: fake, copyRoot: root);
+            var copy = host.CopyFolder!;
+            var copied = Path.Combine(copy, "0");
+            Assert.Equal(root, Path.GetDirectoryName(copy));
+            Assert.True(File.Exists(Path.Combine(copied, "App.dll")));
+            Assert.Equal(["exec", "--runtimeconfig", Path.Combine(copied, "App.runtimeconfig.json"), "--depsfile", Path.Combine(copied, "App.deps.json"), target.DesignerHost], fake.Started!.Arguments);
+            Assert.Equal(copied, fake.Started.WorkingDirectory);
+            Assert.DoesNotContain(fake.Started.Arguments, a => a.StartsWith(output, StringComparison.Ordinal));
+
+            // The document sends the real paths; the host gets the copy's.
+            var model = new DesignerModel { ClassName = "Form1", Namespace = "App", BaseType = "System.Windows.Forms.Form" };
+            await host.LoadAsync(WinFormsDesignerService.LoadParams(target, model, "App.Form1"), TestContext.Current.CancellationToken);
+            Assert.Equal(Path.Combine(copied, "App.dll"), fake.LastLoad!.ProjectAssembly);
+            Assert.Equal([copied], fake.LastLoad.SearchFolders);
+            Assert.False(await host.IsOutdatedAsync(TestContext.Current.CancellationToken));
+            File.AppendAllText(target.ProjectAssembly, " rebuilt");
+            Assert.True(await host.IsOutdatedAsync(TestContext.Current.CancellationToken)); // a build replaced the app's assembly
+
+            await host.DisposeAsync();
+            await AssertNoCopyAsync(root);
+
+            // A library with no app: the host's own runtime, in the library's copy.
+            var library = Path.Combine(folder, "lib");
+            Directory.CreateDirectory(library);
+            File.WriteAllText(Path.Combine(library, "Forms.dll"), "forms");
+            await using var libraryFake = new FakeDesignerHost(ready: true, answerLoad: true);
+            var libraryHost = (WinFormsDesignerProcess)await WinFormsDesignerProcess.StartAsync(target with { HostAssembly = null, ProjectAssembly = Path.Combine(library, "Forms.dll") }, s_short, TestContext.Current.CancellationToken, launcher: libraryFake, copyRoot: root);
+            Assert.Equal([target.DesignerHost], libraryFake.Started!.Arguments);
+            Assert.Equal(Path.Combine(libraryHost.CopyFolder!, "0"), libraryFake.Started.WorkingDirectory);
+            await libraryHost.DisposeAsync();
+            await AssertNoCopyAsync(root);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task A_host_process_that_cant_start_fails_with_the_reason_and_leaves_no_copy()
+    {
+        // The output is there (so the copy is made) but the process doesn't start: dotnet missing, or a pipe that
+        // can't be made. The launcher's exception becomes the designer's reason, and the copy goes.
+        var (folder, target) = AppOutput();
+        var root = Path.Combine(folder, "copies");
+        try
+        {
+            foreach (var failure in new Exception[] { new System.ComponentModel.Win32Exception(2, "An error occurred trying to start process 'dotnet'. The system cannot find the file specified."), new IOException("The pipe has been ended.") })
+            {
+                var launcher = new FailingLauncher(failure);
+                var error = await Assert.ThrowsAsync<PreviewerException>(() => WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: launcher, copyRoot: root));
+                Assert.Equal("The designer didn't start: " + failure.Message, error.Message);
+                Assert.Same(failure, error.InnerException);
+                Assert.Equal(1, launcher.Starts);
+                Assert.StartsWith(root, Path.GetDirectoryName(launcher.Started!.WorkingDirectory!)!, StringComparison.Ordinal); // it was started on the copy
+                await AssertNoCopyAsync(root);
+            }
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task The_output_stamp_changes_when_a_build_writes_or_replaces_the_assemblies()
+    {
+        // What a designer whose host didn't start compares when it becomes active (#66).
+        var (folder, target) = AppOutput();
+        try
+        {
+            Assert.Equal(string.Empty, WinFormsDesignerService.OutputStamp(null));
+            var built = WinFormsDesignerService.OutputStamp(target);
+            Assert.Equal(built, WinFormsDesignerService.OutputStamp(target));
+            Assert.Single(built.Split(';', StringSplitOptions.RemoveEmptyEntries)); // the app is the designed project
+            var missing = target with { ProjectAssembly = Path.Combine(folder, "bin", "Lib.dll") };
+            var before = WinFormsDesignerService.OutputStamp(missing);
+            Assert.Contains("Lib.dll|missing;", before, StringComparison.Ordinal);
+            await File.WriteAllTextAsync(missing.ProjectAssembly, "lib", TestContext.Current.CancellationToken);
+            Assert.NotEqual(before, WinFormsDesignerService.OutputStamp(missing));
+            await File.AppendAllTextAsync(target.ProjectAssembly, " rebuilt", TestContext.Current.CancellationToken);
+            Assert.NotEqual(built, WinFormsDesignerService.OutputStamp(target));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>A launcher whose process doesn't start.</summary>
+    private sealed class FailingLauncher(Exception failure) : IProcessLauncher
+    {
+        public int Starts { get; private set; }
+
+        public ProcessLaunchInfo? Started { get; private set; }
+
+        public Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
+        {
+            Starts++;
+            Started = launch;
+            return Task.FromException<IHostProcess>(failure);
+        }
+    }
+
+    [Fact]
+    public async Task A_host_that_never_becomes_ready_leaves_no_copy()
+    {
+        var (folder, target) = AppOutput();
+        var root = Path.Combine(folder, "copies");
+        try
+        {
+            await using var fake = new FakeDesignerHost(ready: false);
+            var error = await Assert.ThrowsAsync<PreviewerException>(() => WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: fake, copyRoot: root));
+            Assert.StartsWith("The designer didn't start in 2 seconds", error.Message, StringComparison.Ordinal);
+            Assert.NotNull(fake.Started);
+            await AssertNoCopyAsync(root);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Early_log_lines_reach_the_first_subscriber()
+    {
+        // The document subscribes once the start returns: the copy's line and the host's ready line were written before.
+        var (folder, target) = AppOutput();
+        try
+        {
+            await using var fake = new FakeDesignerHost(ready: true);
+            var host = await WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: fake, copyRoot: Path.Combine(folder, "copies"));
+            await using var _ = host;
+            var lines = new List<string>();
+            host.Log += (_, line) => lines.Add(line);
+            Assert.Contains(lines, l => l.StartsWith("Copied the build output (3 files, ", StringComparison.Ordinal) && l.Contains("builds can replace the original while the designer runs.", StringComparison.Ordinal));
+            Assert.Contains(lines, l => l.StartsWith("The designer host is ready after ", StringComparison.Ordinal));
+            var second = new List<string>();
+            host.Log += (_, line) => second.Add(line);
+            Assert.Empty(second); // replayed once, to the first
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Start_waits_for_a_running_build_before_checking_the_output()
+    {
+        // #66: a build the user started is running. The designer waits for it (its output may be half written, and a
+        // second build can't start: "A build is already running."), then builds when the output is stale, then starts.
+        var building = 1;
+        var builds = 0;
+        var starts = 0;
+        var throwOnce = false;
+        var progress = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var service = new WinFormsDesignerService(new SolutionService(() => "/nonexistent/codalus-buildhost.dll"), _ => true,
+            (_, _) =>
+            {
+                Interlocked.Increment(ref builds);
+                if (throwOnce)
+                {
+                    // A build started between the wait and this one.
+                    throwOnce = false;
+                    Volatile.Write(ref building, 1);
+                    _ = Task.Delay(600, CancellationToken.None).ContinueWith(_ => Volatile.Write(ref building, 0), TaskScheduler.Default);
+                    throw new InvalidOperationException("A build is already running.");
+                }
+
+                return Task.FromResult(true);
+            },
+            (_, _, _) => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()))
+        {
+            IsWindows = () => true,
+            IsBuilding = () => Volatile.Read(ref building) == 1,
+            HostFactory = (_, _) =>
+            {
+                Interlocked.Increment(ref starts);
+                throw new PreviewerException("started");
+            },
+        };
+        var missing = Path.Combine(Path.GetTempPath(), "codalus-no-such-output-" + Guid.NewGuid().ToString("N"), "App.dll");
+        var target = new WinFormsDesignerTarget(Path.Combine(Path.GetTempPath(), "Form1.cs"), Path.Combine(Path.GetTempPath(), "App.csproj"), missing, null, "/ide/winformsdesigner/codalus-winformsdesigner.dll");
+
+        var start = service.StartAsync(target, progress.Enqueue, TestContext.Current.CancellationToken);
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (!progress.Contains("Waiting for the build to finish…") && DateTime.UtcNow < until)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Contains("Waiting for the build to finish…", progress);
+        await Task.Delay(600, TestContext.Current.CancellationToken);
+        Assert.False(start.IsCompleted);
+        Assert.Equal((0, 0), (Volatile.Read(ref builds), Volatile.Read(ref starts)));
+        Volatile.Write(ref building, 0);
+        var started = await Assert.ThrowsAsync<PreviewerException>(() => start);
+        Assert.Equal("started", started.Message);
+        Assert.Equal((1, 1), (builds, starts)); // the output is missing: one build, then the host
+        Assert.Equal(["Waiting for the build to finish…", "Building App for the designer…", "Starting the designer…"], progress);
+
+        // A build that starts just before the designer's own: wait for it too, then build once more, and start.
+        (builds, starts, throwOnce) = (0, 0, true);
+        progress.Clear();
+        started = await Assert.ThrowsAsync<PreviewerException>(() => service.StartAsync(target, progress.Enqueue, TestContext.Current.CancellationToken));
+        Assert.Equal("started", started.Message);
+        Assert.Equal((2, 1), (builds, starts));
+        Assert.Equal(["Building App for the designer…", "Waiting for the build to finish…", "Building App for the designer…", "Starting the designer…"], progress);
+    }
+
     /// <summary>
-    /// A designer host in this process, over pipes: designer/ready answered (or never), designer/load never answered, and
-    /// designer/status saying what a stuck host would.
+    /// A designer host in this process, over pipes: designer/ready answered (or never), designer/load never answered
+    /// (or answered with an empty drawing), and designer/status saying what a stuck host would.
     /// </summary>
     private sealed class FakeDesignerHost : IProcessLauncher, IHostProcess
     {
@@ -214,7 +499,7 @@ public sealed class WinFormsDesignerServiceTests
         private readonly bool _ready;
         private int _readyRequests;
 
-        public FakeDesignerHost(bool ready)
+        public FakeDesignerHost(bool ready, bool answerLoad = false)
         {
             _ready = ready;
             _hostInput = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, _toHost.ClientSafePipeHandle);
@@ -233,10 +518,15 @@ public sealed class WinFormsDesignerServiceTests
             });
             _connection.OnRequest(WinFormsDesignerMethods.Status, json.JsonElement, json.DesignerStatus, (_, _) =>
                 Task.FromResult(new DesignerStatus(_ready ? "UI thread: designer/load for 1.0 s (running line 12 of the designer file)." : "its window's message loop hasn't started.")));
-            _connection.OnRequest(WinFormsDesignerMethods.Load, json.DesignerLoadParams, json.DesignerRenderResult, async (_, ct) =>
+            _connection.OnRequest(WinFormsDesignerMethods.Load, json.DesignerLoadParams, json.DesignerRenderResult, async (load, ct) =>
             {
                 ErrorLine?.Invoke("[designer] loading App.dll");
-                await Task.Delay(Timeout.Infinite, ct);
+                LastLoad = load;
+                if (!answerLoad)
+                {
+                    await Task.Delay(Timeout.Infinite, ct);
+                }
+
                 return new DesignerRenderResult(null, [], []);
             });
             _connection.OnRequest("shutdown", (_, _) => Task.FromResult<JsonElement?>(null));
@@ -245,6 +535,12 @@ public sealed class WinFormsDesignerServiceTests
         public ProcessLaunchInfo Launch => new("codalus-winformsdesigner", []) { Launcher = this };
 
         public int ReadyRequests => Volatile.Read(ref _readyRequests);
+
+        /// <summary>How the IDE started this host.</summary>
+        public ProcessLaunchInfo? Started { get; private set; }
+
+        /// <summary>The last designer/load's parameters.</summary>
+        public DesignerLoadParams? LastLoad { get; private set; }
 
         /// <summary>Completes when the IDE ended the host (killed it, or it exited after shutdown).</summary>
         public Task Stopped => _exited.Task;
@@ -261,6 +557,7 @@ public sealed class WinFormsDesignerServiceTests
 
         public Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
         {
+            Started = launch;
             _connection.Start();
             return Task.FromResult<IHostProcess>(this);
         }
