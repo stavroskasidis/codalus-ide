@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.6.0
+
+- **Fixed: Reset in the Settings editor kept the Modified mark** when the setting's value was the same as its default (or as the value another settings file gives it): the line was removed from settings.json, but the row still said Modified and offered Reset, and the page's count of modified settings stayed the same.
+
 ## 0.5.0
 
 - **IntelliSense like a classic IDE's** ([user guide](docs/user-guide/editing.md#intellisense)): in C# and Visual Basic, the completion list, parameter info and Quick Info show code in the editor's own colors, and generic types as you use them (`LayoutBuilderBase<PageModel, PageBuilder<PageModel>>.AddTab(…)`, not `LayoutBuilderBase<TModel, TBuilder>`). Other languages get the same popups, in plain text.

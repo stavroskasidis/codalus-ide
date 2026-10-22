@@ -122,6 +122,7 @@ public sealed class SettingsViewModel : ObservableObject
         OpenJsonCommand = new RelayCommand(openJson);
         ClearSearchCommand = new RelayCommand(() => Search = string.Empty);
         settings.Changed += (_, e) => Ui.Post(() => OnSettingsChanged(e));
+        settings.LayersChanged += (_, e) => Ui.Post(() => OnSettingsChanged(e)); // Reset of a value equal to the default
         Rebuild();
     }
 
