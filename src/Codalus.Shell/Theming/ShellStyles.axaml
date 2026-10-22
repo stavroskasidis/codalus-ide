@@ -1352,6 +1352,16 @@
   <Style Selector="Border.dataTipRow:pointerover Button.dataTipRowPin, Border.dataTipRow.selected Button.dataTipRowPin">
     <Setter Property="Opacity" Value="1" />
   </Style>
+  <!-- Locals, Autos, Watch and QuickWatch (D44, decision 9): the data tip's rows, flat, under a Name | Value | Type header. -->
+  <Style Selector="ListBox.variableRows ListBoxItem">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Grid.variableRowsHeader">
+    <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
+  </Style>
   <Style Selector="Border.pinnedDataTipComment">
     <Setter Property="Padding" Value="6,1" />
   </Style>

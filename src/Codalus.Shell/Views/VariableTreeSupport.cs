@@ -1,18 +1,14 @@
 using Avalonia.Controls;
-using Avalonia.Input;
 using Codalus.Shell.ViewModels;
 
 namespace Codalus.Shell.Views;
 
 /// <summary>
 /// What the debugger's variable trees (Locals, Autos, Watch, QuickWatch) can do with a value, set by the shell: it owns
-/// the input dialog, the Watch window and the visualizers (ADR 0021).
+/// the Watch window, QuickWatch and the visualizers (ADR 0021).
 /// </summary>
 public static class VariableActions
 {
-    /// <summary>Asks for a new value; null when cancelled.</summary>
-    public static Func<VariableNode, Task<string?>>? AskValue { get; set; }
-
     public static Func<string, Task>? AddWatch { get; set; }
 
     public static Func<string, Task>? QuickWatch { get; set; }
@@ -27,38 +23,9 @@ public static class VariableActions
     public static Func<string, Task>? CopyText { get; set; }
 }
 
-/// <summary>Editing (F2, double-click) and the context menu of a variable tree.</summary>
+/// <summary>The menu and visualizers of a value in the data tip and the variable windows.</summary>
 internal static class VariableTreeSupport
 {
-    public static void Attach(TreeView tree, Func<VariableNode, string, Task<string?>> setValue, Func<VariableNode, bool> canEdit)
-    {
-        tree.KeyDown += (_, e) =>
-        {
-            if (e.Key == Key.F2 && tree.SelectedItem is VariableNode node && canEdit(node))
-            {
-                _ = EditAsync(node, setValue);
-                e.Handled = true;
-            }
-        };
-        tree.DoubleTapped += (_, _) =>
-        {
-            if (tree.SelectedItem is VariableNode node && canEdit(node))
-            {
-                _ = EditAsync(node, setValue);
-            }
-        };
-        tree.ContextRequested += (_, e) =>
-        {
-            if (tree.SelectedItem is not VariableNode node || node.IsError)
-            {
-                return;
-            }
-
-            new ContextMenu { ItemsSource = MenuItems(node, canEdit(node) ? () => _ = EditAsync(node, setValue) : null) }.Open(tree);
-            e.Handled = true;
-        };
-    }
-
     /// <summary>A visualizer a value can be opened in: its title, whether a plugin gives it, and what opens it.</summary>
     public sealed record VisualizerChoice(string Title, bool IsPlugin, Action Open);
 
@@ -116,19 +83,6 @@ internal static class VariableTreeSupport
         }
 
         return items;
-    }
-
-    public static async Task EditAsync(VariableNode node, Func<VariableNode, string, Task<string?>> setValue)
-    {
-        if (VariableActions.AskValue is not { } ask || await ask(node).ConfigureAwait(true) is not { } value)
-        {
-            return;
-        }
-
-        if (await setValue(node, value).ConfigureAwait(true) is { } error)
-        {
-            node.Update(error, node.Type, 0);
-        }
     }
 
     private static MenuItem Item(string header, string? icon, Action action, string? keys = null) => Controls.MenuEntry.Create(header, icon, keys: keys, click: action);

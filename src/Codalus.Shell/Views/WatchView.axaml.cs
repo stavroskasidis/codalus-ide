@@ -2,12 +2,13 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
+using Codalus.Shell.Views.DataTips;
 
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// The Watch window: Enter in the box adds an expression; Delete removes the selected top-level watch; F2 edits a value
-/// (a watch with <c>setExpression</c>, a member with <c>setVariable</c>).
+/// The Watch window: Enter in the box adds an expression; Delete removes the selected top-level watch; F2 or a
+/// double-click on a value edits it in place (a watch with <c>setExpression</c>, a member with <c>setVariable</c>).
 /// </summary>
 public sealed partial class WatchView : UserControl, IPaneView
 {
@@ -22,18 +23,24 @@ public sealed partial class WatchView : UserControl, IPaneView
                 e.Handled = true;
             }
         };
-        Tree.KeyDown += (_, e) =>
+        DataContextChanged += (_, _) =>
         {
-            if (e.Key == Key.Delete && DataContext is WatchViewModel vm && Tree.SelectedItem is VariableNode node && vm.Roots.Contains(node))
+            if (DataContext is WatchViewModel vm)
             {
-                vm.Remove(node);
-                e.Handled = true;
+                Rows.Attach(vm.Roots, new VariableRowActions
+                {
+                    SetValue = vm.SetValueAsync,
+                    Reason = vm.ReadOnlyReason,
+                    Remove = node =>
+                    {
+                        if (vm.Roots.Contains(node))
+                        {
+                            vm.Remove(node);
+                        }
+                    },
+                }, vm.Expansion);
             }
         };
-        VariableTreeSupport.Attach(
-            Tree,
-            (node, value) => DataContext is WatchViewModel vm ? vm.SetValueAsync(node, value) : Task.FromResult<string?>(null),
-            node => !node.IsError && node.Value.Length > 0 && (node.EvaluateName is not null || node.ParentReference is not null));
     }
 
     public void FocusPrimary() => Input.Focus();

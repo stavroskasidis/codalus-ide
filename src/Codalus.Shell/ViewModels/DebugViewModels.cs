@@ -244,6 +244,33 @@ public static class VariableIcons
     };
 }
 
+/// <summary>
+/// Which rows of a variable window are expanded, by evaluate name (D44, decision 9): Locals and Autos build new rows at
+/// every stop, Watch reloads a changed value's members, and both open again what was open.
+/// </summary>
+public sealed class ExpansionMemory
+{
+    private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
+
+    /// <summary>A row's key: its evaluate name, else its parent's key and its name (Non-Public members, Raw View).</summary>
+    public static string Key(VariableNode node) =>
+        node.EvaluateName is { } expression && !node.IsGroup ? expression : (node.Parent is { } parent ? Key(parent) + "/" : string.Empty) + node.Name;
+
+    public bool IsExpanded(VariableNode node) => _expanded.Contains(Key(node));
+
+    public void Set(VariableNode node, bool expanded)
+    {
+        if (expanded)
+        {
+            _expanded.Add(Key(node));
+        }
+        else
+        {
+            _expanded.Remove(Key(node));
+        }
+    }
+}
+
 /// <summary>A variable (or watch, or evaluated expression) in a debugger tree; children load when it is expanded.</summary>
 #pragma warning disable CA1001 // _loading is only cancelled (a newer load, or a new value), never waited on: no handle to free.
 public sealed class VariableNode : ObservableObject
@@ -538,6 +565,9 @@ public sealed class VariablesViewModel : ObservableObject
 
     public ObservableCollection<VariableNode> Roots { get; } = [];
 
+    /// <summary>What's expanded, by evaluate name: opened again at the next stop (D44, decision 9).</summary>
+    public ExpansionMemory Expansion { get; } = new();
+
     public bool IsEmpty
     {
         get => _isEmpty;
@@ -584,7 +614,9 @@ public sealed class VariablesViewModel : ObservableObject
             var reference = scopes.Count > 0 ? scopes[0].VariablesReference : 0;
             foreach (var variable in variables)
             {
-                Roots.Add(new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, _source, reference, variable.EvaluateName) { Icon = "symbol-local" });
+                var node = new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, _source, reference, variable.EvaluateName) { Icon = "symbol-local" };
+                _source.Track(node);
+                Roots.Add(node);
             }
 
             IsEmpty = Roots.Count == 0;
@@ -641,6 +673,9 @@ public sealed class VariablesViewModel : ObservableObject
 
     /// <summary>Sets a variable's value: <c>setVariable</c> in its container (Locals, Autos and their members).</summary>
     public Task<string?> SetValueAsync(VariableNode node, string value) => VariableEditing.SetAsync(_debugger, node, value, isWatchRoot: false);
+
+    /// <summary>Why <paramref name="node"/>'s value can't be changed in place (its tooltip); null when it can.</summary>
+    public string? ReadOnlyReason(VariableNode node) => VariableEditing.ReadOnlyReason(_debugger, node);
 }
 
 /// <summary>The Watch window: user expressions, evaluated in the selected frame on every stop.</summary>
@@ -673,6 +708,9 @@ public sealed class WatchViewModel : ObservableObject
     public ObservableCollection<VariableNode> Roots { get; } = [];
 
     public IReadOnlyList<string> Expressions => [.. Roots.Select(r => r.Name)];
+
+    /// <summary>What's expanded, by evaluate name: opened again when a watch's value changes (D44, decision 9).</summary>
+    public ExpansionMemory Expansion { get; } = new();
 
     public string NewExpression
     {
@@ -712,7 +750,17 @@ public sealed class WatchViewModel : ObservableObject
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private VariableNode Node(string expression) => new(expression, string.Empty, null, 0, _source, evaluateName: expression);
+    private VariableNode Node(string expression) => new(expression, string.Empty, null, 0, _source, evaluateName: expression) { Icon = IconOf(expression) };
+
+    /// <summary>A watch's icon: a local for a name, else a member's guessed from the expression's last name.</summary>
+    internal static string IconOf(string expression)
+    {
+        var dot = expression.LastIndexOf('.');
+        return dot < 0 || dot == expression.Length - 1 ? "symbol-local" : VariableIcons.Guess(expression[(dot + 1)..]);
+    }
+
+    /// <summary>Why <paramref name="node"/>'s value can't be changed in place (its tooltip); null when it can.</summary>
+    public string? ReadOnlyReason(VariableNode node) => VariableEditing.ReadOnlyReason(_debugger, node);
 
     /// <summary>Sets a watch's value (<c>setExpression</c>) or a member's (<c>setVariable</c>), then re-evaluates the watches.</summary>
     public async Task<string?> SetValueAsync(VariableNode node, string value)
@@ -744,11 +792,16 @@ public sealed class WatchViewModel : ObservableObject
         try
         {
             var result = await _debugger.EvaluateAsync(node.Name, "watch").ConfigureAwait(true);
+            node.SetError(false, canReevaluate: false);
             node.Update(result.Result, result.Type, result.VariablesReference);
+            _source.Track(node);
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
         {
+            // An expression that doesn't evaluate: the error icon and color (C2).
+            node.SetError(true, canReevaluate: false);
             node.Update(ex.Message, null, 0);
+            node.IsChanged = false;
         }
     }
 }

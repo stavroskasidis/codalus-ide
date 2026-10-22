@@ -692,7 +692,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             }
         }, "debug.session").ConfigureAwait(true);
 
-        await StepAsync("debug.dataTip", "0.6.0", "The data tip: the header over a variable hovered while stopped, and its elements in a child tip", async () =>
+        await StepAsync("debug.dataTip", "0.6.0", "The data tip: the header over a variable hovered while stopped, its elements in a child tip, and the same rows in Locals", async () =>
         {
             var lines = File.ReadAllLines(Program);
             var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
@@ -719,6 +719,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 Check(rows.Any(r => r.Node.Value == "\"two words\""), "the child tip lists \"two words\": " + string.Join(", ", rows.Select(r => $"{r.Node.Name} = {r.Node.Value}")));
                 Screenshot("smoke-test-data-tip.png", tip.Popups);
                 editor.HoverPopup.IsOpen = false;
+
+                // Locals: the same rows in one flat list, args expanded, its elements' values in the Value column.
+                shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
+                await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "args"), "Locals lists args").ConfigureAwait(true);
+                shell.Locals.Roots.First(r => r.Name == "args").IsExpanded = true;
+                Views.DataTips.VariableRowList? locals = null;
+                await WaitAsync(() => (locals = window.GetVisualDescendants().OfType<Views.VariablesView>().FirstOrDefault(v => ReferenceEquals(v.DataContext, shell.Locals))?.GetVisualDescendants().OfType<Views.DataTips.VariableRowList>().FirstOrDefault()) is { } list
+                    && list.Rows.Any(r => r.Depth == 1 && r.Node.Value == "\"two words\""), "Locals shows args' elements one level in").ConfigureAwait(true);
+                var argsRow = locals!.RowOf(locals.Rows.First(r => r.Node.Name == "args").Node);
+                var elementRow = locals.RowOf(locals.Rows.First(r => r.Depth == 1).Node);
+                Check(argsRow is not null && elementRow is not null
+                    && Math.Abs(argsRow.ValueBlock.TranslatePoint(default, locals)!.Value.X - elementRow.ValueBlock.TranslatePoint(default, locals)!.Value.X) <= 1,
+                    "Locals keeps the Value column aligned across levels");
+                Screenshot("smoke-test-locals.png");
             }
             finally
             {

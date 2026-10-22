@@ -40,6 +40,9 @@ public sealed class QuickWatchViewModel : ObservableObject
 
     public ObservableCollection<VariableNode> Roots { get; } = [];
 
+    /// <summary>What's expanded, by evaluate name: opened again when the expression is evaluated again (D44, decision 9).</summary>
+    public ExpansionMemory Expansion { get; } = new();
+
     public string? Error
     {
         get => _error;
@@ -86,7 +89,9 @@ public sealed class QuickWatchViewModel : ObservableObject
         {
             var result = await _debugger.EvaluateAsync(expression, "watch").ConfigureAwait(true);
             Roots.Clear();
-            Roots.Add(new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(_debugger), evaluateName: expression) { IsExpanded = result.VariablesReference > 0 });
+            var root = new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(_debugger), evaluateName: expression) { Icon = WatchViewModel.IconOf(expression), IsExpanded = result.VariablesReference > 0 };
+            root.Source?.Track(root);
+            Roots.Add(root);
             Error = null;
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
@@ -95,6 +100,9 @@ public sealed class QuickWatchViewModel : ObservableObject
             Error = ex.Message;
         }
     }
+
+    /// <summary>Why <paramref name="node"/>'s value can't be changed in place (its tooltip); null when it can.</summary>
+    public string? ReadOnlyReason(VariableNode node) => VariableEditing.ReadOnlyReason(_debugger, node);
 
     public Task AddWatchAsync() => Expression.Trim() is { Length: > 0 } expression ? _addWatch(expression) : Task.CompletedTask;
 

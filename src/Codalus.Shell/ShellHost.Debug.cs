@@ -64,11 +64,6 @@ public sealed partial class ShellHost
         CallStack = new CallStackViewModel(Debugger, (path, line) => OpenFileAsync(path, preview: false, new Position(Math.Max(0, line - 1), 0)));
         DebugConsole = new DebugConsoleViewModel(Debugger, DebugLog, EditorFont);
         BreakpointList = new BreakpointsViewModel(Debugger, (path, line) => OpenFileAsync(path, preview: false, new Position(Math.Max(0, line - 1), 0)));
-        VariableActions.AskValue = async node =>
-        {
-            var result = await Dialogs.ShowAsync(new DialogRequest($"Set {node.Name}", "New value (a C# expression):", ["Set", "Cancel"]) { Input = node.Value }).ConfigureAwait(true);
-            return result.Button == "Set" ? result.Input : null;
-        };
         VariableActions.AddWatch = expression => AddWatchAsync(expression);
         VariableActions.QuickWatch = expression => ShowQuickWatchAsync(expression);
         VariableActions.Visualize = VisualizeAsync;
