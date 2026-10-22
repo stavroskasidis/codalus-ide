@@ -28,11 +28,12 @@ public sealed class DesignerActionRowViewModel : ObservableObject
 
     internal ActionItem Item { get; }
 
-    public string Title => Item.DisplayName;
+    /// <summary>The designer's text without its mnemonic marker ("&amp;Insert Standard Items"), as the classic panel's labels show it.</summary>
+    public string Title => DesignerMnemonics.Strip(Item.DisplayName);
 
     public string Description => Item.Unavailable
         ? Localizer.Get("msg.winFormsDesigner.actionUnavailable", "This action opens a Windows Forms dialog the designer doesn't show.")
-        : Item.Description ?? Item.DisplayName;
+        : Item.Description ?? Title;
 
     public bool IsHeader => Item.Kind == DesignerActionKinds.Header;
 

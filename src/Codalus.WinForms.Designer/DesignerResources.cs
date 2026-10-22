@@ -30,6 +30,16 @@ internal sealed class TextResourceManager : ComponentResourceManager
 
     public bool IsEmpty => _texts.Count == 0;
 
+    private IReadOnlyDictionary<string, object?>? _metadata;
+
+    /// <summary>
+    /// The default resources' design-time metadata (#67: <c>name.Locked</c>), read from its text once as XML, so no data
+    /// value is deserialized for it (<see cref="DesignerResx.Metadata"/>); empty without one. A build's compiled resources
+    /// have none. Throws <see cref="System.Xml.XmlException"/> for a text that isn't XML.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?> Metadata() =>
+        _metadata ??= _texts.TryGetValue(string.Empty, out var text) ? DesignerResx.Metadata(text) : new Dictionary<string, object?>(StringComparer.Ordinal);
+
     /// <summary>A culture's resource set (empty name: the default resources), or null when the form has none for it.</summary>
     public ResourceSet? Set(string culture)
     {

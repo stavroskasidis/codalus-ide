@@ -172,9 +172,68 @@ internal sealed partial class DesignerSession : IDisposable
             }
         }
 
+        ApplyDesignTimeMetadata(errors);
         var render = Render();
         return render with { Errors = [.. errors, .. render.Errors] };
     }
+
+    /// <summary>
+    /// The default resources' design-time metadata the designer reads back (#67): <c>name.Locked</c> (<c>$this.Locked</c>
+    /// for the root) sets that component's designer's Locked, as the classic IDE's serializers do. Only Locked: the tray's
+    /// <c>TrayLocation</c> and <c>$this.Localizable</c> have their own code, and old forms' grid settings are ignored.
+    /// </summary>
+    private void ApplyDesignTimeMetadata(List<string> errors)
+    {
+        if (_textResources is null)
+        {
+            return;
+        }
+
+        IReadOnlyDictionary<string, object?> metadata;
+        try
+        {
+            metadata = _textResources.Metadata();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // A .resx that isn't XML: the form loads without its locks, and says why (the statements that read it say so too).
+            errors.Add($"The form's .resx: {ex.Message}");
+            return;
+        }
+
+        foreach (var (key, value) in metadata)
+        {
+            if (!key.EndsWith(".Locked", StringComparison.Ordinal) || value is not bool locked)
+            {
+                continue;
+            }
+
+            var name = key[..^".Locked".Length];
+            try
+            {
+                if (Target(name == "$this" ? string.Empty : name) is IComponent component && LockedOf(component) is { IsReadOnly: false } descriptor)
+                {
+                    descriptor.SetValue(component, locked);
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                errors.Add($"{key}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A component's design-time <c>Locked</c>: the bool, design-only property a control designer adds
+    /// (<c>ControlDesigner.PreFilterProperties</c>), or null when its designer has none (a tray component, a context menu
+    /// strip, a tool strip item).
+    /// </summary>
+    private static PropertyDescriptor? LockedOf(object component) =>
+        TypeDescriptor.GetProperties(component)["Locked"] is { } descriptor && descriptor.PropertyType == typeof(bool)
+        && descriptor.Attributes[typeof(DesignOnlyAttribute)] is DesignOnlyAttribute { IsDesignOnly: true } ? descriptor : null;
+
+    /// <summary>A component's Locked as the IDE gets it: null when it has none that can be set.</summary>
+    private static bool? LockedValue(object component) => LockedOf(component) is { IsReadOnly: false } descriptor ? descriptor.GetValue(component) is true : null;
 
     private void Unload()
     {
@@ -273,6 +332,8 @@ internal sealed partial class DesignerSession : IDisposable
     }
 
     /// <summary>What a statement or a reference names: the root (empty), a component, a local, or <c>components</c>.</summary>
+    // TODO(issue): resolve a part's name (notesSplit.Panel1), so the Properties window shows a split container's panel
+    // (#68); its properties must then reach the state difference too.
     private object? Target(string name)
     {
         if (name.Length == 0 || name == _className)
@@ -517,6 +578,7 @@ internal sealed partial class DesignerSession : IDisposable
                 Collections = isPart ? null : CollectionKeys(control),
                 Text = isPart ? null : control.Text,
                 InTray = control is ToolStrip and not ToolStripDropDown,
+                Locked = isPart ? null : LockedValue(control),
             };
         }
 
@@ -598,6 +660,7 @@ internal sealed partial class DesignerSession : IDisposable
                 Collections = CollectionKeys(component),
                 InTray = true,
                 Visible = false,
+                Locked = LockedValue(component),
             };
         }
     }
@@ -890,6 +953,13 @@ internal sealed partial class DesignerSession : IDisposable
             }
 
             var target = Target(edit.Component) ?? throw Unknown(edit.Component);
+            if (edit.Property == "Locked" && edit.Provider is null && !edit.DataBinding && LockedOf(target) is not { IsReadOnly: false })
+            {
+                // Lock Controls over a form with a context menu strip or an inherited control (#67): skipped, as the classic
+                // IDE's OnMenuLockControls skips a component without a Locked it can set.
+                continue;
+            }
+
             if (edit.DataBinding)
             {
                 if (SetDataBinding(target, edit) is { } bindingError)

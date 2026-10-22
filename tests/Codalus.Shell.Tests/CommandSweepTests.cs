@@ -78,6 +78,10 @@ public sealed partial class CommandSweepTests
         {
             CheckCommand(rule.Command, $"menu {rule.Location}");
             CheckClause(rule.When, $"menu {rule.Location} → {rule.Command}");
+            if (rule.Checked is { } isChecked)
+            {
+                CheckClause(isChecked, $"menu {rule.Location} → {rule.Command}'s check");
+            }
         }
 
         foreach (var platform in s_platforms)

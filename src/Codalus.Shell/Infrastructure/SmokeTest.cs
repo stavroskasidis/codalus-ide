@@ -1359,6 +1359,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("winforms.toolboxAndBuild", "0.6", winFormsToolboxTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the copy, the Toolbox's drag, double-click and Enter, and the reload after a build are tested on every OS against a fake designer host.");
         }
 
+        // 0.6 (#67, D40): the classic IDE's context menus and Lock Controls, through the real host.
+        const string winFormsMenusTitle = "OrderForm in the designer: no Type Here on a list box; the classic IDE's context menu with the designer's verb and Select 'notesSplit.Panel1'; Lock Controls as OrderForm.resx's Locked metadata, a locked control not nudged; copy, paste into a panel and a split container's panel; undone";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.designerMenus", "0.6", winFormsMenusTitle, WinFormsDesignerMenusStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.designerMenus", "0.6", winFormsMenusTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the menus, their enablement, Lock Controls and the paste target are tested on every OS against a fake designer host.");
+        }
+
         // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
         const string winUITitle = "The WinUI 3 app opens, its XAML completes x:Bind paths from the page's class, and it builds and runs unpackaged";
         if (OperatingSystem.IsWindows())
@@ -2712,6 +2723,105 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await shell.SaveAllAsync().ConfigureAwait(true);
         Check(await File.ReadAllTextAsync(designer.DesignerPath).ConfigureAwait(true) == original, "undo and save take OrderForm.Designer.cs back to the original");
+        shell.Layout.CloseDocument(designer);
+    }
+
+    /// <summary>
+    /// The classic IDE's context menus and Lock Controls in the shipped app (0.6, #67, D40): OrderForm opened; no Type Here
+    /// over its list box or combo box; the surface's menu of a control on the form and of the list box in the split
+    /// container's panel (the real host's verb first, Select naming the panel), and its picture from the menu's own
+    /// window; Lock Controls written as OrderForm.resx's Locked metadata and not as code, a locked control not nudged,
+    /// and taken away again; copy, paste into a panel and into the split container's panel; everything undone.
+    /// </summary>
+    private async Task WinFormsDesignerMenusStepAsync()
+    {
+        var form = Path.Combine(Work, "WindowsDesktop", "WinFormsApp", "OrderForm.cs");
+        await shell.OpenFileAsync(form).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath == form);
+        Check(designer is not null, "OrderForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0 && designer.Host is not null, () => "the designer loads OrderForm and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        var code = designer!.DesignerCode!;
+        var original = code.Text.Text;
+        var resx = designer.ResourceModels.FirstOrDefault(m => m.Path.EndsWith("OrderForm.resx", StringComparison.OrdinalIgnoreCase));
+        Check(resx is not null, "the designer holds OrderForm.resx");
+        var originalResx = resx!.Text.Text;
+
+        foreach (var name in new[] { "historyListBox", "productComboBox" })
+        {
+            designer.SetSelection([name], notify: true);
+            Check(designer.StripTypeHere is null && designer.MenuPanels.Count == 0, name + " shows no Type Here");
+        }
+
+        await WaitAsync(() => window.GetVisualDescendants().OfType<WinFormsDesignerView>().Any(v => v.IsEffectivelyVisible), "the designer's view shows", 30).ConfigureAwait(true);
+        var view = window.GetVisualDescendants().OfType<WinFormsDesignerView>().First(v => v.IsEffectivelyVisible);
+        List<string?> Names(ContextMenu? menu) => [.. menu?.Items.OfType<MenuItem>().Select(Avalonia.Automation.AutomationProperties.GetName) ?? []];
+        designer.SetSelection(["giftCheckBox"], notify: true);
+        var names = Names(await view.BuildMenuAsync(BuiltIns.WinFormsSurfaceMenu).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true));
+        foreach (var expected in new[] { "View Code", "Bring to Front", "Send to Back", "Align to Grid", "Lock Controls", "Select 'OrderForm'", "Cut", "Copy", "Paste", "Delete", "Properties" })
+        {
+            Check(names.Contains(expected), $"the check box's context menu has {expected}: {string.Join(", ", names)}");
+        }
+
+        // The list box's verbs as the real host answers, however long a busy machine takes (the menu waits only 300 ms for
+        // them, and opens without them after that): the menu is built again until they're in it, or 30 s pass.
+        designer.SetSelection(["historyListBox"], notify: true);
+        designer.PrefetchVerbs();
+        ContextMenu? menu;
+        var waited = Stopwatch.StartNew();
+        while (true)
+        {
+            await designer.SelectionVerbsAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+            menu = await view.BuildMenuAsync(BuiltIns.WinFormsSurfaceMenu).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+            names = Names(menu);
+            if (names.FirstOrDefault()?.StartsWith("Edit Items", StringComparison.Ordinal) == true || waited.Elapsed > TimeSpan.FromSeconds(30))
+            {
+                break;
+            }
+
+            await Task.Delay(250).ConfigureAwait(true);
+        }
+
+        Check(names.FirstOrDefault()?.StartsWith("Edit Items", StringComparison.Ordinal) == true, "the list box's menu starts with its designer's verb: " + string.Join(", ", names));
+        Check(names.Contains("Select 'notesSplit.Panel1'"), "the list box's menu selects the split container's panel: " + string.Join(", ", names));
+        menu!.Open(view.Surface);
+        await WaitAsync(() => menu.IsOpen, "the context menu opens", 10).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer-menu.png", menu.Parent is Avalonia.Controls.Primitives.Popup popup ? [popup] : Array.Empty<Avalonia.Controls.Primitives.Popup>());
+        menu.Close();
+
+        // Lock Controls: the default .resx's Locked metadata, the form's and its controls', never code; a locked control stays put.
+        designer.SetSelection(["giftCheckBox"], notify: true);
+        shell.Run("winforms.lockControls");
+        await WaitAsync(() => resx.Text.Text.Contains("<metadata name=\"giftCheckBox.Locked\"", StringComparison.Ordinal) && resx.Text.Text.Contains("<metadata name=\"$this.Locked\"", StringComparison.Ordinal),
+            () => "Lock Controls writes Locked metadata to OrderForm.resx: " + designer.Status, 60).ConfigureAwait(true);
+        Check(code.Text.Text == original, "Lock Controls leaves OrderForm.Designer.cs alone");
+        Check(designer.Find("giftCheckBox")?.Locked == true && designer.AreControlsLocked, "the check box is locked, and so Lock Controls is checked");
+        Check(shell.Workbench.Menus.GetItems(Workbench.Menus.MenuLocations.MenuBar("format")).Single(i => i.Command == "winforms.lockControls").IsChecked == true, "Format → Lock Controls is checked");
+        await designer.NudgeAsync(1, 0, resize: false).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(code.Text.Text == original, "an arrow key doesn't move a locked control");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer-locked.png");
+        shell.Run("winforms.lockControls");
+        await WaitAsync(() => resx.Text.Text == originalResx, "Lock Controls again takes every lock away", 60).ConfigureAwait(true);
+
+        // Copy; paste into a panel, then into the split container's panel the list box is in.
+        designer.SetSelection(["customerTextBox"], notify: true);
+        shell.Run("winforms.copy");
+        designer.SetSelection(["buttonPanel"], notify: true);
+        shell.Run("winforms.paste");
+        await WaitAsync(() => code.Text.Text.Contains("buttonPanel.Controls.Add(customerTextBox1);", StringComparison.Ordinal) && designer.Find("customerTextBox1") is not null,
+            () => "the copy goes into the selected panel: " + designer.Status, 60).ConfigureAwait(true);
+        designer.SetSelection(["historyListBox"], notify: true);
+        shell.Run("winforms.paste");
+        await WaitAsync(() => code.Text.Text.Contains("notesSplit.Panel1.Controls.Add(customerTextBox2);", StringComparison.Ordinal) && designer.Find("customerTextBox2")?.Parent == "notesSplit.Panel1",
+            () => "the copy goes into the split container's panel: " + designer.Status, 60).ConfigureAwait(true);
+
+        for (var i = 0; i < 10 && (code.Text.Text != original || resx.Text.Text != originalResx); i++)
+        {
+            designer.Undo();
+        }
+
+        Check(code.Text.Text == original && resx.Text.Text == originalResx, "undo takes OrderForm.Designer.cs and OrderForm.resx back to the originals");
         shell.Layout.CloseDocument(designer);
     }
 

@@ -50,6 +50,12 @@ public sealed record MenuItemRule(string Location, string Command, ContributionS
     /// </summary>
     public string? Keys { get; init; }
 
+    /// <summary>
+    /// Shows the entry as a check entry, checked while this holds (the Windows Forms designer's Lock Controls); null for an
+    /// ordinary entry.
+    /// </summary>
+    public WhenClause? Checked { get; init; }
+
     /// <summary>A submenu entry: <paramref name="submenu"/> is the location of its items.</summary>
     public static MenuItemRule ForSubmenu(string location, string submenu, string title, ContributionSource source) =>
         new(location, string.Empty, source) { Submenu = submenu, Title = title };
@@ -65,6 +71,9 @@ public sealed record MenuItem(string Command, string Title, string? KeyLabel, bo
 
     /// <summary>The keys shown (the command's binding, or the rule's <see cref="MenuItemRule.Keys"/>), for native menus.</summary>
     public KeySequence? Keys { get; init; }
+
+    /// <summary>A check entry's state (<see cref="MenuItemRule.Checked"/>), or null for an ordinary entry.</summary>
+    public bool? IsChecked { get; init; }
 }
 
 public sealed class MenuRegistry(CommandRegistry commands, KeybindingService keybindings, IContextKeyReader context)
@@ -239,6 +248,7 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
             {
                 Description = descriptor.DisplayTitle,
                 Keys = keys,
+                IsChecked = rule.Checked?.Evaluate(scope),
             });
         }
 

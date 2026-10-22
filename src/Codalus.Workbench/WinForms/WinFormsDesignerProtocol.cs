@@ -161,6 +161,14 @@ public sealed record DesignerComponentView(string Name, string Type, string? Par
     /// parent (a context menu), and, as in Visual Studio, a menu, tool or status strip.
     /// </summary>
     public bool InTray { get; init; }
+
+    /// <summary>
+    /// Its designer's design-time <c>Locked</c> (#67: the default .resx's <c>name.Locked</c> metadata, <c>$this.Locked</c>
+    /// for the root): a locked control doesn't move or resize on the surface. Null when it has none that can be set (a
+    /// tray component, a context menu strip, a tool strip item, a part, a read-only one): Lock Controls leaves it out, as
+    /// the classic IDE does. A host older than #67 sends none.
+    /// </summary>
+    public bool? Locked { get; init; }
 }
 
 /// <summary>The surface after a load or a change: its frame, its components (in z-order, front first, parents before children), and what went wrong.</summary>
@@ -330,6 +338,62 @@ public static class DesignerActionKinds
 }
 
 /// <summary>
+/// A Windows Forms text's mnemonic (#67): an action's or a verb's <see cref="DesignerActionItem.DisplayName"/> is the
+/// designer's own text, and some of the framework's mark one ("&amp;Insert Standard Items", "&amp;Edit Columns..."), which the
+/// classic IDE draws as an underlined letter. The IDE shows it as its own menus do, never the marker itself.
+/// </summary>
+public static class DesignerMnemonics
+{
+    /// <summary>The text as it reads: a single <c>&amp;</c> dropped, <c>&amp;&amp;</c> one <c>&amp;</c> (a screen reader's name, a smart tag's link, the verbs' merge).</summary>
+    public static string Strip(string text) => Convert(text, accessKey: false);
+
+    /// <summary>
+    /// The text as a menu's header marks its access key: the first mnemonic as <c>_</c> (<c>&amp;Edit</c> as <c>_Edit</c>), a
+    /// literal <c>_</c> doubled, <c>&amp;&amp;</c> one <c>&amp;</c>, any other single <c>&amp;</c> dropped.
+    /// </summary>
+    public static string ToAccessKey(string text) => Convert(text, accessKey: true);
+
+    private static string Convert(string text, bool accessKey)
+    {
+        if (!text.Contains('&') && !(accessKey && text.Contains('_')))
+        {
+            return text;
+        }
+
+        var result = new System.Text.StringBuilder(text.Length + 2);
+        var marked = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == '&')
+            {
+                if (i + 1 < text.Length && text[i + 1] == '&')
+                {
+                    result.Append('&');
+                    i++;
+                }
+                else if (accessKey && !marked && i + 1 < text.Length)
+                {
+                    result.Append('_');
+                    marked = true;
+                }
+
+                continue;
+            }
+
+            if (accessKey && c == '_')
+            {
+                result.Append('_');
+            }
+
+            result.Append(c);
+        }
+
+        return result.ToString();
+    }
+}
+
+/// <summary>
 /// An item of a smart tag's panel (a <c>DesignerActionList</c>'s): a header, a text, a property of the action list
 /// (with its value and editor) or a method. A method that opens one of Windows Forms' dialogs opens the IDE's own
 /// editor instead: <see cref="Collection"/> (a collection editor) or <see cref="ImageProperty"/> (an image import);
@@ -354,7 +418,16 @@ public sealed record DesignerActionItem(string Kind, string Member, string Displ
     public bool Unavailable { get; init; }
 }
 
-public sealed record DesignerActionsResult(DesignerActionItem[] Items);
+public sealed record DesignerActionsResult(DesignerActionItem[] Items)
+{
+    /// <summary>
+    /// The context menu's verbs (#67), as the classic IDE lists them for one component: the action methods marked
+    /// <c>IncludeAsDesignerVerb</c>, then the designer's <c>Verbs</c>, merged by their text without its mnemonic
+    /// (<see cref="DesignerMnemonics.Strip"/>, ignoring case, the later one kept), each as a method item (a disabled verb is <see cref="DesignerActionItem.Unavailable"/>). None for an
+    /// inherited read-only component, or from a host older than #67.
+    /// </summary>
+    public DesignerActionItem[] Verbs { get; init; } = [];
+}
 
 /// <summary>A smart tag's method to run, or its property to set to <see cref="Text"/> (through the property's converter).</summary>
 public sealed record DesignerInvokeActionParams(string Component, string Member)

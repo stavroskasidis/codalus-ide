@@ -1083,4 +1083,69 @@ public sealed class WinFormsDesignerCodeTests
         Assert.True(new ResxText(Resx("AboutForm.resx")).IsLocalizable);
         Assert.False(new ResxText(Resx("OrderForm.resx")).IsLocalizable);
     }
+
+    // ------------------------------------------------------------------ #67: the control designers' Locked
+
+    private static readonly DesignerResource s_lockedTrue = new() { Type = "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089", Text = "True" };
+
+    /// <summary>
+    /// Lock Controls' Locked is design-time metadata in the default .resx, as the classic IDE writes it: with the
+    /// component's entries (metadata first), the form's ($this) last, in the file's line endings, never in the code; a
+    /// null resource removes it, and removing or renaming the component takes it along.
+    /// </summary>
+    [Fact]
+    public void Locked_metadata_is_written_where_the_classic_ide_writes_it()
+    {
+        var (code, resources) = ApplyWithResources("OrderForm", Resource("giftCheckBox.Locked", s_lockedTrue, metadata: true), Resource("$this.Locked", s_lockedTrue, metadata: true));
+        Assert.Equal(OrderForm, code);
+        var original = Resx("OrderForm.resx");
+        var resx = resources.Get(null)!.Text;
+        var newLine = original.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        string Element(string name) => string.Join(newLine, $"  <metadata name=\"{name}.Locked\" type=\"System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089\">", "    <value>True</value>", "  </metadata>") + newLine;
+        Assert.All(Diff(original, resx), l => Assert.StartsWith("+", l, StringComparison.Ordinal));
+        Assert.Equal(6, Diff(original, resx).Count);
+
+        // giftCheckBox's sorts before the other components' (logoPictureBox, orderToolTip); the form's goes last.
+        Assert.Contains(Element("giftCheckBox") + "  <metadata name=\"orderToolTip.TrayLocation\"", resx, StringComparison.Ordinal);
+        Assert.EndsWith(Element("$this") + "</root>" + newLine, resx, StringComparison.Ordinal);
+
+        // Unlocked: the entries go, and the file is as it was.
+        var text = new ResxText(resx);
+        text.Set("giftCheckBox.Locked", null, metadata: true);
+        text.Set("$this.Locked", null, metadata: true);
+        Assert.Equal(original, text.Text);
+
+        // The component removed or renamed: its Locked goes, or follows it.
+        text = new ResxText(resx);
+        text.RemoveComponent("giftCheckBox");
+        Assert.DoesNotContain("giftCheckBox", text.Text, StringComparison.Ordinal);
+        Assert.Contains("$this.Locked", text.Text, StringComparison.Ordinal);
+        text = new ResxText(resx);
+        text.RenameComponent("giftCheckBox", "wrapCheckBox");
+        Assert.Contains(Element("wrapCheckBox"), text.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("giftCheckBox", text.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The default .resx the IDE writes before Lock Controls' first metadata (DesignerResx.Empty, held by the designer so
+    /// the lock undoes with it) takes the same edits as one the C# host creates itself: the same text, the same code.
+    /// </summary>
+    [Fact]
+    public void A_precreated_default_resx_takes_the_same_edits_as_one_the_host_creates()
+    {
+        DesignerEdit[] edits = [Resource("greetingLabel.Locked", s_lockedTrue, metadata: true), Resource("$this.Locked", s_lockedTrue, metadata: true)];
+        (string Code, string Resx) ApplyTo(string? resx)
+        {
+            var set = new DesignerResourceSet(Sample("MainForm.cs"), p => p.EndsWith("MainForm.resx", StringComparison.OrdinalIgnoreCase) ? resx : File.Exists(p) ? File.ReadAllText(p) : null);
+            var writer = new DesignerWriter(t => DesignerReader.Read(CSharpSyntaxTree.ParseText(t), "System.Windows.Forms.Form", DesignerReader.WindowsFormsImplicitUsings), set);
+            return (writer.Apply(SourceText.From(File.ReadAllText(Sample("MainForm.Designer.cs"))), edits).ToString(), set.Get(null)!.Text);
+        }
+
+        var created = ApplyTo(null);
+        var precreated = ApplyTo(DesignerResx.Empty.Replace("\r\n", "\n", StringComparison.Ordinal));
+        Assert.Equal(created, precreated);
+        Assert.Equal(File.ReadAllText(Sample("MainForm.Designer.cs")), created.Code);
+        Assert.Contains("<metadata name=\"greetingLabel.Locked\"", created.Resx, StringComparison.Ordinal);
+        Assert.Equal(ResxText.Empty, DesignerResx.Empty);
+    }
 }

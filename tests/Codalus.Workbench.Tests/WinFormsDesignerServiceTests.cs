@@ -24,6 +24,62 @@ public sealed class WinFormsDesignerServiceTests
             DesignerHost = () => "/ide/winformsdesigner/codalus-winformsdesigner.dll",
         };
 
+    /// <summary>
+    /// #67: a verb's text keeps the designer's mnemonic ("&amp;Insert Standard Items"), which the IDE shows as a menu's access
+    /// key or drops (a screen reader's name, a smart tag's link), never as an ampersand; "&amp;&amp;" is one ampersand.
+    /// </summary>
+    [Fact]
+    public void A_verbs_mnemonic_is_an_access_key_or_dropped_never_shown()
+    {
+        Assert.Equal("Insert Standard Items", DesignerMnemonics.Strip("&Insert Standard Items"));
+        Assert.Equal("_Insert Standard Items", DesignerMnemonics.ToAccessKey("&Insert Standard Items"));
+        Assert.Equal("Edit Columns...", DesignerMnemonics.Strip("&Edit Columns..."));
+        Assert.Equal("Add _Column", DesignerMnemonics.ToAccessKey("Add &Column"));
+        Assert.Equal("Choose images", DesignerMnemonics.Strip("Choose images"));
+        Assert.Equal("Choose images", DesignerMnemonics.ToAccessKey("Choose images"));
+        Assert.Equal("Fish & Chips", DesignerMnemonics.Strip("Fish && Chips"));
+        Assert.Equal("Fish & _Chips", DesignerMnemonics.ToAccessKey("Fish && &Chips"));
+        Assert.Equal("Save_As", DesignerMnemonics.Strip("&Save_As"));
+        Assert.Equal("_Save__As", DesignerMnemonics.ToAccessKey("&Save_As"));
+        Assert.Equal("_Edit Items", DesignerMnemonics.ToAccessKey("&Edit &Items"));
+        Assert.Equal("Trailing", DesignerMnemonics.ToAccessKey("Trailing&"));
+    }
+
+    /// <summary>
+    /// #67: a form's .resx's design-time metadata (Lock Controls' name.Locked) is read as XML, so a data value nothing can
+    /// deserialize (a binary-formatted TreeNode on .NET 9 and later, a type that isn't there) doesn't fail the form's load.
+    /// </summary>
+    [Fact]
+    public void Resx_metadata_is_read_without_its_data_values()
+    {
+        const string Boolean = "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+        var resx = DesignerResx.Empty.Replace("</root>", $"""
+              <data name="treeView1.Nodes" mimetype="application/x-microsoft.net.object.binary.base64">
+                <value>AAEAAAD/////AQAAAAAAAAAMAgAAAFdTeXN0ZW0uV2luZG93cy5Gb3Jtcw==</value>
+              </data>
+              <data name="broken" type="Nowhere.Missing, Nowhere">
+                <value>x</value>
+              </data>
+              <metadata name="$this.Locked" type="{Boolean}">
+                <value>True</value>
+              </metadata>
+              <metadata name="button1.Locked" type="{Boolean}">
+                <value>False</value>
+              </metadata>
+              <metadata name="timer1.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+                <value>17, 17</value>
+              </metadata>
+            </root>
+            """, StringComparison.Ordinal);
+        var metadata = DesignerResx.Metadata(resx);
+        Assert.Equal(true, metadata["$this.Locked"]);
+        Assert.Equal(false, metadata["button1.Locked"]);
+        Assert.Equal("17, 17", metadata["timer1.TrayLocation"]);
+        Assert.Equal(3, metadata.Count);
+        Assert.Empty(DesignerResx.Metadata(DesignerResx.Empty));
+        Assert.Throws<System.Xml.XmlException>(() => DesignerResx.Metadata("<root><metadata"));
+    }
+
     [Fact]
     public void A_forms_code_file_opens_in_the_designer_and_other_files_dont()
     {
@@ -126,6 +182,33 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Contains("\"restacked\":2", restacked, StringComparison.Ordinal);
         Assert.Equal(2, JsonSerializer.Deserialize(restacked, json.DesignerRenderResult)!.Frame!.Restacked);
         Assert.Equal(0, JsonSerializer.Deserialize("{\"frame\":{\"png\":\"iVBORw0KGgo=\",\"width\":300,\"height\":200},\"components\":[],\"errors\":[]}", json.DesignerRenderResult)!.Frame!.Restacked);
+
+        // #67: a component's Locked (null: it has none that can be set), and the context menu's verbs; an older host's
+        // render and actions, without them, read as none.
+        var locks = JsonSerializer.Serialize(new DesignerRenderResult(null,
+        [
+            new DesignerComponentView("Form1", "System.Windows.Forms.Form", null, 0, 0, 300, 200) { Locked = true },
+            new DesignerComponentView("button1", "System.Windows.Forms.Button", "Form1", 10, 10, 75, 23) { Locked = false },
+            new DesignerComponentView("timer1", "System.Windows.Forms.Timer", null, 0, 0, 0, 0) { InTray = true },
+        ], []), json.DesignerRenderResult);
+        Assert.Equal([true, false, null], JsonSerializer.Deserialize(locks, json.DesignerRenderResult)!.Components.Select(c => c.Locked));
+        Assert.Null(JsonSerializer.Deserialize("{\"frame\":null,\"components\":[{\"name\":\"Form1\",\"type\":\"Form\",\"x\":0,\"y\":0,\"width\":1,\"height\":1}],\"errors\":[]}", json.DesignerRenderResult)!.Components[0].Locked);
+        var verbs = new DesignerActionsResult([new DesignerActionItem(DesignerActionKinds.Method, "DockInParent", "Dock in Parent Container")])
+        {
+            Verbs =
+            [
+                new DesignerActionItem(DesignerActionKinds.Method, "verb:Add Tab", "Add Tab"),
+                new DesignerActionItem(DesignerActionKinds.Method, "verb:Remove Tab", "Remove Tab") { Unavailable = true },
+                new DesignerActionItem(DesignerActionKinds.Method, "EditItems", "Edit Items...") { Collection = "System.Windows.Forms.ListBox:Items" },
+            ],
+        };
+        var actionsBack = JsonSerializer.Deserialize(JsonSerializer.Serialize(verbs, json.DesignerActionsResult), json.DesignerActionsResult)!;
+        Assert.Equal(["Add Tab", "Remove Tab", "Edit Items..."], actionsBack.Verbs.Select(v => v.DisplayName));
+        Assert.Equal(["verb:Add Tab", "verb:Remove Tab", "EditItems"], actionsBack.Verbs.Select(v => v.Member));
+        Assert.True(actionsBack.Verbs[1].Unavailable);
+        Assert.Equal("System.Windows.Forms.ListBox:Items", actionsBack.Verbs[2].Collection);
+        Assert.Single(actionsBack.Items);
+        Assert.Empty(JsonSerializer.Deserialize("{\"items\":[]}", json.DesignerActionsResult)!.Verbs);
         Assert.Equal(31, back.Render.Components[0].ClientY);
         Assert.Equal("button1", back.Created!.Properties[0].Value.Value);
         Assert.Equal(["label1"], back.Removed);

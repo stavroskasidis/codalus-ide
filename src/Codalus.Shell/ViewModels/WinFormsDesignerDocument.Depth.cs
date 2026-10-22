@@ -460,18 +460,29 @@ public sealed partial class WinFormsDesignerDocument
 
     // ------------------------------------------------------------------ the Format menu (M41b)
 
-    /// <summary>The selected controls with the primary selection's parent: what the Format menu lines up (the primary first).</summary>
-    private List<DesignerComponentView> Formatted()
+    /// <summary>
+    /// What the Format menu lines up: the selected controls (not the form, not parts) with the primary selection's parent,
+    /// the primary first. A locked primary stays the reference, as in the classic IDE (#67: Align and Make Same Size read
+    /// its bounds); the commands move and size only the unlocked ones (<see cref="Unlocked"/>).
+    /// </summary>
+    private (DesignerComponentView? Primary, List<DesignerComponentView> Group) Formatted()
     {
-        var moving = Movable();
-        if (moving.Count == 0)
+        var selected = Orderable();
+        if (selected.Count == 0)
         {
-            return moving;
+            return (null, selected);
         }
 
-        var primary = moving.FirstOrDefault(m => m.Name == PrimarySelection) ?? moving[0];
-        return [primary, .. moving.Where(m => m != primary && m.Parent == primary.Parent)];
+        var primary = selected.FirstOrDefault(m => m.Name == PrimarySelection) ?? selected[0];
+        return (primary, [primary, .. selected.Where(m => m != primary && m.Parent == primary.Parent)]);
     }
+
+    /// <summary>The selected controls Bring to Front and Send to Back take (not the form, not parts; locked ones too, as in the classic IDE).</summary>
+    private List<DesignerComponentView> Orderable() =>
+        [.. _selection.Select(Find).OfType<DesignerComponentView>().Where(c => c.IsControl && c != Root && !c.IsPart)];
+
+    /// <summary>The ones a Format command moves or sizes: the classic IDE skips locked controls.</summary>
+    private static IEnumerable<DesignerComponentView> Unlocked(IEnumerable<DesignerComponentView> views) => views.Where(v => v.Locked != true);
 
     private DesignerPropertyEdit LocationEdit(DesignerComponentView view, double x, double y)
     {
@@ -491,15 +502,14 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>Format → Align: to the primary selection's left, center, right, top, middle or bottom, or each to the grid (8 pixels).</summary>
     public Task AlignAsync(DesignerAlignment alignment)
     {
-        var views = Formatted();
-        if (views.Count == 0 || (views.Count < 2 && alignment != DesignerAlignment.ToGrid))
+        var (primary, views) = Formatted();
+        if (primary is null || (views.Count < 2 && alignment != DesignerAlignment.ToGrid))
         {
             return Task.CompletedTask;
         }
 
-        var primary = views[0];
         var edits = new List<DesignerPropertyEdit>();
-        foreach (var view in alignment == DesignerAlignment.ToGrid ? views : views.Skip(1))
+        foreach (var view in Unlocked(alignment == DesignerAlignment.ToGrid ? views : views.Skip(1)))
         {
             var parent = view.Parent is { } p ? Find(p) : null;
             double x = view.X, y = view.Y;
@@ -534,14 +544,13 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>Format → Make Same Size: the primary selection's width, height or both; or each sized to the grid.</summary>
     public Task MakeSameSizeAsync(DesignerSizing sizing)
     {
-        var views = Formatted();
-        if (views.Count == 0 || (views.Count < 2 && sizing != DesignerSizing.ToGrid))
+        var (primary, views) = Formatted();
+        if (primary is null || (views.Count < 2 && sizing != DesignerSizing.ToGrid))
         {
             return Task.CompletedTask;
         }
 
-        var primary = views[0];
-        return Apply((sizing == DesignerSizing.ToGrid ? views : views.Skip(1)).Select(view => sizing switch
+        return Apply(Unlocked(sizing == DesignerSizing.ToGrid ? views : views.Skip(1)).Select(view => sizing switch
         {
             DesignerSizing.Width => SizeEdit(view, primary.Width, view.Height),
             DesignerSizing.Height => SizeEdit(view, view.Width, primary.Height),
@@ -550,10 +559,13 @@ public sealed partial class WinFormsDesignerDocument
         }));
     }
 
-    /// <summary>Format → Horizontal or Vertical Spacing: make equal, increase or decrease by the grid, or remove, the first control staying.</summary>
+    /// <summary>
+    /// Format → Horizontal or Vertical Spacing: make equal, increase or decrease by the grid, or remove, the first control
+    /// staying; laid out over every selected control, a locked one kept where it is (#67, as the classic IDE).
+    /// </summary>
     public Task SpacingAsync(bool horizontal, DesignerSpacing spacing)
     {
-        var views = Formatted();
+        var (_, views) = Formatted();
         if (views.Count < 2 || (spacing == DesignerSpacing.MakeEqual && views.Count < 3))
         {
             return Task.CompletedTask;
@@ -577,7 +589,7 @@ public sealed partial class WinFormsDesignerDocument
             var target = double.IsNaN(gap) ? Math.Max(0, current + (spacing == DesignerSpacing.Increase ? GridSize : -GridSize)) : gap;
             var start = position + target;
             position = start + Length(view);
-            if (Math.Abs(start - Start(view)) >= 0.5)
+            if (Math.Abs(start - Start(view)) >= 0.5 && view.Locked != true)
             {
                 edits.Add(horizontal ? LocationEdit(view, Math.Round(start), view.Y) : LocationEdit(view, view.X, Math.Round(start)));
             }
@@ -586,10 +598,10 @@ public sealed partial class WinFormsDesignerDocument
         return Apply(edits);
     }
 
-    /// <summary>Format → Center in Form: the selection (as a group) centered in its parent's client area, horizontally or vertically.</summary>
+    /// <summary>Format → Center in Form: the selection's unlocked controls (as a group) centered in their parent's client area, horizontally or vertically.</summary>
     public Task CenterAsync(bool horizontal)
     {
-        var views = Formatted();
+        var views = Unlocked(Formatted().Group).ToList();
         if (views.Count == 0 || (views[0].Parent is { } p ? Find(p) : Root) is not { } parent)
         {
             return Task.CompletedTask;
@@ -611,7 +623,8 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>Format → Order: Bring to Front (the first of its parent's controls) or Send to Back (the last), written as <c>Controls.Add</c>'s order.</summary>
     public async Task OrderAsync(bool front)
     {
-        var views = Movable();
+        // TODO(issue): one undo step for two or more controls brought to the front or sent to the back (one each today).
+        var views = Orderable();
         foreach (var view in front ? Enumerable.Reverse(views) : views)
         {
             await RunAsync(host => host.SetChildIndexAsync(new DesignerChildIndexParams(view.Name, front ? 0 : int.MaxValue), CancellationToken.None)).ConfigureAwait(true);
