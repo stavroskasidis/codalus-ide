@@ -163,6 +163,12 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// On Windows the title row is the window's title bar (M29): the client area extends into it, the empty part drags
     /// the window and a double click maximizes it. Elsewhere the system keeps its title bar and the row sits below it.
     /// </summary>
+    /// <remarks>
+    /// The extended title bar stays <see cref="TitleBarPanel.FirstRowHeight"/> (32 px) tall when the menu wraps onto a
+    /// second row in a narrow window (0.6.0): the caption buttons keep the first row's height at its right end, as in the
+    /// classic IDE, and the second row is ordinary client area. Its empty parts (around the search box, the drag area
+    /// under the first row's) drag the window like the first row's, through <see cref="Window.BeginMoveDrag"/>.
+    /// </remarks>
     private void SetUpTitleBar()
     {
         if (!OperatingSystem.IsWindows())
@@ -171,11 +177,17 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         ExtendClientAreaToDecorationsHint = true;
-        ExtendClientAreaTitleBarHeightHint = 32;
+        ExtendClientAreaTitleBarHeightHint = TitleRow.FirstRowHeight;
         TitleIcon.IsVisible = true;
         CaptionButtonsSpace.Width = CaptionButtonsWidth;
-        TitleDragArea.PointerPressed += (_, e) =>
+        TitleBar.PointerPressed += (_, e) =>
         {
+            // The drag area, or the row's background between the menu, the search box and the name.
+            if (e.Handled || (e.Source != TitleBar && e.Source != TitleRow && e.Source != TitleDragArea))
+            {
+                return;
+            }
+
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             {
                 if (e.ClickCount == 2)
@@ -188,6 +200,71 @@ public sealed partial class MainWindow : Window, IShellWindow
                 }
             }
         };
+    }
+
+    /// <summary>
+    /// What is wrong with the title row and the standard toolbar at the window's current width (0.6.0; the smoke test
+    /// and the tests check it at several widths): anything reaching into the caption buttons' room or past the window's
+    /// edge, a drag area under its minimum, a menu not shown, a toolbar on more than one row, a "…" with nothing in it.
+    /// </summary>
+    internal IReadOnlyList<string> TitleAndToolbarProblems()
+    {
+        var problems = new List<string>();
+        var width = Bounds.Width;
+        Rect In(Visual visual) => visual.TranslatePoint(default, this) is { } origin ? new Rect(origin, visual.Bounds.Size) : default;
+
+        var caption = In(CaptionButtonsSpace);
+        if (Math.Abs(caption.Right - width) > 1 || caption.Top > 1)
+        {
+            problems.Add($"the caption buttons' room is at {caption}, not at the top right of a window {width} px wide");
+        }
+
+        var right = width - CaptionButtonsSpace.Bounds.Width + 0.5;
+        var parts = new List<(string Name, Visual Visual)> { ("the search box", SearchBox) };
+        if (MenuBar.IsVisible)
+        {
+            parts.AddRange(MenuBar.Items.OfType<MenuItem>().Where(m => m.IsVisible).Select(m => ($"the {Avalonia.Automation.AutomationProperties.GetName(m)} menu", (Visual)m)));
+        }
+
+        parts.AddRange(TitleRow.Children.Where(c => TitleBarPanel.GetRole(c) is TitleBarRole.Name or TitleBarRole.Icon && c.IsVisible).Select(c => (TitleBarPanel.GetRole(c).ToString(), (Visual)c)));
+        foreach (var (name, visual) in parts)
+        {
+            var rect = In(visual);
+            if (!visual.IsEffectivelyVisible || rect.Width <= 0 || rect.X < -0.5 || rect.Right > right || rect.Bottom > TitleBar.Bounds.Height + 0.5
+                || (visual is MenuItem && !In(MenuBar).Inflate(0.5).Contains(rect)))
+            {
+                problems.Add($"{name} is at {rect}, outside the title row's {width - CaptionButtonsSpace.Bounds.Width} px before the caption buttons");
+            }
+        }
+
+        if (In(TitleDragArea) is var drag && (drag.Width < TitleRow.MinDragWidth - 0.5 || drag.Right > right))
+        {
+            problems.Add($"the drag area is at {drag}, under its {TitleRow.MinDragWidth} px or in the caption buttons' room");
+        }
+
+        if (this.GetVisualDescendants().OfType<StandardToolbar>().FirstOrDefault(t => t.IsEffectivelyVisible) is { } toolbar)
+        {
+            var row = In(toolbar.Panel);
+            if (row.Height > 40)
+            {
+                problems.Add($"the standard toolbar is {row.Height} px tall: on more than one row");
+            }
+
+            foreach (var item in toolbar.Panel.Children.Where(c => c.IsVisible && !toolbar.Panel.Folded.Contains(c)).Concat(toolbar.Panel.Overflows))
+            {
+                if (In(item) is var rect && (rect.Right > width + 0.5 || rect.Y < row.Y - 0.5 || rect.Bottom > row.Bottom + 0.5))
+                {
+                    problems.Add($"the toolbar's {Avalonia.Automation.AutomationProperties.GetName(item) ?? item.GetType().Name} is at {rect}, off its row of {row}");
+                }
+            }
+
+            if (toolbar.Panel.Folded.Count > 0 && !toolbar.Panel.Overflows.Any())
+            {
+                problems.Add("the toolbar folded items without a \"…\" drop-down");
+            }
+        }
+
+        return problems;
     }
 
     // ------------------------------------------------------------------ startup and shutdown
