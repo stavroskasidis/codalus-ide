@@ -199,6 +199,7 @@
                   <MenuItem controls:MenuEntry.CommandIcon="git.createBranch" Header="{l:T gitChanges.newBranch}" Tag="git.createBranch" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.CommandIcon="git.merge" Header="{l:T gitChanges.mergeBranch}" Tag="git.merge" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.Icon="arrow-sort" Header="{l:T gitChanges.rebaseCurrentBranch}" Tag="git.rebase" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.updateBranch" Header="{l:T gitChanges.updateBranch}" Tag="git.updateBranch" Click="OnMenuCommand" />
                   <Separator />
                   <MenuItem controls:MenuEntry.CommandIcon="git.stash" Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.CommandIcon="git.history" Header="{l:T gitChanges.viewHistory}" Tag="git.history" Click="OnMenuCommand" />

@@ -112,6 +112,24 @@ public sealed class GitServiceTests : IAsyncLifetime
         return output;
     }
 
+    /// <summary>Runs git where it may fail (a rebase or merge that stops on a conflict): its exit code.</summary>
+    private static async Task<int> GitExitCode(string directory, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("git") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        start.Environment["GIT_EDITOR"] = "true";
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync(Ct);
+        var error = process.StandardError.ReadToEndAsync(Ct);
+        await process.WaitForExitAsync(Ct);
+        await Task.WhenAll(output, error);
+        return process.ExitCode;
+    }
+
     private async Task Edit(params (int Line, string Text)[] changes)
     {
         var lines = (await File.ReadAllTextAsync(File1, Ct)).TrimEnd('\n').Split('\n');
@@ -228,6 +246,274 @@ public sealed class GitServiceTests : IAsyncLifetime
         await _git.PushAsync(Ct);
         Assert.Equal(0, _git.Status!.Ahead);
         Assert.Contains(await _git.BranchesAsync(Ct), b => b is { Name: "origin/main", IsRemote: true });
+    }
+
+    /// <summary>
+    /// A bare remote with main and feature, both tracked here, and another clone of it that commits to both (the first
+    /// commit to <paramref name="file"/>). Returns the other clone and its new feature commit.
+    /// </summary>
+    private async Task<(string Other, string FeatureTip)> RemoteWithNewCommitsAsync(string file = "c.txt")
+    {
+        var bare = Path.Combine(_root, "remote.git");
+        await Git(_root, "init", "-q", "--bare", "-b", "main", bare);
+        await Git(Repo, "remote", "add", "origin", bare);
+        await Git(Repo, "push", "-q", "-u", "origin", "main");
+        await Git(Repo, "branch", "feature");
+        await Git(Repo, "push", "-q", "-u", "origin", "feature");
+
+        var other = Path.Combine(_root, "other");
+        await Git(_root, "clone", "-q", bare, other);
+        await Configure(other);
+        await File.WriteAllTextAsync(Path.Combine(other, file), "main from the other clone\n", Ct);
+        await Git(other, "add", ".");
+        await Git(other, "commit", "-q", "-m", "main from the other clone");
+        await Git(other, "push", "-q", "origin", "main");
+        await Git(other, "switch", "-q", "feature");
+        await File.WriteAllTextAsync(Path.Combine(other, "feature.txt"), "feature from the other clone\n", Ct);
+        await Git(other, "add", ".");
+        await Git(other, "commit", "-q", "-m", "feature from the other clone");
+        await Git(other, "push", "-q", "origin", "feature");
+        return (other, (await Git(other, "rev-parse", "HEAD")).Trim());
+    }
+
+    /// <summary>
+    /// Update Branch fast-forwards a branch that isn't checked out to its upstream (fetching only that branch), and leaves
+    /// HEAD, the working tree and the other branches alone; the current branch is fast-forwarded with its files.
+    /// </summary>
+    [Fact]
+    public async Task Update_branch_fast_forwards_a_branch_without_checking_it_out()
+    {
+        var (_, featureTip) = await RemoteWithNewCommitsAsync();
+        var mainBefore = (await Git(Repo, "rev-parse", "main")).Trim();
+        var featureBefore = (await Git(Repo, "rev-parse", "feature")).Trim();
+
+        var update = await _git.UpdateBranchAsync("feature", Ct);
+        Assert.Equal(new GitBranchUpdate("feature", GitBranchUpdateOutcome.Updated) { Upstream = "origin/feature", Before = featureBefore, After = featureTip, Behind = 1 }, update);
+        Assert.Equal(featureTip, (await Git(Repo, "rev-parse", "refs/heads/feature")).Trim());
+        Assert.Equal(featureTip, (await Git(Repo, "rev-parse", "refs/remotes/origin/feature")).Trim()); // its remote-tracking branch too
+        Assert.Equal("main", _git.Status!.Branch);
+        Assert.Equal(mainBefore, (await Git(Repo, "rev-parse", "HEAD")).Trim());
+        Assert.False(File.Exists(Path.Combine(Repo, "feature.txt")));
+        Assert.Empty(_git.Status.Files);
+
+        // Only feature was fetched: main's remote-tracking branch hasn't moved.
+        Assert.Equal(mainBefore, (await Git(Repo, "rev-parse", "refs/remotes/origin/main")).Trim());
+
+        // Again, by its full ref: nothing to do.
+        update = await _git.UpdateBranchAsync("refs/heads/feature", Ct);
+        Assert.Equal(GitBranchUpdateOutcome.UpToDate, update.Outcome);
+        Assert.Equal((featureTip, featureTip), (update.Before, update.After));
+
+        // The current branch: fast-forwarded, its new file in the working tree, nothing left to pull.
+        await File.WriteAllTextAsync(Path.Combine(Repo, "notes.txt"), "uncommitted\n", Ct);
+        update = await _git.UpdateBranchAsync("main", Ct);
+        Assert.Equal((GitBranchUpdateOutcome.Updated, true, 1), (update.Outcome, update.IsCurrent, update.Behind));
+        Assert.Equal(update.After, (await Git(Repo, "rev-parse", "HEAD")).Trim());
+        Assert.NotEqual(mainBefore, update.After);
+        Assert.True(File.Exists(Path.Combine(Repo, "c.txt")));
+        Assert.Equal("uncommitted\n", await File.ReadAllTextAsync(Path.Combine(Repo, "notes.txt"), Ct));
+        Assert.Equal(("main", 0), (_git.Status!.Branch, _git.Status.Behind));
+    }
+
+    /// <summary>
+    /// Update Branch never rewrites a branch: one that has diverged from its upstream stays as it is (with both counts), one
+    /// with only its own commits has nothing to update, and one with no upstream or checked out in another worktree is
+    /// left for the shell to explain.
+    /// </summary>
+    [Fact]
+    public async Task Update_branch_leaves_diverged_unpublished_and_elsewhere_checked_out_branches()
+    {
+        var (_, featureTip) = await RemoteWithNewCommitsAsync();
+
+        // feature gets a commit of its own here, so it and origin/feature have diverged.
+        await Git(Repo, "switch", "-q", "feature");
+        await File.WriteAllTextAsync(Path.Combine(Repo, "mine.txt"), "mine\n", Ct);
+        await Git(Repo, "add", ".");
+        await Git(Repo, "commit", "-q", "-m", "mine");
+        var mine = (await Git(Repo, "rev-parse", "HEAD")).Trim();
+        await Git(Repo, "switch", "-q", "main");
+        await _git.RefreshAsync(Ct);
+
+        var update = await _git.UpdateBranchAsync("feature", Ct);
+        Assert.Equal(new GitBranchUpdate("feature", GitBranchUpdateOutcome.Diverged) { Upstream = "origin/feature", Before = mine, After = mine, Ahead = 1, Behind = 1 }, update);
+        Assert.Equal(mine, (await Git(Repo, "rev-parse", "refs/heads/feature")).Trim());
+        Assert.Equal(featureTip, (await Git(Repo, "rev-parse", "refs/remotes/origin/feature")).Trim()); // fetched all the same
+
+        // The current branch diverged too: no merge commit, nothing changes.
+        await File.WriteAllTextAsync(Path.Combine(Repo, "main.txt"), "main here\n", Ct);
+        await Git(Repo, "add", ".");
+        await Git(Repo, "commit", "-q", "-m", "main here");
+        var mainHere = (await Git(Repo, "rev-parse", "HEAD")).Trim();
+        await _git.RefreshAsync(Ct);
+        update = await _git.UpdateBranchAsync("main", Ct);
+        Assert.Equal((GitBranchUpdateOutcome.Diverged, true, 1, 1), (update.Outcome, update.IsCurrent, update.Ahead, update.Behind));
+        Assert.Equal(mainHere, (await Git(Repo, "rev-parse", "HEAD")).Trim());
+        Assert.False(File.Exists(Path.Combine(Repo, "c.txt")));
+
+        // Ahead of its upstream only: nothing to update (Push sends it), and not rewound.
+        await Git(Repo, "branch", "--track", "ahead", "origin/main");
+        await Git(Repo, "switch", "-q", "ahead");
+        await File.WriteAllTextAsync(Path.Combine(Repo, "ahead.txt"), "ahead\n", Ct);
+        await Git(Repo, "add", ".");
+        await Git(Repo, "commit", "-q", "-m", "ahead");
+        var aheadTip = (await Git(Repo, "rev-parse", "HEAD")).Trim();
+        await Git(Repo, "switch", "-q", "main");
+        await _git.RefreshAsync(Ct);
+        update = await _git.UpdateBranchAsync("ahead", Ct);
+        Assert.Equal(new GitBranchUpdate("ahead", GitBranchUpdateOutcome.Ahead) { Upstream = "origin/main", Before = aheadTip, After = aheadTip, Ahead = 1 }, update);
+        Assert.Equal(aheadTip, (await Git(Repo, "rev-parse", "refs/heads/ahead")).Trim());
+
+        // No upstream: nothing is fetched.
+        await Git(Repo, "branch", "local-only");
+        update = await _git.UpdateBranchAsync("local-only", Ct);
+        Assert.Equal(GitBranchUpdateOutcome.NoUpstream, update.Outcome);
+        Assert.Null(update.Upstream);
+
+        // Checked out in another worktree: that worktree's files would no longer match, so it's left to a pull there.
+        var worktree = Path.Combine(_root, "worktree");
+        await Git(Repo, "branch", "--track", "elsewhere", "origin/feature");
+        await Git(Repo, "branch", "-f", "elsewhere", featureTip + "~1");
+        await Git(Repo, "worktree", "add", "-q", worktree, "elsewhere");
+        update = await _git.UpdateBranchAsync("elsewhere", Ct);
+        Assert.Equal(GitBranchUpdateOutcome.CheckedOutElsewhere, update.Outcome);
+        Assert.Equal(Codalus.Platform.RealPath.Resolve(worktree), Codalus.Platform.RealPath.Resolve(update.WorktreePath!));
+        Assert.Equal(Path.GetFullPath(update.WorktreePath!), update.WorktreePath); // the OS's separators (git writes C:/ on Windows)
+        Assert.Null(update.Operation);
+        Assert.Equal((await Git(Repo, "rev-parse", featureTip + "~1")).Trim(), (await Git(Repo, "rev-parse", "refs/heads/elsewhere")).Trim());
+
+        // A name that is only a folder of branches isn't a branch.
+        await Git(Repo, "branch", "topic/one");
+        var missing = await Assert.ThrowsAsync<GitException>(() => _git.UpdateBranchAsync("topic", Ct));
+        Assert.Contains("'topic'", missing.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A rebase detaches HEAD, so git lists the branch being rebased as checked out nowhere, yet it counts as current
+    /// (D38, question 21): Update leaves it alone, here and in another worktree, without running git (git 2.35 and later
+    /// refuse to fetch into it, older git moved it under the rebase, which then couldn't finish). So does the current
+    /// branch during a merge.
+    /// </summary>
+    [Fact]
+    public async Task Update_branch_leaves_a_branch_being_rebased_and_a_merging_current_branch_alone()
+    {
+        await RemoteWithNewCommitsAsync("a.txt");
+
+        // feature changes a.txt as origin/main does, so rebasing it onto origin/main stops on a conflict.
+        await Git(Repo, "switch", "-q", "feature");
+        await File.WriteAllTextAsync(File1, "feature's own a.txt\n", Ct);
+        await Git(Repo, "commit", "-q", "-am", "feature's a.txt");
+        var featureHere = (await Git(Repo, "rev-parse", "HEAD")).Trim();
+        await Git(Repo, "fetch", "-q", "origin", "main");
+        Assert.NotEqual(0, await GitExitCode(Repo, "rebase", "origin/main"));
+        await _git.RefreshAsync(Ct);
+        Assert.Equal("rebase", _git.Status!.Operation);
+        Assert.Null(_git.Status.Branch); // HEAD is detached
+        var log = new List<string>();
+        _git.Log += (_, line) => log.Add(line);
+
+        var update = await _git.UpdateBranchAsync("feature", Ct);
+        Assert.Equal((GitBranchUpdateOutcome.OperationInProgress, "rebase"), (update.Outcome, update.Operation));
+        Assert.Equal(featureHere, (await Git(Repo, "rev-parse", "refs/heads/feature")).Trim());
+        Assert.Contains(await _git.BranchOperationsAsync(Ct), o => o is { Branch: "feature", Operation: "rebase", IsThisWorktree: true });
+        Assert.DoesNotContain(log, l => l.StartsWith("> git fetch", StringComparison.Ordinal));
+        await Git(Repo, "rebase", "--abort");
+
+        // In another worktree: said to be checked out there, and where.
+        var worktree = Path.Combine(_root, "worktree");
+        await Git(Repo, "switch", "-q", "main");
+        await Git(Repo, "worktree", "add", "-q", worktree, "feature");
+        await Configure(worktree);
+        Assert.NotEqual(0, await GitExitCode(worktree, "rebase", "origin/main"));
+        update = await _git.UpdateBranchAsync("feature", Ct);
+        Assert.Equal((GitBranchUpdateOutcome.CheckedOutElsewhere, "rebase"), (update.Outcome, update.Operation));
+        Assert.Equal(Codalus.Platform.RealPath.Resolve(worktree), Codalus.Platform.RealPath.Resolve(update.WorktreePath!));
+        Assert.Equal(featureHere, (await Git(Repo, "rev-parse", "refs/heads/feature")).Trim());
+        Assert.DoesNotContain(log, l => l.StartsWith("> git fetch", StringComparison.Ordinal));
+        await Git(worktree, "rebase", "--abort");
+
+        // The current branch during a merge: nothing is fetched, nothing moves.
+        await Git(Repo, "switch", "-q", "-c", "conflicting");
+        await File.WriteAllTextAsync(File1, "conflicting a.txt\n", Ct);
+        await Git(Repo, "commit", "-q", "-am", "conflicting a.txt");
+        await Git(Repo, "switch", "-q", "main");
+        await File.WriteAllTextAsync(File1, "main's own a.txt\n", Ct);
+        await Git(Repo, "commit", "-q", "-am", "main's a.txt");
+        var mainHere = (await Git(Repo, "rev-parse", "HEAD")).Trim();
+        Assert.NotEqual(0, await GitExitCode(Repo, "merge", "--no-edit", "conflicting"));
+        await _git.RefreshAsync(Ct);
+        update = await _git.UpdateBranchAsync("main", Ct);
+        Assert.Equal((GitBranchUpdateOutcome.OperationInProgress, "merge", true), (update.Outcome, update.Operation, update.IsCurrent));
+        Assert.Equal(mainHere, (await Git(Repo, "rev-parse", "HEAD")).Trim());
+        Assert.DoesNotContain(log, l => l.StartsWith("> git fetch", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Updates of two branches at once, one an ancestor of the other, while a full fetch also runs: each ends at its own
+    /// upstream's tip (a branch that isn't checked out moves in git's own fetch, never from a FETCH_HEAD another fetch may
+    /// have rewritten), and a second Update waits for the first (<see cref="GitService.FetchGate"/>), as does a cancel.
+    /// </summary>
+    [Fact]
+    public async Task Update_branch_runs_one_at_a_time_and_each_branch_gets_its_own_upstream()
+    {
+        var (other, featureTip) = await RemoteWithNewCommitsAsync();
+
+        // develop: behind origin/develop, and an ancestor of origin/feature's tip.
+        await Git(other, "branch", "develop", featureTip + "~1");
+        await Git(other, "push", "-q", "origin", "develop");
+        await Git(Repo, "fetch", "-q", "origin", "develop");
+        await Git(Repo, "branch", "--track", "develop", "origin/develop");
+        await Git(other, "switch", "-q", "develop");
+        await File.WriteAllTextAsync(Path.Combine(other, "develop.txt"), "develop\n", Ct);
+        await Git(other, "add", ".");
+        await Git(other, "commit", "-q", "-m", "develop");
+        await Git(other, "push", "-q", "origin", "develop");
+        var developTip = (await Git(other, "rev-parse", "HEAD")).Trim();
+
+        var develop = _git.UpdateBranchAsync("develop", Ct);
+        var feature = _git.UpdateBranchAsync("feature", Ct);
+        var fetch = _git.FetchAsync(Ct);
+        await Task.WhenAll(develop, feature, fetch);
+        Assert.Equal((GitBranchUpdateOutcome.Updated, developTip, 1), ((await develop).Outcome, (await develop).After, (await develop).Behind));
+        Assert.Equal((GitBranchUpdateOutcome.Updated, featureTip, 1), ((await feature).Outcome, (await feature).After, (await feature).Behind));
+        Assert.Equal(developTip, (await Git(Repo, "rev-parse", "refs/heads/develop")).Trim());
+        Assert.Equal(featureTip, (await Git(Repo, "rev-parse", "refs/heads/feature")).Trim());
+
+        // While another FETCH_HEAD writer holds the gate, Update waits; a cancel stops it waiting.
+        await _git.FetchGate.WaitAsync(Ct);
+        Task<GitBranchUpdate> waiting;
+        using (var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct))
+        {
+            waiting = _git.UpdateBranchAsync("feature", cancel.Token);
+            await Task.Delay(300, Ct);
+            Assert.False(waiting.IsCompleted);
+            await cancel.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting);
+        }
+
+        waiting = _git.UpdateBranchAsync("feature", Ct);
+        await Task.Delay(300, Ct);
+        Assert.False(waiting.IsCompleted);
+        _git.FetchGate.Release();
+        Assert.Equal(GitBranchUpdateOutcome.UpToDate, (await waiting).Outcome);
+    }
+
+    /// <summary>
+    /// The current branch's fast-forward is git's <c>merge --ff-only</c>: when it would overwrite a local change, git
+    /// refuses and says so, and nothing moves or is lost (no stash, no merge commit).
+    /// </summary>
+    [Fact]
+    public async Task Update_branch_keeps_local_changes_the_current_branch_fast_forward_would_overwrite()
+    {
+        await RemoteWithNewCommitsAsync("a.txt"); // origin/main changes a.txt
+        var mainBefore = (await Git(Repo, "rev-parse", "HEAD")).Trim();
+        await File.WriteAllTextAsync(File1, "my uncommitted a.txt\n", Ct);
+        await _git.RefreshAsync(Ct);
+
+        var failure = await Assert.ThrowsAsync<GitException>(() => _git.UpdateBranchAsync("main", Ct));
+        Assert.Contains("a.txt", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(mainBefore, (await Git(Repo, "rev-parse", "HEAD")).Trim());
+        Assert.Equal("my uncommitted a.txt\n", await File.ReadAllTextAsync(File1, Ct));
+        Assert.Equal(1, _git.Status!.Behind); // fetched, so the count shows what's waiting
     }
 
     [Fact]

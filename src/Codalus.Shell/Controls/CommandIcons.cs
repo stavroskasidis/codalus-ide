@@ -395,6 +395,7 @@ public static class CommandIcons
         ["git.switchBranch"] = new("branch", Git),
         ["git.createBranch"] = new("branch", Git),
         ["git.merge"] = new("merge", Git),
+        ["git.updateBranch"] = new("download", Git),
         ["git.mergeEditor.nextConflict"] = new("arrow-down", Navigate),
         ["git.mergeEditor.previousConflict"] = new("arrow-up", Navigate),
         ["git.mergeEditor.acceptMerge"] = new("check", Git),

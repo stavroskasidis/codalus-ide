@@ -220,6 +220,7 @@ internal static partial class BuiltIns
 
             Item(GitBranchesMenu, "git.switchBranch", "1-branch"),
             Item(GitBranchesMenu, "git.createBranch", "1-branch"),
+            Item(GitBranchesMenu, "git.updateBranch", "1-branch"),
             Item(GitBranchesMenu, "git.merge", "2-merge"),
             Item(GitBranchesMenu, "git.abortMerge", "2-merge"),
             Item(GitBranchesMenu, "git.rebase", "2-merge"),
