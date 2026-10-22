@@ -252,7 +252,7 @@ public sealed class NewProjectViewModelTests : IDisposable
     [AvaloniaFact]
     public async Task Back_on_the_first_page_returns_to_the_start_window()
     {
-        var model = Model(new NewProjectContext { FromStartWindow = true, IsWindows = false });
+        var model = Model(new NewProjectContext { FromStartWindow = true, IsWindows = false, IsMacOS = false });
         NewProjectCompletion? finished = null;
         var done = false;
         model.Finished += (_, completion) => (finished, done) = (completion, true);
