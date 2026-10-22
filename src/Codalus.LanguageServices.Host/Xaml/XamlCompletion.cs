@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using Codalus.LanguageServices.Host.Features;
 using Codalus.LanguageServices.Protocol;
 using Microsoft.CodeAnalysis;
 using Range = Codalus.LanguageServices.Protocol.Range;
@@ -126,7 +128,10 @@ internal static class XamlCompletion
         ("Delay", "Milliseconds to wait before writing back."),
     ];
 
-    public static async Task<CompletionList> CompleteAsync(XamlContext context, int offset, CancellationToken cancellationToken)
+    /// <summary>The symbol an item describes, whose summary comes when the item is resolved (<see cref="CompletionFeature.SummarizeOnResolve"/>).</summary>
+    private static readonly ConditionalWeakTable<CompletionItem, ISymbol> s_described = new();
+
+    public static async Task<CompletionList> CompleteAsync(XamlContext context, int offset, CompletionFeature completion, CancellationToken cancellationToken)
     {
         var items = new List<CompletionItem>();
         var range = Complete(context, offset, items, out var asyncWork);
@@ -135,7 +140,8 @@ internal static class XamlCompletion
             await asyncWork(items, cancellationToken).ConfigureAwait(false);
         }
 
-        return new CompletionList(false, [.. items.DistinctBy(i => i.Label)]) { ItemDefaults = range is null ? null : new CompletionItemDefaults(range) };
+        var described = items.DistinctBy(i => i.Label).Select(i => (i, s_described.TryGetValue(i, out var symbol) ? symbol : null)).ToArray();
+        return new CompletionList(false, completion.SummarizeOnResolve(described, XamlDocs.Summary)) { ItemDefaults = range is null ? null : new CompletionItemDefaults(range) };
     }
 
     private static Range? Complete(XamlContext context, int offset, List<CompletionItem> items, out Func<List<CompletionItem>, CancellationToken, Task>? asyncWork)
@@ -244,13 +250,13 @@ internal static class XamlCompletion
         {
             foreach (var member in types.Members(ownerType).Where(m => m.Kind != XamlMemberKind.Event))
             {
-                items.Add(Item($"{owner.Name}.{member.Name}", CompletionItemKind.Property, range, Detail(member), XamlDocs.Summary(member.Symbol)));
+                items.Add(Item($"{owner.Name}.{member.Name}", CompletionItemKind.Property, range, Detail(member), documented: member.Symbol));
             }
         }
     }
 
     private static CompletionItem TypeItem(string label, INamedTypeSymbol type, Range range) =>
-        Item(label, type.TypeKind == TypeKind.Struct ? CompletionItemKind.Struct : CompletionItemKind.Class, range, type.ToDisplayString(), XamlDocs.Summary(type));
+        Item(label, type.TypeKind == TypeKind.Struct ? CompletionItemKind.Struct : CompletionItemKind.Class, range, type.ToDisplayString(), documented: type);
 
     // ------------------------------------------------------------------ attribute names
 
@@ -339,7 +345,7 @@ internal static class XamlCompletion
 
         foreach (var member in types.Members(type).Where(m => m.Settable))
         {
-            Add(Item(member.Name, member.Kind == XamlMemberKind.Event ? CompletionItemKind.Event : CompletionItemKind.Property, range, Detail(member), XamlDocs.Summary(member.Symbol),
+            Add(Item(member.Name, member.Kind == XamlMemberKind.Event ? CompletionItemKind.Event : CompletionItemKind.Property, range, Detail(member), documented: member.Symbol,
                 insert: member.Name + "=\"$0\"", snippet: true));
         }
 
@@ -354,7 +360,7 @@ internal static class XamlCompletion
         {
             foreach (var member in types.Attached(owner))
             {
-                Add(Item($"{prefix}.{member.Name}", CompletionItemKind.Property, range, Detail(member), XamlDocs.Summary(member.Symbol), insert: $"{prefix}.{member.Name}=\"$0\"", snippet: true));
+                Add(Item($"{prefix}.{member.Name}", CompletionItemKind.Property, range, Detail(member), documented: member.Symbol, insert: $"{prefix}.{member.Name}=\"$0\"", snippet: true));
             }
         }
     }
@@ -510,7 +516,7 @@ internal static class XamlCompletion
             {
                 foreach (var member in types.Members(triggerTarget).Where(m => m.Kind != XamlMemberKind.Event))
                 {
-                    items.Add(Item(member.Name, CompletionItemKind.Property, whole, Detail(member), XamlDocs.Summary(member.Symbol)));
+                    items.Add(Item(member.Name, CompletionItemKind.Property, whole, Detail(member), documented: member.Symbol));
                 }
             }
             else if (element.Attribute("Property")?.Value is { } triggered && Member(context, element, triggerTarget, triggered.Trim()) is { } triggerMember)
@@ -527,7 +533,7 @@ internal static class XamlCompletion
             {
                 foreach (var member in types.Members(eventTarget).Where(m => m.Kind == XamlMemberKind.Event))
                 {
-                    items.Add(Item(member.Name, CompletionItemKind.Event, whole, Detail(member), XamlDocs.Summary(member.Symbol)));
+                    items.Add(Item(member.Name, CompletionItemKind.Event, whole, Detail(member), documented: member.Symbol));
                 }
             }
             else if (name == "Handler" && context.CodeBehind is { } handlers)
@@ -548,7 +554,7 @@ internal static class XamlCompletion
             {
                 foreach (var member in types.Members(target).Where(m => m.Kind != XamlMemberKind.Event && m.Settable))
                 {
-                    items.Add(Item(member.Name, CompletionItemKind.Property, whole, Detail(member), XamlDocs.Summary(member.Symbol)));
+                    items.Add(Item(member.Name, CompletionItemKind.Property, whole, Detail(member), documented: member.Symbol));
                 }
 
                 return whole;
@@ -614,7 +620,7 @@ internal static class XamlCompletion
     {
         foreach (var (value, symbol) in types.ValuesOf(type))
         {
-            items.Add(Item(value, symbol is IFieldSymbol { IsConst: true } ? CompletionItemKind.EnumMember : CompletionItemKind.Value, range, null, symbol is null ? null : XamlDocs.Summary(symbol)));
+            items.Add(Item(value, symbol is IFieldSymbol { IsConst: true } ? CompletionItemKind.EnumMember : CompletionItemKind.Value, range, documented: symbol));
         }
     }
 
@@ -778,7 +784,7 @@ internal static class XamlCompletion
         {
             foreach (var member in types.Members(target).Where(m => m.Kind != XamlMemberKind.Event))
             {
-                items.Add(Item(member.Name, CompletionItemKind.Property, argumentRange, Detail(member), XamlDocs.Summary(member.Symbol)));
+                items.Add(Item(member.Name, CompletionItemKind.Property, argumentRange, Detail(member), documented: member.Symbol));
             }
 
             return argumentRange;
@@ -798,7 +804,7 @@ internal static class XamlCompletion
                 var memberRange = context.Range(attribute.ValueStart + extension.ArgumentStart + dot + 1, offset);
                 foreach (var member in owner.GetMembers().Where(m => m.IsStatic && m.DeclaredAccessibility == Accessibility.Public && m is IPropertySymbol or IFieldSymbol))
                 {
-                    items.Add(Item(member.Name, member is IFieldSymbol { IsConst: true } ? CompletionItemKind.Constant : CompletionItemKind.Property, memberRange, null, XamlDocs.Summary(member)));
+                    items.Add(Item(member.Name, member is IFieldSymbol { IsConst: true } ? CompletionItemKind.Constant : CompletionItemKind.Property, memberRange, documented: member));
                 }
 
                 return memberRange;
@@ -838,7 +844,7 @@ internal static class XamlCompletion
                     IMethodSymbol method => (CompletionItemKind.Method, method.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)),
                     _ => (CompletionItemKind.Field, null as string),
                 };
-                items.Add(Item(member.Name, kind, range, detail, XamlDocs.Summary(member), sort: (kind == CompletionItemKind.Property ? "1" : "2") + member.Name));
+                items.Add(Item(member.Name, kind, range, detail, documented: member, sort: (kind == CompletionItemKind.Property ? "1" : "2") + member.Name));
             }
 
             return range;
@@ -867,7 +873,7 @@ internal static class XamlCompletion
                 IMethodSymbol method => (CompletionItemKind.Method, method.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)),
                 _ => (CompletionItemKind.Field, null as string),
             };
-            items.Add(Item(member.Name, kind, range, detail, XamlDocs.Summary(member), sort: kind == CompletionItemKind.Property ? "0" + member.Name : "1" + member.Name));
+            items.Add(Item(member.Name, kind, range, detail, documented: member, sort: kind == CompletionItemKind.Property ? "0" + member.Name : "1" + member.Name));
         }
 
         return range;
@@ -996,8 +1002,11 @@ internal static class XamlCompletion
         return (start, end);
     }
 
-    private static CompletionItem Item(string label, int kind, Range range, string? detail = null, string? documentation = null, string? insert = null, bool snippet = false, string? filter = null, string? sort = null) =>
-        new(label)
+    /// <param name="documentation">The item's own description (a directive's, a binding property's).</param>
+    /// <param name="documented">The symbol whose summary describes the item once it's resolved (a type's, a property's).</param>
+    private static CompletionItem Item(string label, int kind, Range range, string? detail = null, string? documentation = null, string? insert = null, bool snippet = false, string? filter = null, string? sort = null, ISymbol? documented = null)
+    {
+        var item = new CompletionItem(label)
         {
             Kind = kind,
             Detail = detail,
@@ -1007,6 +1016,13 @@ internal static class XamlCompletion
             FilterText = filter ?? label,
             SortText = sort,
         };
+        if (documented is not null)
+        {
+            s_described.AddOrUpdate(item, documented);
+        }
+
+        return item;
+    }
 }
 
 /// <summary>Binding paths: the type a path leads to.</summary>
@@ -1274,9 +1290,9 @@ internal static class XamlBindingPaths
 /// <summary>XML documentation summaries for hover and completion.</summary>
 internal static class XamlDocs
 {
-    public static string? Summary(ISymbol symbol)
+    public static string? Summary(ISymbol symbol, CancellationToken cancellationToken = default)
     {
-        var xml = symbol.GetDocumentationCommentXml(expandIncludes: false);
+        var xml = symbol.GetDocumentationCommentXml(expandIncludes: false, cancellationToken: cancellationToken);
         if (string.IsNullOrEmpty(xml))
         {
             return null;

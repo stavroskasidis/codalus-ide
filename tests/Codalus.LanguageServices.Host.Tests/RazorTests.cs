@@ -57,14 +57,18 @@ public sealed class RazorTests(BlazorFixture blazor) : IClassFixture<BlazorFixtu
         await blazor.EditAsync(Home, "<Greeting Name=\"Blazor\" Times=\"2\" />", "<Greeting Name=\"Blazor\" Times=\"2\" />\n<Gree");
         var tags = await blazor.Client.CompletionAsync(Uri(Home), blazor.At(Home, "\n<Gree", "\n<Gree".Length), new CompletionContext(CompletionTriggerKind.Invoked, null), Ct);
         Assert.Contains(tags!.Items, i => i.Label == "Greeting");
-        Assert.Contains(tags.Items, i => i.Label == "PageTitle"); // the framework's components
+        var pageTitle = Assert.Single(tags.Items, i => i.Label == "PageTitle"); // the framework's components
         Assert.Contains(tags.Items, i => i.Label == "div");
+
+        // Its summary, from the reference pack's documentation, when the item is resolved.
+        Assert.Null(pageTitle.Documentation);
+        Assert.Contains("Enables rendering an HTML", (await blazor.Client.ResolveCompletionAsync(pageTitle, Ct)).Documentation?.Value, StringComparison.Ordinal);
 
         await blazor.EditAsync(Home, "\n<Gree", "\n<Greeting Times=\"1\" ");
         var parameters = await blazor.Client.CompletionAsync(Uri(Home), blazor.At(Home, "<Greeting Times=\"1\" ", "<Greeting Times=\"1\" ".Length), new CompletionContext(CompletionTriggerKind.Invoked, null), Ct);
         var name = Assert.Single(parameters!.Items, i => i.Label == "Name");
         Assert.Equal("Name=\"$1\"", name.TextEdit?.NewText);
-        Assert.Contains("Who to greet", name.Documentation?.Value, StringComparison.Ordinal);
+        Assert.Contains("Who to greet", (await blazor.Client.ResolveCompletionAsync(name, Ct)).Documentation?.Value, StringComparison.Ordinal);
         Assert.DoesNotContain(parameters.Items, i => i.Label == "Times"); // already set
         Assert.Contains(parameters.Items, i => i.Label == "@onclick");
 
