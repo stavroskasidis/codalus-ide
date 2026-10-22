@@ -988,6 +988,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Infrastructure.SafeClipboard.Busy -= OnClipboardBusy;
+        var designers = StopWinFormsDesignersAsync();
         var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
         await FlushSolutionStateAsync().ConfigureAwait(false);
@@ -1024,6 +1025,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         await Plugins.DisposeAsync().ConfigureAwait(false);
         Tests.Dispose(); // after the test plugin: its last results can't schedule a notification any more
+        await designers.ConfigureAwait(false);
         Workbench.Dispose();
         RestartIfRequested(openSolution);
     }
