@@ -418,6 +418,13 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>The designer's newest request for the Toolbox's project items (tests).</summary>
     internal Task ToolboxLoad => _toolboxLoad;
 
+    /// <summary>
+    /// How many requests for the Toolbox's project items the designer sent to the C# host (tests). <see cref="ToolboxLoad"/>
+    /// doesn't tell whether it asked: a request that ended at once (nothing to ask with, or the C# host's answer already
+    /// read when the request returned) is <see cref="Task.CompletedTask"/>, as was the ask before it.
+    /// </summary>
+    internal int ToolboxRequests { get; private set; }
+
     /// <summary>Waits until what holds or waits for the designer's gate now (a start, a reload, a read again, a change) is done (tests).</summary>
     internal async Task WhenIdleAsync()
     {
@@ -451,6 +458,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
 
         var request = _shell.Toolbox.BeginProjectItemsRequest();
+        ToolboxRequests++;
         try
         {
             if (await client.WinFormsToolboxAsync(project, CancellationToken.None).ConfigureAwait(true) is { } toolbox && !_disposed)
@@ -2141,9 +2149,6 @@ public sealed class ToolboxViewModel : ObservableObject
     /// shown, so a slower earlier answer, such as one from before the restore, doesn't replace a newer one.
     /// </summary>
     public int BeginProjectItemsRequest() => ++_projectItemsRequest;
-
-    /// <summary>How many requests for the project's items have started (tests).</summary>
-    internal int ProjectItemsRequests => _projectItemsRequest;
 
     /// <summary>The answer to <paramref name="request"/>: shown unless a newer request has started since.</summary>
     public void SetProjectItems(int request, IReadOnlyList<WinFormsToolboxItem> items)

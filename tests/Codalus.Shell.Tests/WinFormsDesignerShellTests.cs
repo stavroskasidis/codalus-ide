@@ -413,21 +413,21 @@ public sealed class WinFormsDesignerShellTests
         await designer.ToolboxLoad;
         var categories = f.Shell.Toolbox.Categories.ToList();
         f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0)); // ready, whatever came last
-        var asked = designer.ToolboxLoad;
+        var asked = designer.ToolboxRequests;
         f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0));
-        Assert.Same(asked, designer.ToolboxLoad);
+        Assert.Equal(asked, designer.ToolboxRequests);
         f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Loading, 1, 0));
         f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0));
-        Assert.NotSame(asked, designer.ToolboxLoad);
+        Assert.Equal(asked + 1, designer.ToolboxRequests);
         await designer.ToolboxLoad;
         Assert.Equal(categories, f.Shell.Toolbox.Categories);
 
         // Back to the designer from its code (F7): it asks too, since the Toolbox has the active designer's project's controls.
         await f.RunAsync("winforms.viewCode");
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == form);
-        asked = designer.ToolboxLoad;
+        asked = designer.ToolboxRequests;
         f.Shell.Layout.OpenDocument(designer, focus: true);
-        await ShellFixture.PumpUntil(() => !ReferenceEquals(asked, designer.ToolboxLoad));
+        Assert.Equal(asked + 1, designer.ToolboxRequests);
         await designer.ToolboxLoad;
         Assert.Equal(categories, f.Shell.Toolbox.Categories);
     }
@@ -727,29 +727,28 @@ public sealed class WinFormsDesignerShellTests
         await main.ToolboxLoad;
 
         // OrderForm's designer starts behind it: it doesn't ask.
-        var asked = order.ToolboxLoad;
+        var asked = order.ToolboxRequests;
         first.SetResult();
         Assert.Null(await opening);
         await ShellFixture.PumpUntil(() => order.FrameCount > 0, seconds: 120, () => $"a frame: {order.Status}\n{f.Shell.WinFormsDesignerLog.GetText()}");
         Assert.Same(main, f.Shell.Layout.ActiveDocument);
-        Assert.Same(asked, order.ToolboxLoad);
+        Assert.Equal(asked, order.ToolboxRequests);
 
-        // It asks once it's the active document. An ask that ends at once (OrderForm's first, before it had read the form)
-        // is Task.CompletedTask like any other, so a failure says what the activation did (macOS CI once saw no new ask,
-        // run 39796640525).
-        var requests = f.Shell.Toolbox.ProjectItemsRequests;
+        // It asks once it's the active document. Its requests are counted: its ask's task doesn't tell, since an ask whose
+        // answer had already come in when the C# client's request returned ends at once, as Task.CompletedTask, as did
+        // its ask before (macOS CI, run 39796640525; about one run in ten on Linux).
         var activated = new List<string>();
         void OnActivated(object? sender, Docking.ShellDocument? document) => activated.Add(document?.Title ?? "none");
         f.Shell.Layout.ActiveDocumentChanged += OnActivated;
         f.Shell.Layout.OpenDocument(order, focus: true);
         f.Shell.Layout.ActiveDocumentChanged -= OnActivated;
-        if (ReferenceEquals(asked, order.ToolboxLoad))
+        if (order.ToolboxRequests != asked + 1)
         {
-            Assert.Fail($"OrderForm's designer didn't ask for the Toolbox's items once active: its ask before {(ReferenceEquals(asked, Task.CompletedTask) ? "ended at once" : asked.Status.ToString())}; "
+            Assert.Fail($"OrderForm's designer made {order.ToolboxRequests - asked} request(s) for the Toolbox's items once active: "
                 + $"activations [{string.Join(", ", activated)}], active {f.Shell.Layout.ActiveDocument?.Title ?? "none"}, "
+                + $"its tab group's active tab {(order.Owner is global::Dock.Model.Core.IDock owner ? (owner.ActiveDockable as Docking.ShellDocument)?.Title ?? "none" : "(no tab group)")}, "
                 + $"Properties' source {(ReferenceEquals(f.Shell.PropertySource, order) ? "OrderForm's designer" : f.Shell.PropertySource?.ToString() ?? "none")}, "
-                + $"its project {order.ToolboxProject ?? "not known"}, {(order.IsClosed ? "closed" : "open")}, C# client {(f.Shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is null ? "not running" : "running")}, "
-                + $"Toolbox requests {requests} then {f.Shell.Toolbox.ProjectItemsRequests}.\n"
+                + $"its project {order.ToolboxProject ?? "not known"}, {(order.IsClosed ? "closed" : "open")}, C# client {(f.Shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is null ? "not running" : "running")}.\n"
                 + DescribeToolbox(f, "the ask"));
         }
 
