@@ -472,6 +472,13 @@ public sealed record WinFormsReadResult(string? CodeFile, string? DesignerFile, 
 
     /// <summary>The non-visual components in the order of their tray locations (the <c>.resx</c>'s <c>TrayLocation</c> metadata), for the component tray.</summary>
     public string[] TrayOrder { get; init; } = [];
+
+    /// <summary>
+    /// Read without all of the project's types (#76): from Miscellaneous Files (the C# host doesn't have the project
+    /// yet), from a compilation without Windows Forms (before the restore), or with types named by their syntax. The
+    /// designer reads the form again once the C# service has loaded the projects.
+    /// </summary>
+    public bool IsPartial { get; init; }
 }
 
 /// <summary>The kinds of <see cref="DesignerEdit"/>.</summary>
