@@ -229,9 +229,25 @@ public sealed partial class WinFormsDesignerDocument
         if (info.Provider is { } provider)
         {
             Func<string?, Task>? setExtender = info.IsReadOnly ? null : text => SetExtenderAsync(selected, info.Name, provider, text ?? string.Empty);
+
+            // Reset clears it, as an empty value does (the host resets an extender property set to nothing). A Text row
+            // whose value has a line break opens the multi-line drop-down (D41 question 16).
+            Func<Task>? resetExtender = info.IsReadOnly ? null : () => SetExtenderAsync(selected, info.Name, provider, string.Empty);
             var extender = info.Editor is DesignerEditors.Boolean or DesignerEditors.Enum && info.StandardValues is { Length: > 0 } extenderValues
-                ? new PropertyRowViewModel(ExtenderName(info.Name, provider), value, PropertyRowKind.Choice, description, setExtender, [.. extenderValues.Select(v => new PropertyOption(v, v))], info.IsSet) { Path = $"{info.Name} on {provider}", IsMixed = info.Mixed }
-                : new PropertyRowViewModel(ExtenderName(info.Name, provider), value, PropertyRowKind.Text, description, setExtender, null, info.IsSet) { Path = $"{info.Name} on {provider}", IsMixed = info.Mixed };
+                ? new PropertyRowViewModel(ExtenderName(info.Name, provider), value, PropertyRowKind.Choice, description, setExtender, [.. extenderValues.Select(v => new PropertyOption(v, v))], info.IsSet)
+                {
+                    Path = $"{info.Name} on {provider}",
+                    IsMixed = info.Mixed,
+                    Reset = resetExtender,
+                    CanReset = info.IsSet || info.CanReset,
+                }
+                : new PropertyRowViewModel(ExtenderName(info.Name, provider), value, info.Editor == DesignerEditors.Multiline ? PropertyRowKind.Multiline : PropertyRowKind.Text, description, setExtender, null, info.IsSet)
+                {
+                    Path = $"{info.Name} on {provider}",
+                    IsMixed = info.Mixed,
+                    Reset = resetExtender,
+                    CanReset = info.IsSet || info.CanReset,
+                };
             return extender;
         }
 
@@ -301,6 +317,8 @@ public sealed partial class WinFormsDesignerDocument
                 break;
             case DesignerEditors.Modal:
                 // A Windows Forms dialog the IDE doesn't show (D41 question 8): no "…"; typed in the cell when its converter takes text.
+                // TODO(issue): component editors (a control's Property Pages) and the data grid view's cell style builder as the
+                // IDE's own panels (#68, D41 question 8); their values are typed here or set in the code meanwhile.
                 kind = PropertyRowKind.Text;
                 description = (description.Length == 0 ? string.Empty : description + "\n") + (info.IsReadOnly
                     ? Localizer.Get("msg.winFormsDesigner.dialogEditorReadOnly", "Its editor is a Windows Forms dialog, which Codalus IDE doesn't show, and the value can't be typed: set it in the code.")

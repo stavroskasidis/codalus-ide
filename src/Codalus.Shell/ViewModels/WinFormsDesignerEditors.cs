@@ -723,10 +723,17 @@ public sealed class DesignerResourcePickerViewModel : ObservableObject
 
     public bool HasResourceFile => ResxPath is not null;
 
-    /// <summary>The project's resources file as the radio button names it: "Properties/Resources.resx", or that it has none.</summary>
-    public string ResourceFileText => HasResourceFile
-        ? Localizer.Get("msg.winFormsDesigner.projectResourceFile", "Project resource file: Properties/Resources.resx")
-        : Localizer.Get("msg.winFormsDesigner.noProjectResourceFile", "Project resource file: none (add Properties/Resources.resx to the project)");
+    /// <summary>The project's resources files, as the combo box under Project resource file lists them (D41 panel k): <c>Properties\Resources.resx</c>, or none.</summary>
+    public IReadOnlyList<string> ResourceFiles => HasResourceFile ? [ResourceFileName] : [];
+
+    /// <summary>The project's resources file as the classic IDE names it, from the project's folder.</summary>
+    public const string ResourceFileName = "Properties\\Resources.resx";
+
+    /// <summary>Why Project resource file is grayed: the project has no resources file.</summary>
+    public string NoResourceFileText => Localizer.Get("msg.winFormsDesigner.noProjectResourceFile", "Project resource file: none (add Properties/Resources.resx to the project)");
+
+    /// <summary>The first entry of the project's list: no image (D41 panel k), which OK sets as Clear does.</summary>
+    public static DesignerProjectResource NoResource { get; } = new(string.Empty, null, null);
 
     public bool IsLocal
     {
@@ -760,10 +767,15 @@ public sealed class DesignerResourcePickerViewModel : ObservableObject
         }
     }
 
-    /// <summary>What the local resource will be: the picked file's name, "(none)" after Clear, else the current image.</summary>
+    /// <summary>What the local resource will be: the picked file's name, "(none)" after Clear, else nothing (the current image stays).</summary>
     public string LocalText => _localFile is { } file ? Path.GetFileName(file)
         : _cleared ? Localizer.Get("msg.winFormsDesigner.noImage", "(none)")
-        : Localizer.Get("msg.winFormsDesigner.currentImage", "(the current image)");
+        : string.Empty;
+
+    /// <summary>The previewed image's file name, for the caption under the preview ("cart.png · 32 × 32"), or null.</summary>
+    public string? PreviewName => _isProject
+        ? _selectedResource is { } resource ? resource.FilePath is { } path ? Path.GetFileName(path) : resource.Name : null
+        : _localFile is { } file ? Path.GetFileName(file) : null;
 
     public ObservableCollection<DesignerProjectResource> ProjectResources { get; }
 
@@ -812,6 +824,7 @@ public sealed class DesignerResourcePickerViewModel : ObservableObject
         if (version == _previewVersion)
         {
             Preview = bytes;
+            OnPropertyChanged(nameof(PreviewName));
         }
     }
 
@@ -886,8 +899,9 @@ public sealed class DesignerResourcePickerViewModel : ObservableObject
         {
             await _document.ImportImageAsync(_component, _property, local, toProject: false).ConfigureAwait(true);
         }
-        else if (!_isProject && _cleared)
+        else if (!_isProject && _cleared || _isProject && _selectedResource is null)
         {
+            // Clear, or the project list's (none): no image.
             await _document.SetPropertyAsync([_component], _property, null).ConfigureAwait(true);
         }
     }

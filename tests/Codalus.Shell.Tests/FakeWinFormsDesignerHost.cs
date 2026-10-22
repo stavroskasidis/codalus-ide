@@ -37,6 +37,9 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     /// <summary>The edits of the last designer/setProperties (#68: a font editor's parts come in one request).</summary>
     public List<DesignerPropertyEdit> LastEdits { get; } = [];
 
+    /// <summary>How many designer/setProperties requests came (#68: a Cancel sends none).</summary>
+    public int SetPropertiesCalls { get; private set; }
+
     /// <summary>A Locked metadata entry as the classic IDE writes it (and the real host, through ResXResourceWriter).</summary>
     public const string BooleanType = "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
 
@@ -353,7 +356,52 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         return Task.FromResult(new DesignerChangeResult([], Render()) { Created = created });
     }
 
+    /// <summary>What puts the fake's state back as it is now (#68: a request with an invalid value sets none of its edits, as the real host's).</summary>
+    private Action Snapshot()
+    {
+        Dictionary<string, Control> controls = new(_controls, StringComparer.Ordinal);
+        Dictionary<string, (string Type, string Owner, string? Text)> items = new(_items, StringComparer.Ordinal);
+        Dictionary<(string Component, string Provider), string> toolTips = new(_toolTips);
+        Dictionary<(string Component, string Property), string> bindings = new(_bindings);
+        Dictionary<(string Component, string Property), DesignerValue> assigned = new(_assigned);
+        HashSet<string> locked = new(_locked, StringComparer.Ordinal);
+        return () =>
+        {
+            static void Restore<TKey, TValue>(Dictionary<TKey, TValue> target, Dictionary<TKey, TValue> source)
+                where TKey : notnull
+            {
+                target.Clear();
+                foreach (var (key, value) in source)
+                {
+                    target[key] = value;
+                }
+            }
+
+            Restore(_controls, controls);
+            Restore(_items, items);
+            Restore(_toolTips, toolTips);
+            Restore(_bindings, bindings);
+            Restore(_assigned, assigned);
+            _locked.Clear();
+            _locked.UnionWith(locked);
+        };
+    }
+
     public Task<DesignerChangeResult> SetPropertiesAsync(DesignerSetPropertiesParams parameters, CancellationToken cancellationToken)
+    {
+        SetPropertiesCalls++;
+        var restore = Snapshot();
+        var result = SetProperties(parameters);
+        if (result.Error is not null)
+        {
+            restore();
+            result = new DesignerChangeResult([], Render()) { Error = result.Error };
+        }
+
+        return Task.FromResult(result);
+    }
+
+    private DesignerChangeResult SetProperties(DesignerSetPropertiesParams parameters)
     {
         var changes = new List<DesignerPropertyChange>();
         var resources = new List<DesignerResourceEntry>();
@@ -438,7 +486,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
 
             if (SetKept(edit, changes, fonts) is { } keptError)
             {
-                return Task.FromResult(new DesignerChangeResult([], Render()) { Error = keptError });
+                return new DesignerChangeResult([], Render()) { Error = keptError };
             }
 
             if (s_handled.Contains(edit.Property) || edit.Property.StartsWith("Font.", StringComparison.Ordinal))
@@ -485,7 +533,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                     changes.Add(new DesignerPropertyChange(edit.Component, "Anchor", edit.Text == "Top, Left" ? null : DesignerValue.EnumOf(Forms + "AnchorStyles", [.. edit.Text!.Split(',', StringSplitOptions.TrimEntries)])));
                     break;
                 default:
-                    return Task.FromResult(new DesignerChangeResult([], Render()) { Error = $"The fake host doesn't set {edit.Property}." });
+                    return new DesignerChangeResult([], Render()) { Error = $"The fake host doesn't set {edit.Property}." };
             }
         }
 
@@ -495,7 +543,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             changes.Add(new DesignerPropertyChange(component == _root ? string.Empty : component, "Font", Assigned(component, "Font")));
         }
 
-        return Task.FromResult(new DesignerChangeResult([.. changes], Render()) { Resources = [.. resources], Localized = [.. localized] });
+        return new DesignerChangeResult([.. changes], Render()) { Resources = [.. resources], Localized = [.. localized] };
     }
 
     private static readonly HashSet<string> s_handled = new(StringComparer.Ordinal)
@@ -597,6 +645,16 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                     case "Bold" or "Italic" or "Underline" or "Strikeout":
                         _ = !edit.Reset && string.Equals(text, "True", StringComparison.OrdinalIgnoreCase) ? set.Add(part) : set.Remove(part);
                         break;
+                    case "GdiCharSet":
+                        if (!byte.TryParse(edit.Reset ? "0" : text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var charset))
+                        {
+                            return $"'{text}' is not a valid value for Byte.";
+                        }
+
+                        var written = FontValue(font, name, size, set);
+                        _assigned[(component, "Font")] = written with { Arguments = [.. written.Arguments![..4], DesignerValue.Int(charset)] };
+                        fonts.Add(component);
+                        return null;
                     default:
                         return $"Font's {part} can't be set.";
                 }
@@ -786,14 +844,19 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                 new("Size", "Misc", "System.Single", size.ToString(CultureInfo.InvariantCulture)) { IsSet = font is not null },
                 new("Unit", "Misc", "System.Drawing.GraphicsUnit", "Point") { Editor = DesignerEditors.Enum, StandardValues = s_units, IsSet = font is not null },
                 Style("Bold"),
-                new("GdiCharSet", "Misc", "System.Byte", "0") { IsReadOnly = true, Editor = DesignerEditors.ReadOnly },
-                Bool("GdiVerticalFont", "Misc", "False") with { IsReadOnly = true, Editor = DesignerEditors.ReadOnly, StandardValues = null },
+
+                // Settable through FontConverter's CreateInstance, as on the real host (WinFormsDesignerPropertiesHostTests).
+                new("GdiCharSet", "Misc", "System.Byte", Charset(font).ToString(CultureInfo.InvariantCulture)) { IsSet = font is not null },
+                Bool("GdiVerticalFont", "Misc", "False", font is not null) with { CanReset = false },
                 Style("Italic"),
                 Style("Strikeout"),
                 Style("Underline"),
             ],
         };
     }
+
+    /// <summary>A font's GdiCharSet: its code's fifth argument.</summary>
+    private static int Charset(DesignerValue? font) => font?.Arguments is { Length: > 4 } arguments && int.TryParse(arguments[4].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var charset) ? charset : 0;
 
     private DesignerPropertyInfo ColorInfo(string component, string property, string fallback)
     {
@@ -808,9 +871,21 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         };
     }
 
+    /// <summary>The selected components' properties merged as the real host merges them (#68: shared properties, mixed values blank, parts merged).</summary>
     public Task<DesignerPropertiesResult> PropertiesAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken)
     {
-        var name = parameters.Components.FirstOrDefault() ?? string.Empty;
+        DesignerPropertyInfo[]? merged = null;
+        foreach (var component in parameters.Components.DefaultIfEmpty(string.Empty))
+        {
+            var infos = PropertiesOf(component);
+            merged = merged is null ? infos : DesignerPropertyMerge.Merge(merged, infos);
+        }
+
+        return Task.FromResult(new DesignerPropertiesResult(merged!));
+    }
+
+    private DesignerPropertyInfo[] PropertiesOf(string name)
+    {
         if (_items.TryGetValue(name, out var item))
         {
             List<DesignerPropertyInfo> itemRows =
@@ -831,7 +906,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                 });
             }
 
-            return Task.FromResult(new DesignerPropertiesResult([.. itemRows]));
+            return [.. itemRows];
         }
 
         var control = _controls.GetValueOrDefault(name);
@@ -868,7 +943,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
 
         if (control is null)
         {
-            return Task.FromResult(new DesignerPropertiesResult([.. rows]));
+            return [.. rows];
         }
 
         var isTextBox = control.Type.EndsWith("TextBox", StringComparison.Ordinal);
@@ -956,6 +1031,18 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             rows.Add(new("Image", "Appearance", "System.Drawing.Image", "(none)") { Editor = DesignerEditors.Image });
         }
 
+        // Windows Forms dialogs the IDE doesn't show (D41 question 8): a masked text box's Mask takes text, a numeric
+        // up-down's Accelerations doesn't (WinFormsDesignerPropertiesHostTests asserts a data grid view's DefaultCellStyle).
+        if (control.Type.EndsWith("MaskedTextBox", StringComparison.Ordinal))
+        {
+            rows.Add(new("Mask", "Behavior", "System.String", string.Empty) { Editor = DesignerEditors.Modal, Description = "Sets the string governing the input allowed for this control." });
+        }
+
+        if (control.Type.EndsWith("NumericUpDown", StringComparison.Ordinal))
+        {
+            rows.Add(new("Accelerations", "Data", Forms + "NumericUpDownAccelerationCollection", "(Collection)") { Editor = DesignerEditors.Modal, IsReadOnly = true, Description = "The collection of sorted acceleration objects for the NumericUpDown control." });
+        }
+
         if (CollectionsOf(control.Type) is [var collection, ..])
         {
             rows.Add(new(DesignerCollections.PropertyOf(collection), "Data", "System.Object", "(Collection)") { Editor = DesignerEditors.Collection, Collection = collection });
@@ -973,7 +1060,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
             rows.Add(new("Text", "(DataBindings)", "System.String", _bindings.GetValueOrDefault((name, "Text")) ?? "(none)") { DataBinding = true, Editor = DesignerEditors.Enum, StandardValues = choices });
         }
 
-        return Task.FromResult(new DesignerPropertiesResult([.. rows]));
+        return [.. rows];
     }
 
     public Task<DesignerEventsResult> EventsAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken) =>

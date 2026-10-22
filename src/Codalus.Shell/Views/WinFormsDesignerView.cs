@@ -723,6 +723,9 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         var left = new StackPanel { Children = { list, buttons } };
 
         var details = new StackPanel { Spacing = 4, Width = 300, Margin = new Thickness(12, 0, 0, 0) };
+
+        // One grid view for the editor's life (#68), shown again for each item: a view made per item would stay subscribed to the grid.
+        PropertyGridView? itemGrid = null;
         void Details()
         {
             details.Children.Clear();
@@ -744,7 +747,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             if (editor.HasProperties)
             {
                 // The item's properties in the shared property grid (#68), refreshed in place after each change.
-                details.Children.Add(new PropertyGridView { DataContext = editor.Grid, Height = 300 });
+                details.Children.Add(itemGrid ??= new PropertyGridView { DataContext = editor.Grid, Height = 300 });
             }
         }
 
@@ -942,53 +945,91 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
     }
 
     /// <summary>
-    /// Select Resource, as the classic IDE's: Local resource (Import…, Clear) or the project's resources file (its
-    /// images, Import…), and a preview of the chosen image.
+    /// Select Resource, as the approved panel (k) draws it (D41): Resource context's two options, Local resource with its
+    /// Import… and Clear, and Project resource file with the project's resources files in a combo box, their images under
+    /// "(none)" and Import…; the side not chosen is grayed. The preview has the image's file name and size under it.
     /// </summary>
     private static Border ResourcePanel(DesignerResourcePickerViewModel picker)
     {
-        Button Small(string text, System.Windows.Input.ICommand command)
+        Button Small(string text, System.Windows.Input.ICommand command, string? icon = null)
         {
             var button = new Button { Content = text, Command = command, Classes = { "dialog" }, MinWidth = 76 };
+            if (icon is not null)
+            {
+                button.Classes.Add("iconText");
+                ButtonIcon.SetKind(button, icon);
+            }
+
             Avalonia.Automation.AutomationProperties.SetName(button, text);
             return button;
         }
 
-        var local = new RadioButton { Content = Localizer.Get("msg.winFormsDesigner.localResource", "Local resource:"), GroupName = "resource", IsChecked = picker.IsLocal };
-        var project = new RadioButton { Content = picker.ResourceFileText, GroupName = "resource", IsChecked = picker.IsProject, IsEnabled = picker.HasResourceFile };
+        var local = new RadioButton { Content = Localizer.Get("msg.winFormsDesigner.localResourceOption", "Local resource"), GroupName = "resource", IsChecked = picker.IsLocal };
+        var project = new RadioButton { Content = Localizer.Get("msg.winFormsDesigner.projectResourceOption", "Project resource file"), GroupName = "resource", IsChecked = picker.IsProject, IsEnabled = picker.HasResourceFile };
+        if (!picker.HasResourceFile)
+        {
+            ToolTip.SetTip(project, picker.NoResourceFileText);
+        }
+
         local.IsCheckedChanged += (_, _) => picker.IsLocal = local.IsChecked == true;
         project.IsCheckedChanged += (_, _) => picker.IsProject = project.IsChecked == true;
-        var localText = new TextBlock { Text = picker.LocalText, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 140 };
         var import = Localizer.Get("msg.winFormsDesigner.import", "Import…");
-        var localRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            Margin = new Thickness(24, 4, 0, 8),
-            Children = { Small(import, picker.ImportLocalCommand), Small(Localizer.Get("msg.winFormsDesigner.clear", "Clear"), picker.ClearCommand), localText },
-        };
+        var importLocal = Small(import, picker.ImportLocalCommand, "import");
+        var clear = Small(Localizer.Get("msg.winFormsDesigner.clear", "Clear"), picker.ClearCommand);
+        var localRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(24, 4, 0, 8), Children = { importLocal, clear } };
+
+        var files = new ComboBox { ItemsSource = picker.ResourceFiles, SelectedIndex = picker.HasResourceFile ? 0 : -1, Width = 232, PlaceholderText = Localizer.Get("msg.winFormsDesigner.noImage", "(none)") };
+        Avalonia.Automation.AutomationProperties.SetName(files, Localizer.Get("msg.winFormsDesigner.projectResourceOption", "Project resource file"));
+        var noneLabel = Localizer.Get("msg.winFormsDesigner.noImage", "(none)");
         var list = new ListBox
         {
-            ItemsSource = picker.ProjectResources,
             Width = 232,
             Height = 96,
-            SelectedItem = picker.SelectedResource,
-            IsEnabled = picker.HasResourceFile,
-            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DesignerProjectResource>((resource, _) => new TextBlock { Text = resource?.Name, VerticalAlignment = VerticalAlignment.Center }),
+            Margin = new Thickness(0, 6, 0, 0),
+            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DesignerProjectResource>((resource, _) =>
+                new TextBlock { Text = ReferenceEquals(resource, DesignerResourcePickerViewModel.NoResource) ? noneLabel : resource?.Name, VerticalAlignment = VerticalAlignment.Center }),
         };
         PropertyEditors.PropertyDropDowns.CompactRows(list);
-        Avalonia.Automation.AutomationProperties.SetName(list, picker.ResourceFileText);
-        list.SelectionChanged += (_, _) => picker.SelectedResource = list.SelectedItem as DesignerProjectResource;
-        var importProject = Small(import, picker.ImportProjectCommand);
+        Avalonia.Automation.AutomationProperties.SetName(list, Localizer.Get("msg.winFormsDesigner.projectResources", "Project resources"));
+        var filling = false;
+        void FillList()
+        {
+            filling = true;
+            List<DesignerProjectResource> items = picker.HasResourceFile ? [DesignerResourcePickerViewModel.NoResource, .. picker.ProjectResources] : [];
+            list.ItemsSource = items;
+            list.SelectedItem = picker.SelectedResource ?? (picker.HasResourceFile ? DesignerResourcePickerViewModel.NoResource : null);
+            filling = false;
+        }
+
+        FillList();
+        picker.ProjectResources.CollectionChanged += (_, _) => FillList();
+        list.SelectionChanged += (_, _) =>
+        {
+            if (!filling && list.SelectedItem is DesignerProjectResource resource)
+            {
+                picker.SelectedResource = ReferenceEquals(resource, DesignerResourcePickerViewModel.NoResource) ? null : resource;
+            }
+        };
+        var importProject = Small(import, picker.ImportProjectCommand, "import");
         importProject.HorizontalAlignment = HorizontalAlignment.Left;
         importProject.Margin = new Thickness(0, 6, 0, 0);
-        var projectBox = new StackPanel { Margin = new Thickness(24, 4, 0, 0), Children = { list, importProject } };
+        var projectBox = new StackPanel { Margin = new Thickness(24, 4, 0, 0), Children = { files, list, importProject } };
+
+        // The side not chosen is grayed (panel k: Import… and Clear grayed while Project resource file is chosen).
+        void UpdateSides()
+        {
+            importLocal.IsEnabled = clear.IsEnabled = picker.IsLocal;
+            projectBox.IsEnabled = picker.IsProject;
+        }
+
+        UpdateSides();
 
         var image = new Image { Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, MaxWidth = 138, MaxHeight = 138 };
         var none = new TextBlock { Text = Localizer.Get("msg.winFormsDesigner.noPreview", "No image"), Classes = { "muted", "small" }, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var preview = new Border { Width = 140, Height = 140, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), ClipToBounds = true, Child = new Grid { Children = { none, image } } };
         preview.Bind(Border.BackgroundProperty, preview.GetResourceObservable("Shell.Input"));
         preview.Bind(Border.BorderBrushProperty, preview.GetResourceObservable("Shell.Input.Border"));
+        var caption = new TextBlock { Classes = { "muted", "small" }, Margin = new Thickness(0, 4, 0, 0), MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis };
         void UpdatePreview()
         {
             var old = image.Source as IDisposable;
@@ -1008,6 +1049,13 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
 
             image.Source = bitmap;
             none.IsVisible = bitmap is null;
+
+            // "cart.png · 32 × 32" (D41 panel k): the file and its size in pixels.
+            caption.Text = bitmap is not null && picker.PreviewName is { } name
+                ? Localizer.Format("msg.winFormsDesigner.previewCaption", "{0} · {1} × {2}", name, bitmap.PixelSize.Width, bitmap.PixelSize.Height)
+                : string.Empty;
+            caption.IsVisible = caption.Text.Length > 0;
+            ToolTip.SetTip(caption, caption.IsVisible ? caption.Text : null);
             old?.Dispose();
         }
 
@@ -1018,21 +1066,21 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 case nameof(DesignerResourcePickerViewModel.Preview):
                     UpdatePreview();
                     break;
-                case nameof(DesignerResourcePickerViewModel.LocalText):
-                    localText.Text = picker.LocalText;
-                    break;
                 case nameof(DesignerResourcePickerViewModel.IsProject):
                     local.IsChecked = picker.IsLocal;
                     project.IsChecked = picker.IsProject;
+                    UpdateSides();
                     break;
-                case nameof(DesignerResourcePickerViewModel.SelectedResource) when !ReferenceEquals(list.SelectedItem, picker.SelectedResource):
-                    list.SelectedItem = picker.SelectedResource;
+                case nameof(DesignerResourcePickerViewModel.SelectedResource) when !ReferenceEquals(list.SelectedItem, picker.SelectedResource ?? DesignerResourcePickerViewModel.NoResource):
+                    filling = true;
+                    list.SelectedItem = picker.SelectedResource ?? DesignerResourcePickerViewModel.NoResource;
+                    filling = false;
                     break;
             }
         };
         UpdatePreview();
         var choices = new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.resourceContext", "Resource context")), local, localRow, project, projectBox } };
-        var previewColumn = new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.preview", "Preview")), preview } };
+        var previewColumn = new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.preview", "Preview")), preview, caption } };
         var body = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), ColumnSpacing = 20, Children = { choices, previewColumn } };
         Grid.SetColumn(previewColumn, 1);
         return EditorFrame(picker.Title, picker.Context, body, picker.OkCommand, picker.CancelCommand);

@@ -1734,6 +1734,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         List<DesignerPropertyRow> rows = [.. properties.Where(p => !p.DataBinding).Select(p => new DesignerPropertyRow(p.Category, RowFor(selected, p)))];
 
         // The data bindings the host sends flat, nested under one (DataBindings) row in Data (D41 question 6).
+        // TODO(issue): (ApplicationSettings) (PropertyBinding) and (Advanced) bindings (format, update mode, null value) in
+        // Data (#68, D41 question 6), which the classic IDE edits in Windows Forms dialogs; the plain bindings only meanwhile.
         if (properties.Where(p => p.DataBinding).Select(p => RowFor(selected, p)).ToList() is { Count: > 0 } bindings)
         {
             rows.Add(new DesignerPropertyRow("Data", new PropertyRowViewModel(DataBindingsRow, string.Empty, PropertyRowKind.ReadOnly,
@@ -1769,6 +1771,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     // handler hooked to each; Events is grayed with two components meanwhile, as the view model needs one.
     public bool HasEvents => _selection.Count == 1;
 
+    // TODO(issue): an event's drop-down of the code's methods with a compatible signature, as the classic IDE's Events
+    // view lists them (#68); an event's cell takes a typed handler name meanwhile.
     public async Task<IReadOnlyList<DesignerPropertyRow>> EventRowsAsync(CancellationToken cancellationToken)
     {
         if (_host is not { } host || _selection.Count != 1)

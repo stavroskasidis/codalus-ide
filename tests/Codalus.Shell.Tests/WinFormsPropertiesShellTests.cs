@@ -1,4 +1,6 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using Codalus.Shell.ViewModels;
 using static Codalus.Shell.Tests.WinFormsDesignerTestHost;
@@ -78,7 +80,9 @@ public sealed class WinFormsPropertiesShellTests
         var name = font.Children[0];
         Assert.True(name is { IsChoice: true, ChoicesEditable: false });
         Assert.Contains(name.Options, o => o.Value == "Segoe UI");
-        Assert.True(font.Children.Single(c => c.Name == "GdiCharSet").IsReadOnly);
+        // GdiCharSet is a settable byte and GdiVerticalFont a True/False choice, as the real host reports them and the mockup draws them.
+        Assert.True(font.Children.Single(c => c.Name == "GdiCharSet") is { IsReadOnly: false, IsText: true });
+        Assert.True(font.Children.Single(c => c.Name == "GdiVerticalFont") is { IsReadOnly: false, IsChoice: true });
 
         var bold = font.Children.Single(c => c.Name == "Bold");
         bold.SelectedOption = bold.Options.Single(o => o.Value == "True");
@@ -126,12 +130,100 @@ public sealed class WinFormsPropertiesShellTests
         designer.Undo();
         await ShellFixture.PumpUntil(() => Code(designer).Contains("notesTextBox.Font = new Font(\"Segoe UI\", 9F, FontStyle.Italic, GraphicsUnit.Point, 0);", StringComparison.Ordinal), seconds: 30);
 
-        // Cancel sends nothing.
+        // Cancel sends nothing: no request reaches the host, and after the dispatcher has run the code and the grid are unchanged.
         (await RowAsync(f, "Font", r => r.Value.StartsWith("Segoe UI, 9pt", StringComparison.Ordinal))).ModalEditor!.Execute(null);
+        var calls = host.SetPropertiesCalls;
         designer.FontEditor!.Size = "20";
         designer.FontEditor.CancelCommand.Execute(null);
         Assert.Null(designer.FontEditor);
+        await DrainAsync();
+        Assert.Equal(calls, host.SetPropertiesCalls);
+        Assert.Equal(["Font.Size", "Font.Bold"], host.LastEdits.Select(e => e.Property));
         Assert.Contains("notesTextBox.Font = new Font(\"Segoe UI\", 9F, FontStyle.Italic, GraphicsUnit.Point, 0);", Code(designer), StringComparison.Ordinal);
+        Assert.Equal("Segoe UI, 9pt, style=Italic", Grid(f).Find("Font")!.Value);
+    }
+
+    /// <summary>Runs the dispatcher for a while (an edit sent by mistake would have reached the code by then).</summary>
+    private static async Task DrainAsync()
+    {
+        for (var i = 0; i < 10; i++)
+        {
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+            ShellFixture.Pump();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_font_editor_ok_with_an_invalid_size_changes_nothing()
+    {
+        var (f, designer, host) = await OrderFormAsync("notesTextBox");
+        await using var _ = f;
+        var before = Code(designer);
+        (await RowAsync(f, "Font")).ModalEditor!.Execute(null);
+        var editor = designer.FontEditor!;
+        editor.Family = "Arial";
+        editor.Size = "abc";
+        await editor.OkAsync();
+        Assert.Equal(["Font.Name", "Font.Size"], host.LastEdits.Select(e => e.Property));
+        await ShellFixture.PumpUntil(() => designer.Status.Contains("not a valid value", StringComparison.Ordinal));
+        await DrainAsync();
+        Assert.Equal(before, Code(designer));
+
+        // The host kept none of it (all or none, as the real host): the next change doesn't bring Arial along.
+        var bold = (await RowAsync(f, "Font.Bold"));
+        bold.SelectedOption = bold.Options.Single(o => o.Value == "True");
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("notesTextBox.Font = new Font(\"Segoe UI\", 9F, FontStyle.Bold | FontStyle.Italic, GraphicsUnit.Point, 0);", StringComparison.Ordinal), seconds: 30, () => Code(designer));
+    }
+
+    [AvaloniaFact]
+    public async Task Several_components_merge_their_values_and_the_font_editor_sends_the_changed_parts_to_each()
+    {
+        var (f, designer, host) = await OrderFormAsync("customerTextBox");
+        await using var _ = f;
+        (await RowAsync(f, "Font.Size")).Text = "12";
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("customerTextBox.Font = new Font(\"Segoe UI\", 12F", StringComparison.Ordinal), seconds: 30);
+
+        // notesTextBox (9pt, italic) and customerTextBox (12pt): the font and its size and style blank, its name shared.
+        designer.SetSelection(["notesTextBox", "customerTextBox"], notify: true);
+        var font = await RowAsync(f, "Font", r => r.IsMixed);
+        Assert.Equal(string.Empty, font.DisplayValue);
+        Assert.True(Grid(f).Find("Font.Size") is { IsMixed: true, DisplayValue: "", Text: "" });
+        Assert.True(Grid(f).Find("Font.Italic") is { IsMixed: true });
+        Assert.True(Grid(f).Find("Font.Name") is { IsMixed: false, Value: "Segoe UI" });
+        Assert.Null(f.Shell.PropertiesWindow.SelectedComponent);
+
+        // The font editor opens with what they share; OK sends only the changed part, for both.
+        font.ModalEditor!.Execute(null);
+        var editor = designer.FontEditor!;
+        Assert.True(editor is { Family: "Segoe UI", Size: "", IsItalic: false, IsBold: false });
+        editor.Style = editor.Styles.First(st => st.Contains("Bold", StringComparison.Ordinal) && !st.Contains("Italic", StringComparison.Ordinal));
+        Assert.Equal([("notesTextBox", "Font.Bold"), ("customerTextBox", "Font.Bold")], editor.Edits().Select(e => (e.Component, e.Property)));
+        await editor.OkAsync();
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("customerTextBox.Font = new Font(\"Segoe UI\", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);", StringComparison.Ordinal)
+            && Code(designer).Contains("notesTextBox.Font = new Font(\"Segoe UI\", 9F, FontStyle.Bold | FontStyle.Italic, GraphicsUnit.Point, 0);", StringComparison.Ordinal), seconds: 30, () => Code(designer));
+        Assert.Equal([("notesTextBox", "Font.Bold"), ("customerTextBox", "Font.Bold")], host.LastEdits.Select(e => (e.Component, e.Property)));
+    }
+
+    [AvaloniaFact]
+    public async Task Windows_forms_dialog_editors_are_typed_or_read_only_with_a_note()
+    {
+        var (f, designer, _) = await OrderFormAsync("quantityUpDown");
+        await using var _f = f;
+
+        // A numeric up-down's Accelerations: a dialog whose converter takes no text, so read-only, no "…", and a note.
+        var accelerations = await RowAsync(f, "Accelerations");
+        Assert.True(accelerations is { IsReadOnly: true, HasModalEditor: false, ShowsTextBox: false });
+        Assert.Contains("set it in the code", accelerations.Description, StringComparison.Ordinal);
+
+        // A masked text box's Mask: typed in the cell, no "…", and a note.
+        var root = designer.Root!;
+        await designer.CreateAsync("System.Windows.Forms.MaskedTextBox", root.ClientX + 300, root.ClientY + 300);
+        var masked = Assert.Single(designer.Selection);
+        Assert.Equal("System.Windows.Forms.MaskedTextBox", designer.Find(masked)!.Type);
+        designer.SetSelection([masked], notify: true);
+        var mask = await RowAsync(f, "Mask", r => f.Shell.PropertiesWindow.Title.StartsWith(masked, StringComparison.Ordinal));
+        Assert.True(mask is { IsReadOnly: false, IsText: true, HasModalEditor: false, ShowsTextBox: true });
+        Assert.Contains("type the value here", mask.Description, StringComparison.Ordinal);
     }
 
     [AvaloniaFact]
@@ -175,10 +267,21 @@ public sealed class WinFormsPropertiesShellTests
         var picker = designer.ResourcePicker!;
         Assert.True(picker is { Title: "Select Resource", Context: "placeOrderButton · Image", IsLocal: true, HasResourceFile: true });
         Assert.Empty(picker.ProjectResources); // Properties/Resources.resx has a string only
+        Assert.Equal(["Properties\\Resources.resx"], picker.ResourceFiles);
         Assert.True(designer.HasOpenEditor);
+
+        // As panel (k) draws it: the project side grayed while Local resource is chosen, its list "(none)" first.
+        var panel = await PanelAsync(f, "Select Resource");
+        Button Named(string name) => panel.GetVisualDescendants().OfType<Button>().First(b => Avalonia.Automation.AutomationProperties.GetName(b) == name);
+        var list = panel.GetVisualDescendants().OfType<ListBox>().Single();
+        Assert.True(Named("Clear").IsEffectivelyEnabled);
+        Assert.False(list.IsEffectivelyEnabled);
+        Assert.Same(DesignerResourcePickerViewModel.NoResource, list.Items[0]);
+        Assert.Equal(2, panel.GetVisualDescendants().OfType<Button>().Count(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Import…" && Controls.ButtonIcon.GetKind(b) == "import"));
         await picker.ImportLocalAsync(png);
         Assert.Equal("logo.png", picker.LocalText);
         Assert.NotNull(picker.Preview);
+        await ShellFixture.PumpUntil(() => panel.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "logo.png · 1 × 1" && t.IsEffectivelyVisible));
         await picker.OkAsync();
         Assert.Null(designer.ResourcePicker);
         await ShellFixture.PumpUntil(() => Code(designer).Contains("placeOrderButton.Image = (Image)resources.GetObject(\"placeOrderButton.Image\");", StringComparison.Ordinal), seconds: 30);
@@ -189,6 +292,11 @@ public sealed class WinFormsPropertiesShellTests
         picker = designer.ResourcePicker!;
         await picker.ImportProjectAsync(png);
         Assert.True(picker is { IsProject: true, SelectedResource: { Name: "logo", IsNew: true } });
+        panel = await PanelAsync(f, "Select Resource");
+        Assert.False(panel.GetVisualDescendants().OfType<Button>().First(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Clear").IsEffectivelyEnabled);
+        Assert.True(panel.GetVisualDescendants().OfType<ListBox>().Single().IsEffectivelyEnabled);
+        await ShellFixture.PumpUntil(() => picker.Preview is not null);
+        NavigationDepthTests.Screenshot(f, "m68-select-resource");
         await picker.OkAsync();
         await ShellFixture.PumpUntil(() => Code(designer).Contains("placeOrderButton.Image = Properties.Resources.logo;", StringComparison.Ordinal)
             || Code(designer).Contains("placeOrderButton.Image = WinFormsApp.Properties.Resources.logo;", StringComparison.Ordinal), seconds: 30, () => Code(designer));
@@ -196,17 +304,40 @@ public sealed class WinFormsPropertiesShellTests
         Assert.Contains("<data name=\"logo\" type=\"System.Resources.ResXFileRef, System.Windows.Forms\">", await File.ReadAllTextAsync(resx, TestContext.Current.CancellationToken), StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(app, "Resources", "logo.png")));
 
-        // Opened again: the project's image is listed and chosen, with its preview; Clear and OK remove the image.
+        // Opened again: the project's image is listed and chosen, with its preview; "(none)" in the list and OK remove the image.
         (await RowAsync(f, "Image")).ModalEditor!.Execute(null);
         await ShellFixture.PumpUntil(() => designer.ResourcePicker is { IsProject: true, Preview: not null });
         picker = designer.ResourcePicker!;
         Assert.Equal(["logo"], picker.ProjectResources.Select(r => r.Name));
         Assert.Equal("logo", picker.SelectedResource?.Name);
-        picker.Clear();
-        Assert.True(picker.IsLocal);
+        panel = await PanelAsync(f, "Select Resource");
+        list = panel.GetVisualDescendants().OfType<ListBox>().Single();
+        Assert.Equal("logo", (list.SelectedItem as DesignerProjectResource)?.Name);
+        list.SelectedIndex = 0;
+        Assert.Null(picker.SelectedResource);
         await picker.OkAsync();
         await ShellFixture.PumpUntil(() => !Code(designer).Contains("placeOrderButton.Image =", StringComparison.Ordinal), seconds: 30);
         Assert.False(designer.HasOpenEditor);
+
+        // Clear on Local resource removes it too.
+        (await RowAsync(f, "Image")).ModalEditor!.Execute(null);
+        await ShellFixture.PumpUntil(() => designer.ResourcePicker is not null);
+        await designer.ResourcePicker!.ImportLocalAsync(png);
+        await designer.ResourcePicker!.OkAsync();
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("placeOrderButton.Image = (Image)resources.GetObject(\"placeOrderButton.Image\");", StringComparison.Ordinal), seconds: 30);
+        (await RowAsync(f, "Image")).ModalEditor!.Execute(null);
+        await ShellFixture.PumpUntil(() => designer.ResourcePicker is not null);
+        designer.ResourcePicker!.Clear();
+        Assert.True(designer.ResourcePicker.IsLocal);
+        await designer.ResourcePicker.OkAsync();
+        await ShellFixture.PumpUntil(() => !Code(designer).Contains("placeOrderButton.Image =", StringComparison.Ordinal), seconds: 30);
+    }
+
+    /// <summary>An editor panel over the designer by its title (the in-window dialog's frame).</summary>
+    private static async Task<Border> PanelAsync(ShellFixture f, string title)
+    {
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Border>().Any(b => Avalonia.Automation.AutomationProperties.GetName(b) == title && b.IsEffectivelyVisible));
+        return f.Window.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetName(b) == title && b.IsEffectivelyVisible);
     }
 
     [Fact]
@@ -250,6 +381,36 @@ public sealed class WinFormsPropertiesShellTests
         Assert.Same(font, editor.Grid.Find("Font"));
         Assert.True(font.IsExpanded);
 
+        // An undo reloads the code, and the item grid reads its item again, in place.
+        designer.Undo();
+        await ShellFixture.PumpUntil(() => editor.Grid.Find("Font.Bold")?.Value == "False", seconds: 30, () => Code(designer));
+        Assert.DoesNotContain("fileToolStripMenuItem.Font =", Code(designer), StringComparison.Ordinal);
+        Assert.Same(font, editor.Grid.Find("Font"));
+        Assert.True(font.IsExpanded);
+
+        // F4 in the item grid opens the selected row's drop-down there (the global F4 shows the Properties window elsewhere).
+        f.Shell.Layout.CloseToolWindow(PropertiesWindowViewModel.ToolWindowId);
+        var itemGrid = await GridViewOfAsync(f, editor.Grid);
+        var keys = editor.Grid.Find("ShortcutKeys")!;
+        editor.Grid.SelectedRow = keys;
+        itemGrid.FocusPrimary();
+        await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("propertyGridFocus"), true));
+        f.Press(Key.F4);
+        await ShellFixture.PumpUntil(() => itemGrid.OpenDropDownControl is Views.PropertyEditors.ShortcutKeysDropDown);
+        Assert.False(f.Shell.Layout.IsVisible(PropertiesWindowViewModel.ToolWindowId));
+        f.Press(Key.Escape);
+        await ShellFixture.PumpUntil(() => itemGrid.OpenDropDownControl is null);
+
+        // Another item: the same grid view, listening still (a view per item stayed subscribed to the grid before).
+        var other = editor.Items.First(i => i.Name is { } itemName && itemName != "fileToolStripMenuItem" && itemName.EndsWith("ToolStripMenuItem", StringComparison.Ordinal));
+        editor.Selected = other;
+        await ShellFixture.PumpUntil(() => editor.Grid.Find("(Name)")?.Value == other.Name, seconds: 30);
+        Assert.Same(itemGrid, await GridViewOfAsync(f, editor.Grid));
+        Assert.Single(f.Window.GetVisualDescendants().OfType<Views.PropertyGridView>(), v => ReferenceEquals(v.DataContext, editor.Grid));
+        editor.Selected = editor.Items.Single(i => i.Name == "fileToolStripMenuItem");
+        await ShellFixture.PumpUntil(() => editor.Grid.Find("(Name)")?.Value == "fileToolStripMenuItem", seconds: 30);
+        font = editor.Grid.Find("Font")!;
+
         // The font editor opens over the collection editor; the item grid takes no input meanwhile.
         font.ModalEditor!.Execute(null);
         Assert.Equal("fileToolStripMenuItem · Font", designer.FontEditor!.Context);
@@ -260,6 +421,12 @@ public sealed class WinFormsPropertiesShellTests
         Assert.Same(editor, designer.CollectionEditor);
         designer.CloseCollectionEditor();
         Assert.False(designer.HasOpenEditor);
+    }
+
+    private static async Task<Views.PropertyGridView> GridViewOfAsync(ShellFixture f, PropertyGridViewModel grid)
+    {
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.PropertyGridView>().Any(v => ReferenceEquals(v.DataContext, grid) && v.IsEffectivelyVisible));
+        return f.Window.GetVisualDescendants().OfType<Views.PropertyGridView>().First(v => ReferenceEquals(v.DataContext, grid) && v.IsEffectivelyVisible);
     }
 
     [AvaloniaFact]
@@ -341,6 +508,14 @@ public sealed class WinFormsPropertiesShellTests
         accept.SelectedOption = accept.Options.Single(o => o.Value == "cancelButton");
         await ShellFixture.PumpUntil(() => Code(designer).Contains("            AcceptButton = cancelButton;", StringComparison.Ordinal), seconds: 30);
 
+        // CancelButton reset: an unset reference is "(none)", the first of its list and listed once (D41 question 17).
+        var cancelReference = await RowAsync(f, "CancelButton");
+        cancelReference.ResetCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !Code(designer).Contains("CancelButton = cancelButton;", StringComparison.Ordinal), seconds: 30);
+        cancelReference = await RowAsync(f, "CancelButton", r => r.Value == "(none)");
+        Assert.Equal(["(none)", "cancelButton", "placeOrderButton"], cancelReference.Options.Select(o => o.Value));
+        Assert.Same(cancelReference.Options[0], cancelReference.SelectedOption);
+
         // The Events view: a double-click on Click writes and shows the handler.
         designer.SetSelection(["cancelButton"], notify: true);
         properties.ShowEvents = true;
@@ -351,12 +526,44 @@ public sealed class WinFormsPropertiesShellTests
     }
 
     [AvaloniaFact]
+    public async Task The_events_view_follows_the_selection()
+    {
+        var (f, designer, _) = await OrderFormAsync("placeOrderButton");
+        await using var _f = f;
+        var properties = f.Shell.PropertiesWindow;
+
+        // Events with placeOrderButton (its Click is hooked to OnPlaceOrderClicked), then cancelButton chosen on the surface.
+        properties.ShowEvents = true;
+        var click = await RowAsync(f, "Click", r => r.Value == "OnPlaceOrderClicked");
+        Assert.True(properties.IsShowingEvents);
+        designer.SetSelection(["cancelButton"], notify: true);
+        await RowAsync(f, "Click", r => r.Value.Length == 0 && properties.Title.StartsWith("cancelButton", StringComparison.Ordinal));
+        Assert.Same(click, Grid(f).Find("Click")); // the row is refreshed in place, its action with it
+
+        // The double-click acts on cancelButton, the component shown, not on placeOrderButton.
+        Grid(f).Find("Click")!.DoubleClick();
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("cancelButton.Click += cancelButton_Click;", StringComparison.Ordinal), seconds: 30, () => Code(designer));
+        Assert.DoesNotContain("placeOrderButton_Click", Code(designer), StringComparison.Ordinal);
+
+        // Two components: their properties, Properties checked and Events grayed (D41 panel r); one again: its events.
+        designer.SetSelection(["placeOrderButton", "cancelButton"], notify: true);
+        await RowAsync(f, "Text", r => !properties.IsShowingEvents);
+        Assert.True(properties.ShowEvents);
+        Assert.False(properties.EventsCommand.CanExecute(null));
+        designer.SetSelection(["cancelButton"], notify: true);
+        await RowAsync(f, "Click", r => properties.IsShowingEvents);
+        properties.ShowEvents = false;
+    }
+
+    [AvaloniaFact]
     public async Task Invalid_values_are_reported_and_corrected_or_put_back()
     {
         var (f, designer, _) = await OrderFormAsync("giftCheckBox");
         await using var _f = f;
+        f.Shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
+        var view = await PropertiesViewAsync(f);
         var x = await RowAsync(f, "Location.X");
-        Grid(f).SelectedRow = x;
+        Grid(f).SelectedRow = Grid(f).Find("Text");
         x.Text = "abc";
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         Assert.Equal("Properties Window", f.Shell.Dialogs.Title);
@@ -366,20 +573,57 @@ public sealed class WinFormsPropertiesShellTests
         Assert.Equal("giftCheckBox · Location.X", f.Shell.Dialogs.Request.Context);
         Assert.Equal(["OK", "Cancel"], f.Shell.Dialogs.Request.Buttons);
 
-        // OK: back to the cell, the typed text kept to correct it; nothing written.
+        // OK: back to the cell (selected, its text box focused with what was typed selected), to correct it; nothing written.
         f.Shell.Dialogs.Accept();
         await ShellFixture.PumpUntil(() => !f.Shell.Dialogs.IsOpen);
         Assert.Equal("abc", Grid(f).Find("Location.X")!.Text);
         Assert.Equal("96", Grid(f).Find("Location.X")!.Value);
         Assert.Equal("Location.X", Grid(f).SelectedRow?.Path);
+        await ShellFixture.PumpUntil(() => PropertyGridViewTests.Editor(view, Grid(f).Find("Location.X")!) is { IsFocused: true } box && box.SelectedText == "abc");
         Assert.Contains("giftCheckBox.Location = new Point(96, 70);", Code(designer), StringComparison.Ordinal);
 
         // Again, and Cancel: the old value is back.
+        Grid(f).SelectedRow = Grid(f).Find("Text");
         Grid(f).Find("Location.X")!.Text = "-x";
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.Cancel();
         await ShellFixture.PumpUntil(() => !f.Shell.Dialogs.IsOpen && Grid(f).Find("Location.X")!.Text == "96");
         Assert.Equal("Location.X", Grid(f).SelectedRow?.Path);
+    }
+
+    private static async Task<Views.PropertiesWindowView> PropertiesViewAsync(ShellFixture f)
+    {
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Views.PropertiesWindowView>().Any(v => v.IsEffectivelyVisible));
+        return f.Window.GetVisualDescendants().OfType<Views.PropertiesWindowView>().First(v => v.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task A_multi_line_tool_tip_opens_the_multi_line_editor_and_resets()
+    {
+        var (f, designer, _) = await OrderFormAsync("customerTextBox");
+        await using var _f = f;
+        f.Shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
+        var view = await PropertiesViewAsync(f);
+        var tip = await RowAsync(f, "ToolTip on orderToolTip");
+        tip.Text = "Line 1\r\nLine 2";
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("orderToolTip.SetToolTip(customerTextBox, \"Line 1\\r\\nLine 2\");", StringComparison.Ordinal), seconds: 30, () => Code(designer));
+
+        // No text box (its lines would be joined): the arrow, F4 and a double-click open the multi-line editor.
+        tip = await RowAsync(f, "ToolTip on orderToolTip", r => r.HasLineBreaks);
+        Assert.True(tip is { ShowsTextBox: false, HasDropDown: true, DisplayValue: "Line 1 ⏎ Line 2" });
+        tip.DoubleClick();
+        await ShellFixture.PumpUntil(() => view.Grid.OpenDropDownControl is Views.PropertyEditors.MultilineTextDropDown);
+        var multiline = (Views.PropertyEditors.MultilineTextDropDown)view.Grid.OpenDropDownControl!;
+        Assert.Equal("Line 1\r\nLine 2", multiline.Box.Text);
+        multiline.Box.Text = "Line 1\nLine 3";
+        view.Grid.DropDownPopup.IsOpen = false;
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("orderToolTip.SetToolTip(customerTextBox, \"Line 1\\r\\nLine 3\");", StringComparison.Ordinal), seconds: 30, () => Code(designer));
+
+        // Reset clears it.
+        tip = await RowAsync(f, "ToolTip on orderToolTip", r => r.Value.Contains("Line 3", StringComparison.Ordinal));
+        Assert.True(tip.ResetCommand.CanExecute(null));
+        tip.ResetCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !Code(designer).Contains("orderToolTip.SetToolTip(customerTextBox", StringComparison.Ordinal), seconds: 30, () => Code(designer));
     }
 
     [AvaloniaFact]
