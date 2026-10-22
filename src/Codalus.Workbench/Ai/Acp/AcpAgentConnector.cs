@@ -285,7 +285,9 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
                 var candidate = Path.Combine(folder, program + extension);
                 if (AcpAgentCatalog.IsProgram(candidate))
                 {
-                    return candidate;
+                    // Windows matches names in any case: the file's own name (node.cmd), not PATHEXT's (node.CMD), as the
+                    // Connect dialog shows it.
+                    return OperatingSystem.IsWindows() ? new DirectoryInfo(folder).EnumerateFiles(program + extension).FirstOrDefault()?.FullName ?? candidate : candidate;
                 }
             }
         }

@@ -181,7 +181,9 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
     public async Task Locked_is_the_resx_metadata_both_ways()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), Skip);
-        const string Boolean = "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+        // As ResXResourceWriter writes it: the type shortened to the mscorlib alias, which the entry declares.
+        const string Boolean = "System.Boolean, mscorlib";
+        const string Mscorlib = "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
         string resx;
         var (host, render, source) = await LoadAsync("OrderForm.cs", withResources: true);
         await using (host)
@@ -196,13 +198,14 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
             Assert.Null(locked.Error);
             Assert.Empty(locked.Changes); // design-only: never code
             Assert.Equal(["$this.Locked", "giftCheckBox.Locked"], locked.Resources.Select(r => r.Key).Order(StringComparer.Ordinal));
-            Assert.All(locked.Resources, r => Assert.True(r is { Metadata: true, Culture: "", Resource: { Text: "True", Type: Boolean } }, r.Key));
+            Assert.All(locked.Resources, r => Assert.True(r is { Metadata: true, Culture: "", Resource: { Text: "True", Type: Boolean, AssemblyAlias: "mscorlib", AssemblyName: Mscorlib } }, $"{r.Key}: {r.Resource}"));
             Assert.True(locked.Render.Components.Single(c => c.Name == "giftCheckBox").Locked);
             var (code, resources) = Apply("OrderForm.cs", source, locked);
             Assert.Equal(source.Text.ToString(), code);
             resx = resources["OrderForm.resx"];
             Assert.Contains($"<metadata name=\"giftCheckBox.Locked\" type=\"{Boolean}\">", resx, StringComparison.Ordinal);
             Assert.Contains($"<metadata name=\"$this.Locked\" type=\"{Boolean}\">", resx, StringComparison.Ordinal);
+            Assert.Contains($"<assembly alias=\"mscorlib\" name=\"{Mscorlib}\" />", resx, StringComparison.Ordinal);
         }
 
         // A host loaded with that .resx: the check box and the form are locked, and the Properties window says so; unlocked,
