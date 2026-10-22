@@ -490,6 +490,7 @@ public sealed class WinFormsDesignerMenuShellTests
         await ShellFixture.PumpUntil(() => resx.Text.Text.Contains(Metadata("giftCheckBox"), StringComparison.Ordinal), seconds: 30);
         Assert.Contains(Metadata("$this"), resx.Text.Text, StringComparison.Ordinal);
         Assert.Contains(Metadata("historyListBox"), resx.Text.Text, StringComparison.Ordinal);
+        Assert.Contains($"<assembly alias=\"mscorlib\" name=\"{FakeWinFormsDesignerHost.MscorlibName}\" />", resx.Text.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("orderToolTip.Locked", resx.Text.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("notesSplit.Panel1.Locked", resx.Text.Text, StringComparison.Ordinal);
         Assert.Equal(originalCode, Code(designer));
@@ -515,7 +516,7 @@ public sealed class WinFormsDesignerMenuShellTests
         Assert.DoesNotContain(rows, r => r.Name == "Locked");
         Assert.True(designer.Find("giftCheckBox")!.Locked);
 
-        // Again: every lock goes, and the .resx is as it was.
+        // Again: every lock goes, with the mscorlib alias the locks brought, and the .resx is as it was (as the smoke waits for it).
         await f.ExecuteAsync("winforms.lockControls");
         await ShellFixture.PumpUntil(() => !resx.Text.Text.Contains(".Locked", StringComparison.Ordinal), seconds: 30);
         Assert.Equal(originalResx, resx.Text.Text);

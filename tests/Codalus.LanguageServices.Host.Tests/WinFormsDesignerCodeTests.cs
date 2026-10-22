@@ -1095,6 +1095,10 @@ public sealed class WinFormsDesignerCodeTests
         Assert.DoesNotContain("ComponentResourceManager", noLogo, StringComparison.Ordinal);
         Assert.DoesNotContain("logoPictureBox", logoResources.Get(null)!.Text, StringComparison.Ordinal);
         Assert.Contains("orderToolTip.TrayLocation", logoResources.Get(null)!.Text, StringComparison.Ordinal);
+
+        // So is the System.Drawing alias only the image used (the tray location names its assembly in full), as the
+        // resource writer declares only the aliases its entries use.
+        Assert.DoesNotContain("<assembly alias=\"System.Drawing\"", logoResources.Get(null)!.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1120,12 +1124,17 @@ public sealed class WinFormsDesignerCodeTests
 
     // ------------------------------------------------------------------ #67: the control designers' Locked
 
-    private static readonly DesignerResource s_lockedTrue = new() { Type = "System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089", Text = "True" };
+    private const string MscorlibName = "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+
+    /// <summary>A Locked value as the designer host's ResourceValues.Of gives it (ResXResourceWriter's): the type shortened to the mscorlib alias it declares.</summary>
+    private static readonly DesignerResource s_lockedTrue = new() { Type = "System.Boolean, mscorlib", Text = "True", AssemblyAlias = "mscorlib", AssemblyName = MscorlibName };
 
     /// <summary>
     /// Lock Controls' Locked is design-time metadata in the default .resx, as the classic IDE writes it: with the
-    /// component's entries (metadata first), the form's ($this) last, in the file's line endings, never in the code; a
-    /// null resource removes it, and removing or renaming the component takes it along.
+    /// component's entries (metadata first), the form's ($this) last, in the file's line endings, never in the code,
+    /// the mscorlib alias declared before its first use; a null resource removes it, the alias with the last entry that
+    /// used it (the smoke's "Lock Controls again takes every lock away" on Windows: the alias was left behind), and
+    /// removing or renaming the component takes it along.
     /// </summary>
     [Fact]
     public void Locked_metadata_is_written_where_the_classic_ide_writes_it()
@@ -1135,25 +1144,32 @@ public sealed class WinFormsDesignerCodeTests
         var original = Resx("OrderForm.resx");
         var resx = resources.Get(null)!.Text;
         var newLine = original.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        string Element(string name) => string.Join(newLine, $"  <metadata name=\"{name}.Locked\" type=\"System.Boolean, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089\">", "    <value>True</value>", "  </metadata>") + newLine;
+        string Element(string name) => string.Join(newLine, $"  <metadata name=\"{name}.Locked\" type=\"System.Boolean, mscorlib\">", "    <value>True</value>", "  </metadata>") + newLine;
+        var assembly = $"  <assembly alias=\"mscorlib\" name=\"{MscorlibName}\" />" + newLine;
         Assert.All(Diff(original, resx), l => Assert.StartsWith("+", l, StringComparison.Ordinal));
-        Assert.Equal(6, Diff(original, resx).Count);
+        Assert.Equal(7, Diff(original, resx).Count);
 
-        // giftCheckBox's sorts before the other components' (logoPictureBox, orderToolTip); the form's goes last.
-        Assert.Contains(Element("giftCheckBox") + "  <metadata name=\"orderToolTip.TrayLocation\"", resx, StringComparison.Ordinal);
+        // giftCheckBox's sorts before the other components' (logoPictureBox, orderToolTip), after the alias it uses; the form's goes last.
+        Assert.Contains(assembly + Element("giftCheckBox") + "  <metadata name=\"orderToolTip.TrayLocation\"", resx, StringComparison.Ordinal);
         Assert.EndsWith(Element("$this") + "</root>" + newLine, resx, StringComparison.Ordinal);
+        Assert.Single(new ResxText(resx).Entries(), e => e.Element == "assembly" && e.Name == "mscorlib");
 
-        // Unlocked: the entries go, and the file is as it was.
+        // Unlocked, in either order: the entries go, the alias with the last of them, and the file is as it was.
+        foreach (var order in new[] { new[] { "giftCheckBox", "$this" }, ["$this", "giftCheckBox"] })
+        {
+            var unlocked = new ResxText(resx);
+            unlocked.Set(order[0] + ".Locked", null, metadata: true);
+            Assert.Contains(assembly, unlocked.Text, StringComparison.Ordinal);
+            unlocked.Set(order[1] + ".Locked", null, metadata: true);
+            Assert.Equal(original, unlocked.Text);
+        }
+
+        // The component removed or renamed: its Locked goes, or follows it; the form's still uses the alias.
         var text = new ResxText(resx);
-        text.Set("giftCheckBox.Locked", null, metadata: true);
-        text.Set("$this.Locked", null, metadata: true);
-        Assert.Equal(original, text.Text);
-
-        // The component removed or renamed: its Locked goes, or follows it.
-        text = new ResxText(resx);
         text.RemoveComponent("giftCheckBox");
         Assert.DoesNotContain("giftCheckBox", text.Text, StringComparison.Ordinal);
         Assert.Contains("$this.Locked", text.Text, StringComparison.Ordinal);
+        Assert.Contains(assembly, text.Text, StringComparison.Ordinal);
         text = new ResxText(resx);
         text.RenameComponent("giftCheckBox", "wrapCheckBox");
         Assert.Contains(Element("wrapCheckBox"), text.Text, StringComparison.Ordinal);
