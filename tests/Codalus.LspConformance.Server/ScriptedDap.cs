@@ -13,6 +13,8 @@ namespace Codalus.LspConformance.Server;
 /// arguments (<c>--interpreter=vscode</c>), it stands in for netcoredbg: <c>configurationDone</c> without a launch, then
 /// an attach (a program started in the terminal, see <see cref="AttachScript"/>); or an attach, then a
 /// <c>configurationDone</c> that runs past netcoredbg's 15 seconds (<see cref="AttachLateAsync"/>).
+/// A launch configuration with <c>inspect</c> (see <see cref="ScriptedInspection"/>) is a program paused at a line with
+/// the variables, evaluations and edits its script lists (the data tip and variable window tests).
 /// </summary>
 internal static class ScriptedDap
 {
@@ -30,6 +32,7 @@ internal static class ScriptedDap
         var configured = false;
         (int ProcessId, string? RuntimeAfter, bool Slow)? slowAttach = null;
         var evaluations = 0;
+        ScriptedInspection? inspection = null;
         while (await ReadAsync(input) is { } message)
         {
             if (message.GetProperty("type").GetString() != "request")
@@ -41,6 +44,11 @@ internal static class ScriptedDap
             var requestSeq = message.GetProperty("seq").GetInt32();
             Interlocked.Increment(ref s_requests);
             JsonNode? body = null;
+            if (inspection is not null && await inspection.HandleAsync(output, message, command!, requestSeq))
+            {
+                continue;
+            }
+
             switch (command)
             {
                 case "initialize":
@@ -50,6 +58,7 @@ internal static class ScriptedDap
                     continue;
                 case "launch":
                     launch = message.TryGetProperty("arguments", out var arguments) ? arguments.Clone() : null;
+                    inspection = ScriptedInspection.From(launch);
                     break;
                 case "attach" when !configured && AttachScript(message) is { Slow: true } slow:
                     // As netcoredbg: it only takes the process id, and attaches in configurationDone.

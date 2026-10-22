@@ -86,7 +86,7 @@ public sealed class QuickWatchViewModel : ObservableObject
         {
             var result = await _debugger.EvaluateAsync(expression, "watch").ConfigureAwait(true);
             Roots.Clear();
-            Roots.Add(new VariableNode(expression, result.Result, result.Type, result.VariablesReference, r => _debugger.VariablesAsync(r), evaluateName: expression) { IsExpanded = result.VariablesReference > 0 });
+            Roots.Add(new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(_debugger), evaluateName: expression) { IsExpanded = result.VariablesReference > 0 });
             Error = null;
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
@@ -110,13 +110,19 @@ public sealed class QuickWatchViewModel : ObservableObject
     }
 }
 
-/// <summary>An editor data tip: one evaluated expression as an editable tree (ADR 0021).</summary>
-public sealed class DataTipViewModel(DebugService debugger, string expression, EvaluateResponse result) : ObservableObject
+/// <summary>
+/// An editor data tip (ADR 0021, D44): one evaluated expression as the header over the code, whose members open in
+/// child tips. <paramref name="icon"/> is the hovered name's kind (the editor's semantic token: local, parameter…).
+/// </summary>
+public sealed class DataTipViewModel(DebugService debugger, string expression, EvaluateResponse result, string icon = "symbol-local") : ObservableObject
 {
-    public ObservableCollection<VariableNode> Roots { get; } =
-        [new VariableNode(expression, result.Result, result.Type, result.VariablesReference, r => debugger.VariablesAsync(r), evaluateName: expression)];
+    public VariableNode Root { get; } =
+        new(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(debugger), evaluateName: expression) { Icon = icon };
 
-    public Task<string?> SetValueAsync(VariableNode node, string value) => VariableEditing.SetAsync(debugger, node, value, Roots.Contains(node));
+    /// <summary>The root, as a list (the tests' and the tool windows' shape).</summary>
+    public IReadOnlyList<VariableNode> Roots => [Root];
+
+    public Task<string?> SetValueAsync(VariableNode node, string value) => VariableEditing.SetAsync(debugger, node, value, ReferenceEquals(node, Root));
 
     /// <summary>Pins the tip to its line (M14b); null where it can't be pinned (read-only documents).</summary>
     public Action? PinToSource { get; init; }

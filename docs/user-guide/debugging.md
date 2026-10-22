@@ -134,13 +134,24 @@ Codalus IDE comes to the front when the program stops, even when the program's w
 - **Call Stack** (`Ctrl+Alt+C`): the frames of the selected thread. Pick another thread at the top. Double-click a frame to see its source and its variables.
 - **Threads** (`Ctrl+Alt+H`): every thread with its id, name and location. Double-click to switch to a thread; flag threads and show only the flagged ones.
 - **Modules** (`Ctrl+Alt+U`): the loaded modules with their symbol status and path.
-- **Data tips**: hover over a variable or member access to see its value as a tree: expand members, and edit values with `F2` or double-click.
+- **Data tips**: hover over a variable or a member access to see its value; see [Data tips](#data-tips).
 - **Pinned data tips**: the pin button in a data tip keeps it next to its line. It is evaluated again at every pause, in red when the value changed, and keeps its last value after the session ends. Right-click it to add a comment, copy, add a watch or unpin it; double-click for QuickWatch. Pinned tips follow your edits and are saved with the solution; Debug → Windows → Clear All DataTips removes them.
 - **Parallel Stacks** (Debug → Windows): every thread's call stack in one tree. Threads that share callers are grouped until their stacks branch; the node with the active thread is marked.
 - **Parallel Watch** (Debug → Windows): one expression evaluated on every thread, in the thread's topmost frame with source code.
 - **Processes** (Debug → Windows): the process being debugged with its state, and Attach to Process, Detach All and Terminate All.
 - **The Debug Location toolbar**: while paused, the standard toolbar shows the process and lets you pick the thread and the stack frame.
 - **Debug Console**: type an expression and press Enter to evaluate it in the selected frame. Up and Down recall earlier ones.
+
+## Data tips
+
+Hover over a variable or a member access (`app`, `app.Properties`) while the program is stopped:
+- **The header** sits right over the expression, its name on the code's: the icon of its kind (a local, a parameter, a field, a property), the name, and the value in a box. The type is in the name's tooltip. A string or a collection has a **View** drop-down: the magnifier opens the likely visualizer, the arrow lists them all (plugins' under **Plugins**).
+- **Expanding**: rest the pointer on the chevron (about 400 ms), click it, or press `Right`. The members open in a tip of their own, under the header and 24 px in; each member with members of its own expands the same way, so each level is a tip. Moving to another row of a tip closes the tip the last row opened.
+- **Rows** show the icon, the name and the value, trimmed at 400 px: rest on a value for all of it. A tip shows 15 rows, then scrolls with the wheel.
+- **From the keyboard**: `Up` and `Down` move in a tip, `Right` opens the selected row's tip, `Left` closes it or goes back, `F2` or `Enter` edits the value, `Ctrl+C` copies it, `Shift+F10` opens its menu and `Escape` closes the tips.
+- **Near the edges**: near the editor's bottom the tips open upwards, and near its right edge they move left, their values trimmed sooner.
+- **The code under the header**: a double-click on the header's name selects the word, `Ctrl+Click` goes to its definition, and the wheel scrolls the editor (and closes the tips). Hold `Ctrl` to fade the tips and click through them to the code; let go to bring them back.
+- **Errors and warnings** at the hovered name show above the header, with their fixes, as in Quick Info.
 
 ## Exceptions
 

@@ -692,6 +692,41 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             }
         }, "debug.session").ConfigureAwait(true);
 
+        await StepAsync("debug.dataTip", "0.6.0", "The data tip: the header over a variable hovered while stopped, and its elements in a child tip", async () =>
+        {
+            var lines = File.ReadAllLines(Program);
+            var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+            await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == argsLine, $"the debugger stops at line {argsLine}", 300).ConfigureAwait(true);
+            try
+            {
+                var editor = await OpenAsync(Program).ConfigureAwait(true);
+                var document = editor.Editor.Document;
+                var line = document.GetLineByNumber(argsLine);
+                var column = document.GetText(line).IndexOf(", args)", StringComparison.Ordinal);
+                Check(column >= 0, $"line {argsLine} reads args");
+                await editor.ShowDataTipAsync(line.Offset + column + 3).ConfigureAwait(true);
+                await WaitAsync(() => editor.DataTip is { Header.Bounds.Width: > 0 }, "the data tip opens over args").ConfigureAwait(true);
+                var tip = editor.DataTip!;
+                Check(tip.Header.NameBlock.Text == "args" && tip.Header.ValueBlock.Text is { Length: > 0 }, $"the header shows args and its value: {tip.Header.NameBlock.Text} = {tip.Header.ValueBlock.Text}");
+                var view = editor.Editor.TextArea.TextView;
+                var name = view.PointToClient(tip.Header.NameBlock.PointToScreen(default));
+                var code = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(document.GetLocation(line.Offset + column + 2)), AvaloniaEdit.Rendering.VisualYPosition.LineTop) - view.ScrollOffset;
+                Check(Math.Abs(name.X - code.X) <= 2, $"the header's name lies over the code's (x {name.X:0.#}, the code's {code.X:0.#})");
+                tip.SetOpen(null, tip.Header, tip.Root, true);
+                await WaitAsync(() => tip.Panels is [{ Rows: [{ Node.IsPlaceholder: false }, ..] }], "args' elements open in a child tip").ConfigureAwait(true);
+                var rows = tip.Panels[0].Rows;
+                Check(rows.Any(r => r.Node.Value == "\"two words\""), "the child tip lists \"two words\": " + string.Join(", ", rows.Select(r => $"{r.Node.Name} = {r.Node.Value}")));
+                Screenshot("smoke-test-data-tip.png", tip.Popups);
+                editor.HoverPopup.IsOpen = false;
+            }
+            finally
+            {
+                shell.Run("debug.stop");
+                await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            }
+        }, "debug.session").ConfigureAwait(true);
+
         // M6: Git.
         await StepAsync("git.changes", "M6", "Git status, diff, stage, commit, blame and branches", async () =>
         {

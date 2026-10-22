@@ -3,47 +3,102 @@ using Codalus.Debugging;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Debugging;
 using Codalus.Workbench.FileSystem;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Output;
 
 namespace Codalus.Shell.ViewModels;
 
-/// <summary>A variable (or watch, or evaluated expression) in a debugger tree; children load when it is expanded.</summary>
-public sealed class VariableNode : ObservableObject
+/// <summary>
+/// Where a debugger tree's children come from: the adapter's variables of a node's reference, as nodes (the data tip,
+/// Locals, Autos, Watch and QuickWatch share it).
+/// </summary>
+public class VariableSource(Func<int, Task<IReadOnlyList<Variable>>> variables)
 {
-    private readonly Func<int, Task<IReadOnlyList<Variable>>>? _load;
+    public VariableSource(DebugService debugger)
+        : this(r => debugger.VariablesAsync(r))
+    {
+    }
+
+    /// <summary>The children of <paramref name="parent"/>, read from its variables reference.</summary>
+    public virtual async Task<IReadOnlyList<VariableNode>> ChildrenAsync(VariableNode parent, CancellationToken cancellationToken)
+    {
+        var children = await variables(parent.Reference).ConfigureAwait(true);
+        cancellationToken.ThrowIfCancellationRequested();
+        return [.. children.Select(child => Node(child, parent))];
+    }
+
+    /// <summary>A node for one of the adapter's variables under <paramref name="parent"/>.</summary>
+    protected VariableNode Node(Variable child, VariableNode parent) =>
+        new(child.Name, child.Value, child.Type, child.VariablesReference, this, parent.Reference, child.EvaluateName)
+        {
+            Icon = VariableIcons.Guess(child.Name),
+            Parent = parent,
+        };
+}
+
+/// <summary>The icon of a row whose kind nobody reported: guessed from its name, as for a remote program (B3).</summary>
+public static class VariableIcons
+{
+    public const string StaticMembers = "Static members";
+
+    public static string Guess(string name) =>
+        name == StaticMembers ? "symbol-class"
+        : name.StartsWith('[') || name.StartsWith('_') || (name.Length > 0 && char.IsLower(name[0])) ? "symbol-field"
+        : "symbol-property";
+}
+
+/// <summary>A variable (or watch, or evaluated expression) in a debugger tree; children load when it is expanded.</summary>
+#pragma warning disable CA1001 // _loading is only cancelled (a newer load, or a new value), never waited on: no handle to free.
+public sealed class VariableNode : ObservableObject
+#pragma warning restore CA1001
+{
+    private readonly VariableSource? _source;
+    private CancellationTokenSource? _loading;
     private bool _isExpanded;
     private bool _loaded;
     private string _value;
     private string? _type;
     private int _reference;
 
-    public VariableNode(string name, string value, string? type, int reference, Func<int, Task<IReadOnlyList<Variable>>>? load, int? parentReference = null, string? evaluateName = null)
+    public VariableNode(string name, string value, string? type, int reference, VariableSource? source, int? parentReference = null, string? evaluateName = null)
     {
         Name = name;
         EvaluateName = evaluateName;
         _value = value;
         _type = type;
         _reference = reference;
-        _load = load;
+        _source = source;
         ParentReference = parentReference;
-        if (reference > 0 && load is not null)
+        if (reference > 0 && source is not null)
         {
-            Children.Add(Placeholder);
+            Children.Add(Placeholder());
         }
     }
 
-    private static VariableNode Placeholder => new(string.Empty, "Loading…", null, 0, null);
+    private static VariableNode Placeholder() => new(string.Empty, Localizer.Get("dataTip.loading", "Loading…"), null, 0, null) { IsPlaceholder = true };
 
     public string Name { get; }
 
     /// <summary>The expression that evaluates to this value (the adapter's <c>evaluateName</c>; a watch's own expression).</summary>
     public string? EvaluateName { get; }
 
+    /// <summary>The node this one is a child of (null for a root).</summary>
+    public VariableNode? Parent { get; init; }
+
+    /// <summary>The row's icon kind (a code symbol: <c>symbol-property</c>, <c>symbol-field</c>…).</summary>
+    public string Icon { get; init; } = "symbol-local";
+
+    /// <summary>The muted "Loading…" row shown while the children load.</summary>
+    public bool IsPlaceholder { get; private init; }
+
     /// <summary>Whether the value is a string (visualizers apply).</summary>
     public bool IsString => _type is "string" or "System.String" && _value.StartsWith('"');
 
     /// <summary>The variables reference of the container (for setting this variable's value).</summary>
     public int? ParentReference { get; }
+
+    /// <summary>The adapter's reference to this value's members (0: none).</summary>
+    public int Reference => _reference;
 
     public string Value
     {
@@ -59,11 +114,18 @@ public sealed class VariableNode : ObservableObject
             if (SetField(ref _type, value))
             {
                 OnPropertyChanged(nameof(HasType));
+                OnPropertyChanged(nameof(NameTip));
             }
         }
     }
 
     public bool HasType => !string.IsNullOrEmpty(_type);
+
+    /// <summary>Whether the value has members to expand (a chevron, a child tip).</summary>
+    public bool HasChildren => _reference > 0 && _source is not null;
+
+    /// <summary>The name's tooltip: the type the adapter reports (a data tip has no type column).</summary>
+    public string? NameTip => HasType ? Type : null;
 
     public bool IsError { get; init; }
 
@@ -90,6 +152,9 @@ public sealed class VariableNode : ObservableObject
         }
     }
 
+    /// <summary>The children, loaded once (a child tip opening; what's loading is awaited).</summary>
+    public Task LoadChildrenOnceAsync() => _loaded ? Task.CompletedTask : LoadChildrenAsync();
+
     /// <summary>A new value for this node (a re-evaluated watch, a changed variable): reloads its children if expanded.</summary>
     public void Update(string value, string? type, int reference)
     {
@@ -102,10 +167,12 @@ public sealed class VariableNode : ObservableObject
 
         _reference = reference;
         _loaded = false;
+        _loading?.Cancel();
         Children.Clear();
-        if (reference > 0 && _load is not null)
+        OnPropertyChanged(nameof(HasChildren));
+        if (reference > 0 && _source is not null)
         {
-            Children.Add(Placeholder);
+            Children.Add(Placeholder());
             if (_isExpanded)
             {
                 _ = LoadChildrenAsync();
@@ -115,25 +182,35 @@ public sealed class VariableNode : ObservableObject
 
     private async Task LoadChildrenAsync()
     {
-        if (_load is null || _reference <= 0)
+        if (_source is null || _reference <= 0)
         {
             return;
         }
 
         _loaded = true;
+        _loading?.Cancel();
+        var loading = _loading = new CancellationTokenSource();
         try
         {
-            var children = await _load(_reference).ConfigureAwait(true);
+            var children = await _source.ChildrenAsync(this, loading.Token).ConfigureAwait(true);
+            if (loading.IsCancellationRequested)
+            {
+                return;
+            }
+
             Children.Clear();
             foreach (var child in children)
             {
-                Children.Add(new VariableNode(child.Name, child.Value, child.Type, child.VariablesReference, _load, _reference, child.EvaluateName));
+                Children.Add(child);
             }
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
         {
-            Children.Clear();
-            Children.Add(new VariableNode(string.Empty, ex.Message, null, 0, null) { IsError = true });
+            if (!loading.IsCancellationRequested)
+            {
+                Children.Clear();
+                Children.Add(new VariableNode(string.Empty, ex.Message, null, 0, null) { IsError = true, Icon = "error" });
+            }
         }
     }
 }
@@ -146,12 +223,14 @@ public sealed class VariablesViewModel : ObservableObject
 
     private readonly DebugService _debugger;
     private readonly Func<string, int, string?> _lineText;
+    private readonly VariableSource _source;
     private bool _isEmpty = true;
     private int _generation;
 
     public VariablesViewModel(DebugService debugger, bool autos, Func<string, int, string?> lineText)
     {
         _debugger = debugger;
+        _source = new VariableSource(debugger);
         IsAutos = autos;
         _lineText = lineText;
         debugger.Stopped += (_, _) => Ui.Post(() => _ = RefreshAsync());
@@ -215,7 +294,7 @@ public sealed class VariablesViewModel : ObservableObject
             var reference = scopes.Count > 0 ? scopes[0].VariablesReference : 0;
             foreach (var variable in variables)
             {
-                Roots.Add(new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, r => _debugger.VariablesAsync(r), reference, variable.EvaluateName));
+                Roots.Add(new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, _source, reference, variable.EvaluateName) { Icon = VariableIcons.Guess(variable.Name) });
             }
 
             IsEmpty = Roots.Count == 0;
@@ -225,7 +304,7 @@ public sealed class VariablesViewModel : ObservableObject
             if (generation == _generation)
             {
                 Roots.Clear();
-                Roots.Add(new VariableNode(string.Empty, ex.Message, null, 0, null) { IsError = true });
+                Roots.Add(new VariableNode(string.Empty, ex.Message, null, 0, null) { IsError = true, Icon = "error" });
                 IsEmpty = false;
             }
         }
@@ -280,11 +359,13 @@ public sealed class WatchViewModel : ObservableObject
     public const string ToolWindowId = "debug.watch";
 
     private readonly DebugService _debugger;
+    private readonly VariableSource _source;
     private string _newExpression = string.Empty;
 
     public WatchViewModel(DebugService debugger)
     {
         _debugger = debugger;
+        _source = new VariableSource(debugger);
         debugger.Stopped += (_, _) => Ui.Post(() => _ = RefreshAsync());
         debugger.FrameChanged += (_, _) => Ui.Post(() => _ = RefreshAsync());
         debugger.StateChanged += (_, _) => Ui.Post(() =>
@@ -341,7 +422,7 @@ public sealed class WatchViewModel : ObservableObject
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private VariableNode Node(string expression) => new(expression, string.Empty, null, 0, r => _debugger.VariablesAsync(r), evaluateName: expression);
+    private VariableNode Node(string expression) => new(expression, string.Empty, null, 0, _source, evaluateName: expression);
 
     /// <summary>Sets a watch's value (<c>setExpression</c>) or a member's (<c>setVariable</c>), then re-evaluates the watches.</summary>
     public async Task<string?> SetValueAsync(VariableNode node, string value)
