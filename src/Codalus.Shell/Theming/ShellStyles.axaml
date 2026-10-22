@@ -1270,7 +1270,9 @@
   <!--
     The data tip (D44, docs/design/controls/DataTip.dc.html): the header over the hovered expression and a tip per
     expanded level, on the overlay color with the family's control corners; rows 20 px with a separator between names
-    and values, the row whose child tip is open marked (outlined too in high contrast).
+    and values, the row whose child tip is open marked (outlined too in high contrast). The UI text size is set here: in
+    a window of its own (the hover's header and every child tip), a popup's content inherits from its PopupRoot, at
+    Avalonia's 14 px, not from the main window's Shell.FontSize.Body.
   -->
   <Style Selector="Border.dataTip, Border.dataTipHeader">
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
@@ -1278,6 +1280,7 @@
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
     <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
   </Style>
   <Style Selector="Border.dataTip">
     <Setter Property="Padding" Value="0,2" />
