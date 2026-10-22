@@ -176,6 +176,15 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>The C# host's last read of the form (tests).</summary>
     internal WinFormsReadResult? LastRead => _read;
 
+    /// <summary>
+    /// The project the Toolbox asks about: the C# host's, else the build host's owner project (the C# host names it only
+    /// once it has it; before, it reads the form from Miscellaneous Files). Null before either is known.
+    /// </summary>
+    internal string? ToolboxProject => _read?.Project ?? _target?.Project;
+
+    /// <summary>Whether the designer was closed (or the IDE is exiting): it asks and loads nothing more (tests).</summary>
+    internal bool IsClosed => _disposed;
+
     /// <summary>The surface's components: the root first, then controls (front first, parents before children), then non-visual components.</summary>
     public IReadOnlyList<DesignerComponentView> Components => _components;
 
@@ -409,6 +418,13 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>The designer's newest request for the Toolbox's project items (tests).</summary>
     internal Task ToolboxLoad => _toolboxLoad;
 
+    /// <summary>
+    /// How many requests for the Toolbox's project items the designer sent to the C# host (tests). <see cref="ToolboxLoad"/>
+    /// doesn't tell whether it asked: a request that ended at once (nothing to ask with, or the C# host's answer already
+    /// read when the request returned) is <see cref="Task.CompletedTask"/>, as was the ask before it.
+    /// </summary>
+    internal int ToolboxRequests { get; private set; }
+
     /// <summary>Waits until what holds or waits for the designer's gate now (a start, a reload, a read again, a change) is done (tests).</summary>
     internal async Task WhenIdleAsync()
     {
@@ -436,12 +452,13 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     {
         // The C# host names the project only once it has it (before, it reads the form from Miscellaneous Files): the
         // build host's owner project is known from the evaluation, and the ask once the C# service has loaded finds it.
-        if (_disposed || (_read?.Project ?? _target?.Project) is not { } project || _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is not { } client)
+        if (_disposed || ToolboxProject is not { } project || _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is not { } client)
         {
             return;
         }
 
         var request = _shell.Toolbox.BeginProjectItemsRequest();
+        ToolboxRequests++;
         try
         {
             if (await client.WinFormsToolboxAsync(project, CancellationToken.None).ConfigureAwait(true) is { } toolbox && !_disposed)

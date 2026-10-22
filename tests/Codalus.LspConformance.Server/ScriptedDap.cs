@@ -39,7 +39,11 @@ internal static class ScriptedDap
     /// <summary>The attached program's threads, once a slow attach has the process (<see cref="AttachLateAsync"/>).</summary>
     private static JsonElement[]? s_attachedThreads;
 
-    public static async Task RunAsync(Stream input, Stream output)
+    /// <param name="initializeAfter">
+    /// With <c>--initialize-after &lt;file&gt;</c>, <c>initialize</c> is answered only once that file exists: an adapter whose
+    /// start takes as long as the test says (a netcoredbg that finishes starting after one started after it).
+    /// </param>
+    public static async Task RunAsync(Stream input, Stream output, string? initializeAfter = null)
     {
         JsonElement? launch = null;
         var configured = false;
@@ -74,6 +78,11 @@ internal static class ScriptedDap
             switch (command)
             {
                 case "initialize":
+                    while (initializeAfter is not null && !File.Exists(initializeAfter))
+                    {
+                        await Task.Delay(50);
+                    }
+
                     body = new JsonObject { ["supportsConfigurationDoneRequest"] = true, ["supportsSetVariable"] = true };
                     await RespondAsync(output, requestSeq, command, body);
                     await EventAsync(output, "initialized", null);
@@ -150,10 +159,16 @@ internal static class ScriptedDap
                     // The program runs until the session ends it (a multi-program session's first one, while others join).
                     break;
                 case "configurationDone":
+                    // With processId, netcoredbg's process event names it first; with exitCode, the program exits with it (else 7).
                     await RespondAsync(output, requestSeq, command, null);
+                    if (launch is { } started && Option(started, "processId") is { } processId)
+                    {
+                        await EventAsync(output, "process", new JsonObject { ["name"] = "program", ["systemProcessId"] = int.Parse(processId, System.Globalization.CultureInfo.InvariantCulture), ["isLocalProcess"] = true, ["startMethod"] = "launch" });
+                    }
+
                     await EventAsync(output, "output", new JsonObject { ["category"] = "console", ["output"] = "scripted adapter: launch " + launch?.GetRawText() + "\n" });
                     await EventAsync(output, "output", new JsonObject { ["category"] = "stdout", ["output"] = "Hello from the scripted program\n" });
-                    await EventAsync(output, "exited", new JsonObject { ["exitCode"] = 7 });
+                    await EventAsync(output, "exited", new JsonObject { ["exitCode"] = launch is { } exiting && Option(exiting, "exitCode") is { } code ? int.Parse(code, System.Globalization.CultureInfo.InvariantCulture) : 7 });
                     await EventAsync(output, "terminated", new JsonObject());
                     continue;
                 case "threads":
