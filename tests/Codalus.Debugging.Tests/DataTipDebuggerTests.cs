@@ -85,6 +85,36 @@ public sealed class DataTipDebuggerTests(DebuggeeFixture debuggee) : IClassFixtu
         await _debug.StopAsync();
     }
 
+    [Fact]
+    public async Task The_collection_views_read_their_elements_and_set_them_on_netcoredbg()
+    {
+        await PauseAsync(debuggee.Dll, Path.Combine(debuggee.Folder, "DataTip.cs"), _debug);
+        var locals = await _debug.VariablesAsync((await _debug.ScopesAsync(_debug.SelectedFrame!))[0].VariablesReference);
+        async Task<CollectionView> ViewAsync(string name)
+        {
+            var local = Assert.Single(locals, v => v.Name == name);
+            var view = await CollectionViews.ReadAsync(CollectionViews.KindOf(local.Type)!.Value, await _debug.VariablesAsync(local.VariablesReference), r => _debug.VariablesAsync(r), TestContext.Current.CancellationToken);
+            Assert.NotNull(view);
+            return view;
+        }
+
+        Assert.Equal(["[0]", "[1]", "[2]"], (await ViewAsync("forecasts")).Elements.Select(e => e.Variable.Name));
+        Assert.Equal(["[\"server.Features\"]", "[\"application.Services\"]", "[\"__MiddlewareDescriptions\"]"], (await ViewAsync("properties")).Elements.Select(e => e.Variable.Name));
+        Assert.Equal(["3", "8", "13"], (await ViewAsync("ids")).Elements.Select(e => e.Variable.Value));
+        Assert.Equal(["\"third\"", "\"fourth\"", "\"fifth\""], (await ViewAsync("queue")).Elements.Select(e => e.Variable.Value));
+        Assert.Equal(["3", "2", "1"], (await ViewAsync("stack")).Elements.Select(e => e.Variable.Value));
+
+        // A list's element is set in its _items (the container's name is the index); a queue's and a dictionary entry's by
+        // their evaluate names.
+        var stack = await ViewAsync("stack");
+        Assert.Equal("30", (await _debug.SetExpressionAsync(stack.Elements[0].Variable.EvaluateName!, "30")).Value);
+        var entry = (await ViewAsync("properties")).Elements[1];
+        Assert.Equal("\"changed\"", (await _debug.SetExpressionAsync(entry.Variable.EvaluateName!, "\"changed\"")).Value);
+        Assert.Equal("\"changed\"", (await ViewAsync("properties")).Elements[1].Variable.Value);
+        Assert.Equal("30", (await ViewAsync("stack")).Elements[0].Variable.Value);
+        await _debug.StopAsync();
+    }
+
     /// <summary>
     /// Writes <c>Recorded/datatip-&lt;runtime&gt;.json</c> when <c>CODALUS_RECORD_DATATIP</c> names the folder: the
     /// Debuggee's <c>--datatip</c> locals as netcoredbg lists them, four levels deep. <c>CODALUS_RECORD_DATATIP_DLL</c>

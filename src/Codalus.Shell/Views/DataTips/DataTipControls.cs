@@ -277,6 +277,7 @@ public sealed class DataTipRow : Border
             VerticalAlignment = VerticalAlignment.Center,
         };
         _value.Classes.Set("error", node.IsError);
+        _value.Classes.Set("muted", node.IsDisplayPending);
         ToolTip.SetTip(_value, node.IsPlaceholder || node.Value.Length == 0 ? null : node.Value);
         _value.DoubleTapped += (_, e) =>
         {
@@ -353,7 +354,10 @@ public sealed class DataTipRow : Border
         {
             _value.Classes.Set("error", Node.IsError);
         }
-
+        else if (e.PropertyName is nameof(VariableNode.IsDisplayPending))
+        {
+            _value.Classes.Set("muted", Node.IsDisplayPending);
+        }
         else if (e.PropertyName is nameof(VariableNode.HasChildren))
         {
             _chevron.IsVisible = Node.HasChildren;
@@ -427,7 +431,11 @@ public sealed class DataTipPanel : Border
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             MaxHeight = DataTipMetrics.MaxRows * DataTipMetrics.Row,
         };
-        _scroll.ScrollChanged += (_, _) => ScrollChanged?.Invoke(this, EventArgs.Empty);
+        _scroll.ScrollChanged += (_, _) =>
+        {
+            ResolveDisplays();
+            ScrollChanged?.Invoke(this, EventArgs.Empty);
+        };
         Child = _scroll;
         AutomationProperties.SetName(this, Localizer.Format("dataTip.membersOf", "Members of {0}", parent.Name));
         parent.Children.CollectionChanged += OnChildrenChanged;
@@ -484,7 +492,19 @@ public sealed class DataTipPanel : Border
             Select(again);
         }
 
+        ResolveDisplays();
         RowsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The [DebuggerDisplay] of the rows in view that don't have it yet (A10).</summary>
+    private void ResolveDisplays()
+    {
+        var rows = Rows;
+        var first = Math.Max(0, (int)(ScrollOffset / DataTipMetrics.Row));
+        for (var i = first; i < rows.Count && i < first + DataTipMetrics.MaxRows + 1; i++)
+        {
+            _ = rows[i].Node.ResolveDisplayAsync();
+        }
     }
 
     /// <summary>The top of <paramref name="row"/> in the tip's own coordinates (its border and padding included, its scroll applied).</summary>

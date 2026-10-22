@@ -53,8 +53,17 @@ public sealed record DebugMember(Variable Variable, MemberKind Kind)
     /// <summary>netcoredbg's "name (Owner)" for a member a derived type hides: it has no evaluate name, so no pin.</summary>
     public bool IsDuplicate { get; init; }
 
-    /// <summary>A group's members (Non-Public members, a collection view's Raw View).</summary>
+    /// <summary>A group's members (Non-Public members, a collection view's Raw View), a dictionary entry's Key and Value.</summary>
     public IReadOnlyList<DebugMember>? Children { get; init; }
+
+    /// <summary>
+    /// The adapter's reference the variable is in, for setVariable: null for the object the rows are read from;
+    /// <see cref="ByExpression"/> for a row the shell made (a queue's element, a dictionary's entry), set by its evaluate name.
+    /// </summary>
+    public int? Container { get; init; }
+
+    /// <summary>A <see cref="Container"/>: no container of the adapter's names it; it's set by its evaluate name.</summary>
+    public const int ByExpression = -1;
 
     /// <summary>
     /// A getter that threw: netcoredbg shows the exception as the value. Its type is an exception and the member's
@@ -73,6 +82,7 @@ public sealed record DebugMember(Variable Variable, MemberKind Kind)
 /// netcoredbg's Static members come last. Without the list (a remote program, no companion) nothing is grouped and the
 /// kinds are guessed from the names (decision 15).
 /// </summary>
+/// <remarks>TODO(issue): reading a remote program's metadata (icons, grouping and [DebuggerDisplay] in SSH, container and WSL sessions) is a later step of the remote server.</remarks>
 public static class VariableGrouping
 {
     /// <summary>netcoredbg's node for the static members (its type and value are empty).</summary>

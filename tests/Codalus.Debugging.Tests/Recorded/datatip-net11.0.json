@@ -192,14 +192,14 @@
             },
             {
               "name": "StackTrace",
-              "value": "\u0022   at Debuggee.Inventory.get_Session() in /tmp/codalus-debug-4bae0cbf957149f19a696769cbdb0791/Debugging/Debuggee/DataTip.cs:line 50\u0022",
+              "value": "\u0022   at Debuggee.Inventory.get_Session() in /src/Debuggee/DataTip.cs:line 50\u0022",
               "type": "string",
               "evaluateName": "inventory.Session.StackTrace",
               "variablesReference": 0
             },
             {
               "name": "SerializationStackTraceString",
-              "value": "\u0022   at Debuggee.Inventory.get_Session() in /tmp/codalus-debug-4bae0cbf957149f19a696769cbdb0791/Debugging/Debuggee/DataTip.cs:line 50\u0022",
+              "value": "\u0022   at Debuggee.Inventory.get_Session() in /src/Debuggee/DataTip.cs:line 50\u0022",
               "type": "string",
               "evaluateName": "inventory.Session.SerializationStackTraceString",
               "variablesReference": 0
@@ -554,37 +554,65 @@
       "children": [
         {
           "name": "_buckets",
-          "value": "{int[3]}",
+          "value": "{int[7]}",
           "type": "int[]",
           "evaluateName": "properties._buckets",
           "variablesReference": 35,
           "children": [
             {
               "name": "[0]",
-              "value": "2",
+              "value": "1",
               "type": "int",
               "evaluateName": "properties._buckets[0]",
               "variablesReference": 0
             },
             {
               "name": "[1]",
-              "value": "0",
+              "value": "4",
               "type": "int",
               "evaluateName": "properties._buckets[1]",
               "variablesReference": 0
             },
             {
               "name": "[2]",
-              "value": "3",
+              "value": "0",
               "type": "int",
               "evaluateName": "properties._buckets[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "3",
+              "type": "int",
+              "evaluateName": "properties._buckets[3]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[4]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties._buckets[4]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[5]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties._buckets[5]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[6]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties._buckets[6]",
               "variablesReference": 0
             }
           ]
         },
         {
           "name": "_entries",
-          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry[3]}",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry[7]}",
           "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry[]",
           "evaluateName": "properties._entries",
           "variablesReference": 36,
@@ -622,7 +650,7 @@
                   "value": "{int}",
                   "type": "int",
                   "evaluateName": "properties._entries[0].value",
-                  "variablesReference": 53,
+                  "variablesReference": 57,
                   "children": [
                     {
                       "name": "m_value",
@@ -636,7 +664,7 @@
                       "value": "",
                       "type": "",
                       "evaluateName": "int",
-                      "variablesReference": 54
+                      "variablesReference": 58
                     }
                   ]
                 }
@@ -651,124 +679,31 @@
               "children": [
                 {
                   "name": "hashCode",
-                  "value": "802710105",
+                  "value": "1902985937",
                   "type": "uint",
                   "evaluateName": "properties._entries[1].hashCode",
                   "variablesReference": 0
                 },
                 {
                   "name": "next",
-                  "value": "-1",
+                  "value": "-2",
                   "type": "int",
                   "evaluateName": "properties._entries[1].next",
                   "variablesReference": 0
                 },
                 {
                   "name": "key",
-                  "value": "\u0022__MiddlewareDescriptions\u0022",
+                  "value": "null",
                   "type": "string",
                   "evaluateName": "properties._entries[1].key",
                   "variablesReference": 0
                 },
                 {
                   "name": "value",
-                  "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
-                  "type": "System.Collections.Generic.List\u003Cstring\u003E",
+                  "value": "null",
+                  "type": "object",
                   "evaluateName": "properties._entries[1].value",
-                  "variablesReference": 55,
-                  "children": [
-                    {
-                      "name": "_items",
-                      "value": "{string[4]}",
-                      "type": "string[]",
-                      "evaluateName": "properties._entries[1].value._items",
-                      "variablesReference": 56
-                    },
-                    {
-                      "name": "_size",
-                      "value": "1",
-                      "type": "int",
-                      "evaluateName": "properties._entries[1].value._size",
-                      "variablesReference": 0
-                    },
-                    {
-                      "name": "_version",
-                      "value": "1",
-                      "type": "int",
-                      "evaluateName": "properties._entries[1].value._version",
-                      "variablesReference": 0
-                    },
-                    {
-                      "name": "Capacity",
-                      "value": "4",
-                      "type": "int",
-                      "evaluateName": "properties._entries[1].value.Capacity",
-                      "variablesReference": 0
-                    },
-                    {
-                      "name": "Count",
-                      "value": "1",
-                      "type": "int",
-                      "evaluateName": "properties._entries[1].value.Count",
-                      "variablesReference": 0
-                    },
-                    {
-                      "name": "System.Collections.IList.IsFixedSize",
-                      "value": "false",
-                      "type": "bool",
-                      "evaluateName": "properties._entries[1].value.System.Collections.IList.IsFixedSize",
-                      "variablesReference": 0
-                    },
-                    {
-                      "name": "System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
-                      "value": "false",
-                      "type": "bool",
-                      "evaluateName": "properties._entries[1].value.System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
-                      "variablesReference": 0
-                    },
-                    {
-                      "name": "System.Collections.IList.IsReadOnly",
-                      "value": "false",
-                      "type": "bool",
-                      "evaluateName": "properties._entries[1].value.System.Collections.IList.IsReadOnly",
-                      "variablesReference": 0
-                    },
-                    {
-                      "name": "System.Collections.ICollection.IsSynchronized",
-                      "value": "false",
-                      "type": "bool",
-                      "evaluateName": "properties._entries[1].value.System.Collections.ICollection.IsSynchronized",
-                      "variablesReference": 0
-                    },
-                    {
-                      "name": "System.Collections.ICollection.SyncRoot",
-                      "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
-                      "type": "System.Collections.Generic.List\u003Cstring\u003E",
-                      "evaluateName": "properties._entries[1].value.System.Collections.ICollection.SyncRoot",
-                      "variablesReference": 57
-                    },
-                    {
-                      "name": "Item",
-                      "value": "{System.Reflection.TargetParameterCountException}",
-                      "type": "System.Reflection.TargetParameterCountException",
-                      "evaluateName": "properties._entries[1].value.Item",
-                      "variablesReference": 58
-                    },
-                    {
-                      "name": "System.Collections.IList.Item",
-                      "value": "{System.Reflection.TargetParameterCountException}",
-                      "type": "System.Reflection.TargetParameterCountException",
-                      "evaluateName": "properties._entries[1].value.System.Collections.IList.Item",
-                      "variablesReference": 59
-                    },
-                    {
-                      "name": "Static members",
-                      "value": "",
-                      "type": "",
-                      "evaluateName": "System.Collections.Generic.List\u003Cstring\u003E",
-                      "variablesReference": 60
-                    }
-                  ]
+                  "variablesReference": 0
                 }
               ]
             },
@@ -788,7 +723,7 @@
                 },
                 {
                   "name": "next",
-                  "value": "0",
+                  "value": "-1",
                   "type": "int",
                   "evaluateName": "properties._entries[2].next",
                   "variablesReference": 0
@@ -808,33 +743,274 @@
                   "variablesReference": 0
                 }
               ]
+            },
+            {
+              "name": "[3]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[3]",
+              "variablesReference": 53,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "802710105",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[3].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "properties._entries[3].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\u0022__MiddlewareDescriptions\u0022",
+                  "type": "string",
+                  "evaluateName": "properties._entries[3].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
+                  "type": "System.Collections.Generic.List\u003Cstring\u003E",
+                  "evaluateName": "properties._entries[3].value",
+                  "variablesReference": 59,
+                  "children": [
+                    {
+                      "name": "_items",
+                      "value": "{string[4]}",
+                      "type": "string[]",
+                      "evaluateName": "properties._entries[3].value._items",
+                      "variablesReference": 60
+                    },
+                    {
+                      "name": "_size",
+                      "value": "1",
+                      "type": "int",
+                      "evaluateName": "properties._entries[3].value._size",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "_version",
+                      "value": "1",
+                      "type": "int",
+                      "evaluateName": "properties._entries[3].value._version",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "Capacity",
+                      "value": "4",
+                      "type": "int",
+                      "evaluateName": "properties._entries[3].value.Capacity",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "Count",
+                      "value": "1",
+                      "type": "int",
+                      "evaluateName": "properties._entries[3].value.Count",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.IList.IsFixedSize",
+                      "value": "false",
+                      "type": "bool",
+                      "evaluateName": "properties._entries[3].value.System.Collections.IList.IsFixedSize",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+                      "value": "false",
+                      "type": "bool",
+                      "evaluateName": "properties._entries[3].value.System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.IList.IsReadOnly",
+                      "value": "false",
+                      "type": "bool",
+                      "evaluateName": "properties._entries[3].value.System.Collections.IList.IsReadOnly",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.ICollection.IsSynchronized",
+                      "value": "false",
+                      "type": "bool",
+                      "evaluateName": "properties._entries[3].value.System.Collections.ICollection.IsSynchronized",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.ICollection.SyncRoot",
+                      "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
+                      "type": "System.Collections.Generic.List\u003Cstring\u003E",
+                      "evaluateName": "properties._entries[3].value.System.Collections.ICollection.SyncRoot",
+                      "variablesReference": 61
+                    },
+                    {
+                      "name": "Item",
+                      "value": "{System.Reflection.TargetParameterCountException}",
+                      "type": "System.Reflection.TargetParameterCountException",
+                      "evaluateName": "properties._entries[3].value.Item",
+                      "variablesReference": 62
+                    },
+                    {
+                      "name": "System.Collections.IList.Item",
+                      "value": "{System.Reflection.TargetParameterCountException}",
+                      "type": "System.Reflection.TargetParameterCountException",
+                      "evaluateName": "properties._entries[3].value.System.Collections.IList.Item",
+                      "variablesReference": 63
+                    },
+                    {
+                      "name": "Static members",
+                      "value": "",
+                      "type": "",
+                      "evaluateName": "System.Collections.Generic.List\u003Cstring\u003E",
+                      "variablesReference": 64
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "[4]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[4]",
+              "variablesReference": 54,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[4].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties._entries[4].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "string",
+                  "evaluateName": "properties._entries[4].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties._entries[4].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[5]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[5]",
+              "variablesReference": 55,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[5].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties._entries[5].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "string",
+                  "evaluateName": "properties._entries[5].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties._entries[5].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[6]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[6]",
+              "variablesReference": 56,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[6].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties._entries[6].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "string",
+                  "evaluateName": "properties._entries[6].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties._entries[6].value",
+                  "variablesReference": 0
+                }
+              ]
             }
           ]
         },
         {
           "name": "_fastModMultiplier",
-          "value": "6148914691236517206",
+          "value": "2635249153387078803",
           "type": "ulong",
           "evaluateName": "properties._fastModMultiplier",
           "variablesReference": 0
         },
         {
           "name": "_count",
-          "value": "3",
+          "value": "4",
           "type": "int",
           "evaluateName": "properties._count",
           "variablesReference": 0
         },
         {
           "name": "_freeList",
-          "value": "-1",
+          "value": "1",
           "type": "int",
           "evaluateName": "properties._freeList",
           "variablesReference": 0
         },
         {
           "name": "_freeCount",
-          "value": "0",
+          "value": "1",
           "type": "int",
           "evaluateName": "properties._freeCount",
           "variablesReference": 0
@@ -858,14 +1034,14 @@
               "value": "{System.Collections.Generic.StringEqualityComparer}",
               "type": "System.Collections.Generic.StringEqualityComparer",
               "evaluateName": "properties._comparer._underlyingComparer",
-              "variablesReference": 61,
+              "variablesReference": 65,
               "children": [
                 {
                   "name": "Static members",
                   "value": "",
                   "type": "",
                   "evaluateName": "System.Collections.Generic.StringEqualityComparer",
-                  "variablesReference": 63
+                  "variablesReference": 67
                 }
               ]
             },
@@ -874,7 +1050,7 @@
               "value": "",
               "type": "",
               "evaluateName": "System.Collections.Generic.NonRandomizedStringEqualityComparer.OrdinalComparer",
-              "variablesReference": 62
+              "variablesReference": 66
             }
           ]
         },
@@ -908,7 +1084,7 @@
         },
         {
           "name": "Capacity",
-          "value": "3",
+          "value": "7",
           "type": "int",
           "evaluateName": "properties.Capacity",
           "variablesReference": 0
@@ -1029,47 +1205,75 @@
       "children": [
         {
           "name": "_buckets",
-          "value": "{int[3]}",
+          "value": "{int[7]}",
           "type": "int[]",
           "evaluateName": "ids._buckets",
-          "variablesReference": 64,
+          "variablesReference": 68,
           "children": [
             {
               "name": "[0]",
-              "value": "1",
+              "value": "0",
               "type": "int",
               "evaluateName": "ids._buckets[0]",
               "variablesReference": 0
             },
             {
               "name": "[1]",
-              "value": "2",
+              "value": "3",
               "type": "int",
               "evaluateName": "ids._buckets[1]",
               "variablesReference": 0
             },
             {
               "name": "[2]",
-              "value": "3",
+              "value": "0",
               "type": "int",
               "evaluateName": "ids._buckets[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "1",
+              "type": "int",
+              "evaluateName": "ids._buckets[3]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[4]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids._buckets[4]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[5]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids._buckets[5]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[6]",
+              "value": "4",
+              "type": "int",
+              "evaluateName": "ids._buckets[6]",
               "variablesReference": 0
             }
           ]
         },
         {
           "name": "_entries",
-          "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry[3]}",
+          "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry[7]}",
           "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry[]",
           "evaluateName": "ids._entries",
-          "variablesReference": 65,
+          "variablesReference": 69,
           "children": [
             {
               "name": "[0]",
               "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
               "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
               "evaluateName": "ids._entries[0]",
-              "variablesReference": 68,
+              "variablesReference": 72,
               "children": [
                 {
                   "name": "HashCode",
@@ -1099,25 +1303,25 @@
               "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
               "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
               "evaluateName": "ids._entries[1]",
-              "variablesReference": 69,
+              "variablesReference": 73,
               "children": [
                 {
                   "name": "HashCode",
-                  "value": "13",
+                  "value": "5",
                   "type": "int",
                   "evaluateName": "ids._entries[1].HashCode",
                   "variablesReference": 0
                 },
                 {
                   "name": "Next",
-                  "value": "-1",
+                  "value": "-2",
                   "type": "int",
                   "evaluateName": "ids._entries[1].Next",
                   "variablesReference": 0
                 },
                 {
                   "name": "Value",
-                  "value": "13",
+                  "value": "5",
                   "type": "int",
                   "evaluateName": "ids._entries[1].Value",
                   "variablesReference": 0
@@ -1129,7 +1333,7 @@
               "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
               "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
               "evaluateName": "ids._entries[2]",
-              "variablesReference": 70,
+              "variablesReference": 74,
               "children": [
                 {
                   "name": "HashCode",
@@ -1153,33 +1357,153 @@
                   "variablesReference": 0
                 }
               ]
+            },
+            {
+              "name": "[3]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[3]",
+              "variablesReference": 75,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "13",
+                  "type": "int",
+                  "evaluateName": "ids._entries[3].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "ids._entries[3].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "13",
+                  "type": "int",
+                  "evaluateName": "ids._entries[3].Value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[4]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[4]",
+              "variablesReference": 76,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[4].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[4].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[4].Value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[5]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[5]",
+              "variablesReference": 77,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[5].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[5].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[5].Value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[6]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[6]",
+              "variablesReference": 78,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[6].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[6].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[6].Value",
+                  "variablesReference": 0
+                }
+              ]
             }
           ]
         },
         {
           "name": "_fastModMultiplier",
-          "value": "6148914691236517206",
+          "value": "2635249153387078803",
           "type": "ulong",
           "evaluateName": "ids._fastModMultiplier",
           "variablesReference": 0
         },
         {
           "name": "_count",
-          "value": "3",
+          "value": "4",
           "type": "int",
           "evaluateName": "ids._count",
           "variablesReference": 0
         },
         {
           "name": "_freeList",
-          "value": "-1",
+          "value": "1",
           "type": "int",
           "evaluateName": "ids._freeList",
           "variablesReference": 0
         },
         {
           "name": "_freeCount",
-          "value": "0",
+          "value": "1",
           "type": "int",
           "evaluateName": "ids._freeCount",
           "variablesReference": 0
@@ -1207,7 +1531,7 @@
         },
         {
           "name": "Capacity",
-          "value": "3",
+          "value": "7",
           "type": "int",
           "evaluateName": "ids.Capacity",
           "variablesReference": 0
@@ -1224,14 +1548,14 @@
           "value": "{System.Collections.Generic.GenericEqualityComparer\u003Cint\u003E}",
           "type": "System.Collections.Generic.GenericEqualityComparer\u003Cint\u003E",
           "evaluateName": "ids.Comparer",
-          "variablesReference": 66
+          "variablesReference": 70
         },
         {
           "name": "EffectiveComparer",
           "value": "{System.Collections.Generic.GenericEqualityComparer\u003Cint\u003E}",
           "type": "System.Collections.Generic.GenericEqualityComparer\u003Cint\u003E",
           "evaluateName": "ids.EffectiveComparer",
-          "variablesReference": 67
+          "variablesReference": 71
         }
       ]
     },
@@ -1247,7 +1571,7 @@
           "value": "{string[4]}",
           "type": "string[]",
           "evaluateName": "queue._array",
-          "variablesReference": 71,
+          "variablesReference": 79,
           "children": [
             {
               "name": "[0]",
@@ -1333,7 +1657,7 @@
           "value": "{System.Collections.Generic.Queue\u003Cstring\u003E}",
           "type": "System.Collections.Generic.Queue\u003Cstring\u003E",
           "evaluateName": "queue.System.Collections.ICollection.SyncRoot",
-          "variablesReference": 72
+          "variablesReference": 80
         }
       ]
     },
@@ -1349,7 +1673,7 @@
           "value": "{int[4]}",
           "type": "int[]",
           "evaluateName": "stack._array",
-          "variablesReference": 73,
+          "variablesReference": 81,
           "children": [
             {
               "name": "[0]",
@@ -1421,7 +1745,7 @@
           "value": "{System.Collections.Generic.Stack\u003Cint\u003E}",
           "type": "System.Collections.Generic.Stack\u003Cint\u003E",
           "evaluateName": "stack.System.Collections.ICollection.SyncRoot",
-          "variablesReference": 74
+          "variablesReference": 82
         }
       ]
     },

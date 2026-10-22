@@ -14,11 +14,11 @@ public static class DataTip
         var inventory = new Inventory { "bolt", "nut" };
         var forecasts = new List<Forecast> { new(1, "Freezing"), new(2, "Bracing"), new(3, "Chilly") };
         var properties = new Dictionary<string, object> { ["server.Features"] = 1, ["removed"] = 0, ["application.Services"] = "services" };
-        properties.Remove("removed");
         properties["__MiddlewareDescriptions"] = new List<string> { "HostFiltering" };
+        properties.Remove("removed"); // a free slot between used ones
         var ids = new HashSet<int> { 3, 5, 8 };
-        ids.Remove(5);
         ids.Add(13);
+        ids.Remove(5); // a free slot between used ones
         var queue = new Queue<string>(4);
         queue.Enqueue("first");
         queue.Enqueue("second");

@@ -127,7 +127,7 @@ Codalus IDE comes to the front when the program stops, even when the program's w
 - **Changing values**: in Locals, Autos, Watch, QuickWatch and data tips, `F2` or double-click edits a value: a variable, a field or a property, or a watch expression that can be assigned.
 - **The context menu** of a value copies it or its expression, adds a watch, or opens QuickWatch. Its **View** submenu opens a visualizer:
   - strings: **Text, JSON, XML or HTML Visualizer**, the whole string in a read-only, colored document, with JSON and XML indented;
-  - arrays and collections (`List<T>`, `Queue<T>`, `Stack<T>`, `HashSet<T>`, …): the **Grid Visualizer**, a table of up to 500 elements, with an object's properties and fields as columns;
+  - arrays and collections (`List<T>`, `Queue<T>`, `Stack<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>`, …): the **Grid Visualizer**, a table of up to 500 elements, with an object's properties and fields as columns (a dictionary's keys and values);
   - byte arrays: the **Image Visualizer**, which opens a PNG, JPEG, GIF, BMP, WebP or ICO image they hold in the image viewer;
   - plugins can add their own visualizers for other types (see [Plugins](../plugins.md#workbench-apis)).
 - **Display attributes**: objects whose type has `[DebuggerDisplay]` show its text (`Order 7: Ada (1 lines)` instead of `{MyApp.Order}`), and members marked `[DebuggerBrowsable(Never)]` are hidden, in Locals, Autos, Watch, QuickWatch and data tips.
@@ -155,6 +155,8 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
   - a property whose getter threw reads "threw *ExceptionType*: *message*" in the error color, and expands to the exception;
   - a value the debugger couldn't evaluate (a getter that ran past 5 seconds, or can't be called) reads "Couldn't evaluate": **Re-evaluate** asks again;
   - in a remote session (SSH, containers, WSL) the program's assemblies aren't on this machine: nothing is grouped, and icons are guessed from the names (`_name` and `name` are fields, `Name` a property).
+- **Collections**: a `List<T>`, `Dictionary<TKey, TValue>`, `HashSet<T>`, `Queue<T>` or `Stack<T>` expands to its elements, then **Raw View**, which holds the collection's own members (its capacity, its count, its private fields). A dictionary's entries are named by their keys (`["server.Features"]`) and expand to Key and Value; a queue lists from its head, a stack from its top. netcoredbg can't build these types' debugger views (`[DebuggerTypeProxy]`), so the elements are read from the collections' fields, which differ between .NET versions, .NET Framework and Mono; a collection whose fields aren't known shows its own members. Other collections show their own members.
+- **Long lists**: the `[DebuggerDisplay]` text of the first 60 elements is shown at once; the others show their type, in gray, until they scroll into view.
 - **From the keyboard**: `Up` and `Down` move in a tip, `Right` opens the selected row's tip, `Left` closes it or goes back, `F2` or `Enter` edits the value, `Ctrl+C` copies it, `Shift+F10` opens its menu and `Escape` closes the tips.
 - **Near the edges**: near the editor's bottom the tips open upwards, and near its right edge they move left, their values trimmed sooner.
 - **The code under the header**: a double-click on the header's name selects the word, `Ctrl+Click` goes to its definition, and the wheel scrolls the editor (and closes the tips). Hold `Ctrl` to fade the tips and click through them to the code; let go to bring them back.
@@ -198,7 +200,7 @@ These come from netcoredbg:
 - no Set Next Statement and no Step Into Specific
 - no Memory, Disassembly or Registers windows
 - no mixed-mode debugging
-- debugger type proxies (`[DebuggerTypeProxy]`) aren't applied: showing one means creating it, which netcoredbg can't evaluate. Use the Grid Visualizer for collections
+- debugger type proxies (`[DebuggerTypeProxy]`) aren't applied: showing one means creating it, which netcoredbg can't evaluate. `List<T>`, `Dictionary<TKey, TValue>`, `HashSet<T>`, `Queue<T>` and `Stack<T>` show their elements anyway (see [Data tips](#data-tips)); other collections show their own members, and the Grid Visualizer shows the ones with a `ToArray()`. There's no Results View
 - no Make Object ID, no return values after Step Out, and no freezing of threads
 - no symbol servers or symbol paths: the debugger reads the PDBs next to the assemblies, and library sources come from embedded sources and Source Link
 - Detach All applies to attached programs and to programs launched in the integrated terminal or a console window: a program launched with the Debug Console has the debugger's console, so it can't keep running without it

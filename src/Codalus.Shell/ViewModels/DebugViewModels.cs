@@ -46,6 +46,14 @@ public class VariableSource
             rows = VariableGrouping.Group(variables, await debugger.MembersAsync(parent.Type ?? string.Empty, cancellationToken).ConfigureAwait(true), debugger.IsUserCode);
         }
 
+        // List, Dictionary, HashSet, Queue and Stack: their elements, read from their fields, then Raw View with their own
+        // members (decision 1); fields no table knows leave the members as they are.
+        if (parent.Kind != MemberKind.RawView && CollectionViews.KindOf(parent.Type) is { } kind
+            && await CollectionViews.ReadAsync(kind, variables, _variables, cancellationToken).ConfigureAwait(true) is { } view)
+        {
+            rows = [.. view.Elements, new DebugMember(new Variable("Raw View", string.Empty, parent.Type, parent.Reference), MemberKind.RawView) { Children = rows }];
+        }
+
         return await NodesAsync(rows, parent, parent.Reference, cancellationToken).ConfigureAwait(true);
     }
 
@@ -55,13 +63,13 @@ public class VariableSource
         var nodes = new List<VariableNode>(rows.Count);
         foreach (var row in rows)
         {
-            nodes.Add(await NodeAsync(row, parent, container, cancellationToken).ConfigureAwait(true));
+            nodes.Add(await NodeAsync(row, parent, container, nodes.Count, cancellationToken).ConfigureAwait(true));
         }
 
         return nodes;
     }
 
-    private async Task<VariableNode> NodeAsync(DebugMember row, VariableNode parent, int container, CancellationToken cancellationToken)
+    private async Task<VariableNode> NodeAsync(DebugMember row, VariableNode parent, int container, int index, CancellationToken cancellationToken)
     {
         var variable = row.Variable;
         var value = variable.Value;
@@ -80,7 +88,8 @@ public class VariableSource
         }
 
         var group = row.Kind is MemberKind.NonPublicGroup or MemberKind.StaticGroup or MemberKind.RawView;
-        var node = new VariableNode(Label(row), value, group ? null : variable.Type, variable.VariablesReference, this, group ? null : container, group && row.Kind != MemberKind.StaticGroup ? null : variable.EvaluateName)
+        int? set = group || row.Container == DebugMember.ByExpression ? null : row.Container ?? container;
+        var node = new VariableNode(Label(row), value, group ? null : variable.Type, row.Kind == MemberKind.RawView ? 0 : variable.VariablesReference, this, set, group && row.Kind != MemberKind.StaticGroup ? null : variable.EvaluateName)
         {
             Icon = IconOf(row),
             Kind = row.Kind,
@@ -91,6 +100,8 @@ public class VariableSource
             CanReevaluate = reevaluate,
             Description = Describe(row),
             Parent = parent,
+            IsDisplayPending = row.Kind == MemberKind.Element && Debugger?.Displays is not null && index >= DebuggerDisplays.MaxPerList
+                && DebuggerDisplays.IsObjectValue(variable.Value, variable.Type) && variable.EvaluateName is not null,
         };
         if (row.Children is { } children)
         {
@@ -98,6 +109,29 @@ public class VariableSource
         }
 
         return node;
+    }
+
+    /// <summary>
+    /// The [DebuggerDisplay] of an element that has scrolled into view (A10): the display is applied to the first 60 of a
+    /// list as it loads, and to the rest as they're shown.
+    /// </summary>
+    public virtual async Task DisplayAsync(VariableNode node)
+    {
+        if (Debugger is not { } debugger || node.EvaluateName is not { } expression || !node.IsDisplayPending)
+        {
+            return;
+        }
+
+        node.IsDisplayPending = false;
+        try
+        {
+            var result = await debugger.EvaluateAsync(expression, "watch").ConfigureAwait(true);
+            node.SetValue(result.Result, result.Type);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
+        {
+            // netcoredbg's value stays.
+        }
     }
 
     /// <summary>Re-evaluates a value netcoredbg couldn't (Re-evaluate on "Couldn't evaluate").</summary>
@@ -215,6 +249,7 @@ public sealed class VariableNode : ObservableObject
     private bool _fixed;
     private bool _isError;
     private bool _canReevaluate;
+    private bool _displayPending;
 
     public VariableNode(string name, string value, string? type, int reference, VariableSource? source, int? parentReference = null, string? evaluateName = null)
     {
@@ -265,6 +300,16 @@ public sealed class VariableNode : ObservableObject
         get => _canReevaluate;
         init => _canReevaluate = value;
     }
+
+    /// <summary>An element past the first 60 of a list, its [DebuggerDisplay] not applied yet: muted until it scrolls into view (A10).</summary>
+    public bool IsDisplayPending
+    {
+        get => _displayPending;
+        set => SetField(ref _displayPending, value);
+    }
+
+    /// <summary>Applies the element's [DebuggerDisplay] now that it shows.</summary>
+    public Task ResolveDisplayAsync() => IsDisplayPending && _source is not null ? _source.DisplayAsync(this) : Task.CompletedTask;
 
     /// <summary>What a non-public member is, before its type in the name's tooltip ("Private field of Controller (your code)").</summary>
     public string? Description { get; init; }
