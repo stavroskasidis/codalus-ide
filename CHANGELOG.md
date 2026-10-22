@@ -2,6 +2,14 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.6.0
+
+- **Hot Reload while debugging a Blazor Web App** ([user guide](docs/user-guide/web.md#debugging-the-server-and-the-page-together)): Start Debugging runs the server under `dotnet watch` and attaches the debugger to it, so saving a WebAssembly component (or Apply Code Changes, `Alt+F10`) applies the edit in the browser while both the server and the page are debugged, and breakpoints stop in the changed code. Before, `F5` applied no edits there, although `Ctrl+F5` with Hot Reload did. Edits to code the server runs wait for Restart (`Ctrl+Shift+F5`), and Codalus IDE says so; the server's breakpoints in edited files wait for the restart too, with the reason in the margin. Edits that need a restart restart the app, and debugging follows it in a new browser window, without leaving the old server holding the port. The server's startup code is debugged only when it has breakpoints, which choose the previous behavior; its console output shows in the Debug Console. Needs the .NET SDK 10.0.400 or later. The Hot Reload while debugging setting (`debug.hotReload`) turns it off ([ADR 0040](docs/adr/0040-hot-reload-while-debugging.md#update-2026-10-22-a-blazor-web-apps-webassembly-components-while-debugging-06)).
+- **Fixed:** a Blazor Web App's `.Client` project was the default startup project when the solution listed it first, as `dotnet new blazor` solutions often do, so Run and Start Debugging started the client's dev host, which serves nothing at `/`, and no browser opened. The server that hosts it is the default startup project now.
+- **Fixed:** Run (`Ctrl+F5`) of a web app could end Codalus IDE when no program opens URLs (on Linux, no `xdg-open`). Output → Run now says the browser couldn't be opened, with the address.
+- **Fixed:** the Hot Reload status said "applied" when the browser refused an update ("Unable to apply managed code updates", which SDK 10's `dotnet watch` follows with "changes applied" anyway). It now says the changes weren't applied, and the tooltip has the browser's message. "Waiting for a file to change before restarting" no longer shows as restarting: the app exited.
+- **Fixed:** the Hot Reload while debugging setting's description promised that other apps restart to apply an edit, which nothing did. It now says what happens.
+
 ## 0.5.0
 
 - **IntelliSense like a classic IDE's** ([user guide](docs/user-guide/editing.md#intellisense)): in C# and Visual Basic, the completion list, parameter info and Quick Info show code in the editor's own colors, and generic types as you use them (`LayoutBuilderBase<PageModel, PageBuilder<PageModel>>.AddTab(…)`, not `LayoutBuilderBase<TModel, TBuilder>`). Other languages get the same popups, in plain text.

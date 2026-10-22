@@ -295,6 +295,36 @@ public sealed class WindowsAppsTests : IDisposable
     }
 
     [Fact]
+    public void Hot_reload_for_debugging_a_blazor_web_app_has_the_agent_say_the_apps_process()
+    {
+        // #75: the debugger attaches to the app dotnet watch starts; the agent says its id (SDK 11) once asked to log.
+        var runs = new RunService(null!, new OutputService(), _ => { });
+        var plan = new LaunchPlan("App", string.Empty, "/src/App", new Dictionary<string, string> { ["ASPNETCORE_URLS"] = "http://localhost:5274" }, null);
+        var announced = runs.HotReloadPlan("/src/App/App.csproj", plan, null, announceProcess: true).Environment;
+        Assert.Equal(HotReloadOutput.AgentLogPrefix, announced["HOTRELOAD_DELTA_CLIENT_LOG_MESSAGES"]);
+        Assert.Equal(("1", "true", "1", "http://localhost:5274"), (announced["DOTNET_WATCH_SUPPRESS_EMOJIS"], announced["DOTNET_WATCH_RESTART_ON_RUDE_EDIT"], announced["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"], announced["ASPNETCORE_URLS"]));
+        Assert.False(runs.HotReloadPlan("/src/App/App.csproj", plan, null).Environment.ContainsKey("HOTRELOAD_DELTA_CLIENT_LOG_MESSAGES"));
+    }
+
+    [Fact]
+    public async Task The_agents_log_reaches_the_hot_reload_session_but_not_the_run_output()
+    {
+        var output = new OutputService();
+        var runs = new RunService(null!, output, _ => { });
+        var (shell, arguments) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", "/c echo [codalus-hot-reload-agent] Loaded into process 4242: C:\\app\\App.dll & echo app line")
+            : ("/bin/sh", "-c \"echo '[codalus-hot-reload-agent] Loaded into process 4242: /app/App.dll' 1>&2; echo 'app line'\"");
+        var plan = new LaunchPlan(shell, arguments, Path.GetTempPath(), new Dictionary<string, string>(), null);
+        var program = runs.StartPlan("app", "AgentApp", plan, hotReload: true);
+        await program.Exited.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        await Task.Delay(200, TestContext.Current.CancellationToken);
+        Assert.Equal(4242, program.HotReload!.AppProcessId);
+        var text = program.Channel!.GetText();
+        Assert.DoesNotContain(text.Split('\n'), l => l.TrimStart().StartsWith("[codalus-hot-reload-agent]", StringComparison.Ordinal));
+        Assert.Contains("app line", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Winui_xaml_compiler_errors_become_squiggles_in_their_files()
     {
         var page = Path.Combine(_dir, "MainPage.xaml");

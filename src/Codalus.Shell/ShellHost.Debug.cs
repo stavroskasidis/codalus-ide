@@ -156,13 +156,13 @@ public sealed partial class ShellHost
                 {
                     if (_pendingBrowserUrls.TryDequeue(out var next) && Uri.TryCreate(next, UriKind.Absolute, out var nextUri))
                     {
-                        OpenExternalUrl(nextUri);
+                        TryOpenExternalUrl(nextUri);
                     }
                 });
             }
             else if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                OpenExternalUrl(uri);
+                TryOpenExternalUrl(uri);
             }
         }
     }
@@ -183,7 +183,7 @@ public sealed partial class ShellHost
             if (await ServerProbe.WaitUntilListeningAsync(address, TimeSpan.FromMinutes(2), () => Debugger.State != DebugState.Idle && Volatile.Read(ref _pendingBrowserUrl) is not null, CancellationToken.None).ConfigureAwait(false)
                 && Interlocked.Exchange(ref _pendingBrowserUrl, null) is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                Ui.Post(() => OpenExternalUrl(uri));
+                Ui.Post(() => TryOpenExternalUrl(uri));
             }
         });
     }
@@ -201,6 +201,13 @@ public sealed partial class ShellHost
 
         if (Debugger.IsActive)
         {
+            return;
+        }
+
+        if (WatchedServerDebugSession is { IsFollowing: true })
+        {
+            // Between two servers of a Blazor Web App that dotnet watch restarted (#75): the session comes back by itself.
+            StatusBar.ShowMessage(Localizer.Get("msg.debug.followingTheRestart", "Debugging goes on once the app has restarted…"), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -311,6 +318,20 @@ public sealed partial class ShellHost
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             if (plan.Wsl is null && LaunchPlanner.PageDebugTarget(profile, Workbench.Settings.GetBoolean(JavaScriptDebugSetting, true)) is { } page)
             {
+                // A Blazor Web App with Hot Reload (#75): the server under dotnet watch, the debugger attached to it.
+                var decision = await HotReloadDebugDecisionAsync(project).ConfigureAwait(true);
+                if (decision.Mode is HotReloadDebugMode.Watched or HotReloadDebugMode.PageOnly)
+                {
+                    await StartWatchedServerDebuggingAsync(project, plan, page, decision.Mode == HotReloadDebugMode.PageOnly, decision.Reason).ConfigureAwait(true);
+                    return;
+                }
+
+                if (decision.Reason is { } reason)
+                {
+                    DebugLog.AppendLine(reason);
+                    StatusBar.ShowMessage(Localizer.Get("msg.debug.withoutHotReload", "Debugging without Hot Reload: see the Debug Console for why."), TimeSpan.FromSeconds(6));
+                }
+
                 // The server and its page in one session (ADR 0027).
                 await StartCompoundDebuggingAsync(project, plan, page).ConfigureAwait(true);
                 return;
@@ -387,6 +408,12 @@ public sealed partial class ShellHost
         }
 
         await Debugger.StopAsync().ConfigureAwait(true);
+        if (WatchedServerDebugSession is { } watched)
+        {
+            // dotnet watch and its server end first, so the port is free for the next start (#75).
+            await watched.Completion.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        }
+
         await StartDebuggingAsync().ConfigureAwait(true);
     }
 

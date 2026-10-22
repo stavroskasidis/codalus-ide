@@ -16,6 +16,9 @@ namespace Codalus.Debugging;
 /// resumes. Pause pauses every adapter but one still joining, and Continue from a pause continues every paused one.</item>
 /// <item>The session ends when any adapter ends: closing the browser stops the server, as stopping the server closes
 /// the browser.</item>
+/// <item>The primary may be attached to a program it didn't start (a Blazor Web App's server under <c>dotnet watch</c>,
+/// #75): <see cref="DetachPrimaryAsync"/> leaves that program running and closes the others, and
+/// <see cref="ExcludeFromPart"/> keeps a file's breakpoints out of one adapter (the server runs the code it started with).</item>
 /// </list>
 /// With <c>independent</c> (M14c, multiple startup projects), each adapter debugs a program of its own: the session
 /// ends when the last one ends, every thread is named after its program, and <see cref="PartChanged"/> reports each
@@ -30,6 +33,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private readonly List<Part> _parts = [];
     private readonly Dictionary<string, (SourceBreakpoint[] Specs, int[] Ids)> _breakpoints = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, Dictionary<int, Breakpoint>> _states = [];
+    private readonly Dictionary<(int Part, string Path), string> _excluded = new(ExclusionComparer.Instance);
     private readonly Queue<(Part Part, StoppedEvent Stop)> _waiting = new();
     private readonly SemaphoreSlim _raising = new(1, 1);
     private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -671,9 +675,24 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private async Task<Breakpoint[]> SendBreakpointsAsync(Part part, string path, SourceBreakpoint[] specs, int[] ids, CancellationToken cancellationToken)
     {
         Breakpoint[] response;
+        string? excluded;
+        lock (_gate)
+        {
+            excluded = _excluded.GetValueOrDefault((part.Index, path));
+        }
+
         try
         {
-            response = await part.Adapter.SetBreakpointsAsync(path, specs, cancellationToken).ConfigureAwait(false);
+            if (excluded is not null)
+            {
+                // The adapter keeps none in the file; they show why, unless another adapter binds them.
+                await part.Adapter.SetBreakpointsAsync(path, [], cancellationToken).ConfigureAwait(false);
+                response = [.. specs.Select(_ => new Breakpoint(Verified: false, Message: excluded))];
+            }
+            else
+            {
+                response = await part.Adapter.SetBreakpointsAsync(path, specs, cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (DapException ex) when (part.Index != 0)
         {
@@ -905,6 +924,78 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     {
         var (part, thread) = Owner(threadId, "exceptionInfo");
         return part.Adapter.ExceptionInfoAsync(thread, cancellationToken);
+    }
+
+    /// <summary>
+    /// Keeps <paramref name="path"/>'s breakpoints out of adapter <paramref name="part"/> from its next
+    /// <see cref="SetBreakpointsAsync"/> on: it gets none in the file, and a breakpoint no other adapter binds carries
+    /// <paramref name="reason"/> (#75: the server runs the code it started with, so its lines no longer match the file).
+    /// The caller sends the file's breakpoints again for it to apply.
+    /// </summary>
+    public void ExcludeFromPart(int part, string path, string reason)
+    {
+        lock (_gate)
+        {
+            _excluded[(part, path)] = reason;
+        }
+    }
+
+    /// <summary>The files kept out of adapter <paramref name="part"/> (<see cref="ExcludeFromPart"/>).</summary>
+    public IReadOnlyList<string> ExcludedFrom(int part)
+    {
+        lock (_gate)
+        {
+            return [.. _excluded.Keys.Where(k => k.Part == part).Select(k => k.Path)];
+        }
+    }
+
+    /// <summary>Adapter <paramref name="part"/> gets every file's breakpoints again from its next <see cref="SetBreakpointsAsync"/> on.</summary>
+    public void ClearExclusions(int part)
+    {
+        lock (_gate)
+        {
+            foreach (var key in _excluded.Keys.Where(k => k.Part == part).ToList())
+            {
+                _excluded.Remove(key);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Detaches the primary, leaving its program running, and ends the others (the browser closes): a Blazor Web App's
+    /// server that <c>dotnet watch</c> runs is about to be restarted by it (#75). The session then ends.
+    /// </summary>
+    public async Task DetachPrimaryAsync(CancellationToken cancellationToken)
+    {
+        Interlocked.Exchange(ref _ending, 1);
+        foreach (var part in Parts().Where(p => p.Index != 0).Reverse())
+        {
+            try
+            {
+                await part.Adapter.DisconnectAsync(terminateDebuggee: true, cancellationToken).WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or TimeoutException)
+            {
+            }
+        }
+
+        try
+        {
+            await Primary.DisconnectAsync(terminateDebuggee: false, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException)
+        {
+        }
+    }
+
+    /// <summary>Breakpoint exclusions by adapter and file (paths compared as the session's breakpoints are).</summary>
+    private sealed class ExclusionComparer : IEqualityComparer<(int Part, string Path)>
+    {
+        public static readonly ExclusionComparer Instance = new();
+
+        public bool Equals((int Part, string Path) x, (int Part, string Path) y) => x.Part == y.Part && StringComparer.OrdinalIgnoreCase.Equals(x.Path, y.Path);
+
+        public int GetHashCode((int Part, string Path) obj) => HashCode.Combine(obj.Part, StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Path));
     }
 
     /// <summary>Ends every adapter: the joined ones first (the browser closes), then the primary.</summary>
