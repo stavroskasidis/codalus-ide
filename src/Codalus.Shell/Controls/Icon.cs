@@ -412,6 +412,7 @@ public static class IconSet
         ["control-background-worker"] = "arrow_clockwise_dashes_16_regular",
         ["control-error-provider"] = "error_circle_16_regular",
         ["control-file-system-watcher"] = "eye_16_regular",
+        ["eye-off"] = "eye_off_16_regular",
         ["control-help-provider"] = "question_circle_16_regular",
         ["control-image-list"] = "image_multiple_16_regular",
         ["control-process"] = "developer_board_16_regular",

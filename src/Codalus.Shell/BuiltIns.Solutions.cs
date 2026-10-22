@@ -75,8 +75,22 @@ internal static partial class BuiltIns
         Add("explorer.cut", "Cut", "Explorer", Ui(explorer.Cut), Selection, palette: false);
         Add("explorer.copy", "Copy", "Explorer", Ui(explorer.Copy), Selection, palette: false);
         Add("explorer.paste", "Paste", "Explorer", Ui(explorer.PasteAsync), Selection, palette: false);
-        Add("explorer.copyPath", "Copy Path", "Explorer", Ui(explorer.CopyPathAsync), Open, palette: false);
-        Add("explorer.reveal", OperatingSystem.IsMacOS() ? Localizer.Get("command.explorer.reveal.mac", "Reveal in Finder") : OperatingSystem.IsWindows() ? Localizer.Get("command.explorer.reveal.windows", "Reveal in File Explorer") : Localizer.Get("command.explorer.reveal.linux", "Reveal in File Manager"), "Explorer", Ui(explorer.RevealInFileManager), Open, palette: false);
+        // A path as the first argument (the Git Changes window's menu, D38), else the Solution Explorer's selection.
+        Add("explorer.copyPath", "Copy Path", "Explorer", async (args, _) =>
+        {
+            await Infrastructure.Ui.RunAsync(() => shell.CopyPathCommandAsync(args)).ConfigureAwait(false);
+            return null;
+        }, Open, palette: false);
+        Add("explorer.copyRelativePath", "Copy Relative Path", "Explorer", async (args, _) =>
+        {
+            await Infrastructure.Ui.RunAsync(() => shell.CopyRelativePathCommandAsync(args)).ConfigureAwait(false);
+            return null;
+        }, Open, palette: false);
+        Add("explorer.reveal", OperatingSystem.IsMacOS() ? Localizer.Get("command.explorer.reveal.mac", "Reveal in Finder") : OperatingSystem.IsWindows() ? Localizer.Get("command.explorer.reveal.windows", "Reveal in File Explorer") : Localizer.Get("command.explorer.reveal.linux", "Reveal in File Manager"), "Explorer", async (args, _) =>
+        {
+            await Infrastructure.Ui.RunAsync(() => shell.RevealCommand(args)).ConfigureAwait(false);
+            return null;
+        }, Open, palette: false);
         Add("explorer.collapseAll", "Collapse All", "Explorer", Ui(explorer.CollapseAll), Open);
         Add("explorer.syncWithActiveDocument", "Sync with Active Document", "Explorer", Ui(() =>
         {

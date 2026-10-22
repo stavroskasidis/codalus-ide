@@ -189,6 +189,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterEditorContextMenu(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterDocumentTabContextMenu(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
+        BuiltIns.RegisterGitChangesMenus(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
         BuiltIns.RegisterWebMenus(Workbench.Menus);
         BuiltIns.RegisterDataMenus(Workbench.Menus);
@@ -601,11 +602,14 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public void Run(string commandId) => _ = RunAsync(commandId, []);
 
-    public async Task RunAsync(string commandId, IReadOnlyList<JsonElement> args)
+    public Task RunAsync(string commandId, IReadOnlyList<JsonElement> args) => RunAsync(commandId, args, Workbench.Context);
+
+    /// <summary>Runs a command whose enablement is read in <paramref name="scope"/> (a menu with keys of its own, D38).</summary>
+    public async Task RunAsync(string commandId, IReadOnlyList<JsonElement> args, Workbench.Context.IContextKeyReader scope)
     {
         try
         {
-            await Workbench.Commands.ExecuteAsync(commandId, args, CancellationToken.None).ConfigureAwait(false);
+            await Workbench.Commands.ExecuteAsync(commandId, args, scope, CancellationToken.None).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

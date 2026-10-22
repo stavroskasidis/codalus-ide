@@ -4,6 +4,7 @@
              xmlns:vm="using:Codalus.Shell.ViewModels"
              xmlns:git="using:Codalus.Workbench.Git"
              xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:views="using:Codalus.Shell.Views"
              x:Class="Codalus.Shell.Views.GitChangesView"
              x:DataType="vm:GitChangesViewModel">
   <UserControl.Styles>
@@ -79,19 +80,9 @@
     </Style>
   </UserControl.Styles>
   <UserControl.Resources>
-    <!-- A file of the list view: Name and Path columns, the hover actions, and its status letter. -->
+    <!-- A file of the list view: Name and Path columns, the hover actions, and its status letter. Its menu is gitChanges/context's (D38). -->
     <DataTemplate x:Key="FileRow" x:DataType="vm:GitFileRow">
       <Grid Classes="changeRow" ColumnDefinitions="2*,3*,54,18" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
-        <Grid.ContextMenu>
-          <ContextMenu>
-            <MenuItem controls:MenuEntry.Icon="compare" Header="{l:T gitChanges.compareWithUnmodified}" Tag="diff" Click="OnFileAction" />
-            <MenuItem controls:MenuEntry.Icon="file" Header="{l:T gitChanges.openFile}" Tag="open" Click="OnFileAction" IsVisible="{Binding !IsDeleted}" />
-            <Separator />
-            <MenuItem controls:MenuEntry.Icon="add" Header="{l:T gitChanges.stage}" Tag="stage" Click="OnFileAction" IsVisible="{Binding CanStage}" />
-            <MenuItem controls:MenuEntry.Icon="subtract" Header="{l:T gitChanges.unstage}" Tag="unstage" Click="OnFileAction" IsVisible="{Binding CanUnstage}" />
-            <MenuItem controls:MenuEntry.Icon="discard" Header="{l:T gitChanges.discardChanges}" Tag="discard" Click="OnFileAction" IsVisible="{Binding CanStage}" />
-          </ContextMenu>
-        </Grid.ContextMenu>
         <DockPanel ClipToBounds="True">
           <controls:Icon DockPanel.Dock="Left" Kind="{Binding Icon}" VerticalAlignment="Center" Margin="0,0,6,0" />
           <Border DockPanel.Dock="Right" IsVisible="{Binding HasBadge}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="3" Padding="3,0" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip.Tip="{Binding BadgeTooltip}">
@@ -110,22 +101,15 @@
         <TextBlock Grid.Column="3" Text="{Binding Letter}" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding Description}" />
       </Grid>
     </DataTemplate>
-    <!-- A node of the tree view: the repository, a folder or a file, with the file's actions and status letter. -->
+    <!-- A node of the tree view: the repository, a folder or a file, with its hover actions (Stage, Discard, Unstage: the menu's
+         commands on the files shown, T1), a folder's "2 of 5 files" while a filter hides some (T6), and a file's status letter.
+         Its menu is gitChanges/context's (D38). -->
     <TreeDataTemplate x:Key="NodeRow" x:DataType="vm:GitChangeNode" ItemsSource="{Binding Children}">
       <Grid Classes="changeRow" ColumnDefinitions="Auto,*,Auto,18" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
-        <Grid.ContextMenu>
-          <ContextMenu>
-            <MenuItem controls:MenuEntry.Icon="compare" Header="{l:T gitChanges.compareWithUnmodified}" Tag="diff" Click="OnFileAction" IsVisible="{Binding IsFile}" />
-            <MenuItem controls:MenuEntry.Icon="file" Header="{l:T gitChanges.openFile}" Tag="open" Click="OnFileAction" IsVisible="{Binding IsFile}" />
-            <Separator IsVisible="{Binding IsFile}" />
-            <MenuItem controls:MenuEntry.Icon="add" Header="{l:T gitChanges.stage}" Tag="stage" Click="OnFileAction" IsVisible="{Binding CanStage}" />
-            <MenuItem controls:MenuEntry.Icon="subtract" Header="{l:T gitChanges.unstage}" Tag="unstage" Click="OnFileAction" IsVisible="{Binding CanUnstage}" />
-            <MenuItem controls:MenuEntry.Icon="discard" Header="{l:T gitChanges.discardChanges}" Tag="discard" Click="OnFileAction" IsVisible="{Binding CanDiscard}" />
-          </ContextMenu>
-        </Grid.ContextMenu>
         <controls:Icon Kind="{Binding Icon}" Margin="0,0,6,0" VerticalAlignment="Center" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
           <TextBlock Text="{Binding Text}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding CountText}" IsVisible="{Binding HasCountText}" Classes="muted" VerticalAlignment="Center" />
           <Border IsVisible="{Binding HasBadge}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="3" Padding="3,0" VerticalAlignment="Center" ToolTip.Tip="{Binding BadgeTooltip}">
             <TextBlock Text="{Binding Badge}" FontSize="{DynamicResource Shell.FontSize.Small}" Classes="muted" />
           </Border>
@@ -198,7 +182,7 @@
                 <MenuFlyout Placement="BottomEdgeAlignedRight">
                   <MenuItem controls:MenuEntry.CommandIcon="git.createBranch" Header="{l:T gitChanges.newBranch}" Tag="git.createBranch" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.CommandIcon="git.merge" Header="{l:T gitChanges.mergeBranch}" Tag="git.merge" Click="OnMenuCommand" />
-                  <MenuItem controls:MenuEntry.Icon="arrow-sort" Header="{l:T gitChanges.rebaseCurrentBranch}" Tag="git.rebase" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.rebase" Header="{l:T gitChanges.rebaseCurrentBranch}" Tag="git.rebase" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.CommandIcon="git.updateBranch" Header="{l:T gitChanges.updateBranch}" Tag="git.updateBranch" Click="OnMenuCommand" />
                   <Separator />
                   <MenuItem controls:MenuEntry.CommandIcon="git.stash" Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
@@ -211,13 +195,22 @@
               </Button.Flyout>
             </Button>
           </StackPanel>
-          <Button Tag="git.switchBranch" Click="OnCommand" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="8,3"
-                  ToolTip.Tip="{l:T gitChanges.switchBranch}" AutomationProperties.Name="{l:T gitChanges.branch}">
-            <DockPanel>
-              <controls:Icon DockPanel.Dock="Right" Kind="chevron-down" Margin="6,0,0,0" />
-              <TextBlock Text="{Binding BranchName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-            </DockPanel>
-          </Button>
+          <!-- The branch drop-down (D38, B1): the branch icon in Git orange, the name (trimmed; its tooltip the whole name,
+               B20), and a flyout of 340 px right-aligned to the button's edge that lists the branches, each with its menu. -->
+          <Panel>
+            <Button x:Name="BranchButton" Click="OnBranchButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="8,3"
+                    ToolTip.Tip="{Binding BranchName}" AutomationProperties.Name="{Binding BranchAccessibleName}">
+              <DockPanel>
+                <controls:Icon DockPanel.Dock="Left" Kind="branch" Classes="accent-git" Margin="0,0,6,0" VerticalAlignment="Center" />
+                <controls:Icon DockPanel.Dock="Right" Kind="chevron-down" Margin="6,0,0,0" />
+                <TextBlock Text="{Binding BranchName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              </DockPanel>
+            </Button>
+            <Popup x:Name="BranchPopup" PlacementTarget="{Binding #BranchButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="2"
+                   IsLightDismissEnabled="False" WindowManagerAddShadowHint="False">
+              <views:GitBranchPickerView x:Name="BranchPicker" DataContext="{Binding Branches}" />
+            </Popup>
+          </Panel>
         </DockPanel>
 
         <!-- Outgoing / incoming commits, the history, and pull requests. -->
@@ -233,7 +226,9 @@
               </StackPanel>
             </Button>
             <Button Classes="link" Content="{l:T gitChanges.viewAllCommits}" Tag="git.history" Click="OnCommand" VerticalAlignment="Center" />
-            <Button Classes="link" Content="{l:T gitChanges.publishBranch}" Tag="git.push" Click="OnCommand" IsVisible="{Binding IsNotPublished}" ToolTip.Tip="{Binding OutgoingIncomingTooltip}" VerticalAlignment="Center" />
+            <Button Classes="link" Content="{l:T gitChanges.publishBranch}" Tag="git.push" Click="OnCommand" IsVisible="{Binding ShowPublishBranch}" ToolTip.Tip="{Binding OutgoingIncomingTooltip}" VerticalAlignment="Center" />
+            <!-- No remote (B18, question 19): publish to a Git host; hidden with a detached HEAD or no commits. -->
+            <Button Classes="link" Content="{l:T gitChanges.publishToAGitHost}" Tag="git.publish" Click="OnCommand" IsVisible="{Binding ShowPublishToHost}" ToolTip.Tip="{Binding OutgoingIncomingTooltip}" VerticalAlignment="Center" />
           </WrapPanel>
         </DockPanel>
 
@@ -358,6 +353,7 @@
               </ToggleButton>
             </DockPanel>
             <StackPanel IsVisible="{Binding #StagedToggle.IsChecked}">
+              <TextBlock Classes="muted sectionEmpty" Text="{Binding FilteredOutText}" IsVisible="{Binding StagedFilteredOut}" />
               <TreeView x:Name="StagedTree" Classes="changeTree" ItemsSource="{Binding StagedTree}" ItemTemplate="{StaticResource NodeRow}" Background="Transparent" Margin="4,0,0,0"
                         IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.stagedChanges}" />
               <Grid ColumnDefinitions="2*,3*,76" Margin="18,0,4,0" IsVisible="{Binding IsListView}">
@@ -406,6 +402,7 @@
           <StackPanel IsVisible="{Binding #ChangesToggle.IsChecked}">
             <TextBlock Classes="muted sectionEmpty" Text="{l:T gitChanges.thereAreNoUnstagedChangesIn}" IsVisible="{Binding !HasChanges}" />
             <StackPanel IsVisible="{Binding HasChanges}">
+              <TextBlock Classes="muted sectionEmpty" Text="{Binding FilteredOutText}" IsVisible="{Binding ChangesFilteredOut}" />
               <TreeView x:Name="ChangesTree" Classes="changeTree" ItemsSource="{Binding ChangesTree}" ItemTemplate="{StaticResource NodeRow}" Background="Transparent" Margin="4,0,0,0"
                         IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.changes}" />
               <Grid ColumnDefinitions="2*,3*,76" Margin="18,0,4,0" IsVisible="{Binding IsListView}">

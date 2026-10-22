@@ -690,6 +690,8 @@ public sealed partial class ShellHost
 
                 break;
         }
+
+        await UpdateHasRemoteAsync(force: true).ConfigureAwait(true);
     });
 
     // ------------------------------------------------------------------ repositories

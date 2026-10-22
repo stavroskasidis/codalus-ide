@@ -1,6 +1,7 @@
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Context;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Menus;
 using Codalus.Workbench.Settings;
 using Codalus.Workbench.ToolWindows;
@@ -52,6 +53,58 @@ internal static partial class BuiltIns
         ];
     }
 
+    /// <summary>
+    /// The Git Changes window's menus (#23, D38), registered as a plugin's would be: <c>gitChanges/context</c> for a file, a
+    /// folder or the repository node (groups open, stage, history, path, tree) and <c>gitChanges/branch</c> for a branch of
+    /// the branch drop-down (checkout, integrate, manage, inspect). Entries that don't apply are hidden, never grayed
+    /// (question 3); keys read here are set for each menu only. Rename… shows F2 and Delete shows Delete, the keys the
+    /// drop-down's list handles (question 13).
+    /// </summary>
+    public static void RegisterGitChangesMenus(MenuRegistry menus, Codalus.Platform.PlatformKind platform)
+    {
+        var shell = ContributionSource.Shell;
+        MenuItemRule Item(string location, string command, string group, int order, string? when = null, string? title = null, string? keys = null) =>
+            new(location, command, shell) { Group = group, Order = order, When = WhenClause.Parse(when), Title = title, Keys = keys };
+
+        const string Change = MenuLocations.GitChangesContext;
+        const string Branch = MenuLocations.GitChangesBranch;
+        const string Shown = "!gitBranchIsCurrent && !gitBranchInOtherWorktree && !gitOperation && !gitHeadUnborn";
+
+        // TODO(issue): Reset and Cherry-Pick Tip on a branch's menu, as the classic IDE's has them (D38, question 20).
+        // TODO(issue): Create Pull Request for any branch on its menu; git.createPullRequest takes no branch (question 20).
+        // TODO(issue): Take Current and Take Incoming on a folder of Merge Conflicts (D38's T12).
+        menus.Add(
+        [
+            Item(Change, "git.openMergeEditor", "1-open", 1, "gitChangeKind == file && gitChangeSection == conflicts"),
+            Item(Change, "git.showDiff", "1-open", 2, "gitChangeKind == file"),
+            Item(Change, "workbench.openFile", "1-open", 3, "gitChangeKind == file && gitChangeExists", Localizer.Get("msg.gitChanges.menuOpen", "Open")),
+            Item(Change, "git.stage", "2-stage", 1, "gitChangeSection != staged"),
+            Item(Change, "git.unstage", "2-stage", 2, "gitChangeSection == staged"),
+            Item(Change, "git.discard", "2-stage", 3, "gitChangeSection == changes"),
+            Item(Change, "git.stash", "2-stage", 4, "gitChangeSection != conflicts && !gitOperation"),
+            Item(Change, "explorer.addToGitignore", "2-stage", 5, "gitChangeAllUntracked"),
+            Item(Change, "git.history", "3-history", 1),
+            Item(Change, "explorer.reveal", "4-path", 1, "gitChangeExists"),
+            Item(Change, "terminal.openInTerminal", "4-path", 2, "gitChangeExists"),
+            Item(Change, "explorer.copyPath", "4-path", 3),
+            Item(Change, "explorer.copyRelativePath", "4-path", 4, "gitChangeKind != repository"),
+            Item(Change, "gitChanges.expandAll", "5-tree", 1, "gitChangeKind != file"),
+            Item(Change, "gitChanges.collapseAll", "5-tree", 2, "gitChangeKind != file"),
+
+            Item(Branch, "git.switchBranch", "1-checkout", 1, Shown, Localizer.Get("msg.gitBranches.menuCheckout", "Checkout")),
+            Item(Branch, "git.createBranch", "1-checkout", 2, "!gitHeadUnborn", Localizer.Get("msg.gitBranches.menuNewLocalBranchFrom", "New Local Branch From…")),
+            Item(Branch, "git.merge", "2-integrate", 1, Shown.Replace(" && !gitBranchInOtherWorktree", string.Empty, StringComparison.Ordinal)),
+            Item(Branch, "git.rebase", "2-integrate", 2, Shown.Replace(" && !gitBranchInOtherWorktree", string.Empty, StringComparison.Ordinal)),
+            Item(Branch, "git.updateBranch", "3-manage", 1, "gitBranchKind == local && gitBranchHasUpstream && !gitBranchUpdateBlocked"),
+            Item(Branch, "git.push", "3-manage", 2, "gitBranchKind == local && gitHasRemote && !gitHeadUnborn"),
+            Item(Branch, "git.renameBranch", "3-manage", 3, "gitBranchKind == local && !gitHeadUnborn", Localizer.Get("msg.gitBranches.menuRename", "Rename…"), "f2"),
+            Item(Branch, "git.deleteBranch", "3-manage", 4, Shown, Localizer.Get("msg.gitBranches.menuDelete", "Delete"), platform == Codalus.Platform.PlatformKind.MacOS ? "cmd+backspace" : "delete"),
+            Item(Branch, "git.compareBranch", "4-inspect", 1, "!gitBranchIsCurrent && !gitHeadUnborn", Localizer.Get("msg.gitBranches.menuCompareWithCurrentBranch", "Compare with Current Branch")),
+            Item(Branch, "git.history", "4-inspect", 2, "!gitHeadUnborn"),
+            Item(Branch, "git.copyBranchName", "4-inspect", 3),
+        ]);
+    }
+
     public static ToolWindowDescriptor GitToolWindow() =>
         new(GitChangesViewModel.ToolWindowId, "Git Changes", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "branch" };
 
@@ -63,11 +116,44 @@ internal static partial class BuiltIns
                 new CommandDescriptor(id, title, ContributionSource.Shell) { Category = "Git", Enablement = WhenClause.Parse(enablement) },
                 Ui(handler));
 
+        // Commands the Git Changes window's menus run with arguments (#23, D38): a node's path, section and files shown, or a
+        // branch's full ref. Without them (the palette, the menu bar) they do what they did before.
+        void AddWithArguments(string id, string title, Func<IReadOnlyList<System.Text.Json.JsonElement>, Task> handler, string enablement = "gitRepository", bool palette = true) =>
+            commands.Register(
+                new CommandDescriptor(id, title, ContributionSource.Shell) { Category = "Git", Enablement = WhenClause.Parse(enablement), ShowInPalette = palette },
+                async (args, _) =>
+                {
+                    await Infrastructure.Ui.RunAsync(() => handler(args)).ConfigureAwait(false);
+                    return null;
+                });
+
         Add("git.commit", "Commit…", shell.CommitFromCommandAsync);
         Add("git.refresh", "Refresh", () => shell.Git.RefreshAsync());
-        Add("git.switchBranch", "Switch Branch…", shell.SwitchBranchAsync);
-        Add("git.createBranch", "Create Branch…", shell.CreateBranchAsync);
-        Add("git.merge", "Merge Branch…", shell.MergeBranchAsync);
+        AddWithArguments("git.switchBranch", "Switch Branch…", shell.SwitchBranchCommandAsync);
+        AddWithArguments("git.createBranch", "Create Branch…", args => shell.NewBranchFromAsync(
+            args.Count > 0 && args[0].ValueKind == System.Text.Json.JsonValueKind.String ? args[0].GetString() : null,
+            args.Count > 1 && args[1].ValueKind == System.Text.Json.JsonValueKind.String ? args[1].GetString() : null));
+        AddWithArguments("git.merge", "Merge Branch…", shell.MergeBranchCommandAsync);
+        AddWithArguments("git.renameBranch", "Rename Branch…", shell.RenameBranchCommandAsync);
+        AddWithArguments("git.deleteBranch", "Delete Branch…", shell.DeleteBranchCommandAsync);
+        AddWithArguments("git.compareBranch", "Compare with Branch…", shell.CompareBranchCommandAsync);
+        AddWithArguments("git.copyBranchName", "Copy Branch Name", shell.CopyBranchNameCommandAsync);
+
+        // The Git Changes window's menu for a file, a folder or the repository node (gitChanges/context).
+        AddWithArguments("git.stage", "Stage", shell.StageChangesAsync, palette: false);
+        AddWithArguments("git.unstage", "Unstage", shell.UnstageChangesAsync, palette: false);
+        AddWithArguments("git.discard", "Discard Changes…", shell.DiscardChangesAsync, palette: false);
+        AddWithArguments("git.openMergeEditor", "Open in Merge Editor", shell.OpenMergeEditorCommandAsync, palette: false);
+        AddWithArguments("gitChanges.expandAll", "Expand All", args =>
+        {
+            shell.ExpandUnderCommand(args, expanded: true);
+            return Task.CompletedTask;
+        }, palette: false);
+        AddWithArguments("gitChanges.collapseAll", "Collapse All", args =>
+        {
+            shell.ExpandUnderCommand(args, expanded: false);
+            return Task.CompletedTask;
+        }, palette: false);
 
         // A local branch's name or full ref as the argument; none: a quick pick of the branches that have an upstream.
         commands.Register(
@@ -81,15 +167,15 @@ internal static partial class BuiltIns
         Add("git.abortMerge", "Abort Merge", shell.AbortMergeAsync, "gitMerging");
         Add("git.fetch", "Fetch", shell.FetchAsync);
         Add("git.pull", "Pull", shell.PullAsync);
-        Add("git.push", "Push", shell.PushAsync);
+        AddWithArguments("git.push", "Push", shell.PushCommandAsync);
         Add("git.sync", "Sync (Pull then Push)", shell.SyncAsync);
-        Add("git.showDiff", "Compare with Unmodified", shell.ShowActiveFileDiffAsync, "gitRepository && activeDocumentKind == textFile");
+        AddWithArguments("git.showDiff", "Compare with Unmodified", shell.ShowDiffCommandAsync, "gitRepository && (activeDocumentKind == textFile || gitChangeKind == file)");
         Add("git.stageFile", "Stage Active File", shell.StageActiveFileAsync, "gitRepository && activeDocumentKind == textFile");
         Add("git.toggleBlame", "Toggle Blame", shell.ToggleBlameAsync, "gitRepository && activeDocumentKind == textFile");
 
         // M13: history, operations in progress, stash, rebase, tags, remotes, repositories.
         const string Editor = "gitRepository && activeDocumentKind == textFile";
-        Add("git.history", "View History", () => shell.ShowHistoryAsync());
+        AddWithArguments("git.history", "View History", shell.HistoryCommandAsync);
         Add("git.fileHistory", "View File History", shell.ShowFileHistoryAsync);
         Add("git.lineHistory", "View Line History", shell.ShowLineHistoryAsync, Editor);
         Add("git.showCommit", "Show Commit for Line", shell.ShowCommitAtCaretAsync, Editor);
@@ -97,17 +183,23 @@ internal static partial class BuiltIns
         Add("git.continue", "Continue", shell.ContinueOperationAsync, "gitOperation");
         Add("git.abort", "Abort", shell.AbortOperationAsync, "gitOperation");
         Add("git.skip", "Skip Commit", shell.SkipOperationAsync, "gitOperation");
-        Add("git.stash", "Stash Changes…", shell.StashAsync);
+        AddWithArguments("git.stash", "Stash Changes…", shell.StashChangesAsync);
         Add("git.stashes", "Stashes…", shell.ShowStashesAsync);
         Add("git.dropAllStashes", "Drop All Stashes", shell.DropAllStashesAsync);
-        Add("git.rebase", "Rebase Current Branch…", shell.RebaseAsync);
+        AddWithArguments("git.rebase", "Rebase Current Branch…", shell.RebaseBranchCommandAsync);
         Add("git.interactiveRebase", "Interactive Rebase…", shell.InteractiveRebaseAsync);
         Add("git.tags", "Tags…", shell.ManageTagsAsync);
         Add("git.remotes", "Remotes…", shell.ManageRemotesAsync);
         Add("git.updateSubmodules", "Update Submodules", shell.UpdateSubmodulesAsync);
         Add("git.clone", "Clone Repository…", shell.CloneRepositoryAsync, string.Empty);
         Add("git.init", "Create Git Repository", shell.CreateRepositoryAsync, "solutionOpen && !gitRepository");
-        Add("explorer.addToGitignore", "Add to .gitignore", shell.AddToGitignoreAsync, "gitRepository && explorerItemKind");
+        commands.Register(
+            new CommandDescriptor("explorer.addToGitignore", "Add to .gitignore", ContributionSource.Shell) { Category = "Git", Enablement = WhenClause.Parse("gitRepository && (explorerItemKind || gitChangeKind)") },
+            async (args, _) =>
+            {
+                await Infrastructure.Ui.RunAsync(() => shell.AddToGitignoreCommandAsync(args)).ConfigureAwait(false);
+                return null;
+            });
 
         // The merge editor (M13, redesigned 2026-10-19): its toolbar, check boxes and gear menu, from the keyboard.
         const string Merge = "activeDocumentKind == mergeEditor";

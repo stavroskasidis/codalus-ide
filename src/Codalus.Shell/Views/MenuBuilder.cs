@@ -136,16 +136,38 @@ internal static class MenuBuilder
     /// A context menu of <paramref name="location"/>'s items, or null when none is visible. <paramref name="commandFor"/>
     /// makes each entry's command (the editor passes the document and caret).
     /// </summary>
-    public static ContextMenu? Context(ShellHost shell, string location, Func<string, ICommand>? commandFor = null)
+    public static ContextMenu? Context(ShellHost shell, string location, Func<string, ICommand>? commandFor = null) =>
+        Context(shell, location, new MenuShape(commandFor ?? (c => shell.CommandFor(c))));
+
+    /// <summary>
+    /// A context menu of <paramref name="location"/>'s items in <paramref name="shape"/>'s scope (keys set for this menu
+    /// only, D38), with the titles and keys it gives; null when none is visible.
+    /// </summary>
+    public static ContextMenu? Context(ShellHost shell, string location, MenuShape shape)
     {
-        if (shell.Workbench.Menus.GetItems(location).Count == 0)
+        var scope = shape.Scope ?? shell.Workbench.Context;
+        if (shell.Workbench.Menus.GetItems(location, scope).Count == 0)
         {
             return null;
         }
 
         var menu = new ContextMenu();
-        Fill(menu.Items, location, shell, commandFor ?? (c => shell.CommandFor(c)));
+        Fill(menu.Items, location, shell, shape with { Scope = scope });
         return menu;
+    }
+
+    /// <summary>
+    /// How a context menu is made: each entry's command (the editor passes the document and caret), the context its
+    /// when-clauses read (the global context with a menu's own keys, D38), and, for menus whose entries pass arguments,
+    /// each entry's title (<c>Merge 'x' into 'y'</c>) and keys (only the rule's own: D38, question 13).
+    /// </summary>
+    public sealed record MenuShape(Func<string, ICommand> CommandFor)
+    {
+        public Workbench.Context.IContextKeyReader? Scope { get; init; }
+
+        public Func<Workbench.Menus.MenuItem, string?>? TitleFor { get; init; }
+
+        public Func<Workbench.Menus.MenuItem, string?>? KeyFor { get; init; }
     }
 
     /// <summary>Builds the in-window menu bar; returns the ids of the menus it shows (<see cref="Shown"/>).</summary>
@@ -172,7 +194,7 @@ internal static class MenuBuilder
             {
                 if (e.Source == top)
                 {
-                    Fill(top.Items, location, shell, c => shell.CommandFor(c));
+                    Fill(top.Items, location, shell, new MenuShape(c => shell.CommandFor(c)));
                 }
             };
             menuBar.Items.Add(top);
@@ -181,12 +203,18 @@ internal static class MenuBuilder
         return string.Join('\n', shown);
     }
 
-    private static void Fill(ItemCollection items, string location, ShellHost shell, Func<string, ICommand> commandFor)
+    private static void Fill(ItemCollection items, string location, ShellHost shell, MenuShape shape)
     {
         items.Clear();
         string? group = null;
-        foreach (var item in shell.Workbench.Menus.GetItems(location))
+        foreach (var listed in shape.Scope is { } scope ? shell.Workbench.Menus.GetItems(location, scope) : shell.Workbench.Menus.GetItems(location))
         {
+            var item = shape.TitleFor?.Invoke(listed) is { } title ? listed with { Title = title } : listed;
+            if (shape.KeyFor is { } keyFor)
+            {
+                item = item with { KeyLabel = keyFor(listed) };
+            }
+
             if (group is not null && item.Group != group)
             {
                 items.Add(new Separator());
@@ -197,12 +225,12 @@ internal static class MenuBuilder
             {
                 var child = new MenuItem { Header = item.Title };
                 AutomationProperties.SetName(child, item.Title);
-                Fill(child.Items, submenu, shell, commandFor);
+                Fill(child.Items, submenu, shell, shape);
                 items.Add(child);
                 continue;
             }
 
-            items.Add(Entry(item, shell, commandFor(item.Command)));
+            items.Add(Entry(item, shell, shape.CommandFor(item.Command)));
         }
     }
 

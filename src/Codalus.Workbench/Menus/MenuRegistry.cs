@@ -20,6 +20,23 @@ public static class MenuLocations
     /// <summary>A document tab's context menu (M34e). Its commands act on the active document, which the tab becomes.</summary>
     public const string DocumentTabContext = "documentTab/context";
 
+    /// <summary>
+    /// The Git Changes window's menu for a file, a folder or the repository node (#23, D38). Commands get the node's path,
+    /// its section (<c>changes</c>, <c>staged</c>, <c>conflicts</c>) and the paths of the files the window shows under it (a
+    /// filter can hide some; with no third argument a command acts on the whole folder). Its when-clauses read
+    /// <c>gitChangeKind</c> (<c>file</c>, <c>folder</c>, <c>repository</c>), <c>gitChangeSection</c>,
+    /// <c>gitChangeAllUntracked</c> and <c>gitChangeExists</c>, set for that menu only.
+    /// </summary>
+    public const string GitChangesContext = "gitChanges/context";
+
+    /// <summary>
+    /// A branch's menu in the Git Changes window's branch drop-down (#23, D38). Commands get the branch's full ref
+    /// (<c>refs/heads/main</c>, <c>refs/remotes/origin/main</c>). Its when-clauses read <c>gitBranchKind</c> (<c>local</c>,
+    /// <c>remote</c>), <c>gitBranchIsCurrent</c>, <c>gitBranchHasUpstream</c>, <c>gitBranchInOtherWorktree</c>,
+    /// <c>gitBranchHasLocal</c>, <c>gitHasRemote</c>, <c>gitHeadDetached</c> and <c>gitHeadUnborn</c>, set for that menu only.
+    /// </summary>
+    public const string GitChangesBranch = "gitChanges/branch";
+
     public static string MenuBar(string menu) => MenuBarPrefix + menu;
 }
 
@@ -65,6 +82,12 @@ public sealed record MenuItem(string Command, string Title, string? KeyLabel, bo
 
     /// <summary>The keys shown (the command's binding, or the rule's <see cref="MenuItemRule.Keys"/>), for native menus.</summary>
     public KeySequence? Keys { get; init; }
+
+    /// <summary>
+    /// The rule's own <see cref="MenuItemRule.Keys"/> as a label, whatever the command's binding: what a menu whose entries
+    /// pass arguments shows (D38, question 13), since the command's global binding runs it without them.
+    /// </summary>
+    public string? RuleKeyLabel { get; init; }
 }
 
 public sealed class MenuRegistry(CommandRegistry commands, KeybindingService keybindings, IContextKeyReader context)
@@ -229,7 +252,8 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
                 continue;
             }
 
-            var keys = keybindings.GetBinding(rule.Command) ?? (rule.Keys is { } hint ? KeySequence.Parse(hint, keybindings.Platform) : null);
+            var ruleKeys = rule.Keys is { } hint ? KeySequence.Parse(hint, keybindings.Platform) : null;
+            var keys = keybindings.GetBinding(rule.Command) ?? ruleKeys;
             result.Add(new MenuItem(
                 rule.Command,
                 rule.Title ?? (location == MenuLocations.CommandPalette ? descriptor.DisplayTitle : descriptor.Title),
@@ -239,6 +263,7 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
             {
                 Description = descriptor.DisplayTitle,
                 Keys = keys,
+                RuleKeyLabel = ruleKeys?.ToLabel(keybindings.Platform),
             });
         }
 
