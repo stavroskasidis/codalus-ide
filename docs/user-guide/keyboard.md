@@ -26,7 +26,7 @@ Undo, Redo, Cut, Copy, Paste and Select All belong to the text controls (Ctrl+Z,
 
 ## The Properties window
 
-Inside the Properties window's grid, as in the classic IDE: `Up` and `Down` move between rows (over the category headers), `Right` expands a row or a category and `Left` collapses it, `Enter` commits what you typed, `Esc` puts the value back, and `Alt+Down` (`⌥↓` on macOS) or `F4` opens the selected row's drop-down. Anywhere else, `F4` shows the Properties window. On macOS, use `⌥↓`: F4 runs Launchpad unless the function keys are set as standard keys (below).
+Inside the Properties window's grid (and a collection editor's item grid, which is the same), as in the classic IDE: `Up` and `Down` move between rows (over the category headers), `Right` expands a row or a category and `Left` collapses it, `Enter` commits what you typed (or goes to an event's handler in Events), `Esc` puts the value back, `Ctrl+C` (`⌘C` on macOS) copies the selected row's value, and `Alt+Down` (`⌥↓` on macOS) or `F4` opens the selected row's drop-down. The links under the grid keep their own keys (`Enter` follows the focused one). Anywhere else, `F4` shows the Properties window. On macOS, use `⌥↓`: F4 runs Launchpad unless the function keys are set as standard keys (below).
 
 ## Other shortcuts that differ by OS
 
