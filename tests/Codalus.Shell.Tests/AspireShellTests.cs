@@ -34,7 +34,17 @@ public sealed class AspireShellTests
         ShellFixture.PumpUntil(
             () => f.Shell.AspireWindow.Resources.Count(r => r.Resource.Type == "Project" && r.Resource.State == "Running") == 2
                 && f.Shell.AspireWindow.Resources.Any(r => r.Name == "cache"),
-            seconds: 300);
+            seconds: 300,
+            describe: () => "the api and the frontend to run and the cache to be listed: " + Describe(f));
+
+    /// <summary>What the Aspire window, the debugger and the AppHost's output show, for a failed wait.</summary>
+    private static string Describe(ShellFixture f) =>
+        $"resources [{string.Join(", ", f.Shell.AspireWindow.Resources.Select(r => $"{r.Name} ({r.Resource.Type}) {r.Resource.State}"))}]; "
+        + $"debugger {f.Shell.Debugger.State}, programs [{string.Join(", ", f.Shell.Debugger.Processes.Select(p => $"{p.Name} {p.Id?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no id"}{(p.Ended ? " ended" : string.Empty)}"))}]; "
+        + $"last build {(f.Shell.Builds.LastBuild is { } build ? $"{build.Result.Errors} error(s){(build.Result.Canceled ? ", canceled" : string.Empty)}" : "none")}\n"
+        + $"Aspire output:\n{Tail(f.Shell.AspireLog.GetText())}\nDebug Console:\n{Tail(f.Shell.DebugLog.GetText())}";
+
+    private static string Tail(string text, int length = 3000) => text.Length <= length ? text : text[^length..];
 
     [AvaloniaFact]
     public async Task Ctrl_F5_on_the_apphost_runs_its_projects_and_the_aspire_window_shows_them()

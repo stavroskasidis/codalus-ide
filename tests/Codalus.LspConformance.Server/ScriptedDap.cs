@@ -111,6 +111,9 @@ internal static class ScriptedDap
                 case "configurationDone" when Threads(launch) is not null:
                     // The program runs until a pause.
                     break;
+                case "configurationDone" when launch is { } running && Option(running, "keepsRunning") == "true":
+                    // The program runs until the session ends it (a multi-program session's first one, while others join).
+                    break;
                 case "configurationDone":
                     await RespondAsync(output, requestSeq, command, null);
                     await EventAsync(output, "output", new JsonObject { ["category"] = "console", ["output"] = "scripted adapter: launch " + launch?.GetRawText() + "\n" });

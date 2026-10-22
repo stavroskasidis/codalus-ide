@@ -434,13 +434,19 @@ public sealed class DebugStartAgainTests : IDisposable
     /// starts it: the scripted adapter on this machine (behind a path mapping, as a WSL launch is), told through the
     /// launch's environment how many of its starts to fail.
     /// </summary>
-    private DebugLaunch StartupProject(string name, int failStarts, string? runtimeAfter = null)
+    /// <param name="keepsRunning">The program runs until the session ends it, instead of printing and exiting with 7.</param>
+    private DebugLaunch StartupProject(string name, int failStarts, string? runtimeAfter = null, bool keepsRunning = false)
     {
         var folder = AppContext.BaseDirectory;
         var env = new Dictionary<string, string> { ["failStarts"] = failStarts.ToString(System.Globalization.CultureInfo.InvariantCulture), ["startsFile"] = _starts };
         if (runtimeAfter is not null)
         {
             env["runtimeAfter"] = runtimeAfter;
+        }
+
+        if (keepsRunning)
+        {
+            env["keepsRunning"] = "true";
         }
 
         return new DebugLaunch(name, new Codalus.Workbench.Build.LaunchPlan("program", string.Empty, folder, new Dictionary<string, string>(), null))
@@ -550,6 +556,59 @@ public sealed class DebugStartAgainTests : IDisposable
         Assert.Equal(DebugState.Idle, debug.State);
 
         // Every start's program went: the last one's with its adapter too.
+        var (ids, running) = LeftPrograms();
+        Assert.Equal(DebugService.StartupAttempts, ids.Length);
+        Assert.True(running.Count == 0, "still running: " + string.Join(", ", running.Select(p => p.Id)));
+    }
+
+    [Fact]
+    public async Task A_program_added_to_a_running_session_has_its_place_at_once_and_joins_once_its_runtime_reports()
+    {
+        // An Aspire AppHost's projects (ShellHost.StartRunSessionAsync): the AppHost's orchestrator gives the IDE 120
+        // seconds to answer its request for a project, and a start under netcoredbg on a loaded runner, made again when
+        // it times out, can take longer; past them the orchestrator gave up on the project (the Aspire F5 test on Windows
+        // CI). The program gets its place at once, and its start goes on: here netcoredbg's wait given up on, then the
+        // runtime reporting 1.5 seconds later.
+        await using var debug = new DebugService(() => null);
+        var output = new System.Text.StringBuilder();
+        debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
+        await debug.LaunchAsync([StartupProject("AppHost", failStarts: 0, keepsRunning: true)], Timeout(), compound: true);
+
+        var (index, joined) = debug.AddLaunch(StartupProject("Api", failStarts: 1, runtimeAfter: "1500"), Timeout());
+
+        Assert.Equal(1, index);
+        Assert.False(joined.IsCompleted);
+        Assert.Equal(["AppHost", "Api"], debug.Processes.Select(p => p.Name));
+        Assert.True(await joined.WaitAsync(Timeout()));
+        Assert.Equal(Assert.Single(ProgramIds()), debug.Processes[1].Id);
+        lock (output)
+        {
+            Assert.Contains("[Api] The debugger saw the program's runtime start ", output.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("Could not start", output.ToString(), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task A_program_added_to_a_running_session_that_cannot_start_ends_in_its_place_and_the_session_goes_on()
+    {
+        // Its failure comes after the answer: the program is marked ended (the IDE execution server's sessionTerminated)
+        // and the Debug Console says why.
+        await using var debug = new DebugService(() => null);
+        var output = new System.Text.StringBuilder();
+        debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
+        await debug.LaunchAsync([StartupProject("AppHost", failStarts: 0, keepsRunning: true)], Timeout(), compound: true);
+
+        var (index, joined) = debug.AddLaunch(StartupProject("Api", failStarts: 10), Timeout());
+
+        Assert.False(await joined.WaitAsync(Timeout()));
+        Assert.True(debug.Processes[index].Ended);
+        Assert.False(debug.Processes[0].Ended);
+        Assert.NotEqual(DebugState.Idle, debug.State);
+        lock (output)
+        {
+            Assert.Contains("[Api] Could not start: Failed command 'configurationDone' : 0x80004005", output.ToString(), StringComparison.Ordinal);
+        }
+
         var (ids, running) = LeftPrograms();
         Assert.Equal(DebugService.StartupAttempts, ids.Length);
         Assert.True(running.Count == 0, "still running: " + string.Join(", ", running.Select(p => p.Id)));
