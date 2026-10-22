@@ -67,6 +67,15 @@ public interface IAcpClientHandler
 {
     Task OnUpdateAsync(AcpSessionNotification notification);
 
+    /// <summary>
+    /// The agent said who is signed in (<c>_auth/status_update</c>, any thread). The handler hears it from the connection's
+    /// first message, unlike <see cref="AcpClient.AuthStatusChanged"/>, which is subscribed only once
+    /// <see cref="AcpClient.StartAsync"/> returns: an agent can say it right after <c>initialize</c>.
+    /// </summary>
+    void OnAuthStatus(AcpAuthStatus status)
+    {
+    }
+
     Task<AcpRequestPermissionResponse> RequestPermissionAsync(AcpRequestPermissionRequest request, CancellationToken cancellationToken);
 
     Task<AcpReadTextFileResponse> ReadTextFileAsync(AcpReadTextFileRequest request, CancellationToken cancellationToken);
@@ -286,6 +295,7 @@ public sealed class AcpClient : IAsyncDisposable
             {
                 Volatile.Write(ref _authStatus, status);
                 _firstAuthStatus.TrySetResult(status);
+                handler.OnAuthStatus(status);
                 AuthStatusChanged?.Invoke(this, status);
             }
         });

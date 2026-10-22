@@ -149,7 +149,6 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     {
         var client = await AcpClient.StartAsync(Name, Config, ProcessDirectory, this, cancellationToken).ConfigureAwait(false);
         client.Exited += OnExited;
-        client.AuthStatusChanged += (_, status) => _ai.LogAgent(Name, "_auth/status_update → " + status.Kind); // the kind only: the label names the account
         _client = client;
         var info = client.Info!;
         _ai.LogAgent(Name, string.Create(CultureInfo.InvariantCulture, $"initialize → {info.AgentInfo?.Title ?? info.AgentInfo?.Name ?? Name} {info.AgentInfo?.Version}, protocol {info.ProtocolVersion}, {info.AuthMethods?.Count ?? 0} sign-in method(s)"));
@@ -501,6 +500,8 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             }
         }
     }
+
+    public void OnAuthStatus(AcpAuthStatus status) => _ai.LogAgent(Name, "_auth/status_update → " + status.Kind); // the kind only: the label names the account
 
     // ------------------------------------------------------------------ session/update
 
