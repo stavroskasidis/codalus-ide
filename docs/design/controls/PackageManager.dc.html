@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Package Manager: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<!-- This page's own glyphs: the Fluent UI System Icons the badge is chosen from, copied from the pinned
+     @fluentui/svg-icons 1.1.344 (Microsoft, MIT; eng/get-fluent-icons.sh), so the picture shows the exact shape the
+     shell would compile. i-verified is checkmark_starburst_16_filled, the proposal; the others are the rejected
+     choices: checkmark_starburst_16_regular, shield_checkmark_16_regular (already the shell's "shield", Check Dev
+     Certificate) and checkmark_circle_16_filled. i-cur-arrow is the pointer, as the Properties window's page draws it. -->
+<svg id="pm-sprite" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="i-verified" viewBox="0 0 16 16"><path fill="currentColor" d="M4.1 2.25a2 2 0 0 1 2.65-1.08l.88.38c.25.11.54.11.79 0l.89-.37a2 2 0 0 1 2.64 1.1l.35.9q.16.4.56.56l.9.36a2 2 0 0 1 1.07 2.65l-.38.89a1 1 0 0 0 0 .78l.37.9a2 2 0 0 1-1.1 2.63l-.9.35a1 1 0 0 0-.56.56l-.36.9a2 2 0 0 1-2.65 1.08l-.88-.39a1 1 0 0 0-.8 0l-.88.37a2 2 0 0 1-2.64-1.1l-.35-.9a1 1 0 0 0-.56-.56l-.9-.36a2 2 0 0 1-1.07-2.65l.38-.88a1 1 0 0 0 0-.79l-.37-.89a2 2 0 0 1 1.1-2.64l.9-.35a1 1 0 0 0 .56-.55zm6.75 3.9a.5.5 0 0 0-.7 0l-2.9 2.9-1.4-1.4a.5.5 0 0 0-.7.7L6.9 10.1c.2.2.5.2.7 0l3.25-3.25a.5.5 0 0 0 0-.7"/></symbol>
+  <symbol id="i-verified-regular" viewBox="0 0 16 16"><path fill="currentColor" d="M4.1 2.25a2 2 0 0 1 2.65-1.08l.88.38q.4.15.8 0l.88-.37a2 2 0 0 1 2.64 1.1l.35.9q.16.4.56.56l.9.36a2 2 0 0 1 1.08 2.65l-.39.88a1 1 0 0 0 0 .8l.37.88a2 2 0 0 1-1.1 2.64l-.9.35a1 1 0 0 0-.56.56l-.36.9a2 2 0 0 1-2.65 1.08l-.88-.39a1 1 0 0 0-.8 0l-.88.37a2 2 0 0 1-2.64-1.1l-.35-.9a1 1 0 0 0-.56-.56l-.9-.36a2 2 0 0 1-1.08-2.65l.39-.88a1 1 0 0 0 0-.8l-.37-.88a2 2 0 0 1 1.1-2.64l.9-.35a1 1 0 0 0 .56-.56zm2.25-.17a1 1 0 0 0-1.32.54l-.37.9a2 2 0 0 1-1.11 1.1l-.9.36A1 1 0 0 0 2.1 6.3l.37.89a2 2 0 0 1 0 1.57l-.39.89a1 1 0 0 0 .54 1.32l.9.37c.5.2.9.6 1.1 1.11l.36.9a1 1 0 0 0 1.32.55l.89-.37a2 2 0 0 1 1.57 0l.89.39a1 1 0 0 0 1.32-.54l.37-.9a2 2 0 0 1 1.11-1.1l.9-.36a1 1 0 0 0 .55-1.32l-.37-.89a2 2 0 0 1 0-1.57l.39-.89a1 1 0 0 0-.54-1.32l-.9-.36a2 2 0 0 1-1.1-1.12l-.36-.9A1 1 0 0 0 9.7 2.1l-.89.37a2 2 0 0 1-1.57 0zm3.8 4.07a.5.5 0 0 1 .7.7L7.6 10.1a.5.5 0 0 1-.7 0L5.15 8.35a.5.5 0 0 1 .7-.7l1.4 1.4z"/></symbol>
+  <symbol id="i-shield-check" viewBox="0 0 16 16"><path fill="currentColor" d="M7.65 2.15c.2-.2.5-.2.7 0A5.7 5.7 0 0 0 12.5 4c.28 0 .5.22.5.5v1.1q-.48-.24-1-.4v-.22a6.6 6.6 0 0 1-4-1.8 6.7 6.7 0 0 1-4 1.8V7.5q.02 2.13 1.02 3.44.08 1 .48 1.86Q3 10.98 3 7.5v-3c0-.28.22-.5.5-.5q2.29 0 4.15-1.85M15 10.5a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0m-2.15-1.85a.5.5 0 0 0-.7 0L9.5 11.29l-.65-.64a.5.5 0 0 0-.7.7l1 1c.2.2.5.2.7 0l3-3a.5.5 0 0 0 0-.7"/></symbol>
+  <symbol id="i-check-circle-filled" viewBox="0 0 16 16"><path fill="currentColor" d="M1 8a7 7 0 1 1 14 0A7 7 0 0 1 1 8m9.85-1.15a.5.5 0 0 0-.7-.7l-2.9 2.9-1.4-1.4a.5.5 0 1 0-.7.7L6.9 10.1c.2.2.5.2.7 0z"/></symbol>
+  <symbol id="i-cur-arrow" viewBox="0 0 16 16"><path d="M3.5 1.5v11.2l2.7-2.6 1.9 4.4 1.9-.8-1.9-4.3h3.7z" fill="#FFFFFF" stroke="#000000" stroke-linejoin="round"/></symbol>
+</svg>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:24px 20px 32px;display:flex;flex-direction:column;gap:18px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.lead{color:var(--muted);max-width:1220px}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.sec{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.sec h2{font-size:16px;line-height:22px;margin:0;font-weight:600;color:var(--strong)}
+.prow{display:flex;gap:20px;align-items:flex-start}
+.pnl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pnl h3{font-size:13px;line-height:18px;margin:0;font-weight:600;color:var(--strong);display:flex;flex-direction:column}
+.pnl h3 .src{font-family:var(--mono);font-size:11px;line-height:16px;font-weight:400;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnl .cap{color:var(--muted);font-size:11px;line-height:15px;min-height:45px}
+.stage{position:relative;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+
+/* The document (Dock's DocumentControl): its tab, then the view on Shell.Background, as the gallery photographs it. */
+.stage .doc-tabs{height:30px;overflow:hidden;flex:none}
+.stage .doc-tab .x{margin-left:6px}
+.stage .doc.pm{flex:1 1 auto;min-height:0;background:var(--bg);overflow:hidden}
+
+/* PackageManagerView.axaml, the top: the list's tabs (ToggleButton.tab, 10,6 with a 2 px underline) and the title
+   (TextBlock.heading, 18 px); the search box, Include prerelease, the source (MinWidth 150), Refresh and the sources. */
+.pm-top{flex:none;display:flex;flex-direction:column;gap:6px;padding:4px 8px 6px;border-bottom:1px solid var(--border)}
+.pm-r1{display:flex;align-items:center;min-width:0}
+.pm-tabs{display:flex;gap:2px;flex:none}
+.pm-tab{display:inline-flex;align-items:center;height:30px;padding:0 10px;border-bottom:2px solid transparent;color:var(--fg);white-space:nowrap}
+.pm-tab.on{border-bottom-color:var(--accent)}
+.pm-title{margin-left:auto;padding-left:12px;font-size:18px;line-height:24px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pm-r2{display:flex;align-items:center;min-width:0}
+.pm-r2 .pm-search{flex:1 1 auto;min-width:0}
+.pm-r2 .value.fill{color:var(--fg)}
+.pm-r2 .chk{margin-left:10px;white-space:nowrap;flex:none}
+.pm-r2 .combo{margin-left:10px;width:150px;flex:none}
+.pm-r2 .tb.first{margin-left:4px}
+
+/* The list (2*) and the details (3*) with the 4 px splitter in Shell.Border. */
+.pm-body{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(0,2fr) 4px minmax(0,3fr)}
+.pm-split{background:var(--border)}
+.pm-list{min-width:0}
+.pm-hdr{padding:10px 6px 6px;color:var(--muted);font-weight:600;white-space:nowrap}
+
+/* A row (ListBoxItem, Padding 6,4): the initial on the icon palette, the name line (the ID and the badge in a panel
+   docked left, so the ID trims and the badge stays; then the byline, which gives way first), two lines of
+   description; on the right the versions as badges, and under them the status badges (Prerelease, a note,
+   Deprecated, Vulnerable: Shell.Warning and Shell.Error outlines, their .Foreground text), 3 px apart. */
+.pm-row{display:flex;align-items:flex-start;padding:4px 6px}
+.pm-av{width:32px;height:32px;border-radius:4px;margin-right:8px;flex:none;display:flex;align-items:center;justify-content:center;font-size:19px;line-height:24px;font-weight:700;color:var(--panel)}
+.pm-av.blue{background:var(--ic-blue)} .pm-av.green{background:var(--ic-green)} .pm-av.purple{background:var(--ic-purple)}
+.pm-av.orange{background:var(--ic-orange)} .pm-av.tan{background:var(--ic-folder)}
+.pm-nm{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
+.pm-l1{display:flex;align-items:center;height:16px;min-width:0}
+.pm-idp{display:flex;align-items:center;flex:0 1 auto;min-width:0}
+.pm-id{font-weight:600;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-byw{flex:1 1 0;min-width:0;overflow:hidden;display:flex}
+.pm-by{margin-left:6px;font-size:11px;line-height:14px;color:var(--muted);flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-ds{font-size:11px;line-height:14px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pm-ver{flex:none;margin-left:8px;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+.pm-bdgs{display:flex;gap:4px;justify-content:flex-end}
+.pm-bdg{display:inline-flex;align-items:center;gap:2px;height:16px;padding:0 4px;border:1px solid var(--border);border-radius:3px;font-size:11px;line-height:14px;white-space:nowrap}
+.pm-bdg svg.i{width:12px;height:12px}
+.pm-bdg.installed{border-color:var(--ok)}
+.pm-bdg.update{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.pm-bdg.warning{border-color:var(--warning);color:var(--warn-fg)}
+.pm-bdg.error{border-color:var(--error);color:var(--error-fg)}
+.pm-row.hover{background:var(--row-hover);color:var(--hover-fg)}
+.kind-hc .pm-row.hover{box-shadow:inset 0 0 0 1px var(--fg)}
+.pm-row.sel{background:var(--sel);color:var(--sel-fg)}
+.pm-row.sel-i{background:var(--sel-inactive);color:var(--sel-inactive-fg)}
+.pm-row.sel .pm-by,.pm-row.sel .pm-ds,.pm-row.sel-i .pm-by,.pm-row.sel-i .pm-ds{color:inherit}
+/* High contrast: icons are the text's color, so on a selected row the badge is the selection's text (black on Harbor's). */
+.kind-hc .pm-row.sel .pm-vf svg.i{color:var(--sel-fg)}
+
+/* The verified-owner badge: 14 px, 4 px after the ID. Its tooltip is the shell's (Fluent's, Placement Pointer: 20 px
+   under the pointer, at most ToolTipContentMaxWidth wide, its text wrapped). */
+.pm-vf{position:relative;flex:none;width:14px;height:14px;margin-left:4px;display:flex}
+.pm-vf svg.i{width:14px;height:14px}
+.pm-vf.hd{margin:5px 0 0 4px}
+.pm-vf svg.ptr{position:absolute;z-index:31;width:16px;height:16px;left:3px;top:5px}
+.tip{position:absolute;z-index:30;left:6px;top:27px;width:max-content;max-width:320px;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:4px;box-shadow:var(--shadow);padding:3px 8px;font-size:12px;line-height:16px;font-weight:400;white-space:normal;color:var(--fg)}
+
+/* The details (ScrollViewer, StackPanel 16,12, Spacing 10). */
+.pm-det{min-width:0;overflow:hidden;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.pm-none{padding:4px 0 0}
+.pm-h{display:flex;flex-direction:column;gap:2px}
+.pm-hd{display:flex;align-items:flex-start;align-self:flex-start;max-width:100%}
+/* The heading: TextBlock.heading (18 px semibold) with LineHeight 24 set on it, so the badge's 5 px top margin centers
+   it on the first line whatever the platform's UI font (decision 5). */
+.pm-hd .t{font-size:18px;line-height:24px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.pm-vg{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;row-gap:4px}
+.pm-vg .lbl{margin-right:8px}
+.pm-vg .btn.i1{margin-left:8px}
+.pm-vg .btn.i2{margin-left:4px}
+.pm-vg .it{grid-column:1 / -1}
+.pm-cb{position:relative;min-width:0;display:flex}
+.pm-cb .combo{flex:1 1 auto;min-width:0}
+.pm-cb .menu{position:absolute;z-index:20;top:31px;left:0;right:0;min-width:0}
+.pm-cb .menu .mi{gap:6px;padding:0 8px 0 6px}
+.pm-cb .menu .mi .ck{width:14px;height:14px}
+/* The deprecation and vulnerability bars: a 3 px Shell.Warning or Shell.Error edge, Padding 8,4. */
+.pm-bar{border-left:3px solid var(--warning);padding:4px 8px;display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+.pm-bar.err{border-left-color:var(--error)}
+.pm-bar .btn.link{max-width:100%}
+.pm-sb{font-weight:600}
+.pm-meta{display:grid;grid-template-columns:auto minmax(0,1fr);row-gap:2px}
+.pm-meta .k{color:var(--muted);margin-right:12px;white-space:nowrap}
+.pm-meta .v{display:flex;gap:6px;min-width:0;white-space:nowrap;overflow:hidden}
+.pm-meta .btn.link{min-height:16px;line-height:16px;min-width:0;max-width:100%}
+/* A link wider than its cell trims with an ellipsis (today's Button.link clips mid-character: a gap in controls.md). */
+.lk{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-deps{white-space:pre;font-size:12px}
+
+/* The glyphs, side by side: on the window and on a selected row. The cards share four grid rows (subgrid), so the
+   samples sit on one line however long the descriptions above them are. */
+.gl{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat(4,auto);column-gap:12px;row-gap:6px;padding:12px;background:var(--bg);border:1px solid var(--border)}
+.gl-c{display:grid;grid-row:span 4;grid-template-rows:subgrid;row-gap:6px;min-width:0}
+.gl-c .gl-t{font-weight:600;font-size:11px;line-height:15px;color:var(--fg)}
+.gl-c .gl-d{font-size:11px;line-height:15px;color:var(--muted)}
+.gl-l{display:flex;align-items:center;height:24px;padding:0 6px;gap:4px;min-width:0;white-space:nowrap}
+.gl-l .pm-id{flex:none}
+.gl-l svg.i.s12{width:12px;height:12px} .gl-l svg.i.s14{width:14px;height:14px} .gl-l svg.i.s16{width:16px;height:16px}
+.gl-l.sel{background:var(--sel);color:var(--sel-fg)}
+.kind-hc .gl-l.sel svg.i{color:var(--sel-fg)}
+.gl-l.sel .chip.info{background:transparent;color:inherit;border-color:currentColor}
+.gl-c.on{outline:2px solid var(--accent);outline-offset:4px;border-radius:2px}
+.gl-c.on .gl-t::after{content:" (proposed)";font-weight:400;color:var(--muted)}
+
+/* The decisions at the bottom. */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);padding:14px 18px 16px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.card h2{font-size:14px;line-height:20px;margin:0;font-weight:600;color:var(--strong)}
+.decide{display:grid;grid-template-columns:1fr 1fr;gap:14px 32px}
+.dq{display:flex;gap:10px;align-items:flex-start}
+.dq .n{flex:none;width:20px;height:20px;border-radius:10px;background:var(--badge);color:var(--badge-fg);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.kind-hc .dq .n{border:1px solid var(--soft-border)}
+.dq b{font-weight:600;color:var(--strong)}
+.dq .tag{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}; min-height: 100vh">
+<main class="sheet">
+
+<header>
+  <h1>NuGet: the verified-owner badge</h1>
+  <div class="lead">Task #78, item 4, the design before it is built (D39): the package manager marks a package whose ID prefix nuget.org has reserved for one of its owners (the search API's verified, which NuGet.Protocol reads as PrefixReserved), in the Browse list and in the details, only for results from https://api.nuget.org, and only when the row can be nobody else's copy. samples/Packages' Plain project and its nuget.config: local first, then nuget.org, with packageSourceMapping sending Codalus.Sample.* to local and everything else to nuget.org. Contoso.Logging 2.0.1 is installed beside Codalus.Sample.Greeting for the pictures; the Contoso and Fabrikam packages, their versions and advisories are made up. Each panel is one state, at the document's size given under its title. {{t.name}}, {{t.p.family}} family.</div>
+  <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
+</header>
+
+<sc-for list="{{sections}}" as="sec">
+<div class="sec"><h2>{{sec.title}}</h2><div class="lead">{{sec.lead}}</div></div>
+<sc-for list="{{sec.rows}}" as="row">
+<section class="prow">
+<sc-for list="{{row.items}}" as="s">
+<article class="pnl" style="width:{{s.w}}px" aria-label="{{s.title}}">
+  <h3>{{s.title}}<span class="src">{{s.src}}</span></h3><div class="cap">{{s.cap}}</div>
+
+  <sc-if value="{{s.doc}}">
+  <div class="stage" style="width:{{s.w}}px;height:{{s.h}}px">
+    <div class="doc-tabs" role="tablist" aria-label="Open documents">
+      <span class="doc-tab on" role="tab" aria-selected="true">{{s.doc.title}}<svg class="i sm c-fg x" aria-hidden="true"><use href="#i-close"></use></svg></span>
+      <span class="doc-tab" role="tab" aria-selected="false"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>Program.cs</span>
+    </div>
+    <section class="doc pm" aria-label="{{s.doc.title}}">
+      <div class="pm-top">
+        <div class="pm-r1">
+          <div class="pm-tabs" role="tablist" aria-label="Package lists">
+            <sc-for list="{{s.doc.tabs}}" as="tb"><span class="pm-tab {{tb.cls}}" role="tab" aria-selected="{{tb.on}}">{{tb.t}}</span></sc-for>
+          </div>
+          <span class="pm-title">{{s.doc.title}}</span>
+        </div>
+        <div class="pm-r2">
+          <span class="field pm-search" role="searchbox" aria-label="Search packages"><sc-if value="{{s.doc.search}}"><span class="value fill">{{s.doc.search}}</span></sc-if><sc-if value="{{s.doc.placeholder}}"><span class="ph">{{s.doc.placeholder}}</span></sc-if></span>
+          <sc-if value="{{s.doc.prerelease}}"><span class="chk on" role="checkbox" aria-checked="true"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Include prerelease</span></sc-if>
+          <sc-if value="{{s.doc.release}}"><span class="chk" role="checkbox" aria-checked="false"><span class="box"></span>Include prerelease</span></sc-if>
+          <span class="field combo" role="combobox" aria-label="Package source"><span class="value">{{s.doc.source}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+          <!-- Today's Refresh is Shell.Icon.Green on Shell.Background: 2.96:1 in Classic Blue, which inherits Classic Light's
+               green. That gap is the current view's, not this design's, and is reported on its own; the check skips the
+               icon in Classic Blue only. -->
+          <sc-if value="{{refreshOk}}"><button class="tb first" aria-label="Refresh" title="Refresh"><svg class="i c-green" aria-hidden="true"><use href="#i-refresh"></use></svg></button></sc-if>
+          <sc-if value="{{refreshGap}}"><button class="tb first" aria-label="Refresh" title="Refresh" data-nocheck><svg class="i c-green" aria-hidden="true"><use href="#i-refresh"></use></svg></button></sc-if>
+          <button class="tb" aria-label="Package sources" title="Package Sources…"><svg class="i c-blue" aria-hidden="true"><use href="#i-gear"></use></svg></button>
+        </div>
+      </div>
+      <div class="pm-body">
+        <div class="pm-list" role="listbox" aria-label="Packages">
+          <!-- The initials are today's, unchanged: 19 px bold, large text, which WCAG holds to 3:1 and PolishTests checks
+               so. render.cjs holds every text to 4.5:1 (the light themes' green and orange tiles are 3.85 to 4:1), so
+               the check skips them (data-nocheck). -->
+          <sc-for list="{{s.doc.rows}}" as="r">
+            <sc-if value="{{r.header}}"><div class="pm-hdr" role="presentation">{{r.id}}</div></sc-if>
+            <sc-if value="{{r.pkg}}">
+            <div class="pm-row {{r.cls}}" role="option" aria-selected="{{r.selA}}" aria-label="{{r.acc}}">
+              <span class="pm-av {{r.av}}" data-nocheck aria-hidden="true">{{r.initial}}</span>
+              <div class="pm-nm">
+                <div class="pm-l1">
+                  <span class="pm-idp"><span class="pm-id" title="{{r.id}}">{{r.id}}</span><sc-if value="{{r.verified}}"><span class="pm-vf" role="img" aria-label="verified owner"><svg class="i c-blue" aria-hidden="true"><use href="#i-verified"></use></svg><sc-if value="{{r.tip}}"><svg class="ptr" data-nocheck aria-hidden="true" viewBox="0 0 16 16"><use href="#i-cur-arrow"></use></svg><span class="tip" role="tooltip">{{tipText}}</span></sc-if></span></sc-if></span>
+                  <span class="pm-byw"><sc-if value="{{r.byline}}"><span class="pm-by">{{r.byline}}</span></sc-if></span>
+                </div>
+                <sc-if value="{{r.desc}}"><div class="pm-ds">{{r.desc}}</div></sc-if>
+              </div>
+              <div class="pm-ver">
+                <div class="pm-bdgs">
+                  <sc-if value="{{r.avail}}"><span class="pm-bdg" title="Latest version">{{r.version}}</span></sc-if>
+                  <sc-if value="{{r.inst}}"><span class="pm-bdg installed" title="Installed"><svg class="i c-ok" aria-hidden="true"><use href="#i-check"></use></svg>{{r.installed}}</span></sc-if>
+                  <sc-if value="{{r.upd}}"><span class="pm-bdg update" title="Update available">↑ {{r.version}}</span></sc-if>
+                </div>
+                <sc-if value="{{r.hasStatus}}">
+                <div class="pm-bdgs">
+                  <!-- Today's status badges keep their warning and error text on a selected row. On the quiet selection the
+                       error text is under 7:1 in the High contrast themes (6.71 and 5.45:1), a gap of the current view
+                       listed in controls.md; the check skips that badge there only. -->
+                  <sc-for list="{{r.status}}" as="b"><sc-if value="{{b.ok}}"><span class="pm-bdg {{b.cls}}">{{b.t}}</span></sc-if><sc-if value="{{b.nc}}"><span class="pm-bdg {{b.cls}}" data-nocheck>{{b.t}}</span></sc-if></sc-for>
+                </div>
+                </sc-if>
+              </div>
+            </div>
+            </sc-if>
+          </sc-for>
+        </div>
+        <div class="pm-split" role="separator" aria-orientation="vertical"></div>
+        <div class="pm-det">
+          <sc-if value="{{s.doc.none}}"><div class="muted pm-none">Select a package to see its details.</div></sc-if>
+          <sc-if value="{{s.doc.det}}">
+            <div class="pm-h">
+              <div class="pm-hd"><span class="t">{{s.doc.det.id}}</span><sc-if value="{{s.doc.det.verified}}"><span class="pm-vf hd" role="img" aria-label="verified owner"><svg class="i c-blue" aria-hidden="true"><use href="#i-verified"></use></svg></span></sc-if></div>
+            </div>
+            <div class="pm-vg">
+              <span class="lbl">Version:</span>
+              <span class="pm-cb">
+                <span class="field combo {{s.doc.det.comboCls}}" role="combobox" aria-label="Version" aria-expanded="{{s.doc.det.open}}"><span class="value">{{s.doc.det.versionLabel}}</span><svg class="chev" aria-hidden="true"><use href="#i-{{s.doc.det.chev}}"></use></svg></span>
+                <sc-if value="{{s.doc.det.open}}">
+                <div class="menu" role="listbox" aria-label="Versions">
+                  <sc-for list="{{s.doc.det.menu}}" as="mi"><div class="mi {{mi.cls}}" role="option" aria-selected="{{mi.selA}}"><sc-if value="{{mi.sel}}"><svg class="i ck" aria-hidden="true"><use href="#i-check"></use></svg></sc-if><sc-if value="{{mi.unsel}}"><span class="ck"></span></sc-if>{{mi.t}}</div></sc-for>
+                </div>
+                </sc-if>
+              </span>
+              <span class="btn i1 {{s.doc.det.installCls}}" role="button" aria-disabled="{{s.doc.det.installOff}}">{{s.doc.det.installLabel}}</span>
+              <span class="btn i2 {{s.doc.det.uninstallCls}}" role="button" aria-disabled="{{s.doc.det.uninstallOff}}">Uninstall</span>
+              <span class="muted it">{{s.doc.det.installedText}}</span>
+            </div>
+            <sc-if value="{{s.doc.det.dep}}"><div class="pm-bar" role="note">{{s.doc.det.dep}}</div></sc-if>
+            <sc-if value="{{s.doc.det.vuln}}"><div class="pm-bar err" role="note"><span>{{s.doc.det.vuln.text}}</span><sc-for list="{{s.doc.det.vuln.links}}" as="lk"><span class="btn link {{lk.cls}}" role="link"><span class="lk">{{lk.u}}</span></span></sc-for></div></sc-if>
+            <div class="pm-sb">Description</div>
+            <div>{{s.doc.det.desc}}</div>
+            <div class="pm-meta">
+              <sc-for list="{{s.doc.det.meta}}" as="m"><span class="k">{{m.k}}</span><span class="v"><sc-if value="{{m.v}}"><span>{{m.v}}</span></sc-if><sc-if value="{{m.link}}"><span class="btn link" role="link"><span class="lk">{{m.link}}</span></span></sc-if></span></sc-for>
+            </div>
+            <div class="pm-sb">Dependencies</div>
+            <div class="pm-deps">{{s.doc.det.deps}}</div>
+          </sc-if>
+        </div>
+      </div>
+    </section>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{s.glyphs}}">
+  <div class="gl" role="list" aria-label="Glyphs">
+    <sc-for list="{{s.glyphs}}" as="g">
+      <div class="gl-c {{g.cls}}" role="listitem">
+        <span class="gl-t">{{g.t}}</span>
+        <span class="gl-d">{{g.d}}</span>
+        <span class="gl-l"><span class="pm-id">Contoso.Verified</span><sc-if value="{{g.icon}}"><svg class="i c-blue {{g.size}}" aria-hidden="true"><use href="#i-{{g.icon}}"></use></svg></sc-if><sc-if value="{{g.chip}}"><span class="chip info">verified</span></sc-if></span>
+        <span class="gl-l sel" aria-selected="true"><span class="pm-id">Contoso.Verified</span><sc-if value="{{g.icon}}"><svg class="i c-blue {{g.size}}" aria-hidden="true"><use href="#i-{{g.icon}}"></use></svg></sc-if><sc-if value="{{g.chip}}"><span class="chip info">verified</span></sc-if></span>
+      </div>
+    </sc-for>
+  </div>
+  </sc-if>
+</article>
+</sc-for>
+</section>
+</sc-for>
+</sc-for>
+
+<section class="card" aria-labelledby="h-decide">
+  <h2 id="h-decide">For the maintainer to decide (D39)</h2>
+  <div class="decide">
+    <sc-for list="{{decisions}}" as="q">
+      <div class="dq"><span class="n">{{q.n}}</span><div><b>{{q.b}}</b> {{q.t}}<span class="tag">Rejected: {{q.rej}}</span></div></div>
+    </sc-for>
+  </div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":5081}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+    const tipText = 'Verified owner: nuget.org reserved this ID prefix for one of the package\'s owners. The authors shown are not verified.';
+
+    // ---------------------------------------------------------------- the packages (PackageRowViewModel)
+    // The initial's color is AvatarColor: the sum of the ID's lower-case characters, modulo 5.
+    const AV = ['blue', 'green', 'purple', 'orange', 'tan'];
+    const avatar = (id) => AV[[...id.toLowerCase()].reduce((sum, c) => sum + c.charCodeAt(0), 0) % 5];
+    const LONG = 'Contoso.Extensions.DependencyInjection.Configuration.Abstractions.Core'; // 70 characters
+    const PKG = {
+      verified: { id: 'Contoso.Verified', version: '1.2.0', authors: 'Contoso', downloads: '1.2M',
+        desc: 'Typed clients for Contoso\'s REST APIs, with retries, paging and telemetry built in.' },
+      long: { id: LONG, version: '1.2.0', authors: 'Contoso', downloads: '86.4K',
+        desc: 'Abstractions for binding Contoso clients to configuration in a dependency injection container.' },
+      http: { id: 'Contoso.Extensions.Http', version: '1.2.0', authors: 'Contoso', downloads: '402.7K',
+        desc: 'Registers Contoso\'s typed clients with IHttpClientFactory.' },
+      logging: { id: 'Contoso.Logging', version: '2.1.0', authors: 'Contoso', downloads: '512.3K', installed: '2.0.1',
+        desc: 'Structured logging for Contoso services.' },
+      sharp: { id: 'ContosoSharp', version: '0.9.3', authors: 'jdoe', downloads: '41K',
+        desc: 'An unofficial .NET wrapper for the Contoso API.' },
+      fabrikam: { id: 'Fabrikam.ContosoConnector', version: '3.4.1', authors: 'Fabrikam', downloads: '9.8K',
+        desc: 'Fabrikam\'s connector for syncing orders with Contoso.' },
+      legacy: { id: 'Contoso.Legacy', version: '1.9.0', authors: 'Contoso', downloads: '2.3M',
+        desc: 'The first Contoso client library, kept for existing applications.' },
+      xml: { id: 'Contoso.Xml', version: '3.1.0', authors: 'Contoso', downloads: '734.9K',
+        desc: 'Reads and writes Contoso\'s XML exports.' },
+      json: { id: 'Contoso.Json', version: '4.1.0-beta.2', authors: 'Contoso', downloads: '1.8M',
+        desc: 'Fast JSON for Contoso\'s APIs, with source-generated serializers.' }
+    };
+    const STATUS = { prerelease: 'warning', deprecated: 'warning', vulnerable: 'error' };
+    // A Browse row: from a search result. verified is what the host reports (decisions 7, 9 and 10): nuget.org's flag,
+    // and only when the row can be nobody else's copy.
+    const browse = (p, o = {}) => {
+      const installed = o.installed ?? p.installed ?? null;
+      const version = o.version ?? p.version;
+      const verified = !!o.verified;
+      const inst = installed !== null;
+      const upd = inst && installed !== version;
+      const selected = o.state === 'sel' || o.state === 'sel-i';
+      const parts = [o.authors ?? p.authors].filter(Boolean).map((a) => 'by ' + a);
+      if ((o.downloads ?? p.downloads) && o.downloads !== null) parts.push((o.downloads ?? p.downloads) + ' downloads');
+      const words = [...(version.includes('-') ? ['prerelease'] : []), ...(o.status ?? [])];
+      const status = words.map((w) => {
+        const nc = t.hc && selected && STATUS[w] === 'error';
+        return { t: w, cls: STATUS[w], nc, ok: !nc };
+      });
+      return {
+        pkg: true, id: p.id, initial: p.id[0].toUpperCase(), av: avatar(p.id), verified, tip: !!o.tip,
+        byline: parts.join(', '), desc: p.desc, version, installed, avail: !inst, inst, upd,
+        status, hasStatus: status.length > 0,
+        cls: o.state ?? '', selA: String(selected),
+        acc: `${p.id} ${upd ? installed + ' → ' + version : version}${words.map((w) => ', ' + w).join('')}${inst ? ', installed' : ''}${upd ? ', update available' : ''}${verified ? ', verified owner' : ''}`
+      };
+    };
+    // An Installed row: from the installed data, which has no verified field (no byline, no description).
+    const installedRow = (id, version, o = {}) => ({
+      pkg: true, id, initial: id[0].toUpperCase(), av: avatar(id), verified: false, byline: '', desc: '',
+      version, installed: o.transitive ? null : version, avail: !!o.transitive, inst: !o.transitive, upd: false,
+      status: [], hasStatus: false,
+      cls: o.state ?? '', selA: String(o.state === 'sel' || o.state === 'sel-i'),
+      acc: `${id} ${version}${o.transitive ? '' : ', installed'}`
+    });
+    const header = (title) => ({ header: true, id: title });
+
+    // ---------------------------------------------------------------- the details (PackageDetailsViewModel)
+    const meta = (p, source, o = {}) => [
+      { k: 'Version:', v: o.version ?? p.version },
+      { k: 'Authors:', v: p.authors },
+      { k: 'License:', v: 'MIT', link: 'View License' },
+      { k: 'Published:', v: o.published ?? '2026-09-30' },
+      { k: 'Downloads:', v: o.downloads ?? p.downloads },
+      { k: 'Project URL:', link: 'https://github.com/contoso/contoso-dotnet' },
+      { k: 'Source:', v: source }
+    ];
+    // verified is the heading's own rule (decision 11): the details' Source is nuget.org and nuget.org says verified.
+    const details = (p, source, o = {}) => {
+      const installed = o.installed ?? null;
+      const version = o.version ?? p.version;
+      const same = installed === version;
+      const menu = o.menu ?? null;
+      return {
+        id: p.id, verified: !!o.verified, desc: p.desc,
+        versionLabel: o.versionLabel ?? `${version} (latest)`,
+        comboCls: menu ? 'is-open' : (o.focus ? 'is-focus' : ''), open: menu ? 'true' : '', chev: menu ? 'chevron-up' : 'chevron-down',
+        menu: (menu ?? []).map((m, i) => ({ t: m, sel: i === 0, unsel: i !== 0, cls: i === 0 ? 'sel' : '', selA: String(i === 0) })),
+        installLabel: installed === null ? 'Install' : 'Update',
+        installCls: same ? 'is-disabled' : '', installOff: String(same),
+        uninstallCls: installed === null ? 'is-disabled' : '', uninstallOff: String(installed === null),
+        installedText: installed === null ? 'Not installed' : 'Installed: ' + installed,
+        dep: o.dep ?? '', vuln: o.vuln ?? null,
+        meta: meta(p, source, o),
+        deps: o.deps ?? 'net8.0\n    Contoso.Logging (>= 2.0.0)\nnetstandard2.0\n    Contoso.Logging (>= 2.0.0)'
+      };
+    };
+
+    // ---------------------------------------------------------------- the document (PackageManagerView)
+    const TABS = ['Browse', 'Installed', 'Updates 2'];
+    const doc = (o) => ({
+      title: 'NuGet: Plain',
+      tabs: TABS.map((name) => ({ t: name, cls: name === (o.tab ?? 'Browse') ? 'on' : '', on: String(name === (o.tab ?? 'Browse')) })),
+      search: o.search ?? '', placeholder: o.search ? '' : (o.tab === 'Installed' ? 'Filter packages' : 'Search packages (Enter)'),
+      prerelease: !!o.prerelease, release: !o.prerelease,
+      source: o.source ?? 'All sources', rows: o.rows, det: o.det ?? null, none: !o.det
+    });
+
+    const sections = [
+      { title: 'Browse: the badge after the ID, in the list and in the details',
+        lead: 'nuget.org\'s results with a reserved prefix carry the badge; the others don\'t. In All sources it shows here because the fixture\'s packageSourceMapping lets these IDs come from nuget.org alone. A long ID trims and keeps the badge, and the byline gives way first. Under the pointer the badge says what it means; the details\' heading carries the same badge and tooltip. It stays beside the status badges: it says who holds the prefix, not that a version is safe.',
+        rows: [{ items: [{
+          w: 1240, h: 520, title: 'Browse, all sources, "contoso"',
+          src: 'PackageManagerView.axaml: the row template (:149) and the details heading (:194) · 1240 × 490 px',
+          cap: 'Contoso.Verified is selected. The pointer rests on Contoso.Logging\'s badge, and the tooltip opens 20 px under it, over the list (Fluent\'s tooltip wraps at its maximum width). Contoso.Logging is installed (2.0.1, an update to 2.1.0) and verified: the installed check and the badge are different shapes in different columns. The 70-character ID trims and keeps its badge. ContosoSharp and Fabrikam.ContosoConnector have no reserved prefix.',
+          doc: doc({ search: 'contoso', rows: [
+            browse(PKG.verified, { verified: true, state: 'sel' }),
+            browse(PKG.long, { verified: true }),
+            browse(PKG.sharp),
+            browse(PKG.fabrikam),
+            browse(PKG.logging, { verified: true, state: 'hover', tip: true })
+          ], det: details(PKG.verified, 'nuget.org', { verified: true }) })
+        }] }, { items: [{
+          w: 1240, h: 500, title: 'Verified, and deprecated, vulnerable or prerelease',
+          src: 'The row\'s second line of badges (:170-175) and the details\' deprecation and vulnerability bars · 1240 × 470 px',
+          cap: 'Contoso.Legacy is verified, deprecated and vulnerable: the blue badge stays with its name, the amber and red words stay in the versions column, and the bars above the description say what is wrong with this version. The first advisory link has the focus (Tab from the list), so the row keeps the quiet selection. Contoso.Xml is verified and vulnerable, Contoso.Json\'s latest is a prerelease, and ContosoSharp is deprecated with no reserved prefix: the same words, no badge.',
+          doc: doc({ search: 'contoso', prerelease: true, rows: [
+            browse(PKG.legacy, { verified: true, status: ['deprecated', 'vulnerable'], state: 'sel-i' }),
+            browse(PKG.xml, { verified: true, status: ['vulnerable'] }),
+            browse(PKG.json, { verified: true }),
+            browse(PKG.sharp, { status: ['deprecated'] })
+          ], det: details(PKG.legacy, 'nuget.org', { verified: true, versionLabel: '1.9.0 (latest, deprecated, vulnerable)', published: '2024-03-11',
+            dep: 'This version is deprecated (Legacy). Contoso.Legacy is no longer maintained. Alternative: Contoso.Json (>= 4.0.0).',
+            vuln: { text: 'This version has 2 known vulnerabilities (high, moderate).', links: [
+              { u: 'https://github.com/advisories/GHSA-4q7m-2xv9-c8rp', cls: 'is-focus' },
+              { u: 'https://github.com/advisories/GHSA-9wfj-h3c6-p5m2', cls: '' }] },
+            deps: 'net6.0\n    No dependencies\nnetstandard2.0\n    No dependencies' }) })
+        }] }] },
+      { title: 'Several sources: only when the ID can come from nuget.org alone',
+        lead: 'In All sources the merged row can be any source\'s copy, and on equal versions it is the copy of the source listed first in nuget.config (local, here). So the badge shows there only when packageSourceMapping maps the ID to nuget.org alone; with no mapping it shows only when nuget.org is searched by itself, as in the classic IDE. A source that isn\'t nuget.org never shows it, whatever it sends.',
+        rows: [{ items: [{
+          w: 610, h: 430, title: 'With the fixture\'s mapping: local\'s newer copy left out',
+          src: 'NuGetClient.SearchAsync and DetailsAsync, mapping-aware (decision 10) · 610 × 400 px',
+          cap: 'local has a 1.2.1 build of Contoso.Verified, but the mapping sends Contoso.* to nuget.org alone, so restore can\'t take it. Search and the Version box leave it out: whatever version is picked here, Source stays nuget.org and the heading keeps its badge.',
+          doc: doc({ search: 'Contoso.Verified', rows: [
+            browse(PKG.verified, { verified: true, state: 'sel' }),
+            browse(PKG.long, { verified: true })
+          ], det: details(PKG.verified, 'nuget.org', { verified: true, menu: ['1.2.0 (latest)', '1.1.0', '1.0.0'] }) })
+        }, {
+          w: 610, h: 430, title: 'No mapping, All sources: none',
+          src: 'samples/Packages\' nuget.config without packageSourceMapping · 610 × 400 px',
+          cap: 'Restore can take any of these IDs from local or nuget.org, so All sources shows no badge, as the classic IDE does. Here local\'s 1.2.1 build also wins the merge, and its details say Source: local; with equal versions, local, listed first, would win too.',
+          doc: doc({ search: 'contoso', rows: [
+            browse(PKG.verified, { version: '1.2.1', state: 'sel', downloads: null }),
+            browse(PKG.long),
+            browse(PKG.logging)
+          ], det: details(PKG.verified, 'local', { version: '1.2.1', published: '2026-10-19', downloads: '' }) })
+        }] }, { items: [{
+          w: 610, h: 430, title: 'No mapping, nuget.org searched by itself: shown',
+          src: 'The source box names nuget.org: one source searched · 610 × 400 px',
+          cap: 'Searching nuget.org by itself shows its badges, as the classic IDE does. The details come from nuget.org too (the source box filters them), so Source and the badge agree.',
+          doc: doc({ search: 'contoso', source: 'nuget.org', rows: [
+            browse(PKG.verified, { verified: true, state: 'sel' }),
+            browse(PKG.long, { verified: true }),
+            browse(PKG.logging, { verified: true })
+          ], det: details(PKG.verified, 'nuget.org', { verified: true }) })
+        }, {
+          w: 610, h: 430, title: 'Another source that says verified: none',
+          src: 'VerifiedOwner.Of: the source\'s host is exactly api.nuget.org · 610 × 400 px',
+          cap: 'contoso-mirror (https://pkgs.contoso.com/nuget/v3/index.json), a feed with nuget.org as its upstream (as an Azure Artifacts feed can be), passes on verified: true. Only https://api.nuget.org\'s flag counts, so no other feed can fake the badge; this is stricter than the classic IDE.',
+          doc: doc({ search: 'contoso', source: 'contoso-mirror', rows: [
+            browse(PKG.verified, { state: 'sel', downloads: null }),
+            browse(PKG.logging, { downloads: null }),
+            browse(PKG.long, { downloads: null })
+          ], det: details(PKG.verified, 'contoso-mirror', { downloads: '' }) })
+        }] }] },
+      { title: 'The installed lists, offline, and the document\'s 640 px minimum',
+        lead: 'Installed, Updates and Consolidate are built from the projects\' data, which has no such field, so their rows show none; their details make one nuget.org search for the package and show the badge by the same rules, and offline they make none. At the narrowest document the long ID trims in the list and wraps in the heading.',
+        rows: [{ items: [{
+          w: 610, h: 490, title: 'Installed: the row none, the details the badge',
+          src: 'BuildLocalRowsCore; the details\' one packageid: search (decision 8) · 610 × 460 px',
+          cap: 'Contoso.Logging\'s row has no badge. Its details came from nuget.org, and one nuget.org search for packageid:Contoso.Logging says verified, so the heading shows it when the answer arrives (nothing moves). The version box has the focus, so the row keeps the quiet selection.',
+          doc: doc({ tab: 'Installed', rows: [
+            header('Top-level packages'),
+            installedRow('Codalus.Sample.Greeting', '1.0.0'),
+            installedRow('Contoso.Logging', '2.0.1', { state: 'sel-i' }),
+            header('Transitive packages'),
+            installedRow('Contoso.Logging.Abstractions', '2.0.1', { transitive: true })
+          ], det: details(PKG.logging, 'nuget.org', { verified: true, focus: true, installed: '2.0.1', version: '2.0.1', versionLabel: '2.0.1 (installed)', published: '2026-08-12', deps: 'net8.0\n    Contoso.Logging.Abstractions (>= 2.0.1)' }) })
+        }, {
+          w: 610, h: 490, title: 'Installed, offline: none',
+          src: 'nuget.offline: local sources and the global packages folder · 610 × 460 px',
+          cap: 'Offline the package manager reads only local sources and the global packages folder. The details come from the global packages folder and Source says so; no nuget.org search is made, so the heading has no badge. The row is the same as online.',
+          doc: doc({ tab: 'Installed', rows: [
+            header('Top-level packages'),
+            installedRow('Codalus.Sample.Greeting', '1.0.0'),
+            installedRow('Contoso.Logging', '2.0.1', { state: 'sel' }),
+            header('Transitive packages'),
+            installedRow('Contoso.Logging.Abstractions', '2.0.1', { transitive: true })
+          ], det: details(PKG.logging, 'Global packages folder', { installed: '2.0.1', version: '2.0.1', versionLabel: '2.0.1 (installed)', published: '', downloads: '', deps: 'net8.0\n    Contoso.Logging.Abstractions (>= 2.0.1)' }) })
+        }] }, { items: [{
+          w: 640, h: 490, title: 'At the document\'s 640 px minimum',
+          src: 'The narrowest NuGet document (PolishGalleryReviewTests) · 640 × 460 px',
+          cap: 'The 70-character ID trims and keeps its badge. The heading wraps where it must; its badge stays at the end of the first line, centered on it. The Project URL trims with an ellipsis, and Source: nuget.org shows under it.',
+          doc: doc({ search: 'contoso.extensions', rows: [
+            browse(PKG.long, { verified: true, state: 'sel' }),
+            browse(PKG.http, { verified: true }),
+            browse(PKG.fabrikam)
+          ], det: details(PKG.long, 'nuget.org', { verified: true, deps: 'net8.0\n    Contoso.Verified (>= 1.2.0)' }) })
+        }] }] },
+      { title: 'The glyph',
+        lead: 'Fluent UI System Icons, the set the shell compiles (eng/get-fluent-icons.sh), on the window and on a selected row, in the icon palette\'s Blue (white in High contrast, the selection\'s text on a High contrast selection).',
+        rows: [{ items: [{
+          w: 1240, title: 'The proposal and what it was chosen over', src: 'Icons/fluent-icons.txt, Controls/Icon.cs, CommandIcons.s_kindColors',
+          cap: 'A filled glyph among the regular ones, like play, stop and breakpoint: it is a mark, not a command.',
+          glyphs: [
+            { t: 'Starburst, filled, 14 px', cls: 'on', icon: 'verified', size: 's14', d: 'checkmark_starburst_16_filled: a badge with a check, a shape nothing else in the shell uses.' },
+            { t: 'The same at 12 px', icon: 'verified', size: 's12', d: 'Shell.Size.IconSmall, the badges\' size: the check closes up.' },
+            { t: 'The same at 16 px', icon: 'verified', size: 's16', d: 'Shell.Size.Icon: taller than the 12 px ID it follows.' },
+            { t: 'Starburst, regular', icon: 'verified-regular', size: 's14', d: 'checkmark_starburst_16_regular: the outline and the check blur at 14 px.' },
+            { t: 'Shield', icon: 'shield-check', size: 's14', d: 'shield_checkmark_16_regular is already the shell\'s shield (Check Dev Certificate).' },
+            { t: 'Check in a circle', icon: 'check-circle-filled', size: 's14', d: 'checkmark_circle_16_filled reads as installed or passed, beside the installed badge\'s check.' },
+            { t: 'A chip', chip: true, d: 'A word in a chip: wider, and it competes with the version badges.' }
+          ]
+        }] }] }
+    ];
+
+    const decisions = [
+      { n: 1, b: 'The glyph is checkmark_starburst_16_filled,', t: 'the kind "verified" in Icon.cs and fluent-icons.txt: a badge with a check, a shape nothing else in the shell uses.', rej: 'shield_checkmark (already "shield", Check Dev Certificate), checkmark_circle (reads as installed or passed), the regular starburst, a "verified" chip.' },
+      { n: 2, b: '14 px, 4 px after the ID,', t: 'centered on the 12 px ID\'s line, in the row and in the details\' 18 px heading alike.', rej: '12 px (Shell.Size.IconSmall; the check closes up), 16 px (taller than the ID it follows); 16 px in the heading only.' },
+      { n: 3, b: 'The icon palette\'s Blue', t: '(["verified"] = Blue in CommandIcons.s_kindColors), also on a selected row, where it keeps 3:1 in every theme; in High contrast the text\'s color, so black on Harbor\'s selection.', rej: 'the accent (the update badge\'s fill, and an interactive color), green (installed, passed).' },
+      { n: 4, b: 'Right after the ID, before the byline:', t: 'the ID and the badge share a panel docked left, so a long ID trims and keeps the badge and the byline gives way first.', rej: 'before the ID (the IDs stop lining up), on the initial\'s tile (its five colors), in the versions column (it would read as a version\'s state).' },
+      { n: 5, b: 'In the details, after the heading, on its first line:', t: 'a wrapped ID keeps the badge at the end of the first line (docked right, top, 5 px top margin). The details\' heading gets LineHeight 24, so the margin centers the badge on every platform: without it the line follows the UI font (about 24 px with Segoe UI, about 22 with Inter and the macOS and Linux fonts).', rej: 'after the last character (an InlineUIContainer in the heading\'s inlines), a "Verified owner" row with the metadata, LineHeight on TextBlock.heading in ShellStyles (every heading would move), a margin per platform.' },
+      { n: 6, b: 'The tooltip "Verified owner: nuget.org reserved this ID prefix for one of the package\'s owners. The authors shown are not verified."', t: 'on both badges, wrapped at Fluent\'s tooltip width; the icon\'s name is "verified owner" and the row\'s accessible name ends ", verified owner".', rej: '"…for the package\'s owner" (a package can have several owners; nuget.org says "one of the owners"), no second sentence (the badge sits before the byline, the free-text Authors), no tooltip, a link to nuget.org\'s prefix reservation page.' },
+      { n: 7, b: 'Only from nuget.org, stricter than the classic IDE:', t: 'an https source whose host is exactly api.nuget.org. The classic IDE trusts verified from any single source; here a feed with nuget.org as its upstream (as an Azure Artifacts feed can be), a mirror, a private feed or a local folder never shows it, even when it passes verified: true on, so users behind such a feed never see the badge.', rej: 'the classic IDE\'s rule (a private feed could badge Microsoft.*), a "trust this source\'s verified owners" option per source.' },
+      { n: 8, b: 'Rows in Browse only; the details everywhere:', t: 'Installed, Updates and Consolidate rows show none (the installed data has no such field). Their details make one nuget.org search (packageid:<id>) with the details request and show the badge by decisions 9 and 11; offline or failed, none, silently.', rej: 'a nuget.org request per installed row (forty requests per refresh), remembering the mark from an earlier search (stale, and only for packages searched for), no badge in those details (Source: nuget.org with no badge reads as a bug).' },
+      { n: 9, b: 'Several sources: only when the row can be nobody else\'s copy:', t: 'nuget.org was searched by itself (the source box names it, or it is the only enabled source), or packageSourceMapping maps the ID to nuget.org alone. All sources with no mapping shows none, as the classic IDE does (PrefixReserved && !IsMultiSource): the merge keeps the highest version, and on equal versions the source listed first in nuget.config.', rej: 'the copy that wins the merge decides (the first draft: a tie depends on the order in nuget.config, and with mapping the winner can be a copy restore refuses), the badge when any copy is verified, the classic IDE\'s rule even with mapping (the fixture would never show it in All sources).' },
+      { n: 10, b: 'With packageSourceMapping, search and the details leave out what restore refuses:', t: 'copies from sources the ID doesn\'t map to. Today All sources offers local\'s Contoso.Verified 1.2.1 in the fixture, and its Install fails restore. A fix to today\'s merge, in step 9; if it is turned down, a TODO(issue), and a row that shows another source\'s copy has no badge.', rej: 'today\'s merge (a row and a Version box offering versions restore refuses, under nuget.org\'s badge or none), a mapping note on such a row.' },
+      { n: 11, b: 'The heading\'s badge follows the version shown:', t: 'the details\' Source is nuget.org and nuget.org says verified (the row\'s flag from Browse, decision 8\'s search elsewhere). Under decisions 9 and 10 a badged package\'s Version box lists only nuget.org\'s versions, so picking one never changes Source; if another source\'s version ever shows, the heading drops the badge while the row keeps it.', rej: 'the heading copying the row (it could sit beside "Source: local"), a badge per version in the Version box.' },
+      { n: 12, b: 'Beside deprecated, vulnerable and prerelease it stays:', t: 'the badge says who holds the prefix and sits with the name; what is wrong with a version stays in words, amber and red, in the versions column and in the details\' bars above the description. The tooltip says what it vouches for.', rej: 'hiding it on a deprecated or vulnerable version (the owner is still verified, and a missing badge would read as a lost reservation), an amber or red badge.' }
+    ];
+
+    const refreshGap = t.name === 'Classic Blue';
+    return { t, themes, tipText, sections, decisions, refreshGap, refreshOk: !refreshGap };
+  }
+}
+</script>
+</body>
+</html>

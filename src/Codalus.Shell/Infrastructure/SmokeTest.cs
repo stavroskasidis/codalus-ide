@@ -3130,7 +3130,27 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 File.Delete(file);
             }
 
-            await File.WriteAllTextAsync(greetings, original).ConfigureAwait(true);
+            // The deletions make the build host evaluate Greetings again, and on Windows MSBuild holds the project file
+            // open while it reads it: a writer gets a sharing violation (#108's run). Left changed, the file would fail
+            // git.changes, which needs a clean tree.
+            await WriteBackAsync(greetings, original).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Writes a file back that the build host may be reading (MSBuild shares a project file only for reading): tried again for 10 seconds.</summary>
+    private static async Task WriteBackAsync(string path, string text)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await File.WriteAllTextAsync(path, text).ConfigureAwait(true);
+                return;
+            }
+            catch (IOException) when (attempt < 40)
+            {
+                await Task.Delay(250).ConfigureAwait(true);
+            }
         }
     }
 

@@ -68,6 +68,39 @@ public sealed class CodeEditorDocument : ShellDocument
         }
     }
 
+    /// <summary>
+    /// The view's editor controller once the view is created: a document just opened gets its view on a later layout
+    /// pass. Null when it doesn't appear within <paramref name="timeout"/>.
+    /// </summary>
+    public async Task<CodeEditorController?> ControllerAsync(TimeSpan timeout)
+    {
+        if (Controller is { } controller)
+        {
+            return controller;
+        }
+
+        var attached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnAttached(object? sender, EventArgs e) => attached.TrySetResult();
+        ControllerAttached += OnAttached;
+        try
+        {
+            if (Controller is null)
+            {
+                await attached.Task.WaitAsync(timeout).ConfigureAwait(true);
+            }
+        }
+        catch (TimeoutException)
+        {
+            // No view yet: the caller says so.
+        }
+        finally
+        {
+            ControllerAttached -= OnAttached;
+        }
+
+        return Controller;
+    }
+
     internal void Attach(CodeEditorController controller)
     {
         Controller = controller;
