@@ -153,6 +153,8 @@ internal static partial class BuiltIns
         rules.AddRange(s_spacings.Select(a => Item(Vertical, "winforms.vspacing." + a.Id, a.Title)));
 
         // The surface's context menu.
+        // TODO(issue): the classic IDE's context menus and Lock Controls (#67 part 2), with the host tests' Locked and
+        // split-panel checks; their design comes first and waits for the maintainer's approval (roadmap, Deferred work).
         rules.Add(Item(WinFormsSurfaceMenu, "winforms.smartTag", "Show Smart Tag", "0-tasks"));
         rules.Add(Item(WinFormsSurfaceMenu, "winforms.order.front", "Bring to Front", "1-order"));
         rules.Add(Item(WinFormsSurfaceMenu, "winforms.order.back", "Send to Back", "1-order"));

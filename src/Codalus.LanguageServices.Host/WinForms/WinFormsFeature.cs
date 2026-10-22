@@ -61,6 +61,18 @@ internal static class WinFormsFeature
 
         public required ReplayDesignerTypeResolver Resolver { get; init; }
 
+        /// <summary>
+        /// The solution the form was read from: the request's, or its own copy with the code file's part of the class in
+        /// Miscellaneous Files (#76). A rename goes through it, so the code file's uses are renamed too.
+        /// </summary>
+        public required Solution Solution { get; init; }
+
+        /// <summary>
+        /// Read without all of the project's types (#76): from Miscellaneous Files, from a compilation without Windows
+        /// Forms (before the restore), or without a compilation; the class's base type then came from its syntax.
+        /// </summary>
+        public bool WithoutProjectTypes { get; init; }
+
         public CSharpParseOptions? ParseOptions { get; init; }
 
         /// <summary>The designer file's tree as the compilation has it.</summary>
@@ -122,6 +134,20 @@ internal static class WinFormsFeature
         }
 
         var codeText = await TextOfAsync(code, codePath, openText, cancellationToken).ConfigureAwait(false);
+        if (designer is not null && code is null && codeText is not null && WorkspaceManager.IsMiscellaneous(designer.Project))
+        {
+            // The designer opened the form before the C# host had its project, with the code closed (#76): alone in
+            // Miscellaneous Files, the designer file's part of the class names no base, so its base was object and the
+            // form "isn't a form". The class's other part joins Miscellaneous Files here, in this request's own copy of
+            // the solution, as it does when the code is open: the base then comes from the code file (by name, without
+            // Windows Forms' references), and a rename finds the uses in the code file. The copy never goes back to the
+            // workspace, so diagnostics and the real Miscellaneous Files don't change.
+            var codeId = DocumentId.CreateNewId(designer.Project.Id, codePath);
+            solution = solution.AddDocument(codeId, Path.GetFileName(codePath), codeText, filePath: codePath);
+            designer = solution.GetDocument(designer.Id);
+            code = solution.GetDocument(codeId);
+        }
+
         var parseOptions = designer?.Project.ParseOptions as CSharpParseOptions;
         var codeTree = codeText is null ? null : CSharpSyntaxTree.ParseText(codeText, parseOptions, codePath, cancellationToken);
         var designerTree = designer is not null && await designer.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false) is { } tree && (await tree.GetTextAsync(cancellationToken).ConfigureAwait(false)).ContentEquals(designerText)
@@ -132,6 +158,7 @@ internal static class WinFormsFeature
         string[] globalUsings = DesignerReader.WindowsFormsImplicitUsings;
         INamedTypeSymbol? type = null;
         string? baseType = null;
+        var withoutProjectTypes = true;
         if (designer is not null && found is var (classSyntax, _) && await designer.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false) is { } model
             && model.SyntaxTree == designerTree)
         {
@@ -139,10 +166,15 @@ internal static class WinFormsFeature
             resolver.SemanticTree = designerTree;
             type = model.GetDeclaredSymbol(classSyntax, cancellationToken);
             baseType = type?.BaseType is { TypeKind: not TypeKind.Error } baseSymbol ? SemanticDesignerTypeResolver.Name(baseSymbol) : null;
-            globalUsings = [.. model.Compilation.SyntaxTrees
+            withoutProjectTypes = baseType is null || model.Compilation.GetTypeByMetadataName(ControlType) is null;
+            IEnumerable<string> compilationUsings = model.Compilation.SyntaxTrees
                 .SelectMany(t => t.GetCompilationUnitRoot(cancellationToken).Usings)
                 .Where(u => !u.GlobalKeyword.IsKind(SyntaxKind.None) && u.Alias is null && u.StaticKeyword.IsKind(SyntaxKind.None) && u.Name is not null)
-                .Select(u => u.Name!.ToString().Replace("global::", string.Empty, StringComparison.Ordinal))
+                .Select(u => u.Name!.ToString().Replace("global::", string.Empty, StringComparison.Ordinal));
+
+            // Miscellaneous Files' global usings aren't the project's (#76): while the project loads, the SDK's implicit
+            // usings for Windows Forms stay, as without a compilation, so new code keeps the file's short names.
+            globalUsings = [.. (WorkspaceManager.IsMiscellaneous(designer.Project) ? DesignerReader.WindowsFormsImplicitUsings.Concat(compilationUsings) : compilationUsings)
                 .Distinct(StringComparer.Ordinal)];
         }
 
@@ -163,6 +195,8 @@ internal static class WinFormsFeature
             NotDesignable = why,
             GlobalUsings = globalUsings,
             Resolver = resolver,
+            Solution = solution,
+            WithoutProjectTypes = withoutProjectTypes,
             ParseOptions = parseOptions,
             DesignerTree = designerTree,
         };
@@ -233,6 +267,8 @@ internal static class WinFormsFeature
         WinFormsReadResult Result(DesignerModel? model, string? problem, int? line) =>
             new(codePath, designerPath, context.IsDesignable, model, problem, line)
             {
+                // #76: types the compiler couldn't bind in the file as read were named by their syntax.
+                IsPartial = context.WithoutProjectTypes || context.Resolver.SyntacticNames > 0,
                 ResourceFile = File.Exists(resx) ? resx : null,
                 Project = project,
                 ClassFullName = fullName ?? (model is null ? null : model.Namespace is { } ns ? ns + "." + model.ClassName : model.ClassName),
@@ -310,7 +346,7 @@ internal static class WinFormsFeature
 
                     case DesignerEditKinds.RenameComponent:
                         text = writer.Apply(text, edit);
-                        documents.AddRange(await RenameElsewhereAsync(solution, context, edit.Component, edit.NewName!, openText, version, cancellationToken).ConfigureAwait(false));
+                        documents.AddRange(await RenameElsewhereAsync(context, edit.Component, edit.NewName!, openText, version, cancellationToken).ConfigureAwait(false));
                         break;
 
                     default:
@@ -455,15 +491,20 @@ internal static class WinFormsFeature
         return line[..(line.Length - line.TrimStart().Length)];
     }
 
-    /// <summary>A renamed component's uses outside the designer file, through the compilation (Roslyn's rename of the field).</summary>
+    /// <summary>
+    /// A renamed component's uses outside the designer file, through the compilation (Roslyn's rename of the field) of
+    /// the solution the form was read from: with the code file's part added while the project loads (#76), its uses
+    /// there are renamed too (with no version: the file isn't open).
+    /// </summary>
     private static async Task<IEnumerable<TextDocumentEdit>> RenameElsewhereAsync(
-        Solution solution, Context context, string name, string newName, Func<string, SourceText?> openText, Func<string, int?> version, CancellationToken cancellationToken)
+        Context context, string name, string newName, Func<string, SourceText?> openText, Func<string, int?> version, CancellationToken cancellationToken)
     {
         if (context.Class?.GetMembers(name).OfType<IFieldSymbol>().FirstOrDefault() is not { } field)
         {
             return [];
         }
 
+        var solution = context.Solution;
         var renamed = await Renamer.RenameSymbolAsync(solution, field, new SymbolRenameOptions(), newName, cancellationToken).ConfigureAwait(false);
         var edits = new List<TextDocumentEdit>();
         foreach (var projectChanges in renamed.GetChanges(solution).GetProjectChanges())
@@ -579,6 +620,12 @@ internal sealed class ReplayDesignerTypeResolver : IDesignerTypeResolver
 
     public SyntacticDesignerTypeResolver? Fallback { get; set; }
 
+    /// <summary>
+    /// How many types of the file as read the compiler couldn't bind, so their syntax named them (#76: the read lacked
+    /// the project's types); names replayed for edited text don't count.
+    /// </summary>
+    public int SyntacticNames { get; private set; }
+
     public string? FullName(SyntaxNode node)
     {
         var written = string.Concat(node.ToString().Where(c => !char.IsWhiteSpace(c)));
@@ -596,6 +643,11 @@ internal sealed class ReplayDesignerTypeResolver : IDesignerTypeResolver
         if (_names.TryGetValue(written, out var known))
         {
             return known;
+        }
+
+        if (node.SyntaxTree == SemanticTree)
+        {
+            SyntacticNames++;
         }
 
         var fallback = Fallback ?? new SyntacticDesignerTypeResolver(DesignerSyntax.NamespaceOf(node));
