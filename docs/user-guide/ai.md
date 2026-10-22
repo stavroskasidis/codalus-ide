@@ -13,6 +13,8 @@ Codalus IDE can send questions about your code to a language model you choose, s
 3. Enter your key when asked. It goes to the operating system's credential store (Credential Manager on Windows, the Keychain on macOS, the Secret Service on Linux), never to a file, and is sent only to the provider's address. **Tools > AI > Configure AI Provider…** replaces it, or removes it when you leave the box empty.
 4. Choose a model. **Tools > AI > Choose AI Provider…** changes the provider or the model later (`ai.provider`, `ai.model`).
 
+Or connect a coding agent that brings its own provider (Claude, Codex, Gemini CLI, GitHub Copilot and others) from AI Chat's **Connect** buttons: see [Connecting one](#connecting-one). Its dialog can turn AI assistance on for you, once its test passes.
+
 While AI assistance is on, the status bar shows **AI:** and the provider, or **AI: working…** while a request runs. Click it to open AI Chat.
 
 ## AI Chat
@@ -112,37 +114,74 @@ AI Chat can also run a coding agent that is a program of its own, such as pi, Cl
 
 > **External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for.** An external agent calls its own model provider with its own account. What it reads (through the IDE or by itself) goes there, under that provider's terms, not through Codalus's AI boundary. The built-in assistant stays the default and keeps the full boundary. AI Chat shows this label whenever an external agent is chosen.
 
-### Setting one up
+### Connecting one
 
-**In one step.** In AI Chat, open the agent picker (after the provider in the toolbar) and choose **Add agent…**. It lists the agents Codalus knows, each with what it is, the exact command it would run and its pinned version; **installed** means the agent's own program is on your PATH, and **added** that it's in your settings already (choosing it just picks it). Choose one, read what will run, and choose **Add**: Codalus writes its entry to your user settings (never the workspace's) and picks it, which starts a new chat. Nothing is downloaded or run until you ask that chat something.
+**Where.** While AI assistance is off, or on without a provider, AI Chat offers a row under its next step: **Or connect a coding agent that brings its own provider**, with **Claude**, **Codex**, **Gemini CLI** and **GitHub Copilot** as buttons and **More agents…** for every agent Codalus knows. While AI is on, the agent picker (after the provider in the toolbar) lists Built-in and your agents, then **Connect to** each one-click agent you haven't connected, **More agents…** and **Manage Agents…**. The commands are in the Command Palette and in **Tools > AI** too: **AI: Connect to Claude…**, **AI: Connect to an Agent…** and the others.
 
-| Agent | What runs | Version |
-|---|---|---|
-| pi | `npx -y pi-acp@0.0.34` | 0.0.34 |
-| Claude | `npx -y @agentclientprotocol/claude-agent-acp@0.93.0` | 0.93.0 |
-| Codex | `npx -y @agentclientprotocol/codex-acp@2.2.2` | 2.2.2 |
-| Gemini CLI | `npx -y @google/gemini-cli@0.64.0 --acp` | 0.64.0 |
-| GitHub Copilot | `npx -y @github/copilot@1.0.98 --acp` | 1.0.98 |
-| OpenCode | `opencode acp` (install OpenCode first) | tested with 1.19.3 |
-| goose | `goose acp` (install goose first) | tested with 1.55.0 |
+**The Connect dialog** checks, signs in and tests before anything is saved:
 
-The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-10-19 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time the agent starts and runs it as you, with your account's access to your files, not only the folder's. The registry ships OpenCode and goose as programs to download, which Codalus doesn't do: install them yourself, and their entries run whatever version you installed (the table says which one was tested). An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. Sign in the way the agent says: Codalus doesn't see or keep its credentials. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`; another `.cmd` or `.bat` runs through `cmd.exe` only when its path and arguments have nothing `cmd.exe` would read differently.
+1. **Requirements.** Each program the agent needs (Node.js and npx, or the agent's own CLI) is looked for on your PATH, with its version and the version the agent needs. **Check Again** looks again.
+2. **Installing what's missing**, with your own package manager, each option with its exact command: **winget** on Windows (it runs in the dialog, and Codalus reads the new PATH when it ends), **Homebrew** on macOS, **snap** on Ubuntu (in the Terminal, where it asks for your password), **apt** or **dnf** only when the Node.js they would install is new enough (with npm, which is a package of its own on Debian and Ubuntu), and nodejs.org's page everywhere. A Terminal install keeps the dialog open: it checks again when the command ends. Where none of your package managers can install a new enough Node.js, **Codalus's Node.js** (the checksum-verified 24.21.0 it already uses for npm scripts) is offered as an opt-in; the agent's entry then says `"node": "builtIn"`, and the agent runs with that Node.js first on its PATH. An agent's own CLI installs from npm, pinned (`npm install -g @earendil-works/pi-coding-agent@1.4.0` for pi, `npm install -g opencode-ai@1.19.4` for OpenCode; with `sudo` in the Terminal when npm's global folder isn't yours), or goose's from Homebrew.
+3. **Sign in**, in one of the ways the agent offers (below).
+4. **What runs**: the exact command lines, the sign-in's command, and a variable's name, never its value.
+5. **Turn on AI assistance**: a check box, shown only while AI is off. Its text says what else comes back on (a provider you chose earlier, inline suggestions). **Connect** stays disabled until it's checked. Nothing is written yet.
+6. **Connect** runs the test: the requirements, the download (npm's own progress), the agent's start, the sign-in, and a check that it's signed in. The test runs in an empty folder of the IDE's (`<state>/external-agents/connect-test`), with no workspace, no MCP servers and no prompt, and Codalus refuses anything the agent asks the IDE for meanwhile. Its session may stay in the agent's own history. Cancel stops it and writes nothing.
+
+**Only when the test passes** does Codalus write the agent's entry (`ai.agents.<agent>`) to your user settings, and `ai.enabled` when the check box turned AI on; **Start a Chat** picks the agent. When the agent didn't say whether you're signed in, **Save Anyway** writes it (your first question then asks you to sign in if you aren't), **Sign In…** goes back, and **Cancel** writes nothing. A failed test says why in plain words, with its fixes as buttons (**Sign In with Claude subscription…**, **Use an API Key…**, npm's proxy settings) and **Try Again**; nothing is written. Connect keeps the comments and the other entries in your `ai.agents`.
+
+| Agent | What runs | Version | Sign-in | How the test checks it |
+|---|---|---|---|---|
+| Claude | `npx -y @agentclientprotocol/claude-agent-acp@0.94.0` | 0.94.0 | Claude subscription or Anthropic Console account (Claude Code's own login, in the Terminal), an API key (`ANTHROPIC_API_KEY`), or signed in already | Claude reports who is signed in |
+| Codex | `npx -y @agentclientprotocol/codex-acp@2.2.2` | 2.2.2 | ChatGPT (your browser), an API key (kept by Codex), or signed in already | the session is refused while signed out |
+| Gemini CLI | `npx -y @google/gemini-cli@0.65.0 --acp` | 0.65.0 | Google account (your browser), a Gemini API key (`GEMINI_API_KEY`), or signed in already | the session is refused while signed out |
+| GitHub Copilot | `npx -y @github/copilot@1.0.103 --acp` | 1.0.103 | a GitHub token (`GH_TOKEN`), or signed in already | not confirmed |
+| pi | `npx -y pi-acp@0.0.34` (and pi's own CLI, 0.81 or later) | 0.0.34 | pi's setup in the Terminal, or signed in already | not confirmed |
+| OpenCode | `opencode acp` (install OpenCode first) | tested with 1.19.4 | `opencode auth login` in the Terminal, or signed in already | not confirmed |
+| goose | `goose acp` (install goose first) | tested with 1.55.0 | `goose configure` in the Terminal, or signed in already | not confirmed |
+
+The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-10-22 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time and runs it as you, with your account's access to your files, not only the folder's. An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`.
+
+Where Codalus can set an agent up without opening a page:
+
+| Agent | Windows | macOS | Linux |
+|---|---|---|---|
+| Claude | winget | Homebrew, or Codalus's Node.js | snap (Ubuntu), apt or dnf with Node.js 22, or Codalus's Node.js |
+| Codex | winget | Homebrew, or Codalus's Node.js | snap (Ubuntu), apt or dnf, or Codalus's Node.js |
+| Gemini CLI | winget | Homebrew, or Codalus's Node.js | snap (Ubuntu), apt or dnf with Node.js 20, or Codalus's Node.js |
+| GitHub Copilot | winget | Homebrew, or Codalus's Node.js | snap (Ubuntu), apt or dnf, or Codalus's Node.js |
+| pi | winget, then npm | Homebrew or Codalus's Node.js, then npm | Node.js as for Claude, then npm |
+| OpenCode | winget, then npm | Homebrew or Codalus's Node.js, then npm | Node.js as for Codex, then npm |
+| goose | manual (its install page) | Homebrew | manual (its install page) |
+
+Without Codalus's Node.js (you can always pick nodejs.org's page instead), Claude needs a page on Debian or Ubuntu without snap and on macOS without Homebrew: their own Node.js is older than the 22 it needs.
+
+**Ways to sign in.**
+- **In the Terminal**: the agent's own login (Claude's subscription and Console account, pi's setup, OpenCode's and goose's own commands) runs in a Terminal tab of its own, with its exact command shown first; the dialog continues when it ends, and the agent starts again to read the new sign-in. For Claude, Codalus doesn't take the command's exit code as the answer: Claude reports who is signed in, and the test waits for that report.
+- **Claude subscription** uses Claude Code's own login in the official adapter, so the sign-in stays with Claude Code: Codalus never asks for, reads or keeps Claude's tokens. With it, Claude starts without `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL` from your environment, which would outrank the login (its entry lists them in `unsetEnv`). In an SSH session Claude offers its own **Log in with Claude** in the Terminal; if that doesn't work, run `claude` in a terminal, type `/login`, and choose **I'm signed in already**.
+- **In your browser**: Codex's ChatGPT and Gemini CLI's Google account; the agent opens it itself.
+- **An API key**: typed in the dialog's password box. Codalus keeps it in the OS credential store (Windows Credential Manager, macOS Keychain, Secret Service), never in a file, and the agent gets it as its variable (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GH_TOKEN`) each time it starts. Commands the agent runs by itself inherit that variable; the commands Codalus runs for it don't. When the credential store can't be used, the dialog warns that the key lasts until Codalus closes. **Codex** is different: its key is sent once, in its sign-in request, and Codex keeps it in its own sign-in store (`~/.codex`); Disconnect can sign it out.
+- **Gemini CLI** warns that signing in a different way resets its saved Google sign-in and changes its own settings file (`~/.gemini/settings.json`).
+- **I'm signed in already**: nothing to do; the test checks it.
+
+**Manage Agents…** lists your agents (the template, where the key is, which one is chatting; an entry you wrote by hand says so); choosing one offers **Check Connection** (the test again, in the empty folder, without a prompt), **Change API Key…**, **Sign In Again…**, **Edit in settings.json** and **Disconnect…**. **Disconnect** says what it removes (the entry, the key, the running chat) and what stays (AI assistance on, npm's cache), with an unchecked **Also sign out of** *agent* **on this computer** for agents that can sign out (Claude, Codex), which runs the agent's own sign-out.
+
+Connecting isn't possible from a remote window (WSL, SSH, containers): the agent would run on this computer while the folder and its terminal are on the remote one. AI Chat's buttons are disabled there, with the reason.
 
 **By hand.** Add an entry to your user settings (**Tools > Options > AI: External Agents**, or `settings.json`); a workspace's settings can't add one. Each entry is the command that starts the agent in ACP mode, with its arguments and environment:
 
 ```json
 "ai.agents": {
+  "claude": { "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp@0.94.0"], "secretEnv": ["ANTHROPIC_API_KEY"], "template": "claude@0.94.0" },
   "pi": { "command": "npx", "args": ["-y", "pi-acp@0.0.34"] },
-  "claude": { "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp@0.93.0"] },
   "my-agent": { "command": "/opt/my-agent/bin/my-agent", "args": ["--acp"] }
 }
 ```
 
-Pin the version you've checked. `env` passes variables (`"env": { "ANTHROPIC_API_KEY": "…" }`), but a key there is in a file: prefer the agent's own sign-in, which keeps it in the agent's store.
+Pin the version you've checked. `env` passes variables, but a value there is in a file: put a key's name in `secretEnv` instead (Connect stores the value in the credential store; a name that isn't a variable's, that changes what runs such as `PATH`, or that is also in `env` skips the entry, and AI Chat says why). `unsetEnv` lists variables the agent starts without. `template` records the template Connect used.
 
-**Then**, turn on AI assistance, open a trusted solution or folder, and choose the agent in the picker (**Built-in** is the built-in assistant). Choosing another agent starts a new chat.
+**Then**, open a trusted solution or folder, and choose the agent in the picker (**Built-in** is the built-in assistant). Choosing another agent starts a new chat.
 
-While an external agent is chosen, the label shows above the question box. If AI assistance is off, no folder is open, or the folder isn't trusted, the chat says why under the label, and the agent doesn't start.
+While an external agent is chosen, the label shows above the question box, and the empty chat reads "Ask *agent* about your solution. It answers with its own provider; Codalus asks you before it changes a file or runs a command." If AI assistance is off, no folder is open, or the folder isn't trusted, the chat says why under the label, and the agent doesn't start.
 
 ### What you see
 
@@ -152,7 +191,7 @@ While an external agent is chosen, the label shows above the question box. If AI
 - **Commands**: typing `/` offers the agent's slash commands; `Tab` or a click puts one in the box.
 - **Stop** asks the agent to stop (`session/cancel`), answers its open questions as cancelled, closes an open approval and stops its commands. **New Chat** stops the agent's process; each chat runs one process, which also stops when the folder closes and when the IDE exits.
 - If the agent crashes, the turn shows its last lines of output, and your next question starts it again.
-- If the agent needs you to sign in, Codalus shows the ways it offers and runs the one you choose. The agent manages its own sign-in: Codalus doesn't see or keep its credentials.
+- If the agent needs you to sign in (when the chat starts, or when a question is refused, as Claude does), Codalus shows the ways it offers and runs the one you choose; a sign-in in the Terminal shows its exact command first, and the agent starts again afterwards. The question is then sent again, once; when the agent had to start a new session, the turn says the earlier conversation is gone. The agent manages its own sign-in: Codalus doesn't see or keep its credentials (an API key you gave Connect is the exception, kept in the credential store).
 
 ### The safety model, and its limits
 
@@ -170,7 +209,7 @@ What Codalus can't check:
 - Whatever the agent has, it can send to its provider. Keep files out of reach with `.codalusignore` and `ai.exclude` for what goes through the IDE, and with the agent's own settings for what it reads by itself.
 - Its commands run with your permissions once you allow them, like agent mode's.
 
-Not supported yet: MCP servers over HTTP for agents, the agent's forms (elicitation), signing in from a terminal, and resuming an earlier session. External agents don't run in remote windows (WSL, SSH, containers): the agent and its commands would run on this machine, not where the folder is, so the chat says why and nothing starts.
+Not supported yet: MCP servers over HTTP for agents, the agent's forms (elicitation), resuming an earlier session, and an Options page for External Agents (edit the JSON, or use Manage Agents…). External agents don't run in remote windows (WSL, SSH, containers): the agent and its commands would run on this machine, not where the folder is, so the chat says why and nothing starts.
 
 ## What is never sent
 
@@ -208,7 +247,7 @@ AI assistance has one gate that every request goes through:
 | `ai.agent.commandTimeoutSeconds` | `120` | How long an allowed command may run |
 | `ai.mcp.servers` | `{}` | MCP servers whose tools agent mode may use (user settings only) |
 | `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE (external agents' own pipes don't need it) |
-| `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env" } }` (user settings only) |
+| `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env", "secretEnv", "unsetEnv" } }` (user settings only; **AI: Connect to an Agent…** writes it) |
 | `ai.openai.endpoint` | `https://api.openai.com/v1` | The OpenAI-compatible server |
 | `ai.ollama.endpoint` | `http://localhost:11434/v1` | Ollama's address |
 | `ai.anthropic.endpoint` | `https://api.anthropic.com` | Anthropic's API, or a gateway |
