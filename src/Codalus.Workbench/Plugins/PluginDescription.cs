@@ -102,7 +102,17 @@ public sealed partial class PluginDescription
     /// <summary>The manifest's <c>runsOn</c> is <c>workspace</c>.</summary>
     public bool RunsOnWorkspace => Manifest?.RunsOn == "workspace";
 
-    public PluginState State { get; internal set; }
+    private int _state;
+
+    /// <summary>
+    /// Read and written as a volatile field: the plugin manager sets <see cref="Error"/> before it publishes
+    /// <see cref="PluginState.Failed"/>, often on a plugin host's exit thread, so whoever sees Failed also sees why.
+    /// </summary>
+    public PluginState State
+    {
+        get => (PluginState)Volatile.Read(ref _state);
+        internal set => Volatile.Write(ref _state, (int)value);
+    }
 
     public string? Error { get; internal set; }
 
