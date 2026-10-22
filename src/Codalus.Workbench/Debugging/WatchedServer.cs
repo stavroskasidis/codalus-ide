@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Sockets;
 using Codalus.Platform;
 using Codalus.Workbench.Build;
@@ -198,19 +199,50 @@ public static class WatchedServer
         }
     }
 
-    /// <summary>Whether <paramref name="url"/>'s host and port accept a connection now (one attempt).</summary>
+    /// <summary>
+    /// Whether <paramref name="url"/>'s host and port accept a connection now (one attempt). Each of the host's
+    /// addresses is tried at once: <c>localhost</c> is <c>::1</c> before <c>127.0.0.1</c> on Windows, where a refused
+    /// connection takes about two seconds (it retries the SYN), so trying them in turn never reached an app that
+    /// listens only on IPv4 within the attempt.
+    /// </summary>
     public static async Task<bool> AcceptsAsync(Uri url, CancellationToken cancellationToken)
     {
-        var host = url.Host is "*" or "+" or "0.0.0.0" or "[::]" or "" ? "localhost" : url.Host;
+        var host = url.Host is "*" or "+" or "0.0.0.0" or "[::]" or "" ? "localhost" : url.DnsSafeHost; // [::1] → ::1
+        using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        attempt.CancelAfter(TimeSpan.FromMilliseconds(500));
         try
         {
-            using var client = new TcpClient();
-            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            attempt.CancelAfter(TimeSpan.FromMilliseconds(500));
-            await client.ConnectAsync(host, url.Port, attempt.Token).ConfigureAwait(false);
-            return true;
+            var addresses = await Dns.GetHostAddressesAsync(host, attempt.Token).ConfigureAwait(false); // a literal isn't looked up
+            var connects = addresses.Select(address => ConnectsAsync(new IPEndPoint(address, url.Port), attempt.Token)).ToList();
+            while (connects.Count > 0)
+            {
+                var done = await Task.WhenAny(connects).ConfigureAwait(false);
+                connects.Remove(done);
+                if (await done.ConfigureAwait(false))
+                {
+                    await attempt.CancelAsync().ConfigureAwait(false); // the others
+                    return true;
+                }
+            }
         }
         catch (Exception ex) when (ex is SocketException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
+    private static async Task<bool> ConnectsAsync(IPEndPoint endPoint, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var socket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            await socket.ConnectAsync(endPoint, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (ex is SocketException or OperationCanceledException)
         {
             return false;
         }

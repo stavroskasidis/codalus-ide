@@ -327,6 +327,21 @@ public sealed class WatchedServerSessionTests
     }
 
     [Fact]
+    public async Task The_probe_reaches_an_app_listening_on_only_one_of_localhosts_addresses()
+    {
+        // Windows resolves localhost to ::1 first, and a refused connection there takes about two seconds: one
+        // attempt (500 ms) that tried the addresses in turn never reached 127.0.0.1.
+        var port = FreePort();
+        var url = new Uri($"http://localhost:{port}/");
+        Assert.False(await WatchedServer.AcceptsAsync(url, Ct));
+        using var listener = new TcpListener(IPAddress.Loopback, port);
+        listener.Start();
+        Assert.True(await WatchedServer.AcceptsAsync(url, Ct));
+        Assert.True(await WatchedServer.AcceptsAsync(new Uri($"http://127.0.0.1:{port}/"), Ct));
+        Assert.True(await WatchedServer.AcceptsAsync(new Uri($"http://0.0.0.0:{port}/"), Ct));
+    }
+
+    [Fact]
     public void The_apps_process_name_is_its_apphosts()
     {
         // GetFileNameWithoutExtension would make BlazorSudoku.Server "BlazorSudoku" (seen on SDK 10, whose agent doesn't say the id).
