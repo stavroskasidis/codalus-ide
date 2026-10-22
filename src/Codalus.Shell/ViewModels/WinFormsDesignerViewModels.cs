@@ -175,6 +175,15 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>The C# host's last read of the form (tests).</summary>
     internal WinFormsReadResult? LastRead => _read;
 
+    /// <summary>
+    /// The project the Toolbox asks about: the C# host's, else the build host's owner project (the C# host names it only
+    /// once it has it; before, it reads the form from Miscellaneous Files). Null before either is known.
+    /// </summary>
+    internal string? ToolboxProject => _read?.Project ?? _target?.Project;
+
+    /// <summary>Whether the designer was closed (or the IDE is exiting): it asks and loads nothing more (tests).</summary>
+    internal bool IsClosed => _disposed;
+
     /// <summary>The surface's components: the root first, then controls (front first, parents before children), then non-visual components.</summary>
     public IReadOnlyList<DesignerComponentView> Components => _components;
 
@@ -435,7 +444,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     {
         // The C# host names the project only once it has it (before, it reads the form from Miscellaneous Files): the
         // build host's owner project is known from the evaluation, and the ask once the C# service has loaded finds it.
-        if (_disposed || (_read?.Project ?? _target?.Project) is not { } project || _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is not { } client)
+        if (_disposed || ToolboxProject is not { } project || _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is not { } client)
         {
             return;
         }
@@ -2031,6 +2040,9 @@ public sealed class ToolboxViewModel : ObservableObject
     /// shown, so a slower earlier answer, such as one from before the restore, doesn't replace a newer one.
     /// </summary>
     public int BeginProjectItemsRequest() => ++_projectItemsRequest;
+
+    /// <summary>How many requests for the project's items have started (tests).</summary>
+    internal int ProjectItemsRequests => _projectItemsRequest;
 
     /// <summary>The answer to <paramref name="request"/>: shown unless a newer request has started since.</summary>
     public void SetProjectItems(int request, IReadOnlyList<WinFormsToolboxItem> items)
