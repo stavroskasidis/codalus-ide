@@ -421,6 +421,13 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                 continue;
             }
 
+            if (edit is { Property: "Image", Reset: true })
+            {
+                // Select Resource's Clear (#68): no image, so no assignment.
+                changes.Add(new DesignerPropertyChange(edit.Component, "Image", null));
+                continue;
+            }
+
             if (edit.Bytes is { } bytes)
             {
                 var key = edit.Component + "." + edit.Property;

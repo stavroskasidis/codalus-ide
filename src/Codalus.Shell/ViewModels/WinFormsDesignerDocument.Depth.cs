@@ -27,6 +27,7 @@ public sealed partial class WinFormsDesignerDocument
     private DesignerCollectionEditorViewModel? _collectionEditor;
     private DesignerFontEditorViewModel? _fontEditor;
     private DesignerStringsEditorViewModel? _stringsEditor;
+    private DesignerResourcePickerViewModel? _resourcePicker;
     private IReadOnlyList<DesignerMenuPanel> _menuPanels = [];
     private DesignerTypeHere? _stripTypeHere;
 
@@ -255,7 +256,8 @@ public sealed partial class WinFormsDesignerDocument
         {
             case DesignerEditors.Image when selected.Count == 1:
                 kind = PropertyRowKind.ReadOnly;
-                modal = new RelayCommand(() => _ = ImportImageAsync(selected[0], info.Name, path: null, toProject: false));
+                // Select Resource behind "…": a local resource or one of the project's resources file.
+                modal = new RelayCommand(() => _ = OpenResourcePickerAsync(selected[0], info.Name));
                 break;
             case DesignerEditors.Collection when selected.Count == 1 && info.Collection is { } key:
                 // A collection: "(Collection)", read-only, its editor behind "…" (D41 question 20).
@@ -387,16 +389,14 @@ public sealed partial class WinFormsDesignerDocument
 
     private async Task ImportIntoProjectAsync(string component, string property, string path, byte[] bytes)
     {
-        var project = _read?.Project is { } projectPath ? Path.GetDirectoryName(projectPath)! : Path.GetDirectoryName(CodePath)!;
-        var resx = Path.Combine(project, "Properties", "Resources.resx");
-        if (!File.Exists(resx))
+        if (ProjectResxPath() is not { } resx)
         {
             Status = Localizer.Get("msg.winFormsDesigner.noProjectResources", "The project has no Properties/Resources.resx: add a resources file there first, or import the image into the form's resources.");
             return;
         }
 
-        var name = System.Text.RegularExpressions.Regex.Replace(Path.GetFileNameWithoutExtension(path), "[^A-Za-z0-9_]", "_");
-        name = char.IsDigit(name[0]) ? "_" + name : name;
+        var name = ResourceNameOf(path);
+        var project = Path.GetDirectoryName(Path.GetDirectoryName(resx))!;
         var target = Path.Combine(project, "Resources", name + Path.GetExtension(path).ToLowerInvariant());
         try
         {
@@ -434,7 +434,19 @@ public sealed partial class WinFormsDesignerDocument
             return;
         }
 
-        // The designer shows the image now; the code says Properties.Resources.Name.
+        await UseProjectResourceAsync(component, property, name, bytes).ConfigureAwait(true);
+    }
+
+    /// <summary>A project resource's name for an image file: its name with what an identifier can't hold as "_".</summary>
+    internal static string ResourceNameOf(string path)
+    {
+        var name = System.Text.RegularExpressions.Regex.Replace(Path.GetFileNameWithoutExtension(path), "[^A-Za-z0-9_]", "_");
+        return name.Length == 0 ? "_" : char.IsDigit(name[0]) ? "_" + name : name;
+    }
+
+    /// <summary>An image of the project's resources for an image property: the designer shows its bytes, the code says <c>Properties.Resources.Name</c> (#68: Select Resource).</summary>
+    internal async Task UseProjectResourceAsync(string component, string property, string name, byte[] bytes)
+    {
         var rootNamespace = _read?.ClassFullName is { } full && full.Contains('.', StringComparison.Ordinal) ? full[..full.IndexOf('.', StringComparison.Ordinal)] : _model?.Namespace;
         var member = DesignerValue.MemberOf((rootNamespace is null ? string.Empty : rootNamespace + ".") + "Properties.Resources", name);
         await RunAsync(async host =>
@@ -849,8 +861,21 @@ public sealed partial class WinFormsDesignerDocument
         }
     }
 
+    /// <summary>The open Select Resource, or null.</summary>
+    public DesignerResourcePickerViewModel? ResourcePicker
+    {
+        get => _resourcePicker;
+        private set
+        {
+            if (SetProperty(ref _resourcePicker, value))
+            {
+                OnEditorPanelChanged();
+            }
+        }
+    }
+
     /// <summary>A panel over the others (the font editor, the String Collection Editor, Select Resource) is open.</summary>
-    public bool HasEditorPanel => _fontEditor is not null || _stringsEditor is not null;
+    public bool HasEditorPanel => _fontEditor is not null || _stringsEditor is not null || _resourcePicker is not null;
 
     private void OnEditorPanelChanged()
     {
@@ -902,6 +927,42 @@ public sealed partial class WinFormsDesignerDocument
 
     public void CloseStringsEditor() => StringsEditor = null;
 
+    /// <summary>The project's resources file (<c>Properties/Resources.resx</c> beside the project), or null when it has none.</summary>
+    private string? ProjectResxPath()
+    {
+        var project = _read?.Project is { } projectPath ? Path.GetDirectoryName(projectPath)! : Path.GetDirectoryName(CodePath)!;
+        var resx = Path.Combine(project, "Properties", "Resources.resx");
+        return File.Exists(resx) ? resx : null;
+    }
+
+    /// <summary>
+    /// Select Resource for an image property: the project's resources file's images, and the one the code uses
+    /// (<c>Properties.Resources.Name</c>) chosen.
+    /// </summary>
+    internal async Task OpenResourcePickerAsync(string component, string property)
+    {
+        var resx = ProjectResxPath();
+        IReadOnlyList<DesignerProjectResource> images = [];
+        if (resx is not null)
+        {
+            try
+            {
+                images = DesignerProjectResource.ImagesOf(resx, await File.ReadAllTextAsync(resx).ConfigureAwait(true));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
+            {
+                Status = ex.Message;
+            }
+        }
+
+        var target = ComponentOf(component);
+        var current = _model?.Statements.LastOrDefault(s => s.Kind == DesignerStatementKinds.Assign && s.Target == target && s.Member == property) is
+            { Value: { Kind: DesignerValueKinds.Member, Type: { } type, Value: { } member } } && type.EndsWith("Properties.Resources", StringComparison.Ordinal) ? member : null;
+        ResourcePicker = new DesignerResourcePickerViewModel(this, component, property, EditorContext([component], property), resx, images, current);
+    }
+
+    public void CloseResourcePicker() => ResourcePicker = null;
+
     /// <summary>Opens a collection's editor (Items, Columns, TabPages, ColumnStyles, a strip's items, an image list's images).</summary>
     public async Task OpenCollectionEditorAsync(string component, string key)
     {
@@ -919,6 +980,7 @@ public sealed partial class WinFormsDesignerDocument
     {
         CloseFontEditor();
         CloseStringsEditor();
+        CloseResourcePicker();
         CollectionEditor = null;
     }
 

@@ -143,7 +143,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             {
                 ShowCollectionEditor();
             }
-            else if (e.PropertyName is nameof(WinFormsDesignerDocument.FontEditor) or nameof(WinFormsDesignerDocument.StringsEditor))
+            else if (e.PropertyName is nameof(WinFormsDesignerDocument.FontEditor) or nameof(WinFormsDesignerDocument.StringsEditor) or nameof(WinFormsDesignerDocument.ResourcePicker))
             {
                 ShowEditorPanel();
             }
@@ -779,6 +779,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         _editorHost.Children.Clear();
         Control? panel = _document.FontEditor is { } font ? FontPanel(font)
             : _document.StringsEditor is { } strings ? StringsPanel(strings)
+            : _document.ResourcePicker is { } picker ? ResourcePanel(picker)
             : null;
         _editorHost.IsVisible = panel is not null;
         if (panel is not null)
@@ -937,6 +938,103 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         box.TextChanged += (_, _) => set(box.Text ?? string.Empty);
         Avalonia.Automation.AutomationProperties.SetName(box, name);
         return box;
+    }
+
+    /// <summary>
+    /// Select Resource, as the classic IDE's: Local resource (Import…, Clear) or the project's resources file (its
+    /// images, Import…), and a preview of the chosen image.
+    /// </summary>
+    private static Border ResourcePanel(DesignerResourcePickerViewModel picker)
+    {
+        Button Small(string text, System.Windows.Input.ICommand command)
+        {
+            var button = new Button { Content = text, Command = command, Classes = { "dialog" }, MinWidth = 76 };
+            Avalonia.Automation.AutomationProperties.SetName(button, text);
+            return button;
+        }
+
+        var local = new RadioButton { Content = Localizer.Get("msg.winFormsDesigner.localResource", "Local resource:"), GroupName = "resource", IsChecked = picker.IsLocal };
+        var project = new RadioButton { Content = picker.ResourceFileText, GroupName = "resource", IsChecked = picker.IsProject, IsEnabled = picker.HasResourceFile };
+        local.IsCheckedChanged += (_, _) => picker.IsLocal = local.IsChecked == true;
+        project.IsCheckedChanged += (_, _) => picker.IsProject = project.IsChecked == true;
+        var localText = new TextBlock { Text = picker.LocalText, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 140 };
+        var import = Localizer.Get("msg.winFormsDesigner.import", "Import…");
+        var localRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Margin = new Thickness(24, 4, 0, 8),
+            Children = { Small(import, picker.ImportLocalCommand), Small(Localizer.Get("msg.winFormsDesigner.clear", "Clear"), picker.ClearCommand), localText },
+        };
+        var list = new ListBox
+        {
+            ItemsSource = picker.ProjectResources,
+            Width = 232,
+            Height = 96,
+            SelectedItem = picker.SelectedResource,
+            IsEnabled = picker.HasResourceFile,
+            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DesignerProjectResource>((resource, _) => new TextBlock { Text = resource?.Name, VerticalAlignment = VerticalAlignment.Center }),
+        };
+        PropertyEditors.PropertyDropDowns.CompactRows(list);
+        Avalonia.Automation.AutomationProperties.SetName(list, picker.ResourceFileText);
+        list.SelectionChanged += (_, _) => picker.SelectedResource = list.SelectedItem as DesignerProjectResource;
+        var importProject = Small(import, picker.ImportProjectCommand);
+        importProject.HorizontalAlignment = HorizontalAlignment.Left;
+        importProject.Margin = new Thickness(0, 6, 0, 0);
+        var projectBox = new StackPanel { Margin = new Thickness(24, 4, 0, 0), Children = { list, importProject } };
+
+        var image = new Image { Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, MaxWidth = 138, MaxHeight = 138 };
+        var none = new TextBlock { Text = Localizer.Get("msg.winFormsDesigner.noPreview", "No image"), Classes = { "muted", "small" }, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var preview = new Border { Width = 140, Height = 140, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), ClipToBounds = true, Child = new Grid { Children = { none, image } } };
+        preview.Bind(Border.BackgroundProperty, preview.GetResourceObservable("Shell.Input"));
+        preview.Bind(Border.BorderBrushProperty, preview.GetResourceObservable("Shell.Input.Border"));
+        void UpdatePreview()
+        {
+            var old = image.Source as IDisposable;
+            Avalonia.Media.Imaging.Bitmap? bitmap = null;
+            if (picker.Preview is { } bytes)
+            {
+                try
+                {
+                    using var stream = new MemoryStream(bytes);
+                    bitmap = new Avalonia.Media.Imaging.Bitmap(stream);
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException or IOException)
+                {
+                    bitmap = null; // an image Avalonia can't decode (an icon, a metafile): no preview
+                }
+            }
+
+            image.Source = bitmap;
+            none.IsVisible = bitmap is null;
+            old?.Dispose();
+        }
+
+        picker.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(DesignerResourcePickerViewModel.Preview):
+                    UpdatePreview();
+                    break;
+                case nameof(DesignerResourcePickerViewModel.LocalText):
+                    localText.Text = picker.LocalText;
+                    break;
+                case nameof(DesignerResourcePickerViewModel.IsProject):
+                    local.IsChecked = picker.IsLocal;
+                    project.IsChecked = picker.IsProject;
+                    break;
+                case nameof(DesignerResourcePickerViewModel.SelectedResource) when !ReferenceEquals(list.SelectedItem, picker.SelectedResource):
+                    list.SelectedItem = picker.SelectedResource;
+                    break;
+            }
+        };
+        UpdatePreview();
+        var choices = new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.resourceContext", "Resource context")), local, localRow, project, projectBox } };
+        var previewColumn = new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.preview", "Preview")), preview } };
+        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), ColumnSpacing = 20, Children = { choices, previewColumn } };
+        Grid.SetColumn(previewColumn, 1);
+        return EditorFrame(picker.Title, picker.Context, body, picker.OkCommand, picker.CancelCommand);
     }
 
     private static Border StringsPanel(DesignerStringsEditorViewModel editor)

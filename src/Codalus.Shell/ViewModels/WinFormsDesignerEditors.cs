@@ -628,3 +628,267 @@ public sealed class DesignerStringsEditorViewModel : ObservableObject
         await _document.SetPropertiesAsync([.. _components.Select(c => new DesignerPropertyEdit(c, _path) { Value = DesignerValue.ArrayOf("System.String", [.. items.Select(DesignerValue.String)]) })]).ConfigureAwait(true);
     }
 }
+
+/// <summary>
+/// An image of the project's resources file (<c>Properties/Resources.resx</c>): a file it references (ResXFileRef) or
+/// bytes it embeds; a new one is a file to import with OK.
+/// </summary>
+public sealed record DesignerProjectResource(string Name, string? FilePath, string? Base64, bool IsNew = false)
+{
+    /// <summary>The image's bytes, or null when its file can't be read.</summary>
+    public async Task<byte[]?> ReadAsync()
+    {
+        try
+        {
+            return FilePath is { } path ? await File.ReadAllBytesAsync(path).ConfigureAwait(false)
+                : Base64 is { } base64 ? Convert.FromBase64String(string.Concat(base64.Where(c => !char.IsWhiteSpace(c))))
+                : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The images of a resources file, in file order: file references of type Bitmap or Icon, and embedded Bitmaps and
+    /// Icons (a mimetype); paths in file references are relative to the resources file.
+    /// </summary>
+    public static IReadOnlyList<DesignerProjectResource> ImagesOf(string resxPath, string text)
+    {
+        var folder = Path.GetDirectoryName(resxPath)!;
+        static bool IsImage(string? type) => type is not null && (type.StartsWith("System.Drawing.Bitmap", StringComparison.Ordinal) || type.StartsWith("System.Drawing.Icon", StringComparison.Ordinal));
+        var list = new List<DesignerProjectResource>();
+        foreach (var entry in Workbench.CustomTools.ResxFile.Parse(text).Entries)
+        {
+            if (entry.Type?.StartsWith("System.Resources.ResXFileRef", StringComparison.Ordinal) == true && entry.Value?.Split(';') is [var file, var type, ..] && IsImage(type.Trim()))
+            {
+                list.Add(new(entry.Name, Path.GetFullPath(Path.Combine(folder, file.Trim().Replace('\\', Path.DirectorySeparatorChar))), null));
+            }
+            else if (IsImage(entry.Type) && entry.Value is { Length: > 0 } base64)
+            {
+                list.Add(new(entry.Name, null, base64));
+            }
+        }
+
+        return list;
+    }
+}
+
+/// <summary>
+/// Select Resource (#68), as the classic IDE's image editor: a local resource (imported into the form's resources, or
+/// cleared) or one of the project's resources file (an image already in <c>Properties/Resources.resx</c>, or a file
+/// imported into it), with a preview; OK sets the image, as a panel over the surface in the in-window dialog's frame.
+/// </summary>
+public sealed class DesignerResourcePickerViewModel : ObservableObject
+{
+    private readonly WinFormsDesignerDocument _document;
+    private readonly string _component;
+    private readonly string _property;
+    private bool _isProject;
+    private string? _localFile;
+    private bool _cleared;
+    private DesignerProjectResource? _selectedResource;
+    private byte[]? _preview;
+    private int _previewVersion;
+
+    internal DesignerResourcePickerViewModel(WinFormsDesignerDocument document, string component, string property, string context, string? resxPath,
+        IReadOnlyList<DesignerProjectResource> resources, string? current)
+    {
+        _document = document;
+        _component = component;
+        _property = property;
+        Context = context;
+        ResxPath = resxPath;
+        ProjectResources = new(resources);
+        ImportLocalCommand = new RelayCommand(() => _ = ImportLocalAsync(null));
+        ClearCommand = new RelayCommand(Clear);
+        ImportProjectCommand = new RelayCommand(() => _ = ImportProjectAsync(null), () => HasResourceFile);
+        OkCommand = new RelayCommand(() => _ = OkAsync());
+        CancelCommand = new RelayCommand(document.CloseResourcePicker);
+        if (current is not null && ProjectResources.FirstOrDefault(r => r.Name == current) is { } resource)
+        {
+            _isProject = true;
+            SelectedResource = resource;
+        }
+    }
+
+    public string Title => Localizer.Get("msg.winFormsDesigner.selectResource", "Select Resource");
+
+    /// <summary>"pictureBox · Image".</summary>
+    public string Context { get; }
+
+    /// <summary>The project's resources file, or null when it has none.</summary>
+    public string? ResxPath { get; }
+
+    public bool HasResourceFile => ResxPath is not null;
+
+    /// <summary>The project's resources file as the radio button names it: "Properties/Resources.resx", or that it has none.</summary>
+    public string ResourceFileText => HasResourceFile
+        ? Localizer.Get("msg.winFormsDesigner.projectResourceFile", "Project resource file: Properties/Resources.resx")
+        : Localizer.Get("msg.winFormsDesigner.noProjectResourceFile", "Project resource file: none (add Properties/Resources.resx to the project)");
+
+    public bool IsLocal
+    {
+        get => !_isProject;
+        set => IsProject = !value;
+    }
+
+    public bool IsProject
+    {
+        get => _isProject;
+        set
+        {
+            if (SetField(ref _isProject, value && HasResourceFile))
+            {
+                OnPropertyChanged(nameof(IsLocal));
+                _ = UpdatePreviewAsync();
+            }
+        }
+    }
+
+    /// <summary>The file a local resource is imported from, or null.</summary>
+    public string? LocalFile
+    {
+        get => _localFile;
+        private set
+        {
+            if (SetField(ref _localFile, value))
+            {
+                OnPropertyChanged(nameof(LocalText));
+            }
+        }
+    }
+
+    /// <summary>What the local resource will be: the picked file's name, "(none)" after Clear, else the current image.</summary>
+    public string LocalText => _localFile is { } file ? Path.GetFileName(file)
+        : _cleared ? Localizer.Get("msg.winFormsDesigner.noImage", "(none)")
+        : Localizer.Get("msg.winFormsDesigner.currentImage", "(the current image)");
+
+    public ObservableCollection<DesignerProjectResource> ProjectResources { get; }
+
+    public DesignerProjectResource? SelectedResource
+    {
+        get => _selectedResource;
+        set
+        {
+            if (SetField(ref _selectedResource, value))
+            {
+                _ = UpdatePreviewAsync();
+            }
+        }
+    }
+
+    /// <summary>The chosen image's bytes for the preview, or null.</summary>
+    public byte[]? Preview
+    {
+        get => _preview;
+        private set => SetField(ref _preview, value);
+    }
+
+    public ICommand ImportLocalCommand { get; }
+
+    public ICommand ClearCommand { get; }
+
+    public ICommand ImportProjectCommand { get; }
+
+    public ICommand OkCommand { get; }
+
+    public ICommand CancelCommand { get; }
+
+    private async Task UpdatePreviewAsync()
+    {
+        var version = ++_previewVersion;
+        byte[]? bytes = null;
+        if (_isProject && _selectedResource is { } resource)
+        {
+            bytes = await resource.ReadAsync().ConfigureAwait(true);
+        }
+        else if (!_isProject && _localFile is { } file)
+        {
+            bytes = await new DesignerProjectResource(string.Empty, file, null).ReadAsync().ConfigureAwait(true);
+        }
+
+        if (version == _previewVersion)
+        {
+            Preview = bytes;
+        }
+    }
+
+    private Task<string?> PickAsync() =>
+        _document.Shell.Window is { } window
+            ? window.PickFileAsync(Localizer.Get("msg.winFormsDesigner.pickImage", "Import an Image"), "Images", ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.ico"])
+            : Task.FromResult<string?>(null);
+
+    /// <summary>Local resource's Import…: the image file (picked when <paramref name="path"/> is null) for the form's resources.</summary>
+    public async Task ImportLocalAsync(string? path)
+    {
+        path ??= await PickAsync().ConfigureAwait(true);
+        if (path is null)
+        {
+            return;
+        }
+
+        IsProject = false;
+        _cleared = false;
+        LocalFile = path;
+        await UpdatePreviewAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>Local resource's Clear: OK sets no image.</summary>
+    public void Clear()
+    {
+        IsProject = false;
+        _cleared = true;
+        LocalFile = null;
+        OnPropertyChanged(nameof(LocalText));
+        _ = UpdatePreviewAsync();
+    }
+
+    /// <summary>The project resource file's Import…: the image file (picked when null) is added to the list, and copied into the project with OK.</summary>
+    public async Task ImportProjectAsync(string? path)
+    {
+        if (!HasResourceFile)
+        {
+            return;
+        }
+
+        path ??= await PickAsync().ConfigureAwait(true);
+        if (path is null)
+        {
+            return;
+        }
+
+        var resource = new DesignerProjectResource(WinFormsDesignerDocument.ResourceNameOf(path), path, null, IsNew: true);
+        if (ProjectResources.FirstOrDefault(r => r.Name == resource.Name) is { } existing)
+        {
+            ProjectResources.Remove(existing);
+        }
+
+        ProjectResources.Add(resource);
+        IsProject = true;
+        SelectedResource = resource;
+    }
+
+    /// <summary>OK: the image chosen, as one change; nothing when nothing was chosen.</summary>
+    public async Task OkAsync()
+    {
+        _document.CloseResourcePicker();
+        if (_isProject && _selectedResource is { IsNew: true, FilePath: { } file })
+        {
+            await _document.ImportImageAsync(_component, _property, file, toProject: true).ConfigureAwait(true);
+        }
+        else if (_isProject && _selectedResource is { } resource && await resource.ReadAsync().ConfigureAwait(true) is { } bytes)
+        {
+            await _document.UseProjectResourceAsync(_component, _property, resource.Name, bytes).ConfigureAwait(true);
+        }
+        else if (!_isProject && _localFile is { } local)
+        {
+            await _document.ImportImageAsync(_component, _property, local, toProject: false).ConfigureAwait(true);
+        }
+        else if (!_isProject && _cleared)
+        {
+            await _document.SetPropertyAsync([_component], _property, null).ConfigureAwait(true);
+        }
+    }
+}

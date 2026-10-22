@@ -159,6 +159,75 @@ public sealed class WinFormsPropertiesShellTests
     }
 
     [AvaloniaFact]
+    public async Task Select_resource_sets_a_local_or_a_project_image_or_clears_it()
+    {
+        var (f, app, _) = await OpenAsync();
+        await using var _f = f;
+        var designer = await DesignAsync(f, Path.Combine(app, "OrderForm.cs"));
+        designer.SetSelection(["placeOrderButton"], notify: true);
+        await RowsAsync(f);
+        var png = Path.Combine(app, "logo.png");
+        await File.WriteAllBytesAsync(png, Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), TestContext.Current.CancellationToken);
+
+        // Local resource: Import… shows the image; OK puts it in the form's resources.
+        (await RowAsync(f, "Image")).ModalEditor!.Execute(null);
+        await ShellFixture.PumpUntil(() => designer.ResourcePicker is not null);
+        var picker = designer.ResourcePicker!;
+        Assert.True(picker is { Title: "Select Resource", Context: "placeOrderButton · Image", IsLocal: true, HasResourceFile: true });
+        Assert.Empty(picker.ProjectResources); // Properties/Resources.resx has a string only
+        Assert.True(designer.HasOpenEditor);
+        await picker.ImportLocalAsync(png);
+        Assert.Equal("logo.png", picker.LocalText);
+        Assert.NotNull(picker.Preview);
+        await picker.OkAsync();
+        Assert.Null(designer.ResourcePicker);
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("placeOrderButton.Image = (Image)resources.GetObject(\"placeOrderButton.Image\");", StringComparison.Ordinal), seconds: 30);
+
+        // Project resource file: Import… adds the file to the list; OK copies it into the project and the code reads Properties.Resources.
+        (await RowAsync(f, "Image")).ModalEditor!.Execute(null);
+        await ShellFixture.PumpUntil(() => designer.ResourcePicker is not null);
+        picker = designer.ResourcePicker!;
+        await picker.ImportProjectAsync(png);
+        Assert.True(picker is { IsProject: true, SelectedResource: { Name: "logo", IsNew: true } });
+        await picker.OkAsync();
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("placeOrderButton.Image = Properties.Resources.logo;", StringComparison.Ordinal)
+            || Code(designer).Contains("placeOrderButton.Image = WinFormsApp.Properties.Resources.logo;", StringComparison.Ordinal), seconds: 30, () => Code(designer));
+        var resx = Path.Combine(app, "Properties", "Resources.resx");
+        Assert.Contains("<data name=\"logo\" type=\"System.Resources.ResXFileRef, System.Windows.Forms\">", await File.ReadAllTextAsync(resx, TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(app, "Resources", "logo.png")));
+
+        // Opened again: the project's image is listed and chosen, with its preview; Clear and OK remove the image.
+        (await RowAsync(f, "Image")).ModalEditor!.Execute(null);
+        await ShellFixture.PumpUntil(() => designer.ResourcePicker is { IsProject: true, Preview: not null });
+        picker = designer.ResourcePicker!;
+        Assert.Equal(["logo"], picker.ProjectResources.Select(r => r.Name));
+        Assert.Equal("logo", picker.SelectedResource?.Name);
+        picker.Clear();
+        Assert.True(picker.IsLocal);
+        await picker.OkAsync();
+        await ShellFixture.PumpUntil(() => !Code(designer).Contains("placeOrderButton.Image =", StringComparison.Ordinal), seconds: 30);
+        Assert.False(designer.HasOpenEditor);
+    }
+
+    [Fact]
+    public void A_resources_files_images_are_its_file_references_and_embedded_images()
+    {
+        var resx = Path.Combine(Path.GetTempPath(), "p", "Properties", "Resources.resx");
+        var images = DesignerProjectResource.ImagesOf(resx, """
+            <root>
+              <data name="Greeting" xml:space="preserve"><value>Hi</value></data>
+              <data name="logo" type="System.Resources.ResXFileRef, System.Windows.Forms"><value>..\Resources\logo.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0</value></data>
+              <data name="readme" type="System.Resources.ResXFileRef, System.Windows.Forms"><value>..\Resources\readme.txt;System.String, mscorlib</value></data>
+              <data name="app" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64"><value>AAAB</value></data>
+            </root>
+            """);
+        Assert.Equal(["logo", "app"], images.Select(i => i.Name));
+        Assert.Equal(Path.GetFullPath(Path.Combine(Path.GetTempPath(), "p", "Resources", "logo.png")), images[0].FilePath);
+        Assert.Equal("AAAB", images[1].Base64);
+        Assert.Equal("_2x_logo", WinFormsDesignerDocument.ResourceNameOf("/x/2x-logo.png"));
+    }
+
+    [AvaloniaFact]
     public async Task The_collection_editor_shares_the_grid_and_reads_its_item_again()
     {
         var (f, app, _) = await OpenAsync();
