@@ -3145,10 +3145,29 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             // A WebAssembly edit: the browser runs it under the debugger; the server refuses it and says so.
             File.WriteAllText(counter, original.Replace("ticks++;", "ticks += 1000;", StringComparison.Ordinal));
             await WaitAsync(() => watch.HotReload!.UpdatesRefused, () => "the server refuses the update under the debugger (" + Log() + ")", 180).ConfigureAwait(true);
-            shell.Debugger.Breakpoints.Toggle(counter, Line("tick"));
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && Thread().StartsWith("Browser:", StringComparison.Ordinal), () => "the page stops in the edited tick (" + Log() + ")", 180).ConfigureAwait(true);
-            var ticks = (await shell.Debugger.EvaluateAsync("ticks", "watch").ConfigureAwait(true)).Result;
-            Check(int.TryParse(ticks, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value) && value >= 1000, $"the edit runs in the browser: ticks is {ticks}");
+            // The browser applies the update on its own and nothing reports when (as in BlazorWebAppHotReloadDebugTests),
+            // and the breakpoint stops before the line runs: the first stop after the update can still read the count the
+            // old code left (0 on a fast runner). So the tick is looked at until the edited line has run.
+            var ticks = string.Empty;
+            var deadline = Stopwatch.StartNew();
+            var previous = shell.Debugger.CurrentStop; // null while it runs
+            while (true)
+            {
+                shell.Debugger.Breakpoints.Toggle(counter, Line("tick"));
+                await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.CurrentStop != previous && Thread().StartsWith("Browser:", StringComparison.Ordinal), () => "the page stops in the edited tick (" + Log() + ")", 180).ConfigureAwait(true);
+                previous = shell.Debugger.CurrentStop;
+                ticks = (await shell.Debugger.EvaluateAsync("ticks", "watch").ConfigureAwait(true)).Result;
+                if ((int.TryParse(ticks, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count) && count >= 1000) || deadline.Elapsed > TimeSpan.FromSeconds(90))
+                {
+                    break;
+                }
+
+                shell.Debugger.Breakpoints.Clear();
+                await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+                await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            }
+
+            Check(int.TryParse(ticks, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value) && value >= 1000, $"the edit runs in the browser: ticks is {ticks} after 90 s");
             Screenshot("smoke-test-blazor-compound-hot-reload.png");
             shell.Debugger.Breakpoints.Clear();
             await shell.Debugger.ContinueAsync().ConfigureAwait(true);
