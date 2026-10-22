@@ -1728,7 +1728,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
         // Locked, Modifiers and GenerateMember aren't in the grid yet (D41 question 9): Design shows (Name) only.
         // TODO(issue): Locked in the grid (the control designers' design-time property, written as the .resx's metadata
-        // as Lock Controls writes it), and Modifiers and GenerateMember (an edit of the field's declaration).
+        // as Lock Controls writes it), and Modifiers and GenerateMember (an edit of the field's declaration), in Design
+        // (#68, D41 question 9); Design shows (Name) only meanwhile.
         var properties = result.Properties.Where(p => !(p is { Name: "Locked", Provider: null, DataBinding: false } && p.Type == "System.Boolean")).ToList();
         List<DesignerPropertyRow> rows = [.. properties.Where(p => !p.DataBinding).Select(p => new DesignerPropertyRow(p.Category, RowFor(selected, p)))];
 
@@ -1764,6 +1765,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         return RowFor(selected, info, value);
     }
 
+    // TODO(issue): the events of a multi-selection (#68, D41 question 9): the events the selected components share, a
+    // handler hooked to each; Events is grayed with two components meanwhile, as the view model needs one.
     public bool HasEvents => _selection.Count == 1;
 
     public async Task<IReadOnlyList<DesignerPropertyRow>> EventRowsAsync(CancellationToken cancellationToken)
