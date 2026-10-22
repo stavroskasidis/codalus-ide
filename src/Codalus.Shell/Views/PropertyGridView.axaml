@@ -190,11 +190,7 @@
       </views:PropertyEditorSelector.ReadOnly>
     </views:PropertyEditorSelector>
     <ContextMenu x:Key="RowMenu" x:DataType="vm:PropertyRowViewModel">
-      <MenuItem Header="{l:T properties.reset}" Command="{Binding ResetCommand}">
-        <MenuItem.Icon>
-          <controls:Icon Kind="undo" />
-        </MenuItem.Icon>
-      </MenuItem>
+      <MenuItem controls:MenuEntry.Icon="undo" Header="{l:T properties.reset}" Command="{Binding ResetCommand}" />
       <Separator />
       <MenuItem Header="{l:T properties.description}" ToggleType="CheckBox" />
     </ContextMenu>
