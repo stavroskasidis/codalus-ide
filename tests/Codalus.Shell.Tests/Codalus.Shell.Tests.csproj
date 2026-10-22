@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="..\Shared\MockNuGetFeed.cs" Link="Shared\MockNuGetFeed.cs" />
+    <!-- External agents' Connect (ADR 0083): stand-in node and npx, and a credential store that says it persists. -->
+    <Compile Include="..\Shared\StandInNode.cs" Link="Shared\StandInNode.cs" />
+    <Compile Include="..\Shared\FakePersistentCredentialStore.cs" Link="Shared\FakePersistentCredentialStore.cs" />
     <!-- New Project's recorded templates (ADR 0082): the Workbench tests' data, and its stand-in CLI. -->
     <Compile Include="..\Codalus.Workbench.Tests\TemplateTestData.cs" Link="Shared\TemplateTestData.cs" />
     <ProjectReference Include="..\..\src\Codalus.Shell\Codalus.Shell.csproj" />

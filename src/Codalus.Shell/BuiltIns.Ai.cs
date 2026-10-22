@@ -53,7 +53,38 @@ internal static partial class BuiltIns
         Add("ai.generateTests", "Generate Tests with AI", shell.GenerateTestsWithAiAsync, "aiEnabled && activeDocumentKind == textFile");
         Add("ai.generateCommitMessage", "Write the Commit Message with AI", shell.GenerateCommitMessageAsync, "aiEnabled && gitRepository");
         Add("ai.explainTest", "Ask AI Why the Test Fails", shell.ExplainTestWithAiAsync, "aiEnabled && testExplorerSelection");
+
+        // External agents from templates (D43, ADR 0083): offered while AI is off too (Connect can turn it on).
+        Add("ai.agents.connect", "Connect to an Agent…", () => shell.ConnectExternalAgentAsync());
+        foreach (var template in Workbench.Ai.Acp.AcpAgentTemplates.All)
+        {
+            var id = template.Id;
+            commands.Register(
+                new CommandDescriptor("ai.agents.connect." + id, ConnectTitle(id, template.Name), ContributionSource.Shell) { Category = "AI" },
+                async (_, _) =>
+                {
+                    await Infrastructure.Ui.RunAsync(() => shell.ConnectExternalAgentAsync(id)).ConfigureAwait(false);
+                    return null;
+                });
+        }
+
+        Add("ai.agents.manage", "Manage Agents…", shell.ManageExternalAgentsAsync, "externalAgentsConfigured");
+        Add("ai.agents.check", "Check an Agent's Connection…", () => shell.CheckExternalAgentAsync(), "externalAgentsConfigured");
+        Add("ai.agents.disconnect", "Disconnect an Agent…", () => shell.DisconnectExternalAgentAsync(), "externalAgentsConfigured");
     }
+
+    /// <summary>A template's Connect command title, written out for the catalogue (each is a key of its own).</summary>
+    private static string ConnectTitle(string id, string name) => id switch
+    {
+        "claude" => "Connect to Claude…",
+        "codex" => "Connect to Codex…",
+        "gemini" => "Connect to Gemini CLI…",
+        "copilot" => "Connect to GitHub Copilot…",
+        "pi" => "Connect to pi…",
+        "opencode" => "Connect to OpenCode…",
+        "goose" => "Connect to goose…",
+        _ => "Connect to " + name + "…",
+    };
 
     public static void RegisterAiMenus(MenuRegistry menus)
     {
@@ -73,6 +104,9 @@ internal static partial class BuiltIns
             Item(ToolsAiMenu, "ai.enable", "2-setup", "!aiEnabled"),
             Item(ToolsAiMenu, "ai.chooseProvider", "2-setup", "aiEnabled"),
             Item(ToolsAiMenu, "ai.configureProvider", "2-setup", "aiEnabled"),
+            Item(ToolsAiMenu, "ai.agents.connect.claude", "2-setup"),
+            Item(ToolsAiMenu, "ai.agents.connect", "2-setup"),
+            Item(ToolsAiMenu, "ai.agents.manage", "2-setup", "externalAgentsConfigured"),
             Item(ToolsAiMenu, "ai.toggleForWorkspace", "3-privacy"),
             Item(ToolsAiMenu, "ai.showLog", "3-privacy"),
             MenuItemRule.ForSubmenu(MenuLocations.EditorContext, EditorAiMenu, "AI", shell) with { Group = "5-send", Order = 100, When = WhenClause.Parse("aiEnabled") },

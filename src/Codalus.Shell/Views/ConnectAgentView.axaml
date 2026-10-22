@@ -1,0 +1,370 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.ConnectAgentView"
+             x:DataType="vm:ConnectAgentViewModel">
+  <!--
+    Connect to <agent> (D43, docs/design/controls/AgentConnect.dc.html): the in-window dialog frame at its widest (720 px),
+    the header naming the agent, its vendor and pinned package; Requirements with Check Again; how to install what's missing;
+    Sign in (radio buttons, a password box for a key and where it's kept); What runs (the exact command lines, a variable's
+    name, never its value); the consent check box while AI is off; the test's checklist; the result; ADR 0079's label; and
+    a footer saying what gets written, with the buttons in the OS's order.
+  -->
+  <UserControl.Styles>
+    <Style Selector="Border.iconTile">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Foreground}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Info}" />
+    </Style>
+    <!-- A section: its heading 12 px semibold, then its content. -->
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- Bordered lists (requirements, the test's steps): rows of 30 px with a rule between them. -->
+    <Style Selector="Border.box">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.row">
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <!-- A command line: the editor's font on its background. -->
+    <Style Selector="Border.command">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+      <Setter Property="Padding" Value="8,5" />
+    </Style>
+    <Style Selector="Border.command SelectableTextBlock">
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Editor.Foreground}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- Notices on the status tints (outlined in High contrast, like chips). -->
+    <Style Selector="Border.notice">
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Info}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Status.Info.Foreground}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Status.Info.Foreground}" />
+      <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+    </Style>
+    <Style Selector="Border.notice.warning">
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Warning}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Status.Warning.Foreground}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Status.Warning.Foreground}" />
+    </Style>
+    <Style Selector="Border.notice controls|Icon">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Status.Info.Foreground}" />
+    </Style>
+    <Style Selector="Border.notice.warning controls|Icon">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Status.Warning.Foreground}" />
+    </Style>
+    <!-- The chosen radio row: the header's fill. -->
+    <Style Selector="Border.choice">
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    </Style>
+    <Style Selector="Border.choice.selected">
+      <Setter Property="Background" Value="{DynamicResource Shell.Grid.Header}" />
+    </Style>
+    <Style Selector="Border.consent">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Grid.Header}" />
+      <Setter Property="Padding" Value="10,8" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border x:Name="Frame" Classes="overlay" CornerRadius="{DynamicResource Shell.CornerRadius.Dialog}" Padding="0" ClipToBounds="True"
+          KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{Binding Title}">
+    <DockPanel>
+      <!-- Header: the agent's icon on its tile, the title (14 px), the vendor and package, and a close button (Esc). -->
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="20,16,12,4">
+        <Border Classes="iconTile" Margin="0,0,10,0" VerticalAlignment="Top">
+          <controls:Icon Kind="bot" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+          <TextBlock x:Name="TitleText" Classes="subheading" Text="{Binding Title}" TextWrapping="Wrap" />
+          <TextBlock x:Name="ContextText" Classes="muted small" Text="{Binding Context}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Context}" />
+        </StackPanel>
+        <Button x:Name="CloseButton" Grid.Column="2" Classes="subtle icon compact" VerticalAlignment="Top" Margin="8,0,0,0" IsTabStop="False"
+                Command="{Binding CancelCommand}" ToolTip.Tip="{l:T dialog.closeTip}" AutomationProperties.Name="{l:T dialog.close}">
+          <controls:Icon Kind="close" Width="16" Height="16" Foreground="{DynamicResource Shell.Foreground}" />
+        </Button>
+      </Grid>
+
+      <!-- Footer: what gets written (or a link), the buttons in the OS's order. -->
+      <Border DockPanel.Dock="Bottom" Classes="dialogFooter">
+        <DockPanel>
+          <ItemsControl x:Name="FooterButtons" DockPanel.Dock="Right" ItemsSource="{Binding Buttons}" Margin="12,0,0,0">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="8" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ConnectButton">
+                <Button Classes="dialog" Classes.accent="{Binding IsPrimary}" Content="{Binding Label}" Command="{Binding Command}" IsEnabled="{Binding IsEnabled}"
+                        ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="{Binding Label}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock x:Name="FooterHint" Classes="muted small" Text="{Binding FooterHint}" IsVisible="{Binding HasFooterHint}" TextWrapping="Wrap" MaxWidth="420" VerticalAlignment="Center" />
+            <Button x:Name="FooterLink" Classes="link" Content="{Binding FooterLink}" IsVisible="{Binding HasFooterLink}" Command="{Binding FooterLinkCommand}" VerticalAlignment="Center" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" MaxHeight="640">
+        <StackPanel Margin="20,10,20,16" Spacing="14">
+
+          <!-- Requirements: a row per program, with its state as an icon and a word; Check Again on the heading. -->
+          <StackPanel Spacing="6" IsVisible="{Binding ShowRequirements}">
+            <DockPanel>
+              <Button x:Name="CheckAgain" DockPanel.Dock="Right" Classes="icon compact" controls:ButtonIcon.Kind="refresh" Command="{Binding CheckAgainCommand}"
+                      IsEnabled="{Binding !IsBusy}" ToolTip.Tip="{l:T connectAgent.checkAgain}" AutomationProperties.Name="{l:T connectAgent.checkAgain}" />
+              <TextBlock Classes="section" Text="{l:T connectAgent.requirements}" />
+            </DockPanel>
+            <TextBlock Classes="muted small" Text="{l:T connectAgent.checking}" IsVisible="{Binding IsChecking}" />
+            <Border Classes="box" IsVisible="{Binding !IsChecking}">
+              <ItemsControl x:Name="RequirementRows" ItemsSource="{Binding Requirements}" AutomationProperties.Name="{l:T connectAgent.requirements}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ConnectRequirementRow">
+                    <Border Classes="row" AutomationProperties.Name="{Binding AccessibleName}">
+                      <DockPanel>
+                        <controls:Icon DockPanel.Dock="Left" Kind="{Binding Icon}" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Classes.passed="{Binding IsFound}" Classes.failed="{Binding IsMissing}" Classes.warning="{Binding IsTooOld}" />
+                        <Border DockPanel.Dock="Right" Classes="chip square" Classes.error="{Binding IsMissing}" Classes.warning="{Binding IsTooOld}" IsVisible="{Binding HasChip}" Margin="8,0,0,0">
+                          <TextBlock Text="{Binding Chip}" />
+                        </Border>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                          <TextBlock Classes="muted small" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Detail}" />
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Border>
+          </StackPanel>
+
+          <!-- Something missing: this OS's ways to install it, each with its exact command and how it runs. -->
+          <StackPanel Spacing="6" IsVisible="{Binding ShowInstall}">
+            <TextBlock Classes="section" Text="{Binding InstallTitle}" />
+            <ItemsControl x:Name="InstallChoices" ItemsSource="{Binding InstallOptions}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ConnectChoice">
+                  <Border Classes="choice" Classes.selected="{Binding IsSelected}">
+                    <StackPanel Spacing="4">
+                      <RadioButton GroupName="install" IsChecked="{Binding IsSelected}" AutomationProperties.Name="{Binding AccessibleName}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                          <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+                        </StackPanel>
+                      </RadioButton>
+                      <Border Classes="command" Margin="24,0,0,0" IsVisible="{Binding HasCommand}">
+                        <SelectableTextBlock Text="{Binding Command}" />
+                      </Border>
+                      <StackPanel Orientation="Horizontal" Spacing="6" Margin="24,0,0,0" IsVisible="{Binding HasMeta}">
+                        <controls:Icon Kind="{Binding MetaIcon}" Width="12" Height="12" VerticalAlignment="Center" />
+                        <TextBlock Classes="muted small" Text="{Binding Meta}" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Classes="muted small" Text="{Binding InstallNote}" IsVisible="{Binding HasInstallNote}" TextWrapping="Wrap" />
+            <TextBlock Classes="muted small" Text="{Binding InstallStatus}" IsVisible="{Binding HasInstallStatus}" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <!-- Sign in: the ways the agent offers; a key opens a password box and says where it's kept. -->
+          <StackPanel Spacing="6" IsVisible="{Binding ShowForm}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Classes="section" Text="{l:T connectAgent.signIn}" />
+              <TextBlock Classes="muted small" Text="{Binding SignInAside}" VerticalAlignment="Center" />
+            </StackPanel>
+            <ItemsControl x:Name="SignInChoices" ItemsSource="{Binding SignInOptions}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ConnectChoice">
+                  <Border Classes="choice" Classes.selected="{Binding IsSelected}">
+                    <RadioButton GroupName="signIn" IsChecked="{Binding IsSelected}" AutomationProperties.Name="{Binding AccessibleName}">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                        <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </RadioButton>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <StackPanel Spacing="6" Margin="32,0,0,0" IsVisible="{Binding ShowKey}">
+              <TextBox x:Name="KeyBox" Text="{Binding ApiKey}" PasswordChar="•" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace"
+                       AutomationProperties.Name="{Binding KeyName}" PlaceholderText="{Binding KeyName}">
+                <TextBox.InnerLeftContent>
+                  <controls:Icon Kind="key" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </TextBox.InnerLeftContent>
+              </TextBox>
+              <Border Classes="notice" Classes.warning="{Binding KeyNoteIsWarning}">
+                <DockPanel>
+                  <controls:Icon DockPanel.Dock="Left" Kind="lock" Margin="0,0,8,0" VerticalAlignment="Top" />
+                  <TextBlock x:Name="KeyNote" Text="{Binding KeyNote}" TextWrapping="Wrap" />
+                </DockPanel>
+              </Border>
+            </StackPanel>
+            <Border Classes="notice warning" IsVisible="{Binding HasSignInWarning}">
+              <DockPanel>
+                <controls:Icon DockPanel.Dock="Left" Kind="warning" Margin="0,0,8,0" VerticalAlignment="Top" />
+                <TextBlock x:Name="SignInWarning" Text="{Binding SignInWarning}" TextWrapping="Wrap" />
+              </DockPanel>
+            </Border>
+            <Border Classes="notice" IsVisible="{Binding HasRemoteSessionNote}">
+              <DockPanel>
+                <controls:Icon DockPanel.Dock="Left" Kind="terminal" Margin="0,0,8,0" VerticalAlignment="Top" />
+                <TextBlock Text="{Binding RemoteSessionNote}" TextWrapping="Wrap" />
+              </DockPanel>
+            </Border>
+          </StackPanel>
+
+          <!-- What runs: the exact command lines, labeled; a variable's name, never its value. -->
+          <StackPanel Spacing="6" IsVisible="{Binding ShowForm}">
+            <TextBlock Classes="section" Text="{l:T connectAgent.whatRuns}" />
+            <ItemsControl x:Name="RunsLines" ItemsSource="{Binding Runs}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ConnectRunsLine">
+                  <Grid ColumnDefinitions="118,*" Margin="0,0,0,4">
+                    <TextBlock Classes="muted small" Text="{Binding Label}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    <Border Grid.Column="1" Classes="command" IsVisible="{Binding HasCommand}">
+                      <SelectableTextBlock Text="{Binding Command}" />
+                    </Border>
+                    <TextBlock Grid.Column="1" Text="{Binding Text}" IsVisible="{Binding HasText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Classes="muted small" Text="{Binding RunsNote}" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <!-- The consent: a required check box, shown only while AI is off, its text from the settings. -->
+          <Border Classes="consent" IsVisible="{Binding ShowConsent}">
+            <StackPanel Spacing="2">
+              <CheckBox x:Name="ConsentBox" IsChecked="{Binding Consent}" FontWeight="SemiBold" Content="{l:T connectAgent.turnOnAi}" AutomationProperties.Name="{l:T connectAgent.turnOnAi}" />
+              <TextBlock x:Name="ConsentText" Classes="muted" Margin="28,0,0,0" Text="{Binding ConsentText}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Classes="notice warning" IsVisible="{Binding HasWorkspaceNote}">
+            <TextBlock Text="{Binding WorkspaceNote}" TextWrapping="Wrap" />
+          </Border>
+
+          <!-- The test (and a Terminal install): a checklist, the running step with its last line, a sign-in's command and Show Terminal. -->
+          <StackPanel Spacing="6" IsVisible="{Binding ShowSteps}">
+            <TextBlock Classes="section" Text="{Binding StepsTitle}" />
+            <Border Classes="box">
+              <ItemsControl x:Name="StepRows" ItemsSource="{Binding Steps}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ConnectStep">
+                    <Border Classes="row" AutomationProperties.Name="{Binding AccessibleName}">
+                      <DockPanel>
+                        <controls:Icon DockPanel.Dock="Left" Kind="{Binding Icon}" Margin="0,0,10,0" VerticalAlignment="Top"
+                                       Classes.passed="{Binding IsDone}" Classes.running="{Binding IsRunning}" Classes.failed="{Binding IsFailed}" Classes.none="{Binding IsWaiting}" />
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Classes.muted="{Binding IsWaiting}" TextWrapping="Wrap" />
+                          <TextBlock Classes="muted small" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+                          <ProgressBar IsIndeterminate="True" Height="4" MinHeight="4" Margin="0,4,0,0" IsVisible="{Binding ShowBar}" />
+                          <Border Classes="notice" Margin="0,6,0,0" IsVisible="{Binding HasCall}">
+                            <StackPanel Spacing="4">
+                              <TextBlock Text="{l:T connectAgent.finishInTerminal}" TextWrapping="Wrap" />
+                              <Border Classes="command">
+                                <SelectableTextBlock Text="{Binding CallCommand}" />
+                              </Border>
+                              <TextBlock Text="{Binding CallHint}" IsVisible="{Binding HasCallHint}" TextWrapping="Wrap" />
+                              <Button Classes="iconText" controls:ButtonIcon.Kind="terminal" HorizontalAlignment="Left" Content="{l:T connectAgent.showTerminal}"
+                                      Command="{Binding $parent[UserControl].((vm:ConnectAgentViewModel)DataContext).ShowTerminalCommand}" />
+                            </StackPanel>
+                          </Border>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Border>
+            <TextBlock Classes="muted small" Text="{Binding StepsScope}" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <!-- The result: an icon, a sentence, what was found, and the fixes as buttons. -->
+          <Grid ColumnDefinitions="44,*" IsVisible="{Binding ShowResult}">
+            <controls:Icon x:Name="ResultIcon" Kind="{Binding ResultIcon}" Width="32" Height="32" VerticalAlignment="Top" HorizontalAlignment="Left"
+                           Classes.passed="{Binding ResultIsOk}" Classes.warning="{Binding ResultIsWarning}" Classes.failed="{Binding ResultIsError}" />
+            <StackPanel Grid.Column="1" Spacing="6">
+              <TextBlock x:Name="ResultTitle" Classes="subheading" Text="{Binding ResultTitle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+              <TextBlock x:Name="ResultText" Text="{Binding ResultText}" TextWrapping="Wrap" />
+              <Border Classes="command" IsVisible="{Binding HasResultCommand}">
+                <SelectableTextBlock Text="{Binding ResultCommand}" />
+              </Border>
+              <ItemsControl x:Name="ResultRows" ItemsSource="{Binding ResultRows}" Margin="0,4,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ConnectResultRow">
+                    <Grid ColumnDefinitions="110,*" Margin="0,0,0,4">
+                      <TextBlock Classes="muted" Text="{Binding Key}" TextWrapping="Wrap" />
+                      <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <ItemsControl x:Name="Fixes" ItemsSource="{Binding Fixes}" IsVisible="{Binding HasFixes}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel ItemSpacing="8" LineSpacing="8" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ConnectFix">
+                    <Button Classes="iconText" controls:ButtonIcon.Kind="{Binding Icon}" Content="{Binding Label}" Command="{Binding Command}" AutomationProperties.Name="{Binding Label}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Grid>
+
+          <!-- A remote window: nothing is connected from here. -->
+          <Grid ColumnDefinitions="44,*" IsVisible="{Binding ShowRemote}">
+            <controls:Icon Kind="window-remote" Width="32" Height="32" VerticalAlignment="Top" HorizontalAlignment="Left" />
+            <StackPanel Grid.Column="1" Spacing="6">
+              <TextBlock Classes="subheading" Text="{Binding RemoteTitle}" TextWrapping="Wrap" />
+              <TextBlock x:Name="RemoteText" Text="{Binding RemoteText}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Grid>
+
+          <!-- ADR 0079's label. -->
+          <Border Classes="notice" IsVisible="{Binding ShowLabel}">
+            <DockPanel>
+              <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,0,8,0" VerticalAlignment="Top" />
+              <TextBlock x:Name="AgentLabel" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextWrapping="Wrap" />
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Border>
+</UserControl>

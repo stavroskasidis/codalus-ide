@@ -26,7 +26,7 @@ namespace Codalus.Tests;
 /// <c>_auth/status_update</c> push after <c>initialize</c> (none: signed out; account: signed in; silent: no push).</item>
 /// <item><c>ACP_FAKE_TERMINAL_AUTH=1</c>: a terminal method <c>fake-terminal-login</c> (<c>--login</c>, with
 /// <c>ACP_FAKE_LOGIN_MODE=1</c>) when the client advertises <c>auth.terminal</c>.</item>
-/// <item><c>--login</c> on the command line: the terminal sign-in itself: it writes <c>ACP_FAKE_LOGIN_MARKER</c> (unless
+/// <item><c>--login</c> (or <c>--cli</c>, as Claude's adapter's login) on the command line: the terminal sign-in itself: it writes <c>ACP_FAKE_LOGIN_MARKER</c> (unless
 /// <c>ACP_FAKE_LOGIN_FAILS=1</c>) and exits with <c>ACP_FAKE_LOGIN_EXIT</c> (0); a start that finds the marker is signed in.</item>
 /// <item><c>ACP_FAKE_PROBE_CLIENT=1</c>: before answering <c>session/new</c>, it asks the client to read a file, run a command and allow
 /// something, and logs the answers (the connection test refuses them all).</item>
@@ -54,8 +54,9 @@ public static class StandInAcpAgent
 
     public static async Task<int> RunAsync(Stream input, Stream output)
     {
-        // The terminal sign-in (a terminal method's --login): it signs in by writing the marker, then exits.
-        if (Environment.GetCommandLineArgs().Contains("--login"))
+        // The terminal sign-in (a terminal method's --login, or Claude's adapter's --cli login): it signs in by writing the
+        // marker, then exits.
+        if (Environment.GetCommandLineArgs().Contains("--login") || Environment.GetCommandLineArgs().Contains("--cli"))
         {
             if (Environment.GetEnvironmentVariable("ACP_FAKE_LOGIN_MARKER") is { Length: > 0 } marker && Environment.GetEnvironmentVariable("ACP_FAKE_LOGIN_FAILS") != "1")
             {

@@ -880,6 +880,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
 
+        // #79, D43: Connect to Claude… from AI Chat's off state, with stand-in node and npx: the requirements, the exact
+        // commands and the consent shown; Cancel writes nothing. No network, no agent.
+        await StepAsync("ai.connect", "D43", "AI Chat's off state offers the one-click agents; Connect to Claude shows its requirements, sign-in and exact commands, and Cancel writes nothing", AiConnectStepAsync).ConfigureAwait(true);
+
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source; the solution closed for it keeps its session in .codalus/state", async () =>
         {
@@ -3782,6 +3786,73 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// AI assistance (M28a, ADR 0062) against <see cref="Tests.MockModelServers"/>: the OpenAI-compatible plugin stays
     /// unloaded while AI is off, then a question about a selection streams into AI Chat and its code is applied.
     /// </summary>
+    /// <summary>
+    /// The ai.connect step (D43): stand-in node and npx on the shell's agent search path (so the rows are the same on every
+    /// runner and nothing reaches npm), AI off: AI Chat's connect row, then Connect to Claude… with its rows, the sign-in
+    /// choices, the exact commands and the consent; Cancel leaves ai.agents and ai.enabled as they were.
+    /// </summary>
+    private async Task AiConnectStepAsync()
+    {
+        var settings = shell.Workbench.Settings;
+        var agentsBefore = settings.GetLayerValue(Workbench.Ai.Acp.AcpAgents.AgentsSetting, SettingScope.User)?.GetRawText();
+        var enabledBefore = settings.GetLayerValue(Workbench.Ai.AiService.EnabledSetting, SettingScope.User)?.GetRawText();
+        Check(shell.Ai.State == Workbench.Ai.AiState.Off, "AI assistance is off");
+        shell.AiChat.NewChat(); // the ai.chat step's conversation would keep the empty state away
+        var bin = Path.Combine(Work, "agent-stand-ins");
+        Directory.CreateDirectory(bin);
+        void Program(string name, string version)
+        {
+            // Prints its version; anything else fails, so nothing could start an agent through it.
+            var file = Path.Combine(bin, OperatingSystem.IsWindows() ? name + ".cmd" : name);
+            File.WriteAllText(file, OperatingSystem.IsWindows()
+                ? $"@echo off\r\nif \"%1\"==\"--version\" (echo {version}& exit /b 0)\r\nexit /b 1\r\n"
+                : $"#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo {version}; exit 0; fi\nexit 1\n");
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+        }
+
+        Program("node", "v24.11.1");
+        Program("npx", "11.6.2");
+        shell.AgentSearchPath = bin;
+        try
+        {
+            shell.ShowAiChat();
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(v => v.IsEffectivelyVisible), "AI Chat opens").ConfigureAwait(true);
+            var view = window.GetVisualDescendants().OfType<AiChatView>().First(v => v.IsEffectivelyVisible);
+            await WaitAsync(() => view.GetVisualDescendants().OfType<Avalonia.Controls.StackPanel>().Any(p => p.Name == "ConnectRow" && p.IsEffectivelyVisible), "AI Chat's off state offers to connect an agent").ConfigureAwait(true);
+            var buttons = view.GetVisualDescendants().OfType<Avalonia.Controls.ItemsControl>().First(c => c.Name == "ConnectButtons").GetVisualDescendants().OfType<Avalonia.Controls.Button>().ToList();
+            Check(buttons.Select(b => b.Content as string).SequenceEqual(["Claude", "Codex", "Gemini CLI", "GitHub Copilot"]), "the four one-click agents are buttons");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-ai-connect-off.png");
+
+            buttons[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+            var dialog = shell.ConnectAgent;
+            await WaitAsync(() => dialog.IsOpen && dialog.Mode == ConnectAgentMode.Connect, "Connect to Claude shows what it found").ConfigureAwait(true);
+            Check(dialog.Title == "Connect to Claude", "the dialog names the agent");
+            Check(dialog.Requirements.Select(r => r.Name).SequenceEqual(["Node.js 24.11.1", "npx 11.6.2"]), "the stand-in Node.js and npx are found");
+            Check(dialog.Runs.FirstOrDefault()?.Command == Workbench.Ai.Acp.AcpAgentTemplates.Find("claude")!.Agent.CommandLine, "the exact command line is shown");
+            Check(dialog.ShowConsent && !dialog.CanConnect, "Connect waits for the consent while AI is off");
+            Check(dialog.SignInOptions.Select(o => o.Name).SequenceEqual(["Claude subscription", "Anthropic Console account", "API key", "I'm signed in already"]), "Claude's ways to sign in");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-agent-connect.png");
+
+            dialog.Cancel();
+            await WaitAsync(() => !dialog.IsOpen, "Cancel closes it").ConfigureAwait(true);
+            Check(settings.GetLayerValue(Workbench.Ai.Acp.AcpAgents.AgentsSetting, SettingScope.User)?.GetRawText() == agentsBefore, "ai.agents is as it was");
+            Check(settings.GetLayerValue(Workbench.Ai.AiService.EnabledSetting, SettingScope.User)?.GetRawText() == enabledBefore, "ai.enabled is as it was");
+        }
+        finally
+        {
+            shell.AgentSearchPath = null;
+            if (shell.ConnectAgent.IsOpen)
+            {
+                shell.ConnectAgent.Cancel();
+            }
+        }
+    }
+
     private async Task AiChatStepAsync()
     {
         const string Reply = "This adds two numbers. A shorter version:\n\n```csharp\nstatic int Add(int a, int b) => a + b;\n```\n\nThe expression body returns the same value.";

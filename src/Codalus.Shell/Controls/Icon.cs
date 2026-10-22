@@ -425,6 +425,8 @@ public static class IconSet
         ["snapshot"] = "camera_16_regular",
         ["plug"] = "plug_connected_16_regular",
         ["detach"] = "plug_disconnected_16_regular",
+        ["plug-disconnected"] = "plug_disconnected_16_regular",
+        ["bot"] = "bot_16_regular",
         ["database-update"] = "database_arrow_up_16_regular",
         ["dump"] = "document_arrow_down_16_regular",
         ["cube"] = "cube_16_regular",
