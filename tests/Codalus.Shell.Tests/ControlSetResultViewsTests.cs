@@ -157,6 +157,20 @@ public sealed class ControlSetResultViewsTests
             var badges = tabs.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("badge") && b.IsEffectivelyVisible)
                 .Select(b => (b.Child as TextBlock)?.Text).ToList();
             Assert.Equal(["3", "1"], badges);
+
+            // The pages are tabs inside a view (TabStrip.viewTabs): the hairline runs the view's whole width (6 px of
+            // padding at its ends, not a margin), and the selected page's underline covers it.
+            Assert.Contains("viewTabs", tabs.Classes);
+            Assert.Equal(view.Bounds.Width, tabs.Bounds.Width);
+            Assert.Equal(new Thickness(6, 0), tabs.Padding);
+            Assert.Equal(new Thickness(0, 0, 0, 1), tabs.BorderThickness);
+            Assert.Same(Resource(tabs, "Shell.ViewTabs.Rule"), tabs.BorderBrush);
+            var current = (TabStripItem)tabs.ContainerFromIndex(tabs.SelectedIndex)!;
+            Assert.Equal(28, current.Bounds.Height);
+            Assert.Equal(new Thickness(10, 0, 6, 0), current.Padding); // the close button takes the right padding
+            var underline = ControlSetTests.Underline(current, current);
+            Assert.Equal(tabs.Bounds.Height, ControlSetTests.Underline(current, tabs).Bottom);
+            Assert.Equal((6, 6), (underline.Left, current.Bounds.Width - underline.Right));
             host.Close();
         }
         finally
@@ -210,6 +224,19 @@ public sealed class ControlSetResultViewsTests
             // Body, Headers (a badge with the count) and Request as tabs.
             var tabs = Visible<TabStrip>(view, t => t.Name == "Tabs")!;
             Assert.Equal(3, tabs.ItemCount);
+
+            // The row draws the strip's hairline, under the body's tools too; the selected tab's underline covers it, and
+            // the tools stay centered on the tabs.
+            var row = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "TabRow");
+            Assert.Same(Resource(row, "Shell.ViewTabs.Rule"), row.BorderBrush);
+            Assert.Equal(new Thickness(0, 0, 0, 1), row.BorderThickness);
+            Assert.Contains("viewTabs", tabs.Classes);
+            var bodyTab = (Control)tabs.ContainerFromIndex(0)!;
+            Assert.Equal(row.Bounds.Height, ControlSetTests.Underline(bodyTab, row).Bottom);
+            var tools = view.GetVisualDescendants().OfType<ToolbarPanel>().Single(t => t.Name == "BodyTools");
+            var toolsMiddle = tools.TranslatePoint(new Point(0, tools.Bounds.Height / 2), row)!.Value.Y;
+            var tabMiddle = bodyTab.TranslatePoint(new Point(0, bodyTab.Bounds.Height / 2), row)!.Value.Y;
+            Assert.True(Math.Abs(toolsMiddle - tabMiddle) <= 0.5, $"the body tools are centered at {toolsMiddle}, the tabs at {tabMiddle}");
             Assert.True(http.HeaderCount > 0);
             Assert.NotNull(tabs.GetVisualDescendants().OfType<Border>().FirstOrDefault(b => b.Classes.Contains("badge") && (b.Child as TextBlock)?.Text == http.HeaderCount.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             tabs.SelectedIndex = 1;

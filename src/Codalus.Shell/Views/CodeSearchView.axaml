@@ -6,12 +6,6 @@
              x:Class="Codalus.Shell.Views.CodeSearchView"
              x:DataType="vm:CodeSearchViewModel">
   <UserControl.Styles>
-    <!-- Body-sized tab headers, like the shell's TabItems, not Fluent's 24 pt. -->
-    <Style Selector="TabStripItem">
-      <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
-      <Setter Property="MinHeight" Value="28" />
-      <Setter Property="Padding" Value="8,4" />
-    </Style>
     <!-- The filter chips: pills that say which kinds show; the selected one is filled. -->
     <Style Selector="Button.chip">
       <Setter Property="Background" Value="Transparent" />
@@ -43,34 +37,38 @@
        it by its tabs' row, resize it from its corner. Docked, the same view fills a tool window. -->
   <Border x:Name="Frame" Classes="overlay" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{l:T codeSearch.codeSearch}">
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
-      <Grid x:Name="TitleRow" ColumnDefinitions="*,Auto" Background="Transparent" Margin="6,4,6,0">
-        <TabStrip SelectedIndex="{Binding TabIndex}" AutomationProperties.Name="{l:T codeSearch.searchKind}">
-          <TabStripItem ToolTip.Tip="{l:T codeSearch.codeSearchTip}" AutomationProperties.Name="{l:T codeSearch.codeSearch}">
-            <TextBlock Text="{l:T codeSearch.codeSearch}" TextTrimming="CharacterEllipsis" />
-          </TabStripItem>
-          <TabStripItem ToolTip.Tip="{l:T codeSearch.featureSearchTip}" AutomationProperties.Name="{l:T codeSearch.featureSearch}">
-            <TextBlock Text="{l:T codeSearch.featureSearch}" TextTrimming="CharacterEllipsis" />
-          </TabStripItem>
-        </TabStrip>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{DynamicResource Shell.Space.XS}" VerticalAlignment="Center">
-          <ToggleButton Classes="toolbar" IsChecked="{Binding ShowPreview}" IsVisible="{Binding IsCodeTab}"
-                        ToolTip.Tip="{l:T codeSearch.showPreview}" AutomationProperties.Name="{l:T codeSearch.showPreview}">
-            <controls:Icon Kind="document-text" />
-          </ToggleButton>
-          <ToggleButton x:Name="PinButton" Classes="toolbar" IsChecked="{Binding IsPinned}"
-                        ToolTip.Tip="{l:T codeSearch.keepOpen}" AutomationProperties.Name="{l:T codeSearch.keepOpen}">
-            <controls:Icon Kind="pin" />
-          </ToggleButton>
-          <Button x:Name="DockButton" Classes="toolbar" Command="{Binding ToggleDockCommand}"
-                  ToolTip.Tip="{l:T codeSearch.dock}" AutomationProperties.Name="{l:T codeSearch.dock}">
-            <controls:Icon Kind="window" />
-          </Button>
-          <Button x:Name="CloseButton" Classes="toolbar" Command="{Binding CloseCommand}"
-                  ToolTip.Tip="{l:T codeSearch.close}" AutomationProperties.Name="{l:T codeSearch.close}">
-            <controls:Icon Kind="close" />
-          </Button>
-        </StackPanel>
-      </Grid>
+      <!-- The two kinds are tabs inside a view (TabStrip.viewTabs): the row draws their hairline, under the buttons too,
+           and the tabs reach over it. -->
+      <Border x:Name="TitleBand" Margin="0,4,0,0" Padding="6,0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.ViewTabs.Rule}">
+        <Grid x:Name="TitleRow" ColumnDefinitions="*,Auto" Background="Transparent">
+          <TabStrip x:Name="KindTabs" Classes="viewTabs" BorderThickness="0" Padding="0" SelectedIndex="{Binding TabIndex}" AutomationProperties.Name="{l:T codeSearch.searchKind}">
+            <TabStripItem ToolTip.Tip="{l:T codeSearch.codeSearchTip}" AutomationProperties.Name="{l:T codeSearch.codeSearch}">
+              <TextBlock Text="{l:T codeSearch.codeSearch}" TextTrimming="CharacterEllipsis" />
+            </TabStripItem>
+            <TabStripItem ToolTip.Tip="{l:T codeSearch.featureSearchTip}" AutomationProperties.Name="{l:T codeSearch.featureSearch}">
+              <TextBlock Text="{l:T codeSearch.featureSearch}" TextTrimming="CharacterEllipsis" />
+            </TabStripItem>
+          </TabStrip>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{DynamicResource Shell.Space.XS}" VerticalAlignment="Center">
+            <ToggleButton Classes="toolbar" IsChecked="{Binding ShowPreview}" IsVisible="{Binding IsCodeTab}"
+                          ToolTip.Tip="{l:T codeSearch.showPreview}" AutomationProperties.Name="{l:T codeSearch.showPreview}">
+              <controls:Icon Kind="document-text" />
+            </ToggleButton>
+            <ToggleButton x:Name="PinButton" Classes="toolbar" IsChecked="{Binding IsPinned}"
+                          ToolTip.Tip="{l:T codeSearch.keepOpen}" AutomationProperties.Name="{l:T codeSearch.keepOpen}">
+              <controls:Icon Kind="pin" />
+            </ToggleButton>
+            <Button x:Name="DockButton" Classes="toolbar" Command="{Binding ToggleDockCommand}"
+                    ToolTip.Tip="{l:T codeSearch.dock}" AutomationProperties.Name="{l:T codeSearch.dock}">
+              <controls:Icon Kind="window" />
+            </Button>
+            <Button x:Name="CloseButton" Classes="toolbar" Command="{Binding CloseCommand}"
+                    ToolTip.Tip="{l:T codeSearch.close}" AutomationProperties.Name="{l:T codeSearch.close}">
+              <controls:Icon Kind="close" />
+            </Button>
+          </StackPanel>
+        </Grid>
+      </Border>
 
       <TextBox x:Name="Input" Grid.Row="1" Margin="8,4,8,0"
                Text="{Binding Query}"

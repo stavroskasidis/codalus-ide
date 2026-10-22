@@ -11,32 +11,13 @@
        header line, the results grouped by folder and file with their counts, the code in the editor's colors with the
        match highlighted, line and column columns, and the counts as a status line. -->
   <UserControl.Styles>
-    <!-- The page tabs are the tabs inside a view (28 px, muted until selected, an accent underline, counts as badges). -->
-    <Style Selector="TabStrip#PageTabs TabStripItem">
-      <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing}" />
-      <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
-      <Setter Property="FontWeight" Value="Normal" />
-      <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Tab}" />
+    <!-- The page tabs are the tabs inside a view (TabStrip.viewTabs); a page's close button takes the tab's right padding,
+         and the underline still stops 6 px from each edge. With the class in the selector, these outrank the class's own. -->
+    <Style Selector="TabStrip#PageTabs.viewTabs TabStripItem">
       <Setter Property="Padding" Value="10,0,6,0" />
-      <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
-      <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style Selector="TabStrip#PageTabs TabStripItem:selected">
-      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
-      <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
-    <Style Selector="TabStrip#PageTabs TabStripItem:pointerover /template/ Border#PART_LayoutRoot">
-      <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
-    </Style>
-    <Style Selector="TabStrip#PageTabs TabStripItem:selected /template/ Border#PART_SelectedPipe">
-      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
-      <Setter Property="Height" Value="2" />
-      <Setter Property="CornerRadius" Value="1" />
-      <Setter Property="VerticalAlignment" Value="Bottom" />
-    </Style>
-    <Style Selector="TabStrip#PageTabs TabStripItem:selected Border.badge">
-      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
-      <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.AccentForeground}" />
+    <Style Selector="TabStrip#PageTabs.viewTabs TabStripItem:selected /template/ Border#PART_SelectedPipe">
+      <Setter Property="Margin" Value="-4,0,0,0" />
     </Style>
     <!-- The header line and the column headers. -->
     <Style Selector="Border.findQuery">
@@ -84,8 +65,8 @@
   </UserControl.Styles>
 
   <DockPanel>
-    <TabStrip x:Name="PageTabs" DockPanel.Dock="Top" ItemsSource="{Binding Pages}" SelectedItem="{Binding CurrentPage}" IsVisible="{Binding HasManyPages}"
-              Margin="6,0" AutomationProperties.Name="{l:T findResults.pages}">
+    <TabStrip x:Name="PageTabs" Classes="viewTabs" DockPanel.Dock="Top" ItemsSource="{Binding Pages}" SelectedItem="{Binding CurrentPage}" IsVisible="{Binding HasManyPages}"
+              AutomationProperties.Name="{l:T findResults.pages}">
       <TabStrip.ItemTemplate>
         <DataTemplate x:DataType="vm:FindResultsPage">
           <StackPanel Orientation="Horizontal" Spacing="6">
