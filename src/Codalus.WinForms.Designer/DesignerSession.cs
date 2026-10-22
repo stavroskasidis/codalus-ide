@@ -942,75 +942,197 @@ internal sealed partial class DesignerSession : IDisposable
         return Host.GetDesigner(Root) as ParentControlDesigner ?? throw new InvalidOperationException("The form's designer can't contain controls.");
     }
 
+    /// <summary>
+    /// The Properties window's edits (#68: several in one request, as the font editor sends Font.Name, Font.Size and its
+    /// styles), all or none: each property's value is kept before its edit, so when a later edit's value isn't valid (or
+    /// the host fails) the earlier ones are put back and the surface is as it was, the error with no changes.
+    /// </summary>
     public DesignerChangeResult SetProperties(DesignerSetPropertiesParams parameters)
     {
         var before = Capture();
-        foreach (var edit in parameters.Edits)
+        var undo = new List<Action>();
+        DesignerChangeResult Rejected(string error)
         {
-            if (edit.Component.Length == 0 && edit.Property == "Localizable" && edit.Provider is null)
-            {
-                return SetLocalizable(before, string.Equals(edit.Text, "True", StringComparison.OrdinalIgnoreCase));
-            }
+            Undo(undo);
+            return new DesignerChangeResult([], Render()) { Error = error };
+        }
 
-            var target = Target(edit.Component) ?? throw Unknown(edit.Component);
-            if (edit.Property == "Locked" && edit.Provider is null && !edit.DataBinding && LockedOf(target) is not { IsReadOnly: false })
+        try
+        {
+            foreach (var edit in parameters.Edits)
             {
-                // Lock Controls over a form with a context menu strip or an inherited control (#67): skipped, as the classic
-                // IDE's OnMenuLockControls skips a component without a Locked it can set.
-                continue;
-            }
-
-            if (edit.DataBinding)
-            {
-                if (SetDataBinding(target, edit) is { } bindingError)
+                if (edit.Component.Length == 0 && edit.Property == "Localizable" && edit.Provider is null)
                 {
-                    return new DesignerChangeResult([], Render()) { Error = bindingError };
+                    return SetLocalizable(before, string.Equals(edit.Text, "True", StringComparison.OrdinalIgnoreCase));
                 }
 
-                continue;
-            }
-
-            if (edit.Provider is null && edit.Bytes is null && edit.Property.Contains('.', StringComparison.Ordinal))
-            {
-                // A part (#68: Font.Bold, Location.X, Padding.Left, FlatAppearance.BorderSize): the whole value set again.
-                if (SetSubProperty(target, edit) is { } subError)
+                var target = Target(edit.Component) ?? throw Unknown(edit.Component);
+                if (edit.Property == "Locked" && edit.Provider is null && !edit.DataBinding && LockedOf(target) is not { IsReadOnly: false })
                 {
-                    return new DesignerChangeResult([], Render()) { Error = subError };
+                    // Lock Controls over a form with a context menu strip or an inherited control (#67): skipped, as the classic
+                    // IDE's OnMenuLockControls skips a component without a Locked it can set.
+                    continue;
                 }
 
-                continue;
-            }
-
-            var (owner, member) = Walk(target, edit.Property);
-            var descriptor = Descriptor(owner, member, edit.Provider)
-                ?? throw new InvalidOperationException(edit.Provider is null ? $"{edit.Property} isn't a property of {edit.Component}." : $"{edit.Provider} doesn't give {edit.Component} a {edit.Property}.");
-            if (edit.Reset)
-            {
-                if (descriptor.CanResetValue(owner))
+                if (edit.DataBinding)
                 {
-                    descriptor.ResetValue(owner);
+                    undo.Add(BindingRestorer(target, edit.Property));
+                    if (SetDataBinding(target, edit) is { } bindingError)
+                    {
+                        return Rejected(bindingError);
+                    }
+
+                    continue;
                 }
 
-                continue;
-            }
+                if (edit.Provider is null && edit.Bytes is null && edit.Property.Contains('.', StringComparison.Ordinal))
+                {
+                    // A part (#68: Font.Bold, Location.X, Padding.Left, FlatAppearance.BorderSize): the whole value set again.
+                    undo.Add(PartRestorer(target, edit.Property));
+                    if (SetSubProperty(target, edit) is { } subError)
+                    {
+                        return Rejected(subError);
+                    }
 
-            object? value;
-            try
-            {
-                // Converted with the surface's context (#68), so a component's name resolves (AcceptButton = "cancelButton").
-                value = edit.Bytes is { } bytes ? ImageOf(descriptor.PropertyType, Convert.FromBase64String(bytes))
-                    : edit.Value is { } structured ? _values.Evaluate(structured, descriptor.PropertyType)
-                    : descriptor.Converter.ConvertFrom(Context(owner, descriptor), CultureInfo.InvariantCulture, edit.Text ?? string.Empty);
-            }
-            catch (Exception ex) when (IsConversionError(ex))
-            {
-                return new DesignerChangeResult([], Render()) { Error = ConversionMessage(ex) };
-            }
+                    continue;
+                }
 
-            descriptor.SetValue(owner, value);
+                var (owner, member) = Walk(target, edit.Property);
+                var descriptor = Descriptor(owner, member, edit.Provider)
+                    ?? throw new InvalidOperationException(edit.Provider is null ? $"{edit.Property} isn't a property of {edit.Component}." : $"{edit.Provider} doesn't give {edit.Component} a {edit.Property}.");
+                undo.Add(ValueRestorer(owner, descriptor));
+                if (edit.Reset)
+                {
+                    if (descriptor.CanResetValue(owner))
+                    {
+                        descriptor.ResetValue(owner);
+                    }
+
+                    continue;
+                }
+
+                try
+                {
+                    // Converted with the surface's context (#68), so a component's name resolves (AcceptButton = "cancelButton").
+                    var value = edit.Bytes is { } bytes ? ImageOf(descriptor.PropertyType, Convert.FromBase64String(bytes))
+                        : edit.Value is { } structured ? _values.Evaluate(structured, descriptor.PropertyType)
+                        : descriptor.Converter.ConvertFrom(Context(owner, descriptor), CultureInfo.InvariantCulture, edit.Text ?? string.Empty);
+
+                    // A setter's refusal (a size out of range) is an invalid value too, as the classic IDE reports it.
+                    descriptor.SetValue(owner, value);
+                }
+                catch (Exception ex) when (IsConversionError(ex))
+                {
+                    return Rejected(ConversionMessage(ex));
+                }
+            }
+        }
+        catch
+        {
+            Undo(undo);
+            throw;
         }
 
         return Result(before);
+    }
+
+    /// <summary>Puts back what a request's earlier edits changed, the last first.</summary>
+    private static void Undo(List<Action> undo)
+    {
+        for (var i = undo.Count - 1; i >= 0; i--)
+        {
+            try
+            {
+                undo[i]();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                Console.Error.WriteLine($"[designer] an edit couldn't be put back: {ex.Message}");
+            }
+        }
+
+        undo.Clear();
+    }
+
+    /// <summary>
+    /// What puts a property back as it is now: its value, or a reset when the code doesn't set it, so an ambient value
+    /// (a Font or BackColor from the parent) stays ambient rather than becoming set.
+    /// </summary>
+    private static Action ValueRestorer(object owner, PropertyDescriptor descriptor)
+    {
+        var old = descriptor.GetValue(owner);
+        var wasSet = descriptor.ShouldSerializeValue(owner);
+        return () =>
+        {
+            if (!wasSet && descriptor.CanResetValue(owner))
+            {
+                descriptor.ResetValue(owner);
+            }
+            else if (!descriptor.IsReadOnly)
+            {
+                descriptor.SetValue(owner, old);
+            }
+        };
+    }
+
+    /// <summary>What puts a part's property back: the component's property, and each reference-type holder's part on the way down (FlatAppearance's BorderSize), as they are now.</summary>
+    private static Action PartRestorer(object component, string path)
+    {
+        var names = path.Split('.');
+        var restorers = new List<Action>();
+        if (TypeDescriptor.GetProperties(component)[names[0]] is not { } top)
+        {
+            return () => { };
+        }
+
+        restorers.Add(ValueRestorer(component, top));
+        var holder = top.GetValue(component);
+        for (var i = 1; i < names.Length && holder is not null; i++)
+        {
+            if (TypeDescriptor.GetProperties(holder)[names[i]] is not { } part)
+            {
+                break;
+            }
+
+            if (!holder.GetType().IsValueType && !part.IsReadOnly)
+            {
+                restorers.Add(ValueRestorer(holder, part));
+            }
+
+            holder = part.GetValue(holder);
+        }
+
+        // The deepest first, then the component's property (a no-op for a reference holder changed in place).
+        return () =>
+        {
+            for (var i = restorers.Count - 1; i >= 0; i--)
+            {
+                restorers[i]();
+            }
+        };
+    }
+
+    /// <summary>What puts a control's binding of a property back as it is now (or none).</summary>
+    private static Action BindingRestorer(object target, string property)
+    {
+        if (target is not Control control)
+        {
+            return () => { };
+        }
+
+        var old = control.DataBindings[property];
+        return () =>
+        {
+            if (control.DataBindings[property] is { } current && !ReferenceEquals(current, old))
+            {
+                control.DataBindings.Remove(current);
+            }
+
+            if (old is not null && control.DataBindings[property] is null)
+            {
+                control.DataBindings.Add(old);
+            }
+        };
     }
 
     /// <summary>A property of <paramref name="owner"/>, or the extender property <paramref name="provider"/> gives it (<c>ToolTip on toolTip1</c>).</summary>

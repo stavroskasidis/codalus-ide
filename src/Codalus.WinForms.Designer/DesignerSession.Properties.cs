@@ -19,6 +19,8 @@ internal sealed partial class DesignerSession
     private const int MaxStandardValues = 2000;
 
     /// <summary>How deep parts go: a property's parts and theirs, sent with the properties (D41 question 1).</summary>
+    // TODO(issue): parts deeper than two levels, read when a row is expanded (a request per expansion) rather than sent
+    // with the properties (#68, D41 question 1); a third level's row has no parts meanwhile.
     private const int MaxPartDepth = 2;
 
     /// <summary>A converter's context for <paramref name="instance"/>'s <paramref name="descriptor"/> on this surface.</summary>
@@ -146,7 +148,9 @@ internal sealed partial class DesignerSession
         string? text;
         try
         {
-            text = value is null ? string.Empty : converter.ConvertToString(context, CultureInfo.InvariantCulture, value);
+            // A null value as the converter writes it, as its standard values are written (ReferenceConverter's "(none)",
+            // StringConverter's ""), so an unset ContextMenuStrip is the "(none)" of its own list.
+            text = value is null ? NullText(converter, context) : converter.ConvertToString(context, CultureInfo.InvariantCulture, value);
         }
         catch (Exception ex) when (ex is NotSupportedException or ArgumentException or InvalidOperationException)
         {
@@ -179,6 +183,11 @@ internal sealed partial class DesignerSession
         if (settable || settableAsValue)
         {
             (standard, choicesEditable) = StandardValuesOf(converter, context, descriptor.Name);
+        }
+
+        if (value is null && string.IsNullOrEmpty(text) && standard?.Contains(NoneText) == true)
+        {
+            text = NoneText; // a null standard value the converter writes as nothing is listed as "(none)" (StandardValuesOf)
         }
 
         var editor = !settable && !settableAsValue ? (fromEditor == DesignerEditors.Modal ? DesignerEditors.Modal : DesignerEditors.ReadOnly)
@@ -257,6 +266,22 @@ internal sealed partial class DesignerSession
         }
     }
 
+    /// <summary>What a list of standard values calls a null one the converter writes as nothing.</summary>
+    private const string NoneText = "(none)";
+
+    /// <summary>A null value's text from its converter ("(none)" for a component reference), or "" when the converter can't write one.</summary>
+    private static string NullText(TypeConverter converter, ITypeDescriptorContext context)
+    {
+        try
+        {
+            return converter.ConvertToString(context, CultureInfo.InvariantCulture, null) ?? string.Empty;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return string.Empty; // a vendor converter that doesn't take null
+        }
+    }
+
     /// <summary>The converter's standard values as text (a null one as the converter's text, or "(none)"), and whether a value outside them can be typed.</summary>
     private static (string[]? Values, bool Editable) StandardValuesOf(TypeConverter converter, ITypeDescriptorContext context, string name)
     {
@@ -286,7 +311,7 @@ internal sealed partial class DesignerSession
                     text = standard?.ToString();
                 }
 
-                list.Add(standard is null && string.IsNullOrEmpty(text) ? "(none)" : text ?? string.Empty);
+                list.Add(standard is null && string.IsNullOrEmpty(text) ? NoneText : text ?? string.Empty);
             }
 
             return ([.. list.Distinct(StringComparer.Ordinal)], !converter.GetStandardValuesExclusive(context));

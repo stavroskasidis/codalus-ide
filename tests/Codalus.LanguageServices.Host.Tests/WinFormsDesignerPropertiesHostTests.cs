@@ -13,9 +13,11 @@ namespace Codalus.LanguageServices.Host.Tests;
 /// the change's error; a localizable form's part goes to its resources. The fake designer host of the shell's tests
 /// answers with the same shapes (Font.Name a choice, AcceptButton's "(none)", Text multiline): the facts it encodes are
 /// asserted here on the real host. The exact code strings are the classic IDE's; they are confirmed on the first Windows
-/// run (CI's windows-latest job or a Windows session), as this file was written where the host can't run.
+/// run (CI's windows-latest job or a Windows session), as this file was written where the host can't run. The fixture's
+/// build is shared with <see cref="WinFormsDesignerHostTests"/> (read only; each test starts its own host).
 /// </summary>
-public sealed class WinFormsDesignerPropertiesHostTests(WinFormsHostFixture fixture) : IClassFixture<WinFormsHostFixture>
+[Collection(nameof(WinFormsHostBuild))]
+public sealed class WinFormsDesignerPropertiesHostTests(WinFormsHostFixture fixture)
 {
     private const string Skip = "The Windows Forms designer runs on Windows only (D31).";
 
@@ -87,6 +89,11 @@ public sealed class WinFormsDesignerPropertiesHostTests(WinFormsHostFixture fixt
         Assert.Contains("Segoe UI", name.StandardValues!);
         Assert.All(font.SubProperties!, p => Assert.True(p.IsSet, p.Name));
 
+        // GdiCharSet and GdiVerticalFont are settable through FontConverter's CreateInstance, as the approved mockup draws
+        // them (a text and a True/False choice); the fake host answers the same.
+        Assert.True(font.SubProperties!.Single(p => p.Name == "GdiCharSet") is { IsReadOnly: false, Editor: DesignerEditors.Text, Type: "System.Byte" });
+        Assert.True(font.SubProperties!.Single(p => p.Name == "GdiVerticalFont") is { IsReadOnly: false, Editor: DesignerEditors.Boolean });
+
         var location = Property(await PropertiesAsync(host, "giftCheckBox"), "Location");
         Assert.Equal([("X", "96"), ("Y", "70")], location.SubProperties!.Select(p => (p.Name, p.Value!)));
         Assert.All(location.SubProperties!, p => Assert.False(p.IsReadOnly, p.Name));
@@ -144,6 +151,52 @@ public sealed class WinFormsDesignerPropertiesHostTests(WinFormsHostFixture fixt
     }
 
     [Fact]
+    public async Task A_request_with_an_invalid_value_sets_none_of_its_edits()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), Skip);
+        var (host, source) = await LoadAsync("OrderForm.cs");
+        await using var _ = host;
+        var before = Property(await PropertiesAsync(host, "notesTextBox"), "Font").Value;
+
+        // The font editor's OK with a family and a size that isn't one: the family isn't kept on the surface either.
+        var font = await SetAsync(host, new DesignerPropertyEdit("notesTextBox", "Font.Name") { Text = "Arial" }, new DesignerPropertyEdit("notesTextBox", "Font.Size") { Text = "abc" });
+        Assert.NotNull(font.Error);
+        Assert.Empty(font.Changes);
+        Assert.Equal(before, Property(await PropertiesAsync(host, "notesTextBox"), "Font").Value);
+
+        // The next change doesn't carry the family that was refused.
+        var bold = await SetAsync(host, new DesignerPropertyEdit("notesTextBox", "Font.Bold") { Text = "True" });
+        Assert.Contains("            notesTextBox.Font = new Font(\"Segoe UI\", 9F, FontStyle.Bold | FontStyle.Italic, GraphicsUnit.Point, 0);\n", Apply("OrderForm.cs", source, bold).Code, StringComparison.Ordinal);
+
+        // Two components: the first one's edit is put back too, and an ambient value stays ambient (not set).
+        var customer = Property(await PropertiesAsync(host, "customerTextBox"), "Font");
+        var batch = await SetAsync(host, new DesignerPropertyEdit("customerTextBox", "Font.Size") { Text = "14" }, new DesignerPropertyEdit("giftCheckBox", "Location.X") { Text = "abc" });
+        Assert.NotNull(batch.Error);
+        var after = Property(await PropertiesAsync(host, "customerTextBox"), "Font");
+        Assert.Equal((customer.Value, customer.IsSet), (after.Value, after.IsSet));
+        var next = await SetAsync(host, new DesignerPropertyEdit("customerTextBox", "Text") { Text = "Ada" });
+        Assert.DoesNotContain(next.Changes, c => c.Property == "Font");
+    }
+
+    [Fact]
+    public async Task Several_components_merge_their_properties_and_parts()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), Skip);
+        var (host, _) = await LoadAsync("OrderForm.cs");
+        await using var _h = host;
+
+        // notesTextBox's font is italic, customerTextBox's isn't: Font and its Italic are mixed, its Name and Size shared.
+        var merged = (await host.PropertiesAsync(new DesignerComponentsParams(["notesTextBox", "customerTextBox"]), Ct)).Properties;
+        var font = Property(merged, "Font");
+        Assert.True(font is { Mixed: true, Value: null });
+        Assert.True(font.SubProperties!.Single(p => p.Name == "Italic") is { Mixed: true, Value: null });
+        Assert.True(font.SubProperties!.Single(p => p.Name == "Name") is { Mixed: false, Value: "Segoe UI" });
+        Assert.True(font.SubProperties!.Single(p => p.Name == "Size") is { Mixed: false, Value: "9" });
+        Assert.True(Property(merged, "Location") is { Mixed: true });
+        Assert.True(Property(merged, "Multiline") is { Mixed: true, Value: null });
+    }
+
+    [Fact]
     public async Task Editors_and_choices_come_from_the_type_editors()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), Skip);
@@ -172,12 +225,26 @@ public sealed class WinFormsDesignerPropertiesHostTests(WinFormsHostFixture fixt
             Assert.Contains("(none)", accept.StandardValues!);
             Assert.Contains("placeOrderButton", accept.StandardValues!);
             Assert.Contains("cancelButton", accept.StandardValues!);
+
+            // An unset reference is the "(none)" of its own list (ReferenceConverter's text for null), not an empty value.
+            var strip = Property(button, "ContextMenuStrip");
+            Assert.True(strip is { Editor: DesignerEditors.Enum, ChoicesEditable: false, Value: "(none)" });
+            Assert.Equal("(none)", strip.StandardValues![0]);
+            Assert.Single(strip.StandardValues!, v => v == "(none)");
         }
 
         var (inventory, _) = await LoadAsync("InventoryForm.cs");
         await using (inventory)
         {
             Assert.Equal(DesignerEditors.ShortcutKeys, Property(await PropertiesAsync(inventory, "newToolStripMenuItem"), "ShortcutKeys").Editor);
+
+            // "(none)", then the form's context menu strips; the unset one is "(none)", the set one names its strip.
+            var grid = await PropertiesAsync(inventory, "stockGridView");
+            Assert.True(Property(grid, "ContextMenuStrip") is { Value: "(none)", StandardValues: ["(none)", "itemsContextMenuStrip"] });
+            Assert.Equal("itemsContextMenuStrip", Property(await PropertiesAsync(inventory, "categoryListBox"), "ContextMenuStrip").Value);
+
+            // A Windows Forms dialog the IDE doesn't show, whose converter takes no text (D41 question 8): modal, read-only.
+            Assert.True(Property(grid, "DefaultCellStyle") is { Editor: DesignerEditors.Modal, IsReadOnly: true });
         }
 
         var (about, _) = await LoadAsync("AboutForm.cs");
