@@ -734,9 +734,25 @@ public sealed class WinFormsDesignerShellTests
         Assert.Same(main, f.Shell.Layout.ActiveDocument);
         Assert.Same(asked, order.ToolboxLoad);
 
-        // It asks once it's the active document.
+        // It asks once it's the active document. An ask that ends at once (OrderForm's first, before it had read the form)
+        // is Task.CompletedTask like any other, so a failure says what the activation did (macOS CI once saw no new ask,
+        // run 39796640525).
+        var requests = f.Shell.Toolbox.ProjectItemsRequests;
+        var activated = new List<string>();
+        void OnActivated(object? sender, Docking.ShellDocument? document) => activated.Add(document?.Title ?? "none");
+        f.Shell.Layout.ActiveDocumentChanged += OnActivated;
         f.Shell.Layout.OpenDocument(order, focus: true);
-        Assert.NotSame(asked, order.ToolboxLoad);
+        f.Shell.Layout.ActiveDocumentChanged -= OnActivated;
+        if (ReferenceEquals(asked, order.ToolboxLoad))
+        {
+            Assert.Fail($"OrderForm's designer didn't ask for the Toolbox's items once active: its ask before {(ReferenceEquals(asked, Task.CompletedTask) ? "ended at once" : asked.Status.ToString())}; "
+                + $"activations [{string.Join(", ", activated)}], active {f.Shell.Layout.ActiveDocument?.Title ?? "none"}, "
+                + $"Properties' source {(ReferenceEquals(f.Shell.PropertySource, order) ? "OrderForm's designer" : f.Shell.PropertySource?.ToString() ?? "none")}, "
+                + $"its project {order.ToolboxProject ?? "not known"}, {(order.IsClosed ? "closed" : "open")}, C# client {(f.Shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is null ? "not running" : "running")}, "
+                + $"Toolbox requests {requests} then {f.Shell.Toolbox.ProjectItemsRequests}.\n"
+                + DescribeToolbox(f, "the ask"));
+        }
+
         await order.ToolboxLoad;
     }
 
