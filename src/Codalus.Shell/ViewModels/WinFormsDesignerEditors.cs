@@ -204,7 +204,11 @@ public sealed class DesignerCollectionEditorViewModel : ObservableObject
         MoveDownCommand = new RelayCommand(() => _ = MoveAsync(1));
         OkCommand = new RelayCommand(() => _ = OkAsync());
         CloseCommand = new RelayCommand(document.CloseCollectionEditor);
+        Grid.ValueRejected += (_, e) => _ = PropertiesWindowViewModel.ShowRejectedAsync(document.Shell.Dialogs, Grid, e);
     }
+
+    /// <summary>The document's values changed (an item's part set, a reset): the item grid reads them again, in place.</summary>
+    internal void OnPropertiesChanged() => _ = LoadPropertiesAsync();
 
     public string Component { get; }
 
@@ -214,8 +218,11 @@ public sealed class DesignerCollectionEditorViewModel : ObservableObject
 
     public ObservableCollection<DesignerCollectionItemViewModel> Items { get; } = [];
 
-    /// <summary>The selected component item's properties.</summary>
-    public ObservableCollection<PropertyRowViewModel> Properties { get; } = [];
+    /// <summary>The selected component item's properties (#68: the shared property grid, refreshed in place after each change).</summary>
+    public PropertyGridViewModel Grid { get; } = new();
+
+    /// <summary>The selected item's properties (the grid's top-level rows).</summary>
+    public IReadOnlyList<PropertyRowViewModel> Properties => [.. Grid.Categories.SelectMany(c => c.Rows)];
 
     /// <summary>Strings edited as text, a line each (a list's items, a list view's items): the String Collection Editor.</summary>
     public bool IsText => Info.Kind == DesignerCollections.Locals || (Info.Kind == DesignerCollections.Values && Info.ItemTypes[0] == "System.String");
@@ -294,16 +301,22 @@ public sealed class DesignerCollectionEditorViewModel : ObservableObject
 
     private async Task LoadPropertiesAsync()
     {
-        Properties.Clear();
         if (!HasProperties || _selected?.Name is not { } name)
+        {
+            Grid.Clear();
+            return;
+        }
+
+        var rows = await _document.ItemRowsAsync(name).ConfigureAwait(true);
+        if (_selected?.Name != name)
         {
             return;
         }
 
-        foreach (var row in await _document.ItemRowsAsync(name).ConfigureAwait(true))
-        {
-            Properties.Add(row);
-        }
+        Grid.Context = name;
+        Grid.Show([.. rows.GroupBy(r => r.Category.Length == 0 ? "Misc" : r.Category).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new PropertyCategoryViewModel(g.Key, [.. g.Select(r => r.Row).OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)]))], alphabetical: false);
+        OnPropertyChanged(nameof(Properties));
     }
 
     private IEnumerable<DesignerCollectionItem> Current => Items.Select(i => i.Item.Name is { } name ? new DesignerCollectionItem { Name = name } : i.Item);
@@ -420,5 +433,198 @@ public sealed class DesignerCollectionEditorViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+}
+
+/// <summary>
+/// The font editor (#68, D41 question 2): a panel over the designer surface in the in-window dialog's frame (the title,
+/// the component and property as its context, the buttons in the OS's order), as the classic IDE's font dialog: the
+/// families from the font's Name choices, a style, a size, Strikeout and Underline, and a sample. OK sends only the parts
+/// that changed, in one request: one change, one undo step (the other parts, GdiCharSet and Unit among them, kept by the
+/// host's CreateInstance).
+/// </summary>
+public sealed class DesignerFontEditorViewModel : ObservableObject
+{
+    private readonly WinFormsDesignerDocument _document;
+    private readonly IReadOnlyList<string> _components;
+    private readonly string _path;
+    private readonly (string Family, string Size, bool Bold, bool Italic, bool Strikeout, bool Underline) _initial;
+    private string _family;
+    private string _style;
+    private string _size;
+    private bool _strikeout;
+    private bool _underline;
+
+    internal DesignerFontEditorViewModel(WinFormsDesignerDocument document, IReadOnlyList<string> components, string path, string context, IReadOnlyList<string> families,
+        string family, string size, bool bold, bool italic, bool strikeout, bool underline)
+    {
+        _document = document;
+        _components = components;
+        _path = path;
+        Context = context;
+        Families = families;
+        _family = family;
+        _size = size;
+        _style = StyleOf(bold, italic);
+        _strikeout = strikeout;
+        _underline = underline;
+        _initial = (family, size, bold, italic, strikeout, underline);
+        OkCommand = new RelayCommand(() => _ = OkAsync());
+        CancelCommand = new RelayCommand(document.CloseFontEditor);
+    }
+
+    public string Title => Localizer.Get("msg.winFormsDesigner.fontEditor", "Font");
+
+    /// <summary>What it edits: "placeOrderButton · Font".</summary>
+    public string Context { get; }
+
+    /// <summary>The families the host lists (Font.Name's choices); empty when it lists none, and the family is typed.</summary>
+    public IReadOnlyList<string> Families { get; }
+
+    public IReadOnlyList<string> Styles { get; } =
+    [
+        Localizer.Get("msg.winFormsDesigner.fontRegular", "Regular"),
+        Localizer.Get("msg.winFormsDesigner.fontItalic", "Italic"),
+        Localizer.Get("msg.winFormsDesigner.fontBold", "Bold"),
+        Localizer.Get("msg.winFormsDesigner.fontBoldItalic", "Bold Italic"),
+    ];
+
+    public IReadOnlyList<string> Sizes { get; } = ["8", "9", "10", "11", "12", "14", "16", "18", "20", "22", "24", "26", "28", "36", "48", "72"];
+
+    private string StyleOf(bool bold, bool italic) => Styles[(bold ? 2 : 0) + (italic ? 1 : 0)];
+
+    private int StyleIndex => Math.Max(0, Styles.ToList().IndexOf(_style));
+
+    public string Family
+    {
+        get => _family;
+        set => SetField(ref _family, value ?? string.Empty);
+    }
+
+    public string Style
+    {
+        get => _style;
+        set => SetField(ref _style, value ?? Styles[0]);
+    }
+
+    public string Size
+    {
+        get => _size;
+        set => SetField(ref _size, value ?? string.Empty);
+    }
+
+    public bool Strikeout
+    {
+        get => _strikeout;
+        set => SetField(ref _strikeout, value);
+    }
+
+    public bool Underline
+    {
+        get => _underline;
+        set => SetField(ref _underline, value);
+    }
+
+    public bool IsBold => StyleIndex >= 2;
+
+    public bool IsItalic => StyleIndex % 2 == 1;
+
+    public ICommand OkCommand { get; }
+
+    public ICommand CancelCommand { get; }
+
+    /// <summary>The parts that changed, as dotted paths (<c>Font.Size</c>), for every selected component.</summary>
+    public IReadOnlyList<DesignerPropertyEdit> Edits()
+    {
+        var parts = new List<(string Part, string Text)>();
+        if (_family != _initial.Family)
+        {
+            parts.Add(("Name", _family));
+        }
+
+        if (_size != _initial.Size)
+        {
+            parts.Add(("Size", _size));
+        }
+
+        if (IsBold != _initial.Bold)
+        {
+            parts.Add(("Bold", IsBold ? "True" : "False"));
+        }
+
+        if (IsItalic != _initial.Italic)
+        {
+            parts.Add(("Italic", IsItalic ? "True" : "False"));
+        }
+
+        if (_strikeout != _initial.Strikeout)
+        {
+            parts.Add(("Strikeout", _strikeout ? "True" : "False"));
+        }
+
+        if (_underline != _initial.Underline)
+        {
+            parts.Add(("Underline", _underline ? "True" : "False"));
+        }
+
+        return [.. _components.SelectMany(c => parts.Select(p => new DesignerPropertyEdit(c, _path + "." + p.Part) { Text = p.Text }))];
+    }
+
+    /// <summary>OK: the changed parts in one request; the editor closes (the host's error, if any, stays in the designer's status).</summary>
+    public async Task OkAsync()
+    {
+        var edits = Edits();
+        _document.CloseFontEditor();
+        if (edits.Count > 0)
+        {
+            await _document.SetPropertiesAsync(edits).ConfigureAwait(true);
+        }
+    }
+}
+
+/// <summary>
+/// The String Collection Editor (#68): a string array's items a line each (a text box's Lines), split on any line
+/// ending; OK writes the array.
+/// </summary>
+public sealed class DesignerStringsEditorViewModel : ObservableObject
+{
+    private readonly WinFormsDesignerDocument _document;
+    private readonly IReadOnlyList<string> _components;
+    private readonly string _path;
+    private string _text;
+
+    internal DesignerStringsEditorViewModel(WinFormsDesignerDocument document, IReadOnlyList<string> components, string path, string context, string text)
+    {
+        _document = document;
+        _components = components;
+        _path = path;
+        Context = context;
+        _text = text;
+        OkCommand = new RelayCommand(() => _ = OkAsync());
+        CancelCommand = new RelayCommand(document.CloseStringsEditor);
+    }
+
+    public string Title => Localizer.Get("msg.winFormsDesigner.stringsEditor", "String Collection Editor");
+
+    public string Context { get; }
+
+    public string Prompt => Localizer.Get("msg.winFormsDesigner.stringsPrompt", "Enter the strings in the collection (one per line):");
+
+    public string Text
+    {
+        get => _text;
+        set => SetField(ref _text, value ?? string.Empty);
+    }
+
+    public ICommand OkCommand { get; }
+
+    public ICommand CancelCommand { get; }
+
+    /// <summary>OK: the lines as a <c>string[]</c>, in one request.</summary>
+    public async Task OkAsync()
+    {
+        var items = PropertyText.Lines(_text);
+        _document.CloseStringsEditor();
+        await _document.SetPropertiesAsync([.. _components.Select(c => new DesignerPropertyEdit(c, _path) { Value = DesignerValue.ArrayOf("System.String", [.. items.Select(DesignerValue.String)]) })]).ConfigureAwait(true);
     }
 }

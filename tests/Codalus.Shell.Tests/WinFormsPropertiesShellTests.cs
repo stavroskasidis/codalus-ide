@@ -92,6 +92,108 @@ public sealed class WinFormsPropertiesShellTests
     }
 
     [AvaloniaFact]
+    public async Task The_font_editor_sends_the_changed_parts_in_one_request()
+    {
+        var (f, designer, host) = await OrderFormAsync("notesTextBox");
+        await using var _ = f;
+        var font = await RowAsync(f, "Font");
+        Assert.True(font is { HasModalEditor: true, ShowsModalButton: false });
+        Grid(f).SelectedRow = font;
+        Assert.True(font.ShowsModalButton);
+        font.ModalEditor!.Execute(null);
+
+        // A panel over the surface in the in-window dialog's frame (D41 question 2); the Properties window takes no input meanwhile.
+        var editor = designer.FontEditor!;
+        Assert.NotNull(editor);
+        Assert.Equal("notesTextBox · Font", editor.Context);
+        Assert.Equal(FakeWinFormsDesignerHost.FontFamilies, editor.Families);
+        Assert.True(editor is { Family: "Segoe UI", Size: "9", IsItalic: true, IsBold: false, Strikeout: false, Underline: false });
+        await ShellFixture.PumpUntil(() => !f.Shell.PropertiesWindow.IsInputEnabled);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Avalonia.Controls.Border>()
+            .Any(b => Avalonia.Automation.AutomationProperties.GetName(b) == editor.Title && b.IsEffectivelyVisible));
+
+        editor.Size = "12";
+        editor.Style = editor.Styles[3];
+        Assert.Equal(["Font.Size", "Font.Bold"], editor.Edits().Select(e => e.Property));
+        await editor.OkAsync();
+        Assert.Null(designer.FontEditor);
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("notesTextBox.Font = new Font(\"Segoe UI\", 12F, FontStyle.Bold | FontStyle.Italic, GraphicsUnit.Point, 0);", StringComparison.Ordinal), seconds: 30);
+        Assert.Equal(["Font.Size", "Font.Bold"], host.LastEdits.Select(e => e.Property));
+        await ShellFixture.PumpUntil(() => f.Shell.PropertiesWindow.IsInputEnabled);
+        Assert.Equal("12", (await RowAsync(f, "Font.Size", r => r.Value == "12")).Value);
+
+        // One request, one undo step.
+        designer.Undo();
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("notesTextBox.Font = new Font(\"Segoe UI\", 9F, FontStyle.Italic, GraphicsUnit.Point, 0);", StringComparison.Ordinal), seconds: 30);
+
+        // Cancel sends nothing.
+        (await RowAsync(f, "Font", r => r.Value.StartsWith("Segoe UI, 9pt", StringComparison.Ordinal))).ModalEditor!.Execute(null);
+        designer.FontEditor!.Size = "20";
+        designer.FontEditor.CancelCommand.Execute(null);
+        Assert.Null(designer.FontEditor);
+        Assert.Contains("notesTextBox.Font = new Font(\"Segoe UI\", 9F, FontStyle.Italic, GraphicsUnit.Point, 0);", Code(designer), StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public async Task A_string_array_is_edited_in_the_string_collection_editor()
+    {
+        var (f, designer, _) = await OrderFormAsync("notesTextBox");
+        await using var _f = f;
+        var lines = await RowAsync(f, "Lines");
+        Assert.True(lines is { IsReadOnly: true, HasModalEditor: true });
+        lines.ModalEditor!.Execute(null);
+        await ShellFixture.PumpUntil(() => designer.StringsEditor is not null);
+        var editor = designer.StringsEditor!;
+        Assert.Equal("String Collection Editor", editor.Title);
+        Assert.Equal("notesTextBox · Lines", editor.Context);
+        editor.Text = "one\ntwo\n";
+        await editor.OkAsync();
+        Assert.Null(designer.StringsEditor);
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("notesTextBox.Lines = new string[] { \"one\", \"two\" };", StringComparison.Ordinal), seconds: 30);
+
+        // Opened again, it shows the array's items a line each, with CRLF.
+        (await RowAsync(f, "Lines", r => r.IsSet)).ModalEditor!.Execute(null);
+        await ShellFixture.PumpUntil(() => designer.StringsEditor is not null);
+        Assert.Equal("one\r\ntwo", designer.StringsEditor!.Text);
+        designer.CloseStringsEditor();
+    }
+
+    [AvaloniaFact]
+    public async Task The_collection_editor_shares_the_grid_and_reads_its_item_again()
+    {
+        var (f, app, _) = await OpenAsync();
+        await using var _f = f;
+        var designer = await DesignAsync(f, Path.Combine(app, "InventoryForm.cs"));
+        await designer.OpenCollectionEditorAsync("mainMenuStrip", "System.Windows.Forms.MenuStrip:Items");
+        var editor = designer.CollectionEditor!;
+        Assert.True(editor.HasProperties);
+        editor.Selected = editor.Items.Single(i => i.Name == "fileToolStripMenuItem");
+        await ShellFixture.PumpUntil(() => editor.Grid.Find("Font") is not null, seconds: 30);
+        Assert.Equal(["(Name)", "Font", "ShortcutKeys", "Text"], editor.Grid.AllRows.Where(r => r.Depth == 0).Select(r => r.Name).Order(StringComparer.OrdinalIgnoreCase));
+        var font = editor.Grid.Find("Font")!;
+        editor.Grid.Toggle(font);
+        var bold = editor.Grid.Find("Font.Bold")!;
+        bold.SelectedOption = bold.Options.Single(o => o.Value == "True");
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("fileToolStripMenuItem.Font = new Font(\"Segoe UI\", 9F, FontStyle.Bold", StringComparison.Ordinal), seconds: 30);
+
+        // Read again in place: the same rows, the part True, Font still expanded.
+        await ShellFixture.PumpUntil(() => editor.Grid.Find("Font.Bold")?.Value == "True", seconds: 30);
+        Assert.Same(font, editor.Grid.Find("Font"));
+        Assert.True(font.IsExpanded);
+
+        // The font editor opens over the collection editor; the item grid takes no input meanwhile.
+        font.ModalEditor!.Execute(null);
+        Assert.Equal("fileToolStripMenuItem · Font", designer.FontEditor!.Context);
+        Assert.False(editor.Grid.IsEnabled);
+        Assert.True(designer.HasOpenEditor);
+        designer.FontEditor.CancelCommand.Execute(null);
+        Assert.True(editor.Grid.IsEnabled);
+        Assert.Same(editor, designer.CollectionEditor);
+        designer.CloseCollectionEditor();
+        Assert.False(designer.HasOpenEditor);
+    }
+
+    [AvaloniaFact]
     public async Task Colors_alignment_text_and_reset()
     {
         var (f, designer, _) = await OrderFormAsync("placeOrderButton");

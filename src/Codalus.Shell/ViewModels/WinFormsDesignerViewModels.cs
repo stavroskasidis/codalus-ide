@@ -514,11 +514,10 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
                 await LoadFormAsync().ConfigureAwait(true);
             }
 
-            if (restartHost)
-            {
-                // The Properties window shows the new host's values.
-                PropertiesChanged?.Invoke(this, EventArgs.Empty);
-            }
+            // The Properties window (and the collection editor's item grid) shows the values the code has now: the new
+            // host's, or an undo's or a typed change's (#68: the grid reads them again in place).
+            PropertiesChanged?.Invoke(this, EventArgs.Empty);
+            _collectionEditor?.OnPropertiesChanged();
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -1099,6 +1098,9 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             Show(result.Render);
             after?.Invoke();
             PropertiesChanged?.Invoke(this, EventArgs.Empty);
+
+            // The collection editor's item grid reads its item again, in place (a part's edit, a reset; #68).
+            _collectionEditor?.OnPropertiesChanged();
         }
         catch (PreviewerException ex)
         {
@@ -1712,7 +1714,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     }
 
     /// <summary>An editor panel is open over the surface (#68): the Properties window takes no input meanwhile.</summary>
-    public bool HasOpenEditor => _collectionEditor is not null;
+    public bool HasOpenEditor => _collectionEditor is not null || HasEditorPanel;
 
     public async Task<IReadOnlyList<DesignerPropertyRow>> PropertyRowsAsync(CancellationToken cancellationToken)
     {

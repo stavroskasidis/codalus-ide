@@ -25,6 +25,8 @@ public sealed partial class WinFormsDesignerDocument
     private readonly Dictionary<string, int> _tabCounters = new(StringComparer.Ordinal);
     private DesignerActionPanelViewModel? _actionPanel;
     private DesignerCollectionEditorViewModel? _collectionEditor;
+    private DesignerFontEditorViewModel? _fontEditor;
+    private DesignerStringsEditorViewModel? _stringsEditor;
     private IReadOnlyList<DesignerMenuPanel> _menuPanels = [];
     private DesignerTypeHere? _stripTypeHere;
 
@@ -288,9 +290,12 @@ public sealed partial class WinFormsDesignerDocument
                 break;
             case DesignerEditors.Font:
                 kind = PropertyRowKind.Font;
+                modal = info.IsReadOnly ? null : new RelayCommand(() => OpenFontEditor(selected, path, info));
                 break;
             case DesignerEditors.Strings:
-                kind = PropertyRowKind.Text;
+                // A string array (a text box's Lines): the String Collection Editor behind "…".
+                kind = PropertyRowKind.ReadOnly;
+                modal = info.IsReadOnly ? null : new RelayCommand(() => _ = OpenStringsEditorAsync(selected, path));
                 break;
             case DesignerEditors.Modal:
                 // A Windows Forms dialog the IDE doesn't show (D41 question 8): no "…"; typed in the cell when its converter takes text.
@@ -816,6 +821,87 @@ public sealed partial class WinFormsDesignerDocument
         }
     }
 
+    // ------------------------------------------------------------------ the font editor and the String Collection Editor (#68)
+
+    /// <summary>The open font editor, or null: a panel over the surface (and over the collection editor, when opened from its item grid).</summary>
+    public DesignerFontEditorViewModel? FontEditor
+    {
+        get => _fontEditor;
+        private set
+        {
+            if (SetProperty(ref _fontEditor, value))
+            {
+                OnEditorPanelChanged();
+            }
+        }
+    }
+
+    /// <summary>The open String Collection Editor, or null.</summary>
+    public DesignerStringsEditorViewModel? StringsEditor
+    {
+        get => _stringsEditor;
+        private set
+        {
+            if (SetProperty(ref _stringsEditor, value))
+            {
+                OnEditorPanelChanged();
+            }
+        }
+    }
+
+    /// <summary>A panel over the others (the font editor, the String Collection Editor, Select Resource) is open.</summary>
+    public bool HasEditorPanel => _fontEditor is not null || _stringsEditor is not null;
+
+    private void OnEditorPanelChanged()
+    {
+        // The grids under a panel take no input; they read the values again when it closes (D41 question 2).
+        _collectionEditor?.Grid.IsEnabled = !HasEditorPanel;
+        PropertiesChanged?.Invoke(this, EventArgs.Empty);
+        OnPropertyChanged(nameof(HasEditorPanel));
+    }
+
+    /// <summary>"placeOrderButton · Font": what a panel edits, as the in-window dialog's context line says it.</summary>
+    private string EditorContext(IReadOnlyList<string> selected, string path) =>
+        Localizer.Format("msg.winFormsDesigner.editorContext", "{0} · {1}", selected.Count == 1 ? selected[0] : Localizer.Format("msg.winFormsDesigner.selectedCount", "{0} components", selected.Count), path);
+
+    /// <summary>The font editor for a font property, from its parts as the host described them.</summary>
+    internal void OpenFontEditor(IReadOnlyList<string> selected, string path, DesignerPropertyInfo font)
+    {
+        string Part(string name) => font.SubProperties?.FirstOrDefault(p => p.Name == name) is { Mixed: false, Value: { } value } ? value : string.Empty;
+        bool Flag(string name) => string.Equals(Part(name), "True", StringComparison.OrdinalIgnoreCase);
+        var families = font.SubProperties?.FirstOrDefault(p => p.Name == "Name")?.StandardValues ?? [];
+        FontEditor = new DesignerFontEditorViewModel(this, selected, path, EditorContext(selected, path), families, Part("Name"), Part("Size"), Flag("Bold"), Flag("Italic"), Flag("Strikeout"), Flag("Underline"));
+    }
+
+    public void CloseFontEditor() => FontEditor = null;
+
+    /// <summary>
+    /// The String Collection Editor for a string array: its items from the code's assignment (<c>new string[] { … }</c>),
+    /// or, for a text box's Lines, from its Text, as the classic editor shows them.
+    /// </summary>
+    internal async Task OpenStringsEditorAsync(IReadOnlyList<string> selected, string path)
+    {
+        var component = ComponentOf(selected[0]);
+        string text;
+        if (_model?.Statements.LastOrDefault(s => s.Kind == DesignerStatementKinds.Assign && s.Target == component && s.Member == path) is { Value: { Kind: DesignerValueKinds.Array, Arguments: { } items } })
+        {
+            text = string.Join("\r\n", items.Select(i => i.Value ?? string.Empty));
+        }
+        else if (path == "Lines" && _host is { } host)
+        {
+            var properties = await host.PropertiesAsync(new DesignerComponentsParams([component]), CancellationToken.None).ConfigureAwait(true);
+            text = properties.Properties.FirstOrDefault(p => p is { Name: "Text", DataBinding: false, Provider: null })?.Value ?? string.Empty;
+        }
+        else
+        {
+            text = string.Empty;
+        }
+
+        StringsEditor = new DesignerStringsEditorViewModel(this, selected, path, EditorContext(selected, path), PropertyText.WithCrLf(text));
+    }
+
+    public void CloseStringsEditor() => StringsEditor = null;
+
     /// <summary>Opens a collection's editor (Items, Columns, TabPages, ColumnStyles, a strip's items, an image list's images).</summary>
     public async Task OpenCollectionEditorAsync(string component, string key)
     {
@@ -829,7 +915,12 @@ public sealed partial class WinFormsDesignerDocument
         await editor.RefreshAsync().ConfigureAwait(true);
     }
 
-    public void CloseCollectionEditor() => CollectionEditor = null;
+    public void CloseCollectionEditor()
+    {
+        CloseFontEditor();
+        CloseStringsEditor();
+        CollectionEditor = null;
+    }
 
     internal async Task<DesignerCollectionResult?> CollectionItemsAsync(string component, string property)
     {
@@ -853,16 +944,25 @@ public sealed partial class WinFormsDesignerDocument
     internal Task SetCollectionAsync(string component, string property, IReadOnlyList<DesignerCollectionItem> items) =>
         RunAsync(host => host.SetCollectionAsync(new DesignerSetCollectionParams(ComponentOf(component), property, [.. items]), CancellationToken.None));
 
-    /// <summary>An item component's rows (a column, a menu item, a tab page) for the collection editor's property grid.</summary>
-    internal async Task<IReadOnlyList<PropertyRowViewModel>> ItemRowsAsync(string item)
+    /// <summary>An item component's rows (a column, a menu item, a tab page) with their categories, for the collection editor's property grid.</summary>
+    internal async Task<IReadOnlyList<DesignerPropertyRow>> ItemRowsAsync(string item)
     {
         if (_host is not { } host)
         {
             return [];
         }
 
-        var result = await host.PropertiesAsync(new DesignerComponentsParams([item]), CancellationToken.None).ConfigureAwait(true);
-        return [.. result.Properties.Where(p => p.Provider is null && !p.DataBinding).Select(p => RowFor([item], p, p.Value ?? string.Empty))];
+        try
+        {
+            var result = await host.PropertiesAsync(new DesignerComponentsParams([item]), CancellationToken.None).ConfigureAwait(true);
+            return [.. result.Properties.Where(p => p.Provider is null && !p.DataBinding && !(p is { Name: "Locked", Type: "System.Boolean" }))
+                .Select(p => new DesignerPropertyRow(p.Category, p.Name == "Name" ? new PropertyRowViewModel("(Name)", p.Value ?? string.Empty, PropertyRowKind.ReadOnly, p.Description ?? string.Empty, isSet: true) { Path = "(Name)" } : RowFor([item], p, p.Mixed ? string.Empty : p.Value ?? string.Empty)))];
+        }
+        catch (Exception ex) when (ex is PreviewerException or Rpc.JsonRpcConnectionLostException or Rpc.JsonRpcRemoteException)
+        {
+            Status = ex.Message;
+            return [];
+        }
     }
 
     // ------------------------------------------------------------------ menus and tool strips on the surface (M41b)

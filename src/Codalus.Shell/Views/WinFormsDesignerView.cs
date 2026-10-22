@@ -36,6 +36,9 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
     private readonly ScrollViewer _scroll;
     private readonly Canvas _overlay = new() { ClipToBounds = false };
     private readonly Border _collectionHost = new() { IsVisible = false, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, BorderThickness = new Thickness(1) };
+
+    /// <summary>The editor panels (#68: the font editor, the String Collection Editor, Select Resource), above the collection editor.</summary>
+    private readonly Panel _editorHost = new() { IsVisible = false, Background = Brushes.Transparent };
     private readonly Grid _surfaceArea;
     private ItemsControl? _tray;
     private string? _renaming;
@@ -107,7 +110,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         Avalonia.Automation.AutomationProperties.SetLiveSetting(message, Avalonia.Automation.AutomationLiveSetting.Polite);
         _collectionHost.Bind(Border.BackgroundProperty, _collectionHost.GetResourceObservable("Shell.Panel"));
         _collectionHost.Bind(Border.BorderBrushProperty, _collectionHost.GetResourceObservable("Shell.Border"));
-        _surfaceArea = new Grid { Children = { _scroll, message, _collectionHost } };
+        _surfaceArea = new Grid { Children = { _scroll, message, _collectionHost, _editorHost } };
 
         Content = new DockPanel { Children = { toolbar, problemBar, trayBar, _surfaceArea } };
 
@@ -139,6 +142,10 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             else if (e.PropertyName == nameof(WinFormsDesignerDocument.CollectionEditor))
             {
                 ShowCollectionEditor();
+            }
+            else if (e.PropertyName is nameof(WinFormsDesignerDocument.FontEditor) or nameof(WinFormsDesignerDocument.StringsEditor))
+            {
+                ShowEditorPanel();
             }
         });
         document.SurfaceChanged += (_, _) => Infrastructure.Ui.Post(Update);
@@ -733,9 +740,10 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 return;
             }
 
-            foreach (var row in editor.Properties)
+            if (editor.HasProperties)
             {
-                details.Children.Add(PropertyRow(row));
+                // The item's properties in the shared property grid (#68), refreshed in place after each change.
+                details.Children.Add(new PropertyGridView { DataContext = editor.Grid, Height = 300 });
             }
         }
 
@@ -754,53 +762,190 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 });
             }
         };
-        editor.Properties.CollectionChanged += (_, _) => Infrastructure.Ui.Post(Details);
         list.SelectedItem = editor.Selected;
         Details();
-        return new StackPanel { Orientation = Orientation.Horizontal, Children = { left, new ScrollViewer { Content = details, MaxHeight = 300 } } };
+        return new StackPanel { Orientation = Orientation.Horizontal, Children = { left, editor.HasProperties ? details : new ScrollViewer { Content = details, MaxHeight = 300 } } };
     }
 
-    /// <summary>A collection item's property in the editor's grid: its name and its editor (text, choice, flags), or its value.</summary>
-    private static Grid PropertyRow(PropertyRowViewModel row)
+    // ------------------------------------------------------------------ the editor panels (#68)
+
+    /// <summary>
+    /// The font editor or the String Collection Editor: a panel over the surface (and over the collection editor) in the
+    /// in-window dialog's frame, as the approved mockup draws it (D41 question 2): the title, what it edits as the context
+    /// line, a close button, the body, and OK and Cancel in the OS's order. Esc cancels, Enter in a list or box confirms.
+    /// </summary>
+    private void ShowEditorPanel()
     {
-        Control editor;
-        if (row.IsChoice || row.IsDock)
+        _editorHost.Children.Clear();
+        Control? panel = _document.FontEditor is { } font ? FontPanel(font)
+            : _document.StringsEditor is { } strings ? StringsPanel(strings)
+            : null;
+        _editorHost.IsVisible = panel is not null;
+        if (panel is not null)
         {
-            var combo = new ComboBox { ItemsSource = row.Options.Select(o => o.Label).ToList(), SelectedItem = row.SelectedOption?.Label, HorizontalAlignment = HorizontalAlignment.Stretch };
-            combo.SelectionChanged += (_, _) => row.SelectedOption = row.Options.FirstOrDefault(o => o.Label == combo.SelectedItem as string);
-            editor = combo;
+            _editorHost.Children.Add(panel);
+            Infrastructure.Ui.Post(() => panel.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(c => c.Focusable && c is TextBox or ListBox)?.Focus());
         }
-        else if (row.IsTextEditor)
+    }
+
+    /// <summary>The in-window dialog's frame around an editor's body.</summary>
+    internal static Border EditorFrame(string title, string context, Control body, System.Windows.Input.ICommand ok, System.Windows.Input.ICommand cancel)
+    {
+        var heading = new TextBlock { Text = title, Classes = { "subheading" }, TextWrapping = TextWrapping.Wrap };
+        var line = new TextBlock { Text = context, Classes = { "muted", "small" }, TextTrimming = TextTrimming.CharacterEllipsis };
+        ToolTip.SetTip(line, context);
+        var close = new Button { Classes = { "subtle", "icon", "compact" }, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(8, 0, 0, 0), IsTabStop = false, Command = cancel, Content = new Icon { Kind = "close", Width = 16, Height = 16 } };
+        Avalonia.Automation.AutomationProperties.SetName(close, Localizer.Get("msg.winFormsDesigner.close", "Close"));
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(20, 16, 12, 4), Children = { new StackPanel { Children = { heading, line } }, close } };
+        Grid.SetColumn(close, 1);
+        Button Action(string text, System.Windows.Input.ICommand command, bool accent)
         {
-            var box = new TextBox { Text = row.Text };
-            box.LostFocus += (_, _) => row.Text = box.Text ?? string.Empty;
-            editor = box;
-        }
-        else if (row.IsFlags || row.IsAnchor)
-        {
-            var flags = new WrapPanel();
-            foreach (var flag in row.Flags)
+            var button = new Button { Content = text, Command = command, Classes = { "dialog" } };
+            if (accent)
             {
-                var toggle = new ToggleButton { Content = flag.Name, IsChecked = flag.IsChecked, Classes = { "toolbar" }, Padding = new Thickness(4, 0) };
-                toggle.IsCheckedChanged += (_, _) => flag.IsChecked = toggle.IsChecked == true;
-                flags.Children.Add(toggle);
+                button.Classes.Add("accent");
             }
 
-            editor = flags;
-        }
-        else
-        {
-            editor = new SelectableTextBlock { Text = row.Value, Margin = new Thickness(4, 3) };
+            Avalonia.Automation.AutomationProperties.SetName(button, text);
+            return button;
         }
 
-        Avalonia.Automation.AutomationProperties.SetName(editor, row.Name);
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*") };
-        var name = new TextBlock { Text = row.Name, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = row.IsSet ? FontWeight.SemiBold : FontWeight.Normal };
-        ToolTip.SetTip(name, row.Description);
-        Grid.SetColumn(editor, 1);
-        grid.Children.Add(name);
-        grid.Children.Add(editor);
-        return grid;
+        var okButton = Action(Localizer.Get("msg.winFormsDesigner.ok", "OK"), ok, accent: true);
+        var cancelButton = Action(Localizer.Get("msg.winFormsDesigner.cancel", "Cancel"), cancel, accent: false);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        buttons.Children.AddRange(DialogViewModel.PrimaryLastOnThisOs ? [cancelButton, okButton] : [okButton, cancelButton]);
+        var footer = new Border { Classes = { "dialogFooter" }, Child = buttons };
+        DockPanel.SetDock(header, Avalonia.Controls.Dock.Top);
+        DockPanel.SetDock(footer, Avalonia.Controls.Dock.Bottom);
+        var frame = new Border
+        {
+            Classes = { "overlay" },
+            CornerRadius = new CornerRadius(8),
+            ClipToBounds = true,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(16),
+            // The body scrolls when the surface is shorter than the editor.
+            Child = new DockPanel { Children = { header, footer, new ScrollViewer { HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled, Content = new Border { Padding = new Thickness(20, 12, 20, 16), Child = body } } } },
+        };
+        Avalonia.Automation.AutomationProperties.SetName(frame, title);
+        KeyboardNavigation.SetTabNavigation(frame, KeyboardNavigationMode.Cycle);
+        frame.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                cancel.Execute(null);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter && e.Source is not TextBox { AcceptsReturn: true })
+            {
+                ok.Execute(null);
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+        return frame;
+    }
+
+    private static TextBlock Label(string text) => new() { Text = text, FontWeight = FontWeight.SemiBold, FontSize = 11, Margin = new Thickness(0, 0, 0, 4) };
+
+    /// <summary>A text box over a list (the font editor's family, style and size): picking in the list fills the box.</summary>
+    private static StackPanel Picker(string label, IReadOnlyList<string> items, Func<string> get, Action<string> set, double width)
+    {
+        var box = new TextBox { Text = get(), Width = width, Margin = new Thickness(0, 0, 0, 4) };
+        var list = new ListBox { ItemsSource = items, Width = width, Height = 110, SelectedItem = items.FirstOrDefault(i => string.Equals(i, get(), StringComparison.OrdinalIgnoreCase)) };
+        PropertyEditors.PropertyDropDowns.CompactRows(list);
+        Avalonia.Automation.AutomationProperties.SetName(box, label);
+        Avalonia.Automation.AutomationProperties.SetName(list, label);
+        box.TextChanged += (_, _) => set(box.Text ?? string.Empty);
+        list.SelectionChanged += (_, _) =>
+        {
+            if (list.SelectedItem is string item && item != box.Text)
+            {
+                box.Text = item;
+            }
+        };
+        if (list.SelectedItem is { } selected)
+        {
+            list.ScrollIntoView(selected);
+        }
+
+        return new StackPanel { Children = { Label(label), box, list } };
+    }
+
+    private static Border FontPanel(DesignerFontEditorViewModel editor)
+    {
+        var sample = new TextBlock { Text = "AaBbYyZz", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        void UpdateSample()
+        {
+            sample.FontFamily = editor.Family.Length == 0 ? FontFamily.Default : new FontFamily(editor.Family);
+            sample.FontSize = float.TryParse(editor.Size, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var points) && points is > 1 and < 200 ? points * 96 / 72 : 12;
+            sample.FontWeight = editor.IsBold ? FontWeight.Bold : FontWeight.Normal;
+            sample.FontStyle = editor.IsItalic ? FontStyle.Italic : FontStyle.Normal;
+            sample.TextDecorations = editor.Underline && editor.Strikeout ? [.. TextDecorations.Underline, .. TextDecorations.Strikethrough]
+                : editor.Underline ? TextDecorations.Underline
+                : editor.Strikeout ? TextDecorations.Strikethrough
+                : null;
+        }
+
+        editor.PropertyChanged += (_, _) => UpdateSample();
+        UpdateSample();
+        Control family = editor.Families.Count > 0
+            ? Picker(Localizer.Get("msg.winFormsDesigner.fontFamily", "Font"), editor.Families, () => editor.Family, v => editor.Family = v, 168)
+            : new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.fontFamily", "Font")), BoundBox(editor.Family, v => editor.Family = v, 168, Localizer.Get("msg.winFormsDesigner.fontFamily", "Font")) } };
+        var columns = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            Children =
+            {
+                family,
+                Picker(Localizer.Get("msg.winFormsDesigner.fontStyle", "Font style"), editor.Styles, () => editor.Style, v => editor.Style = v, 108),
+                Picker(Localizer.Get("msg.winFormsDesigner.fontSize", "Size"), editor.Sizes, () => editor.Size, v => editor.Size = v, 64),
+            },
+        };
+        CheckBox Check(string text, bool value, Action<bool> set)
+        {
+            var check = new CheckBox { Content = text, IsChecked = value };
+            check.IsCheckedChanged += (_, _) => set(check.IsChecked == true);
+            Avalonia.Automation.AutomationProperties.SetName(check, text);
+            return check;
+        }
+
+        var effects = new StackPanel
+        {
+            Width = 120,
+            Spacing = 6,
+            Children =
+            {
+                Label(Localizer.Get("msg.winFormsDesigner.fontEffects", "Effects")),
+                Check(Localizer.Get("msg.winFormsDesigner.strikeout", "Strikeout"), editor.Strikeout, v => editor.Strikeout = v),
+                Check(Localizer.Get("msg.winFormsDesigner.underline", "Underline"), editor.Underline, v => editor.Underline = v),
+            },
+        };
+        var sampleBox = new Border { Height = 56, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Child = sample, ClipToBounds = true };
+        sampleBox.Bind(Border.BackgroundProperty, sampleBox.GetResourceObservable("Shell.Input"));
+        sampleBox.Bind(Border.BorderBrushProperty, sampleBox.GetResourceObservable("Shell.Input.Border"));
+        var sampleColumn = new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.fontSample", "Sample")), sampleBox } };
+        var lower = new Grid { ColumnDefinitions = new ColumnDefinitions("120,*"), ColumnSpacing = 12, Margin = new Thickness(0, 4, 0, 0), Children = { effects, sampleColumn } };
+        Grid.SetColumn(sampleColumn, 1);
+        return EditorFrame(editor.Title, editor.Context, new StackPanel { Spacing = 8, Children = { columns, lower } }, editor.OkCommand, editor.CancelCommand);
+    }
+
+    private static TextBox BoundBox(string value, Action<string> set, double width, string name)
+    {
+        var box = new TextBox { Text = value, Width = width };
+        box.TextChanged += (_, _) => set(box.Text ?? string.Empty);
+        Avalonia.Automation.AutomationProperties.SetName(box, name);
+        return box;
+    }
+
+    private static Border StringsPanel(DesignerStringsEditorViewModel editor)
+    {
+        var box = new TextBox { Text = editor.Text, AcceptsReturn = true, NewLine = "\r\n", TextWrapping = TextWrapping.NoWrap, Width = 356, Height = 150 };
+        box.TextChanged += (_, _) => editor.Text = box.Text ?? string.Empty;
+        Avalonia.Automation.AutomationProperties.SetName(box, editor.Title);
+        var prompt = new TextBlock { Text = editor.Prompt, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) };
+        return EditorFrame(editor.Title, editor.Context, new StackPanel { Children = { prompt, box } }, editor.OkCommand, editor.CancelCommand);
     }
 }
 
