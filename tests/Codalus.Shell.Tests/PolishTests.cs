@@ -428,6 +428,10 @@ public partial class PolishTests
         Assert.Equal([true, true, false, true, false], DocumentTabPanel.Shown([(100, true), (100, false), (100, false), (100, true), (100, false)], 300));
         // Kept tabs stay even when they alone don't fit.
         Assert.Equal([true, true, false], DocumentTabPanel.Shown([(200, true), (200, true), (100, false)], 300));
+        // Kept tabs wider than the group together: the last one ends at the edge (CI's fonts made two long names 600 of 592).
+        Assert.Equal(300, DocumentTabPanel.Fitted(300, 0, 592));
+        Assert.Equal(292, DocumentTabPanel.Fitted(300, 300, 592));
+        Assert.Equal(0, DocumentTabPanel.Fitted(300, 600, 592));
     }
 
     [AvaloniaFact]

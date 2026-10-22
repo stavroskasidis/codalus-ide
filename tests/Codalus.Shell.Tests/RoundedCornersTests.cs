@@ -245,19 +245,18 @@ public sealed class RoundedCornersTests
         await using var f = await OpenAsync("dark");
         ToolChromeControl Output() => f.Window.GetVisualDescendants().OfType<ToolChromeControl>().First(c => c.IsEffectivelyVisible && c.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Name == "PART_Title" && t.Text == "Output"));
 
+        Color Frame() => (Output().BorderBrush as ISolidColorBrush)?.Color ?? default;
+
+        // The frame's style follows IsActive on a later layout pass: wait for the color, then check the rest.
         f.Shell.Layout.ShowToolWindow(BuiltIns.OutputWindow, focus: true);
-        await ShellFixture.PumpUntil(() => Output().IsActive);
-        ShellFixture.Pump();
-        Assert.Equal(Color.Parse("#3794FF"), ((ISolidColorBrush)Output().BorderBrush!).Color);
+        await ShellFixture.PumpUntil(() => Output().IsActive && Frame() == Color.Parse("#3794FF"), describe: () => $"active {Output().IsActive}, frame {Frame()}");
         var title = Output().GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "PART_Title");
         Assert.Equal(FontWeight.SemiBold, title.FontWeight);
         var grip = Output().GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "PART_Grip");
         Assert.Equal(Color.Parse("#252526"), ((ISolidColorBrush)grip.Background!).Color); // the caption stays on the card
 
         f.Shell.Layout.OpenDocument(f.Shell.Layout.ActiveDocument!, focus: true);
-        await ShellFixture.PumpUntil(() => !Output().IsActive);
-        ShellFixture.Pump();
-        Assert.Equal(Color.Parse("#3F3F46"), ((ISolidColorBrush)Output().BorderBrush!).Color);
+        await ShellFixture.PumpUntil(() => !Output().IsActive && Frame() == Color.Parse("#3F3F46"), describe: () => $"active {Output().IsActive}, frame {Frame()}");
     }
 
     [AvaloniaFact]

@@ -60,12 +60,18 @@ public sealed class DocumentTabPanel : Panel
                 continue;
             }
 
-            children[i].Arrange(new Rect(x, 0, children[i].DesiredSize.Width, finalSize.Height));
-            x += children[i].DesiredSize.Width;
+            // The tabs to keep can be wider than the group on their own (a pinned and a selected tab with long names): the
+            // last one gets what is left, its title cut off, rather than running past the edge.
+            var width = Fitted(children[i].DesiredSize.Width, x, finalSize.Width);
+            children[i].Arrange(new Rect(x, 0, width, finalSize.Height));
+            x += width;
         }
 
         return finalSize;
     }
+
+    /// <summary>A shown tab's width at <paramref name="x"/>: its own, or what is left of <paramref name="available"/>.</summary>
+    public static double Fitted(double width, double x, double available) => Math.Max(0, Math.Min(width, available - x));
 
     private static bool Keep(Control tab) => DocumentTab.GetIsPinned(tab) || tab is TabStripItem { IsSelected: true };
 
