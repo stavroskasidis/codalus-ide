@@ -556,6 +556,105 @@ public sealed class DiffDocumentTests
         Assert.Equal(string.Empty, Git(folder, "diff", "--cached"));
     }
 
+    [AvaloniaFact]
+    public async Task Summary_folds_the_unchanged_lines_on_both_sides_and_a_click_opens_a_run()
+    {
+        var text = string.Concat(Enumerable.Range(1, 30).Select(i => $"// line {i}\n"));
+        var (f, _, file) = await RepositoryAsync(text);
+        await using var fixture = f;
+        await File.WriteAllTextAsync(file, text.Replace("// line 15\n", "// LINE 15\n", StringComparison.Ordinal));
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var view = await OpenDiffViewAsync(f, file, staged: false);
+        Assert.False(view.ViewModel.IsSummary); // off by default
+        Assert.Equal(30, view.LeftText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
+
+        await f.RunAsync("git.diff.toggleSummary");
+        await ShellFixture.PumpUntil(() => view.LeftText.StartsWith('⋯'));
+        var left = view.LeftText.Split('\n');
+        var right = view.RightText.Split('\n');
+        Assert.Equal(left.Length, right.Length); // in step
+        Assert.Equal("⋯ 11 unchanged lines, 1–11", left[0]);
+        Assert.Equal("// line 12", left[1]);
+        Assert.Equal("⋯ 12 unchanged lines, 19–30", left[8]);
+        Assert.Equal((0, 0), view.NumbersAt(DiffPaneSide.Old, 1));
+        Assert.Equal((12, 0), view.NumbersAt(DiffPaneSide.Old, 2));
+
+        // F8 still finds the change; a click on the first run opens it.
+        await f.RunAsync("git.diff.nextChange");
+        Assert.Equal("1 change", view.CountText);
+        Assert.Contains("LINE 15", view.EditorOf(DiffPaneSide.New).Document.GetText(view.EditorOf(DiffPaneSide.New).Document.GetLineByNumber(view.EditorOf(DiffPaneSide.New).TextArea.Caret.Line)), StringComparison.Ordinal);
+        view.ClickFold(DiffPaneSide.Old, 1);
+        await ShellFixture.PumpUntil(() => view.LeftText.StartsWith("// line 1\n", StringComparison.Ordinal));
+        Assert.Contains("⋯ 12 unchanged lines", view.LeftText, StringComparison.Ordinal);
+
+        await f.RunAsync("git.diff.toggleSummary");
+        await ShellFixture.PumpUntil(() => !view.LeftText.Contains('⋯'));
+    }
+
+    [AvaloniaFact]
+    public async Task No_lines_to_compare_say_why_and_offer_the_next_step()
+    {
+        var (f, folder, file) = await RepositoryAsync();
+        await using var fixture = f;
+
+        // No changes at all (E6).
+        var view = await OpenDiffViewAsync(f, file, staged: false);
+        await ShellFixture.PumpUntil(() => view.EmptyState is not null);
+        Assert.Equal("Greeter.cs has no changes.", view.EmptyState!.Value.Message);
+        Assert.Equal("The working tree, the index and HEAD all match.", view.EmptyState.Value.Detail);
+        Assert.Equal(["Open File"], view.EmptyState.Value.Actions);
+        Assert.Equal("No changes", view.CountText);
+
+        // Only the line endings differ (E5): Stage All stays.
+        await File.WriteAllTextAsync(file, Original.Replace("\n", "\r\n", StringComparison.Ordinal));
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        await view.ViewModel.LoadAsync();
+        await ShellFixture.PumpUntil(() => view.ViewModel.State == DiffState.OnlyFormat);
+        Assert.Equal("Only the line endings differ: LF in the index, CRLF in the working tree.", view.EmptyState!.Value.Message);
+        Assert.Equal("Line endings only", view.CountText);
+        Assert.True(await view.StageAllAsync());
+
+        // Staged, the working tree matches the index (E1): Open Staged Changes.
+        await ShellFixture.PumpUntil(() => view.ViewModel.State == DiffState.NoChanges);
+        Assert.Equal("No changes: the working tree matches the index.", view.EmptyState!.Value.Message);
+        Assert.Equal(["Open Staged Changes", "Open File"], view.EmptyState.Value.Actions);
+        view.ClickEmptyAction("Open Staged Changes");
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<DiffDocument>().Any(d => d.ViewModel.Staged));
+
+        // A binary file shows each side's size (E2).
+        var binary = Path.Combine(folder, "logo.bin");
+        await File.WriteAllBytesAsync(binary, [0x89, 0x50, 0x00, 0x01, 0x02]);
+        Git(folder, "add", ".");
+        Git(folder, "commit", "-q", "-m", "binary");
+        await File.WriteAllBytesAsync(binary, [0x89, 0x50, 0x00, 0x01, 0x02, 0x03, 0x04]);
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var binaryView = await OpenDiffViewAsync(f, binary, staged: false);
+        await ShellFixture.PumpUntil(() => binaryView.EmptyState is not null);
+        Assert.Equal("logo.bin (Index): Binary file, 5 bytes | logo.bin (Working tree): Binary file, 7 bytes", binaryView.EmptyState!.Value.Message);
+        Assert.Equal("Binary file", binaryView.CountText);
+    }
+
+    [AvaloniaFact]
+    public async Task A_file_too_large_waits_for_Compare_Anyway()
+    {
+        var text = string.Concat(Enumerable.Range(1, DiffViewModel.MaxLines).Select(i => $"{i}\n"));
+        var (f, _, file) = await RepositoryAsync(text);
+        await using var fixture = f;
+        await File.WriteAllTextAsync(file, text + "one more\n");
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var view = await OpenDiffViewAsync(f, file, staged: false);
+        await ShellFixture.PumpUntil(() => view.EmptyState is not null);
+        Assert.Equal(DiffState.TooLarge, view.ViewModel.State);
+        Assert.StartsWith("Greeter.cs is too large to compare here (", view.EmptyState!.Value.Message, StringComparison.Ordinal);
+        Assert.Contains((DiffViewModel.MaxLines + 1).ToString("N0", System.Globalization.CultureInfo.CurrentCulture) + " lines", view.EmptyState.Value.Message, StringComparison.Ordinal);
+        Assert.Equal(["Compare Anyway", "Open File"], view.EmptyState.Value.Actions);
+        Assert.Equal("Not compared", view.CountText);
+        Assert.Empty(view.ViewModel.Rows);
+
+        view.ClickEmptyAction("Compare Anyway");
+        await ShellFixture.PumpUntil(() => view.ViewModel is { State: DiffState.Lines, Changes.Count: 1 } && view.EmptyState is null, seconds: 60);
+    }
+
     private static Color Token(string key, Avalonia.Styling.ThemeVariant variant) =>
         Application.Current!.TryGetResource(key, variant, out var value) && value is ISolidColorBrush brush ? brush.Color : throw new InvalidOperationException($"{key} in {variant}");
 

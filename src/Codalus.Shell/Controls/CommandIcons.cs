@@ -415,6 +415,7 @@ public static class CommandIcons
         ["git.diff.discardAll"] = new("discard", Git),
         ["git.diff.unstageAll"] = new("subtract", Git),
         ["git.diff.toggleStagingControls"] = new("staging-controls"),
+        ["git.diff.toggleSummary"] = new("fold"),
         ["git.stash"] = new("stash", Git),
         ["git.tags"] = new("tag"),
         ["git.showDiff"] = new("compare"),

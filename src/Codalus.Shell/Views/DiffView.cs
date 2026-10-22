@@ -273,6 +273,13 @@ public sealed class DiffView : UserControl, IPaneView
     private readonly ProgressBar _progress;
     private readonly List<(ContentControl Control, string Text)> _labeled = [];
     private readonly ToggleButton? _stagingToggle;
+    private readonly ToggleButton _summaryToggle;
+    private readonly Border _empty;
+    private readonly Icon _emptyIcon = new() { Width = 32, Height = 32, HorizontalAlignment = HorizontalAlignment.Center };
+    private readonly TextBlock _emptyMessage = new() { TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, FontWeight = FontWeight.SemiBold, MaxWidth = 520 };
+    private readonly TextBlock _emptyDetail = new() { TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, MaxWidth = 520 };
+    private readonly StackPanel _emptyActions = new() { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
+    private readonly Grid _binary = new() { ColumnDefinitions = new ColumnDefinitions("*,*"), HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly DiffStagingMargin? _rightStaging;
     private readonly DiffStagingMargin? _inlineStaging;
     private IReadOnlySet<int>? _outlined;
@@ -361,12 +368,36 @@ public sealed class DiffView : UserControl, IPaneView
             _toolbar.Children.Add(_stagingToggle);
         }
 
+        var summary = Localizer.Get("diff.summary", "Summary");
+        _summaryToggle = new ToggleButton { Content = summary, IsChecked = viewModel.IsSummary };
+        _summaryToggle.Classes.AddRange(["toolbar", "iconText"]);
+        ButtonIcon.SetKind(_summaryToggle, "fold");
+        AutomationProperties.SetName(_summaryToggle, summary);
+        ToolTip.SetTip(_summaryToggle, Localizer.Get("diff.summaryTip", "Summary: fold the unchanged lines"));
+        _summaryToggle.IsCheckedChanged += (_, _) => viewModel.IsSummary = _summaryToggle.IsChecked == true;
+        _labeled.Add((_summaryToggle, summary));
+        _toolbar.Children.Add(_summaryToggle);
         _toolbar.Children.Add(Separator());
         _toolbar.Children.Add(GearMenu());
         _progress = new ProgressBar { IsIndeterminate = true, Height = 2, MinHeight = 2, IsVisible = false };
         AutomationProperties.SetName(_progress, Localizer.Get("diff.working", "Working"));
 
-        var body = new Panel { Children = { _sideBySide, _inline } };
+        _emptyDetail.Classes.Add("muted");
+        _empty = new Border
+        {
+            Child = new StackPanel
+            {
+                Spacing = 10,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(24),
+                Children = { _emptyIcon, _binary, _emptyMessage, _emptyDetail, _emptyActions },
+            },
+            IsVisible = false,
+        };
+        _empty.Bind(Border.BackgroundProperty, _empty.GetResourceObservable("Shell.Editor.Background"));
+        AutomationProperties.SetLiveSetting(_emptyMessage, AutomationLiveSetting.Polite);
+        var body = new Panel { Children = { _sideBySide, _inline, _empty } };
         var root = new DockPanel();
         DockPanel.SetDock(_toolbar, Avalonia.Controls.Dock.Top);
         DockPanel.SetDock(_progress, Avalonia.Controls.Dock.Top);
@@ -419,6 +450,22 @@ public sealed class DiffView : UserControl, IPaneView
             _active = view;
             OnCaretMoved(view);
         };
+        editor.TextArea.PointerReleased += (_, e) =>
+        {
+            if (e.InitialPressMouseButton == MouseButton.Left && editor.GetPositionFromPoint(e.GetPosition(editor)) is { } position)
+            {
+                OpenFoldAt(view, position.Line);
+            }
+        };
+        editor.TextArea.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                OpenFoldAt(view, editor.TextArea.Caret.Line);
+                e.Handled = true;
+            }
+        };
+        editor.TextArea.TextView.LineTransformers.Add(new FoldLineColorizer(editor, pane));
         editor.ContextMenu = new ContextMenu();
         editor.ContextMenu.Opening += (_, _) =>
         {
@@ -507,9 +554,117 @@ public sealed class DiffView : UserControl, IPaneView
             case nameof(DiffViewModel.ShowStagingControls):
                 ApplyStagingControls();
                 break;
-            case nameof(DiffViewModel.IsBusy) or nameof(DiffViewModel.BusyText):
+            case nameof(DiffViewModel.IsBusy) or nameof(DiffViewModel.BusyText) or nameof(DiffViewModel.IsLoading):
                 ApplyBusy();
                 break;
+        }
+    }
+
+    /// <summary>
+    /// The lines, or the message instead of them (E1–E6): no changes (Open Staged Changes when some are staged),
+    /// only the line endings, the encoding or the file mode, a binary file's sizes, a file too large (Compare Anyway).
+    /// TODO(issue): image previews for binary image files.
+    /// </summary>
+    private void ApplyState()
+    {
+        var vm = _viewModel;
+        var lines = vm.State == DiffState.Lines;
+        _empty.IsVisible = !lines && vm.IsLoaded;
+        _summaryToggle.IsEnabled = lines;
+        if (_stagingToggle is not null)
+        {
+            _stagingToggle.IsEnabled = lines;
+        }
+
+        foreach (var (control, _) in _labeled)
+        {
+            if (control != _stagingToggle && control != _summaryToggle)
+            {
+                control.IsEnabled = vm.State != DiffState.NoChanges && !vm.IsBusy;
+            }
+        }
+
+        if (_summaryToggle.IsChecked != vm.IsSummary)
+        {
+            _summaryToggle.IsChecked = vm.IsSummary;
+        }
+
+        if (lines)
+        {
+            return;
+        }
+
+        _emptyIcon.Kind = vm.State switch
+        {
+            DiffState.NoChanges => "check-circle",
+            DiffState.TooLarge => "warning",
+            DiffState.Binary => "file",
+            _ => "info",
+        };
+        _emptyIcon.IsVisible = vm.State != DiffState.Binary;
+        _emptyMessage.Text = vm.StateMessage;
+        _emptyMessage.IsVisible = vm.State != DiffState.Binary;
+        _emptyDetail.Text = vm.StateDetail;
+        _emptyDetail.IsVisible = vm.StateDetail is not null;
+        _binary.IsVisible = vm.State == DiffState.Binary;
+        _binary.Children.Clear();
+        if (vm.State == DiffState.Binary)
+        {
+            foreach (var (side, size, column) in new[] { (vm.OldSide, vm.Sizes.Old, 0), (vm.NewSide, vm.Sizes.New, 1) })
+            {
+                var name = new TextBlock { Text = $"{side.Name} ({side.Label})", FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center };
+                var kind = new TextBlock { Text = Localizer.Get("diff.binaryFile", "Binary file"), HorizontalAlignment = HorizontalAlignment.Center };
+                var bytes = new TextBlock { Text = size, HorizontalAlignment = HorizontalAlignment.Center };
+                bytes.Classes.Add("muted");
+                var card = new StackPanel { Spacing = 4, Margin = new Thickness(24, 0), Children = { new Icon { Kind = "file", Width = 32, Height = 32, HorizontalAlignment = HorizontalAlignment.Center }, name, kind, bytes } };
+                AutomationProperties.SetName(card, $"{side.Name} ({side.Label}): {kind.Text}, {size}");
+                Grid.SetColumn(card, column);
+                _binary.Children.Add(card);
+            }
+        }
+
+        _emptyActions.Children.Clear();
+        if (vm.State == DiffState.NoChanges && vm.OffersStagedChanges)
+        {
+            _emptyActions.Children.Add(Action("compare", Localizer.Get("diff.openStaged", "Open Staged Changes"), () => _ = vm.OpenStaged?.Invoke(vm.Path)));
+        }
+
+        if (vm.State == DiffState.TooLarge)
+        {
+            _emptyActions.Children.Add(Action("compare", Localizer.Get("diff.compareAnyway", "Compare Anyway"), () => _ = CompareAnywayAsync()));
+        }
+
+        _emptyActions.Children.Add(Action("document-text", Localizer.Get("diff.openFileAction", "Open File"), OpenFile));
+    }
+
+    private static Button Action(string icon, string text, Action action)
+    {
+        var button = new Button { Content = text };
+        button.Classes.Add("iconText");
+        ButtonIcon.SetKind(button, icon);
+        button.Click += (_, _) => action();
+        return button;
+    }
+
+    private async Task CompareAnywayAsync()
+    {
+        try
+        {
+            await _viewModel.CompareAnywayAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
+        {
+            ReportError?.Invoke(ex);
+        }
+    }
+
+    /// <summary>A click or Enter on a folded run's line opens it (Summary).</summary>
+    private void OpenFoldAt(DiffPaneView pane, int line)
+    {
+        var lines = PaneLinesOf(pane).Lines;
+        if ((uint)(line - 1) < (uint)lines.Count && lines[line - 1].Kind == 'z')
+        {
+            _viewModel.ExpandFold(lines[line - 1].Row);
         }
     }
 
@@ -533,17 +688,10 @@ public sealed class DiffView : UserControl, IPaneView
     /// <summary>While git runs (A7): a progress line, "Staging…" in the toolbar, and the actions waiting.</summary>
     private void ApplyBusy()
     {
-        _progress.IsVisible = _viewModel.IsBusy;
+        _progress.IsVisible = _viewModel.IsBusy || (_viewModel.IsLoading && !_viewModel.IsLoaded);
         _rightStaging?.SetBusy(_viewModel.IsBusy);
         _inlineStaging?.SetBusy(_viewModel.IsBusy);
-        foreach (var (control, _) in _labeled)
-        {
-            if (control != _stagingToggle)
-            {
-                control.IsEnabled = !_viewModel.IsBusy;
-            }
-        }
-
+        ApplyState();
         UpdateCount();
     }
 
@@ -593,8 +741,9 @@ public sealed class DiffView : UserControl, IPaneView
         _inline.IsVisible = !vm.SideBySide;
         var carets = new[] { _left, _right, _inline }.ToDictionary(p => p, p => (Row: RowAt(p, p.Editor.TextArea.Caret.Line - 1), p.Editor.TextArea.Caret.Column));
 
-        (_leftPane, _rightPane) = DiffRows.SideBySide(vm.Rows, vm.OldLines, vm.NewLines);
-        _inlinePane = DiffRows.Inline(vm.Rows, vm.OldLines, vm.NewLines);
+        var folds = vm.Folds;
+        (_leftPane, _rightPane) = DiffRows.SideBySide(vm.Rows, vm.OldLines, vm.NewLines, folds, vm.FoldLabel);
+        _inlinePane = DiffRows.Inline(vm.Rows, vm.OldLines, vm.NewLines, folds, vm.FoldLabel);
         foreach (var (pane, lines) in new[] { (_left, _leftPane), (_right, _rightPane), (_inline, _inlinePane) })
         {
             if (pane.Editor.Text != lines.Text)
@@ -624,6 +773,7 @@ public sealed class DiffView : UserControl, IPaneView
         ToolTip.SetTip(_removedChip, AutomationProperties.GetName(_removedChip));
         ToolTip.SetTip(_addedChip, AutomationProperties.GetName(_addedChip));
         _next.IsEnabled = _previous.IsEnabled = vm.Changes.Count > 0;
+        ApplyState();
 
         foreach (var pane in new[] { _left, _right, _inline })
         {
@@ -885,6 +1035,7 @@ public sealed class DiffView : UserControl, IPaneView
         var inline = Item(Localizer.Get("diff.inline", "Inline"), () => _viewModel.SideBySide = false, MenuItemToggleType.Radio);
         var staging = Item(Localizer.Get("diff.showStagingControls", "Show Staging Controls"), () => _viewModel.ShowStagingControls = !_viewModel.ShowStagingControls, MenuItemToggleType.CheckBox);
         staging.IsVisible = _viewModel.CanStage || _viewModel.CanUnstage;
+        var summary = Item(Localizer.Get("diff.summary", "Summary"), () => _viewModel.IsSummary = !_viewModel.IsSummary, MenuItemToggleType.CheckBox);
         var menu = new MenuFlyout
         {
             Items =
@@ -893,7 +1044,8 @@ public sealed class DiffView : UserControl, IPaneView
                 inline,
                 new Separator(),
                 staging,
-                new Separator { IsVisible = staging.IsVisible },
+                summary,
+                new Separator(),
                 MenuEntry.Create(Localizer.Get("diff.refresh", "Refresh"), "refresh", click: Refresh),
                 MenuEntry.Create(OpenFileTitle, "document-text", click: OpenFile),
             },
@@ -903,6 +1055,8 @@ public sealed class DiffView : UserControl, IPaneView
             sideBySide.IsChecked = _viewModel.SideBySide;
             inline.IsChecked = !_viewModel.SideBySide;
             staging.IsChecked = _viewModel.ShowStagingControls;
+            staging.IsEnabled = summary.IsEnabled = _viewModel.State == DiffState.Lines;
+            summary.IsChecked = _viewModel.IsSummary;
         };
         var button = new DropDownButton { Content = new Icon { Kind = "gear" }, Flyout = menu };
         button.Classes.Add("toolbar");
@@ -1358,6 +1512,17 @@ public sealed class DiffView : UserControl, IPaneView
 
     /// <summary>The toolbar's buttons and toggles, by name (tests).</summary>
     internal IReadOnlyList<string> ToolbarNames => [.. _toolbar.Children.OfType<Control>().Select(AutomationProperties.GetName).Where(n => !string.IsNullOrEmpty(n))!];
+
+    /// <summary>The message shown instead of the lines, and its actions' names (tests); null when the lines show.</summary>
+    internal (string? Message, string? Detail, IReadOnlyList<string> Actions)? EmptyState => _empty.IsVisible
+        ? (_viewModel.State == DiffState.Binary ? string.Join(" | ", _binary.Children.Select(AutomationProperties.GetName)) : _emptyMessage.Text, _emptyDetail.IsVisible ? _emptyDetail.Text : null, [.. _emptyActions.Children.OfType<Button>().Select(b => b.Content as string ?? string.Empty)])
+        : null;
+
+    /// <summary>Clicks a folded run's line (tests): the 1-based pane line of a side.</summary>
+    internal void ClickFold(DiffPaneSide side, int line) => OpenFoldAt(PaneOf(side), line);
+
+    /// <summary>Clicks an action of the message instead of the lines (tests).</summary>
+    internal void ClickEmptyAction(string text) => _emptyActions.Children.OfType<Button>().Single(b => b.Content as string == text).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
     /// <summary>The left side's share of the width (tests).</summary>
     public double SplitRatio => _left.Bounds.Width + _right.Bounds.Width is > 0 and var total ? _left.Bounds.Width / total : _viewModel.SplitRatio;

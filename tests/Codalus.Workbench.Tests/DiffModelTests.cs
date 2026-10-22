@@ -82,4 +82,33 @@ public sealed class DiffModelTests
         Assert.Equal((5, 0), inline.NumbersOf(5)); // the removed "e"
         Assert.Equal((0, 6), inline.NumbersOf(6)); // the added "E"
     }
+
+    [Fact]
+    public void Summary_folds_unchanged_runs_to_three_lines_of_context_on_both_sides()
+    {
+        var old = Enumerable.Range(1, 30).Select(i => $"line {i}").ToArray();
+        var now = old.Select(l => l == "line 15" ? "LINE 15" : l).ToArray();
+        var rows = Rows(old, now);
+
+        // Lines 1–11 and 19–30 fold; 12–14 and 16–18 stay as context around the change.
+        var folds = DiffRows.Folds(rows);
+        Assert.Equal([new DiffFold(0, 10), new DiffFold(18, 29)], folds);
+
+        // A run that would hide fewer than four lines stays open.
+        Assert.Empty(DiffRows.Folds(Rows(old[..10], [.. old[..5], "x", .. old[6..10]])));
+        Assert.Empty(DiffRows.Folds(Rows(old, old)));
+
+        var (left, right) = DiffRows.SideBySide(rows, old, now, folds, (fold, isOld) => $"{fold.Count} unchanged lines, {(isOld ? "old" : "new")}");
+        Assert.Equal(left.Lines.Count, right.Lines.Count); // in step
+        Assert.Equal('z', left.Lines[0].Kind);
+        Assert.Equal("11 unchanged lines, old", left.Text.Split('\n')[0]);
+        Assert.Equal("11 unchanged lines, new", right.Text.Split('\n')[0]);
+        Assert.Equal((0, 0), left.NumbersOf(0));
+        Assert.Equal((true, 0), left.SourceOf(0));
+        Assert.Equal((12, 0), left.NumbersOf(1));
+        Assert.Equal(1 + 3 + 1 + 3 + 1, left.Lines.Count);
+
+        var inline = DiffRows.Inline(rows, old, now, folds, (fold, _) => $"{fold.Count} unchanged lines");
+        Assert.Equal("z   -+   z", string.Concat(inline.Lines.Select(l => l.Kind)));
+    }
 }

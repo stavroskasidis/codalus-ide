@@ -12,6 +12,25 @@ public sealed record DiffSide(string Path, string Label, string? Note, string In
     public string Name => System.IO.Path.GetFileName(Path);
 }
 
+/// <summary>What a diff document shows: its lines, or a message instead (D45 E1–E6).</summary>
+public enum DiffState
+{
+    /// <summary>The two versions' lines, aligned.</summary>
+    Lines,
+
+    /// <summary>Nothing differs (E1, E6), or the files are identical.</summary>
+    NoChanges,
+
+    /// <summary>Git reports a change, but every line's text is the same: line endings, the encoding, the file mode (E5).</summary>
+    OnlyFormat,
+
+    /// <summary>A binary file: each side's size (E2).</summary>
+    Binary,
+
+    /// <summary>Over 10 MB or 100,000 lines: waits for Compare Anyway (E3).</summary>
+    TooLarge,
+}
+
 /// <summary>What a staging command does to the lines it acts on.</summary>
 public enum DiffAction
 {
@@ -48,6 +67,16 @@ public sealed class DiffViewModel : ObservableObject
     private string? _busyText;
     private byte[] _oldBytes = [];
     private byte[] _newBytes = [];
+    private bool _isSummary;
+    private bool _isLoading;
+    private bool _compareAnyway;
+    private readonly HashSet<int> _expandedFolds = [];
+    private (int Bytes, int Lines) _largest;
+
+    /// <summary>A side larger than this (bytes) or longer (lines) waits for Compare Anyway (D45 question 13).</summary>
+    public const int MaxBytes = 10 * 1024 * 1024;
+
+    public const int MaxLines = 100_000;
     private readonly Dictionary<int, (IReadOnlyList<(int Start, int Length)> Old, IReadOnlyList<(int Start, int Length)> New)> _words = [];
 
     public DiffViewModel(GitService git, string path, bool staged)
@@ -141,6 +170,78 @@ public sealed class DiffViewModel : ObservableObject
 
     /// <summary>Whether the working tree's side has edits in its editor that aren't saved (they're shown; actions save them first).</summary>
     public bool HasUnsavedEdits => !Staged && IsGitDiff && Services?.OpenDocument(Path) is { IsModified: true };
+
+    /// <summary>
+    /// Summary (D45 question 12, F1, off by default): unchanged runs folded to three lines of context, both sides in
+    /// step; a folded run opens on a click or Enter.
+    /// </summary>
+    public bool IsSummary
+    {
+        get => _isSummary;
+        set
+        {
+            if (SetField(ref _isSummary, value))
+            {
+                _expandedFolds.Clear();
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>The folded runs shown now: Summary's, less those opened.</summary>
+    public IReadOnlyList<DiffFold> Folds => _isSummary && State == DiffState.Lines ? [.. DiffRows.Folds(Rows).Where(f => !_expandedFolds.Contains(f.FirstRow))] : [];
+
+    /// <summary>Opens a folded run (its first row).</summary>
+    public void ExpandFold(int firstRow)
+    {
+        if (_expandedFolds.Add(firstRow))
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>A folded run's line: "⋯ 12 unchanged lines, 7–18", in a side's own numbers.</summary>
+    public string FoldLabel(DiffFold fold, bool old)
+    {
+        int? first = old ? Rows[fold.FirstRow].OldLine : Rows[fold.FirstRow].NewLine;
+        int? last = old ? Rows[fold.LastRow].OldLine : Rows[fold.LastRow].NewLine;
+        return Localizer.Format("diff.foldedLines", "⋯ {0} unchanged lines, {1}–{2}", fold.Count, first ?? 0, last ?? 0);
+    }
+
+    /// <summary>While the texts are read and compared.</summary>
+    public bool IsLoading
+    {
+        get => _isLoading;
+        private set => SetField(ref _isLoading, value);
+    }
+
+    /// <summary>What the document shows: its lines, or a message (no changes, only the line endings, binary, too large).</summary>
+    public DiffState State { get; private set; }
+
+    /// <summary>The message shown instead of the lines, or null.</summary>
+    public string? StateMessage { get; private set; }
+
+    /// <summary>The line under the message, or null.</summary>
+    public string? StateDetail { get; private set; }
+
+    /// <summary>The toolbar's count while there are no lines to compare ("No changes", "Line endings only"…).</summary>
+    public string? StateCount { get; private set; }
+
+    /// <summary>A binary file's sizes, each side's ("14.2 KB").</summary>
+    public (string Old, string New) Sizes { get; private set; } = (string.Empty, string.Empty);
+
+    /// <summary>The working tree matches the index, but the file has staged changes: offer the staged diff (E1).</summary>
+    public bool OffersStagedChanges { get; private set; }
+
+    /// <summary>Opens the file's staged diff (E1's Open Staged Changes).</summary>
+    public Func<string, Task>? OpenStaged { get; set; }
+
+    /// <summary>A file too large to compare is compared anyway (E3).</summary>
+    public Task CompareAnywayAsync()
+    {
+        _compareAnyway = true;
+        return LoadAsync();
+    }
 
     /// <summary>Whether the old side's file exists (an untracked file's index side doesn't).</summary>
     public bool OldExists { get; private set; } = true;
@@ -263,13 +364,29 @@ public sealed class DiffViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
+        IsLoading = true;
+        try
+        {
+            await LoadCoreAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task LoadCoreAsync()
+    {
         OldPath = LeftPath ?? Path;
         if (_oldProvider is not null && _newProvider is not null)
         {
             var oldText = await _oldProvider().ConfigureAwait(true);
             var newText = await _newProvider().ConfigureAwait(true);
-            await SetTextsAsync(Text(oldText), Text(newText)).ConfigureAwait(true);
             SetSides(_oldTitle ?? string.Empty, null, _newTitle ?? string.Empty, null);
+            var revisionsGated = Gate(oldText.Length, newText.Length, Count(oldText), Count(newText), oldText.Contains('\0') || newText.Contains('\0'));
+            await SetTextsAsync(revisionsGated ? Text(string.Empty) : Text(oldText), revisionsGated ? Text(string.Empty) : Text(newText)).ConfigureAwait(true);
+            SetSides(_oldTitle ?? string.Empty, null, _newTitle ?? string.Empty, null);
+            SetState(revisionsGated);
             Summary = AddedLines + RemovedLines == 0 ? "The files are identical." : $"+{AddedLines} −{RemovedLines}";
             Loaded();
             return;
@@ -277,10 +394,14 @@ public sealed class DiffViewModel : ObservableObject
 
         if (_git is null)
         {
-            var oldFile = await ReadAsync(LeftPath!).ConfigureAwait(true);
-            var newFile = await ReadAsync(Path).ConfigureAwait(true);
-            await SetTextsAsync(oldFile, newFile).ConfigureAwait(true);
+            var oldFile = File.Exists(LeftPath!) ? await ReadBytesAsync(LeftPath!).ConfigureAwait(true) : [];
+            var newFile = File.Exists(Path) ? await ReadBytesAsync(Path).ConfigureAwait(true) : [];
             SetSides(Folder(LeftPath!), null, Folder(Path), null);
+            (_oldBytes, _newBytes) = (oldFile, newFile);
+            var filesGated = Gate(oldFile.Length, newFile.Length, Count(oldFile), Count(newFile), IsBinary(oldFile) || IsBinary(newFile));
+            await SetTextsAsync(filesGated ? Text(string.Empty) : TextFiles.Decode(oldFile), filesGated ? Text(string.Empty) : TextFiles.Decode(newFile)).ConfigureAwait(true);
+            SetSides(Folder(LeftPath!), null, Folder(Path), null);
+            SetState(filesGated);
             Summary = AddedLines + RemovedLines == 0 ? "The files are identical." : $"+{AddedLines} −{RemovedLines}";
             Loaded();
             return;
@@ -316,7 +437,10 @@ public sealed class DiffViewModel : ObservableObject
         }
 
         Diff = await _git.DiffAsync(Path, Staged).ConfigureAwait(true);
-        await SetTextsAsync(old, now).ConfigureAwait(true);
+        var index0 = Localizer.Get("diff.index", "Index");
+        SetSides(Staged ? "HEAD" : index0, null, Staged ? index0 : Localizer.Get("diff.workingTree", "Working tree"), null);
+        var gated = Gate(oldBytes?.Length ?? 0, nowBytes.Length, Count(oldBytes ?? []), Count(nowBytes), Diff is { IsBinary: true } || IsBinary(oldBytes ?? []) || IsBinary(nowBytes));
+        await SetTextsAsync(gated ? Text(string.Empty) : old, gated ? Text(string.Empty) : now).ConfigureAwait(true);
         (_oldBytes, _newBytes) = (oldBytes ?? [], nowBytes);
         string? newNote = buffer is { IsModified: true } ? Localizer.Get("diff.unsavedEditsIncluded", "unsaved edits included") : null;
         if (Staged)
@@ -332,10 +456,137 @@ public sealed class DiffViewModel : ObservableObject
 
         var index = Localizer.Get("diff.index", "Index");
         SetSides(Staged ? "HEAD" : index, null, Staged ? index : Localizer.Get("diff.workingTree", "Working tree"), newNote);
+        OffersStagedChanges = !Staged && status is { IsStaged: true };
+        SetState(gated);
         var changes = Changes.Count;
         Summary = Diff is null ? "No changes." : Diff.IsBinary ? "Binary file." : $"{changes} change{(changes == 1 ? string.Empty : "s")}: +{AddedLines} −{RemovedLines}";
         Loaded();
     }
+
+    /// <summary>
+    /// Before comparing (E2, E3): a binary file shows its sizes; a side over 10 MB or 100,000 lines waits for Compare
+    /// Anyway. True when the lines aren't compared.
+    /// </summary>
+    private bool Gate(int oldLength, int newLength, int oldLines, int newLines, bool binary)
+    {
+        Sizes = (Size(oldLength), Size(newLength));
+        _largest = (Math.Max(oldLength, newLength), Math.Max(oldLines, newLines));
+        if (binary)
+        {
+            State = DiffState.Binary;
+            return true;
+        }
+
+        if (!_compareAnyway && (Math.Max(oldLength, newLength) > MaxBytes || Math.Max(oldLines, newLines) > MaxLines))
+        {
+            State = DiffState.TooLarge;
+            return true;
+        }
+
+        State = DiffState.Lines;
+        return false;
+    }
+
+    /// <summary>The message instead of the lines, when there are none to compare (E1–E6).</summary>
+    private void SetState(bool gated)
+    {
+        var name = System.IO.Path.GetFileName(Path);
+        (StateMessage, StateDetail, StateCount) = (null, null, null);
+        if (gated && State == DiffState.Binary)
+        {
+            (StateMessage, StateCount) = (Localizer.Get("diff.binaryFile", "Binary file"), Localizer.Get("diff.binaryFile", "Binary file"));
+            return;
+        }
+
+        if (gated)
+        {
+            StateMessage = Localizer.Format("diff.tooLarge", "{0} is too large to compare here ({1}, {2} lines).", name, Size(_largest.Bytes), _largest.Lines.ToString("N0", System.Globalization.CultureInfo.CurrentCulture));
+            StateDetail = Localizer.Get("diff.tooLargeDetail", "Comparing it could keep Codalus busy for a while.");
+            StateCount = Localizer.Get("diff.notCompared", "Not compared");
+            return;
+        }
+
+        if (Changes.Count > 0)
+        {
+            State = DiffState.Lines;
+            return;
+        }
+
+        if (IsGitDiff && Diff is not null)
+        {
+            // Git reports a change, but every line's text is the same (E5).
+            State = DiffState.OnlyFormat;
+            var (old, now) = (Where(OldSide), Where(NewSide));
+            var modes = Diff.Header.Select(l => l.Split(' ')).Where(p => p.Length == 3 && p[1] == "mode" && p[0] is "old" or "new").ToDictionary(p => p[0], p => p[2]);
+            if (modes.TryGetValue("old", out var oldMode) && modes.TryGetValue("new", out var newMode))
+            {
+                StateMessage = Localizer.Format("diff.onlyMode", "Only the file mode differs: {0} in {1}, {2} in {3}.", oldMode, old, newMode, now);
+                StateCount = Localizer.Get("diff.modeOnly", "File mode only");
+            }
+            else if (OldSide.Encoding != NewSide.Encoding)
+            {
+                StateMessage = Localizer.Format("diff.onlyEncoding", "Only the encoding differs: {0} in {1}, {2} in {3}.", OldSide.Encoding, old, NewSide.Encoding, now);
+                StateCount = Localizer.Get("diff.encodingOnly", "Encoding only");
+            }
+            else if (OldSide.LineEnding != NewSide.LineEnding || _oldBytes.AsSpan().IndexOf((byte)'\r') >= 0 != _newBytes.AsSpan().IndexOf((byte)'\r') >= 0)
+            {
+                StateMessage = Localizer.Format("diff.onlyLineEndings", "Only the line endings differ: {0} in {1}, {2} in {3}.", OldSide.LineEnding, old, NewSide.LineEnding, now);
+                StateDetail = CanStage ? Localizer.Format("diff.onlyLineEndingsDetail", "Every line's text is the same. Stage All records the new line endings; Discard All… puts {0} back.", OldSide.LineEnding) : null;
+                StateCount = Localizer.Get("diff.lineEndingsOnly", "Line endings only");
+            }
+            else
+            {
+                StateMessage = Localizer.Get("diff.onlyLastNewline", "Only the newline at the end of the file differs.");
+                StateCount = Localizer.Get("diff.lastNewlineOnly", "Last newline only");
+            }
+
+            return;
+        }
+
+        State = DiffState.NoChanges;
+        StateCount = Localizer.Get("diff.noChanges", "No changes");
+        if (!IsGitDiff)
+        {
+            StateMessage = Localizer.Get("diff.identical", "The files are identical.");
+        }
+        else if (Staged)
+        {
+            StateMessage = Localizer.Get("diff.indexMatchesHead", "No changes: the index matches HEAD.");
+        }
+        else if (OffersStagedChanges)
+        {
+            StateMessage = Localizer.Get("diff.workingTreeMatchesIndex", "No changes: the working tree matches the index.");
+            StateDetail = Localizer.Format("diff.hasStagedChanges", "{0} has staged changes.", name);
+        }
+        else
+        {
+            StateMessage = Localizer.Format("diff.noChangesAtAll", "{0} has no changes.", name);
+            StateDetail = Localizer.Get("diff.allMatch", "The working tree, the index and HEAD all match.");
+        }
+    }
+
+    /// <summary>A side named in a sentence: "the index", "the working tree", "HEAD", a revision.</summary>
+    private static string Where(DiffSide side) => side.Label switch
+    {
+        "Index" => Localizer.Get("diff.theIndex", "the index"),
+        "Working tree" => Localizer.Get("diff.theWorkingTree", "the working tree"),
+        var label => label,
+    };
+
+    private static int Count(ReadOnlySpan<byte> text) => text.Count((byte)'\n') + (text.Length > 0 && text[^1] != (byte)'\n' ? 1 : 0);
+
+    private static int Count(string text) => text.AsSpan().Count('\n') + (text.Length > 0 && text[^1] != '\n' ? 1 : 0);
+
+    /// <summary>Git's test: a NUL byte in the first 8,000 bytes.</summary>
+    private static bool IsBinary(ReadOnlySpan<byte> bytes) => bytes[..Math.Min(bytes.Length, 8000)].IndexOf((byte)0) >= 0;
+
+    /// <summary>A size as the document shows it: "15.0 KB", "18.4 MB".</summary>
+    private static string Size(long bytes) => bytes switch
+    {
+        < 1024 => Localizer.Format("diff.bytes", "{0} bytes", bytes),
+        < 1024 * 1024 => Localizer.Format("diff.kilobytes", "{0:0.0} KB", bytes / 1024.0),
+        _ => Localizer.Format("diff.megabytes", "{0:0.0} MB", bytes / 1024.0 / 1024.0),
+    };
 
     private void Loaded()
     {
@@ -535,6 +786,16 @@ public sealed class DiffViewModel : ObservableObject
     /// <summary>The toolbar's count: "1 change", "Change 3 of 4" with the caret in a change, "4 changes".</summary>
     public string CountText(int caretRow)
     {
+        if (IsLoading && !IsLoaded)
+        {
+            return Localizer.Get("diff.comparing", "Comparing…");
+        }
+
+        if (State != DiffState.Lines && StateCount is { } count)
+        {
+            return count;
+        }
+
         if (Changes.Count == 0)
         {
             return Localizer.Get("diff.noChanges", "No changes");

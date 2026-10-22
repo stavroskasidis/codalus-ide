@@ -71,6 +71,16 @@ internal sealed class DiffRenderer(Control owner, Func<DiffPane> pane, Func<int,
                     }
 
                     break;
+                case 'z':
+                    // A folded run (Summary): a thin line above and below its note.
+                    if (Brush("Shell.Border") is { } border)
+                    {
+                        var pen = new Pen(border, 1, new DashStyle([3, 3], 0));
+                        drawingContext.DrawLine(pen, new Point(0, Math.Floor(rect.Top) + 0.5), new Point(width, Math.Floor(rect.Top) + 0.5));
+                        drawingContext.DrawLine(pen, new Point(0, Math.Floor(rect.Bottom) - 0.5), new Point(width, Math.Floor(rect.Bottom) - 0.5));
+                    }
+
+                    break;
                 case 'f' when hatch is not null:
                     // Diagonal stripes, anchored to the document so a run of filler lines draws one pattern.
                     using (drawingContext.PushClip(rect))
@@ -418,6 +428,24 @@ internal sealed class DiffStagingMargin : Canvas, ITextViewConnect
 
             SetLeft(button, 2 + (index * (ButtonSize + 2)));
             SetTop(button, top + Math.Max(0, (lineHeight - ButtonSize) / 2));
+        }
+    }
+}
+
+/// <summary>A folded run's line (Summary) in muted text, so it reads as a note, not code.</summary>
+internal sealed class FoldLineColorizer(Control owner, Func<DiffPane> pane) : DocumentColorizingTransformer
+{
+    protected override void ColorizeLine(DocumentLine line)
+    {
+        var lines = pane().Lines;
+        if ((uint)(line.LineNumber - 1) < (uint)lines.Count && lines[line.LineNumber - 1].Kind == 'z' && line.Length > 0
+            && owner.TryFindResource("Shell.MutedForeground", owner.ActualThemeVariant, out var value) && value is IBrush brush)
+        {
+            ChangeLinePart(line.Offset, line.EndOffset, element =>
+            {
+                element.TextRunProperties.SetForegroundBrush(brush);
+                element.TextRunProperties.SetTypeface(new Typeface(element.TextRunProperties.Typeface.FontFamily, FontStyle.Italic));
+            });
         }
     }
 }

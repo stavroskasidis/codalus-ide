@@ -155,6 +155,7 @@ internal static partial class BuiltIns
         Add("git.diff.stageAll", "Stage All", () => shell.OnDiffAsync(view => view.StageAllAsync()), Stage);
         Add("git.diff.discardAll", "Discard All…", () => shell.OnDiffAsync(view => view.DiscardAllAsync()), Stage);
         Add("git.diff.unstageAll", "Unstage All", () => shell.OnDiffAsync(view => view.UnstageAllAsync()), Unstage);
+        Add("git.diff.toggleSummary", "Diff: Summary", () => shell.OnDiffDocument(vm => vm.IsSummary = !vm.IsSummary), Diff);
         Add("git.diff.toggleStagingControls", "Show Staging Controls", () => shell.OnDiffDocument(vm => vm.ShowStagingControls = !vm.ShowStagingControls), Diff + " && (diffCanStage || diffCanUnstage)");
 
         // M13b: hosting, worktrees, LFS, several repositories.

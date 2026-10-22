@@ -69,6 +69,7 @@ public sealed partial class ShellHost
         viewModel.SaveLayout = vm => _ = SaveDiffLayoutAsync(vm);
         viewModel.ShortcutFor = command => Workbench.Keybindings.GetBinding(command)?.ToLabel(Workbench.Platform);
         viewModel.OpenFile = (path, line) => OpenFileAsync(path, at: new Position(line - 1, 0));
+        viewModel.OpenStaged = path => OpenDiffAsync(path, staged: true);
         viewModel.LoadStagingControls(Workbench.Settings.GetBoolean(BuiltIns.DiffStagingControlsSetting, false));
         viewModel.SaveStagingControls = vm => _ = SaveDiffSettingAsync(BuiltIns.DiffStagingControlsSetting, vm.ShowStagingControls);
         return new DiffDocument(viewModel, EditorFont, DiffServices);

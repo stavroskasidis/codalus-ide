@@ -80,9 +80,54 @@ public readonly record struct DiffChange(int FirstRow, int LastRow)
     public bool Contains(int row) => row >= FirstRow && row <= LastRow;
 }
 
+/// <summary>A folded run of unchanged rows (Summary, D45 question 12), first and last inclusive.</summary>
+public readonly record struct DiffFold(int FirstRow, int LastRow)
+{
+    public int Count => LastRow - FirstRow + 1;
+}
+
 /// <summary>Rows, changes and the panes' texts of a diff document (#86).</summary>
 public static class DiffRows
 {
+    /// <summary>
+    /// Summary's folds (F1): each run of unchanged rows that would hide <paramref name="minimumHidden"/> rows or more once
+    /// <paramref name="context"/> rows are kept next to each change; none when nothing changed.
+    /// </summary>
+    public static IReadOnlyList<DiffFold> Folds(IReadOnlyList<DiffRow> rows, int context = 3, int minimumHidden = 4)
+    {
+        var folds = new List<DiffFold>();
+        if (!rows.Any(r => r.IsChange))
+        {
+            return folds;
+        }
+
+        var i = 0;
+        while (i < rows.Count)
+        {
+            if (rows[i].IsChange)
+            {
+                i++;
+                continue;
+            }
+
+            var start = i;
+            while (i < rows.Count && !rows[i].IsChange)
+            {
+                i++;
+            }
+
+            var end = i - 1;
+            var first = start == 0 ? start : start + context;
+            var last = i == rows.Count ? end : end - context;
+            if (last - first + 1 >= minimumHidden)
+            {
+                folds.Add(new DiffFold(first, last));
+            }
+        }
+
+        return folds;
+    }
+
     /// <summary>The changes: each run of changed rows.</summary>
     public static IReadOnlyList<DiffChange> Changes(IReadOnlyList<DiffRow> rows)
     {
@@ -154,7 +199,7 @@ public static class DiffRows
     /// The two panes of the side-by-side layout: each row is a line on both sides, the old file's line on the left and
     /// the new file's on the right, and an empty filler line where a side has none.
     /// </summary>
-    public static (DiffPane Old, DiffPane New) SideBySide(IReadOnlyList<DiffRow> rows, IReadOnlyList<string> oldLines, IReadOnlyList<string> newLines)
+    public static (DiffPane Old, DiffPane New) SideBySide(IReadOnlyList<DiffRow> rows, IReadOnlyList<string> oldLines, IReadOnlyList<string> newLines, IReadOnlyList<DiffFold>? folds = null, Func<DiffFold, bool, string>? label = null)
     {
         var left = new System.Text.StringBuilder();
         var right = new System.Text.StringBuilder();
@@ -162,6 +207,17 @@ public static class DiffRows
         var rightLines = new List<DiffPaneLine>(rows.Count);
         for (var r = 0; r < rows.Count; r++)
         {
+            if (FoldAt(folds, r) is { } fold)
+            {
+                // One line on each side for the folded run, saying what it hides.
+                left.Append(label?.Invoke(fold, true) ?? string.Empty).Append('\n');
+                right.Append(label?.Invoke(fold, false) ?? string.Empty).Append('\n');
+                leftLines.Add(new DiffPaneLine(r, 0, 0, 'z'));
+                rightLines.Add(new DiffPaneLine(r, 0, 0, 'z'));
+                r = fold.LastRow;
+                continue;
+            }
+
             var row = rows[r];
             var o = row.OldLine ?? 0;
             var n = row.NewLine ?? 0;
@@ -174,16 +230,42 @@ public static class DiffRows
         return (new DiffPane(DiffPaneSide.Old, left.ToString(), leftLines), new DiffPane(DiffPaneSide.New, right.ToString(), rightLines));
     }
 
+    private static DiffFold? FoldAt(IReadOnlyList<DiffFold>? folds, int row)
+    {
+        if (folds is null)
+        {
+            return null;
+        }
+
+        foreach (var fold in folds)
+        {
+            if (fold.FirstRow == row)
+            {
+                return fold;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// The inline layout's pane: unchanged rows once, and each change as its removed lines, then its added lines.
     /// </summary>
-    public static DiffPane Inline(IReadOnlyList<DiffRow> rows, IReadOnlyList<string> oldLines, IReadOnlyList<string> newLines)
+    public static DiffPane Inline(IReadOnlyList<DiffRow> rows, IReadOnlyList<string> oldLines, IReadOnlyList<string> newLines, IReadOnlyList<DiffFold>? folds = null, Func<DiffFold, bool, string>? label = null)
     {
         var text = new System.Text.StringBuilder();
         var lines = new List<DiffPaneLine>(rows.Count);
         var r = 0;
         while (r < rows.Count)
         {
+            if (FoldAt(folds, r) is { } fold)
+            {
+                text.Append(label?.Invoke(fold, false) ?? string.Empty).Append('\n');
+                lines.Add(new DiffPaneLine(r, 0, 0, 'z'));
+                r = fold.LastRow + 1;
+                continue;
+            }
+
             if (!rows[r].IsChange)
             {
                 var row = rows[r];
