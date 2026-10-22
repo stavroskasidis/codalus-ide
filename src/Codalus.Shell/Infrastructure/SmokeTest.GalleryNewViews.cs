@@ -316,6 +316,21 @@ internal sealed partial class SmokeTest
             shell.Toolbox.Disarm();
         }
 
+        // #68: the Properties window's "editors" state, the notes box with Font expanded into its parts.
+        var selection = designer.Selection.ToList();
+        designer.SetSelection(["notesTextBox"], notify: true);
+        await WaitAsync(() => shell.PropertiesWindow.Title.StartsWith("notesTextBox", StringComparison.Ordinal) && !shell.PropertiesWindow.IsLoading && shell.PropertiesWindow.Grid.Find("Font") is not null,
+            "the Properties window shows the notes box's Font", 60).ConfigureAwait(true);
+        var font = shell.PropertiesWindow.Grid.Find("Font")!;
+        shell.PropertiesWindow.Grid.SetExpanded(font, true);
+        await GalleryThemesAsync(theme =>
+        {
+            GalleryTool(PropertiesWindowViewModel.ToolWindowId, "editors", theme);
+            return Task.CompletedTask;
+        }, settle: true).ConfigureAwait(true);
+        shell.PropertiesWindow.Grid.SetExpanded(font, false);
+        designer.SetSelection(selection, notify: true);
+
         WriteGalleryIndex();
     }
 

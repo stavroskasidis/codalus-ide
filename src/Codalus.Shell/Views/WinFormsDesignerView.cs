@@ -132,6 +132,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         }
 
         Update();
+        ShowEditorPanel(); // a panel opened before the view was made (#68)
         document.PropertyChanged += (_, e) => Infrastructure.Ui.Post(() =>
         {
             Update();

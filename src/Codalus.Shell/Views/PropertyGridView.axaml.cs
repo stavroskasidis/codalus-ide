@@ -98,6 +98,9 @@ public sealed partial class PropertyGridView : UserControl
     /// <summary>The drop-down that is open, or null (tests).</summary>
     public Control? OpenDropDownControl => DropDown.IsOpen ? DropDownHost.Content as Control : null;
 
+    /// <summary>The drop-down's popup (the smoke test's screenshot takes it with the window).</summary>
+    internal Avalonia.Controls.Primitives.Popup DropDownPopup => DropDown;
+
     /// <summary>The drop-downs made so far, by kind (tests: none until one opens).</summary>
     public IReadOnlyDictionary<string, Control> MadeDropDowns => _dropDowns;
 
