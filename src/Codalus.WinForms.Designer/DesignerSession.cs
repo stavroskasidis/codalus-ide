@@ -42,12 +42,19 @@ internal sealed partial class DesignerSession : IDisposable
     private string _className = string.Empty;
     private string[] _searchFolders = [];
     private string? _phase;
+    private readonly DesignerUIService _ui;
+
+    /// <summary>The name the IDE chose for the component a Toolbox item creates next (#66), with its type: the name service gives it once.</summary>
+    private (string Name, Type Type)? _pendingName;
 
     public DesignerSession(HostWindow window)
     {
         _window = window;
         _values = new DesignerValues(_types, Target, NameOf, Resource);
+        _ui = new DesignerUIService(window);
         _services.AddService(typeof(INameCreationService), new NameCreation(this));
+        _services.AddService(typeof(IUIService), _ui);
+        _services.AddService(typeof(ITypeResolutionService), new DesignerTypeResolution(_types));
     }
 
     private IDesignerHost Host => _host ?? throw new InvalidOperationException("No form is loaded.");
@@ -101,6 +108,9 @@ internal sealed partial class DesignerSession : IDisposable
             project = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => !a.IsDynamic && string.Equals(a.Location, parameters.ProjectAssembly, StringComparison.OrdinalIgnoreCase))
                 ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(parameters.ProjectAssembly);
             _types.Add(project);
+
+            // The IDE's Windows Forms Designer output: where the project came from (#66: the shell's copy of the build output, not bin/).
+            Console.Error.WriteLine($"[designer] {project.GetName().Name} loaded from {project.Location}");
         }
         else
         {
@@ -636,6 +646,17 @@ internal sealed partial class DesignerSession : IDisposable
         return [Index(table.GetColumnWidths(), at.X), Index(table.GetRowHeights(), at.Y)];
     }
 
+    /// <summary>
+    /// A Toolbox item, created as the classic IDE creates it (#66), for every gesture: the type's Toolbox item, named
+    /// as the IDE chose, created by the container designer's <c>CreateToolCore</c>. A drop or a drawing goes to the
+    /// designer of the container under the point, at that point (in screen coordinates, as the drag and drop handler
+    /// takes it) and drawn size; the Toolbox's double-click or Enter goes to the selection's container (as
+    /// DocumentDesigner's tool pick does: the primary selection, else the first selected control, walked up to a
+    /// container designer, else the form's) at its default place. The container may route it (a tab control to its
+    /// selected page, a split container to its panel), and the designers' defaults apply (a label sizes itself to its
+    /// text, a split container fills an empty container, the first menu strip becomes the form's main menu);
+    /// components that aren't controls go to the tray. What a designer refused comes back as the change's error.
+    /// </summary>
     public DesignerChangeResult Create(DesignerCreateParams parameters)
     {
         var before = Capture();
@@ -645,27 +666,117 @@ internal sealed partial class DesignerSession : IDisposable
             throw new InvalidOperationException($"The form already has a component named {parameters.Name}.");
         }
 
-        var component = Host.CreateComponent(type, parameters.Name);
-        if (Host.GetDesigner(component) is IComponentInitializer initializer)
+        var tool = ToolInvoker.ToolFor(type, _types);
+        ParentControlDesigner designer;
+        Point screen = default;
+        Size size = default;
+        var hasSize = false;
+        if (parameters.AtDefaultLocation)
         {
-            // As the Toolbox's creation does: the designer sets its defaults (a button's Text is its name).
-            initializer.InitializeNewComponent(new Hashtable());
+            designer = SelectedParentDesigner(parameters.Selected);
         }
-
-        if (component is Control control and not ToolStripDropDown)
+        else
         {
             var (parent, _, _) = Parent(parameters.Parent);
-            var siblings = parent.Controls.Cast<Control>().Where(c => !ReferenceEquals(c, control)).ToList();
-            AddTo(parent, control, ClientPoint(parent, parameters.X, parameters.Y));
+            designer = Host.GetDesigner(parent) as ParentControlDesigner ?? throw new InvalidOperationException($"{parameters.Parent} can't contain controls.");
+            var origin = WindowOrigin(Root);
+            screen = new Point(origin.X + (int)Math.Round(parameters.X), origin.Y + (int)Math.Round(parameters.Y));
             if (parameters is { Width: { } width, Height: { } height } && width >= 1 && height >= 1)
             {
-                control.Size = new Size((int)Math.Round(width), (int)Math.Round(height));
+                size = new Size((int)Math.Round(width), (int)Math.Round(height));
+                hasSize = true;
+            }
+        }
+
+        _ui.Clear();
+        _pendingName = (parameters.Name, type);
+        string? failure = null;
+        try
+        {
+            ToolInvoker.Create(designer, tool, screen.X, screen.Y, size.Width, size.Height, hasLocation: !parameters.AtDefaultLocation, hasSize);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            failure = ex.Message;
+            Console.Error.WriteLine($"[designer] {parameters.Type} couldn't be created: {ex}");
+        }
+        finally
+        {
+            _pendingName = null;
+        }
+
+        var component = Host.Container.Components[parameters.Name] ?? Host.Container.Components.Cast<IComponent>().FirstOrDefault(c => !before.Components.ContainsKey(c.Site?.Name ?? string.Empty) && c.GetType() == type);
+        if (component is null)
+        {
+            var reason = _ui.Messages.Count > 0 ? string.Join(" ", _ui.Messages) : failure ?? $"The designer didn't create {type.Name}.";
+            return Result(before) with { Error = reason };
+        }
+
+        if (component.Site is { } site && site.Name != parameters.Name)
+        {
+            // A Toolbox item that named it itself: the IDE's name, which the code will use.
+            site.Name = parameters.Name;
+        }
+
+        if (component is Control control and not ToolStripDropDown && control.Parent is { } parentControl)
+        {
+            if (!parameters.AtDefaultLocation && parentControl is TableLayoutPanel table)
+            {
+                // A drop on a table: the cell under the point (a double-click takes the table's first free cell).
+                var cell = CellAt(table, ClientPoint(table, parameters.X, parameters.Y));
+                table.SetCellPosition(control, new TableLayoutPanelCellPosition(cell[0], cell[1]));
             }
 
+            var siblings = parentControl.Controls.Cast<Control>().Where(c => !ReferenceEquals(c, control)).ToList();
             control.TabIndex = siblings.Count == 0 ? 0 : siblings.Max(c => c.TabIndex) + 1;
         }
 
+        // TODO(issue): insert a control dropped on a FlowLayoutPanel at the insertion point under the cursor, as the classic FlowLayoutPanelDesigner does.
         return Result(before, created: parameters.Name);
+    }
+
+    /// <summary>
+    /// The container designer a Toolbox double-click or Enter creates in, as DocumentDesigner's tool pick finds it: the
+    /// primary selection if it is a control, else the first selected control, walked up to the first control whose
+    /// designer takes controls (no CanParent filter); else the form's. The design surface's selection becomes the IDE's,
+    /// since the container designer places the control by its primary selection.
+    /// </summary>
+    private ParentControlDesigner SelectedParentDesigner(IReadOnlyList<string> selected)
+    {
+        var components = new List<IComponent>();
+        foreach (var name in selected)
+        {
+            IComponent? component;
+            try
+            {
+                component = name.Contains('.', StringComparison.Ordinal) ? Parent(name).Control : Target(name) as IComponent;
+            }
+            catch (InvalidOperationException)
+            {
+                component = null;
+            }
+
+            if (component is not null && !components.Contains(component))
+            {
+                components.Add(component);
+            }
+        }
+
+        if (_surface?.GetService(typeof(ISelectionService)) is ISelectionService selection)
+        {
+            selection.SetSelectedComponents(components.Count > 0 ? components.ToArray() : [Root], SelectionTypes.Replace);
+        }
+
+        var start = components.FirstOrDefault() as Control ?? components.OfType<Control>().FirstOrDefault();
+        for (var control = start; control is not null; control = ReferenceEquals(control, Root) ? null : control.Parent)
+        {
+            if (Host.GetDesigner(control) is ParentControlDesigner designer)
+            {
+                return designer;
+            }
+        }
+
+        return Host.GetDesigner(Root) as ParentControlDesigner ?? throw new InvalidOperationException("The form's designer can't contain controls.");
     }
 
     public DesignerChangeResult SetProperties(DesignerSetPropertiesParams parameters)

@@ -380,7 +380,17 @@ internal sealed partial class DesignerSession
     /// </summary>
     private sealed class NameCreation(DesignerSession session) : INameCreationService
     {
-        public string CreateName(IContainer? container, Type dataType) => session.NewComponentName(dataType, container);
+        /// <summary>A Toolbox item's component takes the IDE's name once (#66); the others (the pages a new tab control makes) the next free ones.</summary>
+        public string CreateName(IContainer? container, Type dataType)
+        {
+            if (session._pendingName is { } pending && pending.Type == dataType)
+            {
+                session._pendingName = null;
+                return pending.Name;
+            }
+
+            return session.NewComponentName(dataType, container);
+        }
 
         /// <summary>A free identifier (the standard items try numbered names until one is).</summary>
         public bool IsValidName(string name) =>

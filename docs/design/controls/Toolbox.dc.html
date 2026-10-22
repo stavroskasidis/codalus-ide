@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Toolbox: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<!-- The Toolbox items' icons (stand-ins for eng/icons' control-* drawings, Blue in the icon palette as CommandIcons colors them). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="tb-pointer" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" d="M4.2 2.2v10.4l2.7-2.5 1.9 4 1.7-.8-1.9-3.9h3.6z"/></symbol>
+  <symbol id="tb-button" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><rect x="1.6" y="4.4" width="12.8" height="7.2" rx="1.6"/><path d="M5.2 8h5.6"/></g></symbol>
+  <symbol id="tb-check-box" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="1.6"/><path d="m5 8.2 2 2 4-4.4"/></g></symbol>
+  <symbol id="tb-checked-list-box" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="1.6" y="1.6" width="12.8" height="12.8" rx="1.4"/><path d="m4 5.4 1 1 1.8-2M8.6 5.2h3.4M4 10.4l1 1 1.8-2M8.6 10.2h3.4"/></g></symbol>
+  <symbol id="tb-combo-box" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="1.6" y="4.4" width="12.8" height="7.2" rx="1.4"/><path d="M10.2 4.4v7.2M11.4 7.4l.9.9.9-.9M4 8h3.6"/></g></symbol>
+  <symbol id="tb-date-time-picker" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><rect x="1.8" y="2.8" width="12.4" height="11" rx="1.4"/><path d="M1.8 6.2h12.4M5 1.6v2.4M11 1.6v2.4M4.6 9h1M7.6 9h1M10.6 9h1M4.6 11.4h1M7.6 11.4h1"/></g></symbol>
+  <symbol id="tb-label" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" d="m3.6 13.2 4.4-10.4 4.4 10.4M5.2 9.6h5.6"/></symbol>
+  <symbol id="tb-link-label" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" d="m4.2 10.8 3.8-8.4 3.8 8.4M5.6 7.8h4.8M2.8 13.8h10.4"/></symbol>
+  <symbol id="tb-list-box" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><rect x="1.6" y="1.6" width="12.8" height="12.8" rx="1.4"/><path d="M4.4 5.2h7.2M4.4 8h7.2M4.4 10.8h4.4"/></g></symbol>
+  <symbol id="tb-list-view" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></g></symbol>
+  <symbol id="tb-masked-text-box" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><rect x="1.6" y="4.4" width="12.8" height="7.2" rx="1.4"/><path d="M4.6 6.8v2.4M3.6 7.4l2 1.2M3.6 8.6l2-1.2M8.4 6.8v2.4M7.4 7.4l2 1.2M7.4 8.6l2-1.2"/></g></symbol>
+  <symbol id="tb-month-calendar" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><rect x="1.8" y="1.8" width="12.4" height="12.4" rx="1.4"/><path d="M1.8 5.2h12.4M6 5.2v9M10 5.2v9M1.8 8.6h12.4M1.8 11.4h12.4"/></g></symbol>
+</svg>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:22px 28px 26px;display:flex;flex-direction:column;gap:14px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.states{display:flex;gap:20px;align-items:flex-start}
+.state{display:flex;flex-direction:column;gap:6px;min-width:0}
+.tag{font-size:11px;line-height:14px;min-height:42px;font-weight:600;color:var(--muted);max-width:100%}
+.pair{display:flex;gap:0;align-items:stretch}
+/* The Toolbox: the search box, a category expanded with the Pointer and its items, the others collapsed. */
+.tbx{width:220px;height:488px;flex:none}
+.tbx .search{padding:6px 6px 4px}
+.tbx .list{flex:1;min-height:0;overflow:hidden;padding-bottom:4px}
+.cat{height:24px;display:flex;align-items:center;gap:5px;padding:0 6px;color:var(--strong);font-weight:600;margin-bottom:1px}
+.cat svg{width:12px;height:12px;color:var(--fg)}
+.item{height:24px;display:flex;align-items:center;gap:6px;padding:0 8px;margin:0 3px 1px;border:1px solid transparent;border-radius:var(--radius);white-space:nowrap;color:var(--fg)}
+.item.is-hover{background:var(--tb-hover);border-color:var(--tb-hover-border);color:var(--hover-fg)}
+.item.armed{background:var(--sel);color:var(--sel-fg)}
+.item.armed.inactive{background:var(--sel-inactive);color:var(--sel-inactive-fg)}
+.item.is-focus{outline:2px solid var(--focus);outline-offset:1px}
+.kind-hc .item.armed svg.i{color:var(--sel-fg)}
+.kind-hc .item.armed.inactive svg.i{color:var(--sel-inactive-fg)}
+.kind-light .item.armed svg.c-orange{color:var(--sel-fg)}
+/* The designer document beside it: the toolbar's status line says what the armed item does. */
+.designer{width:470px;height:488px;display:flex;flex-direction:column;flex:none;margin-left:6px}
+.designer .doc{flex:1}
+.status{flex:1;min-width:0;padding:0 8px;color:var(--muted)}
+.status.hint{color:var(--fg)}
+.surface{flex:1;min-height:0;background:var(--editor);padding:16px;position:relative;overflow:hidden}
+.tray{height:34px;border-top:1px solid var(--border);background:var(--panel);display:flex;align-items:center;gap:6px;padding:0 8px}
+.tray .comp{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid transparent;border-radius:var(--radius)}
+/* The designed form: Windows Forms' own drawing (system colors in every theme, as the designer host draws it). */
+.wf{width:330px;height:300px;border:1px solid #7A7A7A;background:#F0F0F0;color:#000;font-family:"Segoe UI",Inter,sans-serif;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.wf .cap{height:30px;background:#FFFFFF;display:flex;align-items:center;padding:0 10px;color:#000}
+.wf .cli{position:relative;height:269px}
+.wf .lab{position:absolute;color:#000}
+.wf .box{position:absolute;height:22px;background:#FFF;border:1px solid #7A7A7A}
+.wf .grp{position:absolute;border:1px solid #BDBDBD;border-radius:2px}
+.wf .grp>span{position:absolute;top:-9px;left:7px;background:#F0F0F0;padding:0 2px;color:#000}
+.wf .btnw{position:absolute;height:24px;background:#E1E1E1;border:1px solid #ADADAD;display:flex;align-items:center;justify-content:center;color:#000}
+.wf .rad{position:absolute;display:flex;align-items:center;gap:5px;color:#000}
+.wf .rad i{width:12px;height:12px;border-radius:50%;border:1px solid #333;background:#FFF;display:inline-block}
+.cross{position:absolute;width:17px;height:17px}
+.notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 28px;margin:0;padding:12px 18px 12px 34px;background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px)}
+.notes li{line-height:17px}
+.notes b{color:var(--strong);font-weight:600}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{t.vars}}; min-height: 100vh">
+<main class="sheet">
+<header>
+  <h1>Toolbox: the armed item, drawn as the selection</h1>
+  <div class="muted">Arming an item highlights its row, as the classic IDE does. The hint that appeared above the list moved every item down, so a double-click's second click landed on another item; it is now the designer's status line, and the list never moves. {{t.name}}.</div>
+  <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
+</header>
+
+<div class="states">
+  <sc-for list="{{panels}}" as="p">
+    <section class="state" aria-label="{{p.label}}">
+      <div class="tag" style="width: {{p.width}}px">{{p.label}}</div>
+      <div class="pair">
+        <div class="tw tbx">
+          <div class="tw-cap {{p.cap}}"><span class="title">Toolbox</span><span class="cb" title="Close"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+          <div class="search"><span class="field sm"><svg class="i lead" aria-hidden="true"><use href="#i-search"></use></svg><input aria-label="Search Toolbox" placeholder="Search Toolbox"></span></div>
+          <div class="list" role="tree" aria-label="Toolbox">
+            <div class="cat" role="treeitem" aria-expanded="true"><svg aria-hidden="true"><use href="#i-chevron-down"></use></svg>Common Controls</div>
+            <sc-for list="{{p.items}}" as="it">
+              <div class="item {{it.cls}}" role="treeitem" aria-selected="{{it.selected}}" title="{{it.type}}"><svg class="i c-blue" aria-hidden="true"><use href="#tb-{{it.icon}}"></use></svg><span>{{it.name}}</span></div>
+            </sc-for>
+            <sc-for list="{{collapsed}}" as="c">
+              <div class="cat" role="treeitem" aria-expanded="false"><svg aria-hidden="true"><use href="#i-chevron-right"></use></svg>{{c}}</div>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{p.designer}}">
+          <div class="designer">
+            <div class="doc-tabs" role="tablist" aria-label="Documents"><span class="doc-tab" role="tab" aria-selected="false">OrderForm.cs</span><span class="doc-tab on" role="tab" aria-selected="true"><svg class="i c-blue" aria-hidden="true"><use href="#i-window"></use></svg>OrderForm.cs [Design]</span></div>
+            <div class="doc">
+              <div class="toolbar bar" role="toolbar" aria-label="Designer">
+                <button class="tb" aria-label="View Code (F7)" title="View Code (F7)"><svg class="i c-blue" aria-hidden="true"><use href="#i-code"></use></svg></button>
+                <button class="tb" aria-label="Load the form again (and restart the designer)" title="Load the form again (and restart the designer)"><svg class="i c-blue" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+                <span class="status hint trim" role="status" aria-live="polite">Click or drag on the form to add a Button (Esc cancels).</span>
+              </div>
+              <div class="surface" aria-label="OrderForm.cs [Design]">
+                <div class="wf">
+                  <div class="cap">Order</div>
+                  <div class="cli">
+                    <span class="lab" style="left:12px;top:15px">Customer:</span><span class="box" style="left:90px;top:11px;width:220px"></span>
+                    <span class="lab" style="left:12px;top:45px">Quantity:</span><span class="box" style="left:90px;top:41px;width:80px"></span>
+                    <div class="grp" style="left:12px;top:84px;width:298px;height:70px"><span>Shipping</span>
+                      <span class="rad" style="left:12px;top:18px"><i></i>Standard</span><span class="rad" style="left:12px;top:40px"><i></i>Express</span>
+                    </div>
+                    <span class="btnw" style="left:118px;top:228px;width:95px">Place order</span><span class="btnw" style="left:221px;top:228px;width:89px">Cancel</span>
+                  </div>
+                </div>
+                <svg class="cross" style="left:120px;top:226px" viewBox="0 0 17 17" aria-hidden="true"><path d="M8.5 0v17M0 8.5h17" stroke="#000" stroke-width="1.6"/><path d="M8.5 1v15M1 8.5h15" stroke="#FFF" stroke-width=".6"/></svg>
+              </div>
+              <div class="tray" aria-label="Component tray"><span class="comp"><svg class="i c-yellow" aria-hidden="true"><use href="#i-info"></use></svg>orderToolTip</span></div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </section>
+  </sc-for>
+</div>
+
+<ul class="notes">
+  <li><b>Click an item or press Space</b> to arm it: its row takes the selection's colors (<span class="mono">Shell.Selection</span>, and <span class="mono">Shell.Selection.Inactive</span> once the designer has the focus). Click or drag on the form to add it; Esc or the Pointer disarms it.</li>
+  <li><b>The list never moves:</b> the rows stay where they were when an item is armed. The hint is the designer's status line, a polite live region, so a screen reader still hears it.</li>
+  <li><b>Double-click an item or press Enter</b> to add it at once, into the selected container, at its top-left corner or a step below and right of the selected control. The designer then has the focus.</li>
+  <li><b>Drag an item onto the form.</b> Outside the form and in tab order mode the cursor says no drop; a component (a Timer) drops on the component tray. No new tokens and no new icon kinds.</li>
+</ul>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+    const all = [
+      ['Pointer', 'pointer'], ['Button', 'button'], ['CheckBox', 'check-box'], ['CheckedListBox', 'checked-list-box'], ['ComboBox', 'combo-box'],
+      ['DateTimePicker', 'date-time-picker'], ['Label', 'label'], ['LinkLabel', 'link-label'], ['ListBox', 'list-box'], ['ListView', 'list-view'],
+      ['MaskedTextBox', 'masked-text-box'], ['MonthCalendar', 'month-calendar']
+    ];
+    const items = (states) => all.map(([name, icon]) => ({
+      name, icon, type: name === 'Pointer' ? 'Pointer' : 'System.Windows.Forms.' + name,
+      cls: states[name] ?? '', selected: String((states[name] ?? '').includes('armed'))
+    }));
+    const panels = [
+      { label: 'Nothing armed: the keyboard on CheckBox, the pointer over ComboBox', width: 220, cap: '', items: items({ CheckBox: 'is-focus', ComboBox: 'is-hover' }) },
+      { label: 'Button armed with a click or Space: drawn as the selection, every row where it was', width: 220, cap: 'active', items: items({ Button: 'armed is-focus', Label: 'is-hover' }) },
+      { label: 'The designer has the focus: the armed row stays, inactive, and the hint is the designer’s status line', width: 696, cap: '', designer: true, items: items({ Button: 'armed inactive' }) }
+    ];
+    const collapsed = ['Containers', 'Menus & Toolbars', 'Data', 'Components'];
+    return { t, themes, panels, collapsed };
+  }
+}
+</script>
+</body>
+</html>
