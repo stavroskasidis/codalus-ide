@@ -162,7 +162,7 @@ public sealed partial class ShellHost
     private async Task OpenRevisionDiffAsync(string path, string key, string oldTitle, Func<Task<string>> oldText, string newTitle, Func<Task<string>> newText)
     {
         var viewModel = new DiffViewModel(path, key, oldTitle, oldText, newTitle, newText);
-        var document = Layout.FindDocument<DiffDocument>("diff:revisions:" + key) ?? new DiffDocument(viewModel, EditorFont);
+        var document = Layout.FindDocument<DiffDocument>("diff:revisions:" + key) ?? new DiffDocument(viewModel, EditorFont, DiffServices);
         await document.ViewModel.LoadAsync().ConfigureAwait(true);
         Layout.OpenDocument(document, focus: true);
     }
@@ -336,6 +336,7 @@ public sealed partial class ShellHost
             Workbench.Settings.GetBoolean(BuiltIns.MergeEditorIncomingOnLeftSetting, true));
         viewModel.SaveLayout = vm => _ = SaveMergeEditorLayoutAsync(vm);
         viewModel.ShortcutFor = command => Workbench.Keybindings.GetBinding(command)?.ToLabel(Workbench.Platform);
+        viewModel.Services = DiffServices;
         return viewModel;
     }
 

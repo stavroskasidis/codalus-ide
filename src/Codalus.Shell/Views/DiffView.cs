@@ -7,6 +7,7 @@ using Avalonia.Media.Immutable;
 using AvaloniaEdit;
 using AvaloniaEdit.Rendering;
 using Codalus.Shell.Controls;
+using Codalus.Shell.Editor;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Git;
@@ -105,9 +106,15 @@ public sealed class DiffView : UserControl, IPaneView
     private readonly TextEditor _inline;
     private readonly Grid _sideBySide;
     private readonly TextBlock _summary;
+    private readonly SourceLineColorizer _leftColors;
+    private readonly SourceLineColorizer _rightColors;
+    private readonly SourceLineColorizer _inlineColors;
     private IReadOnlyList<char> _leftKinds = [];
     private IReadOnlyList<char> _rightKinds = [];
     private IReadOnlyList<char> _inlineKinds = [];
+    private DiffPane _leftPane = DiffPane.Empty;
+    private DiffPane _rightPane = DiffPane.Empty;
+    private DiffPane _inlinePane = DiffPane.Empty;
 
     /// <summary>For each inline line, its row in <see cref="DiffViewModel.Rows"/>.</summary>
     private List<int> _inlineRows = [];
@@ -116,9 +123,12 @@ public sealed class DiffView : UserControl, IPaneView
     public DiffView(DiffViewModel viewModel, EditorFont font)
     {
         _viewModel = viewModel;
-        _left = Editor(font, () => _leftKinds, "Old text");
-        _right = Editor(font, () => _rightKinds, "New text");
-        _inline = Editor(font, () => _inlineKinds, "Diff");
+        _leftColors = new SourceLineColorizer(line => ColorsOf(_leftPane, line));
+        _rightColors = new SourceLineColorizer(line => ColorsOf(_rightPane, line));
+        _inlineColors = new SourceLineColorizer(line => ColorsOf(_inlinePane, line));
+        _left = Editor(font, () => _leftKinds, "Old text", _leftColors);
+        _right = Editor(font, () => _rightKinds, "New text", _rightColors);
+        _inline = Editor(font, () => _inlineKinds, "Diff", _inlineColors);
         _sideBySide = new Grid { ColumnDefinitions = new ColumnDefinitions("*,4,*") };
         _sideBySide.Children.Add(_left);
         var splitter = new GridSplitter { ResizeDirection = GridResizeDirection.Columns };
@@ -175,13 +185,112 @@ public sealed class DiffView : UserControl, IPaneView
         root.Children.Add(body);
         Content = root;
 
-        viewModel.Changed += (_, _) => Ui.Post(() =>
-        {
-            Rebuild();
-            titles.IsVisible = viewModel.SideBySide;
-        });
+        _titles = titles;
         Rebuild();
         titles.IsVisible = viewModel.SideBySide;
+        ApplyTheme();
+    }
+
+    private readonly Grid _titles;
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _viewModel.Changed += OnChanged;
+        _viewModel.ColorsChanged += OnColorsChanged;
+        if (_viewModel.Services is { } services)
+        {
+            services.Editor.ThemeChanged += OnThemeChanged;
+        }
+
+        ApplyTheme();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _viewModel.Changed -= OnChanged;
+        _viewModel.ColorsChanged -= OnColorsChanged;
+        if (_viewModel.Services is { } services)
+        {
+            services.Editor.ThemeChanged -= OnThemeChanged;
+        }
+
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private void OnChanged(object? sender, EventArgs e) => Ui.Post(() =>
+    {
+        Rebuild();
+        _titles.IsVisible = _viewModel.SideBySide;
+    });
+
+    private void OnColorsChanged(object? sender, EventArgs e) => Ui.Post(Redraw);
+
+    /// <summary>The theme changed: the editor theme's colors, and the TextMate theme's (other languages) made again.</summary>
+    private void OnThemeChanged(object? sender, EventArgs e) => Ui.Post(() =>
+    {
+        ApplyTheme();
+        _ = _viewModel.ColorAsync();
+    });
+
+    private void ApplyTheme()
+    {
+        var theme = _viewModel.Services?.Editor.Theme ?? CodeColors.ThemeFor(ActualThemeVariant);
+        foreach (var colors in new[] { _leftColors, _rightColors, _inlineColors })
+        {
+            colors.Theme = theme;
+        }
+
+        Redraw();
+    }
+
+    private void Redraw()
+    {
+        foreach (var editor in new[] { _left, _right, _inline })
+        {
+            editor.TextArea.TextView.Redraw();
+        }
+    }
+
+    /// <summary>A pane line's file line and that file's colors.</summary>
+    private (SourceTokens? Tokens, int Line) ColorsOf(DiffPane pane, int line)
+    {
+        var (old, source) = pane.SourceOf(line - 1);
+        return (old ? _viewModel.OldColors : _viewModel.NewColors, source);
+    }
+
+    /// <summary>The editor of a side (tests, the smoke test): the old file's, the new file's, or the inline view's.</summary>
+    public TextEditor EditorOf(DiffPaneSide side) => side switch
+    {
+        DiffPaneSide.Old => _left,
+        DiffPaneSide.New => _right,
+        _ => _inline,
+    };
+
+    /// <summary>The token type colored at a 1-based pane line and 0-based character of a side, or -1 (tests).</summary>
+    public int ColoredTypeAt(DiffPaneSide side, int line, int character) => side switch
+    {
+        DiffPaneSide.Old => _leftColors.TypeAt(line, character),
+        DiffPaneSide.New => _rightColors.TypeAt(line, character),
+        _ => _inlineColors.TypeAt(line, character),
+    };
+
+    /// <summary>The distinct text colors drawn on a 1-based line of a side (tests, the smoke test).</summary>
+    public int LineColors(DiffPaneSide side, int line)
+    {
+        var view = EditorOf(side).TextArea.TextView;
+        view.EnsureVisualLines();
+        return view.GetVisualLine(line) is { } visual
+            ? visual.Elements.Select(e => e.TextRunProperties.ForegroundBrush is ISolidColorBrush brush ? brush.Color : default).Distinct().Count()
+            : 0;
+    }
+
+    /// <summary>Whether a visible line of a side is drawn in two colors or more (the smoke test).</summary>
+    public bool IsColored(DiffPaneSide side)
+    {
+        var view = EditorOf(side).TextArea.TextView;
+        view.EnsureVisualLines();
+        return view.VisualLinesValid && view.VisualLines.Any(l => l.Elements.Select(e => e.TextRunProperties.ForegroundBrush is ISolidColorBrush brush ? brush.Color : default).Distinct().Count() >= 2);
     }
 
     /// <summary>Shows git errors (set by the shell).</summary>
@@ -205,7 +314,7 @@ public sealed class DiffView : UserControl, IPaneView
         return button;
     }
 
-    private static TextEditor Editor(EditorFont font, Func<IReadOnlyList<char>> kinds, string name)
+    private static TextEditor Editor(EditorFont font, Func<IReadOnlyList<char>> kinds, string name, SourceLineColorizer colors)
     {
         var editor = new TextEditor
         {
@@ -218,6 +327,7 @@ public sealed class DiffView : UserControl, IPaneView
         editor.Bind(BackgroundProperty, editor.GetResourceObservable("Shell.Editor.Background"));
         editor.Bind(ForegroundProperty, editor.GetResourceObservable("Shell.Editor.Foreground"));
         editor.TextArea.TextView.BackgroundRenderers.Add(new DiffLineRenderer(kinds));
+        editor.TextArea.TextView.LineTransformers.Add(colors);
         editor.TextArea.LeftMargins.Add(new DiffSignMargin(kinds));
         AutomationProperties(editor, name);
         return editor;
@@ -230,36 +340,15 @@ public sealed class DiffView : UserControl, IPaneView
         _inline.IsVisible = !vm.SideBySide;
         _summary.Text = vm.Summary;
 
-        var left = new System.Text.StringBuilder();
-        var right = new System.Text.StringBuilder();
-        var leftKinds = new List<char>(vm.Rows.Count);
-        var rightKinds = new List<char>(vm.Rows.Count);
-        foreach (var row in vm.Rows)
-        {
-            left.Append(row.OldLine is { } o ? vm.OldLines[o - 1] : string.Empty).Append('\n');
-            right.Append(row.NewLine is { } n ? vm.NewLines[n - 1] : string.Empty).Append('\n');
-            leftKinds.Add(row.OldLine is null ? 'f' : row.Kind is '-' or '~' ? '-' : ' ');
-            rightKinds.Add(row.NewLine is null ? 'f' : row.Kind is '+' or '~' ? '+' : ' ');
-        }
-
-        _leftKinds = leftKinds;
-        _rightKinds = rightKinds;
-        _left.Text = left.ToString();
-        _right.Text = right.ToString();
-
-        var (text, kinds) = vm.InlineText();
-        _inlineKinds = kinds;
-        _inline.Text = text;
-        _inlineRows = [];
-        for (var i = 0; i < vm.Rows.Count; i++)
-        {
-            var row = vm.Rows[i];
-            var lines = row.Kind == ' ' ? 1 : (row.OldLine is null ? 0 : 1) + (row.NewLine is null ? 0 : 1);
-            for (var k = 0; k < lines; k++)
-            {
-                _inlineRows.Add(i);
-            }
-        }
+        (_leftPane, _rightPane) = DiffRows.SideBySide(vm.Rows, vm.OldLines, vm.NewLines);
+        _inlinePane = DiffRows.Inline(vm.Rows, vm.OldLines, vm.NewLines);
+        _leftKinds = [.. _leftPane.Lines.Select(l => l.Kind)];
+        _rightKinds = [.. _rightPane.Lines.Select(l => l.Kind)];
+        _inlineKinds = [.. _inlinePane.Lines.Select(l => l.Kind)];
+        _inlineRows = [.. _inlinePane.Lines.Select(l => l.Row)];
+        _left.Text = _leftPane.Text;
+        _right.Text = _rightPane.Text;
+        _inline.Text = _inlinePane.Text;
 
         foreach (var editor in new[] { _left, _right, _inline })
         {

@@ -249,6 +249,9 @@ public sealed class MergeEditorViewModel : ObservableObject
 
     public string TextFor(MergeSide side) => side == MergeSide.Current ? CurrentText : IncomingText;
 
+    /// <summary>The shell's services, which color the panes like the editor (#86); null in a test (plain text).</summary>
+    public Codalus.Shell.Editor.DiffServices? Services { get; set; }
+
     /// <summary>The file's line ending (<c>\r\n</c>, <c>\n</c>), which the merge base's text takes in the result.</summary>
     public string LineEnding { get; }
 

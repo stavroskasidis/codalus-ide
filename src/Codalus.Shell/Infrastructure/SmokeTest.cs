@@ -701,6 +701,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             Check(await shell.OpenDiffAsync(Greeter, staged: false).ConfigureAwait(true) is not null, "a diff document opens");
             await WaitAsync(() => window.GetVisualDescendants().OfType<DiffView>().Any(), "the diff view renders").ConfigureAwait(true);
+            var diffView = window.GetVisualDescendants().OfType<DiffView>().First();
+            await WaitAsync(() => diffView.IsColored(Codalus.Workbench.Git.DiffPaneSide.Old) && diffView.IsColored(Codalus.Workbench.Git.DiffPaneSide.New), "both sides of the diff are in the editor's colors (#86)").ConfigureAwait(true);
 
             await shell.Git.StageAsync([Greeter, Program]).ConfigureAwait(true);
             await shell.Git.RefreshAsync().ConfigureAwait(true);
