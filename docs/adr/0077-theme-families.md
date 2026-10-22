@@ -1,6 +1,6 @@
 # 0077. Theme families as variants and tokens
 
-- **Status:** accepted (M45, 2026-10-17; D32 decided 2026-10-16), amended 2026-10-19 ([Classic is the default and listed first](#amendment-2026-10-19-classic-is-the-default-and-listed-first), D36)
+- **Status:** accepted (M45, 2026-10-17; D32 decided 2026-10-16), amended 2026-10-19 ([Classic is the default and listed first](#amendment-2026-10-19-classic-is-the-default-and-listed-first), D36) and 2026-10-22 ([Classic's editor colors follow the classic IDE](#amendment-2026-10-22-classics-editor-colors-follow-the-classic-ide), D47)
 - **Date:** 2026-10-17
 - **Deciders:** maintainer
 - **Amends:** [ADR 0019](0019-classic-ide-look-and-feel.md) (themes as tokens: Blue, Light, Dark and High Contrast become the Classic family)
@@ -57,3 +57,13 @@ The maintainer's choice (D36), from a screenshot of the first-run setup and Opti
 - **A setting that's there is untouched:** every saved value, `harbor` and the values from before M45 included, reads as before.
 - **The setup records its choice.** Next on the Appearance step now also writes the theme when the settings have none, even when it's the default, so a choice made in the setup stays the user's if the default changes again. (0.3.0's setup didn't write a Harbor that was the default, so those profiles move to Classic with the others.) Skip setup still writes nothing.
 - The plugin API, the context keys and the tokens don't change. The smoke test's gallery stays at Classic's four themes and Harbor's three; its setup picture (`setup-appearance.png`, the website's) is now Classic Light.
+
+## Amendment (2026-10-22): Classic's editor colors follow the classic IDE
+
+The maintainer reported Classic's colors as muted next to the classic IDE's (#83). Most of it was the document view drawn at 0.85 opacity (Dock's reveal fade, turned off in 0.6); D47 decided that the real palette differences follow the classic IDE's measured values too. The values and what was assumed are in [`design/shell-themes.md`](../design/shell-themes.md#classic-06).
+
+- **Classic's own editor colors change, the families' don't.** `EditorTheme.Dark` and `.Light` (Classic's, which the families start from) take the classic IDE's control keywords, comments and strings, and Dark's current line `#272727`. The families set their keywords, types, methods, strings, numbers, comments and current line themselves, as above; their control keywords, which they took from Classic, are now set to the value they had (`FamilyDarkControlKeyword`, `FamilyLightControlKeyword`), so no family changes.
+- **Two new tokens in every theme:** `Shell.Editor.LineNumbers.Current`, the caret line's number, drawn by `CurrentLineNumberMargin` (AvaloniaEdit's line number margin, replaced in the editor's margins: AvaloniaEdit's draws one brush), and `Shell.Editor.CodeLens.Foreground`, CodeLens's text (it shared the inlay hints' color). The families and High Contrast set them to their line numbers' and inlay hints' colors. Themes and `workbench.colorCustomizations` reach them as `editorLineNumber.activeForeground` and `editorCodeLens.foreground`.
+- **A setting's default can follow the family.** Bracket pair colors are off in the classic IDE, so `editor.bracketPairColorization` defaults to `false` in Classic and `true` in the families: the shell registers the setting's descriptor again with the active family's default when the family changes. A value in `settings.json` wins either way, and the Settings UI shows the default in effect. This is the settings system's own mechanism (a registration replaces the descriptor and raises `Changed` for the keys whose value changed), not a special case in the reader.
+- **TextMate's fallback follows** in Classic: Dark+'s and Light+'s control keyword, comment and string colors are replaced with Classic's (`TextMateSupport.RecolorsFor`), as Dark+'s plain text already was.
+

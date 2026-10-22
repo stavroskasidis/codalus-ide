@@ -73,8 +73,8 @@ public sealed class RazorColorTests
         Assert.Equal(Of(0xFF808080), ColorAt(editor, "<Router")); // delimiters gray
         Assert.Equal(Of(0xFF569CD6), ColorAt(editor, "<p", 1)); // an HTML element blue
         Assert.Equal(Of(0xFF9CDCFE), ColorAt(editor, "class=")); // its attribute
-        Assert.Equal(Of(0xFF6A9955), ColorAt(editor, "A Razor comment")); // Razor comments green
-        Assert.Equal(Of(0xFF6A9955), ColorAt(editor, "@*"));
+        Assert.Equal(Of(0xFF57A64A), ColorAt(editor, "A Razor comment")); // Razor comments green (the classic IDE's, D47)
+        Assert.Equal(Of(0xFF57A64A), ColorAt(editor, "@*"));
         Assert.Equal(Of(0xFFA699E6), ColorAt(editor, "@using")); // the transition and the directive
         Assert.Equal(Of(0xFFA699E6), ColorAt(editor, "@using", 1));
         Assert.Equal(Of(dark.TokenColor("namespace")!.Value), ColorAt(editor, "Microsoft.AspNetCore")); // a namespace in plain foreground

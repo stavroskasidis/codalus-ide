@@ -164,7 +164,8 @@ public sealed class TextMateSupport : IRegistryOptions
     /// <summary>
     /// The TextMate theme for the shell's theme, by its kind (<c>dark</c>, <c>light</c>, <c>highContrast</c>; a family's
     /// variant too). Dark+ draws plain text (embedded code, operators) in VS Code's #D4D4D4; it takes the editor's plain
-    /// text color instead, Visual Studio's #DCDCDC, as the C# around it does.
+    /// text color instead, Visual Studio's #DCDCDC, as the C# around it does. In Classic, grammar-colored text also takes
+    /// the classic IDE's control keywords, comments and strings (#83, D47), as the semantic colors do.
     /// </summary>
     public IRawTheme ThemeFor(string themeId)
     {
@@ -174,19 +175,50 @@ public sealed class TextMateSupport : IRegistryOptions
             "highContrast" => ThemeName.HighContrastDark,
             _ => ThemeName.DarkPlus,
         };
+        _recolors = RecolorsFor(themeId);
         return Recolor(_bundled.Value.LoadTheme(_theme));
     }
 
-    /// <summary>Dark+'s plain text color and the editor's (Light+ and High Contrast's already match the editor's).</summary>
-    private const string DarkPlusPlainText = "#D4D4D4";
-    private const string DarkPlainText = "#DCDCDC";
+    private IReadOnlyDictionary<string, string> _recolors = RecolorsFor("dark");
 
-    private IRawTheme Recolor(IRawTheme theme) => theme is null || _theme != ThemeName.DarkPlus ? theme! : new RecoloredTheme(theme);
+    /// <summary>
+    /// The colors a bundled theme's are replaced with for <paramref name="themeId"/>: Dark+'s plain text with the editor's
+    /// everywhere it's used, and in Classic Dark and Light (Blue too) the values <see cref="EditorTheme"/> changed (D47).
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> RecolorsFor(string themeId)
+    {
+        var classic = Theming.ThemeService.FamilyOf(themeId) == Theming.ThemeService.Classic;
+        var colors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        switch (Theming.ThemeService.KindOf(themeId))
+        {
+            case "light":
+                if (classic)
+                {
+                    colors["#AF00DB"] = "#8F08C4"; // control keywords
+                }
 
-    private static string? PlainText(string? color) => string.Equals(color, DarkPlusPlainText, StringComparison.OrdinalIgnoreCase) ? DarkPlainText : color;
+                break;
+            case "highContrast":
+                break;
+            default:
+                colors["#D4D4D4"] = "#DCDCDC"; // plain text
+                if (classic)
+                {
+                    colors["#C586C0"] = "#D8A0DF"; // control keywords
+                    colors["#6A9955"] = "#57A64A"; // comments
+                    colors["#CE9178"] = "#D69D85"; // strings
+                }
 
-    /// <summary>A theme (and the themes it includes) with Dark+'s plain text color replaced by the editor's.</summary>
-    private sealed class RecoloredTheme(IRawTheme inner) : IRawTheme
+                break;
+        }
+
+        return colors;
+    }
+
+    private IRawTheme Recolor(IRawTheme theme) => theme is null || _recolors.Count == 0 ? theme! : new RecoloredTheme(theme, _recolors);
+
+    /// <summary>A theme (and the themes it includes) with some of its colors replaced (<see cref="RecolorsFor"/>).</summary>
+    private sealed class RecoloredTheme(IRawTheme inner, IReadOnlyDictionary<string, string> colors) : IRawTheme
     {
         public string GetName() => inner.GetName();
 
@@ -197,13 +229,16 @@ public sealed class TextMateSupport : IRegistryOptions
         public ICollection<IRawThemeSetting> GetTokenColors() => Recolor(inner.GetTokenColors());
 
         public ICollection<KeyValuePair<string, object>> GetGuiColors() =>
-            inner.GetGuiColors()?.Select(c => c.Value is string color ? new KeyValuePair<string, object>(c.Key, PlainText(color)!) : c).ToList()!;
+            inner.GetGuiColors()?.Select(c => c.Value is string color ? new KeyValuePair<string, object>(c.Key, Replace(colors, color)!) : c).ToList()!;
 
-        private static List<IRawThemeSetting> Recolor(ICollection<IRawThemeSetting>? settings) =>
-            settings?.Select(s => (IRawThemeSetting)new RecoloredSetting(s)).ToList()!;
+        private List<IRawThemeSetting> Recolor(ICollection<IRawThemeSetting>? settings) =>
+            settings?.Select(s => (IRawThemeSetting)new RecoloredSetting(s, colors)).ToList()!;
     }
 
-    private sealed class RecoloredSetting(IRawThemeSetting inner) : IRawThemeSetting, IThemeSetting
+    private static string? Replace(IReadOnlyDictionary<string, string> colors, string? color) =>
+        color is not null && colors.TryGetValue(color, out var replacement) ? replacement : color;
+
+    private sealed class RecoloredSetting(IRawThemeSetting inner, IReadOnlyDictionary<string, string> colors) : IRawThemeSetting, IThemeSetting
     {
         public string GetName() => inner.GetName();
 
@@ -215,7 +250,7 @@ public sealed class TextMateSupport : IRegistryOptions
 
         public string GetBackground() => inner.GetSetting().GetBackground();
 
-        public string GetForeground() => PlainText(inner.GetSetting().GetForeground())!;
+        public string GetForeground() => Replace(colors, inner.GetSetting().GetForeground())!;
     }
 
     // ------------------------------------------------------------------ IRegistryOptions

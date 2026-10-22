@@ -2964,7 +2964,7 @@
   "setting.diagnostics.showDiagnosticToolsOnDebug.title": "Show Diagnostic Tools When Debugging Starts",
   "setting.editor.autoClosingBrackets.description": "Insert the closing bracket or quote after typing an opening one, as the language defines them.",
   "setting.editor.autoClosingBrackets.title": "Auto Closing Brackets",
-  "setting.editor.bracketPairColorization.description": "Color matching brackets by nesting depth.",
+  "setting.editor.bracketPairColorization.description": "Color matching brackets by nesting depth. By default it's off in the Classic themes and on in the others.",
   "setting.editor.bracketPairColorization.title": "Bracket Pair Colorization",
   "setting.editor.codeLens.description": "Show reference and implementation counts at the end of declarations.",
   "setting.editor.codeLens.title": "CodeLens",

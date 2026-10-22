@@ -50,7 +50,7 @@ Codalus IDE has five **theme families**: Classic, the default, in Blue, Light, D
 
 | Family | What it looks like |
 |---|---|
-| **Classic** (the default) | The classic IDE's familiar look, the themes from before 0.3: Blue, Light, Dark and High Contrast. |
+| **Classic** (the default) | The classic IDE's familiar look, the themes from before 0.3: Blue, Light, Dark and High Contrast. Since 0.6 its editor has the classic IDE's colors: its control keywords, comments and strings, gray line numbers with the caret's line number brighter, its CodeLens and current line, and no bracket pair colors unless you turn them on. |
 | **Harbor** | The closest to a classic IDE: a deep navy title bar in Light, tool windows docked with gaps between them, the focused tool window's caption and the status bar in cobalt, a bar across the top of the active tab. |
 | **Graphite** | Compact and dense: the title bar and toolbar in the window's color, hairlines between tool windows, a bold title with a teal dot on the focused one, an underline on the active tab, a dark teal status bar. |
 | **Daylight** | Flat and airy: hairlines between tool windows, rounded tabs with the active one tinted violet, the Start button filled with the accent. |

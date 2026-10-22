@@ -88,7 +88,7 @@ All tokens are in `src/Codalus.Shell/Theming/Tokens.axaml`. Colors and the famil
 | `Shell.Tab.Active`, `.Selected`, `.Inactive`, `.Hover`, `.Preview` (each with `.Foreground`) | Document tabs: the active tab, the selected tab of a pane without the focus, other tabs, pointer over, the preview tab |
 | `Shell.TabColor.1`–`8` | Tabs colored by project (`workbench.editor.colorTabsByProject`) |
 | `Shell.Caption.Active`, `Shell.Caption.Inactive` (with `.Foreground`) | Tool window captions with and without the focus |
-| `Shell.Editor.*` | The editor: text, line numbers, inlay hints, guides, brackets, folding; the current line, the breakpoint glyph and line, and the current statement's line (`.CurrentLine`, `.Breakpoint`, `.Breakpoint.Line`, `.CurrentStatement`) |
+| `Shell.Editor.*` | The editor: text, line numbers and the caret line's number (`.LineNumbers`, `.LineNumbers.Current`), inlay hints, CodeLens (`.CodeLens.Foreground`), guides, brackets, folding; the current line, the breakpoint glyph and line, and the current statement's line (`.CurrentLine`, `.Breakpoint`, `.Breakpoint.Line`, `.CurrentStatement`) |
 | `Shell.Icon.Run`, `.Stop`, `.Save`, `.Open`, `.Build`, `.Git`, `.Test`, `.Navigate` | Command icon families (white in High Contrast) |
 | `Shell.Icon.Outline` | The gray of the classic file icons' pages and outlines |
 

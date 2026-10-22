@@ -51,11 +51,14 @@ DockTabActiveForegroundBrush DockTabActiveBackgroundBrush 4.5
 # The editor.
 Shell.Editor.Foreground Shell.Editor.Background 4.5
 Shell.Editor.LineNumbers Shell.Editor.Background 4.5
+Shell.Editor.LineNumbers.Current Shell.Editor.Background 4.5
 Shell.Editor.Foreground Shell.Editor.CurrentLine 4.5
 Shell.Editor.Foreground Shell.Editor.Breakpoint.Line 4.5
 Shell.Editor.Foreground Shell.Editor.CurrentStatement 4.5
 Shell.Editor.Breakpoint Shell.Editor.Background 3
 Shell.Editor.InlayHint.Foreground Shell.Editor.InlayHint.Background 4.5
+Shell.Editor.CodeLens.Foreground Shell.Editor.Background 4.5
+Shell.Editor.CodeLens.Foreground Shell.Editor.CurrentLine 4.5
 Shell.Editor.Fold Shell.Editor.Background 3
 Shell.Editor.Bracket1 Shell.Editor.Background 3
 Shell.Editor.Bracket2 Shell.Editor.Background 3

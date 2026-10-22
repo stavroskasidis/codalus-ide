@@ -331,7 +331,8 @@ public sealed partial class CodeEditorController : IDisposable
     private void OrderMargins()
     {
         var margins = Editor.TextArea.LeftMargins;
-        var numbers = margins.OfType<LineNumberMargin>().FirstOrDefault();
+        // The caret line's number in its own color (#83, D47): AvaloniaEdit's margin, replaced once each time numbers turn on.
+        var numbers = (LineNumberMargin?)CurrentLineNumberMargin.Install(Editor, Avalonia.Controls.ResourceNodeExtensions.GetResourceObservable(Editor, "Shell.Editor.LineNumbers.Current"));
         if (numbers is null)
         {
             return;

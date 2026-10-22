@@ -53,7 +53,9 @@
       <SolidColorBrush x:Key="Shell.Modified" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#000000" />
-      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#727272" />
+      <!-- The current line's number, brighter than the others, and CodeLens: the classic IDE's (#83, D47). -->
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#3F3F3F" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
       <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
@@ -80,6 +82,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#5F6670" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#5E5E5E" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F3F3F3" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#E0E0E0" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -255,7 +258,9 @@
       <SolidColorBrush x:Key="Shell.Modified" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1E1E1E" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#DCDCDC" />
-      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#2B91AF" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8A8A8A" />
+      <!-- The current line's number, brighter than the others, and CodeLens: the classic IDE's (#83, D47). -->
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#CCCCCC" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
       <!-- The merge editor's conflict blocks (2026-10-19): a muted red fill with a dashed outline while unresolved, a solid outline once resolved. -->
@@ -282,6 +287,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#969696" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#A1A1A1" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#2A2A2A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#404040" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -334,7 +340,7 @@
       <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#F1F1F1" />
       <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#A6A6A6" />
-      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#2E2E2E" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#272727" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#E51400" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#501C16" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#695814" />
@@ -617,6 +623,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#FFFFFF" />
       <!-- Fluent colors (palettes cannot target custom variants). The accent fills selected tabs and checkboxes
            under white text, so it is a blue with about 5:1 contrast against white rather than cyan. -->
       <Color x:Key="SystemAccentColor">#0F6CBD</Color>
@@ -690,6 +697,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D0D0D0" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D0D0D0" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -868,6 +876,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1B1F2A" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6A7490" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#6A7490" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F2F6FE" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCE9EC" />
@@ -897,6 +906,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#4E5873" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#4E5873" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#E8EBF4" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#BCC7E0" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -1098,6 +1108,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#141A28" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#D9DFEE" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#7F8AA8" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#7F8AA8" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#1A2236" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A6E" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1E2A" />
@@ -1127,6 +1138,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#9AA5C2" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#9AA5C2" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1C2337" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#2A3553" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -1328,6 +1340,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
@@ -1357,6 +1370,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -1578,6 +1592,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1F2226" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6B7079" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#6B7079" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F4F5F7" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCE9EA" />
@@ -1607,6 +1622,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#555A63" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#555A63" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F0F1F2" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#D3D6DB" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -1813,6 +1829,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1A1B1F" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#D5D8DE" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8A8F9A" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#8A8F9A" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#202227" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A6E" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1E22" />
@@ -1842,6 +1859,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#9A9FAA" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#9A9FAA" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#202126" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#2A2D34" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -2048,6 +2066,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
@@ -2077,6 +2096,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -2303,6 +2323,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1F1F24" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6B6B76" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#6B6B76" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F7F5FC" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCEDEC" />
@@ -2332,6 +2353,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#5C5C66" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#5C5C66" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F4F4F6" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#E0E0E6" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -2533,6 +2555,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#222029" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#E4E2EC" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8E8AA0" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#8E8AA0" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#29263A" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A6E" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1E26" />
@@ -2562,6 +2585,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#A7A3B8" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#A7A3B8" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#282631" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#34313F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -2763,6 +2787,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
@@ -2792,6 +2817,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -3013,6 +3039,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#2A211B" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#7A6C60" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#7A6C60" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#FBF5EE" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCE9E7" />
@@ -3042,6 +3069,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#6B5E53" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#6B5E53" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F3F0EE" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#DDD5CD" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
@@ -3243,6 +3271,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#171513" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#E6DFD8" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8F867D" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#8F867D" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#211E1B" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A5A" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1C1C" />
@@ -3272,6 +3301,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#A39A90" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#A39A90" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1E1B19" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#2B2724" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
@@ -3473,6 +3503,7 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers.Current" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
       <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
@@ -3502,6 +3533,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CodeLens.Foreground" Color="#D6D6D6" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
       <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
