@@ -230,6 +230,15 @@ public sealed class WinFormsDesignerServiceTests
         Assert.Equal(("fr", "Enregistrer"), (depthBack.Resources[0].Culture, depthBack.Resources[0].Resource!.Text));
         Assert.True(depthBack.Localized[0].Localized);
         Assert.True(depthBack.Render.Components[0] is { IsItem: true, Owner: "menuStrip1", ItemIndex: 2, Baseline: 15 });
+        // #68: a sub-property's dotted path and a string array's value.
+        var edits = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerSetPropertiesParams(
+        [
+            new DesignerPropertyEdit("notesTextBox", "Font.Bold") { Text = "True" },
+            new DesignerPropertyEdit("notesTextBox", "Lines") { Value = DesignerValue.ArrayOf("System.String", DesignerValue.String("one"), DesignerValue.String("two")) },
+        ]), json.DesignerSetPropertiesParams), json.DesignerSetPropertiesParams)!;
+        Assert.Equal(("Font.Bold", "True"), (edits.Edits[0].Property, edits.Edits[0].Text));
+        Assert.True(edits.Edits[1].Value!.SameAs(DesignerValue.ArrayOf("System.String", DesignerValue.String("one"), DesignerValue.String("two"))));
+
         var collection = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerSetCollectionParams("menuStrip1", "Items", [new DesignerCollectionItem { Name = "item1", Type = "System.Windows.Forms.ToolStripMenuItem", Text = "&Edit" }]), json.DesignerSetCollectionParams), json.DesignerSetCollectionParams)!;
         Assert.Equal("&Edit", collection.Items[0].Text);
         var actions = JsonSerializer.Deserialize(JsonSerializer.Serialize(new DesignerActionsResult([new DesignerActionItem(DesignerActionKinds.Method, "verb:Add Tab", "Add Tab") { Collection = "TabControl:TabPages" }]), json.DesignerActionsResult), json.DesignerActionsResult)!;

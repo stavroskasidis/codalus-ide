@@ -115,7 +115,7 @@ public sealed class WinFormsDesignerDepthShellTests
         designer.SetSelection(["placeOrderButton"], notify: true);
         rows = await RowsAsync(f);
         var image = rows.Single(r => r.Name == "Image");
-        Assert.True(image is { HasAction: true, HasSecondaryAction: true, IsReadOnly: true });
+        Assert.True(image is { HasModalEditor: true, IsReadOnly: true });
         var png = Path.Combine(app, "logo.png");
         await File.WriteAllBytesAsync(png, Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), TestContext.Current.CancellationToken);
         await designer.ImportImageAsync("placeOrderButton", "Image", png, toProject: false);
@@ -253,7 +253,11 @@ public sealed class WinFormsDesignerDepthShellTests
         // A data binding: (DataBindings) Text to the binding source's other member.
         designer.SetSelection(["nameTextBox"], notify: true);
         var rows = await RowsAsync(f);
-        var binding = Assert.Single(rows, r => r.Name == "Text" && r.IsChoice);
+        // #68: the bindings are the (DataBindings) row's parts, in Data, not a category of their own.
+        Assert.DoesNotContain(f.Shell.PropertiesWindow.Categories, c => c.Title == "(DataBindings)");
+        var bindings = Assert.Single(rows, r => r.Name == "(DataBindings)");
+        Assert.True(bindings.IsReadOnly);
+        var binding = Assert.Single(bindings.Children, r => r.Name == "Text" && r.IsChoice);
         Assert.Contains(binding.Options, o => o.Value == "itemBindingSource - Quantity");
         binding.SelectedOption = binding.Options.Single(o => o.Value == "itemBindingSource - Quantity");
         await ShellFixture.PumpUntil(() => Code(designer).Contains("nameTextBox.DataBindings.Add(new Binding(\"Text\", itemBindingSource, \"Quantity\", true));", StringComparison.Ordinal));

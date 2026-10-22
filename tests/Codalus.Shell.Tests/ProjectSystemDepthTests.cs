@@ -71,6 +71,23 @@ public sealed class ProjectSystemDepthTests
         Assert.Contains("compiled", f.Shell.PropertiesWindow.Description, StringComparison.Ordinal);
         NavigationDepthTests.Screenshot(f, "m26a-properties");
 
+        // #68: the grid's categories collapse, Alphabetical is one sorted list, and Property Pages is grayed for a file.
+        var grid = f.Shell.PropertiesWindow.Grid;
+        Assert.Equal(["Advanced", "Misc"], grid.Items.OfType<PropertyCategoryViewModel>().Select(c => c.Title));
+        grid.Toggle(grid.Categories.Single(c => c.Title == "Advanced"));
+        Assert.DoesNotContain(grid.Items, i => i is PropertyRowViewModel { Name: "Build Action" });
+        Assert.Equal("Advanced", grid.DescriptionTitle);
+        grid.Toggle(grid.Categories.Single(c => c.Title == "Advanced"));
+        Assert.False(f.Shell.PropertiesWindow.PropertyPagesCommand.CanExecute(null));
+        f.Shell.PropertiesWindow.Alphabetical = true;
+        await ShellFixture.PumpUntil(() => grid.Alphabetical && !f.Shell.PropertiesWindow.IsLoading, seconds: 60);
+        Assert.Empty(grid.Items.OfType<PropertyCategoryViewModel>());
+        var names = grid.Items.OfType<PropertyRowViewModel>().Select(r => r.Name).ToList();
+        Assert.Equal(names.Order(StringComparer.OrdinalIgnoreCase), names);
+        f.Shell.PropertiesWindow.Alphabetical = false;
+        await ShellFixture.PumpUntil(() => !grid.Alphabetical && !f.Shell.PropertiesWindow.IsLoading && Rows(f).ContainsKey("Build Action"), seconds: 60);
+        rows = Rows(f);
+
         // Copy always: the attribute changes in place.
         rows["Copy to Output Directory"].SelectedOption = PropertiesWindowViewModel.CopyToOutputOptions.Single(o => o.Value == "Always");
         await ShellFixture.PumpUntil(() => Read(app).Contains("<None Update=\"appsettings.json\" CopyToOutputDirectory=\"Always\" />", StringComparison.Ordinal), seconds: 60);
@@ -91,6 +108,7 @@ public sealed class ProjectSystemDepthTests
         f.Shell.Dialogs.Accept();
         await ShellFixture.PumpUntil(() => Read(app).Contains("<Pack>true</Pack>", StringComparison.Ordinal), seconds: 60);
         await ShellFixture.PumpUntil(() => Rows(f).ContainsKey("Pack") && !f.Shell.PropertiesWindow.IsLoading, seconds: 60);
+        Assert.Equal(["Advanced", "Misc", "Metadata"], grid.Items.OfType<PropertyCategoryViewModel>().Select(c => c.Title));
         Rows(f)["Custom Tool"].Text = "MyGenerator";
         await ShellFixture.PumpUntil(() => Read(app).Contains("<Generator>MyGenerator</Generator>", StringComparison.Ordinal), seconds: 60);
 
@@ -99,9 +117,18 @@ public sealed class ProjectSystemDepthTests
         await ShellFixture.PumpUntil(() => f.Shell.PropertiesWindow.Title == "App Project Properties" && Rows(f).ContainsKey("Output Type"), seconds: 60);
         Assert.Equal("Exe", Rows(f)["Output Type"].Value);
         Assert.Contains(f.Shell.PropertiesWindow.Links, l => l.Title.StartsWith("Open Project Properties", StringComparison.Ordinal));
+
+        // #68: Property Pages opens a project's properties, and the solution's Configuration Manager.
+        Assert.True(f.Shell.PropertiesWindow.PropertyPagesCommand.CanExecute(null));
+        f.Shell.PropertiesWindow.PropertyPagesCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<ProjectPropertiesDocument>().Any());
         f.Shell.Explorer.Reveal("solution");
         await ShellFixture.PumpUntil(() => f.Shell.PropertiesWindow.Title == "Solution Properties" && Rows(f).ContainsKey("Active Configuration"));
         Assert.Equal("Debug|Any CPU", Rows(f)["Active Configuration"].Value);
+        Assert.True(f.Shell.PropertiesWindow.PropertyPagesCommand.CanExecute(null));
+        var documents = f.Shell.Layout.Documents.Count();
+        f.Shell.PropertiesWindow.PropertyPagesCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.Count() == documents + 1 && f.Shell.Layout.Documents.Any(d => d.Title?.Contains("Configuration Manager", StringComparison.Ordinal) == true));
     }
 
     [AvaloniaFact]

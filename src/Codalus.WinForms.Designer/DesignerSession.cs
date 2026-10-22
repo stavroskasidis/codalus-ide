@@ -942,63 +942,197 @@ internal sealed partial class DesignerSession : IDisposable
         return Host.GetDesigner(Root) as ParentControlDesigner ?? throw new InvalidOperationException("The form's designer can't contain controls.");
     }
 
+    /// <summary>
+    /// The Properties window's edits (#68: several in one request, as the font editor sends Font.Name, Font.Size and its
+    /// styles), all or none: each property's value is kept before its edit, so when a later edit's value isn't valid (or
+    /// the host fails) the earlier ones are put back and the surface is as it was, the error with no changes.
+    /// </summary>
     public DesignerChangeResult SetProperties(DesignerSetPropertiesParams parameters)
     {
         var before = Capture();
-        foreach (var edit in parameters.Edits)
+        var undo = new List<Action>();
+        DesignerChangeResult Rejected(string error)
         {
-            if (edit.Component.Length == 0 && edit.Property == "Localizable" && edit.Provider is null)
-            {
-                return SetLocalizable(before, string.Equals(edit.Text, "True", StringComparison.OrdinalIgnoreCase));
-            }
+            Undo(undo);
+            return new DesignerChangeResult([], Render()) { Error = error };
+        }
 
-            var target = Target(edit.Component) ?? throw Unknown(edit.Component);
-            if (edit.Property == "Locked" && edit.Provider is null && !edit.DataBinding && LockedOf(target) is not { IsReadOnly: false })
+        try
+        {
+            foreach (var edit in parameters.Edits)
             {
-                // Lock Controls over a form with a context menu strip or an inherited control (#67): skipped, as the classic
-                // IDE's OnMenuLockControls skips a component without a Locked it can set.
-                continue;
-            }
-
-            if (edit.DataBinding)
-            {
-                if (SetDataBinding(target, edit) is { } bindingError)
+                if (edit.Component.Length == 0 && edit.Property == "Localizable" && edit.Provider is null)
                 {
-                    return new DesignerChangeResult([], Render()) { Error = bindingError };
+                    return SetLocalizable(before, string.Equals(edit.Text, "True", StringComparison.OrdinalIgnoreCase));
                 }
 
-                continue;
-            }
-
-            var (owner, member) = Walk(target, edit.Property);
-            var descriptor = Descriptor(owner, member, edit.Provider)
-                ?? throw new InvalidOperationException(edit.Provider is null ? $"{edit.Property} isn't a property of {edit.Component}." : $"{edit.Provider} doesn't give {edit.Component} a {edit.Property}.");
-            if (edit.Reset)
-            {
-                if (descriptor.CanResetValue(owner))
+                var target = Target(edit.Component) ?? throw Unknown(edit.Component);
+                if (edit.Property == "Locked" && edit.Provider is null && !edit.DataBinding && LockedOf(target) is not { IsReadOnly: false })
                 {
-                    descriptor.ResetValue(owner);
+                    // Lock Controls over a form with a context menu strip or an inherited control (#67): skipped, as the classic
+                    // IDE's OnMenuLockControls skips a component without a Locked it can set.
+                    continue;
                 }
 
-                continue;
-            }
+                if (edit.DataBinding)
+                {
+                    undo.Add(BindingRestorer(target, edit.Property));
+                    if (SetDataBinding(target, edit) is { } bindingError)
+                    {
+                        return Rejected(bindingError);
+                    }
 
-            object? value;
-            try
-            {
-                value = edit.Bytes is { } bytes ? ImageOf(descriptor.PropertyType, Convert.FromBase64String(bytes))
-                    : edit.Value is { } structured ? _values.Evaluate(structured, descriptor.PropertyType)
-                    : descriptor.Converter.ConvertFromInvariantString(edit.Text ?? string.Empty);
-            }
-            catch (Exception ex) when (ex is FormatException or NotSupportedException or ArgumentException or InvalidCastException or OverflowException or System.Runtime.InteropServices.ExternalException)
-            {
-                return new DesignerChangeResult([], Render()) { Error = $"'{edit.Text ?? edit.Property}' isn't a valid {edit.Property}: {ex.Message}" };
-            }
+                    continue;
+                }
 
-            descriptor.SetValue(owner, value);
+                if (edit.Provider is null && edit.Bytes is null && edit.Property.Contains('.', StringComparison.Ordinal))
+                {
+                    // A part (#68: Font.Bold, Location.X, Padding.Left, FlatAppearance.BorderSize): the whole value set again.
+                    undo.Add(PartRestorer(target, edit.Property));
+                    if (SetSubProperty(target, edit) is { } subError)
+                    {
+                        return Rejected(subError);
+                    }
+
+                    continue;
+                }
+
+                var (owner, member) = Walk(target, edit.Property);
+                var descriptor = Descriptor(owner, member, edit.Provider)
+                    ?? throw new InvalidOperationException(edit.Provider is null ? $"{edit.Property} isn't a property of {edit.Component}." : $"{edit.Provider} doesn't give {edit.Component} a {edit.Property}.");
+                undo.Add(ValueRestorer(owner, descriptor));
+                if (edit.Reset)
+                {
+                    if (descriptor.CanResetValue(owner))
+                    {
+                        descriptor.ResetValue(owner);
+                    }
+
+                    continue;
+                }
+
+                try
+                {
+                    // Converted with the surface's context (#68), so a component's name resolves (AcceptButton = "cancelButton").
+                    var value = edit.Bytes is { } bytes ? ImageOf(descriptor.PropertyType, Convert.FromBase64String(bytes))
+                        : edit.Value is { } structured ? _values.Evaluate(structured, descriptor.PropertyType)
+                        : descriptor.Converter.ConvertFrom(Context(owner, descriptor), CultureInfo.InvariantCulture, edit.Text ?? string.Empty);
+
+                    // A setter's refusal (a size out of range) is an invalid value too, as the classic IDE reports it.
+                    descriptor.SetValue(owner, value);
+                }
+                catch (Exception ex) when (IsConversionError(ex))
+                {
+                    return Rejected(ConversionMessage(ex));
+                }
+            }
+        }
+        catch
+        {
+            Undo(undo);
+            throw;
         }
 
         return Result(before);
+    }
+
+    /// <summary>Puts back what a request's earlier edits changed, the last first.</summary>
+    private static void Undo(List<Action> undo)
+    {
+        for (var i = undo.Count - 1; i >= 0; i--)
+        {
+            try
+            {
+                undo[i]();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                Console.Error.WriteLine($"[designer] an edit couldn't be put back: {ex.Message}");
+            }
+        }
+
+        undo.Clear();
+    }
+
+    /// <summary>
+    /// What puts a property back as it is now: its value, or a reset when the code doesn't set it, so an ambient value
+    /// (a Font or BackColor from the parent) stays ambient rather than becoming set.
+    /// </summary>
+    private static Action ValueRestorer(object owner, PropertyDescriptor descriptor)
+    {
+        var old = descriptor.GetValue(owner);
+        var wasSet = descriptor.ShouldSerializeValue(owner);
+        return () =>
+        {
+            if (!wasSet && descriptor.CanResetValue(owner))
+            {
+                descriptor.ResetValue(owner);
+            }
+            else if (!descriptor.IsReadOnly)
+            {
+                descriptor.SetValue(owner, old);
+            }
+        };
+    }
+
+    /// <summary>What puts a part's property back: the component's property, and each reference-type holder's part on the way down (FlatAppearance's BorderSize), as they are now.</summary>
+    private static Action PartRestorer(object component, string path)
+    {
+        var names = path.Split('.');
+        var restorers = new List<Action>();
+        if (TypeDescriptor.GetProperties(component)[names[0]] is not { } top)
+        {
+            return () => { };
+        }
+
+        restorers.Add(ValueRestorer(component, top));
+        var holder = top.GetValue(component);
+        for (var i = 1; i < names.Length && holder is not null; i++)
+        {
+            if (TypeDescriptor.GetProperties(holder)[names[i]] is not { } part)
+            {
+                break;
+            }
+
+            if (!holder.GetType().IsValueType && !part.IsReadOnly)
+            {
+                restorers.Add(ValueRestorer(holder, part));
+            }
+
+            holder = part.GetValue(holder);
+        }
+
+        // The deepest first, then the component's property (a no-op for a reference holder changed in place).
+        return () =>
+        {
+            for (var i = restorers.Count - 1; i >= 0; i--)
+            {
+                restorers[i]();
+            }
+        };
+    }
+
+    /// <summary>What puts a control's binding of a property back as it is now (or none).</summary>
+    private static Action BindingRestorer(object target, string property)
+    {
+        if (target is not Control control)
+        {
+            return () => { };
+        }
+
+        var old = control.DataBindings[property];
+        return () =>
+        {
+            if (control.DataBindings[property] is { } current && !ReferenceEquals(current, old))
+            {
+                control.DataBindings.Remove(current);
+            }
+
+            if (old is not null && control.DataBindings[property] is null)
+            {
+                control.DataBindings.Add(old);
+            }
+        };
     }
 
     /// <summary>A property of <paramref name="owner"/>, or the extender property <paramref name="provider"/> gives it (<c>ToolTip on toolTip1</c>).</summary>
@@ -1184,187 +1318,5 @@ internal sealed partial class DesignerSession : IDisposable
         }
 
         return [.. choices];
-    }
-
-    // ------------------------------------------------------------------ the Properties window
-
-    public DesignerPropertiesResult Properties(DesignerComponentsParams parameters)
-    {
-        var targets = parameters.Components.Select(n =>
-        {
-            var dot = n.IndexOf('.', StringComparison.Ordinal);
-            var target = Target(dot < 0 ? n : n[..dot]) ?? throw Unknown(n);
-            return dot < 0 ? target : Walk(target, n[(dot + 1)..] + ".x").Owner;
-        }).ToList();
-        if (targets.Count == 0)
-        {
-            return new DesignerPropertiesResult([]);
-        }
-
-        List<DesignerPropertyInfo>? merged = null;
-        foreach (var target in targets)
-        {
-            var infos = Describe(target, NameOf(target)).ToList();
-            merged = merged is null
-                ? infos
-                : [.. merged.Join(infos, a => (a.Name, a.Type, a.Provider, a.DataBinding), b => (b.Name, b.Type, b.Provider, b.DataBinding),
-                    (a, b) => a.Value == b.Value ? a with { IsSet = a.IsSet || b.IsSet } : a with { Value = null, Mixed = true, IsSet = a.IsSet || b.IsSet })];
-        }
-
-        return new DesignerPropertiesResult([.. merged!]);
-    }
-
-    private IEnumerable<DesignerPropertyInfo> Describe(object target, string? name)
-    {
-        if (target is IComponent && name is not null)
-        {
-            yield return new DesignerPropertyInfo("Name", "Design", "System.String", name.Length == 0 ? _className : name)
-            {
-                Description = "The name of the component in the code.",
-                IsSet = true,
-                IsReadOnly = name.Length == 0,
-            };
-        }
-
-        if (ReferenceEquals(target, _root))
-        {
-            // Visual Studio's design-time property of a form: its localizable values go to its resources, per language.
-            yield return new DesignerPropertyInfo("Localizable", "Design", "System.Boolean", _localizable ? "True" : "False")
-            {
-                Description = "The form's localizable properties (texts, sizes, locations, images…) are in its resources, a .resx per language.",
-                IsSet = _localizable,
-                Editor = DesignerEditors.Boolean,
-                StandardValues = ["True", "False"],
-            };
-        }
-
-        var collections = CollectionsOf(target).ToDictionary(c => c.Info.Property, c => c.Info.Key, StringComparer.Ordinal);
-        foreach (PropertyDescriptor descriptor in TypeDescriptor.GetProperties(target, [BrowsableAttribute.Yes]))
-        {
-            if (descriptor.Name == "Name")
-            {
-                continue;
-            }
-
-            string? provider = null;
-            if (descriptor.Attributes[typeof(ExtenderProvidedPropertyAttribute)] is ExtenderProvidedPropertyAttribute { Provider: { } extender })
-            {
-                if (NameOf(extender) is not { Length: > 0 } providerName)
-                {
-                    continue;
-                }
-
-                provider = providerName;
-            }
-
-            DesignerPropertyInfo info;
-            try
-            {
-                info = Describe(target, descriptor);
-                if (collections.TryGetValue(descriptor.Name, out var key) && provider is null)
-                {
-                    info = info with { Editor = DesignerEditors.Collection, Collection = key, Value = "(Collection)", IsReadOnly = false };
-                }
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                info = new DesignerPropertyInfo(descriptor.Name, descriptor.Category, DesignerTypes.NameOf(descriptor.PropertyType), ex.Message) { IsReadOnly = true, Editor = DesignerEditors.ReadOnly };
-            }
-
-            yield return info with { Provider = provider, Localizable = _localizable && descriptor.IsLocalizable };
-        }
-
-        // (DataBindings): the bindable properties, bound to a binding source's member.
-        if (target is Control control && NameOf(control) is { Length: > 0 })
-        {
-            string[]? choices = null;
-            foreach (PropertyDescriptor bindable in TypeDescriptor.GetProperties(control, [BindableAttribute.Yes]))
-            {
-                choices ??= BindingChoices();
-                var binding = control.DataBindings[bindable.Name];
-                var current = binding?.DataSource is IComponent source && NameOf(source) is { } sourceName
-                    ? sourceName + BindingSeparator + binding.BindingMemberInfo.BindingMember
-                    : NoBinding;
-                yield return new DesignerPropertyInfo(bindable.Name, "(DataBindings)", DesignerTypes.NameOf(bindable.PropertyType), current)
-                {
-                    Description = $"Binds {bindable.Name} to a member of one of the form's binding sources.",
-                    IsSet = binding is not null,
-                    Editor = DesignerEditors.Enum,
-                    StandardValues = choices.Contains(current) ? choices : [.. choices, current],
-                    DataBinding = true,
-                };
-            }
-        }
-    }
-
-    private static DesignerPropertyInfo Describe(object target, PropertyDescriptor descriptor)
-    {
-        var type = Nullable.GetUnderlyingType(descriptor.PropertyType) ?? descriptor.PropertyType;
-        var converter = descriptor.Converter;
-        var value = descriptor.GetValue(target);
-        string? text;
-        try
-        {
-            text = value is null ? string.Empty : converter.ConvertToInvariantString(value);
-        }
-        catch (Exception ex) when (ex is NotSupportedException or ArgumentException or InvalidOperationException)
-        {
-            text = value?.ToString();
-        }
-
-        if (!descriptor.IsReadOnly && (typeof(Image).IsAssignableFrom(type) || typeof(Icon).IsAssignableFrom(type)))
-        {
-            // An image: imported from a file into the resources (the editor shows its type, as Visual Studio does).
-            return new DesignerPropertyInfo(descriptor.Name, descriptor.Category, DesignerTypes.NameOf(type), value is null ? "(none)" : DesignerTypes.NameOf(value.GetType()))
-            {
-                Description = descriptor.Description,
-                IsSet = descriptor.ShouldSerializeValue(target),
-                Editor = DesignerEditors.Image,
-            };
-        }
-
-        var settable = !descriptor.IsReadOnly && converter.CanConvertFrom(typeof(string)) && descriptor.SerializationVisibility != DesignerSerializationVisibility.Content;
-        var editor = !settable ? DesignerEditors.ReadOnly
-            : type == typeof(bool) ? DesignerEditors.Boolean
-            : type == typeof(AnchorStyles) ? DesignerEditors.Anchor
-            : type == typeof(DockStyle) ? DesignerEditors.Dock
-            : type.IsEnum && type.IsDefined(typeof(FlagsAttribute), inherit: false) ? DesignerEditors.Flags
-            : type.IsEnum ? DesignerEditors.Enum
-            : type == typeof(Color) ? DesignerEditors.Color
-            : type == typeof(Font) ? DesignerEditors.Font
-            : DesignerEditors.Text;
-        string[]? standard = null;
-        if (settable && converter.GetStandardValuesSupported(null) && converter.GetStandardValues(null) is { Count: > 0 and <= 400 } values)
-        {
-            standard = [.. values.Cast<object?>().Select(v => v is null ? string.Empty : converter.ConvertToInvariantString(v) ?? string.Empty)];
-        }
-
-        if (type.IsEnum && editor is DesignerEditors.Flags or DesignerEditors.Anchor)
-        {
-            standard = System.Enum.GetNames(type);
-        }
-
-        return new DesignerPropertyInfo(descriptor.Name, descriptor.Category, DesignerTypes.NameOf(type), text)
-        {
-            Description = descriptor.Description,
-            IsReadOnly = !settable,
-            IsSet = ShouldSerialize(descriptor, target),
-            Editor = editor,
-            StandardValues = standard,
-        };
-    }
-
-    public DesignerEventsResult Events(DesignerComponentsParams parameters)
-    {
-        var target = Target(parameters.Components.FirstOrDefault() ?? string.Empty) ?? throw new InvalidOperationException("No component.");
-        var events = new List<DesignerEventInfo>();
-        foreach (EventDescriptor descriptor in TypeDescriptor.GetEvents(target, [BrowsableAttribute.Yes]))
-        {
-            var invoke = descriptor.EventType.GetMethod("Invoke");
-            var parametersList = invoke?.GetParameters().Select(p => $"{DesignerTypes.NameOf(p.ParameterType)} {p.Name}").ToArray() ?? [];
-            events.Add(new DesignerEventInfo(descriptor.Name, descriptor.Category, DesignerTypes.NameOf(descriptor.EventType), parametersList) { Description = descriptor.Description });
-        }
-
-        return new DesignerEventsResult([.. events.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)], TypeDescriptor.GetDefaultEvent(target)?.Name);
     }
 }

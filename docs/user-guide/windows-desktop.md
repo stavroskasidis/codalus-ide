@@ -154,7 +154,10 @@ Components that don't show on the form (a timer, a tool tip, a binding source, a
 Properties that are collections show **(Collection)** and a **…** button in the Properties window (or the smart tag's **Edit Items…** task), which opens their editor:
 - **items as text**, one a line: a list box's, a combo box's or a domain up-down's `Items`;
 - **members**, added (of a type you choose), removed and moved up and down, each with its properties: a list view's `Columns`, a tab control's `TabPages`, a tool strip's or menu's `Items` and `DropDownItems`, a data grid view's `Columns`;
-- a list view's `Items` (by text, written as `ListViewItem` locals), a table layout panel's `ColumnStyles` and `RowStyles` (size type and size), an image list's `Images`.
+- a list view's `Items` (by text, written as `ListViewItem` locals), a table layout panel's `ColumnStyles` and `RowStyles` (size type and size), an image list's `Images`;
+- a text box's or combo box's `AutoCompleteCustomSource`, as text, one string a line (written as `AutoCompleteCustomSource.AddRange(new string[] { … })`).
+
+A member's properties are in the same grid as the Properties window's (categories, parts, editors), read again after each change.
 
 The code gets Visual Studio's form for each: `Items.AddRange(new object[] { … })`, `Columns.AddRange(new ColumnHeader[] { … })`, `ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F))`, `Images.SetKeyName(0, "save.png")`.
 
@@ -162,13 +165,15 @@ The code gets Visual Studio's form for each: `Items.AddRange(new object[] { … 
 
 Set the form's **Localizable** property to `True` to translate it, as in Visual Studio: its localizable properties (texts, sizes, locations, images…) move from the code to the form's `.resx`, and each control's section starts with `resources.ApplyResources(button1, "button1")`. The form's **Language** property (in the Properties window, with the form selected) chooses the language you design: **(Default)**, or a culture (`fr`, `fr-CA`, `de`…, from the list or typed). In a culture, the form shows its translation, and what you change goes to that culture's file (`OrderForm.fr.resx`, created when needed), only where it differs from the default. Renaming a control renames its resource keys in every culture's file; deleting it removes them. Setting **Localizable** back to `False` moves the values back to the code.
 
-An **image** property (`Image`, `BackgroundImage`, a form's `Icon`) has two buttons in the Properties window: one imports an image file into the form's `.resx` (written as `(Image)resources.GetObject("button1.Image")`), the other copies it into the project's `Resources` folder and adds it to `Properties/Resources.resx` (written as `Properties.Resources.save`).
+An **image** property (`Image`, `BackgroundImage`, a form's `Icon`) opens **Select Resource** from its "…", as in the classic IDE, with a preview of the image and its file name and size under it (`cart.png · 32 × 32`). Choose where the image comes from; the other side's buttons are grayed:
+- **Local resource**: **Import…** an image file into the form's `.resx` (written as `(Image)resources.GetObject("button1.Image")`), or **Clear** the image;
+- **Project resource file**: choose the resources file (`Properties\Resources.resx`), then one of its images (the files it references and the images it holds), or **(none)** for no image, or **Import…** a file, which OK copies into the project's `Resources` folder and adds there; the code reads `Properties.Resources.save`. Opened again, the image the code uses is the one picked.
 
 The `.resx` files are saved with the form (`Ctrl+S`), and undo takes back the code and the resources together.
 
 ### Data binding
 
-A form with a `BindingSource` (from the Toolbox's **Data** category, its `DataSource` set to one of your classes, such as `typeof(Customer)`) can bind its controls' properties to the class's members: the Properties window's **(DataBindings)** category lists a control's bindable properties (`Text`, `Checked`, `Tag`…), each with a list of the binding sources' members (`customerBindingSource - Name`). The code gets `textBox1.DataBindings.Add(new Binding("Text", customerBindingSource, "Name", true))`; **(none)** removes it. Visual Studio's Data Sources window isn't there: set the binding source's `DataSource` in the Properties window or the code.
+A form with a `BindingSource` (from the Toolbox's **Data** category, its `DataSource` set to one of your classes, such as `typeof(Customer)`) can bind its controls' properties to the class's members: the Properties window's **(DataBindings)** row, at the top of **Data**, expands into a control's bindable properties (`Text`, `Checked`, `Tag`…), each with a list of the binding sources' members (`customerBindingSource - Name`). The code gets `textBox1.DataBindings.Add(new Binding("Text", customerBindingSource, "Name", true))`; **(none)** removes it. The classic IDE's Data Sources window isn't there: set the binding source's `DataSource` in the Properties window or the code.
 
 **Code the designer can't read** (an `if` or a loop in `InitializeComponent`, a lambda as an event handler, a call to one of the form's own methods, a field that isn't a component) opens as code instead, at that line, and a notification says why, as in Visual Studio. The .NET SDK's `WFO3000` analyzers already flag most of it as errors.
 
@@ -184,19 +189,38 @@ Items are created as the classic IDE creates them, whichever way you add them: a
 
 ### Properties and events
 
-With the designer active, the **Properties** window (`F4`) shows the selected component's properties, as a classic IDE's property grid:
-- by category or alphabetically (its toolbar), values the code sets in bold, the selected property's description at the bottom;
-- for several selected components, the properties they share, a value they differ in left blank, and a value set on all of them;
-- edited as text (`12, 9` for a point, `Segoe UI, 9pt, style=Bold` for a font, `255, 128, 0` or a name for a color, with a swatch), from a list (enums, `True`/`False`, `Dock`), or with a toggle per flag (`Anchor`'s Top, Bottom, Left and Right);
-- with a picker for **Dock** (a box with the five positions) and **Anchor** (a cross with its four sides to toggle);
-- **(Name)** renames the component, in the designer file and wherever the form's code uses it;
-- **extender properties** that other components give it: a tool tip's **ToolTip on toolTip1** (written as `toolTip1.SetToolTip(button1, "…")`), a help provider's, an error provider's.
+With the designer active, the **Properties** window (`F4`) is the classic IDE's property grid for the selected component:
+- **The component list** at the top names the selection and its type; open it to select the form or any of its components by name (each with its type, the list as wide as its longest entry). It is blank with several components selected.
+- **The toolbar**: **Categorized** and **Alphabetical**, then **Properties** and **Events**, then **Property Pages**, which is grayed for a form's components (it opens a project's properties, or Configuration Manager for the solution, when Solution Explorer has one selected).
+- **Categories collapse** (click a header or its chevron, or press `Left` on it), and stay so as you select other components. In Alphabetical, **(DataBindings)** and **(Name)** come first, as there.
+- **Values the code sets are bold**, read-only values muted, and a clipped name or value shows whole in a tooltip. With several components selected, the grid has the properties they share, and a value they differ in is blank (Location's X blank and its Y 8 when only their Ys match).
+- **Expandable properties** open into their parts (Font, Location, Size, Padding, Margin, FlatAppearance…): edit one part (`Font` → `Bold` → `True`) and the code gets one assignment of the whole value (`button1.Font = new Font("Segoe UI", 9F, FontStyle.Bold, GraphicsUnit.Point, 0);`), the other parts kept.
+- **Type any value in place**, converted as the property's type reads it (`12, 9` for a point, `255, 128, 0` or a name for a color): `Enter` commits, `Esc` puts the value back. A property with standard values has an arrow: an exclusive list for **AcceptButton**, **CancelButton**, **ContextMenuStrip** and **ImageList** (**(none)**, then the form's components of a fitting type) and for `True`/`False` and enums, and the font's **Name** lists the computer's font families (type a family in the font editor's **Font** box); **Cursor** (with each cursor's picture) also takes typing.
+- **The editors** open from the arrow on the selected row (or `F4` or `Alt+Down` there):
+  - colors in three tabs: **Custom** (48 basic colors and 16 slots; right-click a slot for **Define Color**), **Web** (the named colors) and **System**;
+  - **TextAlign**'s nine positions in a 3×3 grid; **Dock**'s five positions and **Anchor**'s four sides;
+  - **multi-line text** (a `Text`, or any text such as a **ToolTip on toolTip1**, with line breaks shows each as `⏎` and is edited only here, so its lines are never joined; `Ctrl+Enter` commits);
+  - a menu item's **ShortcutKeys** as Ctrl, Shift and Alt with a key; flags as check boxes; a **date** as a month calendar with **Today** (picking a day keeps the time).
+- **Editors behind "…"** open as panels over the form, as the classic IDE's dialogs, with OK and Cancel; while one is open, the Properties window shows the component but takes no input:
+  - **Font**: the family, the style, the size, Strikeout and Underline, with a sample; OK writes only what changed, as one undo step;
+  - **String Collection Editor** for a string array (a text box's **Lines**), a line each;
+  - **Select Resource** for an image (see [Localizable forms and images](#localizable-forms-and-images));
+  - the **collection editor** for a collection (see [Collections](#collections)), whose item properties use the same grid.
+- **An invalid value** (`abc` for a location's X) opens **Property value is not valid.** with the reason: **OK** goes back to the cell with what you typed, to correct it; **Cancel** puts the old value back.
+- **Right-click a row** for **Reset** (the property's default, its assignment removed, or an extender property cleared; grayed when there's nothing to reset) and **Description**, which shows or hides the description pane at the bottom (drag the line above it to resize it, and the line between names and values to move it).
+- **Double-click a value** to cycle it (`True` and `False`, an enum's values) or open its editor. Select a read-only value's text to copy part of it, or press `Ctrl+C` (`⌘C` on macOS) on a row to copy its whole value.
+- **Several edits at once** (the font editor's OK) apply all or none: when one value isn't valid, nothing changes.
+- **(Name)** renames the component, in the designer file and wherever the form's code uses it; **extender properties** that other components give it (a tool tip's **ToolTip on toolTip1**, written as `toolTip1.SetToolTip(button1, "…")`, a help provider's, an error provider's) are in the grid too.
+- **The keys**: `Up` and `Down` move between rows (over category headers), `Right` and `Left` expand and collapse a row or a category, `Enter` commits, `Esc` reverts, and `F4` or `Alt+Down` opens the selected row's drop-down. Elsewhere, `F4` still shows the Properties window.
 
-**Events** (its toolbar) lists the component's events with their handlers. Type a method's name to hook the event to it; clear it to unhook the event (the method stays). The arrow next to an event goes to its handler, writing `button1_Click` in the code file first when there's none.
+An editor that is one of Windows Forms' own dialogs has no "…": a value its converter reads from text (a masked text box's **Mask**) is typed in its cell, and the description says so; one it can't (a data grid view's **DefaultCellStyle**) is read-only, and the description says to set it in the code.
+
+**Events** (its toolbar) lists the component's events with their handlers. Type a method's name to hook the event to it; clear it to unhook the event (the method stays). Double-click an event's name, or press `Enter` on it, to go to its handler, writing `button1_Click` in the code file first when there's none. Select another component and the events are its own, the view staying on Events. With several components selected the grid shows their shared properties, **Properties** checked and **Events** grayed.
 
 ### Limits
 
 - Not yet: Visual Studio's Data Sources window (bind through a `BindingSource` instead), complex data binding's designer (a grid's `DataSource` is an ordinary property), the component designer (a class that is a component but not a control opens as code), and a design surface for WPF (its XAML Previewer shows the window, and selects both ways).
+- The Properties window doesn't have **Modifiers**, **GenerateMember** and **Locked** yet (Design shows **(Name)** only; use **Lock Controls** to lock controls), the events of several selected components, a list of the code's compatible methods in an event's cell, **(ApplicationSettings)**, **(Advanced)** data bindings, a control's component editor (its **Property Pages**), or a search box; editors that are Windows Forms' own dialogs are typed in their cell or set in the code, as above.
 - Smart tag tasks and collection items that open one of Windows Forms' own dialogs (a data grid view's **Add Column…**, a binding source's data source wizard) aren't available; set those properties in the Properties window.
 - The designer runs your code (your controls' constructors), so it works only in folders you trust.
 - A menu or tool strip item's own context menu (Convert To, Insert, Set Image…, Edit DropDownItems…) isn't there yet: it gets the form's menu. Copy and paste work within Codalus IDE only (not through the system clipboard), and bringing several controls to the front is one undo step each.

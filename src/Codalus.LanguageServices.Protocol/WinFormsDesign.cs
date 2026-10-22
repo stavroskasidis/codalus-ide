@@ -222,6 +222,8 @@ public static class DesignerCollections
     public static IReadOnlyList<DesignerCollectionInfo> All { get; } =
     [
         new(Forms + "ListBox", "Items", Values, "AddRange", "System.Object", ["System.String"]),
+        new(Forms + "TextBox", "AutoCompleteCustomSource", Values, "AddRange", "System.String", ["System.String"]),
+        new(Forms + "ComboBox", "AutoCompleteCustomSource", Values, "AddRange", "System.String", ["System.String"]),
         new(Forms + "ComboBox", "Items", Values, "AddRange", "System.Object", ["System.String"]),
         new(Forms + "DomainUpDown", "Items", Values, "AddRange", "System.Object", ["System.String"]),
         new(Forms + "ListView", "Columns", Components, "AddRange", Forms + "ColumnHeader", [Forms + "ColumnHeader"]),

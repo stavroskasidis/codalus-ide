@@ -620,6 +620,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         };
         _shell.Workbench.Context.Set("focusedView", view);
         _shell.Workbench.Context.Set("editorTextFocus", view == "textFile");
+
+        // A property grid has the keyboard (the Properties window's, or the collection editor's in a designer): F4 opens its drop-down (#68).
+        _shell.Workbench.Context.Set("propertyGridFocus", source?.FindAncestorOfType<PropertyGridView>(includeSelf: true) is not null);
         _shell.Notifications.SuppressToasts = view == BuiltIns.NotificationsWindow;
     }
 

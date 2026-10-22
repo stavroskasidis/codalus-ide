@@ -739,6 +739,40 @@ public sealed class WinFormsDesignerCodeTests
             Apply(framework.Replace("\r\n", "\n", StringComparison.Ordinal), Extender("button1", "toolTip1", "ToolTip", DesignerValue.String("Saves"))), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// #68: a text box's AutoCompleteCustomSource is a collection of strings (the String Collection Editor's text mode):
+    /// read as its AddRange call, written again byte for byte, and an edit changes only that line.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AutoCompleteCustomSource_is_a_string_collection(bool crlf)
+    {
+        var text = OrderForm.Replace("            notesTextBox.BackColor", "            notesTextBox.AutoCompleteCustomSource.AddRange(new string[] { \"Gift\", \"Rush\" });\n            notesTextBox.BackColor", StringComparison.Ordinal);
+        Assert.NotEqual(OrderForm, text);
+        if (crlf)
+        {
+            text = text.Replace("\n", "\r\n", StringComparison.Ordinal);
+        }
+
+        var source = Read(text);
+        var call = source.Model.Statements.Single(s => s.Kind == DesignerStatementKinds.Call && s.Target == "notesTextBox" && s.Member == "AutoCompleteCustomSource.AddRange");
+        Assert.Equal("System.String", call.Arguments![0].Type);
+        Assert.Equal(["Gift", "Rush"], call.Arguments[0].Arguments!.Select(a => a.Value));
+        Assert.Contains(DesignerCollections.All, c => c.Key == "System.Windows.Forms.TextBox:AutoCompleteCustomSource" && c.Kind == DesignerCollections.Values);
+        Assert.Contains(DesignerCollections.All, c => c.Key == "System.Windows.Forms.ComboBox:AutoCompleteCustomSource" && c.Kind == DesignerCollections.Values);
+
+        var generator = new DesignerCodeGenerator(source.Model, source.Indent, source.NewLine);
+        var written = string.Concat(source.Model.Statements.Select(s => generator.Statement(s, source.SectionRule)));
+        Assert.Equal(source.Text.ToString(TextSpan.FromBounds(source.Statements[0].Lines.Start, source.Statements[^1].Lines.End)), written);
+
+        var edited = Apply(text, Collection("notesTextBox", "AutoCompleteCustomSource", "AddRange", "System.String", DesignerValue.String("Gift"), DesignerValue.String("Rush"), DesignerValue.String("Fragile")));
+        Assert.Equal(
+            ["-notesTextBox.AutoCompleteCustomSource.AddRange(new string[] { \"Gift\", \"Rush\" });", "+notesTextBox.AutoCompleteCustomSource.AddRange(new string[] { \"Gift\", \"Rush\", \"Fragile\" });"],
+            Diff(text, edited));
+        Assert.Equal(text, Apply(text, Collection("notesTextBox", "AutoCompleteCustomSource", "AddRange", "System.String", DesignerValue.String("Gift"), DesignerValue.String("Rush"))));
+    }
+
     [Fact]
     public void Collections_are_written_again_in_place_as_visual_studio_writes_them()
     {

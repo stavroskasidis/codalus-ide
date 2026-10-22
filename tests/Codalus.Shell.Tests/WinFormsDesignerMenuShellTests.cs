@@ -510,8 +510,10 @@ public sealed class WinFormsDesignerMenuShellTests
         await designer.OrderAsync(front: true);
         Assert.Contains("            Controls.Add(giftCheckBox);\n            Controls.Add(counterControl);", Code(designer), StringComparison.Ordinal);
         var ordered = Code(designer);
+        // #68 (D41 question 9): Locked isn't in the Properties window yet; Design shows (Name) only.
         var rows = await RowsAsync(f);
-        Assert.Equal("True", rows.Single(r => r.Name == "Locked").Value);
+        Assert.DoesNotContain(rows, r => r.Name == "Locked");
+        Assert.True(designer.Find("giftCheckBox")!.Locked);
 
         // Again: every lock goes, and the .resx is as it was.
         await f.ExecuteAsync("winforms.lockControls");

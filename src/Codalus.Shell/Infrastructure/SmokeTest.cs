@@ -1370,6 +1370,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("winforms.designerMenus", "0.6", winFormsMenusTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the menus, their enablement, Lock Controls and the paste target are tested on every OS against a fake designer host.");
         }
 
+        // 0.6 (#68, D41): the Properties window as the classic IDE's, through the real host.
+        const string winFormsPropertiesTitle = "OrderForm in the designer's Properties window: a category collapses; Font expands into FontConverter's parts and Bold writes the whole font; the font editor lists the installed families; ForeColor's drop-down writes Color.SteelBlue; an invalid Location.X opens the dialog (OK goes back to the text, Cancel puts the old value back); the selector picks placeOrderButton and FlatAppearance expands; the form's AcceptButton lists its buttons; undone";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.properties", "0.6", winFormsPropertiesTitle, WinFormsPropertiesStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.properties", "0.6", winFormsPropertiesTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the shell's side runs against a fake designer host in the tests on every OS.");
+        }
+
         // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
         const string winUITitle = "The WinUI 3 app opens, its XAML completes x:Bind paths from the page's class, and it builds and runs unpackaged";
         if (OperatingSystem.IsWindows())
@@ -2822,6 +2833,106 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         Check(code.Text.Text == original && resx.Text.Text == originalResx, "undo takes OrderForm.Designer.cs and OrderForm.resx back to the originals");
+        shell.Layout.CloseDocument(designer);
+    }
+
+    /// <summary>
+    /// The Properties window in the shipped app (#68, D41), through the real designer host: OrderForm's notes box with
+    /// Accessibility collapsed and Font expanded into its parts, Bold set as one assignment of the whole font, the font
+    /// editor's families, ForeColor's color drop-down (the screenshot, with Font expanded), an invalid Location.X's
+    /// dialog both ways, the component selector and FlatAppearance's parts, the form's AcceptButton list, and undo.
+    /// </summary>
+    private async Task WinFormsPropertiesStepAsync()
+    {
+        var form = Path.Combine(Work, "WindowsDesktop", "WinFormsApp", "OrderForm.cs");
+        await shell.OpenFileAsync(form).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath == form);
+        Check(designer is not null, "OrderForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0 && designer.Host is not null, () => "the designer loads OrderForm and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        var code = designer!.DesignerCode!;
+        var original = code.Text.Text;
+        var properties = shell.PropertiesWindow;
+        var grid = properties.Grid;
+        shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
+
+        async Task<ViewModels.PropertyRowViewModel> RowAsync(string component, string path)
+        {
+            await WaitAsync(() => properties.Title.StartsWith(component, StringComparison.Ordinal) && !properties.IsLoading && grid.Find(path) is not null,
+                () => $"the Properties window shows {component}'s {path}: {properties.Title}; " + string.Join(", ", grid.AllRows.Take(60).Select(r => r.Path)), 60).ConfigureAwait(true);
+            return grid.Find(path)!;
+        }
+
+        // A category collapses and its rows go.
+        designer.SetSelection(["notesTextBox"], notify: true);
+        var font = await RowAsync("notesTextBox", "Font").ConfigureAwait(true);
+        var accessibility = grid.Categories.FirstOrDefault(c => c.Title == "Accessibility");
+        Check(accessibility is not null, "the notes box's properties have Accessibility: " + string.Join(", ", grid.Categories.Select(c => c.Title)));
+        grid.SetExpanded(accessibility!, false);
+        Check(!grid.Items.OfType<ViewModels.PropertyRowViewModel>().Any(r => r.Name == "AccessibleName"), "collapsed, Accessibility's rows are gone");
+        grid.SetExpanded(accessibility!, true);
+
+        // Font's parts as FontConverter lists them; Bold is one assignment of the whole font.
+        grid.SetExpanded(font, true);
+        Check(font.Children.Select(c => c.Name).SequenceEqual(["Name", "Size", "Unit", "Bold", "GdiCharSet", "GdiVerticalFont", "Italic", "Strikeout", "Underline"]),
+            "Font's parts: " + string.Join(", ", font.Children.Select(c => c.Name)));
+        var bold = grid.Find("Font.Bold")!;
+        bold.SelectedOption = bold.Options.First(o => o.Value == "True");
+        await WaitAsync(() => code.Text.Text.Contains("notesTextBox.Font = new Font(\"Segoe UI\", 9F, FontStyle.Bold | FontStyle.Italic", StringComparison.Ordinal),
+            () => "Font's Bold writes the whole font: " + designer.Status, 60).ConfigureAwait(true);
+
+        // The font editor lists the installed families (FontNameConverter's); Cancel sends nothing.
+        font = await RowAsync("notesTextBox", "Font").ConfigureAwait(true);
+        font.ModalEditor!.Execute(null);
+        Check(designer.FontEditor is { } fontEditor && fontEditor.Families.Contains("Segoe UI") && fontEditor.IsBold, "the font editor lists the installed families and shows Bold");
+        designer.CloseFontEditor();
+
+        // ForeColor's drop-down, open with Font expanded for the screenshot; Web's SteelBlue is written as Color's.
+        await WaitAsync(() => window.GetVisualDescendants().OfType<PropertiesWindowView>().Any(v => v.IsEffectivelyVisible), "the Properties window shows", 30).ConfigureAwait(true);
+        var view = window.GetVisualDescendants().OfType<PropertiesWindowView>().First(v => v.IsEffectivelyVisible);
+        view.Grid.OpenDropDown(await RowAsync("notesTextBox", "ForeColor").ConfigureAwait(true));
+        await WaitAsync(() => view.Grid.OpenDropDownControl is Views.PropertyEditors.ColorDropDown, "ForeColor's color drop-down opens", 10).ConfigureAwait(true);
+        var colors = (Views.PropertyEditors.ColorDropDown)view.Grid.OpenDropDownControl!;
+        colors.SelectTab(ViewModels.PropertyColors.WebTab);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-properties.png", [view.Grid.DropDownPopup]);
+        colors.PickNamed("SteelBlue");
+        await WaitAsync(() => code.Text.Text.Contains("notesTextBox.ForeColor = Color.SteelBlue;", StringComparison.Ordinal), () => "SteelBlue is written as Color's: " + designer.Status, 60).ConfigureAwait(true);
+
+        // An invalid value (D41 question 14): OK goes back to the cell with the typed text; Cancel puts the old value back.
+        designer.SetSelection(["giftCheckBox"], notify: true);
+        var x = await RowAsync("giftCheckBox", "Location.X").ConfigureAwait(true);
+        var oldX = x.Value;
+        grid.SelectedRow = x;
+        x.Text = "abc";
+        await WaitAsync(() => shell.Dialogs.IsOpen, "the invalid value opens a dialog", 30).ConfigureAwait(true);
+        Check(shell.Dialogs.Message.StartsWith("Property value is not valid.", StringComparison.Ordinal) && shell.Dialogs.Request?.Context == "giftCheckBox · Location.X",
+            "the dialog says the value isn't valid, for giftCheckBox · Location.X: " + shell.Dialogs.Message);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-properties-invalid.png");
+        shell.Dialogs.Accept();
+        await WaitAsync(() => !shell.Dialogs.IsOpen, "OK closes the dialog", 10).ConfigureAwait(true);
+        Check(grid.Find("Location.X") is { Text: "abc" } typed && typed.Value == oldX && grid.SelectedRow?.Path == "Location.X", "OK goes back to the cell with the typed text");
+        grid.Find("Location.X")!.Text = "-x";
+        await WaitAsync(() => shell.Dialogs.IsOpen, "the invalid value opens the dialog again", 30).ConfigureAwait(true);
+        shell.Dialogs.Cancel();
+        await WaitAsync(() => !shell.Dialogs.IsOpen && grid.Find("Location.X")?.Text == oldX, "Cancel puts the old value back", 30).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("notesTextBox.ForeColor = Color.SteelBlue;", StringComparison.Ordinal) && !code.Text.Text.Contains("abc", StringComparison.Ordinal), "an invalid value writes nothing");
+
+        // The component selector picks placeOrderButton; FlatAppearance expands; the form's AcceptButton lists its buttons.
+        properties.SelectedComponent = properties.ComponentChoices.First(c => c.Name == "placeOrderButton");
+        var flat = await RowAsync("placeOrderButton", "FlatAppearance").ConfigureAwait(true);
+        grid.SetExpanded(flat, true);
+        Check(flat.Children.Any(c => c.Name == "BorderColor") && flat.Children.Any(c => c.Name == "BorderSize"), "FlatAppearance expands into its parts: " + string.Join(", ", flat.Children.Select(c => c.Name)));
+        properties.SelectedComponent = properties.ComponentChoices[0];
+        var accept = await RowAsync("OrderForm", "AcceptButton").ConfigureAwait(true);
+        Check(accept.Options.FirstOrDefault()?.Value == "(none)" && accept.Options.Any(o => o.Value == "cancelButton"), "AcceptButton lists (none) and the form's buttons: " + string.Join(", ", accept.Options.Select(o => o.Value)));
+
+        for (var i = 0; i < 10 && code.Text.Text != original; i++)
+        {
+            designer.Undo();
+        }
+
+        Check(code.Text.Text == original, "undo takes OrderForm.Designer.cs back to the original");
         shell.Layout.CloseDocument(designer);
     }
 
