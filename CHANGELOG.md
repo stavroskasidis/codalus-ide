@@ -4,6 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.6.0
 
+- **Fixed: dimmed editor colors.** After switching documents or tool windows, the editor and the compare view were often drawn at 85% opacity, so every color, the Classic themes' most visibly, looked muted next to the classic IDE's. A tab's view now appears at once, as in the classic IDE, without the docking library's fade.
 - **Combo box lists check the chosen item, and tabs have a line under them**, as the control set's design draws them: an open combo box's list shows a check beside the item that's chosen, and every item's text starts after the check's column, so the list lines up. Find and Replace's Look in and File types and Counters' process box check the scope, the file types or the process that's chosen too; the editor's navigation bar and Find what and Replace with, whose lists are what you typed before, keep their lists without it. Every row of tabs inside a window or document (Find Results' pages, HTTP Response's Body, Headers and Request, a profiling report, Containers, Find and Replace and Code Search) has a thin line under it, which the selected tab's underline covers. Find and Replace's and Code Search's tabs now look like the others: the body's text size, 28 px, the accent underline.
 
 ## 0.5.0

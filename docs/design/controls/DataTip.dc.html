@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Data tip: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<!-- This page's own icons. The code symbols (sym-*) are the app's own 16 px pixel drawings, copied from
+     src/Codalus.Shell/Icons/Symbols (eng/icons/symbol-icons.py): property (the wrench), field, local, parameter, class,
+     constant and event. The kinds this design adds are stand-ins drawn here, in the same 16 px grid: dt-raw-view (a cube
+     outline, the classic IDE's Raw View picture), dt-results-view and dt-visualizer (a magnifier over a grid, the View
+     button). dt-watch and dt-bulb stand in for the app's existing "watch" and "lightbulb" kinds, which controls.js doesn't
+     draw. dt-stmt is the editor's current-statement arrow; dt-pointer stands in for the system's arrow pointer, in its own
+     black and white in every theme. -->
+<svg id="dt-sprite" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <defs>
+    <mask id="dt-vis-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16"><rect width="16" height="16" fill="#FFFFFF"/><circle cx="5.6" cy="10.4" r="4.6" fill="#000000"/></mask>
+  </defs>
+  <symbol id="i-sym-property" viewBox="0 0 16 16"><path fill="currentColor" d="M9 1H11V3H9ZM13 1H15V3H13ZM9 3H15V5H9ZM8 5H13V6H8ZM7 6H11V7H7ZM6 7H10V8H6ZM5 8H9V9H5ZM4 9H8V10H4ZM3 10H7V11H3ZM2 11H6V12H2ZM1 12H5V13H1ZM1 13H4V14H1Z"/></symbol>
+  <symbol id="i-sym-field" viewBox="0 0 16 16"><path fill="currentColor" d="M5 3H14V4H5ZM4 4H5V5H4ZM13 4H15V5H13ZM3 5H13V9H3ZM3 10H13V11H3ZM14 5H15V9H14ZM3 9H14V10H3Z"/></symbol>
+  <symbol id="i-sym-local" viewBox="0 0 16 16"><path fill="currentColor" d="M2 2H5V3H2ZM2 11H5V12H2ZM11 2H14V3H11ZM11 11H14V12H11ZM2 3H3V11H2ZM13 3H14V11H13ZM5 5H11V9H5Z"/></symbol>
+  <symbol id="i-sym-parameter" viewBox="0 0 16 16"><path fill="currentColor" d="M2 2H5V3H2ZM2 11H5V12H2ZM11 2H14V3H11ZM11 11H14V12H11ZM2 3H3V11H2ZM13 3H14V11H13ZM5 5H11V6H5ZM5 8H11V9H5ZM5 6H6V8H5ZM10 6H11V8H10Z"/></symbol>
+  <symbol id="i-sym-class" viewBox="0 0 16 16"><path fill="currentColor" d="M2 2H14V5H2ZM2 11H14V12H2ZM2 5H3V11H2ZM13 5H14V11H13ZM4 6H11V7H4ZM4 8H9V9H4Z"/></symbol>
+  <symbol id="i-sym-constant" viewBox="0 0 16 16"><path fill="currentColor" d="M2 3H14V4H2ZM2 10H14V11H2ZM2 4H3V10H2ZM13 4H14V10H13ZM4 5H12V6H4ZM4 8H12V9H4Z"/></symbol>
+  <symbol id="i-sym-event" viewBox="0 0 16 16"><path fill="currentColor" d="M7 0H13V1H7ZM7 5H13V6H7ZM6 1H12V2H6ZM6 6H12V7H6ZM5 2H11V3H5ZM4 3H10V4H4ZM3 4H13V5H3ZM5 7H10V8H5ZM4 8H8V9H4ZM3 9H6V10H3ZM2 10H4V11H2Z"/></symbol>
+  <symbol id="i-dt-raw-view" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M8 1.6 14 4.8v6.4L8 14.4 2 11.2V4.8z"/><path d="M2 4.8 8 8l6-3.2M8 8v6.4"/></g></symbol>
+  <symbol id="i-dt-results-view" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.6 14 4.8v6.4L8 14.4 2 11.2V4.8z"/><path d="M5 7.2h6M5 9.6h6M5 12h3.6"/></g></symbol>
+  <symbol id="i-dt-visualizer" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><g mask="url(#dt-vis-mask)"><rect x="5.4" y="1.6" width="9" height="9" rx="1"/><path d="M9.9 1.6v9M5.4 6.1h9"/></g><circle cx="5.6" cy="10.4" r="3"/><path d="m3.5 12.5-2.2 2.2"/></g></symbol>
+  <symbol id="i-dt-watch" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.2" cy="10" r="2.6"/><circle cx="11.8" cy="10" r="2.6"/><path d="M6.8 9.6c.8-.6 1.6-.6 2.4 0M1.7 9.4 3 4.2M14.3 9.4 13 4.2"/></g></symbol>
+  <symbol id="i-dt-bulb" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.6a4.4 4.4 0 0 0-2.6 8c.5.4.8 1 .8 1.6v.4h3.6v-.4c0-.6.3-1.2.8-1.6A4.4 4.4 0 0 0 8 1.6z"/><path d="M6.2 13.4h3.6M6.8 14.8h2.4"/></g></symbol>
+  <symbol id="i-dt-stmt" viewBox="0 0 16 16"><path fill="currentColor" d="M1.6 5.6h6.2V2.4L14.4 8l-6.6 5.6v-3.2H1.6z"/></symbol>
+  <symbol id="i-dt-comment" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M2.4 3.4c0-.6.4-1 1-1h9.2c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H6.8l-3 2.6v-2.6h-.4c-.6 0-1-.4-1-1z"/><path d="M5 5.6h6M5 7.8h4"/></g></symbol>
+  <symbol id="i-dt-pointer" viewBox="0 0 16 16"><path d="M3.5 1.5v11.2l2.7-2.6 1.9 4.4 1.9-.8-1.9-4.3h3.7z" fill="#FFFFFF" stroke="#000000" stroke-linejoin="round"/></symbol>
+</svg>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:24px 20px 32px;display:flex;flex-direction:column;gap:18px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.lead{color:var(--muted);max-width:1200px}
+.navs{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.themes .lbl{color:var(--muted)}
+.sec{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.sec h2{font-size:16px;line-height:22px;margin:0;font-weight:600;color:var(--strong)}
+.frame{width:max-content}
+.prow{display:flex;gap:20px;align-items:flex-start}
+.frame .prow{display:block}
+.pnl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pnl h3{font-size:13px;line-height:18px;margin:0;font-weight:600;color:var(--strong);display:flex;flex-direction:column}
+.pnl h3 .src{font-family:var(--mono);font-size:11px;line-height:16px;font-weight:400;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnl .cap{color:var(--muted);font-size:11px;line-height:15px;min-height:45px}
+.stage{position:relative;overflow:hidden;background:var(--bg)}
+
+/* The editor document: its tabs, the glyph margin with the current statement's arrow, the line numbers. */
+.edoc{position:absolute;inset:0;display:flex;flex-direction:column}
+.edoc .doc-tabs{padding-left:4px}
+.edoc .doc-tab .x{margin-left:6px}
+.edoc .doc{flex:1 1 auto;min-height:0;overflow:hidden}
+.edc{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;background:var(--editor);color:var(--editor-fg);font:12px/20px var(--mono);padding-top:4px}
+.edc.plain{background:var(--panel);color:var(--fg);font:12px/16px var(--ui)}
+.edl{display:flex;height:20px;white-space:pre}
+.edl .gl{width:16px;flex:none;display:flex;align-items:center;justify-content:center}
+.edl .no{width:30px;flex:none;text-align:right;color:var(--line-no);user-select:none}
+.edl .tx{flex:1 1 auto;padding-left:6px}
+.edl.cur .tx{background:var(--cur-stmt)}
+/* A compiler warning's squiggle, and the Ctrl+hover definition link. */
+.edl .sq{text-decoration:underline wavy var(--warning);text-decoration-skip-ink:none;text-underline-offset:3px}
+.edl .lnk{color:var(--link);text-decoration:underline;text-underline-offset:2px}
+
+/* The data tip. An anchor sits where the hovered name starts on its line (52 px of margin, then N characters of the
+   editor's font); the header's name lines up with it, and each child tip is placed from its parent row. */
+.anc{position:absolute;width:0;height:0;font:12px/20px var(--mono)}
+.dt{position:absolute;width:max-content;font:12px/16px var(--ui);color:var(--fg);background:var(--overlay);border:1px solid var(--overlay-border);border-radius:var(--radius);box-shadow:var(--tip-shadow);white-space:nowrap}
+/* The header: expander, icon, name, separator, View slot, the value's box, pin. */
+.dth{display:grid;grid-template-columns:22px 20px max-content 9px max-content fit-content(420px) 22px;align-items:center;height:22px}
+.dth.pinned{grid-template-columns:20px 22px 20px max-content 9px max-content fit-content(420px) 22px}
+.dth.nopin{grid-template-columns:22px 20px max-content 9px max-content fit-content(420px) 3px}
+.dth.pinned.nopin{grid-template-columns:20px 22px 20px max-content 9px max-content fit-content(420px) 3px}
+.dtp{display:grid;grid-template-columns:22px 20px max-content 9px max-content fit-content(var(--vmax,400px)) 22px;padding:2px 0;align-content:start}
+.dr{display:grid;grid-column:1/-1;grid-template-columns:subgrid;height:20px;align-items:center;position:relative}
+.dr.hover,.dth.hover{background:var(--row-hover);color:var(--hover-fg)}
+.dr.chain{background:var(--sel-inactive);color:var(--sel-inactive-fg)}
+.dr.sel{background:var(--sel);color:var(--sel-fg)}
+.dr.kfocus{box-shadow:inset 0 0 0 1px var(--focus)}
+.dth.kfocus{outline:2px solid var(--focus);outline-offset:1px}
+.kind-hc .dr.sel > .ex svg.i,.kind-hc .dr.sel > .ic svg.i,.kind-hc .dr.sel > .vw > .vbtn svg.i,.kind-hc .dr.sel > .va svg.i,.kind-hc .dr.sel > .pn svg.i{color:var(--sel-fg)}
+/* A menu opened from a selected row keeps the menu's colors (the kit colors every icon under a selected row). */
+.kind-hc .dt .dr.sel[aria-selected="true"] .vmenu .mi svg.i{color:var(--fg)}
+/* High contrast: overlays get a 2 px edge, and the row whose child tip is open an outline (Classic's inactive fill is
+   1.2:1 on black), as the Properties window's inactive selection. */
+.kind-hc .dt{border-width:2px}
+.kind-hc .dr.chain{outline:1px solid var(--fg);outline-offset:-1px}
+.dt .ex{display:flex;align-items:center;justify-content:center;padding:0 2px 0 4px;height:100%}
+.dt .ex svg.i{width:12px;height:12px}
+.dt .ex.is-disabled{color:var(--disabled-fg)}
+.dt .ic{display:flex;align-items:center;height:100%;position:relative}
+/* A non-public member of the user's own code: its kind's icon with the lock as a badge. */
+.dt .ic .bdg{position:absolute;left:7px;top:9px;width:10px;height:10px;display:flex;align-items:center;justify-content:center;background:var(--overlay);border-radius:2px}
+.dr.hover .ic .bdg{background:var(--row-hover)}
+.dt .ic .bdg svg.i{width:9px;height:9px}
+.dt .ic .spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--soft-border);border-top-color:var(--accent);box-sizing:border-box;margin-left:2px}
+.dt .nm{padding-right:8px;position:relative}
+.dt .nm.mut{color:var(--muted);font-style:italic}
+.dt .sp{align-self:stretch;background:linear-gradient(var(--border),var(--border)) 4px 0/1px 100% no-repeat}
+.dt .vw{position:relative;display:flex;align-items:center;height:100%}
+.dt .va{position:relative;display:flex;align-items:center;gap:4px;min-width:0;height:100%;padding-right:4px}
+.dt .va .tx{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.dt .va.err .tx,.dt .va.chg .tx,.dt .vb.chg .tx{color:var(--error-fg)}
+.dt .va.mut .tx,.dt .vb.mut .tx{color:var(--muted)}
+.dr.sel .va .tx{color:inherit}
+.dt .va svg.i.sm{width:12px;height:12px}
+.dt .pn{display:flex;align-items:center;justify-content:center;height:100%}
+.dt .pn svg.i{width:14px;height:14px}
+.dt .pst{display:flex;flex-direction:column;align-items:center;justify-content:center;align-self:stretch;border-right:1px solid var(--overlay-border)}
+.dt .pst svg.i{width:14px;height:14px}
+.dt .rf{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:var(--radius);flex:none}
+.dt .rf svg.i{width:14px;height:14px}
+/* The header's value: an input-like box that a click edits. */
+.dt .vb{display:flex;align-items:center;height:18px;padding:0 6px;background:var(--input);border:1px solid var(--input-border);border-radius:var(--radius);min-width:0;position:relative}
+.dt .vb .tx{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.dth.hover .vb{border-color:var(--input-border-hover)}
+/* The View drop-down: the magnifier opens the first visualizer, the chevron lists them all. */
+.vbtn{display:inline-flex;align-items:stretch;height:18px;margin-right:4px;border:1px solid transparent;border-radius:var(--radius);color:inherit}
+.vbtn .vm{display:inline-flex;align-items:center;gap:2px;padding:0 2px 0 1px}
+.vbtn .vd{display:inline-flex;align-items:center;padding:0 1px;border-left:1px solid transparent}
+.vbtn .vd svg{width:12px;height:12px;color:var(--muted)}
+.dr.sel .vbtn .vd svg{color:inherit}
+.vbtn.is-open{background:var(--tb-pressed);border-color:var(--tb-hover-border)}
+.vbtn.is-open .vd{border-left-color:var(--tb-hover-border)}
+.vbtn.is-open .vd svg{color:var(--fg)}
+/* Menus: the View drop-down's list, and the context menus (Shift+F10). */
+.vmenu{position:absolute;left:0;top:19px;z-index:7;min-width:200px;font:12px/16px var(--ui)}
+.vmenu .mi .ic{width:16px;height:16px;flex:none;display:flex;align-items:center;justify-content:center}
+.vmenu .mi .ic svg{width:14px;height:14px}
+.vmenu .mi .sc{font-size:11px}
+.vmenu .mi .sub{width:12px;height:12px;margin-left:auto;color:var(--fg);flex:none}
+.vmenu .mi .sc + .sub{margin-left:8px}
+.vmenu .mi.is-disabled{color:var(--disabled-fg)}
+.vmenu .mh{height:22px;display:flex;align-items:center;padding:0 8px 0 30px;color:var(--muted);font-size:11px}
+/* Editing in place. */
+.eb{display:flex;align-items:center;height:18px;min-width:200px;padding:0 4px;background:var(--input);border:1px solid var(--focus);box-shadow:inset 0 0 0 1px var(--focus);border-radius:var(--radius);color:var(--fg);flex:1 1 auto}
+.eb .selt{background:var(--accent);color:var(--accent-fg)}
+.eb .caret{width:1px;height:14px;background:var(--fg);flex:none}
+.eb.err{border-color:var(--error);box-shadow:inset 0 0 0 1px var(--error)}
+.emsg{position:absolute;left:0;top:20px;z-index:6;display:flex;gap:6px;align-items:center;padding:4px 8px;background:var(--overlay);color:var(--fg);border:1px solid var(--error);border-radius:var(--radius);box-shadow:var(--tip-shadow);white-space:nowrap}
+.emsg svg.i{width:14px;height:14px}
+/* Long lists scroll; the strips at the ends say there's more. */
+.scr{grid-column:1/-1;height:12px;display:flex;align-items:center;justify-content:center;color:var(--fg)}
+.scr svg.i{width:12px;height:12px}
+.scr.is-disabled{color:var(--disabled-fg)}
+/* Diagnostics at the hovered name: a strip on the header's far side from the child tips. */
+.dg{bottom:3px;display:flex;flex-direction:column;gap:4px;padding:5px 8px 5px 6px;white-space:normal;width:max-content;max-width:470px}
+.dg .dl{display:flex;gap:6px;align-items:flex-start}
+.dg .dl svg.i{width:14px;height:14px;flex:none;margin-top:1px}
+.dg .btn.link{min-height:16px;vertical-align:top}
+.dg .btns{display:flex;gap:2px;margin-left:16px}
+.dg .btns .k{color:var(--muted);font-size:11px;margin-left:4px}
+.c-warn{color:var(--warning)}
+/* Tooltips, the pinned tips' comments, Quick Info. */
+.ttip{position:absolute;z-index:8;left:6px;top:22px;padding:4px 8px;background:var(--overlay);color:var(--fg);border:1px solid var(--overlay-border);border-radius:var(--radius);box-shadow:var(--tip-shadow);font:12px/16px var(--ui);white-space:normal;width:max-content;max-width:440px;overflow-wrap:anywhere}
+.ttip .k{color:var(--muted)}
+.pcm{display:flex;align-items:center;gap:6px;height:22px;padding:0 8px 0 6px;font-style:italic}
+.pcm svg.i{width:14px;height:14px}
+.qi{position:absolute;display:flex;align-items:center;gap:6px;padding:5px 8px;font:12px/16px var(--mono)}
+svg.ptr{position:absolute;width:16px;height:16px;z-index:9;pointer-events:none}
+.ghost .dt{opacity:.16}
+
+/* Locals and Watch: the tip's rows in aligned columns. */
+.vtw{position:absolute;inset:0;display:flex;flex-direction:column}
+.vtw .tw-cap .cb{width:20px;height:20px}
+.vtw .tw-cap .cb svg.i{width:12px;height:12px}
+.vhd,.vr{display:grid;grid-template-columns:var(--c1) var(--c2) minmax(0,1fr)}
+.vhd{height:24px;background:var(--header);border-bottom:1px solid var(--soft-border);color:var(--muted);font-weight:600;flex:none}
+.vhd span{display:flex;align-items:center;padding:0 8px;border-right:1px solid var(--soft-border);white-space:nowrap;overflow:hidden}
+.vrows{flex:1 1 auto;min-height:0;background:var(--panel)}
+.vr{height:22px;align-items:center;white-space:nowrap}
+.vr.hover{background:var(--row-hover)}
+.vr.sel{background:var(--sel);color:var(--sel-fg)}
+.vr .cn{display:flex;align-items:center;min-width:0;padding-left:4px;height:100%}
+.vr .cn .ex{width:16px;flex:none;display:flex;align-items:center;justify-content:center}
+.vr .cn .ex svg.i{width:12px;height:12px}
+.vr .cn .ic{width:20px;flex:none;display:flex;align-items:center}
+.vr .cv{display:flex;align-items:center;min-width:0;padding:0 8px;gap:4px;height:100%;position:relative}
+.vr .ct{padding:0 8px;overflow:hidden;text-overflow:ellipsis}
+.vr .tx{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.vr .err{color:var(--error-fg)}
+.vr.sel .err,.vr.sel .ph{color:inherit}
+.kind-hc .vr.sel svg.i{color:var(--sel-fg)}
+.vr .ph{color:var(--muted)}
+.vr .cv svg.i.sm{width:12px;height:12px;flex:none}
+
+/* The legend's labels, beside its rows. */
+.lgl{position:absolute;height:20px;display:flex;align-items:center;gap:6px;color:var(--fg);white-space:nowrap}
+.lgl .k{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* The cards at the bottom. */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);padding:14px 18px 16px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.card h2{font-size:14px;line-height:20px;margin:0;font-weight:600;color:var(--strong)}
+.card .note{color:var(--muted)}
+.kgrid{display:flex;flex-direction:column}
+.kh,.kr{display:grid;grid-template-columns:var(--cols)}
+.kh span{display:flex;align-items:center;min-height:24px;padding:2px 8px;font-weight:600;color:var(--muted);background:var(--header);border-bottom:1px solid var(--soft-border);overflow:hidden}
+.kr span{padding:4px 8px;border-bottom:1px solid var(--rule);min-width:0}
+.kr span.ico{padding:4px 0 4px 8px}
+.kr span.mono{font-family:var(--mono);font-size:11px}
+.kr span.new{color:var(--strong);font-weight:600}
+.kr span.y{color:var(--ok-fg)} .kr span.n{color:var(--error-fg)} .kr span.m{color:var(--fg)}
+.decide{display:grid;grid-template-columns:1fr 1fr;gap:14px 32px}
+.dq{display:flex;gap:10px;align-items:flex-start}
+.dq .n{flex:none;width:20px;height:20px;border-radius:10px;background:var(--badge);color:var(--badge-fg);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.kind-hc .dq .n{border:1px solid var(--soft-border)}
+.dq b{font-weight:600;color:var(--strong)}
+.dq .tag{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{vars}}; min-height: 100vh">
+<main class="{{mainCls}}">
+
+<sc-if value="{{sheet}}">
+<header>
+  <h1>Data tip: the classic IDE's layout, on what netcoredbg can give</h1>
+  <div class="lead">Task #82, the design before it is built: the debugger's data tip (the variable inspect pop-up) laid out as the classic IDE's. A header box over the hovered expression with its icon, its name, a View drop-down where a visualizer applies and an editable value; each expansion a tip of its own, below and to the right; rows of expander, member icon, name, a separator, a View drop-down and the value; no type column. Drawn on the user's Startup.cs (an ASP.NET Core server's Configure, stopped at app.UseDeveloperExceptionPage()) and the same solution's WeatherForecastController.cs, with the values netcoredbg and the companion host report; the lists the screenshots don't show are illustrative. netcoredbg 3.2 can't build a [DebuggerTypeProxy] (section P), so section A, what 0.6 ships, shows each object's own members, grouped, and the shell's own element rows for List, Dictionary, HashSet, Queue and Stack. Screenshot 2's Middleware row and a proxied object's Raw View are in section P: they need netcoredbg changed. {{t.name}}, {{t.p.family}} family.</div>
+  <div class="navs">
+    <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
+    <nav class="themes" aria-label="States"><span class="lbl">One state:</span><sc-for list="{{stateLinks}}" as="sl"><a href="?theme={{themeQ}}&amp;state={{sl.q}}">{{sl.q}}</a></sc-for></nav>
+  </div>
+</header>
+</sc-if>
+
+<sc-for list="{{sections}}" as="sec">
+<sc-if value="{{sheet}}"><div class="sec"><h2>{{sec.title}}</h2><div class="lead">{{sec.lead}}</div></div></sc-if>
+<sc-for list="{{sec.rows}}" as="row">
+<section class="prow">
+<sc-for list="{{row.items}}" as="s">
+<article class="pnl" style="width:{{s.w}}px" aria-label="{{s.title}}">
+  <sc-if value="{{sheet}}"><h3>{{s.title}}<span class="src">{{s.src}}</span></h3><div class="cap">{{s.cap}}</div></sc-if>
+  <div class="stage" style="width:{{s.w}}px;height:{{s.h}}px">
+
+    <sc-if value="{{s.ed}}">
+    <div class="edoc">
+      <sc-if value="{{s.tabs}}">
+      <div class="doc-tabs" role="tablist" aria-label="Open documents">
+        <sc-for list="{{s.tabs}}" as="tb"><span class="doc-tab {{tb.cls}}" role="tab" aria-selected="{{tb.sel}}"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg>{{tb.n}}<sc-if value="{{tb.on}}"><svg class="i sm c-fg x" aria-hidden="true"><use href="#i-close"></use></svg></sc-if></span></sc-for>
+      </div>
+      </sc-if>
+      <section class="doc" aria-label="{{s.docLabel}}">
+        <div class="edc {{s.edcCls}}">
+          <sc-for list="{{s.lines}}" as="ln"><div class="edl {{ln.cls}}"><span class="gl"><sc-if value="{{ln.gl}}"><svg class="i c-yellow" aria-label="Current statement"><use href="#i-dt-stmt"></use></svg></sc-if></span><span class="no">{{ln.n}}</span><span class="tx"><sc-for list="{{ln.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span></div></sc-for>
+
+          <sc-for list="{{s.labels}}" as="lb"><div class="lgl" style="{{lb.style}}"><span>{{lb.t}}</span><span class="k">{{lb.k}}</span></div></sc-for>
+
+          <sc-for list="{{s.qis}}" as="q">
+            <div class="anc" style="{{q.style}}"><div class="dt qi" role="tooltip" style="left:-6px;top:24px"><svg class="i c-blue" aria-hidden="true"><use href="#i-sym-parameter"></use></svg><span><sc-for list="{{q.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></span></div><svg class="ptr" style="left:14px;top:9px" aria-hidden="true"><use href="#i-dt-pointer"></use></svg></div>
+          </sc-for>
+
+          <sc-for list="{{s.anchors}}" as="a">
+          <div class="anc" style="{{a.style}}">
+            <sc-for list="{{a.heads}}" as="h">
+              <sc-if value="{{h.diag}}">
+              <div class="dt dg" style="{{h.diagStyle}}" role="group" aria-label="Diagnostics">
+                <div class="dl"><svg class="i c-warn" aria-label="Warning"><use href="#i-warning"></use></svg><span><span class="btn link">{{h.diag.code}}</span> {{h.diag.msg}}</span></div>
+                <div class="btns"><span class="btn subtle sm has-icon" role="button"><svg class="i c-yellow" aria-hidden="true"><use href="#i-dt-bulb"></use></svg>Fix</span><span class="btn subtle sm" role="button">Other Fixes<span class="k">Ctrl+.</span></span></div>
+              </div>
+              </sc-if>
+              <div class="dt dth {{h.cls}}" style="{{h.style}}" role="group" aria-label="{{h.acc}}">
+                <sc-if value="{{h.pinned}}"><span class="pst" title="Unpin"><svg class="i c-blue" aria-label="Unpin"><use href="#i-pin"></use></svg></span></sc-if>
+                <span class="ex {{h.expCls}}"><sc-if value="{{h.exp}}"><svg class="i c-fg" aria-hidden="true"><use href="#i-{{h.exp}}"></use></svg></sc-if></span>
+                <span class="ic"><svg class="i {{h.c}}" aria-hidden="true"><use href="#i-{{h.icon}}"></use></svg></span>
+                <span class="nm">{{h.name}}<sc-if value="{{h.ptrNm}}"><svg class="ptr" style="left:10px;top:7px" aria-hidden="true"><use href="#i-dt-pointer"></use></svg></sc-if><sc-if value="{{h.tipNm}}"><span class="ttip" role="tooltip" style="top:24px;left:-2px">{{h.tipNm}}</span></sc-if></span>
+                <span class="sp"></span>
+                <span class="vw"><sc-if value="{{h.view}}"><span class="vbtn {{h.vOpen}}" role="button" aria-haspopup="menu" aria-label="View: {{h.viewFirst}}" title="{{h.viewFirst}}"><span class="vm"><svg class="i c-blue" aria-hidden="true"><use href="#i-dt-visualizer"></use></svg>View</span><span class="vd"><svg aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></span></sc-if><sc-if value="{{h.menu}}"><div class="menu vmenu" role="menu" aria-label="{{h.menuLabel}}" style="{{h.menuStyle}}"><sc-for list="{{h.menu}}" as="m"><sc-if value="{{m.sep}}"><div class="msep" role="separator"></div></sc-if><sc-if value="{{m.h}}"><div class="mh" role="presentation">{{m.h}}</div></sc-if><sc-if value="{{m.t}}"><div class="mi {{m.cls}}" role="{{m.role}}" aria-checked="{{m.ckA}}" aria-disabled="{{m.disA}}"><span class="ic"><sc-if value="{{m.ck}}"><svg class="i c-fg" aria-hidden="true"><use href="#i-check"></use></svg></sc-if><sc-if value="{{m.icon}}"><svg class="i {{m.c}}" aria-hidden="true"><use href="#i-{{m.icon}}"></use></svg></sc-if></span><span class="tx">{{m.t}}</span><sc-if value="{{m.k}}"><span class="sc">{{m.k}}</span></sc-if><sc-if value="{{m.sub}}"><svg class="i sub" aria-hidden="true"><use href="#i-chevron-right"></use></svg></sc-if></div></sc-if></sc-for></div></sc-if></span>
+                <sc-if value="{{h.edit}}"><span class="eb {{h.edit.cls}}" role="textbox" aria-label="Value of {{h.name}}"><span class="selt">{{h.edit.sel}}</span><span>{{h.edit.text}}</span><span class="caret"></span></span></sc-if>
+                <sc-if value="{{h.showVb}}"><span class="vb {{h.vbCls}}" role="textbox" aria-readonly="false" aria-label="Value of {{h.name}}"><span class="tx">{{h.value}}</span></span></sc-if>
+                <span class="pn"><sc-if value="{{h.pin}}"><svg class="i c-blue" aria-label="Pin to source"><use href="#i-pin"></use></svg></sc-if><sc-if value="{{h.comment}}"><svg class="i c-blue" aria-label="Comment"><use href="#i-dt-comment"></use></svg></sc-if></span>
+              </div>
+              <sc-if value="{{h.commentText}}"><div class="dt pcm" style="{{h.commentStyle}}"><svg class="i c-blue" aria-hidden="true"><use href="#i-dt-comment"></use></svg><span>{{h.commentText}}</span></div></sc-if>
+            </sc-for>
+            <sc-for list="{{a.panels}}" as="p">
+              <div class="dt dtp" style="{{p.style}}" role="tree" aria-label="{{p.acc}}">
+                <sc-if value="{{p.up}}"><div class="scr {{p.upCls}}" aria-label="Scroll up"><svg class="i" aria-hidden="true"><use href="#i-chevron-up"></use></svg></div></sc-if>
+                <sc-for list="{{p.rows}}" as="r">
+                  <div class="dr {{r.cls}}" role="treeitem" aria-label="{{r.acc}}" aria-expanded="{{r.expA}}" aria-selected="{{r.selA}}">
+                    <span class="ex"><sc-if value="{{r.exp}}"><svg class="i c-fg" aria-hidden="true"><use href="#i-{{r.exp}}"></use></svg></sc-if><sc-if value="{{r.ptrEx}}"><svg class="ptr" style="left:10px;top:9px" aria-hidden="true"><use href="#i-dt-pointer"></use></svg></sc-if></span>
+                    <span class="ic"><sc-if value="{{r.loading}}"><span class="spin" role="progressbar" aria-label="Loading"></span></sc-if><sc-if value="{{r.icon}}"><svg class="i {{r.c}}" aria-hidden="true"><use href="#i-{{r.icon}}"></use></svg></sc-if><sc-if value="{{r.badge}}"><span class="bdg"><svg class="i c-yellow" aria-label="Non-public"><use href="#i-lock"></use></svg></span></sc-if></span>
+                    <span class="nm {{r.nmCls}}">{{r.name}}<sc-if value="{{r.ptrNm}}"><svg class="ptr" style="left:22px;top:8px" aria-hidden="true"><use href="#i-dt-pointer"></use></svg></sc-if><sc-if value="{{r.tipNm}}"><span class="ttip" role="tooltip">{{r.tipNm}}</span></sc-if></span>
+                    <span class="sp"></span>
+                    <span class="vw"><sc-if value="{{r.view}}"><span class="vbtn {{r.vOpen}}" role="button" aria-haspopup="menu" aria-label="View: {{r.viewFirst}}" title="{{r.viewFirst}}"><span class="vm"><svg class="i c-blue" aria-hidden="true"><use href="#i-dt-visualizer"></use></svg>View</span><span class="vd"><svg aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></span></sc-if><sc-if value="{{r.menu}}"><div class="menu vmenu" role="menu" aria-label="{{r.menuLabel}}" style="{{r.menuStyle}}"><sc-for list="{{r.menu}}" as="m"><sc-if value="{{m.sep}}"><div class="msep" role="separator"></div></sc-if><sc-if value="{{m.h}}"><div class="mh" role="presentation">{{m.h}}</div></sc-if><sc-if value="{{m.t}}"><div class="mi {{m.cls}}" role="{{m.role}}" aria-checked="{{m.ckA}}" aria-disabled="{{m.disA}}"><span class="ic"><sc-if value="{{m.ck}}"><svg class="i c-fg" aria-hidden="true"><use href="#i-check"></use></svg></sc-if><sc-if value="{{m.icon}}"><svg class="i {{m.c}}" aria-hidden="true"><use href="#i-{{m.icon}}"></use></svg></sc-if></span><span class="tx">{{m.t}}</span><sc-if value="{{m.k}}"><span class="sc">{{m.k}}</span></sc-if><sc-if value="{{m.sub}}"><svg class="i sub" aria-hidden="true"><use href="#i-chevron-right"></use></svg></sc-if></div></sc-if></sc-for></div></sc-if><sc-if value="{{r.ptrVw}}"><svg class="ptr" style="left:52px;top:9px" aria-hidden="true"><use href="#i-dt-pointer"></use></svg></sc-if></span>
+                    <span class="va {{r.vaCls}}">
+                      <sc-if value="{{r.err}}"><svg class="i sm c-error" aria-label="Error"><use href="#i-error"></use></svg></sc-if>
+                      <sc-if value="{{r.showTx}}"><span class="tx">{{r.value}}</span></sc-if>
+                      <sc-if value="{{r.edit}}"><span class="eb {{r.edit.cls}}" role="textbox" aria-label="Value of {{r.name}}"><span class="selt">{{r.edit.sel}}</span><span>{{r.edit.text}}</span><span class="caret"></span></span></sc-if>
+                      <sc-if value="{{r.refresh}}"><span class="rf" role="button" aria-label="Re-evaluate" title="Re-evaluate"><svg class="i c-green" aria-hidden="true"><use href="#i-refresh"></use></svg></span></sc-if>
+                      <sc-if value="{{r.emsg}}"><span class="emsg" role="alert"><svg class="i c-error" aria-hidden="true"><use href="#i-error"></use></svg><span>{{r.emsg}}</span></span></sc-if>
+                      <sc-if value="{{r.ptrVa}}"><svg class="ptr" style="left:60px;top:9px" aria-hidden="true"><use href="#i-dt-pointer"></use></svg></sc-if>
+                      <sc-if value="{{r.tipVa}}"><span class="ttip" role="tooltip" style="{{r.tipVaStyle}}">{{r.tipVa}}</span></sc-if>
+                    </span>
+                    <span class="pn"><sc-if value="{{r.pin}}"><svg class="i c-blue" aria-label="Pin to source"><use href="#i-pin"></use></svg></sc-if></span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{p.down}}"><div class="scr" aria-label="Scroll down"><svg class="i" aria-hidden="true"><use href="#i-chevron-down"></use></svg></div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+          </sc-for>
+
+          <sc-if value="{{s.ghost}}">
+          <div class="ghost" data-nocheck>
+            <sc-for list="{{s.ghost}}" as="a">
+            <div class="anc" style="{{a.style}}">
+              <sc-for list="{{a.heads}}" as="h"><div class="dt dth" style="{{h.style}}"><span class="ex"><svg class="i c-fg" aria-hidden="true"><use href="#i-{{h.exp}}"></use></svg></span><span class="ic"><svg class="i {{h.c}}" aria-hidden="true"><use href="#i-{{h.icon}}"></use></svg></span><span class="nm">{{h.name}}</span><span class="sp"></span><span class="vw"></span><span class="vb"><span class="tx">{{h.value}}</span></span><span class="pn"></span></div></sc-for>
+              <sc-for list="{{a.panels}}" as="p"><div class="dt dtp" style="{{p.style}}"><sc-for list="{{p.rows}}" as="r"><div class="dr {{r.cls}}"><span class="ex"><sc-if value="{{r.exp}}"><svg class="i c-fg" aria-hidden="true"><use href="#i-{{r.exp}}"></use></svg></sc-if></span><span class="ic"><svg class="i {{r.c}}" aria-hidden="true"><use href="#i-{{r.icon}}"></use></svg></span><span class="nm">{{r.name}}</span><span class="sp"></span><span class="vw"><sc-if value="{{r.view}}"><span class="vbtn"><span class="vm"><svg class="i c-blue" aria-hidden="true"><use href="#i-dt-visualizer"></use></svg>View</span><span class="vd"><svg aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></span></sc-if></span><span class="va"><span class="tx">{{r.value}}</span></span><span class="pn"></span></div></sc-for></div></sc-for>
+            </div>
+            </sc-for>
+          </div>
+          </sc-if>
+
+          <sc-for list="{{s.ptrs}}" as="pt"><svg class="ptr" style="{{pt.style}}" aria-hidden="true"><use href="#i-dt-pointer"></use></svg></sc-for>
+        </div>
+      </section>
+    </div>
+    </sc-if>
+
+    <sc-for list="{{s.tws}}" as="w">
+      <section class="tw vtw" style="{{w.style}}" aria-label="{{w.title}}">
+        <div class="tw-cap {{w.capCls}}"><span class="title">{{w.title}}</span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-pin"></use></svg></span><span class="cb"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+        <div class="vhd" role="row"><span role="columnheader">Name</span><span role="columnheader">Value</span><span role="columnheader">Type</span></div>
+        <div class="vrows" role="treegrid" aria-label="{{w.title}}">
+          <sc-for list="{{w.rows}}" as="r">
+            <div class="vr {{r.cls}}" role="row" aria-label="{{r.acc}}">
+              <span class="cn" role="gridcell"><span style="width:{{r.ind}}px;flex:none"></span><span class="ex"><sc-if value="{{r.exp}}"><svg class="i c-fg" aria-hidden="true"><use href="#i-{{r.exp}}"></use></svg></sc-if></span><span class="ic"><sc-if value="{{r.icon}}"><svg class="i {{r.c}}" aria-hidden="true"><use href="#i-{{r.icon}}"></use></svg></sc-if></span><span class="tx {{r.nameCls}}">{{r.name}}</span></span>
+              <span class="cv" role="gridcell"><sc-if value="{{r.view}}"><span class="vbtn" role="button" aria-label="View"><span class="vm"><svg class="i c-blue" aria-hidden="true"><use href="#i-dt-visualizer"></use></svg>View</span><span class="vd"><svg aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></span></sc-if><sc-if value="{{r.err}}"><svg class="i sm c-error" aria-label="Error"><use href="#i-error"></use></svg></sc-if><span class="tx {{r.valCls}}" title="{{r.value}}">{{r.value}}</span></span>
+              <span class="ct" role="gridcell">{{r.type}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+  </div>
+</article>
+</sc-for>
+</section>
+</sc-for>
+</sc-for>
+
+<sc-if value="{{sheet}}">
+<section class="card" aria-labelledby="h-icons">
+  <h2 id="h-icons">Icons, colors and sizes</h2>
+  <div class="note">Every row's icon is a code symbol the shell already draws for the completion list, colored by its kind in CommandIcons.s_kindColors; three kinds are new, and the lock badge is the existing lock drawn as an overlay. High contrast draws them all in the text color.</div>
+  <div class="kgrid" role="table" aria-label="Icons" style="--cols:24px 170px 64px minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.2fr)">
+    <div class="kh" role="row"><span role="columnheader"></span><span role="columnheader">Kind</span><span role="columnheader">Color</span><span role="columnheader">On</span><span role="columnheader">Where the kind comes from</span><span role="columnheader">In CommandIcons</span></div>
+    <sc-for list="{{iconRows}}" as="ir">
+      <div class="kr" role="row"><span class="ico" role="cell"><svg class="i {{ir.c}}" aria-hidden="true"><use href="#i-{{ir.i}}"></use></svg></span><span class="mono" role="cell">{{ir.kind}}</span><span role="cell">{{ir.color}}</span><span role="cell">{{ir.on}}</span><span role="cell">{{ir.from}}</span><span class="{{ir.stCls}}" role="cell">{{ir.st}}</span></div>
+    </sc-for>
+  </div>
+  <div class="note">{{sizes}}</div>
+</section>
+
+<section class="card" aria-labelledby="h-engines">
+  <h2 id="h-engines">What each engine gives the tip</h2>
+  <div class="note">The layout is the shell's alone; the data isn't. netcoredbg (every .NET and .NET Core program, on every OS, Windows included) sends a variable's name, value, type, evaluateName and reference, nothing about its kind or visibility; it evaluates member access, indexers and instance calls, but not new, typeof or extension methods, and it matches overloads by exact runtime type. Green: there today; red: not possible on that engine as it is; plain: new work.</div>
+  <div class="kgrid" role="table" aria-label="Engines" style="--cols:140px repeat(5,minmax(0,1fr))">
+    <div class="kh" role="row"><sc-for list="{{engineHead}}" as="eh"><span role="columnheader">{{eh}}</span></sc-for></div>
+    <sc-for list="{{engineRows}}" as="er">
+      <div class="kr" role="row"><span role="rowheader"><b>{{er.what}}</b></span><sc-for list="{{er.cells}}" as="ec"><span class="{{ec.cls}}" role="cell">{{ec.t}}</span></sc-for></div>
+    </sc-for>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-decide">
+  <h2 id="h-decide">For the maintainer to decide</h2>
+  <div class="decide">
+    <sc-for list="{{decisions}}" as="q">
+      <div class="dq"><span class="n">{{q.n}}</span><div><b>{{q.b}}</b> {{q.t}}<sc-if value="{{q.rej}}"><span class="tag">Rejected: {{q.rej}}</span></sc-if></div></div>
+    </sc-for>
+  </div>
+  <div class="note">{{landing}}</div>
+</section>
+</sc-if>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Harbor Light","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"state":{"editor":"enum","default":"all","options":["all","collapsed","leaf","diagnostics","list-view","expanded","keyboard","user-type","dictionary-view","collection-view","long-list","edit","edit-refused","loading","read-only","pinned","pinned-more","out-of-scope","bottom-edge","ctrl","list-raw","dictionary","remote","proxy","proxy-raw","locals","watch","rows"]},"$preview":{"width":1280,"height":10600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    // Shell.Editor.CurrentStatement in each theme (Theming/Tokens.axaml), and a tip's shadow, lighter than a dialog's.
+    const STMT = { 'Classic Blue': '#FFEEAA', 'Classic Light': '#FFEEAA', 'Classic Dark': '#695814', 'Classic High Contrast': '#554400',
+      'Harbor Light': '#FFF1B8', 'Harbor Dark': '#3D3514', 'Harbor High contrast': '#2E2600' };
+    const SHADOW = { light: '0 2px 8px rgba(0,0,0,.16)', dark: '0 2px 10px rgba(0,0,0,.5)', hc: 'none' };
+    const vars = `${t.vars};--cur-stmt:${STMT[t.name]};--tip-shadow:${SHADOW[t.p.kind]}`;
+    const themeQ = encodeURIComponent(t.name);
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+
+    // ---------------------------------------------------------------- the code (the user's Startup.cs, screenshots 1 and 2)
+    const STARTUP = {
+      31: 'public class Startup',
+      32: '{',
+      33: '    // This method gets called by the runtime. Use this method to add services to the container.',
+      34: '    public void ConfigureServices(IServiceCollection services)',
+      35: '    {',
+      36: '        services.AddControllersWithViews();',
+      37: '        services.AddRazorPages();',
+      38: '    }',
+      39: '',
+      40: '    // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.',
+      41: '    public void Configure(IApplicationBuilder app, IWebHostEnvironment env)',
+      42: '    {',
+      43: '        if (env.IsDevelopment())',
+      44: '        {',
+      45: '            app.UseDeveloperExceptionPage();',
+      46: '            app.UseWebAssemblyDebugging();',
+      47: '        }',
+      48: '        else',
+      49: '        {',
+      50: '            app.UseExceptionHandler("/Error");',
+      51: '            // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.',
+      52: '            app.UseHsts();',
+      53: '        }',
+      54: '',
+      55: '        app.UseHttpsRedirection();',
+      56: '        app.UseBlazorFrameworkFiles();',
+      57: '        app.UseStaticFiles();',
+      58: '',
+      59: '        app.UseRouting();',
+      60: '',
+      61: '        app.UseEndpoints(endpoints =>',
+      62: '        {',
+      63: '            endpoints.MapRazorPages();',
+      64: '            endpoints.MapControllers();',
+      65: '            endpoints.MapFallbackToFile("index.html");',
+      66: '        });',
+      67: '    }',
+      68: '}'
+    };
+    // The same solution's controller (the hosted Blazor template's), with a list, a string and an unused local added.
+    const CTRL = {
+      17: 'namespace BlazorApp.Server.Controllers',
+      18: '{',
+      19: '    [ApiController]',
+      20: '    [Route("[controller]")]',
+      21: '    public class WeatherForecastController : ControllerBase',
+      22: '    {',
+      23: '        private static readonly string[] Summaries = new[]',
+      24: '        {',
+      25: '            "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"',
+      26: '        };',
+      27: '',
+      28: '        private readonly ILogger<WeatherForecastController> logger;',
+      29: '',
+      30: '        public WeatherForecastController(ILogger<WeatherForecastController> logger)',
+      31: '        {',
+      32: '            this.logger = logger;',
+      33: '        }',
+      34: '',
+      35: '        [HttpGet]',
+      36: '        public IEnumerable<WeatherForecast> Get()',
+      37: '        {',
+      38: '            var rng = new Random();',
+      39: '            var retries = 3;',
+      40: '            var forecasts = new List<WeatherForecast>();',
+      41: '            for (var index = 1; index <= 5; index++)',
+      42: '            {',
+      43: '                var summary = Summaries[rng.Next(Summaries.Length)];',
+      44: '                forecasts.Add(Forecast(rng, index, summary));',
+      45: '            }',
+      46: '            return forecasts;',
+      47: '        }',
+      48: '',
+      49: '        private static WeatherForecast Forecast(Random rng, int index, string summary) =>',
+      50: '            new() { Date = DateTime.Now.AddDays(index), TemperatureC = rng.Next(-20, 55), Summary = summary };',
+      51: '    }',
+      52: '}'
+    };
+    const FILES = {
+      startup: { name: 'Startup.cs', code: STARTUP, max: 68, first: 40, last: 57, cur: 45, tabs: ['Startup.cs', 'Program.cs'] },
+      ctrl: { name: 'WeatherForecastController.cs', code: CTRL, max: 52, first: 34, last: 49, cur: 44, tabs: ['WeatherForecastController.cs', 'Startup.cs'] }
+    };
+    const LH = 20, TOP = 4, TEXT_X = 52, TABS = 30;
+    // marks: { line: { token: class } } adds a squiggle or the Ctrl+hover link to a token.
+    const lines = (F, from, to, cur, marks) => {
+      const out = [];
+      for (let n = from; n <= to; n++) {
+        let toks = C.csharp(F.code[n] || '');
+        if (marks && marks[n]) toks = toks.map((k) => (marks[n][k.t] ? { ...k, cls: `${k.cls} ${marks[n][k.t]}` } : k));
+        out.push({ n: n <= F.max ? n : '', gl: n === cur, cls: n === cur ? 'cur' : '', toks });
+      }
+      return out;
+    };
+
+    // ---------------------------------------------------------------- the tip
+    // Rows 20 px, the header 22 px; a child tip starts 24 px right of its parent and its top sits on the expanded row's
+    // bottom edge (the first one on the header's). The header's name starts 42 px in: 4 + the 16 px chevron + 2, then the
+    // 16 px icon + 4.
+    const ROW = 20, HEAD = 22, IND = 24, NAMEX = 42, PADY = 2, SCR = 12;
+    const IC = {
+      local: ['sym-local', 'c-blue'], param: ['sym-parameter', 'c-blue'], prop: ['sym-property', 'c-blue'], field: ['sym-field', 'c-blue'],
+      konst: ['sym-constant', 'c-blue'], event: ['sym-event', 'c-yellow'], cls: ['sym-class', 'c-orange'], lock: ['lock', 'c-yellow'],
+      raw: ['dt-raw-view', 'c-blue'], results: ['dt-results-view', 'c-blue'], error: ['error', 'c-error'], none: ['', '']
+    };
+    const P = (n, v, i, o) => ({ n, v, i, ...(o || {}) });
+    const STRING_MENU = (k) => [
+      { t: 'Text Visualizer', ck: k === 'Text' }, { t: 'JSON Visualizer', ck: k === 'JSON' }, { t: 'XML Visualizer', ck: k === 'XML' }, { t: 'HTML Visualizer', ck: k === 'HTML' }];
+    const menuRows = (items, radio) => items.map((m) => (m.sep ? { sep: true } : m.h ? { h: m.h } : {
+      t: m.t, ck: !!m.ck, ckA: radio ? String(!!m.ck) : '', role: radio ? 'menuitemradio' : 'menuitem', k: m.k || '',
+      icon: m.icon || '', c: m.c || 'c-blue', sub: !!m.sub, disA: m.dis ? 'true' : 'false',
+      cls: [m.hover && 'hover', m.dis && 'is-disabled'].filter(Boolean).join(' ') }));
+    const viewFirstOf = (o, v) => o.viewFirst || (v && v.startsWith('"') ? 'Text Visualizer' : 'Grid Visualizer');
+    const mkRow = (r) => {
+      const [icon, c] = r.loading ? IC.none : IC[r.i];
+      const leaf = !!r.leaf || !!r.loading;
+      const menu = r.menu || r.ctx;
+      return {
+        cls: [r.hover && 'hover', r.chain && !r.sel && 'chain', r.sel && 'sel kfocus'].filter(Boolean).join(' '),
+        exp: leaf ? '' : (r.open ? 'chevron-down' : 'chevron-right'), expA: leaf ? 'false' : String(!!r.open), selA: String(!!r.sel),
+        icon, c, badge: !!r.badge, loading: !!r.loading, nmCls: r.loading ? 'mut' : '',
+        name: r.loading ? 'Loading…' : r.n, value: r.v || '', showTx: !r.edit,
+        vaCls: r.err ? 'err' : r.changed ? 'chg' : r.muted ? 'mut' : '', err: !!r.err, refresh: !!r.refresh,
+        view: !!r.view, viewFirst: viewFirstOf(r, r.v),
+        vOpen: r.menu ? 'is-open' : '', menu: menu ? menuRows(menu, !!r.menu) : null,
+        menuLabel: r.menu ? 'Visualizers' : `Actions for ${r.n}`, menuStyle: r.menuStyle || '',
+        edit: r.edit || null, emsg: r.emsg || '', pin: !!r.pin,
+        ptrNm: r.ptr === 'nm', ptrVa: r.ptr === 'va', ptrVw: r.ptr === 'vw', ptrEx: r.ptr === 'ex',
+        tipNm: r.tipNm || '', tipVa: r.tipVa || '', tipVaStyle: r.tipVaStyle || 'left:40px',
+        acc: r.loading ? 'Loading' : `${r.n}${r.v ? ', ' + r.v : ''}${r.err ? ' (error)' : ''}${r.badge ? ' (non-public)' : ''}`
+      };
+    };
+    const panelH = (lv) => 2 + 2 * PADY + lv.rows.length * ROW + (lv.up ? SCR : 0) + (lv.down ? SCR : 0);
+    const mkHead = (h, x, y, open) => {
+      const [icon, c] = IC[h.i];
+      const menu = h.menu || h.ctx;
+      return {
+        style: `left:${x}px;top:${y}px`, cls: [h.hover && 'hover', h.pinned && 'pinned', h.focus && 'kfocus', !h.pin && !h.comment && 'nopin'].filter(Boolean).join(' '),
+        exp: h.leaf ? '' : (open ? 'chevron-down' : 'chevron-right'), expCls: h.running ? 'is-disabled' : '',
+        icon, c, name: h.name, value: h.value, vbCls: h.changed ? 'chg' : h.running ? 'mut' : '',
+        view: !!h.view, viewFirst: viewFirstOf(h, h.value), vOpen: h.menu ? 'is-open' : '',
+        menu: menu ? menuRows(menu, !!h.menu) : null, menuLabel: h.menu ? 'Visualizers' : `Actions for ${h.name}`, menuStyle: h.menuStyle || '',
+        showVb: !h.edit, edit: h.edit || null, pin: !!h.pin, comment: !!h.comment, pinned: !!h.pinned,
+        ptrNm: h.ptr === 'nm', tipNm: h.tipNm || '', acc: `${h.name}, ${h.value}`,
+        diag: h.diag || null, diagStyle: `left:${x}px`,
+        commentText: h.commentText || '', commentStyle: `left:${x + 20}px;top:${y + HEAD + 2}px`
+      };
+    };
+    // A tip at a name on a line: its header, then one tip per open level. Each level names the row of the level above
+    // whose child it is (at); that row gets the down chevron and stays marked while its child is open.
+    const tip = (first, spec) => {
+      const y0 = TOP + (spec.line - first) * LH;
+      const a = { style: spec.style || `left:calc(${TEXT_X}px + ${spec.col}ch);top:${y0}px`, heads: [], panels: [] };
+      const hx = spec.hx != null ? spec.hx : -NAMEX, hy = spec.hy != null ? spec.hy : -1;
+      const levels = (spec.levels || []).map((lv) => ({ ...lv, rows: lv.rows.map((r) => ({ ...r })) }));
+      if (spec.head) a.heads.push(mkHead(spec.head, hx, hy, levels.length > 0));
+      const placed = [];
+      levels.forEach((lv, k) => {
+        let x, y;
+        if (k === 0) {
+          x = spec.head ? hx + IND : hx;
+          y = spec.head ? (spec.flip ? hy - panelH(lv) : hy + HEAD) : hy;
+        } else {
+          const pr = placed[k - 1];
+          pr.lv.rows[lv.at].open = true;
+          pr.lv.rows[lv.at].chain = true;
+          const rowTop = pr.y + 1 + PADY + (pr.lv.up ? SCR : 0) + lv.at * ROW;
+          x = pr.x + IND;
+          y = spec.flip ? rowTop - panelH(lv) : rowTop + ROW;
+        }
+        placed.push({ x, y, lv });
+      });
+      a.panels = placed.map(({ x, y, lv }) => ({
+        style: `left:${x}px;top:${y}px;` + (lv.vmax ? `--vmax:${lv.vmax}px;` : ''),
+        up: !!lv.up, upCls: lv.upDisabled ? 'is-disabled' : '', down: !!lv.down, acc: lv.acc || 'Members',
+        rows: lv.rows.map(mkRow)
+      }));
+      return a;
+    };
+
+    // ---------------------------------------------------------------- the values netcoredbg and the companion give
+    const appHead = (o) => ({ name: 'app', value: 'Middleware = 1', i: 'param', ...(o || {}) });
+    const envHead = (o) => ({ name: 'env', value: '{Microsoft.AspNetCore.Hosting.HostingEnvironment}', i: 'param', ...(o || {}) });
+    // ApplicationBuilder's own members, as netcoredbg lists them, grouped with the companion's member list. It's a library
+    // type, so its non-public members go under Non-Public members. Properties, a Dictionary, gets the shell's view (and so
+    // Grid); ServerFeatures, a FeatureCollection, has no view and no Grid.
+    const APP = (o = {}) => [
+      P('ApplicationServices', 'ServiceDescriptors = 336', 'prop', o.ApplicationServices),
+      P('Properties', 'Count = 3', 'prop', { view: true, ...o.Properties }),
+      P('ServerFeatures', 'Count = 1', 'prop', o.ServerFeatures),
+      P('Non-Public members', '', 'lock', o.NonPublic),
+      P('Static members', '', 'cls', o.Static)
+    ];
+    const APP_NONPUBLIC = (o = {}) => [
+      P('_components', 'Count = 1', 'field', { view: true, ...o._components }),
+      P('_debugger', '{Microsoft.AspNetCore.Http.DebuggerWrapper}', 'field', o._debugger),
+      P('_descriptions', 'Count = 1', 'field', { view: true, ...o._descriptions }),
+      P('MiddlewareCount', '1', 'prop', { leaf: true, ...o.MiddlewareCount })
+    ];
+    // The shell's Dictionary view: an entry per used slot of _entries (up to _count, free slots skipped), then Raw View.
+    const PROPERTIES_VIEW = (o = {}) => [
+      P('["server.Features"]', 'Count = 1', 'field', o.f),
+      P('["application.Services"]', 'ServiceDescriptors = 336', 'field', o.s),
+      P('["__MiddlewareDescriptions"]', 'Count = 1', 'field', { view: true, ...o.m }),
+      P('Raw View', '', 'raw')
+    ];
+    // ApplicationBuilder's [DebuggerTypeProxy] (ApplicationBuilderDebugView): section P only.
+    const APP_PROXY = (o = {}) => [
+      P('ApplicationServices', 'ServiceDescriptors = 336', 'prop', o.ApplicationServices),
+      P('Middleware', 'Count = 1', 'prop', { view: true, ...o.Middleware }),
+      P('Properties', 'Count = 3', 'prop', { view: true, ...o.Properties }),
+      P('ServerFeatures', 'Count = 1', 'prop', o.ServerFeatures),
+      P('Raw View', '', 'raw', o.Raw)
+    ];
+    const DESCRIPTORS = [
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.ApplicationParts.ApplicationPartManager', 'ImplementationInstance = Microsoft.AspNetCore.Mvc.ApplicationParts.ApplicationPartManager'],
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.Infrastructure.IActionDescriptorCollectionProvider', 'ImplementationType = "Microsoft.AspNetCore.Mvc.Infrastructure.DefaultActionDescriptorCollectionProvider"'],
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.Infrastructure.IActionSelector', 'ImplementationType = "Microsoft.AspNetCore.Mvc.Infrastructure.ActionSelector"'],
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.ActionConstraints.ActionConstraintCache', 'ImplementationType = "Microsoft.AspNetCore.Mvc.ActionConstraints.ActionConstraintCache"'],
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.Controllers.IControllerFactory', 'ImplementationType = "Microsoft.AspNetCore.Mvc.Controllers.DefaultControllerFactory"'],
+      ['Transient', 'Microsoft.AspNetCore.Mvc.Controllers.IControllerActivator', 'ImplementationType = "Microsoft.AspNetCore.Mvc.Controllers.DefaultControllerActivator"'],
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.Controllers.IControllerFactoryProvider', 'ImplementationType = "Microsoft.AspNetCore.Mvc.Controllers.ControllerFactoryProvider"'],
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.Controllers.IControllerActivatorProvider', 'ImplementationType = "Microsoft.AspNetCore.Mvc.Controllers.ControllerActivatorProvider"'],
+      ['Transient', 'Microsoft.AspNetCore.Mvc.Infrastructure.IActionInvokerFactory', 'ImplementationType = "Microsoft.AspNetCore.Mvc.Infrastructure.ActionInvokerFactory"'],
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.ModelBinding.IModelMetadataProvider', 'ImplementationType = "Microsoft.AspNetCore.Mvc.ModelBinding.Metadata.DefaultModelMetadataProvider"'],
+      ['Transient', 'Microsoft.AspNetCore.Mvc.ModelBinding.Metadata.ICompositeMetadataDetailsProvider', 'ImplementationFactory = Microsoft.AspNetCore.Mvc.ModelBinding.Metadata.ICompositeMetadataDetailsProvider <AddMvcCoreServices>b__8_0(System.IServiceProvider)'],
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.ModelBinding.IModelBinderFactory', 'ImplementationType = "Microsoft.AspNetCore.Mvc.ModelBinding.ModelBinderFactory"'],
+      ['Singleton', 'Microsoft.AspNetCore.Mvc.ModelBinding.Validation.IObjectModelValidator', 'ImplementationFactory = Microsoft.AspNetCore.Mvc.ModelBinding.Validation.IObjectModelValidator <AddMvcCoreServices>b__8_1(System.IServiceProvider)'],
+      null, null
+    ].map((d, i) => (d ? P(`[${58 + i}]`, `Lifetime = ${d[0]}, ServiceType = "${d[1]}", ${d[2]}`, 'field')
+      : P(`[${58 + i}]`, '{Microsoft.Extensions.DependencyInjection.ServiceDescriptor}', 'field', { muted: true })));
+    const ENV = (o = {}) => [
+      P('ApplicationName', '"BlazorApp.Server"', 'prop', { view: true, leaf: true }),
+      P('ContentRootFileProvider', '{Microsoft.Extensions.FileProviders.PhysicalFileProvider}', 'prop'),
+      P('ContentRootPath', '"C:\\\\src\\\\BlazorApp\\\\Server\\\\"', 'prop', { view: true, leaf: true }),
+      P('EnvironmentName', '"Development"', 'prop', { view: true, leaf: true, ...o.EnvironmentName }),
+      P('WebRootFileProvider', '{Microsoft.Extensions.FileProviders.CompositeFileProvider}', 'prop'),
+      P('WebRootPath', '"C:\\\\src\\\\BlazorApp\\\\Server\\\\wwwroot"', 'prop', { view: true, leaf: true })
+    ];
+    // Without the shell's Dictionary view: the dictionary's own members. Keys and Values have no view, so no Grid.
+    const PROPERTIES_RAW = [
+      P('Comparer', '{System.OrdinalCaseSensitiveComparer}', 'prop'),
+      P('Count', '3', 'prop', { leaf: true }),
+      P('Keys', 'Count = 3', 'prop'),
+      P('Values', 'Count = 3', 'prop'),
+      P('Non-Public members', '', 'lock')
+    ];
+    // A remote program: no metadata, so no visibility, no [DebuggerDisplay], icons guessed from the names. The collection
+    // views still work: they need only netcoredbg and the type name, and they probe their fields.
+    const APP_REMOTE = [
+      P('_components', '{System.Collections.Generic.List<System.Func<Microsoft.AspNetCore.Http.RequestDelegate, Microsoft.AspNetCore.Http.RequestDelegate>>}', 'field', { view: true }),
+      P('_debugger', '{Microsoft.AspNetCore.Http.DebuggerWrapper}', 'field'),
+      P('_descriptions', '{System.Collections.Generic.List<string>}', 'field', { view: true }),
+      P('ApplicationServices', '{Microsoft.Extensions.DependencyInjection.ServiceProvider}', 'prop'),
+      P('MiddlewareCount', '1', 'prop', { leaf: true }),
+      P('Properties', '{System.Collections.Generic.Dictionary<string, object>}', 'prop', { view: true }),
+      P('ServerFeatures', '{Microsoft.AspNetCore.Http.Features.FeatureCollection}', 'prop'),
+      P('Static members', '', 'cls')
+    ];
+    // The controller: the user's own type. Its members (logger, Summaries) are the solution's; the rest are ControllerBase's.
+    const ctrlHead = (o) => ({ name: 'this', value: '{BlazorApp.Server.Controllers.WeatherForecastController}', i: 'local', ...(o || {}) });
+    const CONTROLLER = [
+      P('ControllerContext', '{Microsoft.AspNetCore.Mvc.ControllerContext}', 'prop'),
+      P('HttpContext', '{Microsoft.AspNetCore.Http.DefaultHttpContext}', 'prop'),
+      P('logger', '{Microsoft.Extensions.Logging.Logger<BlazorApp.Server.Controllers.WeatherForecastController>}', 'field', { badge: true, hover: true, pin: true, ptr: 'nm',
+        tipNm: 'Private field of WeatherForecastController (your code) · Microsoft.Extensions.Logging.Logger<BlazorApp.Server.Controllers.WeatherForecastController>' }),
+      P('MetadataProvider', '{Microsoft.AspNetCore.Mvc.ModelBinding.Metadata.DefaultModelMetadataProvider}', 'prop'),
+      P('ModelBinderFactory', '{Microsoft.AspNetCore.Mvc.ModelBinding.ModelBinderFactory}', 'prop'),
+      P('ModelState', '{Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary}', 'prop'),
+      P('ObjectValidator', '{Microsoft.AspNetCore.Mvc.ModelBinding.Validation.DefaultObjectValidator}', 'prop'),
+      P('ProblemDetailsFactory', '{Microsoft.AspNetCore.Mvc.Infrastructure.DefaultProblemDetailsFactory}', 'prop'),
+      P('Request', '{Microsoft.AspNetCore.Http.DefaultHttpRequest}', 'prop'),
+      P('Response', '{Microsoft.AspNetCore.Http.DefaultHttpResponse}', 'prop'),
+      P('RouteData', '{Microsoft.AspNetCore.Routing.RouteData}', 'prop'),
+      P('Url', '{Microsoft.AspNetCore.Mvc.Routing.EndpointRoutingUrlHelper}', 'prop'),
+      P('User', '{System.Security.Claims.ClaimsPrincipal}', 'prop'),
+      P('Non-Public members', '', 'lock'),
+      P('Static members', '', 'cls')
+    ];
+    const FORECAST = '{BlazorApp.Shared.WeatherForecast}';
+    const fcHead = (o) => ({ name: 'forecasts', value: 'Count = 5', i: 'local', ...(o || {}) });
+
+    // ---------------------------------------------------------------- the states
+    const ed = (o) => {
+      const F = FILES[o.file || 'startup'];
+      const first = o.first || F.first, last = o.last || F.last;
+      return { ed: true, tabs: F.tabs.map((n, i) => ({ n, on: i === 0, cls: i === 0 ? 'on' : '', sel: String(i === 0) })), docLabel: F.name, edcCls: '',
+        w: o.w || 610, h: TABS + 2 + TOP + (last - first + 1) * LH + 6,
+        lines: lines(F, first, last, o.cur === undefined ? F.cur : o.cur, o.marks), anchors: (o.tips || []).map((sp) => tip(first, sp)),
+        ghost: o.ghost ? o.ghost.map((sp) => tip(first, sp)) : null, qis: o.qis || [], labels: [], tws: [], ptrs: o.ptrs || [] };
+    };
+    const CTX_ROW = (o = {}) => [
+      ...(o.edit ? [{ t: 'Edit Value', icon: 'edit', k: 'F2' }] : []),
+      { t: 'Copy Value', icon: 'copy', k: 'Ctrl+C' }, { t: 'Copy Expression', icon: 'copy' }, { sep: true },
+      { t: 'Add Watch', icon: 'dt-watch' }, { t: 'QuickWatch', icon: 'dt-watch', k: 'Shift+F9' }, { t: 'Pin to Source', icon: 'pin' }, { sep: true },
+      { t: 'View', icon: 'window', sub: true, hover: !!o.viewHover }];
+    const S = {
+      collapsed: ['(A1) Hover: the header over the expression', 'app · Startup.cs:45 · evaluate(context: hover)',
+        'The header replaces today\'s tip under the pointer: it sits on the hovered line, its name over the code\'s, with the parameter\'s icon (the editor\'s semantic token says parameter), a separator and the value in a box a click edits. Resting on the name shows the type netcoredbg reports. The name stands for the code\'s word: a double-click there selects the word, Ctrl+click goes to the definition and the wheel scrolls the editor, forwarded at the same point (decision 10).',
+        () => ed({ tips: [{ line: 45, col: 12, head: appHead({ hover: true, pin: true, ptr: 'nm', tipNm: 'Microsoft.AspNetCore.Builder.ApplicationBuilder' }) }] })],
+      leaf: ['(A2) A string with nothing to expand', 'summary · WeatherForecastController.cs:43 · variablesReference 0',
+        'A value without members (a string, a number, a bool, null) gets no chevron and no child tip. A string or a collection gets the View drop-down in the header too, as each row does: the magnifier opens the first suggested visualizer, the chevron lists them (Text checked; JSON for a value starting with { or [, XML or HTML for <…), a plugin\'s after a separator. Today these are only in the tree\'s context menu.',
+        () => ed({ file: 'ctrl', tips: [{ line: 43, col: 20, head: { name: 'summary', value: '"Balmy"', i: 'local', leaf: true, view: true, pin: true, hover: true, menu: STRING_MENU('Text') } }] })],
+      diagnostics: ['(A3) A name with a diagnostic', 'retries · CS0219 · the hover\'s diagnostics, as Quick Info shows them',
+        'When the hovered name has diagnostics, they sit in a strip right above the header, on the side away from the child tips: the code as a link to its help, the message, and Fix and Other Fixes as in Quick Info. When the tips flip up near the bottom edge (A18), the strip goes under the header instead. An int has no chevron and no View.',
+        () => ed({ file: 'ctrl', marks: { 39: { retries: 'sq' } }, tips: [{ line: 39, col: 16, head: { name: 'retries', value: '3', i: 'local', leaf: true, pin: true, hover: true, ptr: 'nm',
+          diag: { code: 'CS0219', msg: 'The variable \'retries\' is assigned but its value is never used' } } }] })],
+      'list-view': ['(A4) A list, through the shell\'s List view', 'forecasts · List<WeatherForecast> · _items[0.._size), then Raw View',
+        'netcoredbg can\'t build List<T>\'s proxy, so the shell builds the rows itself: _size elements of _items, read through netcoredbg (the sample Dictionary Visualizer reads _entries the same way today), then Raw View with what netcoredbg lists (Capacity, Count, the fields). Compare B1, the same list without it. Resting on [2]\'s chevron opens a WeatherForecast, the user\'s own type, its members all inline.',
+        () => ed({ file: 'ctrl', cur: 47, first: 36, last: 53, tips: [{ line: 46, col: 19, head: fcHead({ view: true }), levels: [
+          { rows: [0, 1, 2, 3, 4].map((i) => P(`[${i}]`, FORECAST, 'field', i === 2 ? { hover: true, pin: true, ptr: 'ex' } : {})).concat([P('Raw View', '', 'raw')]) }] }] })],
+      expanded: ['(A5) Expanded: a library type\'s members', 'variables(app) · ApplicationBuilder\'s own members + the companion\'s member list',
+        'The chevron (a click, or the pointer resting on it) opens the members in a tip of their own, its top on the header\'s bottom edge, 24 px in. ApplicationBuilder is a library type, so its private members go under Non-Public members, then Static members. There\'s no Middleware row: that belongs to the type proxy (section P). The header keeps Middleware = 1: the companion applies [DebuggerDisplay]. Properties, a Dictionary, has a View button; ServerFeatures, a FeatureCollection, doesn\'t.',
+        () => ed({ tips: [{ line: 45, col: 12, head: appHead(), levels: [{ rows: APP({ Properties: { hover: true, pin: true, ptr: 'nm' } }) }] }] })],
+      keyboard: ['(A6) From the keyboard, and the row\'s menu', 'editor.action.showHover · Up, Down, Right, Left, F2, Enter, Shift+F10, Esc',
+        'Opened from the keyboard, the tip takes the focus with the first row selected; Up and Down move, Right expands (opening the child tip), Left collapses or goes back to the parent, F2 or Enter edits, Ctrl+C copies the value, Esc closes the tip. Shift+F10 opens today\'s menu at the row, plus Pin to Source; Edit Value is there only for a value the engine can change (Properties has no setter).',
+        () => ed({ tips: [{ line: 45, col: 12, head: appHead(), levels: [{ rows: APP({ Properties: { sel: true, ctx: CTX_ROW(), menuStyle: 'left:-96px;top:17px' } }) }] }] })],
+      'user-type': ['(A7) The user\'s own type: its private members inline', 'this · WeatherForecastController (BlazorApp.Server) · members declared by the solution\'s code',
+        'A non-public member declared by the solution\'s own code (logger) is listed inline, in name order, with the lock as a badge on its icon, as the classic IDE does for user code; the non-public members of the library types it derives from (ControllerBase\'s fields) go under Non-Public members. The member list says each member\'s declaring type and module; the shell knows which modules are its projects\' outputs. Summaries, static, is under Static members.',
+        () => ed({ file: 'ctrl', w: 1240, first: 28, last: 49, tips: [{ line: 32, col: 12, head: ctrlHead(), levels: [{ rows: CONTROLLER, vmax: 380 }] }] })],
+      'dictionary-view': ['(A8) A dictionary, through the shell\'s Dictionary view', 'app.Properties · Dictionary<string, object> · _entries up to _count, free slots skipped',
+        'Each entry is a row named by its key, as .NET 8\'s dictionary proxy names them, with the value; it expands to Key and Value. Raw View holds the dictionary\'s own members (B2). A list in an entry gets its View button.',
+        () => ed({ w: 620, tips: [{ line: 45, col: 12, head: appHead(), levels: [{ rows: APP() }, { at: 1, rows: PROPERTIES_VIEW({ m: { hover: true, pin: true } }) }] }] })],
+      'collection-view': ['(A9) A collection\'s View drop-down', 'Grid Visualizer · DictionaryVisualizer sample plugin',
+        'Grid reads its rows from the same view as A8 (no ToArray(), which can\'t bind on a Dictionary), so dictionaries and HashSets get it too; FeatureCollection and other IEnumerables don\'t (decision 5). A plugin\'s visualizers follow under a Plugins heading, not in the key column.',
+        () => ed({ w: 600, tips: [{ line: 45, col: 12, head: appHead(), levels: [{ rows: APP({ Properties: { hover: true, pin: true, viewFirst: 'Grid Visualizer',
+          menu: [{ t: 'Grid Visualizer', ck: true }, { sep: true }, { h: 'Plugins' }, { t: 'Dictionary Visualizer' }] } }) }] }] })],
+      'long-list': ['(A10) A long list, and values too long for the tip', 'services · ServiceCollection → _descriptors · Count = 336 · scrolled to [58]',
+        'Without ServiceCollection\'s proxy, the descriptors are its private _descriptors list, which gets the List view. A tip shows up to 15 rows; the rest scroll with the wheel and the strips at its ends. A value stops at 400 px and trims; resting on it shows all of it. [DebuggerDisplay] is applied to the rows in view as the tip scrolls (today DebuggerDisplays stops at the first 60 of a list, 3 s): the last two have just scrolled in and still show their type, muted.',
+        () => ed({ w: 1240, cur: 38, first: 31, last: 59, tips: [{ line: 37, col: 8, head: { name: 'services', value: 'Count = 336', i: 'param' }, levels: [
+          { rows: [P('Count', '336', 'prop', { leaf: true }), P('IsReadOnly', 'false', 'prop', { leaf: true }), P('Non-Public members', '', 'lock')] },
+          { at: 2, rows: [P('_descriptors', 'Count = 336', 'field', { view: true }), P('_isReadOnly', 'false', 'field', { leaf: true })] },
+          { at: 0, up: true, down: true, rows: DESCRIPTORS.map((r, i) => (i === 3 ? { ...r, hover: true, pin: true, ptr: 'va', tipVa: r.v } : r)) }] }] })],
+      edit: ['(A11) Editing a value in place', 'setVariable(EnvironmentName) · VariableEditing.SetAsync',
+        'A click on a value, F2 or Enter swaps it for a text box with the value selected; Enter sets it (setVariable, or setExpression for the header), Esc puts it back, and the tip reads the row and its parents again. Today\'s "Set EnvironmentName" dialog goes.',
+        () => ed({ w: 1240, tips: [{ line: 43, col: 12, head: envHead(), levels: [{ rows: ENV({ EnvironmentName: { edit: { sel: '"Development"', text: '', cls: '' } } }) }] }] })],
+      'edit-refused': ['(A12) An edit the engine refuses', 'netcoredbg · setVariable → error',
+        'Typed without quotes, Production is a name to netcoredbg, and it says so. The box stays open with the engine\'s message under it and a red edge, so the fix is a keystroke away; Esc gives up.',
+        () => ed({ w: 1240, tips: [{ line: 43, col: 12, head: envHead(), levels: [{ rows: ENV({ EnvironmentName: { edit: { sel: '', text: 'Production', cls: 'err' },
+          emsg: 'error: The name \'Production\' does not exist in the current context' } }) }] }] })],
+      loading: ['(A13) A child tip while its members load', 'variables(app.ApplicationServices) · in flight',
+        'Members can take a while (netcoredbg runs each property\'s getter, up to 5 s each). The child tip opens at once with a muted Loading… row and fills in when the answer comes; moving to another row or Esc cancels the request, as children are loaded today.',
+        () => ed({ tips: [{ line: 45, col: 12, head: appHead(), levels: [{ rows: APP() }, { at: 0, rows: [{ loading: true, i: 'none' }] }] }] })],
+      'read-only': ['(A14) A value that can\'t be changed', 'MiddlewareCount · a property without a setter',
+        'A value the engine can\'t change (a property without a setter, a const, any value in a Mono program) opens no box: a click selects the row, and resting on the value says why, so nobody waits for an edit box that won\'t come.',
+        () => ed({ tips: [{ line: 45, col: 12, head: appHead(), levels: [{ rows: APP(), vmax: 200 }, { at: 3, vmax: 220, rows: APP_NONPUBLIC({ MiddlewareCount: { hover: true, pin: true, ptr: 'va', tipVa: 'MiddlewareCount can\'t be changed: it has no setter.', tipVaStyle: 'left:-150px' } }) }] }] })],
+      pinned: ['(A15) Pinned tips, after a step', 'PinnedDataTips · Startup.cs:43 and :45',
+        'A pinned tip is the same header at the end of its line, with a strip to unpin it and its comment under it. Stepped over line 45, app reads Middleware = 2 in red, changed since the last stop. env.EnvironmentName is a string: no chevron, and its View button. A pinned tip that has members expands into the same cascade.',
+        () => ed({ w: 700, cur: 46, tips: [
+          { line: 43, col: STARTUP[43].length + 1, hx: 0, head: { name: 'env.EnvironmentName', value: '"Development"', i: 'prop', pinned: true, hover: true, leaf: true, view: true } },
+          { line: 45, col: STARTUP[45].length + 2, hx: 0, head: { name: 'app', value: 'Middleware = 2', i: 'param', pinned: true, changed: true, commentText: 'one more per Use… call' } }] })],
+      'pinned-more': ['(A16) Pinned tips while the program runs, and their menu', 'two pins on line 45 · context menu · double-click',
+        'While the program runs the values are the last stop\'s, muted, and nothing expands. Two pins on one line stack, one under the other. The context menu is today\'s; a double-click on a pinned tip opens QuickWatch, as today.',
+        () => ed({ w: 700, cur: null, tips: [
+          { line: 43, col: STARTUP[43].length + 1, hx: 0, head: { name: 'env.EnvironmentName', value: '"Development"', i: 'prop', pinned: true, leaf: true, running: true, view: true } },
+          { line: 45, col: STARTUP[45].length + 2, hx: 0, head: { name: 'app', value: 'Middleware = 2', i: 'param', pinned: true, running: true } },
+          { line: 45, col: STARTUP[45].length + 2, hx: 0, hy: 23, head: { name: 'app.Properties', value: 'Count = 3', i: 'prop', pinned: true, running: true, hover: true, ptr: 'nm',
+            ctx: [{ t: 'Add Comment', icon: 'dt-comment' }, { t: 'Copy Value', icon: 'copy' }, { t: 'Copy Expression', icon: 'copy' }, { t: 'Add Watch', icon: 'dt-watch' }, { sep: true },
+              { t: 'Unpin', icon: 'pin' }, { t: 'Clear All DataTips', icon: 'clear-all', c: 'c-red' }], menuStyle: 'left:-70px;top:14px' } }] })],
+      'out-of-scope': ['(A17) A name out of scope: no tip', 'evaluate(endpoints) → error: The name \'endpoints\' does not exist in the current context',
+        'When the engine can\'t evaluate the expression there\'s no data tip, as today and in the classic IDE: the hover shows Quick Info instead. The engine\'s message stays out of the editor; Watch shows it (C2).',
+        () => ed({ w: 520, first: 48, last: 66, qis: [{ style: `left:calc(${TEXT_X}px + 12ch);top:${TOP + (63 - 48) * LH}px`,
+          toks: [{ t: '(parameter) ', cls: 't-pu' }, { t: 'IEndpointRouteBuilder', cls: 't-ty' }, { t: ' endpoints', cls: 't-pu' }] }] })],
+      'bottom-edge': ['(A18) Near the editor\'s bottom edge', 'app at Startup.cs:59 · the pop-up flips',
+        'With no room below, the child tip opens above the header, its bottom on the header\'s top edge, and deeper levels go the same way (a diagnostics strip moves under the header). Near the right edge a tip moves left, and its values trim sooner.',
+        () => ed({ w: 520, first: 44, last: 60, tips: [{ line: 59, col: 8, flip: true, head: appHead(), levels: [{ rows: APP({ ServerFeatures: { hover: true, pin: true, ptr: 'nm' } }) }] }] })],
+      ctrl: ['(A19) Ctrl: seeing and clicking through the tip', 'Ctrl held down · the Ctrl+hover link on env',
+        'While Ctrl is held every open tip fades to a trace and stops taking the pointer: the code under it can be read, the Ctrl+hover definition link shows on the word, and Ctrl+click goes to the definition, as on any other word. Letting go brings the tips back. (This panel is meant to be faint, so the faded tips\' contrast isn\'t checked.)',
+        () => ed({ marks: { 43: { env: 'lnk' } }, ptrs: [{ style: `left:calc(${TEXT_X + 6}px + 13ch);top:${TOP + (43 - 40) * LH + 9}px` }],
+          ghost: [{ line: 43, col: 12, head: envHead(), levels: [{ rows: ENV(), vmax: 190 }] }] })],
+
+      'list-raw': ['(B1) A list with netcoredbg alone', 'forecasts · List<WeatherForecast> · Capacity, Count, _items with its empty slots',
+        'What every List<T> looks like without the shell\'s view (A4): Capacity and Count, then, under Non-Public members, _items with its unused slots (Capacity 8, so three nulls), _size and _version. Three clicks to the first element, and the empty slots look like elements.',
+        () => ed({ file: 'ctrl', cur: 47, first: 36, last: 60, tips: [{ line: 46, col: 19, head: fcHead(), levels: [
+          { rows: [P('Capacity', '8', 'prop', { leaf: true }), P('Count', '5', 'prop', { leaf: true }), P('Non-Public members', '', 'lock'), P('Static members', '', 'cls')] },
+          { at: 2, rows: [P('_items', '{BlazorApp.Shared.WeatherForecast[8]}', 'field', { view: true }), P('_size', '5', 'field', { leaf: true }), P('_version', '5', 'field', { leaf: true })] },
+          { at: 0, rows: [0, 1, 2, 3, 4].map((i) => P(`[${i}]`, FORECAST, 'field')).concat([5, 6, 7].map((i) => P(`[${i}]`, 'null', 'field', { leaf: true, muted: true }))) }] }] })],
+      dictionary: ['(B2) A dictionary with netcoredbg alone', 'app.Properties · Dictionary<string, object> · its own members',
+        'Without the Dictionary view (A8) there are no entry rows, only the dictionary\'s own members; the entries are in _entries, under Non-Public members, with the free slots. View offers only the sample plugin\'s Dictionary Visualizer, which reads _entries itself: Grid\'s ToArray() can\'t bind here.',
+        () => ed({ tips: [{ line: 45, col: 12, head: appHead(), levels: [{ rows: APP({ Properties: { viewFirst: 'Dictionary Visualizer' } }) }, { at: 1, rows: PROPERTIES_RAW, vmax: 210 }] }] })],
+      remote: ['(B3) A remote session: icons guessed', 'SSH, containers, WSL · no metadata',
+        'The companion can\'t read a remote program\'s modules: no visibility (so no grouping), no [DebuggerDisplay] (values are {Type}), and icons from the names: _components and the other _ names are fields, the rest properties. The collection views still apply (they need only netcoredbg and the type name), so the lists and the dictionary keep their View buttons.',
+        () => ed({ tips: [{ line: 45, col: 12, head: appHead({ value: '{Microsoft.AspNetCore.Builder.ApplicationBuilder}' }), levels: [{ rows: APP_REMOTE, vmax: 220 }] }] })],
+
+      proxy: ['(P1) The type proxy: screenshot 2\'s rows', 'ApplicationBuilderDebugView · needs netcoredbg changed',
+        'With a proxy, the tip shows the proxy\'s members (Middleware, the names in _descriptions) and Raw View holds the object\'s own. netcoredbg 3.2 can\'t construct ApplicationBuilderDebugView, so this waits for decision 1\'s option (a).',
+        () => ed({ tips: [{ line: 45, col: 12, head: appHead(), levels: [{ rows: APP_PROXY({ Middleware: { hover: true, pin: true, ptr: 'nm' } }) }] }] })],
+      'proxy-raw': ['(P2) Raw View under a proxied object', 'Raw View → what section A shows at the first level',
+        'Raw View is A5\'s list, one level down. In section A the same node holds a collection view\'s raw members (A4, A8).',
+        () => ed({ tips: [{ line: 45, col: 12, head: appHead(), levels: [{ rows: APP_PROXY(), vmax: 150 }, { at: 4, rows: APP(), vmax: 150 }] }] })]
+    };
+
+    // Locals and Watch.
+    const vrow = (lvl, name, value, type, o = {}) => {
+      const [icon, c] = o.i ? IC[o.i] : ['', ''];
+      return { ind: lvl * 16, exp: o.leaf || o.ph ? '' : (o.open ? 'chevron-down' : 'chevron-right'), icon, c, name, value, type,
+        view: !!o.view, err: !!o.err, valCls: o.err ? 'err' : '', nameCls: o.ph ? 'ph' : '', cls: o.sel ? 'sel' : o.hover ? 'hover' : '',
+        acc: `${name}${value ? ', ' + value : ''}${type ? ', ' + type : ''}` };
+    };
+    const tw = (title, rows, o = {}) => ({ ed: false, w: 610, h: 24 + 24 + rows.length * 22 + 26, lines: [], anchors: [], labels: [], qis: [], ptrs: [],
+      tws: [{ title, rows, capCls: o.active ? 'active' : '', style: o.cols || '--c1:200px;--c2:250px' }] });
+    S.locals = ['(C1) Locals: the same rows, in columns', 'VariablesView · Name | Value | Type · a flattened row list',
+      'The tool windows take the tip\'s rows (icons, the groups, the collection views, the View button, editing in place) in aligned columns: one flattened list of rows with each level\'s indent drawn inside the name cell, as the Properties window\'s grid (D41), so the Value column doesn\'t shift. The type is netcoredbg\'s runtime type. Expansion is kept by evaluateName across steps; today Locals and Autos rebuild every root.',
+      () => tw('Locals', [
+        vrow(0, 'app', 'Middleware = 1', 'Microsoft.AspNetCore.Builder.ApplicationBuilder', { i: 'param', open: true }),
+        vrow(1, 'ApplicationServices', 'ServiceDescriptors = 336', 'Microsoft.Extensions.DependencyInjection.ServiceProvider', { i: 'prop' }),
+        vrow(1, 'Properties', 'Count = 3', 'System.Collections.Generic.Dictionary<string, object>', { i: 'prop', view: true, hover: true }),
+        vrow(1, 'ServerFeatures', 'Count = 1', 'Microsoft.AspNetCore.Http.Features.FeatureCollection', { i: 'prop' }),
+        vrow(1, 'Non-Public members', '', '', { i: 'lock' }),
+        vrow(1, 'Static members', '', '', { i: 'cls' }),
+        vrow(0, 'env', '{Microsoft.AspNetCore.Hosting.HostingEnvironment}', 'Microsoft.AspNetCore.Hosting.HostingEnvironment', { i: 'param', sel: true }),
+        vrow(0, 'this', '{BlazorApp.Server.Startup}', 'BlazorApp.Server.Startup', { i: 'local' })], { active: true })];
+    S.watch = ['(C2) Watch: an expression that fails', 'WatchView · evaluate(context: watch)',
+      'A watch the engine can\'t evaluate shows the error icon in place of its kind and the engine\'s message as its value, in the error color. A row\'s icon is its last member\'s kind; the empty last row takes a new expression.',
+      () => tw('Watch 1', [
+        vrow(0, 'app.Properties', 'Count = 3', 'System.Collections.Generic.Dictionary<string, object>', { i: 'prop', view: true }),
+        vrow(0, 'env.EnvironmentName', '"Development"', 'string', { i: 'prop', view: true, leaf: true, sel: true }),
+        vrow(0, 'endpoints', 'error: The name \'endpoints\' does not exist in the current context', '', { i: 'error', err: true, leaf: true }),
+        vrow(0, 'Add item to watch', '', '', { ph: true })], { cols: '--c1:170px;--c2:330px' })];
+
+    // The legend: one row of each kind.
+    const LEGEND = [
+      [P('ApplicationServices', 'ServiceDescriptors = 336', 'prop'), 'A property: [DebuggerDisplay] applied', 'kind: property'],
+      [P('logger', '{Microsoft.Extensions.Logging.Logger<…>}', 'field', { badge: true }), 'A non-public member of your own code: inline, lock badge', 'private, your code'],
+      [P('_descriptions', 'Count = 1', 'field', { view: true }), 'A list: the List view\'s rows; View opens Grid', 'kind: data'],
+      [P('[0]', '"Microsoft.AspNetCore.HostFiltering.HostFilteringMiddleware"', 'field', { view: true, leaf: true }), 'An element, a string: View opens Text and the rest', 'kind: data'],
+      [P('["server.Features"]', 'Count = 1', 'field'), 'A dictionary entry, named by its key', 'kind: data'],
+      [P('ServerFeaturesKey', '"server.Features"', 'konst', { view: true, leaf: true }), 'A constant', 'kind: data, attributes: constant'],
+      [P('PropertyChanged', 'null', 'event', { leaf: true }), 'An event\'s delegate', 'kind: event'],
+      [P('MiddlewareCount', '2', 'prop', { leaf: true, changed: true }), 'A value changed since the last stop', 'Shell.Error.Foreground'],
+      [P('Session', 'threw InvalidOperationException: Session has not been configured for this application or request.', 'prop', { err: true }),
+        'A getter that threw; it expands to the exception', 'an exception netcoredbg returned'],
+      [P('Slow', 'Couldn\'t evaluate', 'prop', { err: true, refresh: true, leaf: true }), 'netcoredbg\'s <error> (over 5 s, or not callable)', 'Re-evaluate'],
+      [P('Non-Public members', '', 'lock'), 'A library type\'s private, protected and internal members', 'kind: virtual'],
+      [P('Static members', '', 'cls'), 'netcoredbg\'s own node, renamed and localized', 'kind: virtual'],
+      [P('Results View', 'Expanding it enumerates the collection', 'results', { muted: true }), 'IEnumerable, if decision 13 adopts it', 'kind: virtual'],
+      [P('Raw View', '', 'raw'), 'A collection view\'s (or a proxy\'s) object, as netcoredbg lists it', 'kind: virtual']
+    ];
+    S.rows = ['(R) Every kind of row', 'DAP presentationHint (kind, attributes, visibility), new in Dap.cs, or the companion\'s member list',
+      'One tip with a row of each kind, from several objects, and what each row is. Rows are 20 px; the name column is the tip\'s widest name; the separator is Shell.Border; the View slot is kept when any row of the tip has a View button, so values line up.',
+      () => {
+        const sp = { style: 'left:16px;top:12px', hx: 0, levels: [{ rows: LEGEND.map(([r]) => r) }] };
+        const a = tip(40, { ...sp, line: 40 });
+        a.style = 'left:16px;top:12px';
+        const labels = LEGEND.map(([, txt, k], i) => ({ t: txt, k, style: `left:720px;top:${12 - 1 + 1 + PADY + i * ROW}px` }));
+        return { ed: true, tabs: null, docLabel: 'Row kinds', edcCls: 'plain', w: 1240, h: 2 + 12 + 2 + 2 * PADY + LEGEND.length * ROW + 24,
+          lines: [], anchors: [a], ghost: null, qis: [], labels, tws: [], ptrs: [] };
+      }];
+
+    const SECTIONS = [
+      { title: 'A. What 0.6 ships, on netcoredbg 3.2 as it is', lead: 'The header, the cascade, the View drop-down, editing, pinning and the edges, on the data netcoredbg gives today: each object\'s own members, grouped by the companion\'s new member list (a library type\'s non-public members under Non-Public members, the user\'s own inline with a lock badge, Static members last), and for List, Dictionary, HashSet, Queue and Stack the shell\'s own element rows, read from their fields, with Raw View holding netcoredbg\'s members. No [DebuggerTypeProxy]: see section P.',
+        rows: [['collapsed', 'leaf'], ['diagnostics', 'list-view'], ['expanded', 'keyboard'], ['user-type'], ['dictionary-view', 'collection-view'], ['long-list'], ['edit'], ['edit-refused'], ['loading', 'read-only'], ['pinned', 'out-of-scope'], ['pinned-more', 'bottom-edge'], ['ctrl']] },
+      { title: 'B. netcoredbg alone, for comparison', lead: 'The same objects without the shell\'s collection views: every List<T> as Capacity, Count and _items with its empty slots, a dictionary as its own members. This is also what any other collection type shows. Then a remote session, where the companion can\'t read the program\'s metadata.',
+        rows: [['list-raw', 'dictionary'], ['remote']] },
+      { title: 'P. Only with netcoredbg changed: type proxies', lead: 'Screenshot 2\'s Middleware row and a proxied object\'s Raw View need [DebuggerTypeProxy], and netcoredbg 3.2 can\'t construct a proxy. It has no new or typeof (both E_NOTIMPL, evalstackmachine.cpp:1270, 1875), and it matches a method\'s arguments by exact runtime type (ArgElementType::areEqual, evaluator.cpp:52-61, used at evalstackmachine.cpp:1198). So Activator.CreateInstance(Type.GetType(…), new object[] { x }) can\'t bind: Type.GetType returns a RuntimeType where Type is expected, Enumerable.Repeat<object>(app, 1) passes an ApplicationBuilder where object is expected, and the array is an ApplicationBuilder[], not an object[]. MakeGenericType(Type[]) fails the same way, so List<T>\'s and Dictionary\'s generic proxies are out too. These states wait for decision 1\'s option (a).',
+        rows: [['proxy', 'proxy-raw']] },
+      { title: 'C. Locals and Watch, the same rows', lead: 'The four variable windows (Locals, Autos, Watch, QuickWatch) share VariableNode with the tip; they take the same icons, groups, collection views, View button and editing, in columns.',
+        rows: [['locals', 'watch']] },
+      { title: 'R. Rows and icons', lead: 'Each kind of row once, with where its icon comes from.', rows: [['rows']] }
+    ];
+    const STATES = Object.keys(S);
+    const state = STATES.includes(this.props.state) ? this.props.state : 'all';
+    const sheet = state === 'all';
+    const panel = (key) => { const [title, src, cap, make] = S[key]; return { ...make(), title, src, cap }; };
+    let sections, mainCls = 'sheet';
+    if (sheet) {
+      sections = SECTIONS.map((sec) => ({ ...sec, rows: sec.rows.map((keys) => ({ items: keys.map(panel) })) }));
+    } else {
+      mainCls = 'frame';
+      sections = [{ rows: [{ items: [panel(state)] }] }];
+    }
+
+    // ---------------------------------------------------------------- the cards
+    const iconRows = [
+      ['sym-parameter', 'c-blue', 'symbol-parameter', 'Blue', 'The header over a parameter (app, env, services)', 'The editor\'s semantic token at the hovered name (SemanticColorizer.TokenAt)', 'existing'],
+      ['sym-local', 'c-blue', 'symbol-local', 'Blue', 'The header over a local; this', 'The same token', 'existing'],
+      ['sym-property', 'c-blue', 'symbol-property', 'Blue', 'A property (the classic IDE draws its wrench gray, decision 4)', 'presentationHint kind "property": the companion for netcoredbg, the engine itself for .NET Framework and Mono', 'existing'],
+      ['sym-field', 'c-blue', 'symbol-field', 'Blue', 'A field; an element [i]; a dictionary entry', 'kind "data"; the collection views\' rows', 'existing'],
+      ['sym-constant', 'c-blue', 'symbol-constant', 'Blue', 'A constant', 'kind "data" with the attribute "constant"', 'existing'],
+      ['sym-event', 'c-yellow', 'symbol-event', 'Yellow', 'An event\'s delegate', 'kind "event"', 'existing'],
+      ['sym-class', 'c-orange', 'symbol-class', 'Orange', 'Static members', 'netcoredbg\'s fake child "Static members" (no type, no value)', 'existing'],
+      ['lock', 'c-yellow', 'lock', 'Yellow', 'Non-Public members (a library type\'s)', 'Each member\'s access and declaring module, from the member list', 'existing'],
+      ['lock', 'c-yellow', 'lock, as a 9 px badge', 'Yellow', 'A non-public member of the user\'s code, over its kind\'s icon (decision 3)', 'The same, when the declaring module is one of the solution\'s projects\' outputs', 'existing kind; new: an overlay on the Icon control (the lock at the icon\'s bottom right, on the row\'s background)'],
+      ['dt-raw-view', 'c-blue', 'symbol-raw-view', 'Blue', 'Raw View', 'Added by the shell under a collection view (and under a proxied object, section P)', 'new: s_kindColors["symbol-raw-view"] = Blue, drawn by eng/icons/symbol-icons.py'],
+      ['dt-results-view', 'c-blue', 'symbol-results-view', 'Blue', 'Results View (decision 13)', 'Added by the shell under an IEnumerable', 'new, only if adopted: s_kindColors["symbol-results-view"] = Blue'],
+      ['dt-visualizer', 'c-blue', 'visualizer', 'Blue', 'The View button, in rows and in the header', 'Visualizers.ForType, Suggested, the collection views and DebugVisualizerRegistry', 'new: s_kindColors["visualizer"] = Blue; Fluent\'s table search glyph if it has a 16 px regular, else a stroke drawing in Icon.cs'],
+      ['warning', 'c-warn', 'warning', 'Warning', 'A diagnostic in the strip above the header', 'The hover\'s diagnostics, as Quick Info draws them', 'existing'],
+      ['error', 'c-error', 'error', 'Red', 'A value that failed; a watch that failed', 'An exception for a value, <error>, or the engine\'s error message', 'existing'],
+      ['refresh', 'c-green', 'refresh', 'Green', 'Re-evaluate a value that failed', '—', 'existing'],
+      ['pin', 'c-blue', 'pin', 'Blue', 'Pin a row; a pinned tip\'s strip; Pin to Source', '—', 'existing'],
+      ['copy', 'c-blue', 'copy, edit, watch, window, comment', 'Blue', 'The context menus\' items (A6, A16)', 'Today\'s menus (VariableTreeSupport, PinnedDataTipLayer)', 'existing; clear-all stays Red']
+    ].map(([i, c, kind, color, on, from, st]) => ({ i, c, kind, color, on, from, st, stCls: st.startsWith('new') ? 'new' : '' }));
+    const sizes = 'Sizes: rows 20 px, the header 22 px; a child tip 24 px right of its parent, its top on the expanded row\'s bottom edge; each tip Shell.Overlay with a 1 px Shell.Overlay.Border (2 px in high contrast), Shell.Control.CornerRadius (2 Classic, 3 Harbor, as the IntelliSense pop-ups) and 2 px above and below its rows; the name column as wide as the tip\'s widest name, plus 8; a 1 px Shell.Border separator the tip\'s height; the value column at most 400 px; the pin 22 px at the row\'s end; up to 15 rows, then scrolling; the diagnostics strip at most 470 px wide, 2 px from the header. The row whose child tip is open keeps Shell.Selection.Inactive, plus a 1 px text-colored outline in high contrast. The type is in the name\'s tooltip and the accessible name.';
+    const Y = (t) => ({ t, cls: 'y' }), N = (t) => ({ t, cls: 'n' }), M = (t) => ({ t, cls: 'm' });
+    const engineHead = ['', 'netcoredbg (.NET and .NET Core, every OS)', '.NET Framework engine (Windows)', 'Mono engine', 'Remote (SSH, containers, WSL)', 'js-debug (browser, WebAssembly)'];
+    const engineRows = [
+      { what: 'Member icons', cells: [M('New: the companion\'s typeDisplay result lists each member (field or property, access, static, declaring type and module, CanWrite), base types included'), M('New: the engine sends presentationHint. ClrFieldInfo and ClrPropertyInfo have kind and static-ness; access has to be read from the metadata flags (small)'), M('New: presentationHint (what its metadata gives to check)'), N('Guessed from the name'), M('Sent today as presentationHint; Dap.cs\'s Variable record drops it: one field to add')] },
+      { what: 'Grouping: user code inline, libraries under Non-Public', cells: [M('With that member list; user code: the declaring module is one of the solution\'s outputs (netcoredbg sends no isUserCode)'), M('With presentationHint and the IsUserCode it already sends for modules'), M('With presentationHint'), N('No: everything inline'), N('— (JavaScript has no access levels)')] },
+      { what: 'Static members', cells: [Y('netcoredbg\'s own node, relabelled'), M('New in the engine'), M('New in the engine'), Y('netcoredbg\'s node'), N('—')] },
+      { what: '[DebuggerDisplay]', cells: [Y('The companion, today'), Y('The companion, today'), Y('The companion, today'), N('No: {Type}'), N('—')] },
+      { what: 'Collection views (List, Dictionary, HashSet, Queue, Stack)', cells: [M('New: field reads (_items/_size, _entries/_count, _array/_head/_size…) and indexers through its evaluator, as the sample Dictionary Visualizer does today; fields probed, raw members when one is missing'), M('New: .NET Framework\'s names (entries/count, m_slots/m_lastIndex…) through its members and indexers'), M('New: Mono\'s names, to check per version'), M('As netcoredbg: needs only the type name and the fields, no metadata'), N('— (js-debug previews arrays, Maps and Sets itself)')] },
+      { what: '[DebuggerTypeProxy], a proxied object\'s Raw View', cells: [N('No: no new or typeof, exact-type overload matching (evaluator.cpp:52-61), so Activator.CreateInstance and MakeGenericType don\'t bind; needs netcoredbg changed (decision 1)'), N('No: no new, typeof or generic methods (ADR 0076); later through ICorDebugEval NewParameterizedObject'), N('No'), N('No: the proxy\'s name comes from the metadata'), N('—')] },
+      { what: 'Editing values', cells: [Y('Locals, fields, properties with a setter'), M('Primitive values only'), N('No: "Changing values isn\'t supported for Mono programs yet"'), Y('As netcoredbg'), Y('setVariable')] },
+      { what: 'View: strings', cells: [Y('Text, JSON, XML, HTML'), Y('The same'), Y('The same'), Y('The same'), M('The same, through Visualizers.Suggested')] },
+      { what: 'View: Grid', cells: [M('Today: arrays and types with an instance ToArray() (CollectionVisualizers\' list). New: Dictionary and HashSet from the collection views. Any other IEnumerable: no (Enumerable.ToArray doesn\'t bind: LookupExtensionMethods sees only declared interfaces and passes the receiver\'s type arguments; ADR 0032)'), M('Arrays and instance ToArray() (calls pass a generic class\'s type arguments); the collection views as above'), M('To check'), M('As netcoredbg'), N('No (no .NET collections)')] }
+    ];
+    const decisions = [
+      { n: 1, b: 'Collections in 0.6: the shell\'s own views of List, Dictionary, HashSet, Queue and Stack, every other type as its own members (A4, A8; B1 is the alternative);', t: 'read from their fields through netcoredbg (_items up to _size; _entries up to _count, skipping free slots; …), with Raw View holding netcoredbg\'s members. Field names differ between .NET versions, .NET Framework and Mono, so each view probes its fields and falls back to the raw members, with a field table per runtime and tests on recorded netcoredbg output (net6 to net11, Framework 4.8, Mono). Type proxies in general (section P) wait: TODO(issue), proposed upstream to Samsung/netcoredbg first.', rej: '(a) for 0.6, patching netcoredbg (MIT): either let areEqual accept assignable argument types, or add a request that builds the proxy with ICorDebugEval2::NewParameterizedObject; then build and ship it for Windows x64, Linux x64 and arm64, macOS arm64 and x64 and the remote bundles, a native build in the pipeline and a fork to keep; (c) no collection views, so lists look like B1.' },
+      { n: 2, b: 'A child tip opens when the pointer rests on the chevron (about 400 ms) or on a click,', t: 'as in the classic IDE, and with Right from the keyboard; moving into it keeps the chain open, moving to another row of the same tip closes that row\'s child.', rej: 'click only.' },
+      { n: 3, b: 'Non-public members declared by the solution\'s own code are inline, with a lock badge; a library type\'s are under Non-Public members (A7, A5);', t: 'in name order, as the classic IDE does for user code. User code: the member\'s declaring module is one of the solution\'s projects\' outputs (netcoredbg sends no isUserCode; the .NET Framework engine does). One badge for private, protected and internal alike.', rej: 'always grouped (the user\'s own private fields behind a click); the classic IDE\'s four access overlays; everything inline, as today.' },
+      { n: 4, b: 'Properties keep the shell\'s blue wrench (symbol-property),', t: 'the completion list\'s, so a member looks the same in IntelliSense and in the tip.', rej: 'the classic IDE\'s gray wrench (Shell.Icon.Outline), which breaks "every icon is colored".' },
+      { n: 5, b: 'Grid is offered where netcoredbg can read the elements today:', t: 'arrays, the types with an instance ToArray() (today\'s list), and Dictionary and HashSet, read from the collection views (A9). Other IEnumerables (FeatureCollection, KeyCollection, user collections) get no View button.', rej: 'any IEnumerable through Enumerable.ToArray, which needs netcoredbg\'s extension-method lookup fixed (option (a)); reading FeatureCollection\'s internals, which change between ASP.NET Core versions.' },
+      { n: 6, b: 'Values are edited in place, in the header and in every row (A11):', t: 'Enter sets, Esc cancels, an engine error keeps the box open with its message (A12); values the engine can\'t change open no box and the tooltip says why (A14). VariableEditing.SetAsync stays.', rej: 'today\'s "Set {name}" dialog.' },
+      { n: 7, b: 'Every row can be pinned,', t: 'pinning its evaluateName (app.Properties); group nodes and rows without an evaluateName (netcoredbg\'s "name (Owner)" duplicates) have no pin. Pinned tips take the header\'s look, expand into the same cascade (A15), keep today\'s menu and double-click (A16).', rej: 'pinning only the hovered expression; flat pinned tips that can\'t expand.' },
+      { n: 8, b: 'No type column in the tip:', t: 'the type is in the name\'s tooltip (A1) and the accessible name; the tool windows keep their Type column (C1).', rej: 'today\'s type text after each value.' },
+      { n: 9, b: 'Locals, Autos, Watch and QuickWatch change in the same task (C1, C2),', t: 'as one flattened row list with the indent inside the name cell, Name | Value | Type aligned, and expansion kept by evaluateName across steps.', rej: 'a follow-up task, leaving the tip and the windows different for a release; TreeDataGrid (a license and Native AOT check for one control).' },
+      { n: 10, b: 'The header sits over the expression, its name on the code\'s (A1), and passes the code\'s gestures on:', t: 'a double-click on the name selects the word, Ctrl+click goes to the definition, the wheel scrolls the editor and closes the tips (as today), each forwarded to the text view at the same point. KeepsQuickInfo is rewritten for tips under the pointer: the tips stay while the pointer is on any of them or on its way from the word to one. Tips flip up near the bottom edge (A18) and move left near the right one.', rej: 'today\'s placement 4 px under the pointer; a header that swallows clicks on the word.' },
+      { n: 11, b: 'Rows are 20 px, denser than Shell.Size.Row (22), as the classic tip\'s;', t: 'a value stops at 400 px and trims, with the whole value in its tooltip (A10); a tip shows up to 15 rows, then scrolls with the wheel and the strips at its ends.', rej: '22 px rows; the whole tip capped at today\'s 640 px.' },
+      { n: 12, b: 'Changed values are red in tips, pinned tips and the windows,', t: 'comparing each row with its value at the last stop, by evaluateName (A15, R). Pinned tips do it today.', rej: 'pinned tips only.' },
+      { n: 13, b: 'Results View waits (TODO(issue)):', t: 'enumerating needs Enumerable.ToArray, which netcoredbg can\'t bind (decision 5), has side effects and needs the warning node; the collection views and Grid cover the common types.', rej: 'adding it in this task.' },
+      { n: 14, b: 'Ctrl fades the open tips and makes them click-through while held (A19),', t: 'so the Ctrl+hover link shows on the covered word and Ctrl+click goes to its definition, as anywhere else in the editor.', rej: 'no see-through mode; fading without click-through, which would block Ctrl+click on the covered code.' },
+      { n: 15, b: 'Remote sessions guess icons from the names and don\'t group (B3);', t: 'the collection views work there too. Reading a remote program\'s metadata (for icons, grouping and [DebuggerDisplay]) is a later step of the remote server.', rej: 'no icons at all in remote sessions.' },
+      { n: 16, b: 'A thrown exception reads "threw ExceptionType: message" in the error color (R)', t: 'when the value\'s type is an exception and the member\'s declared type isn\'t (the member list has it); netcoredbg\'s bare <error> reads "Couldn\'t evaluate" with Re-evaluate.', rej: 'showing the exception object as an ordinary value, and <error> as text.' },
+      { n: 17, b: 'Diagnostics at the hovered name go in a strip right above the header (A3),', t: 'with the code\'s help link, the message, Fix and Other Fixes, as Quick Info shows them; under the header when the tips flip up (A18).', rej: 'as the first block of the first child tip (unseen until something is expanded, and absent for a string or a number); no diagnostics while debugging.' }
+    ];
+    const landing = 'render.cjs checks this sheet and five of its states in all seven themes, with previews of the sheet in Classic Light and Dark, Harbor Light and Dark and Classic High Contrast; docs/design/controls.md lists these decisions under "The data tip (0.6)", and the answers go into the roadmap\'s decision register.';
+
+    return { t, vars, themeQ, themes, stateLinks: STATES.map((q) => ({ q })), sheet, mainCls, sections, iconRows, sizes, engineHead, engineRows, decisions, landing };
+  }
+}
+</script>
+</body>
+</html>
