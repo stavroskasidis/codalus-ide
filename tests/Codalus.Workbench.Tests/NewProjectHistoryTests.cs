@@ -65,13 +65,16 @@ public sealed class NewProjectHistoryTests : IDisposable
         history.AddRecentLocation(Path.Combine(_root, "loc3") + Path.DirectorySeparatorChar);
         Assert.Equal(Path.Combine(_root, "loc3"), history.RecentLocations[0]);
         Assert.Single(history.RecentLocations, l => l.EndsWith("loc3", StringComparison.Ordinal));
+        Assert.Equal(Path.Combine(_root, "loc3"), history.DefaultLocation("/configured"));
+
+        // Where paths ignore case (Windows, macOS), another casing is the same location: it moves first, once.
         if (SolutionService.PathComparer == StringComparer.OrdinalIgnoreCase)
         {
             history.AddRecentLocation(Path.Combine(_root, "LOC4"));
             Assert.Single(history.RecentLocations, l => l.EndsWith("loc4", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(Path.Combine(_root, "LOC4"), history.DefaultLocation("/configured"));
         }
 
-        Assert.Equal(Path.Combine(_root, "loc3"), history.DefaultLocation("/configured"));
         var empty = new NewProjectHistory(Path.Combine(_root, "other.json"));
         Assert.Equal("/configured", empty.DefaultLocation("/configured"));
         Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos"), empty.DefaultLocation(null));
