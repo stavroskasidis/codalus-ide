@@ -258,7 +258,7 @@ public sealed class DebugService : IAsyncDisposable
     /// distribution runs under netcoredbg there. Throws when the first program can't start; a later one that can't
     /// is reported in the Debug Console and the others go on.
     /// </summary>
-    /// <param name="compound">A compound session even for one program, so programs can join it later (<see cref="AddLaunchAsync"/>, M17b).</param>
+    /// <param name="compound">A compound session even for one program, so programs can join it later (<see cref="AddLaunch"/>, M17b).</param>
     public async Task LaunchAsync(IReadOnlyList<DebugLaunch> launches, CancellationToken cancellationToken, bool compound = false)
     {
         if (launches.Count == 0)
@@ -321,11 +321,15 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Adds a program to the running multi-program session (an Aspire AppHost's projects, M17b, ADR 0043) and returns
-    /// its index in <see cref="Processes"/>, where its process id and exit appear. Throws when no such session runs or
-    /// the program can't start.
+    /// Adds a program to the running multi-program session (an Aspire AppHost's projects, M17b, ADR 0043). Returns at
+    /// once with its index in <see cref="Processes"/>, where its process id and exit appear, and <c>Joined</c>, which
+    /// completes once the program joined (true) or couldn't start (false: it is marked ended, and the Debug Console says
+    /// why). The start isn't waited for: netcoredbg's, made again when it times out, can take minutes on a loaded
+    /// machine, and the AppHost's orchestrator gives the IDE 120 seconds to answer its request for the program
+    /// (<c>DCP_IDE_REQUEST_TIMEOUT_SECONDS</c>); past them it gave up on the project, which never ran in its eyes
+    /// (the Aspire F5 test on Windows CI). Throws when no such session runs or it is full.
     /// </summary>
-    public async Task<int> AddLaunchAsync(DebugLaunch launch, CancellationToken cancellationToken)
+    public (int Index, Task<bool> Joined) AddLaunch(DebugLaunch launch, CancellationToken cancellationToken)
     {
         if (_adapter is not CompoundDebugAdapter { Independent: true } session)
         {
@@ -345,18 +349,25 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         ProcessesChanged?.Invoke(this, EventArgs.Empty);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        var token = _session.Token;
+        return (part.Index, Task.Run(() => JoinAddedAsync(session, part, token, cancellationToken), CancellationToken.None));
+    }
+
+    /// <summary>An added program's start (<see cref="AddLaunch"/>): false, with the program ended, when it fails.</summary>
+    private async Task<bool> JoinAddedAsync(CompoundDebugAdapter session, LaunchPart part, CancellationToken sessionToken, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, sessionToken);
         try
         {
             await JoinAsync(session, part, linked.Token).ConfigureAwait(false);
+            return true;
         }
-        catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or OperationCanceledException)
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException or OperationCanceledException)
         {
             UpdateProcess(part.Index, p => p with { Ended = true });
-            throw new InvalidOperationException($"{part.Name} could not start: {ex.Message}", ex);
+            Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] Could not start: {ex.Message}\n"));
+            return false;
         }
-
-        return part.Index;
     }
 
     /// <summary>
