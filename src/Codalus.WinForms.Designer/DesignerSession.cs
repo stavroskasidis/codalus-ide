@@ -2,6 +2,7 @@ using System.Collections;
 using System.ComponentModel;
 using System.ComponentModel.Design;
 using System.ComponentModel.Design.Serialization;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.Reflection;
@@ -371,9 +372,10 @@ internal sealed partial class DesignerSession : IDisposable
         {
             using var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
             root.DrawToBitmap(bitmap, new Rectangle(0, 0, width, height));
+            var restacked = Restack(bitmap, root);
             using var png = new MemoryStream();
             bitmap.Save(png, ImageFormat.Png);
-            frame = new DesignerFrame(Convert.ToBase64String(png.ToArray()), width, height);
+            frame = new DesignerFrame(Convert.ToBase64String(png.ToArray()), width, height, restacked);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.Runtime.InteropServices.ExternalException)
         {
@@ -384,6 +386,104 @@ internal sealed partial class DesignerSession : IDisposable
     }
 
     private static Point WindowOrigin(Control control) => control.Parent is { } parent ? parent.PointToScreen(control.Location) : control.Location;
+
+    /// <summary>
+    /// Draws overlapping controls again, back to front, over the first pass (#78), and says how many it drew.
+    /// Control.DrawToBitmap draws a container's controls in reverse order (its documented limitation: "Controls inside
+    /// containers are rendered in reverse order"), so of two overlapping siblings the front one came out behind: the
+    /// 2026-10-18 smoke picture showed a button dropped on the counter control under the counter's own "+1", and Send
+    /// to Back seemed to bring a control to the front. Only siblings that overlap are drawn again, each by its own
+    /// DrawToBitmap copied pixel for pixel, at every depth (a group box's, a panel's, a tab page's, a split container
+    /// panel's controls), placed as <see cref="Views"/> places them. A form without overlaps draws nothing more (0), so
+    /// its frame is the first pass's.
+    /// </summary>
+    private static int Restack(Bitmap bitmap, Control root)
+    {
+        var origin = WindowOrigin(root);
+        var client = root.PointToScreen(Point.Empty);
+        Graphics? graphics = null;
+        try
+        {
+            return Restack(bitmap, root, origin, new Rectangle(client.X - origin.X, client.Y - origin.Y, root.ClientSize.Width, root.ClientSize.Height), ref graphics);
+        }
+        finally
+        {
+            graphics?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Restack(Bitmap, Control)"/> in <paramref name="parent"/>: its visible controls from the back (the last
+    /// in Controls) to the front, each one that overlaps a sibling drawn again inside the parent's client area (and
+    /// <paramref name="clip"/>, its ancestors'), and each one with controls of its own looked into right after it is
+    /// (drawn again or not), before the siblings in front of it. Which are drawn again, and in what order, is
+    /// <see cref="Restacking.BackToFront"/>.
+    /// </summary>
+    private static int Restack(Bitmap bitmap, Control parent, Point origin, Rectangle clip, ref Graphics? graphics)
+    {
+        var children = new List<Control>();
+        var bounds = new List<Rectangle>();
+        foreach (Control child in parent.Controls)
+        {
+            if (child.Visible && child.Width > 0 && child.Height > 0)
+            {
+                var at = WindowOrigin(child);
+                children.Add(child);
+                bounds.Add(new Rectangle(at.X - origin.X, at.Y - origin.Y, child.Width, child.Height));
+            }
+        }
+
+        var client = parent.PointToScreen(Point.Empty);
+        var area = Rectangle.Intersect(clip, new Rectangle(client.X - origin.X, client.Y - origin.Y, parent.ClientSize.Width, parent.ClientSize.Height));
+        if (children.Count == 0 || area.IsEmpty)
+        {
+            return 0;
+        }
+
+        var restacked = 0;
+        foreach (var (index, redraw) in Restacking.BackToFront(bounds, area))
+        {
+            var child = children[index];
+            if (redraw && Redraw(bitmap, child, bounds[index], area, ref graphics))
+            {
+                restacked++;
+            }
+
+            if (child.Controls.Count > 0)
+            {
+                restacked += Restack(bitmap, child, origin, area, ref graphics);
+            }
+        }
+
+        return restacked;
+    }
+
+    /// <summary>
+    /// Draws <paramref name="child"/> again at <paramref name="bounds"/>, inside <paramref name="area"/>, as the first pass
+    /// drew it (the child's own WM_PRINT), copied without scaling or blending: a transparent control shows its parent, not
+    /// the siblings behind it, as at run time. A child that can't be drawn alone (GDI+ refuses a bitmap that large, or
+    /// runs out of memory for it) keeps the first pass's pixels, out of order, and the frame stays; false then.
+    /// </summary>
+    private static bool Redraw(Bitmap bitmap, Control child, Rectangle bounds, Rectangle area, ref Graphics? graphics)
+    {
+        try
+        {
+            using var drawn = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+            child.DrawToBitmap(drawn, new Rectangle(0, 0, bounds.Width, bounds.Height));
+            graphics ??= Graphics.FromImage(bitmap);
+            graphics.CompositingMode = CompositingMode.SourceCopy;
+            graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+            graphics.PixelOffsetMode = PixelOffsetMode.Half;
+            graphics.SetClip(area);
+            graphics.DrawImage(drawn, bounds, 0, 0, bounds.Width, bounds.Height, GraphicsUnit.Pixel);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.Runtime.InteropServices.ExternalException or OutOfMemoryException)
+        {
+            Console.Error.WriteLine($"[designer] {child.Name} ({bounds.Width}x{bounds.Height}) couldn't be drawn again in its order: {ex.Message}");
+            return false;
+        }
+    }
 
     /// <summary>
     /// The root, its controls (front first, parents before children; a SplitContainer's panels as parts), the tool
