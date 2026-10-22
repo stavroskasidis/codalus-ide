@@ -26,7 +26,7 @@ Review a surface against each line, in Classic and every theme family (Harbor, G
     tree purple, Git's commands the Git family's orange, as in the menus. Where an icon's kind would give the wrong family in
     a toolbar, its `Icon` takes an `accent-*` class.
 - **Typography**
-  - UI text is 9 pt: `Shell.FontSize.Body` (12 px), the window's default; don't set it again.
+  - UI text is 9 pt: `Shell.FontSize.Body` (12 px), the window's default and every popup's (menus, flyouts, IntelliSense, data tips: the `PopupRoot, OverlayPopupHost` style, since a popup's content inherits from its own root, not the window); don't set it again.
   - Secondary text (details, counts, dates) is `Shell.FontSize.Small` (11 px), usually with `TextBlock.muted`.
   - Two heading sizes: `TextBlock.heading` (`Shell.FontSize.Title`, 18 px, page titles) and `TextBlock.subheading` (`Shell.FontSize.Heading`, 14 px, sections, detail panes and the in-window dialog's title, M34h).
   - Titles are sentence case except command and window names, which are title case as in the menus. Use the product's terms: solution, project, tool window, document.

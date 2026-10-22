@@ -1428,6 +1428,17 @@
   <Style Selector="PopupRoot">
     <Setter Property="TransparencyBackgroundFallback" Value="{DynamicResource Shell.Background}" />
   </Style>
+  <!--
+    A popup's UI text is the window's 9 pt (Shell.FontSize.Body), as the main window's (the Window style above). Its
+    content inherits from the popup's root, not from the window it opens over, and Fluent's themes for both roots (a
+    window of its own, PopupRoot; one drawn in the window's overlay layer, OverlayPopupHost) set Avalonia's 14 px
+    (ControlContentThemeFontSize): menus, drop-down lists, flyouts, IntelliSense, Quick Info and the data tips drew at
+    14 px in the windowed app (the smoke steps editor.intelliSense and debug.dataTip check it). A control that sets its
+    own size (the ToolTip style, TextBlock.small) still does.
+  -->
+  <Style Selector="PopupRoot, OverlayPopupHost">
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+  </Style>
 
   <!-- Floating surfaces: command palette and toasts. -->
   <Style Selector="Border.overlay">
@@ -1487,9 +1498,8 @@
   <!--
     The data tip (D44, docs/design/controls/DataTip.dc.html): the header over the hovered expression and a tip per
     expanded level, on the overlay color with the family's control corners; rows 20 px with a separator between names
-    and values, the row whose child tip is open marked (outlined too in high contrast). The UI text size is set here: in
-    a window of its own (the hover's header and every child tip), a popup's content inherits from its PopupRoot, at
-    Avalonia's 14 px, not from the main window's Shell.FontSize.Body.
+    and values, the row whose child tip is open marked (outlined too in high contrast). The text is the popups' UI size
+    (the PopupRoot, OverlayPopupHost style), the same as the pinned tips' in the editor.
   -->
   <Style Selector="Border.dataTip, Border.dataTipHeader">
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
@@ -1497,7 +1507,6 @@
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
     <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
-    <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
   </Style>
   <Style Selector="Border.dataTip">
     <Setter Property="Padding" Value="0,2" />

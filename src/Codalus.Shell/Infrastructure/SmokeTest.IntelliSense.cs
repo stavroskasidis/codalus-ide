@@ -1,6 +1,8 @@
+using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Codalus.Shell.Editor.IntelliSense;
 
 namespace Codalus.Shell.Infrastructure;
@@ -48,6 +50,9 @@ internal sealed partial class SmokeTest
             Check(completion.DescriptionContent is DescriptionView { SignatureBlock: { } description } && DescriptionView.TextOf(description).Contains("System.Console", StringComparison.Ordinal), "the description names the class");
             await Task.Delay(300).ConfigureAwait(true);
             await RenderedAsync().ConfigureAwait(true);
+            CheckPopupTextSize("signature help", signature, signature.SignatureBlock, signature.SummaryBlock);
+            CheckPopupTextSize("the completion list", completion, completion.CompletionList.ListBox.GetVisualDescendants().OfType<Controls.HighlightedText>().FirstOrDefault());
+            CheckPopupTextSize("the description", completion.DescriptionTip, (completion.DescriptionContent as DescriptionView)?.SignatureBlock);
             Screenshot("smoke-test-intellisense.png", new Popup?[] { signature, completion, completion.DescriptionTip }.OfType<Popup>());
 
             // Quick Info stays closed while they're open; Escape closes the list, then signature help.
@@ -64,6 +69,8 @@ internal sealed partial class SmokeTest
             await WaitAsync(() => program.IsQuickInfoOpen && program.LastQuickInfo is { Symbol: not null, DiagnosticLinks.Count: > 0, FixButton: not null }, "Quick Info shows the variable, its warning and Fix", 60).ConfigureAwait(true);
             Check(program.LastQuickInfo!.DiagnosticLinks[0].Content as string == "CS0219", "the warning's code is a link");
             await RenderedAsync().ConfigureAwait(true);
+            CheckPopupTextSize("Quick Info", program.HoverPopup, program.LastQuickInfo.Symbol?.SignatureBlock,
+                program.LastQuickInfo.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Classes.Contains("quickInfoDiagnostic")));
             Screenshot("smoke-test-quick-info.png", [program.HoverPopup]);
             program.HoverPopup.IsOpen = false;
         }
@@ -74,6 +81,21 @@ internal sealed partial class SmokeTest
             {
                 document.UndoStack.Undo();
             }
+        }
+    }
+
+    /// <summary>
+    /// A popup's text is the window's UI size (Shell.FontSize.Body). In the windowed app the popup is a window of its own,
+    /// whose content inherits from its root (Fluent's 14 px unless the shell's styles set it), not from the main window.
+    /// </summary>
+    private void CheckPopupTextSize(string what, Popup popup, params TextBlock?[] blocks)
+    {
+        Check(popup.IsOpen, $"{what} is open");
+        foreach (var block in blocks)
+        {
+            Check(block is not null, $"{what} has its text");
+            var root = TopLevel.GetTopLevel(block)?.GetType().Name ?? "no window";
+            Check(Math.Abs(block!.FontSize - window.FontSize) < 0.01, $"{what}'s text is {block.FontSize:0.#} px in its {root}, the window's {window.FontSize:0.#}");
         }
     }
 }

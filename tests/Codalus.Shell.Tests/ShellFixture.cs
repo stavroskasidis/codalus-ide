@@ -11,11 +11,14 @@ namespace Codalus.Shell.Tests;
 
 public static class TestAppBuilder
 {
+    /// <summary>The headless platform's options, which every headless window reads when it opens a popup.</summary>
+    private static readonly AvaloniaHeadlessPlatformOptions s_options = new() { UseHeadlessDrawing = false }; // real rendering, so frames can be captured
+
     public static AppBuilder BuildAvaloniaApp()
     {
         var builder = AppBuilder.Configure<App>()
             .UseSkia()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }); // real rendering, so frames can be captured
+            .UseHeadless(s_options);
 
         // Each test from an empty root locator (HeadlessIsolation). The name stays "Headless", or the session sets it up again.
         var headless = builder.WindowingSubsystemInitializer!;
@@ -24,6 +27,22 @@ public static class TestAppBuilder
             HeadlessIsolation.ClearRootLocator();
             headless();
         }, builder.WindowingSubsystemName!);
+    }
+
+    /// <summary>
+    /// Until disposed, popups that open (their <c>IsOpen</c> set, a menu's <c>Open</c>) are windows of their own
+    /// (<see cref="Avalonia.Controls.Primitives.PopupRoot"/>), as in the windowed app, instead of headless's default, the
+    /// window's overlay layer. Dispose it before the next await: other tests' popups share the setting.
+    /// </summary>
+    public static IDisposable PopupsInWindowsOfTheirOwn()
+    {
+        s_options.OverlayPopups = false;
+        return new Restore();
+    }
+
+    private sealed class Restore : IDisposable
+    {
+        public void Dispose() => s_options.OverlayPopups = true;
     }
 }
 
