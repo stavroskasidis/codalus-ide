@@ -676,10 +676,10 @@ public sealed class PluginManager : IAsyncDisposable
     /// </summary>
     private bool FailWithHost(PluginDescription plugin, JsonRpcConnectionLostException error)
     {
-        plugin.State = PluginState.Failed;
         plugin.Error = error.Message;
         plugin.FailedWithItsHost = true;
         plugin.ActivationFailedWithItsHost = true; // its activation was asked for: a retry activates it again
+        plugin.State = PluginState.Failed;
         PluginLog.AppendLine($"[{plugin.Id}] failed: its plugin host couldn't start: {error.Message}");
         ReportHostStartFailure(plugin.HostGroup, error);
         PluginsChanged?.Invoke(this, EventArgs.Empty);
@@ -732,8 +732,8 @@ public sealed class PluginManager : IAsyncDisposable
 
     private bool Fail(PluginDescription plugin, string error)
     {
-        plugin.State = PluginState.Failed;
         plugin.Error = error;
+        plugin.State = PluginState.Failed;
         PluginLog.AppendLine($"[{plugin.Id}] failed: {error}");
         _ = ShowAndHandleAsync(_workbench.Notifications.Error(Localizer.Format("msg.pluginManager.pluginFailed", "Plugin '{0}' failed: {1}", plugin.DisplayName, error), "Show Log"));
         PluginsChanged?.Invoke(this, EventArgs.Empty);
@@ -1319,9 +1319,9 @@ public sealed class PluginManager : IAsyncDisposable
                 var error = e.Error as JsonRpcConnectionLostException ?? new JsonRpcConnectionLostException($"Plugin host '{_group}' exited during startup{exit}.", e.Error);
                 foreach (var plugin in Members.Where(p => p.IsUsable))
                 {
-                    plugin.State = PluginState.Failed;
                     plugin.Error = error.Message;
                     plugin.FailedWithItsHost = true;
+                    plugin.State = PluginState.Failed;
                 }
 
                 _manager.ReportHostStartFailure(_group, error);
@@ -1334,8 +1334,8 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 foreach (var plugin in Members.Where(p => p.IsUsable))
                 {
-                    plugin.State = PluginState.Failed;
                     plugin.Error = "Its plugin host crashed repeatedly and was stopped for this session.";
+                    plugin.State = PluginState.Failed;
                 }
 
                 _ = _manager.ShowAndHandleAsync(_manager._workbench.Notifications.Error(

@@ -4,11 +4,15 @@
              xmlns:controls="using:Codalus.Shell.Controls"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              x:Class="Codalus.Shell.Views.ToolboxView"
-             x:DataType="vm:ToolboxViewModel">
-  <!-- The Toolbox (M41a): a click arms an item for a click or a drag on the designer's surface; an item can be dragged onto it too. -->
+             x:DataType="vm:ToolboxViewModel"
+             Classes="toolbox">
+  <!--
+    The Toolbox (M41a): a click (or Space) arms an item for a click or a drag on the designer's surface, and the armed
+    item is drawn as the selection (#66); a double-click or Enter adds it at once; an item can be dragged onto the
+    surface too. The hint for the armed item is the designer's status line, so the list never moves (docs/design/controls/Toolbox.dc.html).
+  -->
   <DockPanel>
     <TextBox DockPanel.Dock="Top" Margin="6,6,6,4" Text="{Binding Filter}" PlaceholderText="{l:T toolbox.searchToolbox}" AutomationProperties.Name="{l:T toolbox.searchToolbox}" />
-    <TextBlock DockPanel.Dock="Top" Margin="8,0,8,4" Classes="muted" Text="{Binding ArmedText}" IsVisible="{Binding HasArmed}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
     <Grid>
       <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" />
       <TextBlock Classes="emptyState" Text="{Binding NoMatchesText}" IsVisible="{Binding HasNoMatches}" TextWrapping="Wrap" />
@@ -21,7 +25,8 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:ToolboxItemViewModel">
                       <Button Classes="toolbar toolboxItem" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,2" Click="OnItemClicked"
-                              PointerPressed="OnItemPressed" PointerMoved="OnItemMoved" ToolTip.Tip="{Binding ToolTip}" AutomationProperties.Name="{Binding Name}">
+                              AttachedToVisualTree="OnItemAttached" DataContextChanged="OnItemDataContextChanged" ToolTip.Tip="{Binding ToolTip}"
+                              AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{Binding HelpText}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                           <controls:Icon Kind="{Binding Icon}" />
                           <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
