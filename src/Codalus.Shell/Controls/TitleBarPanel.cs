@@ -156,11 +156,13 @@ public sealed class TitleBarPanel : Panel
         _menuWidth = menuOneRow;
         if (IsWrapped && menu is not null)
         {
-            // The first row's items with the name at its narrowest, then the name takes what they leave (up to its width).
+            // The rows with the name at its narrowest, then the name takes what the widest of them leaves (up to its width).
+            // Not just what the first row leaves: a later row wider than it (or the last with the search box at its end)
+            // would wrap again.
             menu.Measure(new Size(Math.Max(0, room - nameMin), double.PositiveInfinity));
             var chrome = menu.DesiredSize.Width - (rows?.DesiredSize.Width ?? menu.DesiredSize.Width);
-            var firstRow = (rows?.FirstRowWidth ?? menu.DesiredSize.Width) + chrome;
-            _nameWidth = Math.Clamp(room - firstRow, nameMin, nameFull);
+            var widest = (rows is null ? menu.DesiredSize.Width - chrome : Math.Max(rows.DesiredSize.Width, rows.LastRowEnd + rows.TrailingSpace)) + chrome;
+            _nameWidth = Math.Clamp(room - widest, nameMin, nameFull);
             _menuWidth = Math.Max(0, room - _nameWidth);
             menu.Measure(new Size(_menuWidth, double.PositiveInfinity));
 

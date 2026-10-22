@@ -60,7 +60,8 @@ public class NarrowWindowTests
                 Assert.True(drag.Width >= MinDrag - 0.5, $"{at}: the drag area is {drag.Width} px wide");
                 Assert.True(drag.Right <= width - caption + 0.5, $"{at}: the drag area ({drag}) reaches into the caption buttons' room");
 
-                // Every menu is shown, inside the window; on one row when there is room, on two when it is narrow.
+                // Every menu is shown, inside the window; on one row when there is room, wrapped when it is narrow, each row
+                // filled before the next (the font decides how many rows).
                 var menus = MenuItems(window);
                 if (window.MenuBar.IsVisible)
                 {
@@ -75,15 +76,20 @@ public class NarrowWindowTests
                         Assert.True(hit is not null && (hit == menu || menu.IsVisualAncestorOf(hit)), $"{at}: the pointer over {menu.Header} ({Rect(menu, window)}) finds {hit}");
                     }
 
-                    var rows = menus.Select(m => Math.Round(Rect(m, window).Y)).Distinct().Count();
+                    var rowOf = menus.Select(m => Math.Round(Rect(m, window).Y)).ToList();
+                    var rows = rowOf.Distinct().Count();
+                    var layout = string.Join(", ", menus.Select(m => $"{m.Header} {Rect(m, window)}"));
+                    var filled = string.Join(" | ", MenuRows(window, width, caption));
+                    var shown = string.Join(" | ", rowOf.GroupBy(y => y).Select(g => g.Count()));
+                    Assert.True(shown == filled, $"{at}: the menu's rows hold {shown} menus, not {filled}: {layout}");
                     if (width >= 1400)
                     {
-                        Assert.Equal(1, rows);
+                        Assert.True(rows == 1, $"{at}: the menu takes {rows} rows: {layout}");
                     }
 
                     if (width <= 650)
                     {
-                        Assert.Equal(2, rows);
+                        Assert.True(rows >= 2, $"{at}: the menu takes one row: {layout}");
                     }
                 }
 
@@ -305,6 +311,47 @@ public class NarrowWindowTests
     }
 
     private static List<MenuItem> MenuItems(MainWindow window) => [.. window.MenuBar.Items.OfType<MenuItem>().Where(m => m.IsVisible)];
+
+    /// <summary>
+    /// How many menus each row holds: all on one when they, the search box shrunk to its icon and the solution's name at
+    /// its narrowest fit before the drag area and the caption buttons' room; otherwise each row filled in the room the name
+    /// leaves at its narrowest, with room for the search box at the last row's end. The solution's name trims before the
+    /// menu takes another row or a menu moves down one.
+    /// </summary>
+    private static List<int> MenuRows(MainWindow window, double width, double caption)
+    {
+        var title = window.TitleRow;
+        var panel = (TitleMenuPanel)window.MenuBar.ItemsPanelRoot!;
+        var items = MenuItems(window).Select(m => m.DesiredSize.Width).Where(w => w > 0).ToList();
+        var chrome = window.MenuBar.DesiredSize.Width - panel.DesiredSize.Width;
+        var room = width - caption - title.MinDragWidth - title.MinNameWidth - (window.TitleIcon.IsVisible ? window.TitleIcon.DesiredSize.Width : 0);
+        if (items.Sum() + chrome + panel.TrailingSpace <= room)
+        {
+            return [items.Count];
+        }
+
+        var limit = room - chrome;
+        var rows = new List<(double Width, int Count)> { (0, 0) };
+        foreach (var item in items)
+        {
+            if (rows[^1].Width > 0 && rows[^1].Width + item > limit + 0.5)
+            {
+                rows.Add((0, 0));
+            }
+
+            rows[^1] = (rows[^1].Width + item, rows[^1].Count + 1);
+        }
+
+        var counts = rows.Select(r => r.Count).ToList();
+        if (rows[^1].Width + panel.TrailingSpace > limit + 0.5 && rows[^1].Count > 1)
+        {
+            // The last menu moves to a row of its own.
+            counts[^1]--;
+            counts.Add(1);
+        }
+
+        return counts;
+    }
 
     private static IEnumerable<(string Name, Rect Rect)> TitleParts(MainWindow window)
     {
