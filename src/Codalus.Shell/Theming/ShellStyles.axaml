@@ -1484,6 +1484,122 @@
     <Setter Property="Padding" Value="8,6" />
     <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
   </Style>
+  <!--
+    The data tip (D44, docs/design/controls/DataTip.dc.html): the header over the hovered expression and a tip per
+    expanded level, on the overlay color with the family's control corners; rows 20 px with a separator between names
+    and values, the row whose child tip is open marked (outlined too in high contrast). The UI text size is set here: in
+    a window of its own (the hover's header and every child tip), a popup's content inherits from its PopupRoot, at
+    Avalonia's 14 px, not from the main window's Shell.FontSize.Body.
+  -->
+  <Style Selector="Border.dataTip, Border.dataTipHeader">
+    <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+  </Style>
+  <Style Selector="Border.dataTip">
+    <Setter Property="Padding" Value="0,2" />
+  </Style>
+  <Style Selector="Border.dataTipRow">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Border.dataTipRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource Shell.Row.Hover}" />
+  </Style>
+  <Style Selector="Border.dataTipRow.open">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Inactive}" />
+    <Setter Property="BoxShadow" Value="{DynamicResource Shell.Row.Hover.Outline}" />
+  </Style>
+  <Style Selector="Border.dataTipRow.selected">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <Style Selector="Border.dataTipSeparator">
+    <Setter Property="Width" Value="1" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="Border.dataTipHeader Border.dataTipSeparator">
+    <Setter Property="Margin" Value="0,3" />
+  </Style>
+  <Style Selector="Border.dataTipChevron:pointerover">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+  </Style>
+  <Style Selector="Border.dataTipValueBox">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="Padding" Value="4,0" />
+    <Setter Property="MinHeight" Value="16" />
+  </Style>
+  <Style Selector="TextBlock.dataTipValue.error, TextBlock.dataTipValue.changed">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Error.Foreground}" />
+  </Style>
+  <Style Selector="Border.dataTipView Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="Height" Value="18" />
+    <Setter Property="Padding" Value="2,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+  </Style>
+  <Style Selector="Border.dataTipView Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+  </Style>
+  <Style Selector="Button.dataTipPin">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="Width" Value="20" />
+    <Setter Property="Height" Value="18" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+  </Style>
+  <Style Selector="Button.dataTipPin:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+  </Style>
+  <!-- A value edited in place (A11, A12): a compact box; the engine's refusal reddens its edge. -->
+  <Style Selector="TextBox.dataTipEdit">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Height" Value="18" />
+    <Setter Property="Padding" Value="3,0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="TextBox.dataTipEdit.error /template/ Border#PART_BorderElement">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Error}" />
+  </Style>
+  <Style Selector="TextBox.dataTipEdit.error">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Error}" />
+  </Style>
+  <!-- A row's pin shows on the row under the pointer, and on the selected one. -->
+  <Style Selector="Border.dataTipRow Button.dataTipRowPin">
+    <Setter Property="Opacity" Value="0" />
+  </Style>
+  <Style Selector="Border.dataTipRow:pointerover Button.dataTipRowPin, Border.dataTipRow.selected Button.dataTipRowPin">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+  <!-- Locals, Autos, Watch and QuickWatch (D44, decision 9): the data tip's rows, flat, under a Name | Value | Type header. -->
+  <Style Selector="ListBox.variableRows ListBoxItem">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Grid.variableRowsHeader">
+    <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
+  </Style>
+  <Style Selector="Border.pinnedDataTipComment">
+    <Setter Property="Padding" Value="6,1" />
+  </Style>
   <Style Selector="Border.intelliSense.completionPopup">
     <Setter Property="Padding" Value="0" />
     <Setter Property="MinWidth" Value="240" />

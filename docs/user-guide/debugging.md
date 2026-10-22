@@ -121,26 +121,49 @@ Codalus IDE comes to the front when the program stops, even when the program's w
 - **Stepping**: Step Over (`F10`), Step Into (`F11`), Step Out (`Shift+F11`), Continue (`F5`).
 - **The current statement** is highlighted, with a yellow arrow in the margin.
 - **PerfTips**: the time since the program was resumed appears in gray at the end of the current line, e.g. `≤ 12 ms elapsed`. It includes the debugger's own overhead, so use it to compare steps, not as a profiler. Turn it off with the `debug.perfTips` setting.
-- **Locals** and **Autos**: Autos shows the variables used on the current and previous lines. Expand objects to see their members.
-- **Watch**: add expressions in the box at the top, or with Debug → Add Watch on the selection. They are evaluated at every stop and saved with the solution.
-- **QuickWatch** (`Shift+F9`): evaluates the selection, or the expression under the caret, as a tree. Change the expression and press Enter to evaluate another; **Add Watch** copies it to Watch.
-- **Changing values**: in Locals, Autos, Watch, QuickWatch and data tips, `F2` or double-click edits a value: a variable, a field or a property, or a watch expression that can be assigned.
+- **Locals** and **Autos**: Autos shows the variables used on the current and previous lines. Expand objects to see their members: they show as rows under the Name | Value | Type header, each level indented inside the Name column so values and types stay in their columns (drag the header's edges to resize them). What you expanded stays expanded when you step. `Right` and `Left` expand and collapse the selected row; `Ctrl+C` copies its value.
+- **Watch**: add expressions in the box at the top, or with Debug → Add Watch on the selection. They are evaluated at every stop and saved with the solution. An expression that doesn't evaluate shows the error icon and the debugger's message in the error color; `Delete` removes the selected watch.
+- **QuickWatch** (`Shift+F9`): evaluates the selection, or the expression under the caret, with its members as rows, as in Locals. Change the expression and press Enter to evaluate another; **Add Watch** copies it to Watch.
+- **Changing values**: in Locals, Autos, Watch and QuickWatch, `F2`, `Enter` or a double-click on a value edits it in place, as in a data tip: a variable, a field or a property, or a watch expression that can be assigned. `Enter` sets it and `Escape` puts it back; when the debugger refuses the value, the box stays open with its message under it, and a value that can't be changed says why in its tooltip (see [Data tips](#data-tips)). Values that changed since the last stop are red.
 - **The context menu** of a value copies it or its expression, adds a watch, or opens QuickWatch. Its **View** submenu opens a visualizer:
   - strings: **Text, JSON, XML or HTML Visualizer**, the whole string in a read-only, colored document, with JSON and XML indented;
-  - arrays and collections (`List<T>`, `Queue<T>`, `Stack<T>`, `HashSet<T>`, …): the **Grid Visualizer**, a table of up to 500 elements, with an object's properties and fields as columns;
+  - arrays and collections (`List<T>`, `Queue<T>`, `Stack<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>`, …): the **Grid Visualizer**, a table of up to 500 elements, with an object's properties and fields as columns (a dictionary's keys and values);
   - byte arrays: the **Image Visualizer**, which opens a PNG, JPEG, GIF, BMP, WebP or ICO image they hold in the image viewer;
   - plugins can add their own visualizers for other types (see [Plugins](../plugins.md#workbench-apis)).
 - **Display attributes**: objects whose type has `[DebuggerDisplay]` show its text (`Order 7: Ada (1 lines)` instead of `{MyApp.Order}`), and members marked `[DebuggerBrowsable(Never)]` are hidden, in Locals, Autos, Watch, QuickWatch and data tips.
 - **Call Stack** (`Ctrl+Alt+C`): the frames of the selected thread. Pick another thread at the top. Double-click a frame to see its source and its variables.
 - **Threads** (`Ctrl+Alt+H`): every thread with its id, name and location. Double-click to switch to a thread; flag threads and show only the flagged ones.
 - **Modules** (`Ctrl+Alt+U`): the loaded modules with their symbol status and path.
-- **Data tips**: hover over a variable or member access to see its value as a tree: expand members, and edit values with `F2` or double-click.
-- **Pinned data tips**: the pin button in a data tip keeps it next to its line. It is evaluated again at every pause, in red when the value changed, and keeps its last value after the session ends. Right-click it to add a comment, copy, add a watch or unpin it; double-click for QuickWatch. Pinned tips follow your edits and are saved with the solution; Debug → Windows → Clear All DataTips removes them.
+- **Data tips**: hover over a variable or a member access to see its value; see [Data tips](#data-tips).
+- **Pinned data tips**: the pin in a data tip's header or rows keeps that expression next to its line, as the data tip's header with a strip to unpin it. It is evaluated again at every pause, in red when the value changed, and keeps its last value, muted, after the program resumes or the session ends. While the program is paused, its chevron expands it into the same tips as the hover's, and its value is edited in place. Several pins on one line stack. Right-click it to add a comment (shown under it), copy, add a watch or unpin it; double-click its name for QuickWatch. Pinned tips follow your edits and are saved with the solution; Debug → Windows → Clear All DataTips removes them.
 - **Parallel Stacks** (Debug → Windows): every thread's call stack in one tree. Threads that share callers are grouped until their stacks branch; the node with the active thread is marked.
 - **Parallel Watch** (Debug → Windows): one expression evaluated on every thread, in the thread's topmost frame with source code.
 - **Processes** (Debug → Windows): the process being debugged with its state, and Attach to Process, Detach All and Terminate All.
 - **The Debug Location toolbar**: while paused, the standard toolbar shows the process and lets you pick the thread and the stack frame.
 - **Debug Console**: type an expression and press Enter to evaluate it in the selected frame. Up and Down recall earlier ones.
+
+## Data tips
+
+Hover over a variable or a member access (`app`, `app.Properties`) while the program is stopped:
+- **The header** sits right over the expression, its name on the code's: the icon of its kind (a local, a parameter, a field, a property), the name, and the value in a box. The type is in the name's tooltip. A string or a collection has a **View** drop-down: the magnifier opens the likely visualizer, the arrow lists them all (plugins' under **Plugins**).
+- **Expanding**: rest the pointer on the chevron (about 400 ms), click it, or press `Right`. The members open in a tip of their own, under the header and 24 px in; each member with members of its own expands the same way, so each level is a tip. Moving to another row of a tip closes the tip the last row opened.
+- **Rows** show the icon, the name and the value, trimmed at 400 px: rest on a value for all of it. A tip shows 15 rows, then scrolls with the wheel.
+- **Members** are grouped as in the classic IDE, in Locals, Autos, Watch and QuickWatch too:
+  - each has its kind's icon: a property's blue wrench, a field, a constant, an event;
+  - the private, protected and internal members of your own code (the solution's projects) are listed with the others, in name order, with a lock on their icon; the name's tooltip says what each is ("Private field of WeatherForecastController (your code)");
+  - a library type's non-public members are under **Non-Public members**, and **Static members** come last;
+  - a property whose getter threw reads "threw *ExceptionType*: *message*" in the error color, and expands to the exception;
+  - a value the debugger couldn't evaluate (a getter that ran past 5 seconds, or can't be called) reads "Couldn't evaluate": **Re-evaluate** asks again;
+  - in a remote session (SSH, containers, WSL) the program's assemblies aren't on this machine: nothing is grouped, and icons are guessed from the names (`_name` and `name` are fields, `Name` a property).
+- **Collections**: a `List<T>`, `Dictionary<TKey, TValue>`, `HashSet<T>`, `Queue<T>` or `Stack<T>` expands to its elements, then **Raw View**, which holds the collection's own members (its capacity, its count, its private fields). A dictionary's entries are named by their keys (`["server.Features"]`) and expand to Key and Value; a queue lists from its head, a stack from its top. netcoredbg can't build these types' debugger views (`[DebuggerTypeProxy]`), so the elements are read from the collections' fields, which differ between .NET versions, .NET Framework and Mono; a collection whose fields aren't known shows its own members. Other collections show their own members.
+- **Long lists**: the `[DebuggerDisplay]` text of the first 60 elements is shown at once; the others show their type, in gray, until they scroll into view.
+- **From the keyboard**: `Up` and `Down` move in a tip, `Right` opens the selected row's tip, `Left` closes it or goes back, `F2` or `Enter` edits the value, `Ctrl+C` copies it, `Shift+F10` opens its menu and `Escape` closes the tips.
+- **Editing**: click a value (in the header or a row), or press `F2` or `Enter`, to edit it in place; `Enter` sets it and `Escape` puts it back. When the debugger refuses what you typed (a name it doesn't know, a string without quotes), the box stays open with its message under it. A value that can't be changed opens no box: rest the pointer on it to see why (a property without a setter, a constant, a read-only field, or a Mono program, whose debugger can't change values).
+- **Changed values** are red: a value that differs from what it was when the program last stopped (and you last saw it).
+- **Pinning**: the pin at the end of the row under the pointer (and in the header) pins that expression to the line. Groups and members only the debugger names (`Name (Base)`) have no pin.
+- **Near the edges**: near the editor's bottom the tips open upwards, and near its right edge they move left, their values trimmed sooner.
+- **The code under the header**: a double-click on the header's name selects the word, `Ctrl+Click` goes to its definition, and the wheel scrolls the editor (and closes the tips). Hold `Ctrl` to fade the tips and click through them to the code; let go to bring them back.
+- **Errors and warnings** at the hovered name show in a strip right above the header: the code (a link to its documentation), the message, **Fix** and **Other Fixes**, as in Quick Info. When the tips open upwards near the editor's bottom edge, the strip moves under the header.
 
 ## Exceptions
 
@@ -180,7 +203,7 @@ These come from netcoredbg:
 - no Set Next Statement and no Step Into Specific
 - no Memory, Disassembly or Registers windows
 - no mixed-mode debugging
-- debugger type proxies (`[DebuggerTypeProxy]`) aren't applied: showing one means creating it, which netcoredbg can't evaluate. Use the Grid Visualizer for collections
+- debugger type proxies (`[DebuggerTypeProxy]`) aren't applied: showing one means creating it, which netcoredbg can't evaluate. `List<T>`, `Dictionary<TKey, TValue>`, `HashSet<T>`, `Queue<T>` and `Stack<T>` show their elements anyway (see [Data tips](#data-tips)); other collections show their own members, and the Grid Visualizer shows the ones with a `ToArray()`. There's no Results View
 - no Make Object ID, no return values after Step Out, and no freezing of threads
 - no symbol servers or symbol paths: the debugger reads the PDBs next to the assemblies, and library sources come from embedded sources and Source Link
 - Detach All applies to attached programs and to programs launched in the integrated terminal or a console window: a program launched with the Debug Console has the debugger's console, so it can't keep running without it

@@ -54,17 +54,16 @@ public sealed partial class ShellHost
         // [DebuggerDisplay] and [DebuggerBrowsable] from the companion host (M14b); netcoredbg doesn't apply them.
         Debugger.Displays = new DebuggerDisplays(async (type, modules, cancellationToken) =>
             await Companion.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false));
+        // The solution's own code (D44): a module named as one of its projects, or built under one's folder.
+        Debugger.IsUserModule = path => path is not null && Solutions.Projects.Values.Any(p =>
+            string.Equals(p.Name, Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase)
+            || (Path.GetDirectoryName(p.Path) is { Length: > 0 } folder && path.StartsWith(folder + Path.DirectorySeparatorChar, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)));
         Locals = new VariablesViewModel(Debugger, autos: false, LineText);
         Autos = new VariablesViewModel(Debugger, autos: true, LineText);
         Watch = new WatchViewModel(Debugger);
         CallStack = new CallStackViewModel(Debugger, (path, line) => OpenFileAsync(path, preview: false, new Position(Math.Max(0, line - 1), 0)));
         DebugConsole = new DebugConsoleViewModel(Debugger, DebugLog, EditorFont);
         BreakpointList = new BreakpointsViewModel(Debugger, (path, line) => OpenFileAsync(path, preview: false, new Position(Math.Max(0, line - 1), 0)));
-        VariableActions.AskValue = async node =>
-        {
-            var result = await Dialogs.ShowAsync(new DialogRequest($"Set {node.Name}", "New value (a C# expression):", ["Set", "Cancel"]) { Input = node.Value }).ConfigureAwait(true);
-            return result.Button == "Set" ? result.Input : null;
-        };
         VariableActions.AddWatch = expression => AddWatchAsync(expression);
         VariableActions.QuickWatch = expression => ShowQuickWatchAsync(expression);
         VariableActions.Visualize = VisualizeAsync;

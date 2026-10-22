@@ -92,6 +92,12 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>The text view's scroll offset when Quick Info opened: Quick Info is placed against the text.</summary>
     private Vector _quickInfoScroll;
 
+    /// <summary>The data tip's cascade while the hover shows one (D44).</summary>
+    private DataTipCascade? _dataTip;
+
+    /// <summary>Where the hover's data tip's expression starts, and its line's top and height when the tip was last placed.</summary>
+    private (TextViewPosition Start, Point Top, double Height) _dataTipPlace;
+
     /// <summary>Quick Info's last decisions (asked, refused and why, opened, closed and why), for a test's failure message.</summary>
     private readonly Queue<string> _quickInfoTrace = new();
     private DocumentOptions? _documentOptions;
@@ -184,6 +190,7 @@ public sealed partial class CodeEditorController : IDisposable
         view.ScrollOffsetChanged += OnViewChanged;
         view.ScrollOffsetChanged += OnViewScrolled;
         view.VisualLinesChanged += OnViewChanged;
+        view.VisualLinesChanged += OnDataTipLinesChanged;
         editor.TextArea.Caret.PositionChanged += OnCaretChanged;
         editor.TextArea.SelectionChanged += OnCaretChanged;
         editor.TextArea.TextEntering += OnTextEntering;
@@ -1497,7 +1504,15 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    private void OnKeyUp(object? sender, KeyEventArgs e) => _link.Update(null, LinkModifiers(e, pressed: false));
+    private void OnKeyUp(object? sender, KeyEventArgs e)
+    {
+        var modifiers = LinkModifiers(e, pressed: false);
+        _link.Update(null, modifiers);
+        if (_dataTip is { IsFaded: true } tip && !modifiers.HasFlag(KeyModifiers.Control) && !modifiers.HasFlag(KeyModifiers.Meta))
+        {
+            tip.SetFaded(false); // Ctrl let go: the tips come back (A19)
+        }
+    }
 
     /// <summary>The modifiers after a key event: a Ctrl or Cmd key's own event may not count itself yet.</summary>
     private static KeyModifiers LinkModifiers(KeyEventArgs e, bool pressed)
@@ -1515,6 +1530,11 @@ public sealed partial class CodeEditorController : IDisposable
     {
         TrackCopy(e);
         _link.Update(null, LinkModifiers(e, pressed: true));
+        if (e.Key is Key.LeftCtrl or Key.RightCtrl or Key.LWin or Key.RWin && _dataTip is { } tip && _hoverPopup.IsOpen
+            && LinkModifiers(e, pressed: true) is var held && (held == KeyModifiers.Control || held == KeyModifiers.Meta))
+        {
+            tip.SetFaded(true); // Ctrl held: the tips fade and let the pointer through to the code (A19)
+        }
 
         // The completion list and signature help take their keys first (the arrows, Enter, Tab, Escape).
         if (HandlePopupKey(e))
@@ -1593,10 +1613,11 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>
     /// Whether a pointer move over the text leaves Quick Info open: near where it opened, on the symbol it describes, or on
-    /// its way to it. Quick Info opens just below the pointer, so the way to a button at its far right (a data tip's Pin to
-    /// source) runs along the text above its top edge: while the pointer gets no more than a few pixels farther from Quick
-    /// Info than it has been (as VS Code), it's heading there. Any other move closes Quick Info, and it's asked for where
-    /// the pointer stops.
+    /// its way to it. Quick Info opens just below the pointer, so the way to a button at its far right runs along the text
+    /// above its top edge: while the pointer gets no more than a few pixels farther from Quick Info than it has been (as
+    /// VS Code), it's heading there. A data tip is its header over the word and the child tips under it: the pointer on
+    /// the text keeps them while it heads for any of them. Any other move closes Quick Info, and it's asked for where the
+    /// pointer stops.
     /// </summary>
     private bool KeepsQuickInfo(Point point)
     {
@@ -1606,13 +1627,14 @@ public sealed partial class CodeEditorController : IDisposable
             return true;
         }
 
-        if (QuickInfoBounds() is not { } bounds)
+        var bounds = QuickInfoBounds();
+        if (bounds.Count == 0)
         {
             return false;
         }
 
-        var closest = _quickInfoClosest ?? DistanceTo(bounds, _hoverPoint);
-        var distance = DistanceTo(bounds, point);
+        var closest = _quickInfoClosest ?? bounds.Min(b => DistanceTo(b, _hoverPoint));
+        var distance = bounds.Min(b => DistanceTo(b, point));
         if (distance > closest + 4)
         {
             return false;
@@ -1622,15 +1644,23 @@ public sealed partial class CodeEditorController : IDisposable
         return true;
     }
 
-    /// <summary>Quick Info's bounds in the text view's coordinates, once it's laid out (its own window, or the window's overlay).</summary>
-    private Rect? QuickInfoBounds()
+    /// <summary>
+    /// Quick Info's bounds in the text view's coordinates, once it's laid out (its own window, or the window's overlay):
+    /// one rectangle, or a data tip's header and each of its open tips.
+    /// </summary>
+    private IReadOnlyList<Rect> QuickInfoBounds()
     {
-        if (_hoverPopup.Child is not { Bounds.Width: > 0, Bounds.Height: > 0 } child || TopLevel.GetTopLevel(child) is null)
+        if (_dataTip is { } tip && _hoverPopup.IsOpen)
         {
-            return null;
+            return [.. tip.Bounds];
         }
 
-        return new Rect(Editor.TextArea.TextView.PointToClient(child.PointToScreen(default)), child.Bounds.Size);
+        if (_hoverPopup.Child is not { Bounds.Width: > 0, Bounds.Height: > 0 } child || TopLevel.GetTopLevel(child) is null)
+        {
+            return [];
+        }
+
+        return [new Rect(Editor.TextArea.TextView.PointToClient(child.PointToScreen(default)), child.Bounds.Size)];
     }
 
     private static double DistanceTo(Rect rect, Point point)
@@ -1720,27 +1750,28 @@ public sealed partial class CodeEditorController : IDisposable
                 return;
             }
 
-            Control content;
-            if (dataTip is not null)
-            {
-                // The data tip is a tree that expands and edits values (ADR 0021); diagnostics stay above it.
-                var tip = new Views.DataTipView { DataContext = dataTip };
-                LastDataTip = dataTip;
-                content = diagnostics.Count > 0 ? new StackPanel { Spacing = 6, Children = { QuickInfo(null, null, diagnostics), tip } } : tip;
-            }
-            else
-            {
-                // A symbol's classified description (the C# service), else the server's Markdown, then the diagnostics.
-                var markdown = hover?.Description is null && hover?.Contents.Value is { Length: > 0 } text ? MarkdownRenderer.Render(text, _services.OpenLink) : null;
-                content = QuickInfo(hover?.Description, markdown, diagnostics);
-            }
-
             if (!CanShowPopups)
             {
                 TraceQuickInfo("not shown: the editor isn't showing");
                 return; // a document opened over the editor while Quick Info was asked for
             }
 
+            _quickInfoSymbol = symbol;
+            _quickInfoClosest = null;
+            _quickInfoScroll = Editor.TextArea.TextView.ScrollOffset;
+            if (dataTip is not null)
+            {
+                // The data tip (D44): the header over the expression, its members in child tips; diagnostics above it.
+                LastDataTip = dataTip;
+                ShowDataTip(dataTip, offset, diagnostics);
+                TraceQuickInfo(_hoverPopup.IsOpen ? $"data tip opened at {offset}" : "the data tip didn't open");
+                return;
+            }
+
+            // A symbol's classified description (the C# service), else the server's Markdown, then the diagnostics.
+            var markdown = hover?.Description is null && hover?.Contents.Value is { Length: > 0 } text ? MarkdownRenderer.Render(text, _services.OpenLink) : null;
+            Control content = QuickInfo(hover?.Description, markdown, diagnostics);
+            _dataTip = null;
             _hoverPopup.Child = new Border
             {
                 Classes = { "editorHover", "intelliSense" },
@@ -1759,10 +1790,10 @@ public sealed partial class CodeEditorController : IDisposable
             _hoverPopup.Placement = PlacementMode.AnchorAndGravity;
             _hoverPopup.PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft;
             _hoverPopup.PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight;
+            _hoverPopup.PlacementConstraintAdjustment = Avalonia.Controls.Primitives.PopupPositioning.PopupPositionerConstraintAdjustment.All;
+            _hoverPopup.HorizontalOffset = 0;
+            _hoverPopup.VerticalOffset = 0;
             _hoverPopup.PlacementRect = new Rect(at.X, at.Y + 4, 1, 1);
-            _quickInfoSymbol = symbol;
-            _quickInfoClosest = null;
-            _quickInfoScroll = Editor.TextArea.TextView.ScrollOffset;
             _hoverPopup.IsOpen = true;
             TraceQuickInfo(_hoverPopup.IsOpen ? $"opened at {at}" : "didn't open");
         }
@@ -1941,13 +1972,16 @@ public sealed partial class CodeEditorController : IDisposable
     }
 
     /// <summary>The expression a data tip evaluates: the identifier at <paramref name="offset"/> with the member accesses before it.</summary>
-    public string? ExpressionAt(int offset)
+    public string? ExpressionAt(int offset) => ExpressionRangeAt(offset) is { } range ? Model.Text.GetText(range.Start, range.End - range.Start) : null;
+
+    /// <summary>Where <see cref="ExpressionAt"/>'s expression starts and ends.</summary>
+    public (int Start, int End)? ExpressionRangeAt(int offset)
     {
         var text = Model.Text;
         static bool IsIdentifier(char c) => char.IsLetterOrDigit(c) || c == '_';
         if (offset >= text.TextLength || !IsIdentifier(text.GetCharAt(offset)))
         {
-            if (offset == 0 || !IsIdentifier(text.GetCharAt(offset - 1)))
+            if (offset == 0 || offset > text.TextLength || !IsIdentifier(text.GetCharAt(offset - 1)))
             {
                 return null;
             }
@@ -1978,8 +2012,7 @@ public sealed partial class CodeEditorController : IDisposable
             break;
         }
 
-        var expression = text.GetText(start, end - start);
-        return expression.Length == 0 || char.IsDigit(expression[0]) ? null : expression;
+        return end > start && !char.IsDigit(text.GetCharAt(start)) ? (start, end) : null;
     }
 
     /// <summary>The last data tip shown (tests).</summary>
@@ -1997,21 +2030,24 @@ public sealed partial class CodeEditorController : IDisposable
     private async Task<ViewModels.DataTipViewModel?> DataTipAsync(int offset, CancellationToken cancellationToken)
     {
         var debugger = _services.Debugger;
-        if (debugger.State != DebugState.Stopped || ExpressionAt(offset) is not { } expression)
+        if (debugger.State != DebugState.Stopped || ExpressionRangeAt(offset) is not { } range)
         {
             return null;
         }
 
+        var expression = Model.Text.GetText(range.Start, range.End - range.Start);
         try
         {
             var result = await debugger.EvaluateAsync(expression, "hover", cancellationToken).ConfigureAwait(true);
             var line = Model.Text.GetLineByOffset(offset).LineNumber;
-            return new ViewModels.DataTipViewModel(debugger, expression, result)
+            return new ViewModels.DataTipViewModel(debugger, expression, result, DataTipIcon(range))
             {
-                PinToSource = Model.IsReadOnly ? null : () =>
+                PinExpression = Model.IsReadOnly ? null : (pinned, value) =>
                 {
-                    debugger.PinnedTips.Pin(Model.Path, line, expression, result.Result);
+                    debugger.PinnedTips.Pin(Model.Path, line, pinned, value);
                     _hoverPopup.IsOpen = false;
+                    // Evaluated now for its type and members: the pinned tip expands while the program is paused (A15).
+                    _ = debugger.PinnedTips.RefreshAsync((e, token) => debugger.EvaluateAsync(e, "watch", token));
                 },
             };
         }
@@ -2021,7 +2057,144 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    private void OnHoverClosed(object? sender, EventArgs e) => _hoverPopup.Child = null;
+    /// <summary>
+    /// The header's icon: the kind of the expression's last name, as the editor's semantic tokens say (a parameter, a
+    /// local, a field, a property…); a local's when they say nothing.
+    /// </summary>
+    private string DataTipIcon((int Start, int End) range)
+    {
+        var last = range.End - 1;
+        var location = Model.Text.GetLocation(last);
+        var type = _colorizer.TokenAt(location.Line - 1, location.Column - 1);
+        var name = type >= 0 && type < LanguageServices.Protocol.TokenTypes.All.Length ? LanguageServices.Protocol.TokenTypes.All[type] : null;
+        return name switch
+        {
+            "parameter" => "symbol-parameter",
+            "property" => "symbol-property",
+            "field" => "symbol-field",
+            "constant" => "symbol-constant",
+            "event" => "symbol-event",
+            "enumMember" => "symbol-enum-member",
+            _ => "symbol-local",
+        };
+    }
+
+    /// <summary>The data tip's header over the expression at <paramref name="offset"/>, with the diagnostics above it.</summary>
+    private void ShowDataTip(ViewModels.DataTipViewModel tip, int offset, IReadOnlyList<Diagnostic> diagnostics)
+    {
+        var view = Editor.TextArea.TextView;
+        var start = ExpressionRangeAt(offset)?.Start ?? offset;
+        view.EnsureVisualLines();
+        var at = new TextViewPosition(Model.Text.GetLocation(start));
+        var top = view.GetVisualPosition(at, VisualYPosition.LineTop) - view.ScrollOffset;
+        var bottom = view.GetVisualPosition(at, VisualYPosition.LineBottom) - view.ScrollOffset;
+        var cascade = new DataTipCascade(view, _hoverPopup, tip.Root, new DataTipActions
+        {
+            Wheel = e =>
+            {
+                TraceQuickInfo($"the wheel on the data tip: {e.Delta}");
+                ScrollText(e.Delta.Y * -3 * view.DefaultLineHeight);
+                _hoverPopup.IsOpen = false;
+            },
+            NameGesture = (point, doubleClick) =>
+            {
+                _hoverPopup.IsOpen = false;
+                if (doubleClick)
+                {
+                    if (DefinitionLink.IdentifierAt(Editor, point) is { } word)
+                    {
+                        Editor.Select(word.Start, word.End - word.Start);
+                    }
+                }
+                else
+                {
+                    GoToDefinitionAt(point);
+                }
+            },
+            FadedMove = (point, modifiers) => _link.Update(point, modifiers),
+            FadedPress = (point, modifiers) =>
+            {
+                _hoverPopup.IsOpen = false;
+                if (modifiers.HasFlag(KeyModifiers.Control) || modifiers.HasFlag(KeyModifiers.Meta))
+                {
+                    GoToDefinitionAt(point);
+                }
+            },
+            SetValue = tip.SetValueAsync,
+            ReadOnlyReason = tip.ReadOnlyReason,
+            Pin = tip.PinAction,
+            Close = () => _hoverPopup.IsOpen = false,
+        });
+        _dataTip = cascade;
+        if (diagnostics.Count > 0)
+        {
+            cascade.SetStrip(QuickInfo(null, null, diagnostics));
+        }
+
+        _hoverPopup.Child = cascade.Content;
+        _hoverPopup.WindowManagerAddShadowHint = true;
+        _hoverPopup.OverlayInputPassThroughElement = view.GetVisualParent() as IInputElement ?? Editor.TextArea;
+        cascade.Place(top, bottom.Y - top.Y);
+        _dataTipPlace = (at, top, bottom.Y - top.Y);
+        _hoverPopup.IsOpen = true;
+        cascade.Opened();
+    }
+
+    /// <summary>
+    /// The hover's data tip stays over its expression (D44): when the lines above it change height while it's open
+    /// (the C# service's CodeLens rows or inlay hints arriving, another font size), the tips move with the text, so the header's double-click
+    /// and Ctrl+click still act on the code under it. A scroll closes them instead (<see cref="OnViewScrolled"/>).
+    /// </summary>
+    private void OnDataTipLinesChanged(object? sender, EventArgs e)
+    {
+        var view = Editor.TextArea.TextView;
+        var (start, placed, height) = _dataTipPlace;
+        if (_dataTip is not { } tip || !_hoverPopup.IsOpen || !view.VisualLinesValid || start.Line > Editor.Document.LineCount || view.GetVisualLine(start.Line) is null)
+        {
+            return;
+        }
+
+        var top = view.GetVisualPosition(start, VisualYPosition.LineTop) - view.ScrollOffset;
+        var bottom = view.GetVisualPosition(start, VisualYPosition.LineBottom) - view.ScrollOffset;
+        if (Math.Abs(top.X - placed.X) > 0.5 || Math.Abs(top.Y - placed.Y) > 0.5 || Math.Abs(bottom.Y - top.Y - height) > 0.5)
+        {
+            TraceQuickInfo($"the data tip's line moved from {placed} to {top}");
+            _dataTipPlace = (start, top, bottom.Y - top.Y);
+            tip.Place(top, bottom.Y - top.Y);
+        }
+    }
+
+    /// <summary>Scrolls the text by <paramref name="delta"/> pixels, down when positive (TextEditor.ScrollToVerticalOffset doesn't move its scroll viewer).</summary>
+    private void ScrollText(double delta)
+    {
+        if (Editor.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault() is { } scroll)
+        {
+            scroll.Offset = new Vector(scroll.Offset.X, Math.Clamp(scroll.Offset.Y + delta, 0, Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height)));
+        }
+    }
+
+    /// <summary>The data tip's cascade while one shows (tests).</summary>
+    internal DataTipCascade? DataTip => _hoverPopup.IsOpen ? _dataTip : null;
+
+    /// <summary>Ctrl+click at a point of the text view: Go to Definition there.</summary>
+    private void GoToDefinitionAt(Point point)
+    {
+        var view = Editor.TextArea.TextView;
+        if (view.GetPosition(point + view.ScrollOffset) is not { } position)
+        {
+            return;
+        }
+
+        _link.Clear();
+        Editor.CaretOffset = Model.Text.GetOffset(position.Location);
+        _ = GoToDefinitionAsync();
+    }
+
+    private void OnHoverClosed(object? sender, EventArgs e)
+    {
+        _hoverPopup.Child = null;
+        _dataTip = null;
+    }
 
     // ------------------------------------------------------------------ navigation
 
@@ -2190,6 +2363,7 @@ public sealed partial class CodeEditorController : IDisposable
         view.ScrollOffsetChanged -= OnViewChanged;
         view.ScrollOffsetChanged -= OnViewScrolled;
         view.VisualLinesChanged -= OnViewChanged;
+        view.VisualLinesChanged -= OnDataTipLinesChanged;
         view.PointerMoved -= OnPointerMoved;
         view.PointerExited -= OnPointerExited;
         _hoverPopup.Closed -= OnQuickInfoClosed;

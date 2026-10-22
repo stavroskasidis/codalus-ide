@@ -699,6 +699,87 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             }
         }, "debug.session").ConfigureAwait(true);
 
+        await StepAsync("debug.dataTip", "0.6.0", "The data tip: the header over a variable hovered while stopped, its elements in a child tip, and the same rows in Locals", async () =>
+        {
+            var lines = File.ReadAllLines(Program);
+            var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+            await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == argsLine, $"the debugger stops at line {argsLine}", 300).ConfigureAwait(true);
+            try
+            {
+                var editor = await OpenAsync(Program).ConfigureAwait(true);
+                var document = editor.Editor.Document;
+                var line = document.GetLineByNumber(argsLine);
+                var column = document.GetText(line).IndexOf(", args)", StringComparison.Ordinal);
+                Check(column >= 0, $"line {argsLine} reads args");
+                await editor.ShowDataTipAsync(line.Offset + column + 3).ConfigureAwait(true);
+                await WaitAsync(() => editor.DataTip is { Header.Bounds.Width: > 0 }, "the data tip opens over args").ConfigureAwait(true);
+                var tip = editor.DataTip!;
+                Check(tip.Header.NameBlock.Text == "args" && tip.Header.ValueBlock.Text is { Length: > 0 }, $"the header shows args and its value: {tip.Header.NameBlock.Text} = {tip.Header.ValueBlock.Text}");
+                var view = editor.Editor.TextArea.TextView;
+
+                // Where the header is, in the real window: its name over the code's (A1), unless the header would end
+                // past the text view's right edge, where it moves left just enough to stay in view (D44, decision 10).
+                // The smoke window is 1280 px wide, so line 4's args, far right in the text view, is that case.
+                (Rect Header, Point Name, Point Code) Where(DataTipCascade shown, int offset) =>
+                    (new Rect(view.PointToClient(shown.Header.PointToScreen(default)), shown.Header.Bounds.Size),
+                     view.PointToClient(shown.Header.NameBlock.PointToScreen(default)),
+                     view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(document.GetLocation(offset)), AvaloniaEdit.Rendering.VisualYPosition.LineTop) - view.ScrollOffset);
+                await RenderedAsync().ConfigureAwait(true); // a popup's window moves a frame after its offsets change
+                var (header, name, code) = Where(tip, line.Offset + column + 2);
+                var where = $"the header at {header}, its name at x {name.X:0.#}, the code's at {code.X:0.#}, the text view {view.Bounds.Width:0.#} wide";
+                Check(header.Left >= -0.5 && header.Right <= view.Bounds.Width + 0.5, $"the header stays in the text view ({where})");
+                var lineBottom = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(document.GetLocation(line.Offset + column + 2)), AvaloniaEdit.Rendering.VisualYPosition.LineBottom).Y - view.ScrollOffset.Y;
+                Check(header.Center.Y >= code.Y && header.Center.Y <= lineBottom, $"the header sits on the hovered line ({where}, the line from y {code.Y:0.#} to {lineBottom:0.#})");
+                Check(code.X - Views.DataTips.DataTipMetrics.NameX + header.Width <= view.Bounds.Width
+                    ? Math.Abs(name.X - code.X) <= 2
+                    : Math.Abs(header.Right - view.Bounds.Width) <= 2,
+                    $"the header's name lies over the code's, or the header ends at the text view's right edge where there's no room ({where})");
+
+                // In windows of their own, the tips' text is the shell's UI size, as the pinned tips' in the editor.
+                Check(Math.Abs(tip.Header.NameBlock.FontSize - window.FontSize) < 0.01 && Math.Abs(tip.Header.ValueBlock.FontSize - window.FontSize) < 0.01,
+                    $"the header's text is {tip.Header.NameBlock.FontSize:0.#} and {tip.Header.ValueBlock.FontSize:0.#} px, the window's {window.FontSize:0.#}");
+                tip.SetOpen(null, tip.Header, tip.Root, true);
+                await WaitAsync(() => tip.Panels is [{ Rows: [{ Node.IsPlaceholder: false }, ..] }], "args' elements open in a child tip").ConfigureAwait(true);
+                var rows = tip.Panels[0].Rows;
+                Check(Math.Abs(rows[0].ValueBlock.FontSize - window.FontSize) < 0.01, $"the child tip's text is {rows[0].ValueBlock.FontSize:0.#} px, the window's {window.FontSize:0.#}");
+                Check(rows.Any(r => r.Node.Value == "\"two words\""), "the child tip lists \"two words\": " + string.Join(", ", rows.Select(r => $"{r.Node.Name} = {r.Node.Value}")));
+                Screenshot("smoke-test-data-tip.png", tip.Popups);
+                editor.HoverPopup.IsOpen = false;
+
+                // With room to its right (line 9's args, near the text's left edge), the header's name lies over the code's.
+                var exitLine = document.GetLineByNumber(Array.FindIndex(lines, l => l.Contains("Array.IndexOf(args", StringComparison.Ordinal)) + 1);
+                var argsAt = exitLine.Offset + document.GetText(exitLine).IndexOf("(args", StringComparison.Ordinal) + 1;
+                await editor.ShowDataTipAsync(argsAt + 1).ConfigureAwait(true);
+                await WaitAsync(() => editor.DataTip is { Header.Bounds.Width: > 0 } shown && !ReferenceEquals(shown, tip), $"the data tip opens over line {exitLine.LineNumber}'s args").ConfigureAwait(true);
+                await RenderedAsync().ConfigureAwait(true);
+                (header, name, code) = Where(editor.DataTip!, argsAt);
+                where = $"the header at {header}, its name at x {name.X:0.#}, the code's at {code.X:0.#}, the text view {view.Bounds.Width:0.#} wide";
+                Check(code.X - Views.DataTips.DataTipMetrics.NameX + header.Width <= view.Bounds.Width && Math.Abs(name.X - code.X) <= 2,
+                    $"with room to its right, the header's name lies over the code's ({where})");
+                editor.HoverPopup.IsOpen = false;
+
+                // Locals: the same rows in one flat list, args expanded, its elements' values in the Value column.
+                shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
+                await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "args"), "Locals lists args").ConfigureAwait(true);
+                shell.Locals.Roots.First(r => r.Name == "args").IsExpanded = true;
+                Views.DataTips.VariableRowList? locals = null;
+                await WaitAsync(() => (locals = window.GetVisualDescendants().OfType<Views.VariablesView>().FirstOrDefault(v => ReferenceEquals(v.DataContext, shell.Locals))?.GetVisualDescendants().OfType<Views.DataTips.VariableRowList>().FirstOrDefault()) is { } list
+                    && list.Rows.Any(r => r.Depth == 1 && r.Node.Value == "\"two words\""), "Locals shows args' elements one level in").ConfigureAwait(true);
+                var argsRow = locals!.RowOf(locals.Rows.First(r => r.Node.Name == "args").Node);
+                var elementRow = locals.RowOf(locals.Rows.First(r => r.Depth == 1).Node);
+                Check(argsRow is not null && elementRow is not null
+                    && Math.Abs(argsRow.ValueBlock.TranslatePoint(default, locals)!.Value.X - elementRow.ValueBlock.TranslatePoint(default, locals)!.Value.X) <= 1,
+                    "Locals keeps the Value column aligned across levels");
+                Screenshot("smoke-test-locals.png");
+            }
+            finally
+            {
+                shell.Run("debug.stop");
+                await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            }
+        }, "debug.session").ConfigureAwait(true);
+
         // M6: Git.
         await StepAsync("git.changes", "M6", "Git status, diff, stage, commit, blame and branches", async () =>
         {

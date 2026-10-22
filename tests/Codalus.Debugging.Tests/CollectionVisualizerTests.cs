@@ -93,7 +93,10 @@ public sealed class CollectionVisualizerTests(DebuggeeFixture debuggee) : IClass
     [InlineData("Debuggee.Order[]", true)]
     [InlineData("int[,]", true)]
     [InlineData("System.Collections.Generic.List<int>", true)]
-    [InlineData("System.Collections.Generic.Dictionary<string, int>", false)]
+    [InlineData("System.Collections.Generic.Dictionary<string, int>", true)] // through the data tip's collection view (D44, decision 5)
+    [InlineData("System.Collections.Generic.HashSet<int>", true)]
+    [InlineData("System.Collections.Generic.Dictionary<string, int>.KeyCollection", false)]
+    [InlineData("Microsoft.AspNetCore.Http.Features.FeatureCollection", false)]
     [InlineData("string", false)]
     [InlineData(null, false)]
     public void Arrays_and_common_collections_get_a_grid(string? type, bool expected)

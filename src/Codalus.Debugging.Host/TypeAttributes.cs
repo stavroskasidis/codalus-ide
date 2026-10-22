@@ -27,7 +27,7 @@ internal sealed class TypeAttributes : IDisposable
             }
         }
 
-        var result = FindCore(typeName, modules, depth: 0) ?? new TypeDisplayResult(null, null, null, [], [], null);
+        var result = (FindCore(typeName, modules, depth: 0) ?? new TypeDisplayResult(null, null, null, [], [], null)) with { Members = MembersOf(typeName, modules) };
         lock (_cache)
         {
             _cache[key] = result;
@@ -67,6 +67,131 @@ internal sealed class TypeAttributes : IDisposable
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The members of <paramref name="typeName"/> and of its base types, most derived first (D44): each field, property
+    /// and event with its kind, access, static-ness, declaring type and module, whether it can be set, and its declared
+    /// type. Generic base types (<c>Dictionary&lt;string, object&gt;</c>) are followed through their definitions. Null
+    /// when the type isn't in the modules (a remote program's, whose files aren't here).
+    /// </summary>
+    internal List<TypeMember>? MembersOf(string typeName, IReadOnlyList<string> modules)
+    {
+        var located = MetadataNames(typeName).Select(name => Locate(name, modules)).FirstOrDefault(l => l is not null);
+        if (located is null)
+        {
+            return null;
+        }
+
+        var members = new List<TypeMember>();
+        for (var depth = 0; located is { } at && depth < 16; depth++)
+        {
+            var (reader, type, path) = at;
+            var declaring = FullName(reader, type).Replace('/', '.');
+            var events = new HashSet<string>(type.GetEvents().Select(e => reader.GetString(reader.GetEventDefinition(e).Name)), StringComparer.Ordinal);
+            foreach (var handle in type.GetFields())
+            {
+                var field = reader.GetFieldDefinition(handle);
+                var name = reader.GetString(field.Name);
+                var attributes = field.Attributes;
+                var literal = (attributes & FieldAttributes.Literal) != 0;
+                members.Add(new TypeMember(
+                    name,
+                    literal ? "constant" : events.Contains(name) ? "event" : "field",
+                    Access((int)(attributes & FieldAttributes.FieldAccessMask)),
+                    (attributes & FieldAttributes.Static) != 0,
+                    declaring,
+                    path,
+                    !literal && (attributes & FieldAttributes.InitOnly) == 0,
+                    Decode(() => field.DecodeSignature(SignatureNames.Instance, null))));
+            }
+
+            foreach (var handle in type.GetProperties())
+            {
+                var property = reader.GetPropertyDefinition(handle);
+                var accessors = property.GetAccessors();
+                var getter = accessors.Getter.IsNil ? (MethodDefinition?)null : reader.GetMethodDefinition(accessors.Getter);
+                var setter = accessors.Setter.IsNil ? (MethodDefinition?)null : reader.GetMethodDefinition(accessors.Setter);
+                if (getter is null && setter is null)
+                {
+                    continue;
+                }
+
+                // An indexer: netcoredbg lists it by its name (Item) with the exception its call without arguments throws.
+                var indexer = (getter ?? setter)!.Value.GetParameters().Count > (getter is null ? 1 : 0);
+                var access = Math.Max(getter is { } g ? (int)(g.Attributes & MethodAttributes.MemberAccessMask) : 0, setter is { } st ? (int)(st.Attributes & MethodAttributes.MemberAccessMask) : 0);
+                members.Add(new TypeMember(
+                    reader.GetString(property.Name),
+                    indexer ? "indexer" : "property",
+                    Access(access),
+                    ((getter ?? setter)!.Value.Attributes & MethodAttributes.Static) != 0,
+                    declaring,
+                    path,
+                    setter is not null,
+                    Decode(() => property.DecodeSignature(SignatureNames.Instance, null).ReturnType)));
+            }
+
+            located = BaseTypeMetadataName(reader, type.BaseType) is { } baseName && baseName is not ("System.Object" or "System.ValueType" or "System.Enum")
+                ? Locate(baseName, modules)
+                : null;
+        }
+
+        return members;
+    }
+
+    /// <summary>The access of a field's or a method's access bits (FieldAttributes and MethodAttributes share them).</summary>
+    private static string Access(int bits) => bits switch
+    {
+        6 => "public",
+        5 => "protected internal",
+        4 => "protected",
+        3 => "internal",
+        2 => "private protected",
+        _ => "private",
+    };
+
+    private static string? Decode(Func<string> decode)
+    {
+        try
+        {
+            return decode();
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or InvalidOperationException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A type definition by its metadata name (<c>Namespace.Name`1</c>, <c>Outer/Inner</c>), in the first module that has it.</summary>
+    private (MetadataReader Reader, TypeDefinition Type, string Path)? Locate(string metadataName, IReadOnlyList<string> modules)
+    {
+        foreach (var path in modules)
+        {
+            if (Load(path) is { } module && module.Types.TryGetValue(metadataName, out var handle))
+            {
+                return (module.Reader, module.Reader.GetTypeDefinition(handle), path);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>A base type's metadata name, a generic instantiation's (<c>Dictionary&lt;string, object&gt;</c>) by its definition's (<c>Dictionary`2</c>).</summary>
+    private static string? BaseTypeMetadataName(MetadataReader reader, EntityHandle handle)
+    {
+        if (handle.Kind != HandleKind.TypeSpecification)
+        {
+            return BaseTypeName(reader, handle);
+        }
+
+        var blob = reader.GetBlobReader(reader.GetTypeSpecification((TypeSpecificationHandle)handle).Signature);
+        if (blob.ReadSignatureTypeCode() != SignatureTypeCode.GenericTypeInstance)
+        {
+            return null;
+        }
+
+        blob.ReadSignatureTypeCode(); // class or value type
+        return BaseTypeName(reader, blob.ReadTypeHandle());
     }
 
     /// <summary>
@@ -265,6 +390,65 @@ internal sealed class TypeAttributes : IDisposable
     }
 
     private sealed record Module(PEReader Pe, MetadataReader Reader, Dictionary<string, TypeDefinitionHandle> Types);
+
+    /// <summary>A signature's types as C# names (<c>int</c>, <c>System.Collections.Generic.List&lt;string&gt;</c>), enough to tell an exception type.</summary>
+    private sealed class SignatureNames : ISignatureTypeProvider<string, object?>
+    {
+        public static readonly SignatureNames Instance = new();
+
+        public string GetPrimitiveType(PrimitiveTypeCode typeCode) => typeCode switch
+        {
+            PrimitiveTypeCode.Boolean => "bool",
+            PrimitiveTypeCode.Byte => "byte",
+            PrimitiveTypeCode.SByte => "sbyte",
+            PrimitiveTypeCode.Char => "char",
+            PrimitiveTypeCode.Int16 => "short",
+            PrimitiveTypeCode.UInt16 => "ushort",
+            PrimitiveTypeCode.Int32 => "int",
+            PrimitiveTypeCode.UInt32 => "uint",
+            PrimitiveTypeCode.Int64 => "long",
+            PrimitiveTypeCode.UInt64 => "ulong",
+            PrimitiveTypeCode.Single => "float",
+            PrimitiveTypeCode.Double => "double",
+            PrimitiveTypeCode.String => "string",
+            PrimitiveTypeCode.Object => "object",
+            PrimitiveTypeCode.IntPtr => "nint",
+            PrimitiveTypeCode.UIntPtr => "nuint",
+            PrimitiveTypeCode.Void => "void",
+            _ => typeCode.ToString(),
+        };
+
+        public string GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind) => FullName(reader, reader.GetTypeDefinition(handle)).Replace('/', '.');
+
+        public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind) => FullName(reader, reader.GetTypeReference(handle));
+
+        public string GetTypeFromSpecification(MetadataReader reader, object? genericContext, TypeSpecificationHandle handle, byte rawTypeKind) =>
+            reader.GetTypeSpecification(handle).DecodeSignature(this, genericContext);
+
+        public string GetSZArrayType(string elementType) => elementType + "[]";
+
+        public string GetArrayType(string elementType, ArrayShape shape) => elementType + "[" + new string(',', Math.Max(0, shape.Rank - 1)) + "]";
+
+        public string GetByReferenceType(string elementType) => elementType;
+
+        public string GetPointerType(string elementType) => elementType + "*";
+
+        public string GetPinnedType(string elementType) => elementType;
+
+        public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments)
+        {
+            var tick = genericType.IndexOf('`', StringComparison.Ordinal);
+            return (tick >= 0 ? genericType[..tick] : genericType) + "<" + string.Join(", ", typeArguments) + ">";
+        }
+
+        public string GetGenericMethodParameter(object? genericContext, int index) => "!!" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        public string GetGenericTypeParameter(object? genericContext, int index) => "!" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        public string GetFunctionPointerType(MethodSignature<string> signature) => "delegate*";
+
+        public string GetModifiedType(string modifier, string unmodifiedType, bool isRequired) => unmodifiedType;
+    }
 
     /// <summary>Decodes attribute arguments with types as names (enough for the debugger attributes).</summary>
     private sealed class StringTypes : ICustomAttributeTypeProvider<object?>
