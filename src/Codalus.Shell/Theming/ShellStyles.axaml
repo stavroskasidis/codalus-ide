@@ -838,6 +838,21 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
   </Style>
   <!--
+    The Toolbox's armed item (#66, docs/design/controls/Toolbox.dc.html): drawn as the selection, as the classic IDE
+    highlights its selected tool, under the pointer and pressed too; Shell.Selection.Inactive once the Toolbox hasn't
+    the focus (the designer has it). Its icon takes the selection's text in High Contrast, as icons do there. The hint
+    that sat above the list (and moved every item, so a double-click's second click landed on another) is the designer's status line.
+  -->
+  <Style Selector="Button.toolboxItem.armed /template/ ContentPresenter#PART_ContentPresenter, Button.toolboxItem.armed:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.toolboxItem.armed:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <Style Selector=":is(UserControl).toolbox:not(:focus-within) Button.toolboxItem.armed /template/ ContentPresenter#PART_ContentPresenter, :is(UserControl).toolbox:not(:focus-within) Button.toolboxItem.armed:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Inactive}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
+  </Style>
+  <!--
     A split button (the control set): the default button's look with its arrow; in a toolbar (the Hot Reload button and
     its menu's arrow) flat like the buttons beside it. Its two parts are Buttons in its template that Fluent styles
     itself, so every state is restated on their presenters: the hover color and border under the pointer or pressed or
