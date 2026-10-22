@@ -1,6 +1,9 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Codalus.LanguageServices.Protocol;
+using Codalus.Rpc;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Host;
@@ -29,13 +32,91 @@ internal sealed class WorkspaceManager : IDisposable
             .Concat([typeof(Microsoft.CodeAnalysis.Completion.CompletionService).Assembly, Assembly.Load("Microsoft.CodeAnalysis.CSharp.Features")])
             .Distinct()));
 
-    private static readonly Lazy<MetadataReference[]> s_frameworkReferences = new(() =>
-        [.. ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? string.Empty)
+    private static readonly Lazy<MetadataReference[]> s_frameworkReferences = new(() => FrameworkReferences(RuntimeEnvironment.GetRuntimeDirectory()));
+
+    /// <summary>
+    /// What Miscellaneous Files compiles against: the reference pack of the .NET in <paramref name="runtimeDirectory"/>
+    /// (<see cref="ReferencePack"/>), as a project for it does, with the documentation next to each assembly. Else the
+    /// host's own framework assemblies, which have no documentation: on a machine with the runtime only, and when the
+    /// pack can't be read (an SDK update replacing it while the host starts, a broken link, a folder the user can't
+    /// read), since the host must start anyway.
+    /// </summary>
+    internal static MetadataReference[] FrameworkReferences(string runtimeDirectory)
+    {
+        try
+        {
+            if (ReferencePack(runtimeDirectory) is { } pack
+                && Open(Directory.GetFiles(pack, "*.dll").Order(StringComparer.Ordinal)) is var references
+                && !references.Contains(null))
+            {
+                return [.. references.OfType<MetadataReference>()];
+            }
+        }
+        catch (Exception ex) when (IsUnreadable(ex))
+        {
+            // Its folders can't be listed: the runtime's assemblies, below.
+        }
+
+        // Files the runtime has loaded; one that still can't be opened is left out rather than failing the host.
+        return [.. Open(((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Where(p => Path.GetFileName(p).StartsWith("System.", StringComparison.Ordinal) || Path.GetFileName(p) is "mscorlib.dll" or "netstandard.dll")
-            .AsParallel()
-            .AsOrdered()
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))]);
+            .Where(p => Path.GetFileName(p).StartsWith("System.", StringComparison.Ordinal) || Path.GetFileName(p) is "mscorlib.dll" or "netstandard.dll"))
+            .OfType<MetadataReference>()];
+
+        // In parallel (the cold start reads a few hundred files); null for a file that can't be read.
+        static MetadataReference?[] Open(IEnumerable<string> paths) =>
+            [.. paths.AsParallel().AsOrdered().Select(p =>
+            {
+                try
+                {
+                    return MetadataReference.CreateFromFile(p, documentation: DocumentationFiles.For(p, CultureInfo.CurrentUICulture));
+                }
+                catch (Exception ex) when (IsUnreadable(ex))
+                {
+                    return (MetadataReference?)null;
+                }
+            })];
+
+        static bool IsUnreadable(Exception ex) => ex is IOException or UnauthorizedAccessException or BadImageFormatException;
+    }
+
+    /// <summary>
+    /// The reference assemblies (<c>packs/Microsoft.NETCore.App.Ref/&lt;version&gt;/ref/net&lt;major.minor&gt;</c>) of the
+    /// runtime in <paramref name="runtimeDirectory"/> (<c>shared/Microsoft.NETCore.App/&lt;version&gt;</c>) in the same
+    /// .NET folder: those of its version, else the newest of its major version; null when there are none.
+    /// </summary>
+    internal static string? ReferencePack(string runtimeDirectory)
+    {
+        var runtime = new DirectoryInfo(Path.TrimEndingDirectorySeparator(runtimeDirectory));
+        if (!FrameworkVersion.TryParse(runtime.Name, out var version)
+            || runtime.Parent is not { Name: "Microsoft.NETCore.App", Parent: { Name: "shared", Parent: { } root } })
+        {
+            return null;
+        }
+
+        var packs = Path.Combine(root.FullName, "packs", "Microsoft.NETCore.App.Ref");
+        if (!Directory.Exists(packs))
+        {
+            return null;
+        }
+
+        var candidates = Directory.EnumerateDirectories(packs)
+            .Select(d => FrameworkVersion.TryParse(Path.GetFileName(d), out var v) ? v : null)
+            .OfType<FrameworkVersion>()
+            .Where(v => v.Major == version.Major)
+            .OrderByDescending(v => v.Equals(version))
+            .ThenByDescending(v => v);
+        foreach (var candidate in candidates)
+        {
+            var folder = Path.Combine(packs, candidate.Text, "ref", $"net{candidate.Major}.{candidate.Minor}");
+            if (File.Exists(Path.Combine(folder, "System.Runtime.dll")))
+            {
+                return folder;
+            }
+        }
+
+        return null;
+    }
 
     private readonly Lock _gate = new();
     private readonly CodalusWorkspace _workspace;
