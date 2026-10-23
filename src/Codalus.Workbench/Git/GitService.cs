@@ -53,6 +53,39 @@ public sealed partial class GitService : IDisposable
         string directory, IReadOnlyList<string> arguments, CancellationToken cancellationToken, string? input = null, bool check = true, bool readOnly = false,
         IReadOnlyDictionary<string, string>? environment = null)
     {
+        for (var attempt = 0; ; attempt++)
+        {
+            var result = await RunOnceAsync(directory, arguments, input, readOnly, environment, cancellationToken).ConfigureAwait(false);
+            if (!readOnly && attempt < s_lockRetryDelays.Length && IsLockBusy(result.ExitCode, result.Error))
+            {
+                await Task.Delay(s_lockRetryDelays[attempt], cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            if (check && result.ExitCode != 0)
+            {
+                var message = (result.Error.Trim().Length > 0 ? result.Error : result.Output).Trim();
+                throw new GitException(message.Length > 0 ? message : $"git {(arguments.Count > 0 ? arguments[0] : string.Empty)} failed (exit code {result.ExitCode.ToString(CultureInfo.InvariantCulture)}).", result.ExitCode);
+            }
+
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Whether git failed only because a lock file it creates (<c>index.lock</c>, a ref's) exists: on Windows the
+    /// antivirus or the search indexer can hold the last command's lock open for a moment after git deleted it, so the
+    /// next write finds it there (the Windows command sweep's Stage File, right after other git commands). Such a command
+    /// changed nothing, so a write tries again a few times before it reports the lock.
+    /// </summary>
+    internal static bool IsLockBusy(int exitCode, string error) => exitCode != 0 && error.Contains(".lock': File exists", StringComparison.Ordinal);
+
+    /// <summary>The waits before a write that found a lock busy tries again: about 1.5 s in all.</summary>
+    private static readonly TimeSpan[] s_lockRetryDelays = [TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(800)];
+
+    private async Task<(int ExitCode, string Output, string Error)> RunOnceAsync(
+        string directory, IReadOnlyList<string> arguments, string? input, bool readOnly, IReadOnlyDictionary<string, string>? environment, CancellationToken cancellationToken)
+    {
         var process = await Task.Run(() => Start(directory, arguments, input is not null, readOnly, environment), CancellationToken.None).ConfigureAwait(false);
         using (process)
         {
@@ -87,12 +120,6 @@ public sealed partial class GitService : IDisposable
                 Log?.Invoke(this, $"> git {string.Join(' ', arguments)}" + (result.ExitCode == 0 ? string.Empty : $"\n{result.Item3.TrimEnd()}"));
             }
 
-            if (check && result.ExitCode != 0)
-            {
-                var message = (result.Item3.Trim().Length > 0 ? result.Item3 : result.Item2).Trim();
-                throw new GitException(message.Length > 0 ? message : $"git {(arguments.Count > 0 ? arguments[0] : string.Empty)} failed (exit code {result.ExitCode.ToString(CultureInfo.InvariantCulture)}).", result.ExitCode);
-            }
-
             return result;
         }
     }
@@ -102,6 +129,20 @@ public sealed partial class GitService : IDisposable
     /// order mark, line endings and any encoding pass unchanged (#86).
     /// </summary>
     private async Task<(int ExitCode, byte[] Output, string Error)> RunBytesAsync(IReadOnlyList<string> arguments, byte[]? input, bool readOnly, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var result = await RunBytesOnceAsync(arguments, input, readOnly, cancellationToken).ConfigureAwait(false);
+            if (readOnly || attempt >= s_lockRetryDelays.Length || !IsLockBusy(result.ExitCode, result.Error))
+            {
+                return result;
+            }
+
+            await Task.Delay(s_lockRetryDelays[attempt], cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<(int ExitCode, byte[] Output, string Error)> RunBytesOnceAsync(IReadOnlyList<string> arguments, byte[]? input, bool readOnly, CancellationToken cancellationToken)
     {
         var root = Root ?? throw new InvalidOperationException("No git repository is open.");
         var process = await Task.Run(() => Start(root, arguments, input is not null, readOnly, null), CancellationToken.None).ConfigureAwait(false);
