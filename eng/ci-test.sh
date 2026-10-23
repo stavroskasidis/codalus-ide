@@ -113,10 +113,13 @@ case "$shard" in
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The
     # Windows runner has four cores, where all the projects at once timed out at random, and three at a time still
     # starved a test now and then (a plugin host's start, a trace's start, Aspire's orchestrator check): two there.
+    # The macOS runner (three cores, 7 GB) too: with every project at once, the fixtures' builds ran out of the
+    # kernel's socket buffers (an MSBuild node's pipe write failed with ENOBUFS, "No buffer space available": MSB4166,
+    # run 39893166475), and three unrelated tests stalled together until HangDump ended them (its second attempt).
     # The tests that write full core dumps run on their own afterwards: next to every other test process (a macOS
     # runner has 7 GB) createdump stalled past its timeout or wrote a truncated core.
     extra=()
-    [[ "${RUNNER_OS:-}" == "Windows" ]] && extra=(--max-parallel-test-modules 2)
+    [[ "${RUNNER_OS:-}" == "Windows" || "${RUNNER_OS:-}" == "macOS" ]] && extra=(--max-parallel-test-modules 2)
     dumps=(Codalus.Debugging.Tests.CompanionTests Codalus.Debugging.Tests.JitDebuggingTests)
     without=()
     alone=()
