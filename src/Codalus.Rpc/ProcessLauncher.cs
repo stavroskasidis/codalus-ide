@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Codalus.Platform;
+using Codalus.Platform.Internal;
 
 namespace Codalus.Rpc;
 
