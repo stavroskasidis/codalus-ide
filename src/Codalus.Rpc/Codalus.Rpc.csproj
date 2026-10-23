@@ -7,4 +7,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Codalus.Rpc.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- ProcessTree.Kill: a host's process tree is ended without .NET's walk, which blocks on macOS. -->
+    <ProjectReference Include="..\Codalus.Platform\Codalus.Platform.csproj" />
+  </ItemGroup>
 </Project>

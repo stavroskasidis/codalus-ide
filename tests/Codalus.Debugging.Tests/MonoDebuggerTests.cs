@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using Codalus.Platform;
 
 namespace Codalus.Debugging.Tests;
 
@@ -178,7 +179,7 @@ public sealed class MonoDebuggerTests(MonoDebuggeeFixture fixture) : IClassFixtu
         {
             if (!app.HasExited)
             {
-                app.Kill(entireProcessTree: true);
+                ProcessTree.Kill(app);
             }
         }
     }
@@ -215,7 +216,7 @@ public sealed class MonoDebuggerTests(MonoDebuggeeFixture fixture) : IClassFixtu
         {
             if (!app.HasExited)
             {
-                app.Kill(entireProcessTree: true);
+                ProcessTree.Kill(app);
             }
         }
     }

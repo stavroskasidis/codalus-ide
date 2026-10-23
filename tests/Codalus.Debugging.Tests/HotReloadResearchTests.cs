@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using Codalus.Platform;
 using Codalus.Workbench.Debugging;
 
 namespace Codalus.Debugging.Tests;
@@ -76,7 +77,7 @@ public sealed partial class HotReloadResearchTests
             await debug.StopAsync();
             if (!process.HasExited)
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
             }
         }
     }

@@ -1,3 +1,4 @@
+using Codalus.Platform;
 namespace Codalus.Rpc.Tests;
 
 /// <summary>
@@ -416,7 +417,7 @@ public sealed class HostRuntimeTests : IDisposable
         await logged.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         using (var running = System.Diagnostics.Process.GetProcessById(process.ProcessId!.Value))
         {
-            running.Kill(entireProcessTree: true);
+            ProcessTree.Kill(running);
         }
 
         await WaitUntilAsync(() => { lock (crashes) { return crashes.Count > 0; } });
@@ -454,7 +455,7 @@ public sealed class HostRuntimeTests : IDisposable
         Assert.True(process.IsRunning); // it kept running
         using (var running = System.Diagnostics.Process.GetProcessById(process.ProcessId!.Value))
         {
-            running.Kill(entireProcessTree: true);
+            ProcessTree.Kill(running);
         }
 
         await restarted.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Projects;
 
@@ -115,7 +116,7 @@ public static class BuildHostRuntime
             }
             catch (OperationCanceledException)
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
                 throw;
             }
 

@@ -980,7 +980,7 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
             {
                 try
                 {
-                    process.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(process);
                 }
                 catch (InvalidOperationException)
                 {

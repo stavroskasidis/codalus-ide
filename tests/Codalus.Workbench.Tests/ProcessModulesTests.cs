@@ -55,7 +55,7 @@ public sealed class ProcessModulesTests
         }
         finally
         {
-            child.Kill(entireProcessTree: true);
+            ProcessTree.Kill(child);
             child.WaitForExit();
         }
 

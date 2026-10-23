@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Codalus.Platform;
 
 namespace Codalus.Debugging;
 
@@ -141,7 +142,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
             }
             else if (!process.HasExited)
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
             }
 
             string output;
@@ -599,7 +600,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
         {
             if (!_server.HasExited)
             {
-                _server.Kill(entireProcessTree: true);
+                ProcessTree.Kill(_server);
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException)

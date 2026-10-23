@@ -3,6 +3,7 @@ using System.Formats.Tar;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Node;
 
@@ -149,7 +150,7 @@ public sealed class NodeRuntime(string cacheFolder, HttpClient? http = null) : I
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             throw;
         }
 

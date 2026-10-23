@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Diagnostics;
 
@@ -590,7 +591,7 @@ public sealed class BenchmarkService
                 }
                 catch (OperationCanceledException)
                 {
-                    process.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(process);
                     throw;
                 }
 

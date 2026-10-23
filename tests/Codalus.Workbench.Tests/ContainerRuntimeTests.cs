@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Codalus.Platform;
 using Codalus.Projects.Protocol;
 using Codalus.Workbench.Build;
 using Codalus.Workbench.Containers;
@@ -151,7 +152,7 @@ public sealed class ContainerRuntimeTests : IAsyncLifetime
         }
         finally
         {
-            app.Kill(entireProcessTree: true);
+            ProcessTree.Kill(app);
         }
 
         await engine.RemoveAsync(launch.Name, ct);

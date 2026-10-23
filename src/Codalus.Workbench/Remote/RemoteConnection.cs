@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
+using Codalus.Platform;
 using Codalus.Remote.Protocol;
 using Codalus.Rpc;
 using Codalus.Rpc.Multiplexing;
@@ -615,7 +616,14 @@ public sealed class RemoteConnection : IAsyncDisposable
         {
             if (!process.HasExited)
             {
-                process.Kill(entireProcessTree: tree);
+                if (tree)
+                {
+                    ProcessTree.Kill(process);
+                }
+                else
+                {
+                    process.Kill();
+                }
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
