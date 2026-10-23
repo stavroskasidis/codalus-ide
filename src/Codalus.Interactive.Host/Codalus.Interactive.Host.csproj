@@ -11,6 +11,9 @@
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- ProcessTree's LibraryImports marshal arrays. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);CODALUS_PROCESS_TREE_INTERNAL</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,5 +27,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- ProcessTree.Kill, compiled in (internal) instead of referencing Codalus.Platform for one class (its remarks). -->
+    <Compile Include="..\Codalus.Platform\ProcessTree.cs" Link="Platform\ProcessTree.cs" />
   </ItemGroup>
 </Project>

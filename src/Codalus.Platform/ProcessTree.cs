@@ -2,13 +2,27 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 
+#if CODALUS_PROCESS_TREE_INTERNAL
+namespace Codalus.Platform.Internal;
+#else
 namespace Codalus.Platform;
+#endif
 
 /// <summary>
 /// The processes a process started, by their ids: <c>/proc</c> on Linux, <c>proc_listchildpids</c> on macOS, a
 /// Toolhelp snapshot on Windows (.NET has no public way to read a process's parent), and ending a process with them.
 /// </summary>
+/// <remarks>
+/// Codalus.Rpc and the hosts that use it compile this file in as an internal copy (CODALUS_PROCESS_TREE_INTERNAL, in
+/// Codalus.Platform.Internal so that code seeing both never finds two) instead of referencing Codalus.Platform: every
+/// host would otherwise ship the whole assembly for this one class, which the size gate caught (the markup host +0.3 MB,
+/// 0.6.0's release run).
+/// </remarks>
+#if CODALUS_PROCESS_TREE_INTERNAL
+internal static partial class ProcessTree
+#else
 public static partial class ProcessTree
+#endif
 {
     /// <summary>
     /// Ends <paramref name="process"/> and every process it started, as <see cref="Process.Kill(bool)"/> with

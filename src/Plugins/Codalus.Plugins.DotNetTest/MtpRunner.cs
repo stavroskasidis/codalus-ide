@@ -4,7 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
-using Codalus.Platform;
+using Codalus.Platform.Internal;
 using Codalus.Plugins.Proposed;
 using Codalus.Rpc;
 

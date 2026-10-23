@@ -3,12 +3,15 @@
     <Description>AOT-safe, bidirectional JSON-RPC 2.0 (LSP framing) and supervised service processes.</Description>
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
+    <!-- ProcessTree's LibraryImports marshal arrays. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);CODALUS_PROCESS_TREE_INTERNAL</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Codalus.Rpc.Tests" />
   </ItemGroup>
   <ItemGroup>
-    <!-- ProcessTree.Kill: a host's process tree is ended without .NET's walk, which blocks on macOS. -->
-    <ProjectReference Include="..\Codalus.Platform\Codalus.Platform.csproj" />
+    <!-- ProcessTree.Kill, compiled in (internal) instead of referencing Codalus.Platform for one class (its remarks). -->
+    <Compile Include="..\Codalus.Platform\ProcessTree.cs" Link="Platform\ProcessTree.cs" />
   </ItemGroup>
 </Project>
