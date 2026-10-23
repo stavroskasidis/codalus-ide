@@ -3,6 +3,9 @@
     <Description>Built-in .NET test plugin (ADR 0010, 0011): discovers, runs and debugs VSTest and Microsoft.Testing.Platform tests and collects coverage with Coverlet, on the proposed test controller API.</Description>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <IsPackable>false</IsPackable>
+    <!-- ProcessTree's LibraryImports marshal arrays. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);CODALUS_PROCESS_TREE_INTERNAL</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <!-- The plugin host provides the API at runtime, so it is not copied next to the plugin. -->
@@ -41,5 +44,9 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Codalus.Plugins.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- ProcessTree.Kill, compiled in (internal) instead of referencing Codalus.Platform for one class (its remarks). -->
+    <Compile Include="..\..\Codalus.Platform\ProcessTree.cs" Link="Platform\ProcessTree.cs" />
   </ItemGroup>
 </Project>
