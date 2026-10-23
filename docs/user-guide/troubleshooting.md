@@ -40,6 +40,7 @@ Help → Show Logs opens the Codalus IDE channel. Crash reports are saved in the
 | "Address already in use" after an edit restarted a Blazor Web App | A server from before the restart still holds the port: one held at a breakpoint by a debugger other than Codalus IDE's, or left by a crash. Codalus IDE ends the ones it started. Find the process listening on the port (`lsof -i :5000` on Linux and macOS, `netstat -ano` on Windows) and end it. |
 | `Ctrl+F5` on a Blazor Web App opens nothing, or the page is "not found" | The startup project is the `.Client` project, whose dev host serves nothing at `/` in a Blazor Web App: set the server project as the startup project. Codalus IDE picks the server by default. |
 | The browser doesn't open after Run | No program opens URLs here (on Linux, `xdg-open`): Output → Run says so, with the address to open yourself. |
+| On Windows, **Restart to update** starts the same version again | A program still running holds a file or folder of the install, so the update can't replace it: `%LOCALAPPDATA%\velopack\velopack_Codalus.log` ends with "one or more running processes prevented it". Before 0.6.0 it was usually adb's server, started when the IDE listed Android devices: run `adb kill-server` (or restart Windows), then **Restart to update**. |
 
 A helper process that crashes (build host, language service, plugin host) is restarted automatically, and a notification tells you. One that exits while it starts isn't restarted (see above).
 

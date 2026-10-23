@@ -66,6 +66,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Plugins can no longer read other plugins' secrets**: a plugin host's secret requests must name one of its own plugins, and the shell's own secrets (external agents' keys) are out of every plugin's reach.
 - **Fixed:** the completion list, its description, parameter info, Quick Info and other popups that open in a window of their own drew their text at 14 px instead of the 12 px of the rest of the IDE.
 - **Fixed:** the Aspire window's console output could stay empty for a running project: when the AppHost's log stream for it ended early, the window never asked again. It now follows the stream again while the resource runs (a few times, waiting longer each time), without repeating lines already shown, and again when the resource is restarted.
+- **Fixed:** on Windows, **Restart to update** could start the old version again and offer the same update ([user guide](docs/user-guide/troubleshooting.md#common-problems)). The IDE ran in its install folder, so the programs it started did too, and one that keeps running after the IDE exits held the folder the update replaces: adb's server, started when the IDE lists Android devices. The IDE now moves to your home folder when it starts in its own (a terminal opened without a solution starts there too). An earlier install still starts adb in its folder: run `adb kill-server` (or restart Windows), then **Restart to update**.
 
 ## 0.5.0
 
