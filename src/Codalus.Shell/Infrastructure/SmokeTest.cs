@@ -3824,14 +3824,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(v => v.IsEffectivelyVisible), "AI Chat opens").ConfigureAwait(true);
             var view = window.GetVisualDescendants().OfType<AiChatView>().First(v => v.IsEffectivelyVisible);
             await WaitAsync(() => view.GetVisualDescendants().OfType<Avalonia.Controls.StackPanel>().Any(p => p.Name == "ConnectRow" && p.IsEffectivelyVisible), "AI Chat's off state offers to connect an agent").ConfigureAwait(true);
-            var buttons = view.GetVisualDescendants().OfType<Avalonia.Controls.ItemsControl>().First(c => c.Name == "ConnectButtons").GetVisualDescendants().OfType<Avalonia.Controls.Button>().ToList();
+            // The buttons once the row has made them, shown and bound to their agents: the row was hidden while the
+            // ai.chat step's provider answered, and a button read while it was laid out again could be replaced before the
+            // click (with no agent, the click does nothing).
+            List<Avalonia.Controls.Button> Buttons() => [.. view.GetVisualDescendants().OfType<Avalonia.Controls.ItemsControl>().First(c => c.Name == "ConnectButtons").GetVisualDescendants().OfType<Avalonia.Controls.Button>()];
+            await WaitAsync(() => Buttons() is { Count: 4 } made && made.All(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Tag is string), "the one-click agents' buttons are shown").ConfigureAwait(true);
+            var buttons = Buttons();
             Check(buttons.Select(b => b.Content as string).SequenceEqual(["Claude", "Codex", "Gemini CLI", "GitHub Copilot"]), "the four one-click agents are buttons");
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("ai-chat-connect.png");
 
             buttons[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
             var dialog = shell.ConnectAgent;
-            await WaitAsync(() => dialog.IsOpen && dialog.Mode == ConnectAgentMode.Connect, "Connect to Claude shows what it found").ConfigureAwait(true);
+            await WaitAsync(() => dialog.IsOpen, "Connect to Claude opens").ConfigureAwait(true);
+            await WaitAsync(() => dialog.Mode == ConnectAgentMode.Connect, "Connect to Claude shows what it found").ConfigureAwait(true);
             Check(dialog.Title == "Connect to Claude", "the dialog names the agent");
             Check(dialog.Requirements.Select(r => r.Name).SequenceEqual(["Node.js 24.11.1", "npx 11.6.2"]), "the stand-in Node.js and npx are found");
             Check(dialog.Runs.FirstOrDefault()?.Command == Workbench.Ai.Acp.AcpAgentTemplates.Find("claude")!.Agent.CommandLine, "the exact command line is shown");
