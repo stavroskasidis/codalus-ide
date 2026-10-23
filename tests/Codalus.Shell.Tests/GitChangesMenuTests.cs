@@ -224,7 +224,9 @@ public sealed class GitChangesMenuTests
 
         Git(folder, "branch", "-D", "fix/null-greeting");
         Git(folder, "branch", "local-only");
-        Git(root, "clone", "-q", bare, other);
+        // core.autocrlf for the checkout itself: Windows runners set it to true, so the clone's README.md came out with CRLF,
+        // which the first `git add .` here then committed into release/0.6 (a fourth file in its compare).
+        Git(root, "clone", "-q", "-c", "core.autocrlf=false", bare, other);
         Configure(other);
         Git(other, "switch", "-q", "release/0.6");
         CommitFile(other, "r1.txt", "release one");
