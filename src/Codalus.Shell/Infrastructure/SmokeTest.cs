@@ -3824,17 +3824,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(v => v.IsEffectivelyVisible), "AI Chat opens").ConfigureAwait(true);
             var view = window.GetVisualDescendants().OfType<AiChatView>().First(v => v.IsEffectivelyVisible);
             await WaitAsync(() => view.GetVisualDescendants().OfType<Avalonia.Controls.StackPanel>().Any(p => p.Name == "ConnectRow" && p.IsEffectivelyVisible), "AI Chat's off state offers to connect an agent").ConfigureAwait(true);
-            // The buttons once the row has made them, shown and bound to their agents: the row was hidden while the
-            // ai.chat step's provider answered, and a button read while it was laid out again could be replaced before the
-            // click (with no agent, the click does nothing).
-            List<Avalonia.Controls.Button> Buttons() => [.. view.GetVisualDescendants().OfType<Avalonia.Controls.ItemsControl>().First(c => c.Name == "ConnectButtons").GetVisualDescendants().OfType<Avalonia.Controls.Button>()];
-            await WaitAsync(() => Buttons() is { Count: 4 } made && made.All(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Tag is string), "the one-click agents' buttons are shown").ConfigureAwait(true);
+            // The buttons once the row has made them, shown and bound to their agents. The row's buttons are made again
+            // as the window is laid out (after ai.chat and the gallery's themes): a button read before the screenshot was
+            // detached by the click, with no agent, and the click did nothing (#144's Linux smoke).
+            List<Avalonia.Controls.Button> Buttons() => [.. view.GetVisualDescendants().OfType<Avalonia.Controls.ItemsControl>().First(c => c.Name == "ConnectButtons").GetVisualDescendants().OfType<Avalonia.Controls.Button>().Where(b => b.IsAttachedToVisualTree())];
+            bool Shown(Avalonia.Controls.Button b) => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Tag is string { Length: > 0 };
+            await WaitAsync(() => Buttons() is { Count: 4 } made && made.All(Shown), "the one-click agents' buttons are shown").ConfigureAwait(true);
             var buttons = Buttons();
             Check(buttons.Select(b => b.Content as string).SequenceEqual(["Claude", "Codex", "Gemini CLI", "GitHub Copilot"]), "the four one-click agents are buttons");
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("ai-chat-connect.png");
 
-            buttons[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+            await WaitAsync(() => Buttons().FirstOrDefault(b => b.Content as string == "Claude") is { } shown && Shown(shown), "the Claude button is shown").ConfigureAwait(true);
+            Buttons().First(b => b.Content as string == "Claude").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
             var dialog = shell.ConnectAgent;
             await WaitAsync(() => dialog.IsOpen, "Connect to Claude opens").ConfigureAwait(true);
             await WaitAsync(() => dialog.Mode == ConnectAgentMode.Connect, "Connect to Claude shows what it found").ConfigureAwait(true);
