@@ -95,6 +95,37 @@ public sealed class ProcessTreeTests
     }
 
     [Fact]
+    public async Task Kill_ends_a_child_started_as_its_parent_is_stopped()
+    {
+        // Killed the moment it prints, the shell is often in the middle of forking sleep: on macOS the child shows only
+        // once the fork is done, after the first listing. A sleep that survives keeps standard output open (as a host's
+        // child keeps the host's connection open), so the output's end is the check.
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var start = OperatingSystem.IsWindows()
+                ? new ProcessStartInfo("cmd.exe", "/c echo started& ping -n 60 127.0.0.1 >nul")
+                : new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", "echo started; sleep 60" } };
+            start.UseShellExecute = false;
+            start.RedirectStandardOutput = true;
+            using var shell = Process.Start(start)!;
+            try
+            {
+                Assert.Equal("started", (await shell.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken))?.Trim());
+                ProcessTree.Kill(shell);
+                var rest = shell.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+                Assert.True(await Task.WhenAny(rest, Task.Delay(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken)) == rest, $"Attempt {attempt + 1}: the shell's child still holds its output.");
+            }
+            finally
+            {
+                if (!shell.HasExited)
+                {
+                    shell.Kill(entireProcessTree: true);
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void The_product_ends_process_trees_through_ProcessTree_Kill()
     {
         // .NET's tree walk reads every process's task information on macOS, which blocks for minutes while ReportCrash

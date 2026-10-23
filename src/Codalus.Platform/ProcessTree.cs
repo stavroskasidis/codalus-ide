@@ -37,6 +37,27 @@ public static partial class ProcessTree
         try
         {
             Stop(process.Id, stopped);
+
+            // A process stopped in the middle of a fork has a child the listing missed: it shows once the fork is done.
+            // Look again, after a moment, until a look finds no one new (a child it missed kept the host's standard
+            // output open, so its end went unnoticed: HostRuntimeTests on macOS). .NET's walk, slower, never missed one.
+            for (var round = 0; round < 10; round++)
+            {
+                var count = stopped.Count;
+                Thread.Sleep(10);
+                foreach (var id in stopped.ToArray())
+                {
+                    foreach (var child in Children(id))
+                    {
+                        Stop(child, stopped);
+                    }
+                }
+
+                if (stopped.Count == count)
+                {
+                    break;
+                }
+            }
         }
         finally
         {
