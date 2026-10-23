@@ -247,6 +247,31 @@ public sealed class WatchedServerSessionTests
     }
 
     [Fact]
+    public async Task A_server_dotnet_watch_reports_exited_while_the_debugger_holds_it_is_ended_before_the_next_starts()
+    {
+        // The release (the detach) is slow, and dotnet watch says the server exited while the debugger still holds it: it
+        // rebuilds and starts the next server, which can't bind the port the held one keeps (macOS CI: "address already in
+        // use", the rude edit test). Ended at once, the next server finds its port free.
+        var (session, hotReload, host, _) = await StartedAsync();
+        using var _ = session;
+        var next = host.NextWait();
+        hotReload.OnLine("dotnet watch : Restart is needed to apply the changes.");
+        await UntilAsync(() => host.Entries().Contains("release"), () => string.Join(", ", host.Entries()));
+        Assert.Equal(WatchedServerState.Releasing, session.State);
+
+        hotReload.OnLine("dotnet watch : [App (net10.0)] Exited");
+        Assert.Contains("kill 100", host.Entries());
+        Assert.Contains(host.Changes, c => c.Kind == WatchedServerChangeKind.OrphanEnded && c.ProcessId == 100);
+
+        // The debug session ends with it, and the next server is followed.
+        session.OnDebugEnded(requested: false);
+        host.Alive.Add(200);
+        next.SetResult(200);
+        await UntilAsync(() => session.State == WatchedServerState.Attached && session.ProcessId == 200, () => string.Join(", ", host.Entries()));
+        Assert.Equal(1, host.Entries().Count(e => e == "kill 100"));
+    }
+
+    [Fact]
     public async Task Dotnet_watch_exiting_ends_the_debug_session_too()
     {
         // Stop Running Programs, or dotnet watch failing.

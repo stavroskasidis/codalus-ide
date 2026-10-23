@@ -125,6 +125,7 @@ public sealed class WatchedServerSession : IDisposable
         hotReload.RestartAnnounced += OnRestartAnnounced;
         hotReload.AppStarted += OnAppStarted;
         hotReload.AppEnded += OnAppEnded;
+        hotReload.Changed += OnHotReloadChanged;
         _ = watchExited.ContinueWith(_ => OnWatchExited(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
     }
 
@@ -256,6 +257,17 @@ public sealed class WatchedServerSession : IDisposable
     }
 
     private void OnAppEnded() => Volatile.Write(ref _appEnded, 1);
+
+    private void OnHotReloadChanged(object? sender, HotReloadEvent e)
+    {
+        // dotnet watch says the server exited while a restart is under way, before it builds the next one: a server the
+        // debugger still holds (its detach is slow) is an orphan now. Ended here, the next server can bind the port it
+        // kept; ended only once the next one started, that one failed "address already in use" (macOS CI).
+        if (e.State == HotReloadState.Exited && State is WatchedServerState.Releasing or WatchedServerState.Following && ProcessId is { } last)
+        {
+            EndOrphan(last);
+        }
+    }
 
     private void OnWatchExited()
     {
@@ -389,5 +401,6 @@ public sealed class WatchedServerSession : IDisposable
         _hotReload.RestartAnnounced -= OnRestartAnnounced;
         _hotReload.AppStarted -= OnAppStarted;
         _hotReload.AppEnded -= OnAppEnded;
+        _hotReload.Changed -= OnHotReloadChanged;
     }
 }
