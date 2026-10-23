@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using Codalus.Platform;
+using Codalus.Platform.Internal;
 using Codalus.Projects.Protocol;
 
 namespace Codalus.Projects.Host.Packages;

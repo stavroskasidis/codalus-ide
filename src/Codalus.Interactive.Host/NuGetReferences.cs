@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Codalus.Platform;
+using Codalus.Platform.Internal;
 using Microsoft.CodeAnalysis;
 
 namespace Codalus.Interactive.Host;
