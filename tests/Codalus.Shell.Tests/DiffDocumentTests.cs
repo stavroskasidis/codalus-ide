@@ -234,7 +234,10 @@ public sealed class DiffDocumentTests
         var editor = view.EditorOf(DiffPaneSide.New).TextArea.TextView;
         var removedRow = LineOf(left, "Wave()");
         Assert.True(removedRow > 0, left);
-        Assert.Equal(Token("Shell.Diff.Added.Line", variant), Pixel(frame, editor, changed, editor.Bounds.Width - 4));
+        // The changed line's fill where it has no text, its indentation: the line runs past a narrow pane's edge (with a
+        // wider font, or Solution Explorer open), so its right end can be a letter. The removed line is short.
+        var indent = editor.GetOrConstructVisualLine(editor.Document.GetLineByNumber(changed)).GetVisualPosition(2, AvaloniaEdit.Rendering.VisualYPosition.LineMiddle).X - editor.HorizontalOffset;
+        Assert.Equal(Token("Shell.Diff.Added.Line", variant), Pixel(frame, editor, changed, indent));
         Assert.Equal(Token("Shell.Diff.Removed.Line", variant), Pixel(frame, view.EditorOf(DiffPaneSide.Old).TextArea.TextView, removedRow, editor.Bounds.Width - 4));
         var row = Row(frame, editor, changed, 0, editor.Bounds.Width - 1);
         Assert.Contains(Token("Shell.Diff.Added.Word", variant), row);
