@@ -224,21 +224,38 @@ public sealed class DiffDocumentTests
         Assert.Empty(view.WordsAt(DiffPaneSide.New, 1));
 
         // Drawn: the line's fill past its end, the word's fill and border, and the hatching opposite the removed line.
-        for (var i = 0; i < 5; i++)
-        {
-            ShellFixture.Pump();
-        }
-
-        using var frame = f.Window.CaptureRenderedFrame()!;
         var variant = f.Window.ActualThemeVariant;
         var editor = view.EditorOf(DiffPaneSide.New).TextArea.TextView;
+        var oldEditor = view.EditorOf(DiffPaneSide.Old).TextArea.TextView; // its own width: the panes' text views differ
         var removedRow = LineOf(left, "Wave()");
         Assert.True(removedRow > 0, left);
+
         // The changed line's fill where it has no text, its indentation: the line runs past a narrow pane's edge (with a
         // wider font, or Solution Explorer open), so its right end can be a letter. The removed line is short.
         var indent = editor.GetOrConstructVisualLine(editor.Document.GetLineByNumber(changed)).GetVisualPosition(2, AvaloniaEdit.Rendering.VisualYPosition.LineMiddle).X - editor.HorizontalOffset;
+
+        // A frame once both fills are drawn: a few pumps weren't always enough on CI (the removed line still white).
+        Avalonia.Media.Imaging.WriteableBitmap? captured = null;
+        bool Drawn()
+        {
+            captured?.Dispose();
+            captured = f.Window.CaptureRenderedFrame()!;
+            return Pixel(captured, editor, changed, indent) == Token("Shell.Diff.Added.Line", variant)
+                && Pixel(captured, oldEditor, removedRow, oldEditor.Bounds.Width - 4) == Token("Shell.Diff.Removed.Line", variant);
+        }
+
+        try
+        {
+            await ShellFixture.PumpUntil(Drawn, seconds: 10);
+        }
+        catch (Xunit.Sdk.XunitException)
+        {
+            // The assertions below say which fill is missing.
+        }
+
+        using var frame = captured!;
         Assert.Equal(Token("Shell.Diff.Added.Line", variant), Pixel(frame, editor, changed, indent));
-        Assert.Equal(Token("Shell.Diff.Removed.Line", variant), Pixel(frame, view.EditorOf(DiffPaneSide.Old).TextArea.TextView, removedRow, editor.Bounds.Width - 4));
+        Assert.Equal(Token("Shell.Diff.Removed.Line", variant), Pixel(frame, oldEditor, removedRow, oldEditor.Bounds.Width - 4));
         var row = Row(frame, editor, changed, 0, editor.Bounds.Width - 1);
         Assert.Contains(Token("Shell.Diff.Added.Word", variant), row);
         Assert.Contains(Token("Shell.Diff.Added.WordBorder", variant), row);
