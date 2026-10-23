@@ -739,6 +739,40 @@ public sealed class WinFormsDesignerCodeTests
             Apply(framework.Replace("\r\n", "\n", StringComparison.Ordinal), Extender("button1", "toolTip1", "ToolTip", DesignerValue.String("Saves"))), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// #68: a text box's AutoCompleteCustomSource is a collection of strings (the String Collection Editor's text mode):
+    /// read as its AddRange call, written again byte for byte, and an edit changes only that line.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AutoCompleteCustomSource_is_a_string_collection(bool crlf)
+    {
+        var text = OrderForm.Replace("            notesTextBox.BackColor", "            notesTextBox.AutoCompleteCustomSource.AddRange(new string[] { \"Gift\", \"Rush\" });\n            notesTextBox.BackColor", StringComparison.Ordinal);
+        Assert.NotEqual(OrderForm, text);
+        if (crlf)
+        {
+            text = text.Replace("\n", "\r\n", StringComparison.Ordinal);
+        }
+
+        var source = Read(text);
+        var call = source.Model.Statements.Single(s => s.Kind == DesignerStatementKinds.Call && s.Target == "notesTextBox" && s.Member == "AutoCompleteCustomSource.AddRange");
+        Assert.Equal("System.String", call.Arguments![0].Type);
+        Assert.Equal(["Gift", "Rush"], call.Arguments[0].Arguments!.Select(a => a.Value));
+        Assert.Contains(DesignerCollections.All, c => c.Key == "System.Windows.Forms.TextBox:AutoCompleteCustomSource" && c.Kind == DesignerCollections.Values);
+        Assert.Contains(DesignerCollections.All, c => c.Key == "System.Windows.Forms.ComboBox:AutoCompleteCustomSource" && c.Kind == DesignerCollections.Values);
+
+        var generator = new DesignerCodeGenerator(source.Model, source.Indent, source.NewLine);
+        var written = string.Concat(source.Model.Statements.Select(s => generator.Statement(s, source.SectionRule)));
+        Assert.Equal(source.Text.ToString(TextSpan.FromBounds(source.Statements[0].Lines.Start, source.Statements[^1].Lines.End)), written);
+
+        var edited = Apply(text, Collection("notesTextBox", "AutoCompleteCustomSource", "AddRange", "System.String", DesignerValue.String("Gift"), DesignerValue.String("Rush"), DesignerValue.String("Fragile")));
+        Assert.Equal(
+            ["-notesTextBox.AutoCompleteCustomSource.AddRange(new string[] { \"Gift\", \"Rush\" });", "+notesTextBox.AutoCompleteCustomSource.AddRange(new string[] { \"Gift\", \"Rush\", \"Fragile\" });"],
+            Diff(text, edited));
+        Assert.Equal(text, Apply(text, Collection("notesTextBox", "AutoCompleteCustomSource", "AddRange", "System.String", DesignerValue.String("Gift"), DesignerValue.String("Rush"))));
+    }
+
     [Fact]
     public void Collections_are_written_again_in_place_as_visual_studio_writes_them()
     {
@@ -1061,6 +1095,10 @@ public sealed class WinFormsDesignerCodeTests
         Assert.DoesNotContain("ComponentResourceManager", noLogo, StringComparison.Ordinal);
         Assert.DoesNotContain("logoPictureBox", logoResources.Get(null)!.Text, StringComparison.Ordinal);
         Assert.Contains("orderToolTip.TrayLocation", logoResources.Get(null)!.Text, StringComparison.Ordinal);
+
+        // So is the System.Drawing alias only the image used (the tray location names its assembly in full), as the
+        // resource writer declares only the aliases its entries use.
+        Assert.DoesNotContain("<assembly alias=\"System.Drawing\"", logoResources.Get(null)!.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1082,5 +1120,82 @@ public sealed class WinFormsDesignerCodeTests
             new ResxText(Resx("InventoryForm.resx")).TrayLocations().OrderBy(t => t.Value.Y).ThenBy(t => t.Value.X).Select(t => t.Key));
         Assert.True(new ResxText(Resx("AboutForm.resx")).IsLocalizable);
         Assert.False(new ResxText(Resx("OrderForm.resx")).IsLocalizable);
+    }
+
+    // ------------------------------------------------------------------ #67: the control designers' Locked
+
+    private const string MscorlibName = "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+
+    /// <summary>A Locked value as the designer host's ResourceValues.Of gives it (ResXResourceWriter's): the type shortened to the mscorlib alias it declares.</summary>
+    private static readonly DesignerResource s_lockedTrue = new() { Type = "System.Boolean, mscorlib", Text = "True", AssemblyAlias = "mscorlib", AssemblyName = MscorlibName };
+
+    /// <summary>
+    /// Lock Controls' Locked is design-time metadata in the default .resx, as the classic IDE writes it: with the
+    /// component's entries (metadata first), the form's ($this) last, in the file's line endings, never in the code,
+    /// the mscorlib alias declared before its first use; a null resource removes it, the alias with the last entry that
+    /// used it (the smoke's "Lock Controls again takes every lock away" on Windows: the alias was left behind), and
+    /// removing or renaming the component takes it along.
+    /// </summary>
+    [Fact]
+    public void Locked_metadata_is_written_where_the_classic_ide_writes_it()
+    {
+        var (code, resources) = ApplyWithResources("OrderForm", Resource("giftCheckBox.Locked", s_lockedTrue, metadata: true), Resource("$this.Locked", s_lockedTrue, metadata: true));
+        Assert.Equal(OrderForm, code);
+        var original = Resx("OrderForm.resx");
+        var resx = resources.Get(null)!.Text;
+        var newLine = original.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        string Element(string name) => string.Join(newLine, $"  <metadata name=\"{name}.Locked\" type=\"System.Boolean, mscorlib\">", "    <value>True</value>", "  </metadata>") + newLine;
+        var assembly = $"  <assembly alias=\"mscorlib\" name=\"{MscorlibName}\" />" + newLine;
+        Assert.All(Diff(original, resx), l => Assert.StartsWith("+", l, StringComparison.Ordinal));
+        Assert.Equal(7, Diff(original, resx).Count);
+
+        // giftCheckBox's sorts before the other components' (logoPictureBox, orderToolTip), after the alias it uses; the form's goes last.
+        Assert.Contains(assembly + Element("giftCheckBox") + "  <metadata name=\"orderToolTip.TrayLocation\"", resx, StringComparison.Ordinal);
+        Assert.EndsWith(Element("$this") + "</root>" + newLine, resx, StringComparison.Ordinal);
+        Assert.Single(new ResxText(resx).Entries(), e => e.Element == "assembly" && e.Name == "mscorlib");
+
+        // Unlocked, in either order: the entries go, the alias with the last of them, and the file is as it was.
+        foreach (var order in new[] { new[] { "giftCheckBox", "$this" }, ["$this", "giftCheckBox"] })
+        {
+            var unlocked = new ResxText(resx);
+            unlocked.Set(order[0] + ".Locked", null, metadata: true);
+            Assert.Contains(assembly, unlocked.Text, StringComparison.Ordinal);
+            unlocked.Set(order[1] + ".Locked", null, metadata: true);
+            Assert.Equal(original, unlocked.Text);
+        }
+
+        // The component removed or renamed: its Locked goes, or follows it; the form's still uses the alias.
+        var text = new ResxText(resx);
+        text.RemoveComponent("giftCheckBox");
+        Assert.DoesNotContain("giftCheckBox", text.Text, StringComparison.Ordinal);
+        Assert.Contains("$this.Locked", text.Text, StringComparison.Ordinal);
+        Assert.Contains(assembly, text.Text, StringComparison.Ordinal);
+        text = new ResxText(resx);
+        text.RenameComponent("giftCheckBox", "wrapCheckBox");
+        Assert.Contains(Element("wrapCheckBox"), text.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("giftCheckBox", text.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The default .resx the IDE writes before Lock Controls' first metadata (DesignerResx.Empty, held by the designer so
+    /// the lock undoes with it) takes the same edits as one the C# host creates itself: the same text, the same code.
+    /// </summary>
+    [Fact]
+    public void A_precreated_default_resx_takes_the_same_edits_as_one_the_host_creates()
+    {
+        DesignerEdit[] edits = [Resource("greetingLabel.Locked", s_lockedTrue, metadata: true), Resource("$this.Locked", s_lockedTrue, metadata: true)];
+        (string Code, string Resx) ApplyTo(string? resx)
+        {
+            var set = new DesignerResourceSet(Sample("MainForm.cs"), p => p.EndsWith("MainForm.resx", StringComparison.OrdinalIgnoreCase) ? resx : File.Exists(p) ? File.ReadAllText(p) : null);
+            var writer = new DesignerWriter(t => DesignerReader.Read(CSharpSyntaxTree.ParseText(t), "System.Windows.Forms.Form", DesignerReader.WindowsFormsImplicitUsings), set);
+            return (writer.Apply(SourceText.From(File.ReadAllText(Sample("MainForm.Designer.cs"))), edits).ToString(), set.Get(null)!.Text);
+        }
+
+        var created = ApplyTo(null);
+        var precreated = ApplyTo(DesignerResx.Empty.Replace("\r\n", "\n", StringComparison.Ordinal));
+        Assert.Equal(created, precreated);
+        Assert.Equal(File.ReadAllText(Sample("MainForm.Designer.cs")), created.Code);
+        Assert.Contains("<metadata name=\"greetingLabel.Locked\"", created.Resx, StringComparison.Ordinal);
+        Assert.Equal(ResxText.Empty, DesignerResx.Empty);
     }
 }

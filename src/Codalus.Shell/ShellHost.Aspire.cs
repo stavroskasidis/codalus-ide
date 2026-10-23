@@ -277,8 +277,36 @@ public sealed partial class ShellHost
 
         if (run.Debug && request.Configuration.Debug)
         {
-            var index = await Debugger.AddLaunchAsync(new DebugLaunch(name, plan), cancellationToken).ConfigureAwait(false);
-            return new DebuggedRunSession(Debugger, index);
+            // Answered once the program has its place in the session, not once it started (DebugService.AddLaunch):
+            // its process id follows in processRestarted, or its end in sessionTerminated.
+            var starting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            (int Index, Task<bool> Joined) added;
+            try
+            {
+                added = Debugger.AddLaunch(new DebugLaunch(name, plan), starting.Token);
+            }
+            catch
+            {
+                starting.Dispose();
+                throw;
+            }
+
+            var joined = added.Joined;
+            _ = joined.ContinueWith(_ => starting.Dispose(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            return new DebuggedRunSession(Debugger, added.Index, () =>
+            {
+                if (!joined.IsCompleted)
+                {
+                    try
+                    {
+                        starting.Cancel();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // It joined meanwhile.
+                    }
+                }
+            });
         }
 
         var program = Runs.StartPlan(project, name, plan);
@@ -296,18 +324,23 @@ public sealed partial class ShellHost
         public void Terminate() => program.Stop();
     }
 
-    /// <summary>A run session's program in the AppHost's compound debug session: its process id and exit come from the Processes list.</summary>
+    /// <summary>
+    /// A run session's program in the AppHost's compound debug session: its process id and exit come from the Processes
+    /// list. Stopped while it is still starting, its start is cancelled.
+    /// </summary>
     private sealed class DebuggedRunSession : IIdeRunSession
     {
         private readonly DebugService _debugger;
         private readonly int _index;
+        private readonly Action _cancelStart;
         private readonly TaskCompletionSource<int> _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource<int?> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public DebuggedRunSession(DebugService debugger, int index)
+        public DebuggedRunSession(DebugService debugger, int index, Action cancelStart)
         {
             _debugger = debugger;
             _index = index;
+            _cancelStart = cancelStart;
             debugger.ProcessesChanged += OnChanged;
             debugger.Ended += OnEnded;
             OnChanged(null, EventArgs.Empty);
@@ -362,6 +395,10 @@ public sealed partial class ShellHost
                 {
                     // Already gone.
                 }
+            }
+            else
+            {
+                _cancelStart();
             }
         }
     }

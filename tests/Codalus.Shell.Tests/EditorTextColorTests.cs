@@ -108,7 +108,12 @@ public sealed class EditorTextColorTests
             ("method", "SignIn(", 0, 0xFFDCDCAA),
             ("xml doc delimiter", "/// <summary>", 0, 0xFF608B4E),
             ("xml doc name", "<summary>", 1, 0xFF608B4E),
-            ("xml doc text", "Signs the user", 0, 0xFF608B4E),
+            ("xml doc text", "Signs the user", 0, 0xFF57A64A),
+
+            // The classic IDE's measured control keyword, comment and string colors (#83, D47).
+            ("control keyword", "return loginInput", 0, 0xFFD8A0DF),
+            ("comment", "A comment", 0, 0xFF57A64A),
+            ("string", "\"admin\"", 1, 0xFFD69D85),
         ]);
         NavigationDepthTests.Screenshot(f, "editor-text-csharp-dark");
         Assert.True(differences.Length == 0, differences);
@@ -129,6 +134,9 @@ public sealed class EditorTextColorTests
             ("xml doc delimiter", "/// <summary>", 0, 0xFF808080),
             ("xml doc name", "<summary>", 1, 0xFF808080),
             ("xml doc text", "Signs the user", 0, 0xFF008000),
+            ("control keyword", "return loginInput", 0, 0xFF8F08C4),
+            ("comment", "A comment", 0, 0xFF008000),
+            ("string", "\"admin\"", 1, 0xFFA31515),
         ]);
         NavigationDepthTests.Screenshot(f, "editor-text-csharp-light");
         Assert.True(differences.Length == 0, differences);

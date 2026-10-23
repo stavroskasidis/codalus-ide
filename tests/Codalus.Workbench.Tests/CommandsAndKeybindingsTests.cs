@@ -216,6 +216,29 @@ public class MenuRegistryTests
         Assert.Equal("exit", items[2].Group);
     }
 
+    /// <summary>A rule's Checked clause makes a check entry (#67: the Windows Forms designer's Lock Controls), checked while it holds.</summary>
+    [Fact]
+    public void A_rules_checked_clause_checks_its_entry()
+    {
+        var context = new ContextKeyService();
+        var commands = new CommandRegistry(context);
+        commands.Register(new CommandDescriptor("lock", "Lock Controls", ContributionSource.Shell), () => { });
+        commands.Register(new CommandDescriptor("other", "Other", ContributionSource.Shell), () => { });
+        var menus = new MenuRegistry(commands, new KeybindingService(context, PlatformKind.Windows), context);
+        menus.Add(
+        [
+            new MenuItemRule("menuBar/format", "lock", ContributionSource.Shell) { Checked = WhenClause.Parse("locked"), When = WhenClause.Parse("designer") },
+            new MenuItemRule("menuBar/format", "other", ContributionSource.Shell),
+        ]);
+
+        Assert.Equal(["other"], menus.GetItems("menuBar/format").Select(i => i.Command)); // When still hides it
+        context.Set("designer", true);
+        var items = menus.GetItems("menuBar/format");
+        Assert.Equal([false, null], items.Select(i => i.IsChecked));
+        context.Set("locked", true);
+        Assert.True(menus.GetItems("menuBar/format")[0].IsChecked);
+    }
+
     [Fact]
     public void Palette_rules_only_restrict_the_commands_they_name()
     {

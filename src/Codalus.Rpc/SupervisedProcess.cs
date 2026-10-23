@@ -5,6 +5,12 @@ public sealed record ProcessLaunchInfo(string FileName, IReadOnlyList<string> Ar
 {
     public IReadOnlyDictionary<string, string>? Environment { get; init; }
 
+    /// <summary>
+    /// Variables removed from the environment the process would inherit (an external agent signed in with its own
+    /// account starts without the variables that would outrank it, ADR 0083); a local process only.
+    /// </summary>
+    public IReadOnlyList<string>? UnsetEnvironment { get; init; }
+
     public string? WorkingDirectory { get; init; }
 
     /// <summary>Where the process starts: null for this machine, or a remote server's launcher (M21, ADR 0050).</summary>

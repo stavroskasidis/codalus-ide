@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Codalus IDE tests",
+  "classifications": [ "Common", "Aspire", "Cloud" ],
+  "identity": "Codalus.Tests.Aspire.ServiceDefaults",
+  "name": "Aspire Service Defaults (test stand-in)",
+  "shortName": "aspire-servicedefaults",
+  "sourceName": "Aspire.ServiceDefaults1",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "skipRestore": { "type": "parameter", "datatype": "bool", "defaultValue": "false" }
+  }
+}

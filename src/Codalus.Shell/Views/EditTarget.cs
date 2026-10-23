@@ -6,10 +6,12 @@ using Codalus.Shell.Terminal;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// What Edit → Undo, Cut, Paste… act on (M34a): the focused text box, text editor or terminal; with nothing focused,
-/// the active document's editor. A menu click leaves the keyboard focus where it was, so the focused control is the one
-/// the user means. Another focused control (the Solution Explorer…) has no text target: the command then runs what
-/// the same keys are bound to there (macOS's menu takes ⌘C before the control sees it).
+/// What Edit → Undo, Cut, Paste… act on (M34a): the focused text box, text editor or terminal, or Windows Forms designer's
+/// surface or tray (#67: its components, as the classic IDE's Edit menu; a text box in it, Type Here or a tray rename,
+/// keeps its text; its collection editor and smart tag panel aren't its components); with nothing focused, the active
+/// designer or the active document's editor. A menu click leaves the keyboard focus where it was, so the focused control
+/// is the one the user means. Another focused control (the Solution Explorer…) has no text target: the command then runs
+/// what the same keys are bound to there (macOS's menu takes ⌘C before the control sees it).
 /// </summary>
 internal abstract class EditTarget
 {
@@ -54,12 +56,22 @@ internal abstract class EditTarget
             return new TerminalTarget(terminal);
         }
 
+        if (focused?.FindAncestorOfType<WinFormsDesignerView>(includeSelf: true) is { } designer && designer.HoldsComponentFocus(focused))
+        {
+            return new DesignerTarget(designer.Document);
+        }
+
         if (focused is not null)
         {
             return null;
         }
 
-        return shell.ActiveEditor?.Controller?.Editor is { } active ? new EditorTarget(active) : null;
+        if (shell.Layout.ActiveDocument is ViewModels.WinFormsDesignerDocument active)
+        {
+            return new DesignerTarget(active);
+        }
+
+        return shell.ActiveEditor?.Controller?.Editor is { } activeEditor ? new EditorTarget(activeEditor) : null;
     }
 
     private sealed class BoxTarget(TextBox box) : EditTarget
@@ -99,5 +111,21 @@ internal abstract class EditTarget
         public override void Copy() => _ = terminal.CopyAsync();
 
         public override void Paste() => _ = terminal.PasteAsync();
+    }
+
+    /// <summary>The designer's components: its undo, its clipboard, the classic IDE's Select All.</summary>
+    private sealed class DesignerTarget(ViewModels.WinFormsDesignerDocument designer) : EditTarget
+    {
+        public override void Undo() => designer.Undo();
+
+        public override void Redo() => designer.Redo();
+
+        public override void Cut() => _ = designer.CutAsync();
+
+        public override void Copy() => designer.Copy();
+
+        public override void Paste() => _ = designer.PasteAsync();
+
+        public override void SelectAll() => designer.SelectAll();
     }
 }

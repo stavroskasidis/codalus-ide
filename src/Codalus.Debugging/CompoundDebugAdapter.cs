@@ -16,6 +16,9 @@ namespace Codalus.Debugging;
 /// resumes. Pause pauses every adapter but one still joining, and Continue from a pause continues every paused one.</item>
 /// <item>The session ends when any adapter ends: closing the browser stops the server, as stopping the server closes
 /// the browser.</item>
+/// <item>The primary may be attached to a program it didn't start (a Blazor Web App's server under <c>dotnet watch</c>,
+/// #75): <see cref="DetachPrimaryAsync"/> leaves that program running and closes the others, and
+/// <see cref="ExcludeFromPart"/> keeps a file's breakpoints out of one adapter (the server runs the code it started with).</item>
 /// </list>
 /// With <c>independent</c> (M14c, multiple startup projects), each adapter debugs a program of its own: the session
 /// ends when the last one ends, every thread is named after its program, and <see cref="PartChanged"/> reports each
@@ -30,6 +33,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private readonly List<Part> _parts = [];
     private readonly Dictionary<string, (SourceBreakpoint[] Specs, int[] Ids)> _breakpoints = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, Dictionary<int, Breakpoint>> _states = [];
+    private readonly Dictionary<(int Part, string Path), string> _excluded = new(ExclusionComparer.Instance);
     private readonly Queue<(Part Part, StoppedEvent Stop)> _waiting = new();
     private readonly SemaphoreSlim _raising = new(1, 1);
     private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -167,7 +171,34 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// session's breakpoints and exception settings are replayed to it, then it is configured.
     /// </summary>
     public Task AddAsync(IDebugAdapter adapter, string name, Func<IDebugAdapter, Task> launch, CancellationToken cancellationToken) =>
-        AddAsync(name, _ => Task.FromResult(adapter), launch, static (_, _, _) => Task.FromResult(false), cancellationToken);
+        AddAsync(name, _ => Task.FromResult(adapter), launch, static (_, _, _) => Task.FromResult(false), index: null, cancellationToken);
+
+    /// <summary>
+    /// <paramref name="index"/> when it's free, or the lowest free index when it's null (with the gate held). Throws when
+    /// the session is full or the index is taken.
+    /// </summary>
+    private int FreeIndex(int? index)
+    {
+        if (_parts.Count >= MaxParts)
+        {
+            throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
+        }
+
+        if (index is { } wanted)
+        {
+            return _parts.Any(p => p.Index == wanted)
+                ? throw new InvalidOperationException($"The debug session already has a program at index {wanted}.")
+                : wanted;
+        }
+
+        var free = 1;
+        while (_parts.Any(p => p.Index == free))
+        {
+            free++;
+        }
+
+        return free < MaxParts ? free : throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
+    }
 
     /// <summary>
     /// Adds a program to the running session (multiple startup projects, M14c): <paramref name="create"/> starts its
@@ -176,36 +207,45 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// true to start again in the same place, under the same index, or says false to fail. An abandoned attempt's
     /// events and end are no longer the session's.
     /// </summary>
+    /// <param name="index">
+    /// The program's index in the session, which <see cref="PartChanged"/> reports: the caller's own number for it (its
+    /// place in the caller's list of programs), from 1 (the primary's is 0), below <see cref="MaxParts"/> and not yet
+    /// taken; null for the lowest free one. A caller that numbers its programs before their adapters start needs its
+    /// own: programs added at once join in the order their adapters started, which needn't be the order they were
+    /// added in, and a program whose adapter didn't start takes no index here.
+    /// </param>
     public async Task AddAsync(
         string name,
         Func<CancellationToken, Task<IDebugAdapter>> create,
         Func<IDebugAdapter, Task> launch,
         Func<IDebugAdapter, Exception, int, Task<bool>> startAgain,
+        int? index,
         CancellationToken cancellationToken)
     {
+        if (index is < 1 or >= MaxParts)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"A program's index in a debug session is from 1 to {MaxParts - 1}.");
+        }
+
         lock (_gate)
         {
-            if (_parts.Count >= MaxParts)
-            {
-                throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
-            }
+            _ = FreeIndex(index);
         }
 
         var adapter = await create(cancellationToken).ConfigureAwait(false);
-        Part? part = null;
-        lock (_gate)
+        Part part;
+        try
         {
-            if (_parts.Count < MaxParts)
+            lock (_gate)
             {
-                part = new Part(adapter, name, _parts.Count) { Starting = true };
+                part = new Part(adapter, name, FreeIndex(index)) { Starting = true };
                 _parts.Add(part);
             }
         }
-
-        if (part is null)
+        catch (InvalidOperationException)
         {
             await adapter.DisposeAsync().ConfigureAwait(false);
-            throw new InvalidOperationException($"A debug session holds at most {MaxParts} adapters.");
+            throw;
         }
 
         var abandoned = new StrongBox<bool>();
@@ -368,7 +408,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         lock (_gate)
         {
             var index = id % MaxParts;
-            return index < _parts.Count ? (_parts[index], id / MaxParts) : throw new DapException(command, "That debug target has ended.");
+            return _parts.Find(p => p.Index == index) is { } part ? (part, id / MaxParts) : throw new DapException(command, "That debug target has ended.");
         }
     }
 
@@ -671,9 +711,24 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private async Task<Breakpoint[]> SendBreakpointsAsync(Part part, string path, SourceBreakpoint[] specs, int[] ids, CancellationToken cancellationToken)
     {
         Breakpoint[] response;
+        string? excluded;
+        lock (_gate)
+        {
+            excluded = _excluded.GetValueOrDefault((part.Index, path));
+        }
+
         try
         {
-            response = await part.Adapter.SetBreakpointsAsync(path, specs, cancellationToken).ConfigureAwait(false);
+            if (excluded is not null)
+            {
+                // The adapter keeps none in the file; they show why, unless another adapter binds them.
+                await part.Adapter.SetBreakpointsAsync(path, [], cancellationToken).ConfigureAwait(false);
+                response = [.. specs.Select(_ => new Breakpoint(Verified: false, Message: excluded))];
+            }
+            else
+            {
+                response = await part.Adapter.SetBreakpointsAsync(path, specs, cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (DapException ex) when (part.Index != 0)
         {
@@ -905,6 +960,78 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     {
         var (part, thread) = Owner(threadId, "exceptionInfo");
         return part.Adapter.ExceptionInfoAsync(thread, cancellationToken);
+    }
+
+    /// <summary>
+    /// Keeps <paramref name="path"/>'s breakpoints out of adapter <paramref name="part"/> from its next
+    /// <see cref="SetBreakpointsAsync"/> on: it gets none in the file, and a breakpoint no other adapter binds carries
+    /// <paramref name="reason"/> (#75: the server runs the code it started with, so its lines no longer match the file).
+    /// The caller sends the file's breakpoints again for it to apply.
+    /// </summary>
+    public void ExcludeFromPart(int part, string path, string reason)
+    {
+        lock (_gate)
+        {
+            _excluded[(part, path)] = reason;
+        }
+    }
+
+    /// <summary>The files kept out of adapter <paramref name="part"/> (<see cref="ExcludeFromPart"/>).</summary>
+    public IReadOnlyList<string> ExcludedFrom(int part)
+    {
+        lock (_gate)
+        {
+            return [.. _excluded.Keys.Where(k => k.Part == part).Select(k => k.Path)];
+        }
+    }
+
+    /// <summary>Adapter <paramref name="part"/> gets every file's breakpoints again from its next <see cref="SetBreakpointsAsync"/> on.</summary>
+    public void ClearExclusions(int part)
+    {
+        lock (_gate)
+        {
+            foreach (var key in _excluded.Keys.Where(k => k.Part == part).ToList())
+            {
+                _excluded.Remove(key);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Detaches the primary, leaving its program running, and ends the others (the browser closes): a Blazor Web App's
+    /// server that <c>dotnet watch</c> runs is about to be restarted by it (#75). The session then ends.
+    /// </summary>
+    public async Task DetachPrimaryAsync(CancellationToken cancellationToken)
+    {
+        Interlocked.Exchange(ref _ending, 1);
+        foreach (var part in Parts().Where(p => p.Index != 0).Reverse())
+        {
+            try
+            {
+                await part.Adapter.DisconnectAsync(terminateDebuggee: true, cancellationToken).WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or TimeoutException)
+            {
+            }
+        }
+
+        try
+        {
+            await Primary.DisconnectAsync(terminateDebuggee: false, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException)
+        {
+        }
+    }
+
+    /// <summary>Breakpoint exclusions by adapter and file (paths compared as the session's breakpoints are).</summary>
+    private sealed class ExclusionComparer : IEqualityComparer<(int Part, string Path)>
+    {
+        public static readonly ExclusionComparer Instance = new();
+
+        public bool Equals((int Part, string Path) x, (int Part, string Path) y) => x.Part == y.Part && StringComparer.OrdinalIgnoreCase.Equals(x.Path, y.Path);
+
+        public int GetHashCode((int Part, string Path) obj) => HashCode.Combine(obj.Part, StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Path));
     }
 
     /// <summary>Ends every adapter: the joined ones first (the browser closes), then the primary.</summary>

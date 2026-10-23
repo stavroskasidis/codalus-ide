@@ -20,6 +20,15 @@ public sealed record AcpPermissionPrompt(string Agent, string Title, string? Kin
 /// <param name="Resolved">What starts on Windows when it isn't the command as written (a script through node or cmd.exe), or null.</param>
 public sealed record AcpCommandPrompt(string Agent, string CommandLine, string Folder, IReadOnlyList<string> Environment, string? Resolved);
 
+/// <summary>An agent's terminal sign-in: who, how the user sees the command, and how it starts.</summary>
+/// <param name="Agent">The agent's name.</param>
+/// <param name="Method">The method's name, as the agent gives it ("Claude Subscription").</param>
+/// <param name="CommandLine">The exact command line, as configured, with the method's arguments.</param>
+/// <param name="Variables">The names of the variables it sets (never their values).</param>
+/// <param name="Launch">How it starts: the agent's own command, its environment, the method's arguments and variables.</param>
+/// <param name="Hint">A line under the command (Claude in an SSH session: "or run <c>claude</c> and type <c>/login</c>"), or null.</param>
+public sealed record AcpTerminalSignIn(string Agent, string Method, string CommandLine, IReadOnlyList<string> Variables, Codalus.Rpc.ProcessLaunchInfo Launch, string? Hint);
+
 /// <summary>What an external agent's session needs from the shell: files as the editor has them, the preview, approvals.</summary>
 public interface IAcpHost
 {
@@ -45,6 +54,13 @@ public interface IAcpHost
     Task ReloadFromDiskAsync(string path);
 
     /// <summary>
+    /// Runs an agent's terminal sign-in (ADR 0083) in the IDE's terminal after showing its exact command line and the
+    /// names of the variables it sets, and waits for it to end: its exit code, or null when the user declined or it was
+    /// refused (a remote window, whose terminal runs elsewhere). Cancelling kills it.
+    /// </summary>
+    Task<int?> RunTerminalSignInAsync(AcpTerminalSignIn signIn, CancellationToken cancellationToken);
+
+    /// <summary>
     /// <c>codalus mcp</c> for this session (the running executable's absolute path and the user-data folder), with a pipe
     /// to this IDE open until the returned lifetime is disposed; null when the IDE can't offer it.
     /// </summary>
@@ -66,7 +82,10 @@ public sealed class AcpAgents : IAsyncDisposable
     private readonly SettingsService _settings;
     private readonly AiService _ai;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Dictionary<string, (string Names, IReadOnlyDictionary<string, string> Values)> _secretCache = new(StringComparer.Ordinal);
+    private readonly Lock _cacheGate = new();
     private AcpAgentSession? _current;
+    private AcpAgentSecrets? _secrets;
 
     public AcpAgents(SettingsService settings, AiService ai)
     {
@@ -75,6 +94,39 @@ public sealed class AcpAgents : IAsyncDisposable
 
         // AI turned off (by the user, or for this workspace): a running agent stops, and its requests aren't served.
         _ai.Changed += (_, _) => _ = EnforceAsync();
+    }
+
+    /// <summary>
+    /// Agents' keys (<c>secretEnv</c>) in the OS credential store; null when the shell has none (an entry with
+    /// <c>secretEnv</c> then doesn't start). A key stored or deleted refreshes the values read for the sessions.
+    /// </summary>
+    public AcpAgentSecrets? Secrets
+    {
+        get => _secrets;
+        set
+        {
+            if (_secrets is { } old)
+            {
+                old.Changed -= OnSecretChanged;
+            }
+
+            _secrets = value;
+            if (value is not null)
+            {
+                value.Changed += OnSecretChanged;
+            }
+        }
+    }
+
+    /// <summary>The folder of Codalus's own Node.js (D-node) for entries with <c>"node": "builtIn"</c>, or null when it isn't installed.</summary>
+    public Func<string?> BuiltInNodeFolder { get; set; } = () => null;
+
+    private void OnSecretChanged(object? sender, string agent)
+    {
+        lock (_cacheGate)
+        {
+            _secretCache.Remove(agent);
+        }
     }
 
     /// <summary>The window is a remote one (WSL, SSH, a container): an agent would run on this machine, not there (ADR 0079).</summary>
@@ -101,15 +153,78 @@ public sealed class AcpAgents : IAsyncDisposable
     /// <summary>The configured agents, read from the user's settings only.</summary>
     public IReadOnlyDictionary<string, AcpAgentConfig> Configured => Parse(_settings.GetLayerValue(AgentsSetting, SettingScope.User));
 
+    /// <summary>Why entries of the user's <c>ai.agents</c> were skipped (a bad <c>secretEnv</c> name…), one line each.</summary>
+    public IReadOnlyList<string> Problems
+    {
+        get
+        {
+            var problems = new List<string>();
+            Parse(_settings.GetLayerValue(AgentsSetting, SettingScope.User), problems);
+            return problems;
+        }
+    }
+
+    /// <summary>The folder the connection test runs agents in: empty, the IDE's own, no workspace (ADR 0083).</summary>
+    public string ConnectTestDirectory => Path.Combine(ProcessDirectory, "connect-test");
+
     /// <summary>The session that runs, if any.</summary>
     public AcpAgentSession? Current => Volatile.Read(ref _current);
 
     /// <summary>A session started or stopped, or its commands or modes changed (any thread).</summary>
     public event EventHandler? Changed;
 
-    /// <summary>Parses <c>{ "name": { "command": "…", "args": ["…"], "env": { "K": "V" } } }</c>; entries without a command are skipped.</summary>
-    public static IReadOnlyDictionary<string, AcpAgentConfig> Parse(JsonElement? value) =>
-        Mcp.McpServers.Parse(value).ToDictionary(e => e.Key, e => new AcpAgentConfig(e.Value.Command, e.Value.Args, e.Value.Env), StringComparer.Ordinal);
+    /// <summary>
+    /// Parses <c>{ "name": { "command": "…", "args": ["…"], "env": { "K": "V" }, "secretEnv": ["K"], "unsetEnv": ["K"],
+    /// "template": "…", "node": "builtIn" } }</c>; entries without a command are skipped, and so are entries whose
+    /// <c>secretEnv</c> or <c>unsetEnv</c> has a name that isn't a variable's, is one Codalus refuses an agent to set
+    /// (<see cref="AcpTerminals.RefusedVariable"/>), or is also in <c>env</c> (why goes to <paramref name="problems"/>).
+    /// </summary>
+    public static IReadOnlyDictionary<string, AcpAgentConfig> Parse(JsonElement? value, List<string>? problems = null)
+    {
+        var agents = new Dictionary<string, AcpAgentConfig>(StringComparer.Ordinal);
+        foreach (var (name, server) in Mcp.McpServers.Parse(value))
+        {
+            var entry = value!.Value.GetProperty(name);
+            var secretEnv = Names(entry, "secretEnv");
+            var unsetEnv = Names(entry, "unsetEnv");
+            if (secretEnv.Concat(unsetEnv).FirstOrDefault(n => !IsVariableName(n)) is { } bad)
+            {
+                problems?.Add($"ai.agents.{name}: '{bad}' isn't a variable name, so the entry is skipped.");
+                continue;
+            }
+
+            if (AcpTerminals.RefusedVariable(secretEnv) is { } refused)
+            {
+                problems?.Add($"ai.agents.{name}: secretEnv can't set {refused} (it changes what runs), so the entry is skipped.");
+                continue;
+            }
+
+            if (secretEnv.FirstOrDefault(n => server.Env.ContainsKey(n)) is { } both)
+            {
+                problems?.Add($"ai.agents.{name}: {both} is in both env and secretEnv, so the entry is skipped.");
+                continue;
+            }
+
+            agents[name] = new AcpAgentConfig(server.Command, server.Args, server.Env)
+            {
+                SecretEnv = secretEnv,
+                UnsetEnv = unsetEnv,
+                Template = entry.TryGetProperty("template", out var template) && template.ValueKind == JsonValueKind.String ? template.GetString() : null,
+                Node = entry.TryGetProperty("node", out var node) && node.ValueKind == JsonValueKind.String ? node.GetString() : null,
+            };
+        }
+
+        return agents;
+
+        static IReadOnlyList<string> Names(JsonElement entry, string property) =>
+            entry.TryGetProperty(property, out var list) && list.ValueKind == JsonValueKind.Array
+                ? [.. list.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString()! : "")]
+                : [];
+    }
+
+    /// <summary>A variable's name: a letter or underscore, then letters, digits and underscores.</summary>
+    public static bool IsVariableName(string name) =>
+        name.Length > 0 && (char.IsAsciiLetter(name[0]) || name[0] == '_') && name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
 
     /// <summary>Why an external agent can't start now, or null when it can: AI on, a workspace, and a trusted one (ADR 0079).</summary>
     public string? WhyNot()
@@ -147,9 +262,10 @@ public sealed class AcpAgents : IAsyncDisposable
 
         if (!Configured.TryGetValue(name, out var config))
         {
-            throw new AcpException($"There is no agent '{name}' in your settings (ai.agents).");
+            throw new AcpException(Problems.FirstOrDefault(p => p.StartsWith($"ai.agents.{name}:", StringComparison.Ordinal)) ?? $"There is no agent '{name}' in your settings (ai.agents).");
         }
 
+        config = await ResolveAsync(name, config, cancellationToken).ConfigureAwait(false);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -193,6 +309,65 @@ public sealed class AcpAgents : IAsyncDisposable
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="config"/> ready to start: its <c>secretEnv</c> values (read once and kept for later sessions until a
+    /// key is stored or deleted, so a turn doesn't ask the OS store, which can prompt or be slow) and Codalus's Node.js
+    /// folder for <c>"node": "builtIn"</c>. Throws <see cref="AcpException"/> with what to do when one is missing.
+    /// </summary>
+    public async Task<AcpAgentConfig> ResolveAsync(string name, AcpAgentConfig config, CancellationToken cancellationToken)
+    {
+        if (config.Node is { } node)
+        {
+            if (node != "builtIn")
+            {
+                throw new AcpException($"ai.agents.{name}: \"node\" can only be \"builtIn\" (Codalus's own Node.js), or left out for yours.");
+            }
+
+            config = config with { NodeFolder = BuiltInNodeFolder() ?? throw new AcpException($"{name} runs on Codalus's own Node.js, which isn't installed: connect it again (AI: Connect to an Agent…).") };
+        }
+
+        if (config.SecretEnv.Count == 0)
+        {
+            return config;
+        }
+
+        if (Secrets is not { } secrets)
+        {
+            throw new AcpException($"{name}'s keys ({string.Join(", ", config.SecretEnv)}) are kept in the credential store, which this window can't use.");
+        }
+
+        var names = string.Join('\n', config.SecretEnv);
+        lock (_cacheGate)
+        {
+            if (_secretCache.TryGetValue(name, out var cached) && cached.Names == names)
+            {
+                return config with { SecretValues = cached.Values };
+            }
+        }
+
+        var (values, missing) = await secrets.ResolveAsync(name, config.SecretEnv, cancellationToken).ConfigureAwait(false);
+        if (missing.Count > 0)
+        {
+            throw new AcpException($"{name}'s {string.Join(", ", missing)} isn't in {secrets.StoreName}: connect it again with its key (AI: Connect to an Agent…), or remove it from secretEnv in its entry.");
+        }
+
+        lock (_cacheGate)
+        {
+            _secretCache[name] = (names, values);
+        }
+
+        return config with { SecretValues = values };
+    }
+
+    /// <summary>Stops the running session when it is <paramref name="name"/>'s (Connect, Check and Disconnect of that agent).</summary>
+    public async Task StopAgentAsync(string name)
+    {
+        if (Current is { } session && session.Name == name)
+        {
+            await StopAsync().ConfigureAwait(false);
         }
     }
 

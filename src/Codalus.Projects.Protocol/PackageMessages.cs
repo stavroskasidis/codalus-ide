@@ -40,7 +40,10 @@ public sealed record PackageSearchResult(PackageSummary[] Packages, bool HasMore
 
 /// <summary>
 /// A search hit. <see cref="VulnerabilitySeverity"/> is the highest advisory severity of <see cref="Version"/> (0 low,
-/// 1 moderate, 2 high, 3 critical) or -1 when none is known.
+/// 1 moderate, 2 high, 3 critical) or -1 when none is known. <see cref="Verified"/> (D39): nuget.org reserved the ID's
+/// prefix for one of the package's owners (its search's <c>verified</c>), set only for a result from
+/// https://api.nuget.org that can be nobody else's copy: nuget.org was searched by itself, or package source mapping maps
+/// the ID to it alone. Another feed's <c>verified</c> (a mirror, an upstream, a private feed) never counts.
 /// </summary>
 public sealed record PackageSummary(
     string Id,
@@ -51,7 +54,8 @@ public sealed record PackageSummary(
     long? Downloads,
     bool Deprecated,
     int VulnerabilitySeverity,
-    string Source);
+    string Source,
+    bool Verified = false);
 
 public sealed record PackageSourceError(string Source, string Message);
 
@@ -72,10 +76,16 @@ public sealed record PackageSignInMessage(string Source, string Message);
 /// <summary>
 /// Details of one version (<see cref="Version"/>, or the latest one), and every version for the picker. With
 /// <see cref="TargetFrameworks"/> (a project's, M33), each version says whether it supports them, and without a
-/// <see cref="Version"/> the details are of the newest version that does.
+/// <see cref="Version"/> the details are of the newest version that does. <see cref="Verified"/> is what a search
+/// already said (<see cref="PackageSummary.Verified"/> of the Browse row); null makes the host ask nuget.org itself
+/// (one <c>packageid:</c> search beside the details), for <see cref="PackageDetails.Verified"/>.
 /// </summary>
-public sealed record PackageDetailsParams(string Id, bool Prerelease, string? Version = null, string? Source = null, bool Offline = false, string[]? TargetFrameworks = null);
+public sealed record PackageDetailsParams(string Id, bool Prerelease, string? Version = null, string? Source = null, bool Offline = false, string[]? TargetFrameworks = null, bool? Verified = null);
 
+/// <summary>
+/// One version's details. <see cref="Verified"/> (D39): <see cref="Source"/> is https://api.nuget.org, the details can be
+/// nobody else's copy (as for <see cref="PackageSummary.Verified"/>) and nuget.org says the ID's prefix is reserved.
+/// </summary>
 public sealed record PackageDetails(
     string Id,
     string Version,
@@ -94,7 +104,8 @@ public sealed record PackageDetails(
     PackageDependencyGroup[] DependencyGroups,
     PackageDeprecation? Deprecation,
     PackageVulnerability[] Vulnerabilities,
-    string Source);
+    string Source,
+    bool Verified = false);
 
 /// <summary>
 /// A version for the version picker, newest first. <see cref="Compatible"/> says whether it supports every framework of

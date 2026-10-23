@@ -1,0 +1,35 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.PropertyEditors.DockAnchorDropDown"
+             x:DataType="vm:PropertyRowViewModel">
+  <!-- The classic IDE's Dock and Anchor pickers (M41b), moved from the Properties window's row (#68): the edges to click. -->
+  <Panel Margin="6">
+    <Grid IsVisible="{Binding IsDock}" ColumnDefinitions="28,56,28" RowDefinitions="22,44,22,26" Width="116">
+      <ToggleButton Grid.Row="0" Grid.ColumnSpan="3" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Top" IsChecked="{Binding DockTop, Mode=OneWay}"
+                    ToolTip.Tip="{l:T properties.dockTop}" AutomationProperties.Name="{l:T properties.dockTop}" />
+      <ToggleButton Grid.Row="1" Grid.Column="0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Left" IsChecked="{Binding DockLeft, Mode=OneWay}"
+                    ToolTip.Tip="{l:T properties.dockLeft}" AutomationProperties.Name="{l:T properties.dockLeft}" />
+      <ToggleButton Grid.Row="1" Grid.Column="1" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Fill" IsChecked="{Binding DockFill, Mode=OneWay}"
+                    ToolTip.Tip="{l:T properties.dockFill}" AutomationProperties.Name="{l:T properties.dockFill}" />
+      <ToggleButton Grid.Row="1" Grid.Column="2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Right" IsChecked="{Binding DockRight, Mode=OneWay}"
+                    ToolTip.Tip="{l:T properties.dockRight}" AutomationProperties.Name="{l:T properties.dockRight}" />
+      <ToggleButton Grid.Row="2" Grid.ColumnSpan="3" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="Bottom" IsChecked="{Binding DockBottom, Mode=OneWay}"
+                    ToolTip.Tip="{l:T properties.dockBottom}" AutomationProperties.Name="{l:T properties.dockBottom}" />
+      <ToggleButton Grid.Row="3" Grid.ColumnSpan="3" HorizontalAlignment="Stretch" Margin="1" Command="{Binding DockCommand}" CommandParameter="None" IsChecked="{Binding DockNone, Mode=OneWay}"
+                    Content="{l:T properties.dockNone}" AutomationProperties.Name="{l:T properties.dockNone}" />
+    </Grid>
+    <Grid IsVisible="{Binding IsAnchor}" ColumnDefinitions="40,36,40" RowDefinitions="30,36,30" Width="116">
+      <ToggleButton Grid.Row="0" Grid.Column="1" Width="10" HorizontalAlignment="Center" VerticalAlignment="Stretch" IsChecked="{Binding AnchorTop.IsChecked}"
+                    ToolTip.Tip="{l:T properties.anchorTop}" AutomationProperties.Name="{l:T properties.anchorTop}" />
+      <ToggleButton Grid.Row="1" Grid.Column="0" Height="10" HorizontalAlignment="Stretch" VerticalAlignment="Center" IsChecked="{Binding AnchorLeft.IsChecked}"
+                    ToolTip.Tip="{l:T properties.anchorLeft}" AutomationProperties.Name="{l:T properties.anchorLeft}" />
+      <Border Grid.Row="1" Grid.Column="1" Margin="2" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}" Background="{DynamicResource Shell.Toolbar}" />
+      <ToggleButton Grid.Row="1" Grid.Column="2" Height="10" HorizontalAlignment="Stretch" VerticalAlignment="Center" IsChecked="{Binding AnchorRight.IsChecked}"
+                    ToolTip.Tip="{l:T properties.anchorRight}" AutomationProperties.Name="{l:T properties.anchorRight}" />
+      <ToggleButton Grid.Row="2" Grid.Column="1" Width="10" HorizontalAlignment="Center" VerticalAlignment="Stretch" IsChecked="{Binding AnchorBottom.IsChecked}"
+                    ToolTip.Tip="{l:T properties.anchorBottom}" AutomationProperties.Name="{l:T properties.anchorBottom}" />
+    </Grid>
+  </Panel>
+</UserControl>

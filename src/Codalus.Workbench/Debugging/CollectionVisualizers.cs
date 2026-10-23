@@ -35,9 +35,15 @@ public static class CollectionVisualizers
 
     public static bool IsByteArray(string? type) => type is "byte[]" or "System.Byte[]";
 
-    /// <summary>Whether the grid can show a value of <paramref name="type"/>: arrays and the common collections.</summary>
+    /// <summary>
+    /// Whether the grid can show a value of <paramref name="type"/>: arrays, the collections with an instance
+    /// <c>ToArray()</c>, and Dictionary and HashSet through the data tip's collection views (D44, decision 5).
+    /// </summary>
     public static bool IsCollection(string? type) =>
-        IsArray(type) || (type is not null && CollectionTypes.Any(prefix => type.StartsWith(prefix, StringComparison.Ordinal)));
+        IsArray(type) || (type is not null && CollectionTypes.Any(prefix => type.StartsWith(prefix, StringComparison.Ordinal))) || ThroughView(type) is not null;
+
+    /// <summary>Dictionary and HashSet have no instance ToArray(): the grid reads them through their collection views.</summary>
+    private static CollectionKind? ThroughView(string? type) => CollectionViews.KindOf(type) is CollectionKind.Dictionary or CollectionKind.HashSet ? CollectionViews.KindOf(type) : null;
 
     /// <summary>The expression that reads <paramref name="expression"/>'s elements as an array.</summary>
     public static string AsArray(string expression, string? type) => IsArray(type) ? expression : $"({expression}).ToArray()";
@@ -45,6 +51,11 @@ public static class CollectionVisualizers
     /// <summary>The elements of the collection <paramref name="expression"/> evaluates to, with an object's members as columns.</summary>
     public static async Task<DebugGrid> GridAsync(DebugService debugger, string expression, string? type, CancellationToken cancellationToken = default)
     {
+        if (ThroughView(type) is { } kind)
+        {
+            return await ViewGridAsync(debugger, expression, kind, cancellationToken).ConfigureAwait(false);
+        }
+
         var array = await debugger.EvaluateAsync(AsArray(expression, type), "watch", cancellationToken).ConfigureAwait(false);
         if (array.VariablesReference == 0)
         {
@@ -88,6 +99,23 @@ public static class CollectionVisualizers
             element.Value,
             .. columns.Select(c => members[i].TryGetValue(c, out var value) ? value : string.Empty)]).ToList();
         return new DebugGrid(["Index", "Value", .. columns], rows, elements.Count > shown.Count);
+    }
+
+    /// <summary>A dictionary's entries (Key, Value) or a set's elements (Index, Value), read by their collection view.</summary>
+    private static async Task<DebugGrid> ViewGridAsync(DebugService debugger, string expression, CollectionKind kind, CancellationToken cancellationToken)
+    {
+        var value = await debugger.EvaluateAsync(expression, "watch", cancellationToken).ConfigureAwait(false);
+        var raw = value.VariablesReference > 0 ? await debugger.VariablesAsync(value.VariablesReference).ConfigureAwait(false) : [];
+        if (await CollectionViews.ReadAsync(kind, raw, r => debugger.VariablesAsync(r), cancellationToken).ConfigureAwait(false) is not { } view)
+        {
+            throw new InvalidOperationException($"'{expression}' has no elements to show ({value.Result}).");
+        }
+
+        var shown = view.Elements.Take(MaxRows).ToList();
+        var rows = kind == CollectionKind.Dictionary
+            ? shown.Select(e => (IReadOnlyList<string>)[e.Children![0].Variable.Value, e.Variable.Value]).ToList()
+            : shown.Select(e => (IReadOnlyList<string>)[e.Variable.Name.Trim('[', ']'), e.Variable.Value]).ToList();
+        return new DebugGrid(kind == CollectionKind.Dictionary ? ["Key", "Value"] : ["Index", "Value"], rows, view.Count > shown.Count);
     }
 
     /// <summary>The bytes of the byte array <paramref name="expression"/> evaluates to.</summary>

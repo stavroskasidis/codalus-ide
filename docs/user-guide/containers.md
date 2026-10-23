@@ -42,6 +42,8 @@ When no engine answers (Docker or Podman isn't installed, or its daemon or machi
 
 ## .NET Aspire
 
+New Project's **Enlist in Aspire orchestration** (on Additional information, for web projects in a trusted location) adds `<Solution>.AppHost` and `<Solution>.ServiceDefaults` projects to a new solution, or adds the new project to the solution's own AppHost, with the references and the AppHost's `AddProject` line ([New projects and solutions](solutions.md#additional-information)).
+
 Set an Aspire **AppHost** project as the startup project, then:
 - `Ctrl+F5` runs it. Its orchestrator asks Codalus IDE to start each project of the app: they run like any program, each with its **Run** output, and their output also reaches the dashboard's console logs.
 - `F5` debugs the AppHost and every project in **one debug session**: breakpoints in any project stop, and the Processes window lists each program.

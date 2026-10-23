@@ -52,6 +52,9 @@ internal sealed partial class SmokeTest
                 await RenderedAsync().ConfigureAwait(true);
                 var height = PopupHeight(top);
                 Check(height > 0 && height <= screen, $"the {title} menu ({height:0} px) fits the screen ({screen:0} px)");
+                // In its own window, a menu's text is the window's UI size, not the popup root's (Fluent's 14 px).
+                var first = top.Items.OfType<MenuItem>().First();
+                Check(Math.Abs(first.FontSize - window.FontSize) < 0.01, $"the {title} menu's text is {first.FontSize:0.#} px in its {TopLevel.GetTopLevel(first)?.GetType().Name}, the window's {window.FontSize:0.#}");
                 Screenshot($"smoke-test-menu-{title.ToLowerInvariant()}.png", top);
                 if (title == "Edit")
                 {

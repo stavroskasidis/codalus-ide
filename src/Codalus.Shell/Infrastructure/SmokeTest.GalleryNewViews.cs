@@ -58,6 +58,9 @@ internal sealed partial class SmokeTest
             }
         }
 
+        // New Project's pages (0.6.0, ADR 0082): the templates, no match, a pack to install, a reserved name, Blazor's options.
+        await GalleryNewProjectAsync(solutionOpen: false).ConfigureAwait(true);
+
         // The first-run setup (M46), opened as from Help, each step; the settings it may touch are put back.
         var settings = shell.Workbench.Settings;
         var before = s_setupKeys.ToDictionary(k => k, k => settings.GetLayerValue(k, SettingScope.User));
@@ -107,6 +110,9 @@ internal sealed partial class SmokeTest
         await SoftWaitAsync(() => shell.CodeSearchIndex.IsComplete, 60).ConfigureAwait(true);
         await GalleryCodeSearchAsync([("data", "Calculator", CodeSearchViewModel.CodeTab)]).ConfigureAwait(true);
 
+        // New Project with a solution open (0.6.0): Configure's Solution choice.
+        await GalleryNewProjectAsync(solutionOpen: true).ConfigureAwait(true);
+
         // Options' color theme cards (M45).
         shell.OpenSettings(ThemeService.SettingKey);
         if (shell.Layout.ActiveDocument is SettingsDocument options)
@@ -125,6 +131,105 @@ internal sealed partial class SmokeTest
             {
                 shell.Layout.CloseDocument(document);
             }
+        }
+    }
+
+    /// <summary>
+    /// New Project's window (0.6.0, ADR 0082) in each gallery theme, as its design's states: without a solution the
+    /// templates (Console App chosen), no match, a template pack to install, a reserved name and Blazor's options with
+    /// Individual Accounts; with one, Configure's Solution choice. The window closes after.
+    /// </summary>
+    private async Task GalleryNewProjectAsync(bool solutionOpen)
+    {
+        shell.Run("templates.newProject");
+        if (!await SoftWaitAsync(() => shell.NewProjectModel is { IsLoading: false, Templates.Count: > 0 } && shell.NewProjectWindowView is { IsVisible: true }, 120).ConfigureAwait(true))
+        {
+            shell.NewProjectModel?.Cancel();
+            return;
+        }
+
+        var model = shell.NewProjectModel!;
+        var view = shell.NewProjectWindowView!;
+        model.SearchDelay = TimeSpan.Zero;
+        model.ValidationDelay = TimeSpan.Zero;
+        Task Shoot(string page, string state) => GalleryThemesAsync(async theme =>
+        {
+            await Task.Delay(100).ConfigureAwait(true);
+            await RenderedAsync(view).ConfigureAwait(true);
+            GalleryShot("newproject-" + page, state, theme, null, view);
+        });
+
+        async Task<bool> ChooseAsync(string shortName)
+        {
+            if (model.Templates.FirstOrDefault(r => r.Group.ShortName == shortName && r.Group.Language == "C#") is not { } row)
+            {
+                return false;
+            }
+
+            model.SelectedTemplate = row;
+            await model.WaitForTemplateAsync().ConfigureAwait(true);
+            return true;
+        }
+
+        async Task<bool> ConfigureAsync(string shortName)
+        {
+            if (!await ChooseAsync(shortName).ConfigureAwait(true))
+            {
+                return false;
+            }
+
+            await model.GoForwardAsync().ConfigureAwait(true);
+            return await SoftWaitAsync(() => model.Page == NewProjectPage.Configure && !model.IsValidating, 30).ConfigureAwait(true);
+        }
+
+        try
+        {
+            if (solutionOpen)
+            {
+                if (await ConfigureAsync("console").ConfigureAwait(true))
+                {
+                    await Shoot("configure", "solution").ConfigureAwait(true);
+                }
+
+                return;
+            }
+
+            if (await ChooseAsync("console").ConfigureAwait(true))
+            {
+                await Shoot("choose", "data").ConfigureAwait(true);
+            }
+
+            model.Search = "zqxwv";
+            await Shoot("choose", "nomatch").ConfigureAwait(true);
+            model.ClearAllCommand.Execute(null);
+            if (model.Templates.FirstOrDefault(r => r.IsPack) is { } pack)
+            {
+                model.SelectedTemplate = pack;
+                await Shoot("choose", "install").ConfigureAwait(true);
+            }
+
+            if (await ConfigureAsync("blazor").ConfigureAwait(true))
+            {
+                var name = model.ProjectName;
+                model.ProjectName = "CON";
+                await Shoot("configure", "error").ConfigureAwait(true);
+                model.ProjectName = name;
+                if (await SoftWaitAsync(() => model.CanGoNext, 30).ConfigureAwait(true))
+                {
+                    await model.GoForwardAsync().ConfigureAwait(true);
+                    if (model.AuthChoices.FirstOrDefault(a => a.Value == "Individual") is { } individual)
+                    {
+                        model.SelectedAuth = individual;
+                    }
+
+                    await Shoot("additional", "data").ConfigureAwait(true);
+                }
+            }
+        }
+        finally
+        {
+            model.Cancel();
+            await SoftWaitAsync(() => !shell.IsNewProjectOpen, 10).ConfigureAwait(true);
         }
     }
 
@@ -315,6 +420,21 @@ internal sealed partial class SmokeTest
         {
             shell.Toolbox.Disarm();
         }
+
+        // #68: the Properties window's "editors" state, the notes box with Font expanded into its parts.
+        var selection = designer.Selection.ToList();
+        designer.SetSelection(["notesTextBox"], notify: true);
+        await WaitAsync(() => shell.PropertiesWindow.Title.StartsWith("notesTextBox", StringComparison.Ordinal) && !shell.PropertiesWindow.IsLoading && shell.PropertiesWindow.Grid.Find("Font") is not null,
+            "the Properties window shows the notes box's Font", 60).ConfigureAwait(true);
+        var font = shell.PropertiesWindow.Grid.Find("Font")!;
+        shell.PropertiesWindow.Grid.SetExpanded(font, true);
+        await GalleryThemesAsync(theme =>
+        {
+            GalleryTool(PropertiesWindowViewModel.ToolWindowId, "editors", theme);
+            return Task.CompletedTask;
+        }, settle: true).ConfigureAwait(true);
+        shell.PropertiesWindow.Grid.SetExpanded(font, false);
+        designer.SetSelection(selection, notify: true);
 
         WriteGalleryIndex();
     }

@@ -13,6 +13,8 @@ namespace Codalus.LspConformance.Server;
 /// arguments (<c>--interpreter=vscode</c>), it stands in for netcoredbg: <c>configurationDone</c> without a launch, then
 /// an attach (a program started in the terminal, see <see cref="AttachScript"/>); or an attach, then a
 /// <c>configurationDone</c> that runs past netcoredbg's 15 seconds (<see cref="AttachLateAsync"/>).
+/// A launch configuration with <c>inspect</c> (see <see cref="ScriptedInspection"/>) is a program paused at a line with
+/// the variables, evaluations and edits its script lists (the data tip and variable window tests).
 /// </summary>
 internal static class ScriptedDap
 {
@@ -21,15 +23,33 @@ internal static class ScriptedDap
     /// <summary>How many requests arrived (<c>runtimeAfter</c> with <c>+request</c>).</summary>
     private static int s_requests;
 
+    /// <summary>
+    /// Where each request is written once an attach named a process that has a request log: the file
+    /// <c>codalus-scripted-requests-&lt;process id&gt;</c> in the temp folder, when it exists (#75's owned attach tests).
+    /// </summary>
+    private static string? s_requestLog;
+
+    private static string? RequestLog(JsonElement attach)
+    {
+        var processId = attach.GetProperty("arguments").GetProperty("processId").GetInt32();
+        var log = Path.Combine(Path.GetTempPath(), "codalus-scripted-requests-" + processId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return File.Exists(log) ? log : null;
+    }
+
     /// <summary>The attached program's threads, once a slow attach has the process (<see cref="AttachLateAsync"/>).</summary>
     private static JsonElement[]? s_attachedThreads;
 
-    public static async Task RunAsync(Stream input, Stream output)
+    /// <param name="initializeAfter">
+    /// With <c>--initialize-after &lt;file&gt;</c>, <c>initialize</c> is answered only once that file exists: an adapter whose
+    /// start takes as long as the test says (a netcoredbg that finishes starting after one started after it).
+    /// </param>
+    public static async Task RunAsync(Stream input, Stream output, string? initializeAfter = null)
     {
         JsonElement? launch = null;
         var configured = false;
         (int ProcessId, string? RuntimeAfter, bool Slow)? slowAttach = null;
         var evaluations = 0;
+        ScriptedInspection? inspection = null;
         while (await ReadAsync(input) is { } message)
         {
             if (message.GetProperty("type").GetString() != "request")
@@ -40,17 +60,41 @@ internal static class ScriptedDap
             var command = message.GetProperty("command").GetString();
             var requestSeq = message.GetProperty("seq").GetInt32();
             Interlocked.Increment(ref s_requests);
+            if (command == "attach" && RequestLog(message) is { } log)
+            {
+                s_requestLog = log;
+            }
+
+            if (s_requestLog is { } logging)
+            {
+                await File.AppendAllTextAsync(logging, command + " " + (message.TryGetProperty("arguments", out var logged) ? logged.GetRawText() : "{}") + "\n");
+            }
             JsonNode? body = null;
+            if (inspection is not null && await inspection.HandleAsync(output, message, command!, requestSeq))
+            {
+                continue;
+            }
+
             switch (command)
             {
                 case "initialize":
-                    body = new JsonObject { ["supportsConfigurationDoneRequest"] = true };
+                    while (initializeAfter is not null && !File.Exists(initializeAfter))
+                    {
+                        await Task.Delay(50);
+                    }
+
+                    body = new JsonObject { ["supportsConfigurationDoneRequest"] = true, ["supportsSetVariable"] = true };
                     await RespondAsync(output, requestSeq, command, body);
                     await EventAsync(output, "initialized", null);
                     continue;
                 case "launch":
                     launch = message.TryGetProperty("arguments", out var arguments) ? arguments.Clone() : null;
+                    inspection = ScriptedInspection.From(launch);
                     break;
+                case "attach" when !configured && AttachScript(message) is { RuntimeAfter: "fail" }:
+                    // An attach netcoredbg refuses (not its startup timeout: the start isn't made again).
+                    await FailAsync(output, requestSeq, command, "Failed command 'attach' : 0x80070057");
+                    continue;
                 case "attach" when !configured && AttachScript(message) is { Slow: true } slow:
                     // As netcoredbg: it only takes the process id, and attaches in configurationDone.
                     slowAttach = slow;
@@ -111,11 +155,20 @@ internal static class ScriptedDap
                 case "configurationDone" when Threads(launch) is not null:
                     // The program runs until a pause.
                     break;
+                case "configurationDone" when launch is { } running && Option(running, "keepsRunning") == "true":
+                    // The program runs until the session ends it (a multi-program session's first one, while others join).
+                    break;
                 case "configurationDone":
+                    // With processId, netcoredbg's process event names it first; with exitCode, the program exits with it (else 7).
                     await RespondAsync(output, requestSeq, command, null);
+                    if (launch is { } started && Option(started, "processId") is { } processId)
+                    {
+                        await EventAsync(output, "process", new JsonObject { ["name"] = "program", ["systemProcessId"] = int.Parse(processId, System.Globalization.CultureInfo.InvariantCulture), ["isLocalProcess"] = true, ["startMethod"] = "launch" });
+                    }
+
                     await EventAsync(output, "output", new JsonObject { ["category"] = "console", ["output"] = "scripted adapter: launch " + launch?.GetRawText() + "\n" });
                     await EventAsync(output, "output", new JsonObject { ["category"] = "stdout", ["output"] = "Hello from the scripted program\n" });
-                    await EventAsync(output, "exited", new JsonObject { ["exitCode"] = 7 });
+                    await EventAsync(output, "exited", new JsonObject { ["exitCode"] = launch is { } exiting && Option(exiting, "exitCode") is { } code ? int.Parse(code, System.Globalization.CultureInfo.InvariantCulture) : 7 });
                     await EventAsync(output, "terminated", new JsonObject());
                     continue;
                 case "threads":

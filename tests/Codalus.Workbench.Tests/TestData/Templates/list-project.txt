@@ -1,0 +1,10 @@
+These templates matched your input: --type='project'
+
+Template Name                                 Short Name                  Language    Tags
+--------------------------------------------  --------------------------  ----------  ----------------------------------------
+ASP.NET Core Web API                          webapi                      [C#],F#     Web/Web API/API/Service
+Blazor Web App                                blazor                      [C#]        Web/Blazor/WebAssembly
+Class Library                                 classlib                    [C#],F#,VB  Common/Library
+Console App                                   console                     [C#],F#,VB  Common/Console
+WPF Application                               wpf                         [C#],VB     Common/WPF
+xUnit Test Project                            xunit                       [C#],F#,VB  Test/xUnit/Desktop/Web

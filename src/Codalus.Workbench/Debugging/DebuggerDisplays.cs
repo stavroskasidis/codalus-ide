@@ -17,7 +17,8 @@ public sealed class DebuggerDisplays
     /// <summary>Evaluations for one list of variables stop after this long: the rest keep netcoredbg's values.</summary>
     public TimeSpan Budget { get; init; } = TimeSpan.FromSeconds(3);
 
-    private const int MaxPerList = 60;
+    /// <summary>The displays applied as a list loads; the data tip applies the rest's as they scroll into view.</summary>
+    public const int MaxPerList = 60;
 
     private readonly Func<string, IReadOnlyList<string>, CancellationToken, Task<TypeDisplayResult?>> _attributes;
     private readonly Dictionary<string, Task<TypeDisplayResult?>> _types = new(StringComparer.Ordinal);
@@ -133,7 +134,7 @@ public sealed class DebuggerDisplays
     }
 
     /// <summary>netcoredbg shows an object as <c>{Namespace.Type}</c>; arrays (<c>{int[3]}</c>) have no attributes.</summary>
-    internal static bool IsObjectValue(string value, string? type) =>
+    public static bool IsObjectValue(string value, string? type) =>
         type is not null && value.Length > 2 && value[0] == '{' && value[^1] == '}' && !value.EndsWith("]}", StringComparison.Ordinal);
 
     private async Task<string?> DisplayAsync(
@@ -175,6 +176,9 @@ public sealed class DebuggerDisplays
 
     /// <summary>The expression applied to the object: <c>{Name}</c> on <c>order</c> is <c>(order).Name</c>.</summary>
     internal static string Member(string target, string member) => $"({target}).{member}";
+
+    /// <summary>What the companion says of a type (its attributes and member list), looked up once per session.</summary>
+    public Task<TypeDisplayResult?> TypeInfoAsync(string type, IReadOnlyList<string> modules, CancellationToken cancellationToken) => TypeAsync(type, modules, cancellationToken);
 
     private Task<TypeDisplayResult?> TypeAsync(string type, IReadOnlyList<string> modules, CancellationToken cancellationToken)
     {

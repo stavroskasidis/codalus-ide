@@ -18,6 +18,25 @@ using Codalus.Shell.ViewModels;
 namespace Codalus.Shell.Editor;
 
 /// <summary>
+/// What a navigation bar lists and follows: a document's symbols, a caret in it, and moving the caret to a symbol. The
+/// editor's (<see cref="CodeEditorController"/>), or a diff side's that shows the open document's text (#86, D45).
+/// </summary>
+public interface INavigationSource
+{
+    IReadOnlyList<DocumentSymbol> Symbols { get; }
+
+    event EventHandler? SymbolsChanged;
+
+    event EventHandler? CaretChanged;
+
+    /// <summary>The symbols around the caret, outermost first.</summary>
+    IReadOnlyList<DocumentSymbol> SymbolPathAtCaret();
+
+    /// <summary>Moves the caret to a position of the document.</summary>
+    void Navigate(Position position);
+}
+
+/// <summary>
 /// The navigation bar above the editor (M12a): the types of the document and the members of the selected type, from
 /// the document symbols. It follows the caret; choosing an entry moves the caret to it.
 /// </summary>
@@ -25,8 +44,32 @@ public sealed class NavigationBar : Border
 {
     private readonly ComboBox _types = new() { Classes = { "navigationBar" } };
     private readonly ComboBox _members = new() { Classes = { "navigationBar" } };
-    private CodeEditorController? _controller;
+    private INavigationSource? _controller;
     private bool _updating;
+
+    /// <summary>The editor's symbols and caret.</summary>
+    private sealed class EditorSource(CodeEditorController controller) : INavigationSource
+    {
+        public CodeEditorController Controller => controller;
+
+        public IReadOnlyList<DocumentSymbol> Symbols => controller.Insights.Symbols;
+
+        public event EventHandler? SymbolsChanged
+        {
+            add => controller.Insights.SymbolsChanged += value;
+            remove => controller.Insights.SymbolsChanged -= value;
+        }
+
+        public event EventHandler? CaretChanged
+        {
+            add => controller.CaretChanged += value;
+            remove => controller.CaretChanged -= value;
+        }
+
+        public IReadOnlyList<DocumentSymbol> SymbolPathAtCaret() => controller.Insights.SymbolPath(controller.Model.PositionAt(controller.Editor.CaretOffset));
+
+        public void Navigate(Position position) => controller.Navigate(position);
+    }
 
     public NavigationBar()
     {
@@ -72,12 +115,14 @@ public sealed class NavigationBar : Border
 
     internal NavigationEntry? SelectedMember => _members.SelectedItem as NavigationEntry;
 
-    public void Attach(CodeEditorController controller)
+    public void Attach(CodeEditorController controller) => Attach(new EditorSource(controller));
+
+    public void Attach(INavigationSource source)
     {
         Detach();
-        _controller = controller;
-        controller.Insights.SymbolsChanged += OnSymbolsChanged;
-        controller.CaretChanged += OnCaretChanged;
+        _controller = source;
+        source.SymbolsChanged += OnSymbolsChanged;
+        source.CaretChanged += OnCaretChanged;
         Rebuild();
     }
 
@@ -85,11 +130,14 @@ public sealed class NavigationBar : Border
     {
         if (_controller is not null)
         {
-            _controller.Insights.SymbolsChanged -= OnSymbolsChanged;
+            _controller.SymbolsChanged -= OnSymbolsChanged;
             _controller.CaretChanged -= OnCaretChanged;
             _controller = null;
         }
     }
+
+    /// <summary>Whether it lists a document's types (it is hidden otherwise).</summary>
+    public bool HasTypes => Types.Count > 0;
 
     public bool Enabled { get; set; } = true;
 
@@ -118,7 +166,7 @@ public sealed class NavigationBar : Border
 
     private void Rebuild()
     {
-        var symbols = _controller?.Insights.Symbols ?? [];
+        var symbols = _controller?.Symbols ?? [];
         var types = new List<NavigationEntry>();
         void Collect(IEnumerable<DocumentSymbol> level, string? outer)
         {
@@ -152,7 +200,7 @@ public sealed class NavigationBar : Border
             return;
         }
 
-        var path = controller.Insights.SymbolPath(controller.Model.PositionAt(controller.Editor.CaretOffset));
+        var path = controller.SymbolPathAtCaret();
         var type = path.LastOrDefault(IsType);
         var member = path.LastOrDefault(s => !IsType(s) && s.Kind is not (SymbolKind.Namespace or SymbolKind.Module));
         _updating = true;

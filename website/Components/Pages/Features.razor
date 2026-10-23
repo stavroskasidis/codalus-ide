@@ -84,6 +84,8 @@
                     <li>Property pages that show where each value comes from</li>
                     <li>Launch profiles, Configuration Manager and Reference Manager</li>
                     <li>Browse, update and consolidate packages; Central Package Management</li>
+                    <li>nuget.org's verified owners: a badge after a package whose ID prefix nuget.org reserved for one of its owners, shown only when it can be nobody else's copy (never from a mirror), and search that leaves out what package source mapping wouldn't restore</li>
+                    <li>New Project as the classic IDE's three-page wizard: recent templates, search and filters, each template's own options, and the framework with its support</li>
                     <li>The Properties window, Show All Files, Add New Item, templates and External Tools</li>
                     <li>Folder mode for a folder without a solution</li>
                     <li>A solution reopens as you left it: documents, breakpoints, bookmarks, configuration and the Solution Explorer's expansion, kept in a self-ignoring .codalus/state next to it</li>
@@ -110,7 +112,9 @@
                     <li>Launch (F5) and attach, stepping and threads</li>
                     <li>Conditions, hit counts, logpoints and dependent breakpoints</li>
                     <li>Text, JSON, XML and HTML visualizers, and [DebuggerDisplay]</li>
-                    <li>Pinned data tips, PerfTips and Run to Click</li>
+                    <li>Data tips like a classic IDE's: the header over the hovered expression, each expanded level a tip of its own, members grouped with their icons, List, Dictionary, HashSet, Queue and Stack as their elements, View drop-downs for visualizers, values edited in place and red when they changed, any row pinned, and Ctrl to see through them</li>
+                    <li>Pinned data tips that expand like the data tip, PerfTips and Run to Click</li>
+                    <li>Locals, Autos, Watch and QuickWatch with the data tip's rows: Name, Value and Type in aligned columns at every depth, expansion kept across steps, values edited in place</li>
                     <li>Dumps, Parallel Stacks and Parallel Watch, and Just-In-Time crash dumps</li>
                     <li>Attach over SSH, in containers and in WSL; console apps in the integrated terminal</li>
                     <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
@@ -119,7 +123,11 @@
             <div>
                 <h3>Git and hosting</h3>
                 <ul>
-                    <li>Per-file, per-hunk and per-line staging, and blame</li>
+                    <li>Per-file, per-change and per-line staging, from Git Changes or the diff, and blame</li>
+                    <li>Diffs and the merge editor in the editor's colors</li>
+                    <li>A branch drop-down in Git Changes: search, outgoing and incoming counts, and each branch's own menu (checkout, merge, rebase, update, push, rename, delete, compare)</li>
+                    <li>Update a branch from its remote without checking it out</li>
+                    <li>A folder's menu in Git Changes, as in the classic IDE: stage, discard, stash, ignore, history, reveal, terminal, copy path</li>
                     <li>A history graph and interactive rebase</li>
                     <li>A 3-way merge editor: check boxes beside each conflict, the merge base in the result, both versions scrolling with it</li>
                     <li>Stash, tags, remotes, worktrees and Git LFS</li>
@@ -134,7 +142,7 @@
                     <li>.http files, the HTTP Response window (the status as a chip, the body pretty or raw, the headers, a history of requests) and an Endpoints Explorer</li>
                     <li>HTML, CSS, JavaScript and TypeScript language servers</li>
                     <li>ESLint, Prettier, npm scripts and the Task Runner Explorer</li>
-                    <li>Hot Reload through dotnet watch, and while debugging a Blazor WebAssembly app</li>
+                    <li>Hot Reload through dotnet watch, and while debugging Blazor WebAssembly components, standalone or in a Blazor Web App (its server under dotnet watch with the debugger attached)</li>
                     <li>Scaffolding, OpenAPI and gRPC service references, the dev certificate and user secrets</li>
                 </ul>
             </div>
@@ -153,7 +161,7 @@
                 <h3>Make it yours</h3>
                 <ul>
                     <li>A first-run setup: the theme family and mode, previewed live, the keyboard scheme, your settings from VS Code, a .vssettings file or settings sync, and a check of the .NET SDK and git, before the start window</li>
-                    <li>Classic's Blue, Light, Dark and High Contrast, the default, and four theme families, Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, chosen from pictures in Options</li>
+                    <li>Classic's Blue, Light, Dark and High Contrast, the default, with the classic IDE's rounded cards and editor colors, and four theme families, Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, chosen from pictures in Options</li>
                     <li>Fonts and Colors over any theme, for code, the editor and the window</li>
                     <li>Default, VS Code, ReSharper and Emacs keyboard schemes</li>
                     <li>Import from VS Code or a .vssettings file; export to one file</li>
@@ -172,7 +180,8 @@
                     <li>Commit messages, pull request descriptions, Ask AI on an exception or a failing test, Fix with AI, tests for the selection, and profile summaries</li>
                     <li>Agent mode, one switch: it reads, searches, builds, edits and runs commands, each step shown in the chat, every change in a preview and every command after you allow it</li>
                     <li>MCP: your MCP servers' tools in agent mode, and <code>codalus mcp</code> for agents outside the IDE</li>
-                    <li>External agents in AI Chat over the Agent Client Protocol (pi, Claude, Codex, Gemini CLI, GitHub Copilot, OpenCode, goose, your own CLIs), set up in one step with Add agent… (pinned versions, the exact command shown first): Codalus serves their file, terminal and permission requests with its own checks, and gives each one the IDE's tools</li>
+                    <li>External agents in AI Chat over the Agent Client Protocol (Claude, Codex, Gemini CLI, GitHub Copilot, pi, OpenCode, goose, your own CLIs): Codalus serves their file, terminal and permission requests with its own checks, and gives each one the IDE's tools</li>
+                    <li>Connect to Claude, Codex, Gemini CLI or GitHub Copilot from AI Chat in one dialog: it finds or installs Node.js with your own package manager, signs the agent in (Claude subscription through Claude Code's own login, or an API key kept in the OS credential store), tests the connection in an empty folder, and only then saves it; Disconnect undoes it</li>
                     <li>Files .gitignore or a .codalusignore excludes, and secrets, are never sent; a request log of what was</li>
                 </ul>
             </div>
@@ -199,10 +208,12 @@
                     <li>On Windows, the XAML Previewer draws WPF XAML on your app's own WPF as you type: design-time data from d:DesignInstance, the design size, zoom and scale, and a click selects the element's tag</li>
                     <li>On Windows, the Live Visual Tree and Live Property Explorer for running WPF apps: logical and visual trees, dependency property values with their sources, values set live, highlight, pick and Go to XAML</li>
                     <li>On Windows, the Windows Forms designer on your app's own Windows Forms: select, move, resize, nudge, copy and paste controls, the Toolbox with an icon for every control and your own controls, the Properties window and its Events view</li>
+                    <li>The Properties window as the classic IDE's: categories that collapse, Font, Location, Size and Padding opened into their parts (each written as one assignment), color, alignment, multi-line text, shortcut key and date drop-downs, the font editor, the String Collection Editor and Select Resource, choices for AcceptButton and Cursor, Reset, and a component list</li>
                     <li>Drag, click or double-click from the Toolbox (or press Enter on an item) to add controls, into the selected container as in the classic IDE</li>
                     <li>Build while a form is open: the designer runs on a copy of your build output, as the classic IDE does, and loads the form on the new build after it</li>
-                    <li>Snap lines, the Format menu (align, make same size, spacing, center, bring to front and send to back), tab order mode, Dock and Anchor pickers and adorners</li>
+                    <li>Snap lines, the Format menu (align, make same size, spacing, center, bring to front and send to back, Lock Controls), tab order mode, Dock and Anchor pickers and adorners</li>
                     <li>Smart tags with the designers' tasks, menus and tool strips edited in place with Type Here, the component tray, and collection editors for items, columns, tab pages and table styles</li>
+                    <li>The designer's context menu as in the classic IDE: the designers' own commands (Add Tab, Edit Items...), Bring to Front and Send to Back, Align to Grid, Lock Controls, Select the parent, Cut, Copy, Paste, Delete and Properties, grayed when they don't apply; Edit's commands and Select All in the designer</li>
                     <li>Localizable forms designed per language into each culture's .resx, images imported into the form's or the project's resources, extender properties such as ToolTip on toolTip1, and data binding to a BindingSource's members</li>
                     <li>The designer writes InitializeComponent as Visual Studio does, as the smallest edit of the designer file: undo, local history and source control see only what changed; code it can't read opens as code with the reason</li>
                     <li>New WPF and Windows Forms projects; windows, pages, user controls, resource dictionaries and forms in Add New Item, nested with their code-behind</li>
@@ -288,7 +299,7 @@
     /// <summary>Classic, the default (D36), and the theme families (M45), each in the variant its screenshot shows.</summary>
     private static readonly (string Family, string Variant, string Line)[] s_families =
     [
-        ("Classic", "Light", "the default, with docked tool windows, plain tabs and a blue accent"),
+        ("Classic", "Light", "the default, with tool windows and documents as rounded cards, an outlined tab and a blue accent"),
         ("Harbor", "Light", "closest to a classic IDE, with a navy title bar"),
         ("Graphite", "Dark", "compact, hairlines instead of gutters"),
         ("Daylight", "Light", "flat, with rounded tabs"),
@@ -309,6 +320,9 @@
         new("code-search", "Code Search", "code-search.png",
             "The Code Search window over the editor: filter chips, two-line results for Greet with Greeter selected, and Greeter.cs in the preview below",
             "Go To All is Code Search: files, types, members and text with filter chips, results that say where each one is, and the selected one in a live preview you can edit and save."),
+        new("new-project", "New Project", "new-project.png",
+            "The New Project window: recent templates on the left, the search box, language, platform and project type filters, and templates with their descriptions and tags",
+            "New Project as the classic IDE's three-page wizard: your recent templates, search and filters over every installed template, then the name, location and solution, then the template's own options for the framework you pick, labeled with its support."),
         new("debugging", "Debugging", "debugging.png",
             "Paused at a breakpoint with a PerfTip, and the Exception Settings window",
             "Paused on a line with a PerfTip, and the Exception Settings window, with every debug tool window a tab away."),
@@ -336,6 +350,9 @@
         new("ai-agent", "Agent mode", "ai-chat-agent.png",
             "AI Chat in agent mode: the file it read shown as a step, its explanation, and the edit it proposes as a code block to apply",
             "Agent mode reads, searches, builds, edits and runs commands, each step shown in the chat, every change in a preview and every command after you allow it."),
+        new("agent-connect", "Connect an agent", "agent-connect.png",
+            "Connect to Claude over AI Chat: Node.js and npx found, Claude's ways to sign in, the exact commands it runs, and the box that turns AI assistance on",
+            "Connect Claude, Codex, Gemini CLI or GitHub Copilot in one dialog: what it needs, how it signs in and exactly what runs, then a connection test before anything is saved."),
         new("setup", "First start", "setup.png",
             "The first-run setup's appearance step: Classic, chosen, then Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, and the mode",
             "The first start sets it up your way: a theme family and its mode, previewed as you click, then the keyboard scheme, your settings from elsewhere and a tools check."),

@@ -78,13 +78,21 @@ public sealed class WinFormsHostFixture : IAsyncLifetime
 }
 
 /// <summary>
+/// The Windows Forms app's one build for the designer host's test classes that only read it (#68: built once, not once a
+/// class); each test starts its own host process.
+/// </summary>
+[CollectionDefinition(nameof(WinFormsHostBuild))]
+public sealed class WinFormsHostBuild : ICollectionFixture<WinFormsHostFixture>;
+
+/// <summary>
 /// M41a (ADR 0073), Windows only: the Windows Forms designer's host on the fixture's own build output, through the same
 /// process and protocol as the IDE: a VS-written form loaded on Windows Forms' own DesignSurface and drawn, its
 /// components and their bounds, a Toolbox create, a property set, a move, a resize, a reparent and a delete coming back
 /// as code that the C# host's writer turns into the expected minimal edits, the Properties window's descriptors and
 /// events, a localizable form from its compiled resources, and the app's own user control.
 /// </summary>
-public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : IClassFixture<WinFormsHostFixture>
+[Collection(nameof(WinFormsHostBuild))]
+public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -333,7 +341,10 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
         // A bindable property (Text) also has its row in (DataBindings) since M41b: these are the properties' own rows.
         DesignerPropertyInfo Property(string name) => properties.Single(p => p.Name == name && !p.DataBinding);
         Assert.Equal(("placeOrderButton", true), (Property("Name").Value, Property("Name").IsSet));
-        Assert.Equal(("&Place order", DesignerEditors.Text, true), (Property("Text").Value, Property("Text").Editor, Property("Text").IsSet));
+        // #68: ButtonBase.Text's UITypeEditor is the multi-line string editor; Reset is the descriptor's CanResetValue.
+        Assert.Equal(("&Place order", DesignerEditors.Multiline, true), (Property("Text").Value, Property("Text").Editor, Property("Text").IsSet));
+        Assert.True(Property("Text").CanReset);
+        Assert.False(Property("Name").CanReset);
         Assert.Equal(DesignerEditors.Anchor, Property("Anchor").Editor);
         Assert.Contains("Bottom", Property("Anchor").Value, StringComparison.Ordinal);
         Assert.Equal(DesignerEditors.Dock, Property("Dock").Editor);

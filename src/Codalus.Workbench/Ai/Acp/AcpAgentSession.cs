@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Codalus.Rpc;
 using Codalus.Workbench.Ai.Agent;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Workbench.Ai.Acp;
 
@@ -35,6 +36,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     private IReadOnlyList<AcpAvailableCommand> _commands = [];
     private IReadOnlyList<AcpSessionMode> _modes = [];
     private string? _modeId;
+    private int _prompts;
     private int _disposed;
 
     public AcpAgentSession(string name, AcpAgentConfig config, AiService ai, IAcpHost host, string workspaceRoot)
@@ -123,15 +125,15 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
     // ------------------------------------------------------------------ lifetime
 
+    /// <summary>How long a restarted agent that reports who is signed in has to say it after a terminal sign-in (its own check takes up to 5 s).</summary>
+    public static TimeSpan AuthStatusWait { get; set; } = TimeSpan.FromSeconds(8);
+
     /// <summary>Starts the agent's process, initializes, and creates the session (signing in first when the agent asks).</summary>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _ai.LogAgent(Name, $"starting {Config.Command} in {WorkspaceRoot}");
         Directory.CreateDirectory(ProcessDirectory);
-        _client = await AcpClient.StartAsync(Name, Config, ProcessDirectory, this, cancellationToken).ConfigureAwait(false);
-        _client.Exited += OnExited;
-        var info = _client.Info!;
-        _ai.LogAgent(Name, string.Create(CultureInfo.InvariantCulture, $"initialize → {info.AgentInfo?.Title ?? info.AgentInfo?.Name ?? Name} {info.AgentInfo?.Version}, protocol {info.ProtocolVersion}, {info.AuthMethods?.Count ?? 0} sign-in method(s)"));
+        await StartClientAsync(cancellationToken).ConfigureAwait(false);
 
         if (_host.StartMcpServer(Name) is { } mcp)
         {
@@ -139,31 +141,44 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             McpServers = [mcp.Server];
         }
 
+        UseSession(await NewSessionAsync(cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>Starts the agent's process and initializes it (again, after a terminal sign-in: the protocol's reconnect).</summary>
+    private async Task StartClientAsync(CancellationToken cancellationToken)
+    {
+        var client = await AcpClient.StartAsync(Name, Config, ProcessDirectory, this, cancellationToken).ConfigureAwait(false);
+        client.Exited += OnExited;
+        _client = client;
+        var info = client.Info!;
+        _ai.LogAgent(Name, string.Create(CultureInfo.InvariantCulture, $"initialize → {info.AgentInfo?.Title ?? info.AgentInfo?.Name ?? Name} {info.AgentInfo?.Version}, protocol {info.ProtocolVersion}, {info.AuthMethods?.Count ?? 0} sign-in method(s)"));
+    }
+
+    /// <summary><c>session/new</c> in the workspace, signing in first when the agent asks (once).</summary>
+    private async Task<AcpNewSessionResponse> NewSessionAsync(CancellationToken cancellationToken)
+    {
         var request = new AcpNewSessionRequest(WorkspaceRoot, McpServers);
-        AcpNewSessionResponse created;
         try
         {
-            created = await _client.NewSessionAsync(request, cancellationToken).ConfigureAwait(false);
+            return await _client!.NewSessionAsync(request, cancellationToken).ConfigureAwait(false);
         }
         catch (AcpAuthRequiredException ex)
         {
-            var methods = ex.Methods.Where(m => !m.IsTerminal).ToList();
             _ai.LogAgent(Name, "session/new → sign-in needed");
-            if (methods.Count == 0)
+            await SignInAsync(ex.Methods, cancellationToken).ConfigureAwait(false);
+            try
             {
-                throw new AcpException($"{Name} needs you to sign in, in a way Codalus IDE can't run here. Sign in with the agent's own command in a terminal, then try again.");
+                return await _client!.NewSessionAsync(request, cancellationToken).ConfigureAwait(false);
             }
-
-            if (await _host.ChooseSignInAsync(Name, methods, cancellationToken).ConfigureAwait(false) is not { } method)
+            catch (AcpAuthRequiredException)
             {
-                throw new AcpException($"{Name} needs you to sign in first.");
+                throw new AcpException($"{Name} still needs you to sign in. Sign in again, or with the agent's own command in a terminal.");
             }
-
-            _ai.LogAgent(Name, "authenticate " + method.Id);
-            await _client.AuthenticateAsync(method.Id, cancellationToken).ConfigureAwait(false);
-            created = await _client.NewSessionAsync(request, cancellationToken).ConfigureAwait(false);
         }
+    }
 
+    private void UseSession(AcpNewSessionResponse created)
+    {
         _sessionId = created.SessionId;
         lock (_gate)
         {
@@ -173,6 +188,95 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         _modeId = created.Modes?.CurrentModeId;
         _ai.LogAgent(Name, string.Create(CultureInfo.InvariantCulture, $"session/new → {_sessionId} (cwd {WorkspaceRoot}, {McpServers.Count} MCP server(s))"));
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Signs in with the way the user chooses from <paramref name="methods"/>: an agent method through <c>authenticate</c>,
+    /// a terminal method in the IDE's terminal, after which the agent starts again. True when it started again (its
+    /// earlier session is gone).
+    /// </summary>
+    private async Task<bool> SignInAsync(IReadOnlyList<AcpAuthMethod> methods, CancellationToken cancellationToken)
+    {
+        if (methods.Count == 0)
+        {
+            throw new AcpException($"{Name} needs you to sign in, and offers no way Codalus IDE can run. Sign in with the agent's own command in a terminal, then try again.");
+        }
+
+        if (await _host.ChooseSignInAsync(Name, methods, cancellationToken).ConfigureAwait(false) is not { } method)
+        {
+            throw new AcpException($"{Name} needs you to sign in first.");
+        }
+
+        if (!method.IsTerminal)
+        {
+            _ai.LogAgent(Name, "authenticate " + method.Id);
+            await _client!.AuthenticateAsync(method.Id, cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        await RunTerminalSignInAsync(method, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// A terminal method (ADR 0083): the configured command with the method's arguments and variables, in the agent's own
+    /// folder, in the IDE's terminal; never <c>authenticate</c>. Then the agent starts again. An agent that reports who is
+    /// signed in (Claude's adapter) is judged by that, not by the exit code: its interactive login exits 0 either way.
+    /// </summary>
+    private async Task RunTerminalSignInAsync(AcpAuthMethod method, CancellationToken cancellationToken)
+    {
+        var (config, signIn) = TerminalSignIn(Name, Config, method, ProcessDirectory);
+        Directory.CreateDirectory(ProcessDirectory);
+        _ai.LogAgent(Name, "terminal sign-in " + method.Id);
+        var exit = await _host.RunTerminalSignInAsync(signIn, cancellationToken).ConfigureAwait(false) ?? throw new AcpException($"{Name} needs you to sign in first.");
+        _ai.LogAgent(Name, string.Create(CultureInfo.InvariantCulture, $"terminal sign-in {method.Id} → exit {exit}"));
+        var reports = _client?.ReportsAuthStatus == true;
+        if (exit != 0 && !reports)
+        {
+            throw new AcpException(string.Create(CultureInfo.InvariantCulture, $"{Name}'s sign-in ended with exit code {exit}, so you aren't signed in. Try again, or sign in with the agent's own command in a terminal."));
+        }
+
+        // The protocol's "reconnect and reinitialize": a new process, which reads the new sign-in.
+        if (_client is { } old)
+        {
+            old.Exited -= OnExited;
+            await old.DisposeAsync().ConfigureAwait(false);
+        }
+
+        await StartClientAsync(cancellationToken).ConfigureAwait(false);
+        if (_client!.ReportsAuthStatus)
+        {
+            var status = await _client.WaitForAuthStatusAsync(AuthStatusWait, cancellationToken).ConfigureAwait(false);
+            if (status is { IsSignedOut: true })
+            {
+                throw new AcpException($"{Name} says you still aren't signed in ({status.Label ?? "not logged in"}). Try again, or sign in with the agent's own command in a terminal.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// How a terminal method runs: the configured command with the method's arguments, the agent's environment with the
+    /// method's variables over it (a variable that changes what runs is refused before anything runs), and what the user
+    /// is shown first.
+    /// </summary>
+    public static (AcpAgentConfig Config, AcpTerminalSignIn SignIn) TerminalSignIn(string agent, AcpAgentConfig agentConfig, AcpAuthMethod method, string processDirectory)
+    {
+        var variables = method.Env ?? new Dictionary<string, string>();
+        if (AcpTerminals.RefusedVariable(variables.Keys) is { } refused)
+        {
+            throw new AcpException($"{agent}'s sign-in would set {refused}, which changes what runs, so Codalus IDE doesn't run it.");
+        }
+
+        var env = new Dictionary<string, string>(agentConfig.Env, StringComparer.Ordinal);
+        foreach (var (name, value) in variables)
+        {
+            env[name] = value;
+        }
+
+        var config = agentConfig with { Args = [.. agentConfig.Args, .. method.Args ?? []], Env = env };
+        var launch = AcpClient.Launch(config, processDirectory);
+        var hint = method.Id == "claude-login" ? Localizer.Get("msg.acp.claudeLoginHint", "If the sign-in doesn't open, run claude in a terminal and type /login, then try again.") : null;
+        return (config, new AcpTerminalSignIn(agent, method.Name, config.ToString(), [.. variables.Keys.Concat(agentConfig.SecretEnv).Distinct(StringComparer.Ordinal)], launch, hint));
     }
 
     private void OnExited(object? sender, EventArgs e)
@@ -245,7 +349,38 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         using var registration = cancellationToken.Register(() => _ = CancelTurnAsync(turnCancelled, giveUp));
         try
         {
-            var response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, [AcpContentBlock.FromText(text)]), giveUp.Token).ConfigureAwait(false);
+            AcpPromptResponse response;
+            try
+            {
+                response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, [AcpContentBlock.FromText(text)]), giveUp.Token).ConfigureAwait(false);
+            }
+            catch (AcpAuthRequiredException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Claude's adapter asks for sign-in only when a prompt comes: sign in, then the prompt goes again, once,
+                // in a new session when the agent started again (no session/load, ADR 0079: the earlier turns are gone).
+                _ai.LogAgent(Name, "session/prompt → sign-in needed");
+                if (await SignInAsync(ex.Methods, cancellationToken).ConfigureAwait(false))
+                {
+                    UseSession(await NewSessionAsync(cancellationToken).ConfigureAwait(false));
+                    if (_prompts > 0)
+                    {
+                        turn.SetNotice("signed-in", new AiTurnNotice("warning", Localizer.Format("msg.acp.contextLost", "{0} started a new session when you signed in: it doesn't have the earlier conversation.", Name)));
+                    }
+                }
+
+                client = _client!;
+                _ai.LogAgent(Name, "session/prompt (sent again after the sign-in)");
+                try
+                {
+                    response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, [AcpContentBlock.FromText(text)]), giveUp.Token).ConfigureAwait(false);
+                }
+                catch (AcpAuthRequiredException)
+                {
+                    throw new AcpException($"{Name} still needs you to sign in. Sign in again, or with the agent's own command in a terminal.");
+                }
+            }
+
+            Interlocked.Increment(ref _prompts);
             _ai.LogAgent(Name, "session/prompt → " + response.StopReason);
             if (cancellationToken.IsCancellationRequested)
             {
@@ -365,6 +500,8 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             }
         }
     }
+
+    public void OnAuthStatus(AcpAuthStatus status) => _ai.LogAgent(Name, "_auth/status_update → " + status.Kind); // the kind only: the label names the account
 
     // ------------------------------------------------------------------ session/update
 
@@ -569,23 +706,23 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
     private static string Cut(string text) => text.Length > MaxOutputShown ? "…" + text[^MaxOutputShown..] : text;
 
-    private static string Shown(AcpTerminal terminal) => ShownOutput(terminal.Output.Text);
+    private string Shown(AcpTerminal terminal) => ShownOutput(terminal.Output.Text, Config.SecretValues.Values);
 
     /// <summary>
     /// The end of a command's output as the step shows it, redacted: only the tail is redacted (from a line's start, so a
     /// secret isn't cut in half before the redactor sees it), not the whole output on every chunk.
     /// </summary>
-    internal static string ShownOutput(string raw)
+    internal static string ShownOutput(string raw, IEnumerable<string>? secrets = null)
     {
         if (raw.Length <= MaxOutputShown * 2)
         {
-            return Cut(SecretRedactor.Redact(raw).Text);
+            return Cut(SecretRedactor.Redact(raw, secrets ?? []).Text);
         }
 
         var start = raw.Length - (MaxOutputShown * 2);
         var line = raw.IndexOf('\n', start);
         var tail = line >= 0 && line < raw.Length - 1 ? raw[(line + 1)..] : raw[start..];
-        return Cut(SecretRedactor.Redact(tail).Text) is var shown && shown.StartsWith('…') ? shown : "…" + shown;
+        return Cut(SecretRedactor.Redact(tail, secrets ?? []).Text) is var shown && shown.StartsWith('…') ? shown : "…" + shown;
     }
 
     private void OnTerminalChanged(object? sender, AcpTerminal terminal)
@@ -647,7 +784,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             range = string.Create(CultureInfo.InvariantCulture, $" (lines {first + 1}–{first + count})");
         }
 
-        var (redacted, redactions) = SecretRedactor.Redact(text);
+        var (redacted, redactions) = SecretRedactor.Redact(text, Config.SecretValues.Values);
         _ai.LogAgent(Name, string.Create(CultureInfo.InvariantCulture, $"{AcpMethods.ReadTextFile} {Relative(full)}{range}{(redactions > 0 ? $", {redactions} secret(s) redacted" : "")}"));
         return new AcpReadTextFileResponse(redacted);
     }
@@ -778,7 +915,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
                 Name,
                 display,
                 folder,
-                [.. variables.Select(v => v.Name + "=" + SecretRedactor.Redact(v.Value).Text)],
+                [.. variables.Select(v => v.Name + "=" + SecretRedactor.Redact(v.Value, Config.SecretValues.Values).Text)],
                 WindowsCommand.Resolved(request.Command, launch) is { } resolved && (request.Args is { Count: > 0 } || !request.Command.Any(char.IsWhiteSpace)) ? resolved : null);
             allowed = await _host.ApproveCommandAsync(prompt, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
         }
@@ -802,7 +939,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     {
         var terminal = Terminal(request.TerminalId);
         var (text, truncated) = terminal.Output;
-        return Task.FromResult(new AcpTerminalOutputResponse(SecretRedactor.Redact(text).Text, truncated, terminal.ExitStatus));
+        return Task.FromResult(new AcpTerminalOutputResponse(SecretRedactor.Redact(text, Config.SecretValues.Values).Text, truncated, terminal.ExitStatus));
     }
 
     public async Task<AcpTerminalExitStatus> WaitForTerminalExitAsync(AcpTerminalRequest request, CancellationToken cancellationToken)

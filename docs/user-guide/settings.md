@@ -2,9 +2,9 @@
 
 ## The window
 
-- **Title bar**: the menu, the search box and the open solution's name. On Windows they're in the window's title bar; drag its empty part to move the window, double-click it to maximize.
+- **Title bar**: the menu, the search box and the open solution's name. On Windows they're in the window's title bar; drag its empty part to move the window, double-click it to maximize. In a narrow window the solution's name shortens (hover it for the whole name), the search box shrinks to its magnifier, and then the menu wraps onto a second row with the search box at its end; the minimize, maximize and close buttons keep their place at the top right, with room to drag the window beside them.
 - **Search** (`Ctrl+Q`): Feature Search, in the Code Search window: commands, settings and Options pages. Its other tab, Code Search (`Ctrl+T`), finds files, types, members and text ([Code Search](editing.md#code-search)).
-- **Toolbar**: back and forward, open, save and save all, undo and redo, the solution configuration and platform, the startup project, and Start (`F5`) and Start Without Debugging (`Ctrl+F5`). While debugging it shows Continue, Break All, Stop, Restart and the step commands.
+- **Toolbar**: back and forward, open, save and save all, undo and redo, the solution configuration and platform, the startup project, and Start (`F5`) and Start Without Debugging (`Ctrl+F5`). While debugging it shows Continue, Break All, Stop, Restart and the step commands. It stays on one row: in a narrow window its groups fold from the right into **…** buttons, each listing the commands its group couldn't show.
 - **Status bar**: purple without a solution, blue with one, orange while debugging. The right side shows the caret's line and column, indentation, line endings, encoding, language, Git branch and notifications.
 - **Layout**: the Solution Explorer is on the right, the Error List and Output at the bottom. Window → Reset Layout brings this layout back.
   - Drag a tab to move a tool window to another group, a window's edge, a floating window or among the documents, where it gets a document tab. A tool window you open goes back where you last closed it, or opens as a tab in the group for its usual place (most at the bottom, with the Output), wherever you moved that group.
@@ -50,7 +50,7 @@ Codalus IDE has five **theme families**: Classic, the default, in Blue, Light, D
 
 | Family | What it looks like |
 |---|---|
-| **Classic** (the default) | The classic IDE's familiar look, the themes from before 0.3: Blue, Light, Dark and High Contrast. |
+| **Classic** (the default) | The classic IDE's familiar look, the themes from before 0.3: Blue, Light, Dark and High Contrast. Since 0.6 it has the classic IDE's current shapes and editor colors: tool windows, the document well and the toolbar are cards with 4 px corners, 6 px apart on the window's color; the selected tab is outlined and flows into a frame around the active document, and the focused tool window is framed in the accent; lists inset their rows, with a pill beside Solution Explorer's selected item. The editor has its control keywords, comments and strings, gray line numbers with the caret's line number brighter, its CodeLens and current line, and no bracket pair colors unless you turn them on. |
 | **Harbor** | The closest to a classic IDE: a deep navy title bar in Light, tool windows docked with gaps between them, the focused tool window's caption and the status bar in cobalt, a bar across the top of the active tab. |
 | **Graphite** | Compact and dense: the title bar and toolbar in the window's color, hairlines between tool windows, a bold title with a teal dot on the focused one, an underline on the active tab, a dark teal status bar. |
 | **Daylight** | Flat and airy: hairlines between tool windows, rounded tabs with the active one tinted violet, the Start button filled with the accent. |

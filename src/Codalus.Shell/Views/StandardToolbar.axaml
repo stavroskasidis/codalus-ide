@@ -5,8 +5,9 @@
              xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.StandardToolbar"
              x:DataType="vm:ToolbarViewModel">
+  <!-- One row that never wraps (0.6.0): in a narrow window its groups fold from the right into "…" drop-downs. -->
   <Border Classes="standardToolbar">
-    <WrapPanel x:Name="Panel" Orientation="Horizontal" Margin="4,2" AutomationProperties.Name="{l:T standardToolbar.standardToolbar}">
+    <controls:ToolbarGroupsPanel x:Name="Panel" Margin="4,2" AutomationProperties.Name="{l:T standardToolbar.standardToolbar}">
       <Button Classes="toolbar" Command="{Binding BackCommand}" Tag="workbench.navigateBack" ToolTip.Tip="{l:T standardToolbar.navigateBackward}" AutomationProperties.Name="{l:T standardToolbar.navigateBackward}">
         <controls:Icon Kind="arrow-left" Classes="accent-navigate" />
       </Button>
@@ -105,6 +106,6 @@
                 IsVisible="{Binding IsStopped}" ToolTip.Tip="{l:T standardToolbar.thread}" AutomationProperties.Name="{l:T standardToolbar.thread}" />
       <ComboBox Classes="toolbar" ItemsSource="{Binding DebugLocation.Frames}" SelectedItem="{Binding DebugLocation.Frame}" MinWidth="180" MaxWidth="360"
                 IsVisible="{Binding IsStopped}" ToolTip.Tip="{l:T standardToolbar.stackFrame}" AutomationProperties.Name="{l:T standardToolbar.stackFrame}" />
-    </WrapPanel>
+    </controls:ToolbarGroupsPanel>
   </Border>
 </UserControl>

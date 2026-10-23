@@ -21,6 +21,54 @@ public static class JsoncEditor
 
         var scanner = new Scanner(text);
         var members = scanner.ReadTopLevelMembers(out var openBrace, out var closeBrace);
+        return SetIn(text, members, openBrace, closeBrace, key, valueJson, Indent);
+    }
+
+    /// <summary>
+    /// Sets <paramref name="member"/> of the object <paramref name="key"/> to <paramref name="valueJson"/>, or removes it
+    /// when that is null, leaving the object's other members, comments and formatting as they are (Connect and Disconnect
+    /// of one <c>ai.agents</c> entry, ADR 0083). When <paramref name="key"/> isn't there it is added with that one member;
+    /// when its value isn't an object, the whole value is replaced, as <see cref="SetProperty"/> does.
+    /// </summary>
+    public static string SetMember(string text, string key, string member, string? valueJson)
+    {
+        var whole = valueJson is null ? null : $"{{ {Quote(member)}: {valueJson} }}";
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return whole is null ? SetProperty(text, key, null) : SetProperty(text, key, whole);
+        }
+
+        var scanner = new Scanner(text);
+        var members = scanner.ReadTopLevelMembers(out _, out _);
+        var existing = members.Find(m => m.Name == key);
+        if (existing is null)
+        {
+            return whole is null ? text : SetProperty(text, key, whole);
+        }
+
+        if (text[existing.ValueStart] != '{')
+        {
+            return SetProperty(text, key, whole ?? "{}");
+        }
+
+        var inner = new Scanner(text, existing.ValueStart);
+        var innerMembers = inner.ReadObjectMembers(out var open, out var close);
+
+        // The entries' own indentation (the first entry's), else one level deeper than the key's.
+        var indent = innerMembers.Count > 0 && LineIndent(text, innerMembers[0].NameStart) is { Length: > 0 } own ? own : LineIndent(text, existing.NameStart) + Indent;
+        return SetIn(text, innerMembers, open, close, member, valueJson, indent);
+    }
+
+    /// <summary>The whitespace before <paramref name="position"/> on its line (empty when other text is before it).</summary>
+    private static string LineIndent(string text, int position)
+    {
+        var lineStart = text.LastIndexOf('\n', Math.Max(0, position - 1)) + 1;
+        var before = text[lineStart..position];
+        return before.All(c => c is ' ' or '\t') ? before : string.Empty;
+    }
+
+    private static string SetIn(string text, List<Member> members, int openBrace, int closeBrace, string key, string? valueJson, string indent)
+    {
         var existing = members.FindIndex(m => m.Name == key);
         if (existing >= 0)
         {
@@ -41,8 +89,10 @@ public static class JsoncEditor
         var entry = $"{Quote(key)}: {valueJson}";
         if (members.Count == 0)
         {
+            // The closing brace one level out from the entries (the top level's at the line's start).
             var inner = text[(openBrace + 1)..closeBrace];
-            var body = inner.Trim().Length == 0 ? $"\n{Indent}{entry}\n" : $"{inner.TrimEnd()}\n{Indent}{entry}\n";
+            var closing = indent.Length >= Indent.Length ? indent[..^Indent.Length] : string.Empty;
+            var body = (inner.Trim().Length == 0 ? string.Empty : inner.TrimEnd()) + $"\n{indent}{entry}\n{closing}";
             return string.Concat(text.AsSpan(0, openBrace + 1), body, text.AsSpan(closeBrace));
         }
 
@@ -52,10 +102,10 @@ public static class JsoncEditor
         {
             // Trailing comma already present (allowed in JSONC): insert after it.
             afterLast = last.CommaEnd;
-            return string.Concat(text.AsSpan(0, afterLast), $"\n{Indent}{entry},", text.AsSpan(afterLast));
+            return string.Concat(text.AsSpan(0, afterLast), $"\n{indent}{entry},", text.AsSpan(afterLast));
         }
 
-        return string.Concat(text.AsSpan(0, afterLast), $",\n{Indent}{entry}", text.AsSpan(afterLast));
+        return string.Concat(text.AsSpan(0, afterLast), $",\n{indent}{entry}", text.AsSpan(afterLast));
     }
 
     private static string RemoveMember(string text, List<Member> members, int index, int openBrace, int closeBrace)
@@ -108,9 +158,9 @@ public static class JsoncEditor
 
     private sealed record Member(string Name, int NameStart, int ValueStart, int ValueEnd, int CommaEnd);
 
-    private sealed class Scanner(string text)
+    private sealed class Scanner(string text, int start = 0)
     {
-        private int _pos;
+        private int _pos = start;
 
         public List<Member> ReadTopLevelMembers(out int openBrace, out int closeBrace)
         {
@@ -118,6 +168,18 @@ public static class JsoncEditor
             if (_pos >= text.Length || text[_pos] != '{')
             {
                 throw new FormatException("settings.json must contain a JSON object.");
+            }
+
+            return ReadObjectMembers(out openBrace, out closeBrace);
+        }
+
+        /// <summary>The members of the object at the current position (its <c>{</c>).</summary>
+        public List<Member> ReadObjectMembers(out int openBrace, out int closeBrace)
+        {
+            SkipTrivia();
+            if (_pos >= text.Length || text[_pos] != '{')
+            {
+                throw new FormatException($"Expected an object at {_pos}.");
             }
 
             openBrace = _pos++;

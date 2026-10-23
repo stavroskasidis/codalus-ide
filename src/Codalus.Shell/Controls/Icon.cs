@@ -19,9 +19,27 @@ public sealed class Icon : Control
 
     public static readonly StyledProperty<IBrush?> ForegroundProperty = TextElement.ForegroundProperty.AddOwner<Icon>();
 
+    /// <summary>A kind drawn small over the icon's bottom right (the data tip's lock on a non-public member of your code, D44).</summary>
+    public static readonly StyledProperty<string?> BadgeProperty = AvaloniaProperty.Register<Icon, string?>(nameof(Badge));
+
+    /// <summary>What the badge stands on: the row's background, so it reads over the icon under it.</summary>
+    public static readonly StyledProperty<IBrush?> BadgeBackgroundProperty = AvaloniaProperty.Register<Icon, IBrush?>(nameof(BadgeBackground));
+
     static Icon()
     {
-        AffectsRender<Icon>(KindProperty, ForegroundProperty);
+        AffectsRender<Icon>(KindProperty, ForegroundProperty, BadgeProperty, BadgeBackgroundProperty);
+    }
+
+    public string? Badge
+    {
+        get => GetValue(BadgeProperty);
+        set => SetValue(BadgeProperty, value);
+    }
+
+    public IBrush? BadgeBackground
+    {
+        get => GetValue(BadgeBackgroundProperty);
+        set => SetValue(BadgeBackgroundProperty, value);
     }
 
     public string? Kind
@@ -70,6 +88,35 @@ public sealed class Icon : Control
     }
 
     public override void Render(DrawingContext context)
+    {
+        RenderIcon(context);
+        if (Badge is { } badge && IconSet.GetFilled(badge) is { } filled && Foreground is { } foreground)
+        {
+            // 9 px at the bottom right, on the row's background, in the badge kind's color (the text color in High Contrast).
+            var size = Math.Min(Bounds.Width, Bounds.Height);
+            var side = size * 9 / 16;
+            var at = new Point(((Bounds.Width + size) / 2) - side, ((Bounds.Height + size) / 2) - side);
+            if (BadgeBackground is { } background)
+            {
+                context.DrawRectangle(background, null, new Rect(at.X - 1, at.Y - 1, side + 1, side + 1), 1, 1);
+            }
+
+            var brush = !Theming.ThemeService.IsHighContrast(ActualThemeVariant) && CommandIcons.DefaultColorOf(badge) is { } color
+                && this.TryFindResource("Shell.Icon." + char.ToUpperInvariant(color[0]) + color[1..], ActualThemeVariant, out var token) && token is IBrush colored
+                ? colored
+                : foreground;
+            var scale = side / filled.DesignSize;
+            using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(at.X, at.Y)))
+            {
+                foreach (var layer in filled.Layers)
+                {
+                    context.DrawGeometry(brush, null, layer.Geometry);
+                }
+            }
+        }
+    }
+
+    private void RenderIcon(DrawingContext context)
     {
         if (Kind is { } image && image.StartsWith("img:", StringComparison.Ordinal))
         {
@@ -293,6 +340,7 @@ public static class IconSet
         ["arrow-up"] = "arrow_up_16_regular",
         ["select-expand"] = "select_all_on_16_regular",
         ["fold"] = "text_collapse_16_regular",
+        ["staging-controls"] = "add_subtract_circle_16_regular",
         ["unfold"] = "text_expand_16_regular",
         ["fold-all"] = "arrow_collapse_all_16_regular",
         ["unfold-all"] = "arrow_expand_all_16_regular",
@@ -336,6 +384,22 @@ public static class IconSet
         ["split-down"] = "split_horizontal_16_regular",
         ["close-all"] = "dismiss_square_multiple_16_regular",
         ["layout"] = "layout_column_two_16_regular",
+
+        // The Windows Forms designer's menus (#67, D40): Order, Align (to Grid on the surface's menu too), and a locked
+        // control's lock (filled: the regular lock's outline is 0.6 px at the adorner's 10 px). 1.1.344 has no 16 px
+        // position icons: the 20 px ones are drawn at 16 as the shell scales a 20 px design.
+        ["bring-to-front"] = "position_to_front_20_regular",
+        ["send-to-back"] = "position_to_back_20_regular",
+        ["align-grid"] = "grid_16_regular",
+        ["align-left"] = "align_left_16_regular",
+        ["align-center"] = "align_center_vertical_16_regular",
+        ["align-right"] = "align_right_16_regular",
+        ["align-top"] = "align_top_16_regular",
+        ["align-middle"] = "align_center_horizontal_16_regular",
+        ["align-bottom"] = "align_bottom_16_regular",
+        ["locked"] = "lock_closed_16_filled",
+        // NuGet's verified owner (D39): a badge with a check, filled because it is a mark; drawn at 14 px after the ID.
+        ["verified"] = "checkmark_starburst_16_filled",
         ["document-text"] = "document_text_16_regular",
         ["update"] = "arrow_sync_circle_16_regular",
         ["sparkle"] = "sparkle_16_regular",
@@ -363,6 +427,8 @@ public static class IconSet
         ["snapshot"] = "camera_16_regular",
         ["plug"] = "plug_connected_16_regular",
         ["detach"] = "plug_disconnected_16_regular",
+        ["plug-disconnected"] = "plug_disconnected_16_regular",
+        ["bot"] = "bot_16_regular",
         ["database-update"] = "database_arrow_up_16_regular",
         ["dump"] = "document_arrow_down_16_regular",
         ["cube"] = "cube_16_regular",
@@ -412,6 +478,7 @@ public static class IconSet
         ["control-background-worker"] = "arrow_clockwise_dashes_16_regular",
         ["control-error-provider"] = "error_circle_16_regular",
         ["control-file-system-watcher"] = "eye_16_regular",
+        ["eye-off"] = "eye_off_16_regular",
         ["control-help-provider"] = "question_circle_16_regular",
         ["control-image-list"] = "image_multiple_16_regular",
         ["control-process"] = "developer_board_16_regular",
@@ -428,6 +495,21 @@ public static class IconSet
         ["control-save-file-dialog"] = "save_16_regular",
         ["control-generic"] = "window_16_regular",
         ["control-component"] = "settings_16_regular",
+
+        // New Project's template kinds (0.6.0, ADR 0082; TemplateTags.IconKind), as docs/design/controls/NewProject.dc.html
+        // draws them: a console, a library, a test, a service, a web app, a mobile app, a desktop app, a cloud app, a
+        // solution, any other template, and a template pack to install.
+        ["template-console"] = "window_console_20_regular",
+        ["template-library"] = "library_16_regular",
+        ["template-test"] = "beaker_16_regular",
+        ["template-service"] = "server_16_regular",
+        ["template-web"] = "globe_16_regular",
+        ["template-mobile"] = "phone_16_regular",
+        ["template-desktop"] = "desktop_16_regular",
+        ["template-cloud"] = "cloud_16_regular",
+        ["template-solution"] = "stack_16_regular",
+        ["template-generic"] = "apps_16_regular",
+        ["template-install"] = "arrow_download_16_regular",
     };
 
     private static readonly Dictionary<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);
@@ -480,7 +562,7 @@ public static class IconSet
         "symbol-class", "symbol-struct", "symbol-interface", "symbol-enum", "symbol-enum-member", "symbol-delegate",
         "symbol-method", "symbol-extension-method", "symbol-property", "symbol-field", "symbol-event", "symbol-constant",
         "symbol-local", "symbol-parameter", "symbol-namespace", "symbol-keyword", "symbol-snippet", "symbol-type-parameter",
-        "symbol-operator", "symbol-module", "symbol-label", "symbol-text", "symbol-target-type",
+        "symbol-operator", "symbol-module", "symbol-label", "symbol-text", "symbol-target-type", "symbol-raw-view",
     };
 
     /// <summary>The code symbol icons' names (tests).</summary>
@@ -553,6 +635,7 @@ public static class IconSet
         ["chevron-right"] = "M6,3.5 L10.5,8 L6,12.5",
         ["chevron-down"] = "M3.5,6 L8,10.5 L12.5,6",
         ["chevron-up"] = "M3.5,10 L8,5.5 L12.5,10",
+        ["chevron-left"] = "M10,3.5 L5.5,8 L10,12.5",
         ["zoom-in"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14 M4.75,6.75 H8.75 M6.75,4.75 V8.75",
         ["zoom-out"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14 M4.75,6.75 H8.75",
         ["fit"] = "M2,5.5 V2 H5.5 M10.5,2 H14 V5.5 M14,10.5 V14 H10.5 M5.5,14 H2 V10.5",
@@ -581,6 +664,9 @@ public static class IconSet
         ["arrow-up-down"] = "M5,13.5 V2.5 M2.5,5 L5,2.5 L7.5,5 M11,2.5 V13.5 M8.5,11 L11,13.5 L13.5,11",
         ["subtract"] = "M3.5,8 H12.5",
         ["pin"] = "M5.5,2 H10.5 M6.5,2 V6.5 L4,9.5 H12 L9.5,6.5 V2 M8,9.5 V14.5",
+
+        // The data tip's View drop-down (D44): a magnifier over a grid (Fluent has no 16 px table search).
+        ["visualizer"] = "M8.5,10.5 H14.5 V1.5 H5.5 V7 M10,1.5 V10.5 M5.5,6 H14.5 " + Circle(5.25, 10.75, 2.75) + "M3.25,12.75 L1.5,14.5",
 
         // Toolbox controls Fluent has no picture of (M34h): a combo box (a box with its drop-down button), a progress
         // bar (a bar partly filled), a group box (a frame with its caption in the top edge).

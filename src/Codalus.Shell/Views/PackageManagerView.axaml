@@ -18,6 +18,10 @@
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
       <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
     </Style>
+    <!-- TODO(issue): gaps of this view that D39's pictures show (docs/roadmap.md, Deferred work): Refresh's green icon is
+         2.96:1 in Classic Blue; the version badge's outline vanishes on a selected row in Classic Dark, and the version and
+         installed badges' outlines are faint on Harbor High contrast's selection; the status badges keep their warning and
+         error text on a selected row; a long Project URL (Button.link) is cut instead of trimmed. -->
     <Style Selector="Border.badge">
       <Setter Property="CornerRadius" Value="3" />
       <Setter Property="Padding" Value="4,0" />
@@ -144,10 +148,15 @@
                       <TextBlock Text="{Binding Initial}" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="19" FontWeight="Bold" />
                     </Border>
                     <!-- M34h: the name and the byline share the line and trim (in a horizontal stack panel the byline ran
-                         under the versions' column). -->
+                         under the versions' column). D39: the ID and its verified-owner badge (14 px, 4 px after it) share a
+                         panel docked left, so a long ID trims and keeps its badge, and the byline gives way first. -->
                     <StackPanel Grid.Column="2" Spacing="1">
                       <DockPanel>
-                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding Id}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Id}" />
+                        <DockPanel DockPanel.Dock="Left">
+                          <controls:Icon x:Name="VerifiedBadge" DockPanel.Dock="Right" Kind="verified" Width="14" Height="14" Margin="4,0,0,0" VerticalAlignment="Center"
+                                         IsVisible="{Binding IsVerified}" ToolTip.Tip="{l:T packageManager.verifiedOwnerTip}" AutomationProperties.Name="{l:T packageManager.verifiedOwner}" />
+                          <TextBlock FontWeight="SemiBold" Text="{Binding Id}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Id}" />
+                        </DockPanel>
                         <TextBlock Classes="muted" Margin="6,0,0,0" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Text="{Binding Byline}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Byline}" />
                       </DockPanel>
                       <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Description}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
@@ -191,7 +200,13 @@
         <ScrollViewer x:Name="DetailsScroller" DataContext="{Binding Details}">
           <StackPanel Margin="16,12" Spacing="10" x:DataType="vm:PackageDetailsViewModel">
             <StackPanel Spacing="2">
-              <TextBlock Classes="heading" Text="{Binding Id}" TextWrapping="Wrap" />
+              <!-- D39 question 5: the verified-owner badge after the heading, on its first line (docked right and top, 5 px
+                   down); LineHeight 24 so that margin centers it whatever the platform's UI font. -->
+              <DockPanel HorizontalAlignment="Left">
+                <controls:Icon x:Name="HeadingVerifiedBadge" DockPanel.Dock="Right" Kind="verified" Width="14" Height="14" Margin="4,5,0,0" VerticalAlignment="Top"
+                               IsVisible="{Binding IsVerified}" ToolTip.Tip="{l:T packageManager.verifiedOwnerTip}" AutomationProperties.Name="{l:T packageManager.verifiedOwner}" />
+                <TextBlock x:Name="DetailsHeading" Classes="heading" LineHeight="24" Text="{Binding Id}" TextWrapping="Wrap" />
+              </DockPanel>
               <TextBlock Classes="muted" Text="{Binding Title}" IsVisible="{Binding Title, Converter={x:Static ObjectConverters.IsNotNull}}" />
               <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
               <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />

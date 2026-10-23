@@ -58,6 +58,21 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>
+    /// The settings whose default follows the theme's family (D47): bracket pair colors, off in Classic and on in the
+    /// families. The setting is registered again only when the family's default differs from the registered one.
+    /// </summary>
+    private void UseFamilyDefaults()
+    {
+        var descriptor = BuiltIns.BracketPairColorizationSetting(Theme.ActiveFamily);
+        if (Workbench.Settings.Find(descriptor.Key) is { } registered && registered.Default.ValueKind == descriptor.Default.ValueKind)
+        {
+            return;
+        }
+
+        Workbench.Settings.Register([descriptor]);
+    }
+
     private void InitializeColors()
     {
         Workbench.Settings.Changed += (_, e) =>

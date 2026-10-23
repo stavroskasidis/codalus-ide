@@ -30,6 +30,12 @@ public sealed class PinnedDataTip
     /// <summary>The last value (null: not evaluated yet).</summary>
     public string? Value { get; internal set; }
 
+    /// <summary>The value's type at the last pause (null: not evaluated, or an error).</summary>
+    public string? Type { get; internal set; }
+
+    /// <summary>The adapter's reference to the value's members at the last pause (0: none); stale once the program runs.</summary>
+    public int VariablesReference { get; internal set; }
+
     /// <summary>Whether the value changed at the last pause.</summary>
     public bool Changed { get; internal set; }
 
@@ -171,9 +177,11 @@ public sealed class PinnedDataTipStore
         {
             string value;
             bool error;
+            EvaluateResponse? response = null;
             try
             {
-                value = (await evaluate(tip.Expression, cancellationToken).ConfigureAwait(false)).Result;
+                response = await evaluate(tip.Expression, cancellationToken).ConfigureAwait(false);
+                value = response.Result;
                 error = false;
             }
             catch (DapException ex)
@@ -189,6 +197,8 @@ public sealed class PinnedDataTipStore
             tip.Changed = !error && !tip.IsError && tip.Value is not null && tip.Value != value;
             tip.IsError = error;
             tip.Value = value;
+            tip.Type = response?.Type;
+            tip.VariablesReference = response?.VariablesReference ?? 0;
         }
 
         Changed?.Invoke(this, null);

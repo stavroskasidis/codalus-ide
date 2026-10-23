@@ -1,0 +1,1790 @@
+{
+  "runtime": "net11.0",
+  "locals": [
+    {
+      "name": "inventory",
+      "value": "{Debuggee.Inventory}",
+      "type": "Debuggee.Inventory",
+      "evaluateName": "inventory",
+      "variablesReference": 2,
+      "children": [
+        {
+          "name": "logger",
+          "value": "\u0022inventory log\u0022",
+          "type": "string",
+          "evaluateName": "inventory.logger",
+          "variablesReference": 0
+        },
+        {
+          "name": "Size",
+          "value": "2",
+          "type": "int",
+          "evaluateName": "inventory.Size",
+          "variablesReference": 0
+        },
+        {
+          "name": "Session",
+          "value": "{System.InvalidOperationException}",
+          "type": "System.InvalidOperationException",
+          "evaluateName": "inventory.Session",
+          "variablesReference": 9,
+          "children": [
+            {
+              "name": "_exceptionMethod",
+              "value": "null",
+              "type": "System.Reflection.MethodBase",
+              "evaluateName": "inventory.Session._exceptionMethod",
+              "variablesReference": 0
+            },
+            {
+              "name": "_message",
+              "value": "\u0022Session has not been configured for this application or request.\u0022",
+              "type": "string",
+              "evaluateName": "inventory.Session._message",
+              "variablesReference": 0
+            },
+            {
+              "name": "_data",
+              "value": "null",
+              "type": "System.Collections.IDictionary",
+              "evaluateName": "inventory.Session._data",
+              "variablesReference": 0
+            },
+            {
+              "name": "_innerException",
+              "value": "null",
+              "type": "System.Exception",
+              "evaluateName": "inventory.Session._innerException",
+              "variablesReference": 16
+            },
+            {
+              "name": "_helpURL",
+              "value": "null",
+              "type": "string",
+              "evaluateName": "inventory.Session._helpURL",
+              "variablesReference": 0
+            },
+            {
+              "name": "_stackTrace",
+              "value": "{sbyte[48]}",
+              "type": "sbyte[]",
+              "evaluateName": "inventory.Session._stackTrace",
+              "variablesReference": 17
+            },
+            {
+              "name": "_watsonBuckets",
+              "value": "null",
+              "type": "byte[]",
+              "evaluateName": "inventory.Session._watsonBuckets",
+              "variablesReference": 0
+            },
+            {
+              "name": "_stackTraceString",
+              "value": "null",
+              "type": "string",
+              "evaluateName": "inventory.Session._stackTraceString",
+              "variablesReference": 0
+            },
+            {
+              "name": "_remoteStackTraceString",
+              "value": "null",
+              "type": "string",
+              "evaluateName": "inventory.Session._remoteStackTraceString",
+              "variablesReference": 0
+            },
+            {
+              "name": "_source",
+              "value": "null",
+              "type": "string",
+              "evaluateName": "inventory.Session._source",
+              "variablesReference": 0
+            },
+            {
+              "name": "_ipForWatsonBuckets",
+              "value": "0",
+              "type": "UIntPtr",
+              "evaluateName": "inventory.Session._ipForWatsonBuckets",
+              "variablesReference": 0
+            },
+            {
+              "name": "_xptrs",
+              "value": "0",
+              "type": "IntPtr",
+              "evaluateName": "inventory.Session._xptrs",
+              "variablesReference": 0
+            },
+            {
+              "name": "_xcode",
+              "value": "-532462766",
+              "type": "int",
+              "evaluateName": "inventory.Session._xcode",
+              "variablesReference": 0
+            },
+            {
+              "name": "_HResult",
+              "value": "-2146233079",
+              "type": "int",
+              "evaluateName": "inventory.Session._HResult",
+              "variablesReference": 0
+            },
+            {
+              "name": "TargetSite",
+              "value": "{System.Reflection.RuntimeMethodInfo}",
+              "type": "System.Reflection.RuntimeMethodInfo",
+              "evaluateName": "inventory.Session.TargetSite",
+              "variablesReference": 18
+            },
+            {
+              "name": "HasBeenThrown",
+              "value": "true",
+              "type": "bool",
+              "evaluateName": "inventory.Session.HasBeenThrown",
+              "variablesReference": 0
+            },
+            {
+              "name": "SerializationWatsonBuckets",
+              "value": "null",
+              "type": "object",
+              "evaluateName": "inventory.Session.SerializationWatsonBuckets",
+              "variablesReference": 0
+            },
+            {
+              "name": "Message",
+              "value": "\u0022Session has not been configured for this application or request.\u0022",
+              "type": "string",
+              "evaluateName": "inventory.Session.Message",
+              "variablesReference": 0
+            },
+            {
+              "name": "Data",
+              "value": "{System.Collections.ListDictionaryInternal}",
+              "type": "System.Collections.ListDictionaryInternal",
+              "evaluateName": "inventory.Session.Data",
+              "variablesReference": 19
+            },
+            {
+              "name": "InnerException",
+              "value": "null",
+              "type": "System.Exception",
+              "evaluateName": "inventory.Session.InnerException",
+              "variablesReference": 20
+            },
+            {
+              "name": "HelpLink",
+              "value": "null",
+              "type": "string",
+              "evaluateName": "inventory.Session.HelpLink",
+              "variablesReference": 0
+            },
+            {
+              "name": "Source",
+              "value": "\u0022Debuggee\u0022",
+              "type": "string",
+              "evaluateName": "inventory.Session.Source",
+              "variablesReference": 0
+            },
+            {
+              "name": "HResult",
+              "value": "-2146233079",
+              "type": "int",
+              "evaluateName": "inventory.Session.HResult",
+              "variablesReference": 0
+            },
+            {
+              "name": "StackTrace",
+              "value": "\u0022   at Debuggee.Inventory.get_Session() in /src/Debuggee/DataTip.cs:line 50\u0022",
+              "type": "string",
+              "evaluateName": "inventory.Session.StackTrace",
+              "variablesReference": 0
+            },
+            {
+              "name": "SerializationStackTraceString",
+              "value": "\u0022   at Debuggee.Inventory.get_Session() in /src/Debuggee/DataTip.cs:line 50\u0022",
+              "type": "string",
+              "evaluateName": "inventory.Session.SerializationStackTraceString",
+              "variablesReference": 0
+            },
+            {
+              "name": "Static members",
+              "value": "",
+              "type": "",
+              "evaluateName": "System.InvalidOperationException",
+              "variablesReference": 21
+            }
+          ]
+        },
+        {
+          "name": "items",
+          "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
+          "type": "System.Collections.Generic.List\u003Cstring\u003E",
+          "evaluateName": "inventory.items",
+          "variablesReference": 10,
+          "children": [
+            {
+              "name": "_items",
+              "value": "{string[4]}",
+              "type": "string[]",
+              "evaluateName": "inventory.items._items",
+              "variablesReference": 22,
+              "children": [
+                {
+                  "name": "[0]",
+                  "value": "\u0022bolt\u0022",
+                  "type": "string",
+                  "evaluateName": "inventory.items._items[0]",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "[1]",
+                  "value": "\u0022nut\u0022",
+                  "type": "string",
+                  "evaluateName": "inventory.items._items[1]",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "[2]",
+                  "value": "null",
+                  "type": "string",
+                  "evaluateName": "inventory.items._items[2]",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "[3]",
+                  "value": "null",
+                  "type": "string",
+                  "evaluateName": "inventory.items._items[3]",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "_size",
+              "value": "2",
+              "type": "int",
+              "evaluateName": "inventory.items._size",
+              "variablesReference": 0
+            },
+            {
+              "name": "_version",
+              "value": "2",
+              "type": "int",
+              "evaluateName": "inventory.items._version",
+              "variablesReference": 0
+            },
+            {
+              "name": "Capacity",
+              "value": "4",
+              "type": "int",
+              "evaluateName": "inventory.items.Capacity",
+              "variablesReference": 0
+            },
+            {
+              "name": "Count",
+              "value": "2",
+              "type": "int",
+              "evaluateName": "inventory.items.Count",
+              "variablesReference": 0
+            },
+            {
+              "name": "System.Collections.IList.IsFixedSize",
+              "value": "false",
+              "type": "bool",
+              "evaluateName": "inventory.items.System.Collections.IList.IsFixedSize",
+              "variablesReference": 0
+            },
+            {
+              "name": "System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+              "value": "false",
+              "type": "bool",
+              "evaluateName": "inventory.items.System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+              "variablesReference": 0
+            },
+            {
+              "name": "System.Collections.IList.IsReadOnly",
+              "value": "false",
+              "type": "bool",
+              "evaluateName": "inventory.items.System.Collections.IList.IsReadOnly",
+              "variablesReference": 0
+            },
+            {
+              "name": "System.Collections.ICollection.IsSynchronized",
+              "value": "false",
+              "type": "bool",
+              "evaluateName": "inventory.items.System.Collections.ICollection.IsSynchronized",
+              "variablesReference": 0
+            },
+            {
+              "name": "System.Collections.ICollection.SyncRoot",
+              "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
+              "type": "System.Collections.Generic.List\u003Cstring\u003E",
+              "evaluateName": "inventory.items.System.Collections.ICollection.SyncRoot",
+              "variablesReference": 23
+            },
+            {
+              "name": "Item",
+              "value": "{System.Reflection.TargetParameterCountException}",
+              "type": "System.Reflection.TargetParameterCountException",
+              "evaluateName": "inventory.items.Item",
+              "variablesReference": 24
+            },
+            {
+              "name": "System.Collections.IList.Item",
+              "value": "{System.Reflection.TargetParameterCountException}",
+              "type": "System.Reflection.TargetParameterCountException",
+              "evaluateName": "inventory.items.System.Collections.IList.Item",
+              "variablesReference": 25
+            },
+            {
+              "name": "Static members",
+              "value": "",
+              "type": "",
+              "evaluateName": "System.Collections.Generic.List\u003Cstring\u003E",
+              "variablesReference": 26
+            }
+          ]
+        },
+        {
+          "name": "Count",
+          "value": "2",
+          "type": "int",
+          "evaluateName": "inventory.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "Items",
+          "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
+          "type": "System.Collections.Generic.List\u003Cstring\u003E",
+          "evaluateName": "inventory.Items",
+          "variablesReference": 11
+        },
+        {
+          "name": "Item",
+          "value": "{System.Reflection.TargetParameterCountException}",
+          "type": "System.Reflection.TargetParameterCountException",
+          "evaluateName": "inventory.Item",
+          "variablesReference": 12
+        },
+        {
+          "name": "System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "inventory.System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.IsSynchronized",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "inventory.System.Collections.ICollection.IsSynchronized",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.SyncRoot",
+          "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
+          "type": "System.Collections.Generic.List\u003Cstring\u003E",
+          "evaluateName": "inventory.System.Collections.ICollection.SyncRoot",
+          "variablesReference": 13
+        },
+        {
+          "name": "System.Collections.IList.Item",
+          "value": "{System.Reflection.TargetParameterCountException}",
+          "type": "System.Reflection.TargetParameterCountException",
+          "evaluateName": "inventory.System.Collections.IList.Item",
+          "variablesReference": 14
+        },
+        {
+          "name": "System.Collections.IList.IsReadOnly",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "inventory.System.Collections.IList.IsReadOnly",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.IList.IsFixedSize",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "inventory.System.Collections.IList.IsFixedSize",
+          "variablesReference": 0
+        },
+        {
+          "name": "Static members",
+          "value": "",
+          "type": "",
+          "evaluateName": "Debuggee.Inventory",
+          "variablesReference": 15
+        }
+      ]
+    },
+    {
+      "name": "forecasts",
+      "value": "{System.Collections.Generic.List\u003CDebuggee.Forecast\u003E}",
+      "type": "System.Collections.Generic.List\u003CDebuggee.Forecast\u003E",
+      "evaluateName": "forecasts",
+      "variablesReference": 3,
+      "children": [
+        {
+          "name": "_items",
+          "value": "{Debuggee.Forecast[4]}",
+          "type": "Debuggee.Forecast[]",
+          "evaluateName": "forecasts._items",
+          "variablesReference": 27,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "{Debuggee.Forecast}",
+              "type": "Debuggee.Forecast",
+              "evaluateName": "forecasts._items[0]",
+              "variablesReference": 32
+            },
+            {
+              "name": "[1]",
+              "value": "{Debuggee.Forecast}",
+              "type": "Debuggee.Forecast",
+              "evaluateName": "forecasts._items[1]",
+              "variablesReference": 33
+            },
+            {
+              "name": "[2]",
+              "value": "{Debuggee.Forecast}",
+              "type": "Debuggee.Forecast",
+              "evaluateName": "forecasts._items[2]",
+              "variablesReference": 34
+            },
+            {
+              "name": "[3]",
+              "value": "null",
+              "type": "Debuggee.Forecast",
+              "evaluateName": "forecasts._items[3]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_size",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "forecasts._size",
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "forecasts._version",
+          "variablesReference": 0
+        },
+        {
+          "name": "Capacity",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "forecasts.Capacity",
+          "variablesReference": 0
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "forecasts.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.IList.IsFixedSize",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "forecasts.System.Collections.IList.IsFixedSize",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "forecasts.System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.IList.IsReadOnly",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "forecasts.System.Collections.IList.IsReadOnly",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.IsSynchronized",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "forecasts.System.Collections.ICollection.IsSynchronized",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.SyncRoot",
+          "value": "{System.Collections.Generic.List\u003CDebuggee.Forecast\u003E}",
+          "type": "System.Collections.Generic.List\u003CDebuggee.Forecast\u003E",
+          "evaluateName": "forecasts.System.Collections.ICollection.SyncRoot",
+          "variablesReference": 28
+        },
+        {
+          "name": "Item",
+          "value": "{System.Reflection.TargetParameterCountException}",
+          "type": "System.Reflection.TargetParameterCountException",
+          "evaluateName": "forecasts.Item",
+          "variablesReference": 29
+        },
+        {
+          "name": "System.Collections.IList.Item",
+          "value": "{System.Reflection.TargetParameterCountException}",
+          "type": "System.Reflection.TargetParameterCountException",
+          "evaluateName": "forecasts.System.Collections.IList.Item",
+          "variablesReference": 30
+        },
+        {
+          "name": "Static members",
+          "value": "",
+          "type": "",
+          "evaluateName": "System.Collections.Generic.List\u003CDebuggee.Forecast\u003E",
+          "variablesReference": 31
+        }
+      ]
+    },
+    {
+      "name": "properties",
+      "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E}",
+      "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E",
+      "evaluateName": "properties",
+      "variablesReference": 4,
+      "children": [
+        {
+          "name": "_buckets",
+          "value": "{int[7]}",
+          "type": "int[]",
+          "evaluateName": "properties._buckets",
+          "variablesReference": 35,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "1",
+              "type": "int",
+              "evaluateName": "properties._buckets[0]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "4",
+              "type": "int",
+              "evaluateName": "properties._buckets[1]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties._buckets[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "3",
+              "type": "int",
+              "evaluateName": "properties._buckets[3]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[4]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties._buckets[4]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[5]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties._buckets[5]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[6]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties._buckets[6]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_entries",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry[7]}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry[]",
+          "evaluateName": "properties._entries",
+          "variablesReference": 36,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[0]",
+              "variablesReference": 50,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "1798518155",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[0].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "properties._entries[0].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\u0022server.Features\u0022",
+                  "type": "string",
+                  "evaluateName": "properties._entries[0].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "{int}",
+                  "type": "int",
+                  "evaluateName": "properties._entries[0].value",
+                  "variablesReference": 57,
+                  "children": [
+                    {
+                      "name": "m_value",
+                      "value": "1",
+                      "type": "int",
+                      "evaluateName": "properties._entries[0].value.m_value",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "Static members",
+                      "value": "",
+                      "type": "",
+                      "evaluateName": "int",
+                      "variablesReference": 58
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "[1]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[1]",
+              "variablesReference": 51,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "1902985937",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[1].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-2",
+                  "type": "int",
+                  "evaluateName": "properties._entries[1].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "string",
+                  "evaluateName": "properties._entries[1].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties._entries[1].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[2]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[2]",
+              "variablesReference": 52,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "1367684090",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[2].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "properties._entries[2].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\u0022application.Services\u0022",
+                  "type": "string",
+                  "evaluateName": "properties._entries[2].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "\u0022services\u0022",
+                  "type": "string",
+                  "evaluateName": "properties._entries[2].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[3]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[3]",
+              "variablesReference": 53,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "802710105",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[3].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "properties._entries[3].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\u0022__MiddlewareDescriptions\u0022",
+                  "type": "string",
+                  "evaluateName": "properties._entries[3].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
+                  "type": "System.Collections.Generic.List\u003Cstring\u003E",
+                  "evaluateName": "properties._entries[3].value",
+                  "variablesReference": 59,
+                  "children": [
+                    {
+                      "name": "_items",
+                      "value": "{string[4]}",
+                      "type": "string[]",
+                      "evaluateName": "properties._entries[3].value._items",
+                      "variablesReference": 60
+                    },
+                    {
+                      "name": "_size",
+                      "value": "1",
+                      "type": "int",
+                      "evaluateName": "properties._entries[3].value._size",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "_version",
+                      "value": "1",
+                      "type": "int",
+                      "evaluateName": "properties._entries[3].value._version",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "Capacity",
+                      "value": "4",
+                      "type": "int",
+                      "evaluateName": "properties._entries[3].value.Capacity",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "Count",
+                      "value": "1",
+                      "type": "int",
+                      "evaluateName": "properties._entries[3].value.Count",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.IList.IsFixedSize",
+                      "value": "false",
+                      "type": "bool",
+                      "evaluateName": "properties._entries[3].value.System.Collections.IList.IsFixedSize",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+                      "value": "false",
+                      "type": "bool",
+                      "evaluateName": "properties._entries[3].value.System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.IList.IsReadOnly",
+                      "value": "false",
+                      "type": "bool",
+                      "evaluateName": "properties._entries[3].value.System.Collections.IList.IsReadOnly",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.ICollection.IsSynchronized",
+                      "value": "false",
+                      "type": "bool",
+                      "evaluateName": "properties._entries[3].value.System.Collections.ICollection.IsSynchronized",
+                      "variablesReference": 0
+                    },
+                    {
+                      "name": "System.Collections.ICollection.SyncRoot",
+                      "value": "{System.Collections.Generic.List\u003Cstring\u003E}",
+                      "type": "System.Collections.Generic.List\u003Cstring\u003E",
+                      "evaluateName": "properties._entries[3].value.System.Collections.ICollection.SyncRoot",
+                      "variablesReference": 61
+                    },
+                    {
+                      "name": "Item",
+                      "value": "{System.Reflection.TargetParameterCountException}",
+                      "type": "System.Reflection.TargetParameterCountException",
+                      "evaluateName": "properties._entries[3].value.Item",
+                      "variablesReference": 62
+                    },
+                    {
+                      "name": "System.Collections.IList.Item",
+                      "value": "{System.Reflection.TargetParameterCountException}",
+                      "type": "System.Reflection.TargetParameterCountException",
+                      "evaluateName": "properties._entries[3].value.System.Collections.IList.Item",
+                      "variablesReference": 63
+                    },
+                    {
+                      "name": "Static members",
+                      "value": "",
+                      "type": "",
+                      "evaluateName": "System.Collections.Generic.List\u003Cstring\u003E",
+                      "variablesReference": 64
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "[4]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[4]",
+              "variablesReference": 54,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[4].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties._entries[4].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "string",
+                  "evaluateName": "properties._entries[4].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties._entries[4].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[5]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[5]",
+              "variablesReference": 55,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[5].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties._entries[5].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "string",
+                  "evaluateName": "properties._entries[5].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties._entries[5].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[6]",
+              "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry}",
+              "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.Entry",
+              "evaluateName": "properties._entries[6]",
+              "variablesReference": 56,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "uint",
+                  "evaluateName": "properties._entries[6].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties._entries[6].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "string",
+                  "evaluateName": "properties._entries[6].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties._entries[6].value",
+                  "variablesReference": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "_fastModMultiplier",
+          "value": "2635249153387078803",
+          "type": "ulong",
+          "evaluateName": "properties._fastModMultiplier",
+          "variablesReference": 0
+        },
+        {
+          "name": "_count",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "properties._count",
+          "variablesReference": 0
+        },
+        {
+          "name": "_freeList",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "properties._freeList",
+          "variablesReference": 0
+        },
+        {
+          "name": "_freeCount",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "properties._freeCount",
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "properties._version",
+          "variablesReference": 0
+        },
+        {
+          "name": "_comparer",
+          "value": "{System.Collections.Generic.NonRandomizedStringEqualityComparer.OrdinalComparer}",
+          "type": "System.Collections.Generic.NonRandomizedStringEqualityComparer.OrdinalComparer",
+          "evaluateName": "properties._comparer",
+          "variablesReference": 37,
+          "children": [
+            {
+              "name": "_underlyingComparer",
+              "value": "{System.Collections.Generic.StringEqualityComparer}",
+              "type": "System.Collections.Generic.StringEqualityComparer",
+              "evaluateName": "properties._comparer._underlyingComparer",
+              "variablesReference": 65,
+              "children": [
+                {
+                  "name": "Static members",
+                  "value": "",
+                  "type": "",
+                  "evaluateName": "System.Collections.Generic.StringEqualityComparer",
+                  "variablesReference": 67
+                }
+              ]
+            },
+            {
+              "name": "Static members",
+              "value": "",
+              "type": "",
+              "evaluateName": "System.Collections.Generic.NonRandomizedStringEqualityComparer.OrdinalComparer",
+              "variablesReference": 66
+            }
+          ]
+        },
+        {
+          "name": "_keys",
+          "value": "null",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.KeyCollection",
+          "evaluateName": "properties._keys",
+          "variablesReference": 0
+        },
+        {
+          "name": "_values",
+          "value": "null",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.ValueCollection",
+          "evaluateName": "properties._values",
+          "variablesReference": 0
+        },
+        {
+          "name": "Comparer",
+          "value": "{System.Collections.Generic.StringEqualityComparer}",
+          "type": "System.Collections.Generic.StringEqualityComparer",
+          "evaluateName": "properties.Comparer",
+          "variablesReference": 38
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "properties.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "Capacity",
+          "value": "7",
+          "type": "int",
+          "evaluateName": "properties.Capacity",
+          "variablesReference": 0
+        },
+        {
+          "name": "Keys",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.KeyCollection}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.KeyCollection",
+          "evaluateName": "properties.Keys",
+          "variablesReference": 39
+        },
+        {
+          "name": "System.Collections.Generic.IDictionary\u003CTKey,TValue\u003E.Keys",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.KeyCollection}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.KeyCollection",
+          "evaluateName": "properties.System.Collections.Generic.IDictionary\u003CTKey,TValue\u003E.Keys",
+          "variablesReference": 40
+        },
+        {
+          "name": "System.Collections.Generic.IReadOnlyDictionary\u003CTKey,TValue\u003E.Keys",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.KeyCollection}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.KeyCollection",
+          "evaluateName": "properties.System.Collections.Generic.IReadOnlyDictionary\u003CTKey,TValue\u003E.Keys",
+          "variablesReference": 41
+        },
+        {
+          "name": "Values",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.ValueCollection}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.ValueCollection",
+          "evaluateName": "properties.Values",
+          "variablesReference": 42
+        },
+        {
+          "name": "System.Collections.Generic.IDictionary\u003CTKey,TValue\u003E.Values",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.ValueCollection}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.ValueCollection",
+          "evaluateName": "properties.System.Collections.Generic.IDictionary\u003CTKey,TValue\u003E.Values",
+          "variablesReference": 43
+        },
+        {
+          "name": "System.Collections.Generic.IReadOnlyDictionary\u003CTKey,TValue\u003E.Values",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.ValueCollection}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.ValueCollection",
+          "evaluateName": "properties.System.Collections.Generic.IReadOnlyDictionary\u003CTKey,TValue\u003E.Values",
+          "variablesReference": 44
+        },
+        {
+          "name": "Item",
+          "value": "{System.Reflection.TargetParameterCountException}",
+          "type": "System.Reflection.TargetParameterCountException",
+          "evaluateName": "properties.Item",
+          "variablesReference": 45
+        },
+        {
+          "name": "System.Collections.Generic.ICollection\u003CSystem.Collections.Generic.KeyValuePair\u003CTKey,TValue\u003E\u003E.IsReadOnly",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "properties.System.Collections.Generic.ICollection\u003CSystem.Collections.Generic.KeyValuePair\u003CTKey,TValue\u003E\u003E.IsReadOnly",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.IsSynchronized",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "properties.System.Collections.ICollection.IsSynchronized",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.SyncRoot",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E",
+          "evaluateName": "properties.System.Collections.ICollection.SyncRoot",
+          "variablesReference": 46
+        },
+        {
+          "name": "System.Collections.IDictionary.IsFixedSize",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "properties.System.Collections.IDictionary.IsFixedSize",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.IDictionary.IsReadOnly",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "properties.System.Collections.IDictionary.IsReadOnly",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.IDictionary.Keys",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.KeyCollection}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.KeyCollection",
+          "evaluateName": "properties.System.Collections.IDictionary.Keys",
+          "variablesReference": 47
+        },
+        {
+          "name": "System.Collections.IDictionary.Values",
+          "value": "{System.Collections.Generic.Dictionary\u003Cstring, object\u003E.ValueCollection}",
+          "type": "System.Collections.Generic.Dictionary\u003Cstring, object\u003E.ValueCollection",
+          "evaluateName": "properties.System.Collections.IDictionary.Values",
+          "variablesReference": 48
+        },
+        {
+          "name": "System.Collections.IDictionary.Item",
+          "value": "{System.Reflection.TargetParameterCountException}",
+          "type": "System.Reflection.TargetParameterCountException",
+          "evaluateName": "properties.System.Collections.IDictionary.Item",
+          "variablesReference": 49
+        }
+      ]
+    },
+    {
+      "name": "ids",
+      "value": "{System.Collections.Generic.HashSet\u003Cint\u003E}",
+      "type": "System.Collections.Generic.HashSet\u003Cint\u003E",
+      "evaluateName": "ids",
+      "variablesReference": 5,
+      "children": [
+        {
+          "name": "_buckets",
+          "value": "{int[7]}",
+          "type": "int[]",
+          "evaluateName": "ids._buckets",
+          "variablesReference": 68,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids._buckets[0]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "3",
+              "type": "int",
+              "evaluateName": "ids._buckets[1]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids._buckets[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "1",
+              "type": "int",
+              "evaluateName": "ids._buckets[3]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[4]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids._buckets[4]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[5]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids._buckets[5]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[6]",
+              "value": "4",
+              "type": "int",
+              "evaluateName": "ids._buckets[6]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_entries",
+          "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry[7]}",
+          "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry[]",
+          "evaluateName": "ids._entries",
+          "variablesReference": 69,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[0]",
+              "variablesReference": 72,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "3",
+                  "type": "int",
+                  "evaluateName": "ids._entries[0].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "ids._entries[0].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "3",
+                  "type": "int",
+                  "evaluateName": "ids._entries[0].Value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[1]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[1]",
+              "variablesReference": 73,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "5",
+                  "type": "int",
+                  "evaluateName": "ids._entries[1].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "-2",
+                  "type": "int",
+                  "evaluateName": "ids._entries[1].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "5",
+                  "type": "int",
+                  "evaluateName": "ids._entries[1].Value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[2]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[2]",
+              "variablesReference": 74,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "8",
+                  "type": "int",
+                  "evaluateName": "ids._entries[2].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "ids._entries[2].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "8",
+                  "type": "int",
+                  "evaluateName": "ids._entries[2].Value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[3]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[3]",
+              "variablesReference": 75,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "13",
+                  "type": "int",
+                  "evaluateName": "ids._entries[3].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "ids._entries[3].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "13",
+                  "type": "int",
+                  "evaluateName": "ids._entries[3].Value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[4]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[4]",
+              "variablesReference": 76,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[4].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[4].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[4].Value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[5]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[5]",
+              "variablesReference": 77,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[5].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[5].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[5].Value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[6]",
+              "value": "{System.Collections.Generic.HashSet\u003Cint\u003E.Entry}",
+              "type": "System.Collections.Generic.HashSet\u003Cint\u003E.Entry",
+              "evaluateName": "ids._entries[6]",
+              "variablesReference": 78,
+              "children": [
+                {
+                  "name": "HashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[6].HashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[6].Next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "Value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids._entries[6].Value",
+                  "variablesReference": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "_fastModMultiplier",
+          "value": "2635249153387078803",
+          "type": "ulong",
+          "evaluateName": "ids._fastModMultiplier",
+          "variablesReference": 0
+        },
+        {
+          "name": "_count",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "ids._count",
+          "variablesReference": 0
+        },
+        {
+          "name": "_freeList",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "ids._freeList",
+          "variablesReference": 0
+        },
+        {
+          "name": "_freeCount",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "ids._freeCount",
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "ids._version",
+          "variablesReference": 0
+        },
+        {
+          "name": "_comparer",
+          "value": "null",
+          "type": "System.Collections.Generic.IEqualityComparer\u003Cint\u003E",
+          "evaluateName": "ids._comparer",
+          "variablesReference": 0
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "ids.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "Capacity",
+          "value": "7",
+          "type": "int",
+          "evaluateName": "ids.Capacity",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "ids.System.Collections.Generic.ICollection\u003CT\u003E.IsReadOnly",
+          "variablesReference": 0
+        },
+        {
+          "name": "Comparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer\u003Cint\u003E}",
+          "type": "System.Collections.Generic.GenericEqualityComparer\u003Cint\u003E",
+          "evaluateName": "ids.Comparer",
+          "variablesReference": 70
+        },
+        {
+          "name": "EffectiveComparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer\u003Cint\u003E}",
+          "type": "System.Collections.Generic.GenericEqualityComparer\u003Cint\u003E",
+          "evaluateName": "ids.EffectiveComparer",
+          "variablesReference": 71
+        }
+      ]
+    },
+    {
+      "name": "queue",
+      "value": "{System.Collections.Generic.Queue\u003Cstring\u003E}",
+      "type": "System.Collections.Generic.Queue\u003Cstring\u003E",
+      "evaluateName": "queue",
+      "variablesReference": 6,
+      "children": [
+        {
+          "name": "_array",
+          "value": "{string[4]}",
+          "type": "string[]",
+          "evaluateName": "queue._array",
+          "variablesReference": 79,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "\u0022fifth\u0022",
+              "type": "string",
+              "evaluateName": "queue._array[0]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "null",
+              "type": "string",
+              "evaluateName": "queue._array[1]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "\u0022third\u0022",
+              "type": "string",
+              "evaluateName": "queue._array[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "\u0022fourth\u0022",
+              "type": "string",
+              "evaluateName": "queue._array[3]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_head",
+          "value": "2",
+          "type": "int",
+          "evaluateName": "queue._head",
+          "variablesReference": 0
+        },
+        {
+          "name": "_tail",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "queue._tail",
+          "variablesReference": 0
+        },
+        {
+          "name": "_size",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "queue._size",
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "7",
+          "type": "int",
+          "evaluateName": "queue._version",
+          "variablesReference": 0
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "queue.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "Capacity",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "queue.Capacity",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.IsSynchronized",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "queue.System.Collections.ICollection.IsSynchronized",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.SyncRoot",
+          "value": "{System.Collections.Generic.Queue\u003Cstring\u003E}",
+          "type": "System.Collections.Generic.Queue\u003Cstring\u003E",
+          "evaluateName": "queue.System.Collections.ICollection.SyncRoot",
+          "variablesReference": 80
+        }
+      ]
+    },
+    {
+      "name": "stack",
+      "value": "{System.Collections.Generic.Stack\u003Cint\u003E}",
+      "type": "System.Collections.Generic.Stack\u003Cint\u003E",
+      "evaluateName": "stack",
+      "variablesReference": 7,
+      "children": [
+        {
+          "name": "_array",
+          "value": "{int[4]}",
+          "type": "int[]",
+          "evaluateName": "stack._array",
+          "variablesReference": 81,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "1",
+              "type": "int",
+              "evaluateName": "stack._array[0]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "2",
+              "type": "int",
+              "evaluateName": "stack._array[1]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "3",
+              "type": "int",
+              "evaluateName": "stack._array[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "stack._array[3]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_size",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "stack._size",
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "stack._version",
+          "variablesReference": 0
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "stack.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "Capacity",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "stack.Capacity",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.IsSynchronized",
+          "value": "false",
+          "type": "bool",
+          "evaluateName": "stack.System.Collections.ICollection.IsSynchronized",
+          "variablesReference": 0
+        },
+        {
+          "name": "System.Collections.ICollection.SyncRoot",
+          "value": "{System.Collections.Generic.Stack\u003Cint\u003E}",
+          "type": "System.Collections.Generic.Stack\u003Cint\u003E",
+          "evaluateName": "stack.System.Collections.ICollection.SyncRoot",
+          "variablesReference": 82
+        }
+      ]
+    },
+    {
+      "name": "squares",
+      "value": "{int[3]}",
+      "type": "int[]",
+      "evaluateName": "squares",
+      "variablesReference": 8,
+      "children": [
+        {
+          "name": "[0]",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "squares[0]",
+          "variablesReference": 0
+        },
+        {
+          "name": "[1]",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "squares[1]",
+          "variablesReference": 0
+        },
+        {
+          "name": "[2]",
+          "value": "9",
+          "type": "int",
+          "evaluateName": "squares[2]",
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "summary",
+      "value": "\u0022Balmy\u0022",
+      "type": "string",
+      "evaluateName": "summary",
+      "variablesReference": 0
+    }
+  ]
+}

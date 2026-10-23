@@ -2,10 +2,11 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
+using Codalus.Shell.Views.DataTips;
 
 namespace Codalus.Shell.Views;
 
-/// <summary>QuickWatch: Enter or Reevaluate evaluates the expression; F2 edits a value; Add Watch copies it to Watch.</summary>
+/// <summary>QuickWatch: Enter or Reevaluate evaluates the expression; F2 edits a value in place; Add Watch copies it to Watch.</summary>
 public sealed partial class QuickWatchView : UserControl, IPaneView
 {
     public QuickWatchView()
@@ -21,10 +22,13 @@ public sealed partial class QuickWatchView : UserControl, IPaneView
         };
         Reevaluate.Click += (_, _) => _ = (DataContext as QuickWatchViewModel)?.EvaluateAsync();
         AddWatch.Click += (_, _) => _ = (DataContext as QuickWatchViewModel)?.AddWatchAsync();
-        VariableTreeSupport.Attach(
-            Tree,
-            (node, value) => DataContext is QuickWatchViewModel vm ? vm.SetValueAsync(node, value) : Task.FromResult<string?>(null),
-            node => !node.IsError && (node.EvaluateName is not null || node.ParentReference is not null));
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is QuickWatchViewModel vm)
+            {
+                Rows.Attach(vm.Roots, new VariableRowActions { SetValue = vm.SetValueAsync, Reason = vm.ReadOnlyReason }, vm.Expansion);
+            }
+        };
     }
 
     public void FocusPrimary()

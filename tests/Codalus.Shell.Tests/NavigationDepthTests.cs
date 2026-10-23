@@ -103,9 +103,11 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => shapes.Insights.Margin.Items.ContainsKey(areaLine), seconds: 60);
         Assert.Equal([InheritanceRelations.Implements, InheritanceRelations.Overrides], shapes.Insights.Margin.Items[areaLine].Relations.Order());
 
-        // Bracket pair colors: the braces of nested blocks differ.
+        // Bracket pair colors (off by default in Classic, D47): the braces of nested blocks differ.
         var describeLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("virtual string Describe(int precision)", StringComparison.Ordinal)).LineNumber;
-        Assert.NotEqual(BraceColor(shapes, interfaceLine + 1), BraceColor(shapes, describeLine)); // { at depth 0, ( at depth 1
+        Assert.Equal(BraceColor(shapes, interfaceLine + 1), BraceColor(shapes, describeLine));
+        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.BracketPairColorizationKey, true, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => BraceColor(shapes, interfaceLine + 1) != BraceColor(shapes, describeLine)); // { at depth 0, ( at depth 1
         // The navigation bar: the document's types, and the members of the type at the caret.
         var shapesView = f.Shell.ActiveEditor!.View!;
         await ShellFixture.PumpUntil(() => shapesView.NavigationBar.Types.Count == 5, seconds: 30);

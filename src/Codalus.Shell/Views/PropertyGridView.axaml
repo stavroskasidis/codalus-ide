@@ -1,0 +1,277 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:views="using:Codalus.Shell.Views"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.PropertyGridView"
+             x:DataType="vm:PropertyGridViewModel">
+  <!--
+    The property grid (#68, D41): the classic IDE's grid with this IDE's controls. Rows of Shell.Size.Row (22 px) with
+    Shell.Grid.Rule lines, Shell.Row.Hover under the pointer (outlined in High contrast); a 16 px gutter in the
+    categories' color runs down the rows, with the chevrons (chrome, in the text color); names in the left 45 % (the line
+    between names and values drags it), indented 16 px a level; values set in the code bold, read-only ones muted and
+    selectable; the selected row's name in the selection color (outlined in High contrast, so the inactive selection
+    shows on black) and its arrow or "…" (the selected row's only); one editor per row, the drop-downs made when they
+    open. A clipped name or value shows in full in a tooltip. A 5 px splitter above the description.
+  -->
+  <UserControl.Styles>
+    <Style Selector="Border.pgRow, Border.pgHeader">
+      <Setter Property="Height" Value="{DynamicResource Shell.Size.Row}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.pgRow:pointerover">
+      <Setter Property="Background" Value="{DynamicResource Shell.Row.Hover}" />
+      <Setter Property="BoxShadow" Value="{DynamicResource Shell.Row.Hover.Outline}" />
+    </Style>
+    <Style Selector="Border.pgHeader">
+      <Setter Property="Background" Value="{DynamicResource Shell.Toolbar}" />
+    </Style>
+    <Style Selector="Border.pgHeader.selected TextBlock.title">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+    </Style>
+    <Style Selector="Border.pgHeader.selected">
+      <Setter Property="Background" Value="{DynamicResource Shell.Selection.Inactive}" />
+    </Style>
+    <Style Selector="views|PropertyGridView:focus-within Border.pgHeader.selected">
+      <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    </Style>
+    <Style Selector="Border.gutter">
+      <Setter Property="Width" Value="16" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Toolbar}" />
+    </Style>
+    <Style Selector="Border.nameCell">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <!-- The selected name: in High contrast an outline too (Shell.Row.Hover.Outline is clear in the other themes), as the inactive selection is near black there. -->
+    <Style Selector="Border.nameCell.selected">
+      <Setter Property="Background" Value="{DynamicResource Shell.Selection.Inactive}" />
+      <Setter Property="BoxShadow" Value="{DynamicResource Shell.Row.Hover.Outline}" />
+    </Style>
+    <Style Selector="Border.nameCell.selected TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
+    </Style>
+    <Style Selector="views|PropertyGridView:focus-within Border.nameCell.selected">
+      <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    </Style>
+    <Style Selector="views|PropertyGridView:focus-within Border.nameCell.selected TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+    </Style>
+    <Style Selector="Border.valueCell">
+      <Setter Property="BorderThickness" Value="1,0,0,0" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="Padding" Value="0,0,1,0" />
+    </Style>
+    <Style Selector="TextBlock.value, SelectableTextBlock.value">
+      <Setter Property="Margin" Value="6,0,4,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.value.set, SelectableTextBlock.value.set">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBox.cell.set">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.value.muted, SelectableTextBlock.value.muted">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    </Style>
+    <Style Selector="TextBox.cell">
+      <Setter Property="MinHeight" Value="20" />
+      <Setter Property="Height" Value="21" />
+      <Setter Property="Padding" Value="5,1,4,1" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="TextBox.cell:focus">
+      <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    </Style>
+    <Style Selector="TextBox.cell:focus /template/ Border#PART_BorderElement">
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="Button.valueButton">
+      <Setter Property="Width" Value="20" />
+      <Setter Property="Height" Value="20" />
+      <Setter Property="MinHeight" Value="20" />
+      <Setter Property="MinWidth" Value="20" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="1,0,0,0" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Button}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Button.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    </Style>
+    <Style Selector="Button.chevron">
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="12" />
+      <Setter Property="MinWidth" Value="12" />
+      <Setter Property="MinHeight" Value="12" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Button.chevron controls|Icon, Button.valueButton controls|Icon">
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="12" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <Style Selector="Border.nameCell.selected Button.chevron controls|Icon">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
+    </Style>
+    <Style Selector="Border.swatch">
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="12" />
+      <Setter Property="Margin" Value="6,0,0,0" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
+  <UserControl.Resources>
+    <!-- One editor per row (#68): a text box, or the value as text; the arrow and "…" on the selected row only. -->
+    <views:PropertyEditorSelector x:Key="Editors">
+      <views:PropertyEditorSelector.TextBox>
+        <DataTemplate x:DataType="vm:PropertyRowViewModel">
+          <DockPanel LastChildFill="True">
+            <Button DockPanel.Dock="Right" Classes="valueButton modal" IsVisible="{Binding ShowsModalButton}" Command="{Binding ModalEditor}"
+                    ToolTip.Tip="{Binding ModalEditorName}" AutomationProperties.Name="{Binding ModalEditorName}">
+              <controls:Icon Kind="more" />
+            </Button>
+            <Button DockPanel.Dock="Right" Classes="valueButton dropDown" IsVisible="{Binding ShowsDropDownButton}"
+                    ToolTip.Tip="{Binding DropDownName}" AutomationProperties.Name="{Binding DropDownName}">
+              <controls:Icon Kind="chevron-down" />
+            </Button>
+            <Border DockPanel.Dock="Left" Classes="swatch" IsVisible="{Binding HasSwatch}" Background="{Binding Swatch}" />
+            <TextBox Classes="cell editor clipTip" Classes.set="{Binding IsSet}" Text="{Binding Text, UpdateSourceTrigger=LostFocus}"
+                     AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding ValueToolTip}" />
+          </DockPanel>
+        </DataTemplate>
+      </views:PropertyEditorSelector.TextBox>
+      <views:PropertyEditorSelector.Value>
+        <DataTemplate x:DataType="vm:PropertyRowViewModel">
+          <DockPanel LastChildFill="True" Background="Transparent">
+            <Button DockPanel.Dock="Right" Classes="valueButton modal" IsVisible="{Binding ShowsModalButton}" Command="{Binding ModalEditor}"
+                    ToolTip.Tip="{Binding ModalEditorName}" AutomationProperties.Name="{Binding ModalEditorName}">
+              <controls:Icon Kind="more" />
+            </Button>
+            <Button DockPanel.Dock="Right" Classes="valueButton dropDown" IsVisible="{Binding ShowsDropDownButton}"
+                    ToolTip.Tip="{Binding DropDownName}" AutomationProperties.Name="{Binding DropDownName}">
+              <controls:Icon Kind="chevron-down" />
+            </Button>
+            <Border DockPanel.Dock="Left" Classes="swatch" IsVisible="{Binding HasSwatch}" Background="{Binding Swatch}" />
+            <TextBlock Classes="value editor clipTip" Classes.set="{Binding IsSet}" Classes.muted="{Binding IsValueMuted}" Text="{Binding DisplayValue}"
+                       ToolTip.Tip="{Binding ValueToolTip}" AutomationProperties.Name="{Binding AccessibleName}" Focusable="True" />
+          </DockPanel>
+        </DataTemplate>
+      </views:PropertyEditorSelector.Value>
+      <!-- A read-only value (a Full Path, a project's folder): selectable, so a part of it, or all of it with Ctrl+C, is copied. -->
+      <views:PropertyEditorSelector.ReadOnly>
+        <DataTemplate x:DataType="vm:PropertyRowViewModel">
+          <DockPanel LastChildFill="True" Background="Transparent">
+            <Border DockPanel.Dock="Left" Classes="swatch" IsVisible="{Binding HasSwatch}" Background="{Binding Swatch}" />
+            <SelectableTextBlock Classes="value editor clipTip" Classes.set="{Binding IsSet}" Classes.muted="{Binding IsValueMuted}" Text="{Binding DisplayValue}"
+                                 ToolTip.Tip="{Binding ValueToolTip}" AutomationProperties.Name="{Binding AccessibleName}" Focusable="True" />
+          </DockPanel>
+        </DataTemplate>
+      </views:PropertyEditorSelector.ReadOnly>
+    </views:PropertyEditorSelector>
+    <ContextMenu x:Key="RowMenu" x:DataType="vm:PropertyRowViewModel">
+      <MenuItem controls:MenuEntry.Icon="undo" Header="{l:T properties.reset}" Command="{Binding ResetCommand}" />
+      <Separator />
+      <MenuItem Header="{l:T properties.description}" ToggleType="CheckBox" />
+    </ContextMenu>
+  </UserControl.Resources>
+
+  <DockPanel>
+    <!-- The description: the selected row's name and text, 76 px (a title and three lines), scrolling when longer. -->
+    <Border x:Name="DescriptionPane" DockPanel.Dock="Bottom" Height="{Binding DescriptionHeight}" IsVisible="{Binding ShowDescription}" Padding="8,6,12,6">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="2">
+          <TextBlock FontWeight="SemiBold" Text="{Binding DescriptionTitle}" TextTrimming="CharacterEllipsis" />
+          <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+    <Border x:Name="DescriptionSplitter" DockPanel.Dock="Bottom" Height="5" Cursor="SizeNorthSouth" IsVisible="{Binding ShowDescription}"
+            Background="{DynamicResource Shell.Toolbar}" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Shell.Border}" />
+
+    <Border DockPanel.Dock="Bottom" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Shell.Border}" IsVisible="{Binding $parent[views:PropertyGridView].Footer, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <ContentControl Content="{Binding $parent[views:PropertyGridView].Footer}" />
+    </Border>
+    <Panel>
+      <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <ItemsControl x:Name="Rows" ItemsSource="{Binding Items}" IsEnabled="{Binding IsEnabled}" Background="Transparent" Focusable="True"
+                      AutomationProperties.Name="{l:T properties.properties}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <VirtualizingStackPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.DataTemplates>
+            <DataTemplate DataType="vm:PropertyCategoryViewModel">
+              <Border Classes="pgHeader" Classes.selected="{Binding IsSelected}">
+                <DockPanel>
+                  <Border Width="16">
+                    <Button Classes="chevron" HorizontalAlignment="Center" Command="{Binding ToggleCommand}" AutomationProperties.Name="{Binding Title}">
+                      <controls:Icon Kind="{Binding Chevron}" />
+                    </Button>
+                  </Border>
+                  <TextBlock Classes="title" Margin="2,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+            <DataTemplate DataType="vm:PropertyRowViewModel">
+              <Border Classes="pgRow">
+                <Panel>
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Classes="gutter" />
+                    <Border DockPanel.Dock="Left" Classes="nameCell" Classes.selected="{Binding IsSelected}" Width="{Binding $parent[views:PropertyGridView].NameWidth}">
+                      <TextBlock Classes="clipTip" Margin="{Binding NameIndent}" VerticalAlignment="Center" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding NameToolTip}" />
+                    </Border>
+                    <Border Classes="valueCell">
+                      <ContentControl Content="{Binding}" ContentTemplate="{StaticResource Editors}" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                    </Border>
+                  </DockPanel>
+                  <Button Classes="chevron expander" Margin="{Binding ChevronMargin}" IsVisible="{Binding IsExpandable}" Command="{Binding ExpandCommand}"
+                          AutomationProperties.Name="{Binding ExpanderName}">
+                    <controls:Icon Kind="{Binding Chevron}" />
+                  </Button>
+                </Panel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.DataTemplates>
+        </ItemsControl>
+      </ScrollViewer>
+      <!-- The line between names and values: drag it to change the names' share. -->
+      <Canvas x:Name="SplitLayer" IsHitTestVisible="True" Background="{x:Null}" HorizontalAlignment="Left" VerticalAlignment="Stretch" Width="0">
+        <Thumb x:Name="ColumnSplitter" Width="5" Cursor="SizeWestEast" Background="Transparent" Canvas.Top="0">
+          <Thumb.Template>
+            <ControlTemplate>
+              <Border Background="Transparent" />
+            </ControlTemplate>
+          </Thumb.Template>
+        </Thumb>
+      </Canvas>
+      <!-- The drop-down: the overlays' look (the menus' corners, border and shadow), its editor made when it first opens. -->
+      <Popup x:Name="DropDown" IsLightDismissEnabled="True" Placement="BottomEdgeAlignedRight">
+        <Border Classes="overlay" Margin="0,2,8,8">
+          <ContentControl x:Name="DropDownHost" FontSize="{DynamicResource Shell.FontSize.Body}" />
+        </Border>
+      </Popup>
+    </Panel>
+  </DockPanel>
+</UserControl>

@@ -69,6 +69,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 {
     public const string DocumentKind = "winformsDesigner";
 
+    // TODO(issue): the OS clipboard, so components paste into another instance of the IDE, as the classic IDE's do (#67's gaps).
     private static List<DesignerClipboardEntry> s_clipboard = [];
 
     private readonly ShellHost _shell;
@@ -174,6 +175,15 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     /// <summary>The C# host's last read of the form (tests).</summary>
     internal WinFormsReadResult? LastRead => _read;
+
+    /// <summary>
+    /// The project the Toolbox asks about: the C# host's, else the build host's owner project (the C# host names it only
+    /// once it has it; before, it reads the form from Miscellaneous Files). Null before either is known.
+    /// </summary>
+    internal string? ToolboxProject => _read?.Project ?? _target?.Project;
+
+    /// <summary>Whether the designer was closed (or the IDE is exiting): it asks and loads nothing more (tests).</summary>
+    internal bool IsClosed => _disposed;
 
     /// <summary>The surface's components: the root first, then controls (front first, parents before children), then non-visual components.</summary>
     public IReadOnlyList<DesignerComponentView> Components => _components;
@@ -408,6 +418,13 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>The designer's newest request for the Toolbox's project items (tests).</summary>
     internal Task ToolboxLoad => _toolboxLoad;
 
+    /// <summary>
+    /// How many requests for the Toolbox's project items the designer sent to the C# host (tests). <see cref="ToolboxLoad"/>
+    /// doesn't tell whether it asked: a request that ended at once (nothing to ask with, or the C# host's answer already
+    /// read when the request returned) is <see cref="Task.CompletedTask"/>, as was the ask before it.
+    /// </summary>
+    internal int ToolboxRequests { get; private set; }
+
     /// <summary>Waits until what holds or waits for the designer's gate now (a start, a reload, a read again, a change) is done (tests).</summary>
     internal async Task WhenIdleAsync()
     {
@@ -435,12 +452,13 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     {
         // The C# host names the project only once it has it (before, it reads the form from Miscellaneous Files): the
         // build host's owner project is known from the evaluation, and the ask once the C# service has loaded finds it.
-        if (_disposed || (_read?.Project ?? _target?.Project) is not { } project || _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is not { } client)
+        if (_disposed || ToolboxProject is not { } project || _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is not { } client)
         {
             return;
         }
 
         var request = _shell.Toolbox.BeginProjectItemsRequest();
+        ToolboxRequests++;
         try
         {
             if (await client.WinFormsToolboxAsync(project, CancellationToken.None).ConfigureAwait(true) is { } toolbox && !_disposed)
@@ -513,11 +531,10 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
                 await LoadFormAsync().ConfigureAwait(true);
             }
 
-            if (restartHost)
-            {
-                // The Properties window shows the new host's values.
-                PropertiesChanged?.Invoke(this, EventArgs.Empty);
-            }
+            // The Properties window (and the collection editor's item grid) shows the values the code has now: the new
+            // host's, or an undo's or a typed change's (#68: the grid reads them again in place).
+            PropertiesChanged?.Invoke(this, EventArgs.Empty);
+            _collectionEditor?.OnPropertiesChanged();
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -732,6 +749,11 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         Problems = render.Errors.Length == 0 ? null : string.Join("\n", render.Errors);
         UpdateTray();
         SurfaceChanged?.Invoke(this, EventArgs.Empty);
+
+        // #67: a change can lock a control or enable a verb (Remove Tab once there's a tab page).
+        _renderVersion++;
+        PublishContext();
+        RefreshVerbs();
     }
 
     private void UpdateTray()
@@ -796,6 +818,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         OnPropertyChanged(nameof(PrimarySelection));
         UpdateTray();
         UpdateMenus();
+        PublishContext();
+        RefreshVerbs();
         SurfaceChanged?.Invoke(this, EventArgs.Empty);
         if (notify)
         {
@@ -850,9 +874,38 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         SetSelection(add ? [.. _selection.Where(s => s != Root?.Name), .. picked] : picked.Count == 0 ? [container] : picked, notify: true);
     }
 
-    /// <summary>The selected controls that can move (not the root, not parts).</summary>
+    /// <summary>
+    /// The selected controls that can move (not the root, not parts, not locked: #67, as the classic IDE's drag and arrow
+    /// keys skip a locked control; the Properties window still sets its Location).
+    /// </summary>
     private List<DesignerComponentView> Movable() =>
-        [.. _selection.Select(Find).OfType<DesignerComponentView>().Where(c => c.IsControl && c != Root && !c.IsPart)];
+        [.. _selection.Select(Find).OfType<DesignerComponentView>().Where(c => c.IsControl && c != Root && !c.IsPart && c.Locked != true)];
+
+    /// <summary>
+    /// The controls a drag or an arrow key moves: <see cref="Movable"/> without those inside another that moves (Select
+    /// All takes a group box and its radio buttons, a split container and the list box in its panel), which move with
+    /// it, as in the classic IDE; moved by the delta too, they went twice as far.
+    /// </summary>
+    private List<DesignerComponentView> MovingTogether()
+    {
+        var movable = Movable();
+        var names = new HashSet<string>(movable.Select(m => m.Name), StringComparer.Ordinal);
+        bool InsideMoving(DesignerComponentView view)
+        {
+            // Up through the parents, a split container's panel to its split container (the panel's own Parent).
+            for (var parent = view.Parent is { } p ? Find(p) : null; parent is not null && parent != Root; parent = parent.Parent is { } next ? Find(next) : null)
+            {
+                if (names.Contains(parent.Name))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return [.. movable.Where(m => !InsideMoving(m))];
+    }
 
     private static string Invariant(double value) => Math.Round(value).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -861,7 +914,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>Moves the selected controls by a delta, into another container when they're dropped in one.</summary>
     public Task MoveSelectionAsync(double dx, double dy, double dropX, double dropY)
     {
-        var moving = Movable();
+        var moving = MovingTogether();
         if (moving.Count == 0 || (Math.Abs(dx) < 1 && Math.Abs(dy) < 1))
         {
             return Task.CompletedTask;
@@ -917,7 +970,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// <summary>The arrow keys: moves the selection a pixel, or with Shift resizes it.</summary>
     public Task NudgeAsync(int dx, int dy, bool resize)
     {
-        var moving = Movable();
+        // Shift+arrow resizes every selected control; an arrow moves a nested one only with its container.
+        var moving = resize ? Movable() : MovingTogether();
         if (moving.Count == 0)
         {
             return Task.CompletedTask;
@@ -1016,13 +1070,14 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
     /// <summary>
     /// A change through the designer host, then its code through the C# host, applied to the designer file as one
-    /// undoable edit. One at a time; when the code can't take it, the form is loaded again from the code.
+    /// undoable edit. One at a time; when the code can't take it, the form is loaded again from the code. Returns the
+    /// host's error when it rejected the change (#68: the Properties window's invalid-value dialog), else null.
     /// </summary>
-    private async Task RunAsync(Func<IWinFormsDesignerHost, Task<DesignerChangeResult>> change, Action? after = null)
+    private async Task<string?> RunAsync(Func<IWinFormsDesignerHost, Task<DesignerChangeResult>> change, Action? after = null)
     {
         if (_disposed)
         {
-            return;
+            return null;
         }
 
         // A change made while the host starts (again) waits here, then applies on the new host (#66).
@@ -1032,13 +1087,13 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         {
             if (_disposed)
             {
-                return;
+                return null;
             }
 
             if (_host is not { } host || _designerCode is null || _model is null)
             {
                 Status = Localizer.Get("msg.winFormsDesigner.notReady", "The designer isn't running, so the change wasn't made: see the Windows Forms Designer output, or click Load the form again on the designer's toolbar.");
-                return;
+                return null;
             }
 
             IsBusy = busy = true;
@@ -1047,19 +1102,22 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             {
                 Status = error;
                 Show(result.Render);
-                return;
+                return error;
             }
 
             var edits = EditsFor(result);
             if (edits.Count > 0 && !await WriteAsync(edits).ConfigureAwait(true))
             {
                 await LoadFormAsync().ConfigureAwait(true);
-                return;
+                return null;
             }
 
             Show(result.Render);
             after?.Invoke();
             PropertiesChanged?.Invoke(this, EventArgs.Empty);
+
+            // The collection editor's item grid reads its item again, in place (a part's edit, a reset; #68).
+            _collectionEditor?.OnPropertiesChanged();
         }
         catch (PreviewerException ex)
         {
@@ -1078,6 +1136,8 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
             ReleaseGate();
         }
+
+        return null;
     }
 
     /// <summary>
@@ -1210,6 +1270,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             return false;
         }
 
+        await EnsureDefaultResourcesAsync(edits).ConfigureAwait(true);
         var result = await client.WinFormsEditAsync(new WinFormsEditParams(new TextDocumentIdentifier(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(DesignerPath)), [.. edits]) { Version = _designerCode.Version, ResourceFiles = HeldResourceFiles() }, CancellationToken.None).ConfigureAwait(true);
         if (result is null || result.Error is { } error)
         {
@@ -1260,13 +1321,21 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         return true;
     }
 
-    /// <summary>A property set in the Properties window (as text, converted by the property's type converter), or reset to its default (null).</summary>
-    public Task SetPropertyAsync(IReadOnlyList<string> components, string property, string? text)
+    /// <summary>
+    /// A property set in the Properties window (as text, converted by the property's type converter), or reset to its
+    /// default (null); <paramref name="property"/> may be a part's dotted path (#68: <c>Font.Bold</c>). Returns the host's
+    /// error when it rejected the value, else null.
+    /// </summary>
+    public Task<string?> SetPropertyAsync(IReadOnlyList<string> components, string property, string? text)
     {
         return RunAsync(host => host.SetPropertiesAsync(new DesignerSetPropertiesParams([.. components.Select(c => text is null
             ? new DesignerPropertyEdit(ComponentOf(c), property) { Reset = true }
             : new DesignerPropertyEdit(ComponentOf(c), property) { Text = text })]), CancellationToken.None));
     }
+
+    /// <summary>Several edits as one change and one undo step (#68: the font editor's parts, the String Collection Editor's array); the host's error, or null.</summary>
+    public Task<string?> SetPropertiesAsync(IReadOnlyList<DesignerPropertyEdit> edits) =>
+        RunAsync(host => host.SetPropertiesAsync(new DesignerSetPropertiesParams([.. edits.Select(e => e with { Component = ComponentOf(e.Component) })]), CancellationToken.None));
 
     /// <summary>The Properties window's (Name): renames the component in the code (its uses elsewhere too), then loads the form again.</summary>
     public async Task RenameAsync(string component, string newName)
@@ -1427,8 +1496,15 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             Add(selected);
         }
 
+        if (names.Count == 0)
+        {
+            // The form or a panel alone (Edit → Copy isn't grayed, as the menus' Copy is): what was copied stays.
+            return;
+        }
+
         s_clipboard = [.. names.Select(n => Describe(model, n, DesignerPath, locals)).OfType<DesignerClipboardEntry>()];
         _shell.StatusBar.ShowMessage(Localizer.Format("msg.winFormsDesigner.copied", "Copied {0} component(s).", s_clipboard.Count), TimeSpan.FromSeconds(3));
+        PublishContext();
     }
 
     /// <summary><c>Controls.Add</c> and the collections' calls (<c>Items.AddRange</c>, <c>ColumnStyles.Add</c>, <c>Images.SetKeyName</c>).</summary>
@@ -1487,8 +1563,9 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     }
 
     /// <summary>
-    /// Paste: the copied components under new names, in the selected container (or the copied ones' parent), a little
-    /// lower and to the right, with their collections, extender properties and data bindings where what they name
+    /// Paste: the copied components under new names, in the nearest container of the primary selection (#67, as the
+    /// classic IDE: a selected container, a selected control's container, a split container's panel; else the form), a
+    /// little lower and to the right, with their collections, extender properties and data bindings where what they name
     /// exists. Their event hookups come too when pasting into the form they were copied from (the handlers are its);
     /// into another form they don't, as Visual Studio does (ADR 0073).
     /// </summary>
@@ -1499,8 +1576,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             return;
         }
 
-        var target = _selection.Select(Find).OfType<DesignerComponentView>().FirstOrDefault(c => c.IsContainer && !c.IsPart);
-        var targetName = target is null || target == Root ? string.Empty : target.Name;
+        var (targetName, targetPath) = PasteTarget();
         var copied = s_clipboard.Select(e => e.Name).ToHashSet(StringComparer.Ordinal);
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         var taken = model.Components.Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
@@ -1562,7 +1638,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
                 Type = entry.Type,
                 CreationArguments = entry.CreationArguments,
                 Parent = parent,
-                ParentPath = topLevel ? null : entry.ParentPath,
+                ParentPath = topLevel ? (entry.Parent is null ? null : targetPath) : entry.ParentPath,
                 Cell = topLevel ? null : entry.Cell,
                 Index = topLevel ? 0 : int.MaxValue,
                 Properties = properties,
@@ -1640,6 +1716,23 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         _ => Localizer.Format("msg.winFormsDesigner.selectedCount", "{0} components", _selection.Count),
     };
 
+    /// <summary>The component selector's entries (#68): the form first, then its components by name (a part, such as a split container's panel, isn't one).</summary>
+    public IReadOnlyList<DesignerComponentChoice> ComponentChoices =>
+        [.. _components.Take(1).Concat(_components.Skip(1).Where(c => !c.IsPart).OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)).Select(c => new DesignerComponentChoice(c.Name, c.Type))];
+
+    public string? SelectedComponent => _selection.Count == 1 ? _selection[0] : null;
+
+    public void SelectComponent(string name)
+    {
+        if (Find(name) is not null)
+        {
+            SetSelection([name], notify: true);
+        }
+    }
+
+    /// <summary>An editor panel is open over the surface (#68): the Properties window takes no input meanwhile.</summary>
+    public bool HasOpenEditor => _collectionEditor is not null || HasEditorPanel;
+
     public async Task<IReadOnlyList<DesignerPropertyRow>> PropertyRowsAsync(CancellationToken cancellationToken)
     {
         if (_host is not { } host || _selection.Count == 0)
@@ -1649,7 +1742,27 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
         var selected = _selection.ToList();
         var result = await host.PropertiesAsync(new DesignerComponentsParams([.. selected.Select(ComponentOf)]), cancellationToken).ConfigureAwait(true);
-        List<DesignerPropertyRow> rows = [.. result.Properties.Select(p => new DesignerPropertyRow(p.Category, RowFor(selected, p)))];
+
+        // Locked, Modifiers and GenerateMember aren't in the grid yet (D41 question 9): Design shows (Name) only.
+        // TODO(issue): Locked in the grid (the control designers' design-time property, written as the .resx's metadata
+        // as Lock Controls writes it), and Modifiers and GenerateMember (an edit of the field's declaration), in Design
+        // (#68, D41 question 9); Design shows (Name) only meanwhile.
+        var properties = result.Properties.Where(p => !(p is { Name: "Locked", Provider: null, DataBinding: false } && p.Type == "System.Boolean")).ToList();
+        List<DesignerPropertyRow> rows = [.. properties.Where(p => !p.DataBinding).Select(p => new DesignerPropertyRow(p.Category, RowFor(selected, p)))];
+
+        // The data bindings the host sends flat, nested under one (DataBindings) row in Data (D41 question 6).
+        // TODO(issue): (ApplicationSettings) (PropertyBinding) and (Advanced) bindings (format, update mode, null value) in
+        // Data (#68, D41 question 6), which the classic IDE edits in Windows Forms dialogs; the plain bindings only meanwhile.
+        if (properties.Where(p => p.DataBinding).Select(p => RowFor(selected, p)).ToList() is { Count: > 0 } bindings)
+        {
+            rows.Add(new DesignerPropertyRow("Data", new PropertyRowViewModel(DataBindingsRow, string.Empty, PropertyRowKind.ReadOnly,
+                Localizer.Get("msg.winFormsDesigner.dataBindings", "The data bindings of the component: each bindable property bound to a member of one of the form's binding sources."), isSet: bindings.Any(b => b.IsSet))
+            {
+                Path = DataBindingsRow,
+                Children = bindings,
+            }));
+        }
+
         if (IsLocalizable && selected.Count == 1 && ComponentOf(selected[0]).Length == 0)
         {
             rows.Add(LanguageRow());
@@ -1663,15 +1776,20 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         var value = info.Mixed ? string.Empty : info.Value ?? string.Empty;
         if (info.Name == "Name" && selected.Count == 1)
         {
+            // (Name) can't be reset (D41: Reset is grayed for it).
             return new PropertyRowViewModel("(Name)", value, PropertyRowKind.Text, info.Description ?? string.Empty,
-                info.IsReadOnly ? null : name => RenameAsync(selected[0], name?.Trim() ?? string.Empty), isSet: true);
+                info.IsReadOnly ? null : name => RenameAsync(selected[0], name?.Trim() ?? string.Empty), isSet: true) { Path = "(Name)" };
         }
 
         return RowFor(selected, info, value);
     }
 
+    // TODO(issue): the events of a multi-selection (#68, D41 question 9): the events the selected components share, a
+    // handler hooked to each; Events is grayed with two components meanwhile, as the view model needs one.
     public bool HasEvents => _selection.Count == 1;
 
+    // TODO(issue): an event's drop-down of the code's methods with a compatible signature, as the classic IDE's Events
+    // view lists them (#68); an event's cell takes a typed handler name meanwhile.
     public async Task<IReadOnlyList<DesignerPropertyRow>> EventRowsAsync(CancellationToken cancellationToken)
     {
         if (_host is not { } host || _selection.Count != 1)

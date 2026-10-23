@@ -117,6 +117,8 @@ Since API 0.2.6 (protocol 0.2), [ADR 0031](adr/0031-git-hosting-and-repository-f
 | `hosting/owners` | shell → host | request | `{providerId}` → `{owners: [{id, name, kind: user\|organization\|group\|project}]}` |
 | `hosting/publish` | shell → host | request | `{providerId, owner, name, description?, isPrivate}` → `{cloneUrl, webUrl, sshUrl?}` |
 
+The `pluginId` of a `secrets/*` request must be one of that host's own plugins, and never an id under `codalus.shell.` (the shell's own, where external agents' keys are; ADR 0083): the shell refuses it otherwise (0.6.0). Plugins in the same host group can still name each other's ids.
+
 A `pullRequest` is `{number, title, author, sourceBranch, targetBranch, webUrl, reference, isDraft, state, createdAt?, updatedAt?, sourceCommit?, sourceRepository?, sourceCloneUrl?, reviewers}`; `sourceRepository` is set for a fork's pull request. Thread paths are relative to the repository, with forward slashes; lines are one-based in the pull request's version of the file.
 
 ### Language model providers

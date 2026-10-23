@@ -20,9 +20,17 @@ Some shortcuts belong to the operating system or the desktop, which takes them b
 - **Linux:** IBus and Fcitx switch input methods with Ctrl+Space (older setups) or Super+Space. If Ctrl+Space doesn't reach the editor, use Ctrl+J, or change the input method's trigger (`ibus-setup` → General → Next input method).
 - **Windows:** the Chinese, Japanese and Korean IMEs can toggle with Ctrl+Space; Ctrl+J works there.
 
+## New Project
+
+`Ctrl+Shift+N` (`⌘⇧N` on macOS) opens New Project. In it, `Alt+Right` and `Enter` go to the next page (Create on the last), `Alt+Left` goes back, `Esc` closes it (clearing the search first), `Alt+S` goes to the search and `Down` from there into the templates, and `Delete` removes the selected recent template. On macOS `⌘]` and `⌘[` go to the next page and back from anywhere, and `⌥→` and `⌥←` do too except in a text box, where they move by word as macOS's text boxes do; the other `Alt` keys are `⌥`. [New projects and solutions](solutions.md#keys) has the access keys.
+
 ## Edit's clipboard keys
 
 Undo, Redo, Cut, Copy, Paste and Select All belong to the text controls (Ctrl+Z, Ctrl+Y, Ctrl+X, Ctrl+C, Ctrl+V, Ctrl+A; on macOS ⌘Z, ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A). The Edit menu shows them, and on macOS the global menu carries them as key equivalents, as Mac apps do, with Edit starting with them. They act on the focused text box, editor or terminal; elsewhere (the Solution Explorer) they run what the same keys do there.
+
+## The Properties window
+
+Inside the Properties window's grid (and a collection editor's item grid, which is the same), as in the classic IDE: `Up` and `Down` move between rows (over the category headers), `Right` expands a row or a category and `Left` collapses it, `Enter` commits what you typed (or goes to an event's handler in Events), `Esc` puts the value back, `Ctrl+C` (`⌘C` on macOS) copies the selected row's value, and `Alt+Down` (`⌥↓` on macOS) or `F4` opens the selected row's drop-down. The links under the grid keep their own keys (`Enter` follows the focused one). Anywhere else, `F4` shows the Properties window. On macOS, use `⌥↓`: F4 runs Launchpad unless the function keys are set as standard keys (below).
 
 ## Other shortcuts that differ by OS
 
@@ -44,7 +52,7 @@ Undo, Redo, Cut, Copy, Paste and Select All belong to the text controls (Ctrl+Z,
 
 ## Shortcuts left as they are, with a note
 
-- **macOS function keys:** F11 (Step Into) shows the desktop and F3/F4 run Mission Control and Launchpad unless "Use F1, F2, etc. keys as standard function keys" is on; hold fn otherwise.
+- **macOS function keys:** F11 (Step Into) shows the desktop and F3/F4 run Mission Control and Launchpad unless "Use F1, F2, etc. keys as standard function keys" is on; hold fn otherwise. In the Properties window, `⌥↓` opens a row's drop-down without F4.
 - **Ctrl+Alt on European keyboards (Windows):** Ctrl+Alt is AltGr, so a few classic Ctrl+Alt shortcuts (Ctrl+Alt+L, Solution Explorer) can type a character on layouts such as Polish. Rebind them if you need those characters.
 - **KDE:** Ctrl+Alt+L locks the screen; Solution Explorer is also on View → Solution Explorer.
 

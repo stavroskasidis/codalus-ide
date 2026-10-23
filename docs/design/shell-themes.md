@@ -264,6 +264,46 @@ The tokens are those of [`ui-guidelines.md`](../ui-guidelines.md#tokens). Tokens
 | Icons: orange, purple, yellow | `Shell.Icon.Orange`, `.Purple`, `.Yellow` | `#B26B12` `#652D90` `#8A6400` | `#E8AB53` `#B180D7` `#FFCC00` | `#FFFFFF` `#FFFFFF` `#FFFFFF` |
 | Icons: folder, outline | `Shell.Icon.Folder`, `.Outline` | `#8A6320` `#6E6E6E` | `#DCB67A` `#C5C5C5` | `#FFFFFF` `#FFFFFF` |
 
+## Classic (0.6)
+
+Classic isn't one of this page's designs: it is the classic IDE's look, kept as a family (D32) and the default since D36. In 0.6 it moved closer to the classic IDE it follows, from the maintainer's screenshots of it.
+
+### Classic's editor colors (D47)
+
+Measured in the classic IDE's Dark theme (#83), after the document view's 0.85 opacity was fixed; `EditorTheme` and `Tokens.axaml` hold them, `ClassicPaletteTests` checks them. Light and Blue take the classic IDE's Light scheme. The families keep their own (their control keywords stay VS Code's `#C586C0` and `#AF00DB`).
+
+| Role | Classic Dark | Classic Light and Blue | Before |
+|---|---|---|---|
+| Control keywords (`if`, `return`) | `#D8A0DF` | `#8F08C4` | `#C586C0`, `#AF00DB` |
+| Comments, XML doc text, Razor and markup comments | `#57A64A` | `#008000` (unchanged) | Dark `#6A9955` (XML doc text `#608B4E`) |
+| Strings | `#D69D85` | `#A31515` (unchanged) | Dark `#CE9178` |
+| Line numbers (`Shell.Editor.LineNumbers`) | `#8A8A8A` | `#727272` (assumed) | `#2B91AF`, `#6E7681` |
+| The caret line's number (`Shell.Editor.LineNumbers.Current`, new) | `#CCCCCC` | `#3F3F3F` (assumed) | as the others |
+| CodeLens (`Shell.Editor.CodeLens.Foreground`, new) | `#A1A1A1` | `#5E5E5E` (assumed) | the inlay hints' `#969696`, `#5F6670` |
+| Current line (`Shell.Editor.CurrentLine`, `editor.lineHighlightBackground`) | `#272727` (`#0AFFFFFF` over the editor), no border | `#F0F0F0` (unchanged) | Dark `#2E2E2E` |
+| Bracket pair colors | off by default | off by default | on |
+
+- **Assumed values.** No screenshot of the classic IDE's Light theme was measured. Its control keyword is Roslyn's published Light value; its comments and strings were already its own. For the line numbers, the caret line's number and CodeLens, which the published scheme doesn't cover, Light takes the gray that has the same contrast on its white editor as the measured Dark value has on `#1E1E1E` (4.8:1, 9.2:1 on the current line, 6.5:1). Light's current line keeps its `#F0F0F0`. Check them against a Light screenshot when one is available.
+- **Text a grammar colors** (TextMate's Dark+ and Light+, `TextMateSupport.RecolorsFor`) takes the same control keyword, comment and string colors in Classic, so a file without a language service looks the same.
+- **Bracket pair colors' default follows the family**: `editor.bracketPairColorization` is registered with `false` while a Classic theme is active and again with `true` when a family is (`BuiltIns.BracketPairColorizationSetting`, `ShellHost.UseFamilyDefaults`). A value in `settings.json` wins in any theme, and the Settings UI shows the active family's default.
+- The families and High Contrast set `.LineNumbers.Current` to their line numbers' color and `.CodeLens.Foreground` to their inlay hints', so they look as before.
+
+### Classic's shapes (D46)
+
+Classic takes the classic IDE's current shapes, drawn and decided in [`controls/RoundedCorners.dc.html`](controls/RoundedCorners.dc.html) ([controls.md](controls.md#rounded-corners-06), superseding D33's 2 px): one 4 px radius on cards, tabs and controls (check boxes 3, the focus ring 6), 6 px gaps on the window's color and 6 px of window around the dock area. The tokens are in [`ui-guidelines.md`'s Shapes table](../ui-guidelines.md#shapes-m45).
+
+| | Classic Light and Dark | Classic Blue | Classic High Contrast |
+|---|---|---|---|
+| Document well | one card holding its tabs, 1 px `Shell.Border` | the same | the same, cyan border |
+| Selected tab, active group | outlined in the accent, the content's fill, semibold, open into the active document's 1 px accent frame (`TabStripEdge`) | today's gold fill, a gold frame | today's accent fill, an accent frame |
+| Selected tab, other groups | outlined at 3:1 against the strip, semibold; the frame in `Shell.Border` | today's fill | outlined in cyan |
+| Tool windows | cards outlined all round; the focused one framed in the accent, its caption on the card with a semibold title | today's solid captions | today's solid captions |
+| Toolbar | a card as wide as its buttons | the same | the same |
+| Rows | inset 3 px, 4 px corners; Solution Explorer's selected row has the accent pill (muted without the focus) | the same | the same |
+| Popups | menus and lists 6, dialogs 8, tooltips and the editor's popups 4 (every family takes the shared 6 and 8) | the same | the same |
+
+The colors that moved with it: Light's and Dark's toolbar, strip and unselected tabs take `Shell.Panel`'s value (`#F5F5F5`, `#252526`), the selected tab the content's (`#FFFFFF` with black text, `#252526` with white), a tab under the pointer the toolbar's hover (`#DCEAF8`, `#3E3E40`), the focused caption the card's (`#EEEEF2`, `#252526`); the gaps show `Shell.Background`. Window frames stay the system's.
+
 ## The first-run setup: appearance
 
 ![The setup's appearance step](shell-themes/previews/setup-appearance.png)

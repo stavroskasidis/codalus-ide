@@ -4,15 +4,37 @@ using Microsoft.NET.StringTools;
 namespace Codalus.Projects.Tests;
 
 /// <summary>
+/// The gate tests run alone, after the parallel ones: the gate is the process's, and the evaluations and builds of
+/// the other classes hold it and wait for it too, which their counts and waits would see.
+/// </summary>
+[CollectionDefinition(nameof(StringCacheGateTests), DisableParallelization = true)]
+public sealed class StringCacheGateTestsAlone;
+
+/// <summary>
 /// The build host's gate between MSBuild work and the end of a build (<see cref="StringCacheGate"/>), on its own and
 /// with MSBuild's real string cache: clearing the cache while strings are interned fails with "Handle is not
 /// initialized." (the build host's intermittent CI failure, PR #68), and the gate keeps the two apart.
 /// </summary>
+[Collection(nameof(StringCacheGateTests))]
 public sealed class StringCacheGateTests
 {
     private static readonly TimeSpan s_wait = TimeSpan.FromSeconds(30);
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// Until the end of a build started on the thread pool waits for the gate: a fixed delay isn't enough on a busy
+    /// machine (the Windows runner started it after the test's 100 ms, so new work got in first).
+    /// </summary>
+    private static async Task UntilAnEndOfBuildWaitsAsync()
+    {
+        var until = DateTime.UtcNow + s_wait;
+        while (StringCacheGate.WaitingCount == 0)
+        {
+            Assert.True(DateTime.UtcNow < until, "The end of the build never waited for the gate.");
+            await Task.Delay(10, Token);
+        }
+    }
 
     /// <summary>
     /// What the build host does, at full speed: threads interning strings over 500 characters (the ones the cache holds
@@ -62,7 +84,8 @@ public sealed class StringCacheGateTests
         using (StringCacheGate.Enter())
         {
             exclusive = Task.Run(() => StringCacheGate.Exclusive(ended.SetResult), Token);
-            await Task.Delay(200, Token);
+            await UntilAnEndOfBuildWaitsAsync();
+            await Task.Delay(100, Token);
             Assert.False(ended.Task.IsCompleted);
         }
 
@@ -93,15 +116,16 @@ public sealed class StringCacheGateTests
 
     /// <summary>
     /// New work waits behind an end of build that waits, or overlapping evaluations (three readers in a loop) would
-    /// hold it off for good: the first version of the gate kept a design-time build from ending for a minute.
+    /// hold it off for good: the first version of the gate kept a design-time build from ending for a minute. The gate is
+    /// the process's: a test that fails holding it would hang every test after it, so the hold is left in any case.
     /// </summary>
     [Fact]
     public async Task New_work_waits_behind_a_build_waiting_to_end()
     {
-        var outer = StringCacheGate.Enter();
+        using var outer = StringCacheGate.Enter();
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var exclusive = Task.Run(() => StringCacheGate.Exclusive(ended.SetResult), Token);
-        await Task.Delay(100, Token);
+        await UntilAnEndOfBuildWaitsAsync();
 
         Task<bool> entered;
         using (ExecutionContext.SuppressFlow()) // another flow: not work inside the outer one
@@ -129,12 +153,12 @@ public sealed class StringCacheGateTests
     [Fact]
     public async Task Nested_work_gets_in_while_a_build_waits_to_end()
     {
-        var outer = StringCacheGate.Enter();
+        using var outer = StringCacheGate.Enter();
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var exclusive = Task.Run(() => StringCacheGate.Exclusive(ended.SetResult), Token);
-        await Task.Delay(100, Token);
+        await UntilAnEndOfBuildWaitsAsync();
 
-        var inner = await Task.Run(StringCacheGate.Enter, Token).WaitAsync(s_wait, Token);
+        using var inner = await Task.Run(StringCacheGate.Enter, Token).WaitAsync(s_wait, Token);
         Assert.Equal(2, StringCacheGate.SharedCount);
         inner.Dispose();
         inner.Dispose(); // leaves once

@@ -58,6 +58,7 @@ public sealed class DebugService : IAsyncDisposable
     private long _resumedAt;
     private IDebugAdapter? _adapter;
     private bool _attached;
+    private volatile bool _stopRequested;
     private int _exitCode;
     private CancellationTokenSource _session = new();
 
@@ -144,6 +145,15 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Whether the session attached to a running process (Stop detaches instead of terminating).</summary>
     public bool IsAttached => _attached;
+
+    /// <summary>
+    /// Whether the session's end was asked for (Stop, Detach All), and not the program's or the debugger's: read in the
+    /// <see cref="Ended"/> handler (#75 tells a Stop from <c>dotnet watch</c> restarting the server).
+    /// </summary>
+    public bool StopRequested => _stopRequested;
+
+    /// <summary>Completes when the current session has ended (at once when there is none).</summary>
+    public Task Completion => _ended.Task;
 
     /// <summary>Starts programs in the integrated terminal (M14c); without it, launches use the Debug Console.</summary>
     public ITerminalLauncher? Terminal { get; set; }
@@ -258,7 +268,7 @@ public sealed class DebugService : IAsyncDisposable
     /// distribution runs under netcoredbg there. Throws when the first program can't start; a later one that can't
     /// is reported in the Debug Console and the others go on.
     /// </summary>
-    /// <param name="compound">A compound session even for one program, so programs can join it later (<see cref="AddLaunchAsync"/>, M17b).</param>
+    /// <param name="compound">A compound session even for one program, so programs can join it later (<see cref="AddLaunch"/>, M17b).</param>
     public async Task LaunchAsync(IReadOnlyList<DebugLaunch> launches, CancellationToken cancellationToken, bool compound = false)
     {
         if (launches.Count == 0)
@@ -321,11 +331,15 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Adds a program to the running multi-program session (an Aspire AppHost's projects, M17b, ADR 0043) and returns
-    /// its index in <see cref="Processes"/>, where its process id and exit appear. Throws when no such session runs or
-    /// the program can't start.
+    /// Adds a program to the running multi-program session (an Aspire AppHost's projects, M17b, ADR 0043). Returns at
+    /// once with its index in <see cref="Processes"/>, where its process id and exit appear, and <c>Joined</c>, which
+    /// completes once the program joined (true) or couldn't start (false: it is marked ended, and the Debug Console says
+    /// why). The start isn't waited for: netcoredbg's, made again when it times out, can take minutes on a loaded
+    /// machine, and the AppHost's orchestrator gives the IDE 120 seconds to answer its request for the program
+    /// (<c>DCP_IDE_REQUEST_TIMEOUT_SECONDS</c>); past them it gave up on the project, which never ran in its eyes
+    /// (the Aspire F5 test on Windows CI). Throws when no such session runs or it is full.
     /// </summary>
-    public async Task<int> AddLaunchAsync(DebugLaunch launch, CancellationToken cancellationToken)
+    public (int Index, Task<bool> Joined) AddLaunch(DebugLaunch launch, CancellationToken cancellationToken)
     {
         if (_adapter is not CompoundDebugAdapter { Independent: true } session)
         {
@@ -345,18 +359,25 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         ProcessesChanged?.Invoke(this, EventArgs.Empty);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        var token = _session.Token;
+        return (part.Index, Task.Run(() => JoinAddedAsync(session, part, token, cancellationToken), CancellationToken.None));
+    }
+
+    /// <summary>An added program's start (<see cref="AddLaunch"/>): false, with the program ended, when it fails.</summary>
+    private async Task<bool> JoinAddedAsync(CompoundDebugAdapter session, LaunchPart part, CancellationToken sessionToken, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, sessionToken);
         try
         {
             await JoinAsync(session, part, linked.Token).ConfigureAwait(false);
+            return true;
         }
-        catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or OperationCanceledException)
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException or OperationCanceledException)
         {
             UpdateProcess(part.Index, p => p with { Ended = true });
-            throw new InvalidOperationException($"{part.Name} could not start: {ex.Message}", ex);
+            Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] Could not start: {ex.Message}\n"));
+            return false;
         }
-
-        return part.Index;
     }
 
     /// <summary>
@@ -380,7 +401,10 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     private async Task JoinAsync(CompoundDebugAdapter session, LaunchPart part, CancellationToken cancellationToken)
     {
-        await session.AddAsync(part.Name, part.CreateAsync, part.StartAsync, (adapter, ex, attempt) => StartPartAgainAsync(part, adapter, ex, attempt, cancellationToken), cancellationToken).ConfigureAwait(false);
+        // Under its index in Processes: the session reports its process and exit by it (PartChanged). The session's own
+        // numbering follows the order the adapters started, which isn't the order of Processes when programs are added
+        // at once and the later one's netcoredbg starts first, or when an earlier one's netcoredbg didn't start.
+        await session.AddAsync(part.Name, part.CreateAsync, part.StartAsync, (adapter, ex, attempt) => StartPartAgainAsync(part, adapter, ex, attempt, cancellationToken), part.Index, cancellationToken).ConfigureAwait(false);
         if (part.ConfiguredAsync is { } configured)
         {
             await configured().ConfigureAwait(false);
@@ -503,7 +527,7 @@ public sealed class DebugService : IAsyncDisposable
             adapter => ((DebugAdapter)adapter).LaunchAsync(Arguments(launch.Plan), cancellationToken));
     }
 
-    /// <summary>A program of an independent compound session started or ended.</summary>
+    /// <summary>A program of an independent compound session started or ended: its index is its place in <see cref="Processes"/> (<see cref="JoinAsync"/>).</summary>
     private void OnPartChanged(object? sender, CompoundPartEvent e)
     {
         UpdateProcess(e.Index, p => e.Ended ? p with { Ended = true, ExitCode = e.ExitCode } : p with { Id = e.ProcessId ?? p.Id });
@@ -567,6 +591,64 @@ public sealed class DebugService : IAsyncDisposable
             attached: false,
             [new DebugProcess(ProgramName(plan), null, DebugProcess.Launched, null)],
             cancellationToken);
+
+    /// <summary>
+    /// Attaches to <paramref name="processId"/>, a Blazor Web App's server that <c>dotnet watch</c> started (#75), as the
+    /// first adapter of a compound session its page joins (<see cref="AddBrowserAsync"/>). The session owns the server as
+    /// a launch does: Stop ends it and Restart is allowed (not <see cref="IsAttached"/>). Its start fails as an attach
+    /// does: it detaches, never ends the server, and starts again only while the server runs.
+    /// </summary>
+    public async Task AttachOwnedCompoundAsync(int processId, string name, LaunchPlan plan, CancellationToken cancellationToken)
+    {
+        await StartAsync(
+            async ct => new CompoundDebugAdapter(await (plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
+            adapter => ((DebugAdapter)adapter.Primary).AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
+            attached: true,
+            [new DebugProcess(name, processId, DebugProcess.Launched, null)],
+            cancellationToken,
+            owned: true).ConfigureAwait(false);
+        OnProcess(processId);
+    }
+
+    /// <summary>
+    /// Leaves the server of an owned compound session (<see cref="AttachOwnedCompoundAsync"/>) running and ends the session:
+    /// the page's browser closes. <c>dotnet watch</c> is about to restart the server for an edit, and a server held by the
+    /// debugger would outlive the restart on Linux and macOS, keeping its port (#75). Completes when the session ended.
+    /// </summary>
+    public async Task ReleaseOwnedServerAsync()
+    {
+        if (_adapter is not CompoundDebugAdapter compound)
+        {
+            await _ended.Task.ConfigureAwait(false);
+            return;
+        }
+
+        await PrepareDetachAsync(compound).ConfigureAwait(false);
+        await compound.DetachPrimaryAsync(CancellationToken.None).ConfigureAwait(false);
+        await EndAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Keeps <paramref name="paths"/>' breakpoints out of a compound session's server (#75: the server runs the code it
+    /// started with); they still bind in the page, or show <paramref name="reason"/>. Until the session ends.
+    /// </summary>
+    public async Task ExcludeFromServerAsync(IReadOnlyList<string> paths, string reason)
+    {
+        if (_adapter is not CompoundDebugAdapter compound)
+        {
+            return;
+        }
+
+        foreach (var path in paths)
+        {
+            compound.ExcludeFromPart(0, path, reason);
+        }
+
+        foreach (var path in paths.Where(p => Breakpoints.Files.Contains(p, StringComparer.OrdinalIgnoreCase)))
+        {
+            await SyncBreakpointsAsync(path).ConfigureAwait(false);
+        }
+    }
 
     /// <summary>Whether the session is a compound one that a browser can join.</summary>
     public bool IsCompound => _adapter is CompoundDebugAdapter;
@@ -727,7 +809,8 @@ public sealed class DebugService : IAsyncDisposable
         bool attached,
         IReadOnlyList<DebugProcess> processes,
         CancellationToken cancellationToken,
-        Func<Task>? configured = null)
+        Func<Task>? configured = null,
+        bool owned = false)
         where TAdapter : class, IDebugAdapter
     {
         if (IsActive)
@@ -746,7 +829,8 @@ public sealed class DebugService : IAsyncDisposable
         SetState(DebugState.Starting);
         _session = new CancellationTokenSource();
         _ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _attached = attached;
+        _attached = attached && !owned;
+        _stopRequested = false;
         _exitCode = 0;
         ProcessId = null;
         _process = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -993,6 +1077,7 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>Ends the session: terminates a launched program, detaches from an attached one.</summary>
     public async Task StopAsync()
     {
+        _stopRequested = true;
         if (_adapter is not { } adapter)
         {
             // Ending already (the adapter reported it terminated): done when that is.
@@ -1092,6 +1177,7 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public async Task DetachAsync()
     {
+        _stopRequested = true;
         if (_adapter is not { } adapter || !CanDetach)
         {
             await StopAsync().ConfigureAwait(false);
@@ -1301,6 +1387,52 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     private string[] ModulePaths() => [.. Modules.Select(m => m.Path).OfType<string>()];
+
+    /// <summary>The values seen at the last stop, by evaluate name: what changed since is drawn in red (D44).</summary>
+    public StopValues Values { get; } = new();
+
+    /// <summary>Whether the adapter changes values (setVariable): the Mono engine doesn't.</summary>
+    public bool CanSetValues => _adapter?.Capabilities.SupportsSetVariable ?? false;
+
+    /// <summary>
+    /// Whether a module (a path) is one of the solution's projects' outputs: the data tip lists the non-public members its
+    /// code declares inline, and a library's under Non-Public members (D44). The shell sets it; netcoredbg sends no
+    /// <c>isUserCode</c>, the .NET Framework engine does, and that wins.
+    /// </summary>
+    public Func<string?, bool> IsUserModule { get; set; } = _ => false;
+
+    /// <summary>Whether <paramref name="path"/> is the solution's own code: the adapter's word for the module, else <see cref="IsUserModule"/>.</summary>
+    public bool IsUserCode(string? path)
+    {
+        if (path is null)
+        {
+            return false;
+        }
+
+        var module = Modules.FirstOrDefault(m => m.Path is { } p && SolutionService.PathComparer.Equals(p, path));
+        return module?.IsUserCode ?? IsUserModule(path);
+    }
+
+    /// <summary>
+    /// The member list of <paramref name="type"/> and its base types from the companion host (D44), or null without it
+    /// (no companion, or a remote program whose modules aren't here).
+    /// </summary>
+    public async Task<IReadOnlyList<Codalus.Debugging.Companion.TypeMember>?> MembersAsync(string type, CancellationToken cancellationToken)
+    {
+        if (Displays is not { } displays || State != DebugState.Stopped || string.IsNullOrEmpty(type))
+        {
+            return null;
+        }
+
+        try
+        {
+            return (await displays.TypeInfoAsync(type, ModulePaths(), cancellationToken).ConfigureAwait(false))?.Members;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Evaluates in the selected frame. <paramref name="context"/>: <c>watch</c>, <c>repl</c> or <c>hover</c>.</summary>
     public async Task<EvaluateResponse> EvaluateAsync(string expression, string context, CancellationToken cancellationToken = default)
@@ -1687,6 +1819,7 @@ public sealed class DebugService : IAsyncDisposable
             SelectedFrame = frames.FirstOrDefault(f => f.Source?.Path is not null) ?? (frames.Length > 0 ? frames[0] : null);
             var info = new StopInfo(stopped.Reason, threadId, stopped.Description ?? stopped.Text, exception, elapsed);
             CurrentStop = info;
+            Values.NextStop();
             SetState(DebugState.Stopped);
             Stopped?.Invoke(this, info);
             RefreshPinnedTips();
@@ -1940,6 +2073,7 @@ public sealed class DebugService : IAsyncDisposable
         else if (state == DebugState.Idle)
         {
             Displays?.SessionEnded();
+            Values.Clear();
         }
 
         State = state;

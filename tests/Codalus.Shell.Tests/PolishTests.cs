@@ -88,6 +88,39 @@ public partial class PolishTests
     [GeneratedRegex("x:Key=\"([^\"]+)\"")]
     private static partial Regex KeyPattern();
 
+    /// <summary>
+    /// The diff document's fills (#86, D45) hold the editor's syntax colors at 3:1 or more in every theme: the colors the
+    /// design measured (keywords, control keywords, types, interfaces, methods, parameters, strings, numbers and
+    /// comments), each that meets AA on the editor's own background (the others are the editor palette's to fix).
+    /// </summary>
+    [AvaloniaFact]
+    public void The_diff_fills_keep_the_syntax_colors_readable()
+    {
+        string[] syntax = ["keyword", "controlKeyword", "class", "interface", "method", "parameter", "string", "number", "comment"];
+        string[] fills = ["Shell.Diff.Added.Line", "Shell.Diff.Removed.Line", "Shell.Diff.Added.Word", "Shell.Diff.Removed.Word"];
+        var failures = new List<string>();
+        foreach (var (id, variant) in ThemeService.Themes)
+        {
+            var theme = Editor.EditorTheme.For(id);
+            var background = Color("Shell.Editor.Background", variant);
+            foreach (var fill in fills)
+            {
+                var under = Color(fill, variant);
+                Assert.Equal(255, under.A); // opaque, so the code on it can be measured
+                foreach (var type in syntax)
+                {
+                    var color = Avalonia.Media.Color.FromUInt32(theme.TokenColor(type)!.Value);
+                    if (Contrast(color, background) >= 4.5 && Contrast(color, under) < 3)
+                    {
+                        failures.Add($"{ThemeService.Title(id)}: {type} {color} on {fill} {under} is {Contrast(color, under):0.00}:1");
+                    }
+                }
+            }
+        }
+
+        Assert.Empty(failures);
+    }
+
     // ------------------------------------------------------------------ clipped text
 
     /// <summary>In Classic and in each theme family (M45), whose shapes change sizes: one variant each, the sizes are the family's.</summary>
@@ -144,7 +177,8 @@ public partial class PolishTests
         var rootRect = new Rect(root.Bounds.Size);
         foreach (var text in root.GetVisualDescendants().OfType<TextBlock>())
         {
-            var content = text.Text ?? text.Inlines?.Text;
+            // An access key's text (a button's "_Next") draws without its underscore.
+            var content = text is Avalonia.Controls.Primitives.AccessText ? WithoutAccessKey(text.Text) : text.Text ?? text.Inlines?.Text;
             if (!text.IsEffectivelyVisible || string.IsNullOrWhiteSpace(content) || text.Bounds.Width < 1 || text.Bounds.Height < 1
                 || text.TextWrapping != TextWrapping.NoWrap || text.FindAncestorOfType<TextBox>() is not null || InThemePreview(text))
             {
@@ -205,6 +239,36 @@ public partial class PolishTests
                 yield return $"\"{label}\" is trimmed without a tooltip ({Describe(text, root)})";
             }
         }
+    }
+
+    /// <summary>An access key's text as drawn: its first single underscore gone, a doubled one a literal underscore.</summary>
+    private static string? WithoutAccessKey(string? text)
+    {
+        if (text is null)
+        {
+            return null;
+        }
+
+        var drawn = new System.Text.StringBuilder(text.Length);
+        var marked = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '_' && i + 1 < text.Length && text[i + 1] == '_')
+            {
+                drawn.Append('_');
+                i++;
+            }
+            else if (text[i] == '_' && !marked)
+            {
+                marked = true;
+            }
+            else
+            {
+                drawn.Append(text[i]);
+            }
+        }
+
+        return drawn.ToString();
     }
 
     /// <summary>Whether the text is on a toolbar item that moved into the toolbar's overflow menu.</summary>
@@ -428,6 +492,10 @@ public partial class PolishTests
         Assert.Equal([true, true, false, true, false], DocumentTabPanel.Shown([(100, true), (100, false), (100, false), (100, true), (100, false)], 300));
         // Kept tabs stay even when they alone don't fit.
         Assert.Equal([true, true, false], DocumentTabPanel.Shown([(200, true), (200, true), (100, false)], 300));
+        // Kept tabs wider than the group together: the last one ends at the edge (CI's fonts made two long names 600 of 592).
+        Assert.Equal(300, DocumentTabPanel.Fitted(300, 0, 592));
+        Assert.Equal(292, DocumentTabPanel.Fitted(300, 300, 592));
+        Assert.Equal(0, DocumentTabPanel.Fitted(300, 600, 592));
     }
 
     [AvaloniaFact]

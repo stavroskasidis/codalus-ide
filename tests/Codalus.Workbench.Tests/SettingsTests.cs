@@ -135,6 +135,32 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Removing_a_value_equal_to_the_default_reports_the_layer_change()
+    {
+        File.WriteAllText(UserFile, """{ "telemetry.enabled": false }""");
+        using var settings = new SettingsService(UserFile);
+        settings.Register(Schema());
+        var changed = new List<string>();
+        var layers = new List<string>();
+        settings.Changed += (_, e) => changed.AddRange(e.Keys);
+        settings.LayersChanged += (_, e) => layers.AddRange(e.Keys);
+        Assert.NotNull(settings.GetLayerValue("telemetry.enabled", SettingScope.User));
+
+        // Reset: the entry goes, the effective value (the default, false) stays.
+        await settings.SetAsync("telemetry.enabled", (JsonElement?)null, SettingScope.User, TestContext.Current.CancellationToken);
+
+        Assert.Null(settings.GetLayerValue("telemetry.enabled", SettingScope.User));
+        Assert.Empty(changed);
+        Assert.Equal(["telemetry.enabled"], layers);
+
+        // A value that changes the effective one is a Changed key, not a layer-only one.
+        layers.Clear();
+        await settings.SetAsync("telemetry.enabled", true, SettingScope.User, TestContext.Current.CancellationToken);
+        Assert.Equal(["telemetry.enabled"], changed);
+        Assert.Empty(layers);
+    }
+
+    [Fact]
     public async Task Registering_settings_is_reported_apart_from_value_changes()
     {
         using var settings = new SettingsService(UserFile);
@@ -206,6 +232,42 @@ public sealed class SettingsServiceTests : IDisposable
 
         Assert.Equal(18, settings.GetInt32("editor.fontSize"));
     }
+
+    [Fact]
+    public async Task Writing_one_member_of_an_object_setting_keeps_the_others_and_the_comments_inside_it()
+    {
+        File.WriteAllText(UserFile, """
+            {
+              // my agents
+              "ai.agents": {
+                // mine, by hand
+                "mine": { "command": "my-agent", "args": ["--acp"] },
+                "old": { "command": "old-agent" }
+              },
+              "editor.fontSize": 14
+            }
+            """);
+        using var settings = new SettingsService(UserFile, null);
+        settings.Register([SettingDescriptor.Create("ai.agents", "{}", SettingType.Object, ContributionSource.Shell) with { Scope = SettingScope.User }, .. Schema()]);
+
+        using (var claude = JsonDocument.Parse("""{ "command": "npx", "args": ["-y", "a@1.0.0"] }"""))
+        {
+            await settings.SetMemberAsync("ai.agents", "claude", claude.RootElement.Clone(), SettingScope.User, CancellationToken.None);
+        }
+
+        await settings.SetMemberAsync("ai.agents", "old", null, SettingScope.User, CancellationToken.None);
+        var text = File.ReadAllText(UserFile);
+        Assert.Contains("// my agents", text, StringComparison.Ordinal);
+        Assert.Contains("// mine, by hand", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("old-agent", text, StringComparison.Ordinal);
+        Assert.Equal(["mine", "claude"], settings.GetLayerValue("ai.agents", SettingScope.User)!.Value.EnumerateObject().Select(p => p.Name));
+        Assert.Equal(14, settings.GetInt32("editor.fontSize"));
+
+        // An invalid whole value is refused, and nothing is written.
+        var before = File.ReadAllText(UserFile);
+        await Assert.ThrowsAsync<ArgumentException>(() => settings.SetMemberAsync("editor.fontSize", "x", JsonElement.Parse("1"), SettingScope.User, CancellationToken.None));
+        Assert.Equal(before, File.ReadAllText(UserFile));
+    }
 }
 
 public class JsoncEditorTests
@@ -245,5 +307,31 @@ public class JsoncEditorTests
     {
         const string Text = "{ \"a\": \"{,}//\", \"b\": { \"x\": [\"]\"] } }";
         Assert.Equal("{ \"a\": \"{,}//\", \"b\": 5 }", JsoncEditor.SetProperty(Text, "b", "5"));
+    }
+
+    [Fact]
+    public void Sets_one_member_of_an_object_and_leaves_the_rest_of_it_alone()
+    {
+        const string Text = "{\n  // agents\n  \"ai.agents\": {\n    // mine\n    \"mine\": { \"command\": \"x\" }, // kept\n    \"b\": 1\n  },\n  \"z\": 0\n}";
+        Assert.Equal(
+            "{\n  // agents\n  \"ai.agents\": {\n    // mine\n    \"mine\": { \"command\": \"x\" }, // kept\n    \"b\": 1,\n    \"claude\": {\"command\":\"npx\"}\n  },\n  \"z\": 0\n}",
+            JsoncEditor.SetMember(Text, "ai.agents", "claude", "{\"command\":\"npx\"}"));
+        Assert.Equal(
+            "{\n  // agents\n  \"ai.agents\": {\n    // mine\n    \"mine\": { \"command\": \"x\" }, // kept\n    \"b\": 2\n  },\n  \"z\": 0\n}",
+            JsoncEditor.SetMember(Text, "ai.agents", "b", "2"));
+        Assert.Equal(
+            "{\n  // agents\n  \"ai.agents\": {\n    // mine\n    \"mine\": { \"command\": \"x\" } // kept\n  },\n  \"z\": 0\n}",
+            JsoncEditor.SetMember(Text, "ai.agents", "b", null));
+        Assert.Equal(Text, JsoncEditor.SetMember(Text, "ai.agents", "missing", null));
+    }
+
+    [Fact]
+    public void A_member_of_a_missing_empty_or_non_object_setting()
+    {
+        Assert.Equal("{\n    \"ai.agents\": { \"a\": 1 }\n}\n", JsoncEditor.SetMember("", "ai.agents", "a", "1"));
+        Assert.Equal("{\n  \"z\": 0,\n    \"ai.agents\": { \"a\": 1 }\n}", JsoncEditor.SetMember("{\n  \"z\": 0\n}", "ai.agents", "a", "1"));
+        Assert.Equal("{\n    \"ai.agents\": {\n        \"a\": 1\n    }\n}", JsoncEditor.SetMember("{\n    \"ai.agents\": {}\n}", "ai.agents", "a", "1"));
+        Assert.Equal("{ \"ai.agents\": { \"a\": 1 } }", JsoncEditor.SetMember("{ \"ai.agents\": [1] }", "ai.agents", "a", "1")); // not an object: replaced
+        Assert.Equal("{ \"z\": 0 }", JsoncEditor.SetMember("{ \"z\": 0 }", "ai.agents", "a", null));
     }
 }

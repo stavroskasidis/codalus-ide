@@ -25,7 +25,8 @@ if (args.Contains("--program"))
 
 if (args.Contains("--dap") || args.Contains("--interpreter=vscode"))
 {
-    await Codalus.LspConformance.Server.ScriptedDap.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput());
+    var initializeAfter = Array.IndexOf(args, "--initialize-after") is var at and >= 0 && at + 1 < args.Length ? args[at + 1] : null;
+    await Codalus.LspConformance.Server.ScriptedDap.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput(), initializeAfter);
     return;
 }
 

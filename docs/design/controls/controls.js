@@ -29,7 +29,7 @@
       capActive: '#FFF29D', capActiveFg: '#1E1E1E', capInactive: '#4D6082', capInactiveFg: '#FFFFFF',
       tabs: '#4D6082', tabsFg: '#FFFFFF', tabOn: '#F5F5F5', tabOnFg: '#1E1E1E', tabIndicator: '#F5CC84',
       header: '#EAEDF5', rule: '#E2E6F0',
-      editor: '#FFFFFF', editorFg: '#1E1E1E', lineNo: '#6E7681', curLine: '#F0F0F0',
+      editor: '#FFFFFF', editorFg: '#1E1E1E', lineNo: '#727272', curLine: '#F0F0F0',
       chipOk: '#E3F2E6', chipOkFg: '#116329', chipErr: '#FBE7E3', chipErrFg: '#9A220B', chipWarn: '#FFF2CC', chipWarnFg: '#6E4B00', chipInfo: '#E1ECF8', chipInfoFg: '#0054A0',
       badge: '#DDE2EF', badgeFg: '#1E1E1E', dlgFooter: '#EEF0F6', userBubble: '#DCE6F6', userBubbleFg: '#1E1E1E', codeHeader: '#EEF0F6',
       titleBar: '#CCD5F0', titleBarFg: '#1E1E1E',
@@ -54,7 +54,7 @@
       capActive: '#007ACC', capActiveFg: '#FFFFFF', capInactive: '#EEEEF2', capInactiveFg: '#3C3C3C',
       tabs: '#EEEEF2', tabsFg: '#1E1E1E', tabOn: '#F5F5F5', tabOnFg: '#0E5A9C', tabIndicator: '#007ACC',
       header: '#F0F0F3', rule: '#EBEBEF',
-      editor: '#FFFFFF', editorFg: '#1E1E1E', lineNo: '#6E7681', curLine: '#F0F0F0',
+      editor: '#FFFFFF', editorFg: '#1E1E1E', lineNo: '#727272', curLine: '#F0F0F0',
       chipOk: '#E3F2E6', chipOkFg: '#116329', chipErr: '#FBE7E3', chipErrFg: '#9A220B', chipWarn: '#FFF2CC', chipWarnFg: '#6E4B00', chipInfo: '#E1EEF9', chipInfoFg: '#005A9E',
       badge: '#E4E6EE', badgeFg: '#1E1E1E', dlgFooter: '#F2F2F5', userBubble: '#E1EEF9', userBubbleFg: '#1E1E1E', codeHeader: '#F2F2F5',
       titleBar: '#EEEEF2', titleBarFg: '#1E1E1E',
@@ -79,12 +79,12 @@
       capActive: '#007ACC', capActiveFg: '#FFFFFF', capInactive: '#252526', capInactiveFg: '#D0D0D0',
       tabs: '#1F1F1F', tabsFg: '#D0D0D0', tabOn: '#252526', tabOnFg: '#4DAAFC', tabIndicator: '#3794FF',
       header: '#2A2A2C', rule: '#2E2E31',
-      editor: '#1E1E1E', editorFg: '#DCDCDC', lineNo: '#2B91AF', curLine: '#2E2E2E',
+      editor: '#1E1E1E', editorFg: '#DCDCDC', lineNo: '#8A8A8A', curLine: '#272727',
       chipOk: '#1F3A28', chipOkFg: '#8FDBA8', chipErr: '#4A2420', chipErrFg: '#F8A08F', chipWarn: '#3D3412', chipWarnFg: '#E5C24A', chipInfo: '#1B3550', chipInfoFg: '#8CC8FF',
       badge: '#3F3F46', badgeFg: '#F1F1F1', dlgFooter: '#2A2A2C', userBubble: '#1E3A5C', userBubbleFg: '#F1F1F1', codeHeader: '#2A2A2C',
       titleBar: '#1F1F1F', titleBarFg: '#F1F1F1',
       icBlue: '#75BEFF', icGreen: '#89D185', icRed: '#F48771', icOrange: '#E8AB53', icPurple: '#B180D7', icYellow: '#FFCC00', icFolder: '#DCB67A', icOutline: '#C5C5C5',
-      kw: '#569CD6', ty: '#4EC9B0', fn: '#DCDCAA', st: '#D69D85', nu: '#B5CEA8', cm: '#6A9955', pu: '#DCDCDC'
+      kw: '#569CD6', ty: '#4EC9B0', fn: '#DCDCAA', st: '#D69D85', nu: '#B5CEA8', cm: '#57A64A', pu: '#DCDCDC'
     },
     'Classic High Contrast': {
       family: 'Classic', kind: 'hc', radius: 2,
@@ -360,7 +360,15 @@
     'cs-file': `<path d="M3.6 1.6h6l3 3v9.8H3.6z" fill="none" stroke="var(--ic-outline)"/><rect x="0.8" y="8.2" width="9" height="6.6" rx="1" fill="var(--ic-green)"/><text x="5.3" y="13.3" text-anchor="middle" font-size="5.4" font-weight="700" font-family="Inter, sans-serif" fill="var(--badge-mark, #FFFFFF)">C#</text>`,
     'json-file': `<path d="M3.6 1.6h6l3 3v9.8H3.6z" fill="none" stroke="var(--ic-outline)"/><rect x="0.8" y="8.2" width="9" height="6.6" rx="1" fill="var(--ic-yellow)"/><text x="5.3" y="13.3" text-anchor="middle" font-size="5.4" font-weight="700" font-family="Inter, sans-serif" fill="var(--badge-mark, #FFFFFF)">{}</text>`,
     method: `<g ${S}><path d="M8 2.2 13 5v6L8 13.8 3 11V5z" fill="var(--ic2, none)"/><path d="m3 5 5 2.8L13 5M8 7.8v6"/></g>`,
-    plug: `<g ${S}><path d="M5.6 1.8v3M10.4 1.8v3M3.6 4.8h8.8v2.4a4.4 4.4 0 0 1-8.8 0zM8 11.6v2.6"/></g>`
+    plug: `<g ${S}><path d="M5.6 1.8v3M10.4 1.8v3M3.6 4.8h8.8v2.4a4.4 4.4 0 0 1-8.8 0zM8 11.6v2.6"/></g>`,
+    // New Project's template kinds (NewProject.dc.html): library, desktop, mobile, service, cloud, generic.
+    library: `<g ${S}><path d="M2.4 2.6h2.8v10.8H2.4zM6.4 2.6h2.8v10.8H6.4z"/><path d="m10.2 3.5 2.6-.7 2.8 10.3-2.6.7z"/></g>`,
+    desktop: `<g ${S}><rect x="1.6" y="2.4" width="12.8" height="8.8" rx="1.4"/><path d="M5.8 13.8h4.4M8 11.2v2.6"/></g>`,
+    phone: `<g ${S}><rect x="4.2" y="1.6" width="7.6" height="12.8" rx="1.6"/><path d="M7.1 12.2h1.8"/></g>`,
+    server: `<g ${S}><rect x="2.2" y="2.2" width="11.6" height="4.8" rx="1"/><rect x="2.2" y="9" width="11.6" height="4.8" rx="1"/><path d="M4.6 4.6h.1M4.6 11.4h.1M7 4.6h4.4M7 11.4h4.4"/></g>`,
+    cloud: `<path ${S} d="M4.6 12.6a3 3 0 0 1-.2-6 3.9 3.9 0 0 1 7.6-.8 2.9 2.9 0 0 1 .3 5.8z"/>`,
+    apps: `<g ${S}><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></g>`,
+    maximize: `<rect ${S} x="3.4" y="3.4" width="9.2" height="9.2" rx="1"/>`
   };
 
   function sprite() {

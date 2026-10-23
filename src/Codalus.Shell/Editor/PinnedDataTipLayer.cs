@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
@@ -16,9 +17,10 @@ using Codalus.Workbench.Debugging;
 namespace Codalus.Shell.Editor;
 
 /// <summary>
-/// Pinned data tips (M14b): each one floats over the code to the right of its line, shows the expression's value at
-/// the last pause (in red when it changed, muted when the program isn't paused), and keeps a comment. Double-click for
-/// QuickWatch; the menu edits the comment, copies, adds a watch or unpins. With <c>relocate</c>, tips follow edits.
+/// Pinned data tips (M14b, D44): each one floats over the code to the right of its line as the data tip's header, shows
+/// the expression's value at the last pause (in red when it changed, muted when the program isn't paused), expands into
+/// the data tip's cascade while it's paused, and keeps a comment. Double-click its name for QuickWatch; the menu edits
+/// the comment, copies, adds a watch or unpins. With <c>relocate</c>, tips follow edits.
 /// </summary>
 public sealed class PinnedDataTipLayer : Canvas
 {
@@ -40,7 +42,12 @@ public sealed class PinnedDataTipLayer : Canvas
         ClipToBounds = true;
         Background = null;
         editor.TextArea.TextView.VisualLinesChanged += (_, _) => Arrange();
-        editor.TextArea.TextView.ScrollOffsetChanged += (_, _) => Arrange();
+        editor.TextArea.TextView.ScrollOffsetChanged += (_, _) =>
+        {
+            CloseCascades();
+            Arrange();
+        };
+        editor.TextArea.TextView.PointerPressed += (_, _) => CloseCascades();
         editor.DocumentChanged += (_, _) => Rebuild();
     }
 
@@ -104,6 +111,8 @@ public sealed class PinnedDataTipLayer : Canvas
     /// <summary>Builds a control per pinned line, then places them.</summary>
     public void Rebuild()
     {
+        CloseCascades();
+        _cascades.Clear();
         Children.Clear();
         _byLine.Clear();
         var tips = _attached ? Store.For(_path()) : [];
@@ -145,91 +154,128 @@ public sealed class PinnedDataTipLayer : Canvas
         }
     }
 
-    private Border Build(IReadOnlyList<PinnedDataTip> tips)
+    /// <summary>The open tips' cascades (tests).</summary>
+    internal IReadOnlyList<DataTipCascade> Cascades => [.. _cascades];
+
+    private readonly List<DataTipCascade> _cascades = [];
+
+    /// <summary>Closes every pinned tip's child tips (a click in the text, a rebuild).</summary>
+    public void CloseCascades()
     {
-        var stopped = _services.Debugger.State == DebugState.Stopped;
+        foreach (var cascade in _cascades)
+        {
+            cascade.CloseFrom(0);
+        }
+    }
+
+    /// <summary>
+    /// A line's pinned tips, stacked (A16): each the data tip's header with a strip to unpin it (A15), its comment under
+    /// it; while the program is stopped it expands into the same cascade as the hover's, and its value is red when it
+    /// changed at the last pause; while it runs, the last value is muted and nothing expands.
+    /// </summary>
+    private StackPanel Build(IReadOnlyList<PinnedDataTip> tips)
+    {
+        var debugger = _services.Debugger;
+        var stopped = debugger.State == DebugState.Stopped;
         var panel = new StackPanel { Spacing = 1 };
         foreach (var tip in tips)
         {
-            var value = new TextBlock
+            var model = new ViewModels.DataTipViewModel(debugger, tip.Expression, new Codalus.Debugging.EvaluateResponse(tip.Value ?? "…", tip.IsError ? null : tip.Type, stopped && !tip.IsError ? tip.VariablesReference : 0), IconOf(tip.Expression))
             {
-                Text = tip.Value ?? "…",
-                FontFamily = _editor.FontFamily,
-                MaxWidth = 480,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            ToolTip.SetTip(value, tip.Value);
-            if (tip.Changed && stopped)
-            {
-                value.Bind(TextBlock.ForegroundProperty, value.GetResourceObservable("Shell.Error.Foreground"));
-            }
-            else if (tip.IsError || !stopped)
-            {
-                value.Classes.Add("muted");
-            }
-
-            var unpin = new Button { Classes = { "toolbar" }, Padding = new Thickness(1), Content = new Icon { Kind = "close", Width = 12, Height = 12 }, VerticalAlignment = VerticalAlignment.Center };
-            unpin.Click += (_, _) => Store.Unpin(tip);
-            AutomationProperties.SetName(unpin, "Unpin " + tip.Expression);
-            ToolTip.SetTip(unpin, "Unpin");
-            var row = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 6,
-                Background = Brushes.Transparent,
-                Children =
+                PinExpression = (expression, value) =>
                 {
-                    new Icon { Kind = "pin", Width = 12, Height = 12, VerticalAlignment = VerticalAlignment.Center },
-                    new TextBlock { Text = tip.Expression, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center },
-                    value,
-                    unpin,
+                    Store.Pin(tip.Path, tip.Line, expression, value);
+                    _ = Store.RefreshAsync((e, token) => debugger.EvaluateAsync(e, "watch", token));
                 },
             };
-            row.DoubleTapped += (_, e) =>
+            model.Root.IsChanged = tip.Changed && stopped;
+            DataTipCascade? cascade = null;
+            cascade = new DataTipCascade(_editor.TextArea.TextView, this, model.Root, new DataTipActions
             {
-                e.Handled = true;
-                _services.ShowQuickWatch(tip.Expression);
-            };
-            row.ContextMenu = Menu(tip, row);
-            AutomationProperties.SetName(row, $"{tip.Expression} = {tip.Value}{(tip.Comment is null ? string.Empty : ", " + tip.Comment)}");
-            panel.Children.Add(row);
+                Wheel = e =>
+                {
+                    cascade?.CloseFrom(0);
+                    if (_editor.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault() is { } scroll)
+                    {
+                        scroll.Offset = new Vector(scroll.Offset.X, Math.Max(0, scroll.Offset.Y - (e.Delta.Y * 3 * _editor.TextArea.TextView.DefaultLineHeight)));
+                    }
+                },
+                NameGesture = (_, doubleClick) =>
+                {
+                    if (doubleClick)
+                    {
+                        _services.ShowQuickWatch(tip.Expression);
+                    }
+                },
+                FadedMove = (_, _) => { },
+                FadedPress = (_, _) => { },
+                SetValue = async (node, value) =>
+                {
+                    var error = await model.SetValueAsync(node, value).ConfigureAwait(true);
+                    if (error is null)
+                    {
+                        _ = Store.RefreshAsync((expression, token) => debugger.EvaluateAsync(expression, "watch", token));
+                    }
+
+                    return error;
+                },
+                ReadOnlyReason = node => stopped ? model.ReadOnlyReason(node) : string.Empty,
+                Pin = node => ReferenceEquals(node, model.Root) ? null : model.PinAction(node),
+                Close = () => cascade?.CloseFrom(0),
+                Menu = (node, _) => ReferenceEquals(node, model.Root) ? MenuItems(tip, cascade!.Header) : null,
+                Unpin = () => Store.Unpin(tip),
+                Muted = !stopped,
+            });
+            _cascades.Add(cascade);
+            var header = cascade.Header;
+            header.HorizontalAlignment = HorizontalAlignment.Left;
+            AutomationProperties.SetName(header, $"{tip.Expression} = {tip.Value}{(tip.Comment is null ? string.Empty : ", " + tip.Comment)}");
+            panel.Children.Add(header);
             if (tip.Comment is { } comment)
             {
-                panel.Children.Add(new TextBlock
+                panel.Children.Add(new Border
                 {
-                    Text = comment,
-                    FontStyle = FontStyle.Italic,
-                    Classes = { "muted" },
-                    Margin = new Thickness(18, 0, 0, 0),
-                    MaxWidth = 480,
-                    TextWrapping = TextWrapping.Wrap,
+                    Classes = { "editorHover", "pinnedDataTipComment" },
+                    Padding = new Thickness(6, 1),
+                    Margin = new Thickness(20, 0, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Child = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 6,
+                        Children =
+                        {
+                            new Icon { Kind = "comment", Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center },
+                            new TextBlock { Text = comment, FontStyle = FontStyle.Italic, MaxWidth = 480, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center },
+                        },
+                    },
                 });
             }
         }
 
-        var border = new Border { Classes = { "editorHover", "pinnedDataTip" }, Padding = new Thickness(6, 2), Child = panel };
-        AutomationProperties.SetName(border, "Pinned data tips");
-        return border;
+        AutomationProperties.SetName(panel, "Pinned data tips");
+        return panel;
     }
 
-    private ContextMenu Menu(PinnedDataTip tip, Control anchor)
+    /// <summary>A pinned expression's icon: a local's for a name, a member's kind guessed from the last name (<c>env.EnvironmentName</c>: a property).</summary>
+    private static string IconOf(string expression) =>
+        expression.LastIndexOf('.') is var dot and > 0 ? ViewModels.VariableIcons.Guess(expression[(dot + 1)..]) : "symbol-local";
+
+    /// <summary>A pinned tip's menu (A16): its comment, copying, Add Watch, Unpin and Clear All DataTips.</summary>
+    private IReadOnlyList<Control> MenuItems(PinnedDataTip tip, Control anchor)
     {
         static MenuItem Item(string header, string icon, Action action) => Controls.MenuEntry.Create(header, icon, click: action);
 
-        return new ContextMenu
-        {
-            ItemsSource = new List<Control>
-            {
-                Item(tip.Comment is null ? "Add Comment" : "Edit Comment", "comment", () => EditComment(tip, anchor)),
-                Item("Copy Value", "copy", () => _ = VariableActions.CopyText?.Invoke(tip.Value ?? string.Empty)),
-                Item("Copy Expression", "copy", () => _ = VariableActions.CopyText?.Invoke(tip.Expression)),
-                Item("Add Watch", "watch", () => _ = VariableActions.AddWatch?.Invoke(tip.Expression)),
-                new Separator(),
-                Item("Unpin", "pin", () => Store.Unpin(tip)),
-                Item("Clear All DataTips", "clear-all", () => _services.RunCommand("debug.clearDataTips")),
-            },
-        };
+        return
+        [
+            Item(tip.Comment is null ? "Add Comment" : "Edit Comment", "comment", () => EditComment(tip, anchor)),
+            Item("Copy Value", "copy", () => _ = VariableActions.CopyText?.Invoke(tip.Value ?? string.Empty)),
+            Item("Copy Expression", "copy", () => _ = VariableActions.CopyText?.Invoke(tip.Expression)),
+            Item("Add Watch", "watch", () => _ = VariableActions.AddWatch?.Invoke(tip.Expression)),
+            new Separator(),
+            Item("Unpin", "pin", () => Store.Unpin(tip)),
+            Item("Clear All DataTips", "clear-all", () => _services.RunCommand("debug.clearDataTips")),
+        ];
     }
 
     /// <summary>The comment, typed in a flyout under the tip: Enter keeps it, Escape cancels.</summary>

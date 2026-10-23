@@ -301,7 +301,10 @@ public sealed partial class GitService
     /// <paramref name="track"/> (a branch of the remote, not a pull request ref) the local branch tracks
     /// <c>&lt;remote&gt;/&lt;sourceRef&gt;</c>.
     /// </summary>
-    public async Task FetchAndSwitchAsync(string remote, string sourceRef, string localBranch, bool track, CancellationToken cancellationToken = default)
+    public Task FetchAndSwitchAsync(string remote, string sourceRef, string localBranch, bool track, CancellationToken cancellationToken = default) =>
+        WithFetchGateAsync(() => FetchAndSwitchUnderGateAsync(remote, sourceRef, localBranch, track, cancellationToken), cancellationToken);
+
+    private async Task FetchAndSwitchUnderGateAsync(string remote, string sourceRef, string localBranch, bool track, CancellationToken cancellationToken)
     {
         try
         {

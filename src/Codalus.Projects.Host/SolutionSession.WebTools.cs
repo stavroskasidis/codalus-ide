@@ -295,7 +295,7 @@ internal sealed partial class SolutionSession
             limit.CancelAfter(TimeSpan.FromSeconds(offline ? 10 : 30));
             try
             {
-                var details = await NuGet.DetailsAsync(new PackageDetailsParams(id, Prerelease: false, Offline: offline), limit.Token).ConfigureAwait(false);
+                var details = await NuGet.DetailsAsync(new PackageDetailsParams(id, Prerelease: false, Offline: offline, Verified: false), limit.Token).ConfigureAwait(false);
                 var best = details.Versions
                     .Select(v => NuGetVersion.TryParse(v.Version, out var parsed) ? parsed : null)
                     .OfType<NuGetVersion>()

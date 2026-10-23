@@ -93,6 +93,40 @@ public sealed class PluginHostIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Quick_picks_and_input_boxes_round_trip_through_the_host()
+    {
+        // HelloWorld's hello.ask (API 1.1): a quick pick, then a folder and a file, each with a Browse button. This is the
+        // plugin API's own test of InputBoxOptions.Browse through the host (the Templates plugin's went with it, ADR 0082).
+        var folder = Path.Combine(_userData, "some folder");
+        var file = Path.Combine(folder, "notes.txt");
+        var prompts = new ScriptedPrompts(new Queue<string>(["goodbye", folder, file]));
+        _manager.Prompts = prompts;
+
+        var result = await _workbench.Commands.ExecuteAsync("hello.ask", Timeout());
+
+        Assert.Equal(["Pick a word", "Folder", "File"], prompts.Asked);
+        Assert.Equal(new Dictionary<string, string> { ["Folder"] = "folder", ["File"] = "file" }, prompts.Browse);
+        var items = Assert.Single(prompts.Picks);
+        Assert.Equal([new QuickPickItemDto("Hello", "hello", "A greeting"), new QuickPickItemDto("Goodbye", "goodbye", null)], items);
+        Assert.Equal("goodbye", result!.Value.GetProperty("picked").GetString());
+        Assert.Equal(folder, result.Value.GetProperty("folder").GetString());
+        Assert.Equal(file, result.Value.GetProperty("file").GetString());
+
+        // Cancelled prompts come back as nulls.
+        _manager.Prompts = new CancellingPrompts();
+        var cancelled = await _workbench.Commands.ExecuteAsync("hello.ask", Timeout());
+        Assert.Equal(JsonValueKind.Null, cancelled!.Value.GetProperty("picked").ValueKind);
+        Assert.Equal(JsonValueKind.Null, cancelled.Value.GetProperty("folder").ValueKind);
+    }
+
+    private sealed class CancellingPrompts : IPluginPrompts
+    {
+        public Task<int?> PickAsync(IReadOnlyList<QuickPickItemDto> items, string? placeholder, string source, CancellationToken cancellationToken) => Task.FromResult<int?>(null);
+
+        public Task<string?> InputAsync(string title, string? prompt, string? value, string? browse, string source, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+    }
+
+    [Fact]
     public async Task Executing_a_command_activates_the_plugin_and_round_trips_arguments()
     {
         var result = await _workbench.Commands.ExecuteAsync("hello.echo", [Json("1"), Json("\"two\""), Json("""{"a":[3]}""")], Timeout());
