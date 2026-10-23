@@ -53,10 +53,17 @@ runs:
         key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
         restore-keys: nuget-${{ runner.os }}-
     - if: inputs.netcoredbg == 'true'
+      id: netcoredbg-key
+      # The key from the script's own hash, not hashFiles: the cache's post step evaluates its key again after the job,
+      # and hashFiles walks the whole workspace, which failed on Windows while processes the tests left were still
+      # changing files there ("Fail to hash files under directory", develop's run 39927358842).
+      shell: bash
+      run: echo "hash=$(sha256sum eng/get-netcoredbg.sh | cut -c1-64)" >> "$GITHUB_OUTPUT"
+    - if: inputs.netcoredbg == 'true'
       uses: actions/cache@v4
       with:
         path: .work/netcoredbg
-        key: netcoredbg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/get-netcoredbg.sh') }}
+        key: netcoredbg-${{ runner.os }}-${{ runner.arch }}-${{ steps.netcoredbg-key.outputs.hash }}
     - name: Debugger (netcoredbg, pinned and checksummed)
       if: inputs.netcoredbg == 'true'
       shell: bash

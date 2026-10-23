@@ -58,6 +58,45 @@ public sealed class GitServiceTests : IAsyncLifetime
         Assert.True(probe.CallerHadReturned, "git started on the caller's thread, before RunAsync returned");
     }
 
+    /// <summary>
+    /// A write that finds the index locked tries again for a moment: on Windows the antivirus can hold the last command's
+    /// <c>index.lock</c> after git deleted it (the command sweep's Stage File). A lock that stays is still an error.
+    /// </summary>
+    [Fact]
+    public async Task A_write_that_finds_the_index_locked_tries_again_until_the_lock_is_gone()
+    {
+        await File.AppendAllTextAsync(File1, "thirteen\n", Ct);
+        var lockFile = Path.Combine(Repo, ".git", "index.lock");
+        await File.WriteAllTextAsync(lockFile, string.Empty, Ct);
+        var stage = _git.StageAsync([File1], Ct);
+        await Task.Delay(150, Ct);
+        File.Delete(lockFile);
+        await stage;
+        var (_, staged, _) = await _git.RunAsync(Repo, ["diff", "--cached", "--name-only"], Ct);
+        Assert.Equal("a.txt", staged.Trim());
+
+        await File.AppendAllTextAsync(File1, "fourteen\n", Ct);
+        await File.WriteAllTextAsync(lockFile, string.Empty, Ct);
+        try
+        {
+            var error = await Assert.ThrowsAsync<GitException>(() => _git.StageAsync([File1], Ct));
+            Assert.Contains("index.lock", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(lockFile);
+        }
+    }
+
+    [Fact]
+    public void Only_an_existing_lock_file_is_a_busy_lock()
+    {
+        Assert.True(GitService.IsLockBusy(128, "fatal: Unable to create 'C:/repo/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository"));
+        Assert.True(GitService.IsLockBusy(128, "error: cannot lock ref 'refs/heads/main': Unable to create '/repo/.git/refs/heads/main.lock': File exists."));
+        Assert.False(GitService.IsLockBusy(0, "Unable to create '/repo/.git/index.lock': File exists."));
+        Assert.False(GitService.IsLockBusy(1, "error: pathspec 'b.txt' did not match any file(s) known to git"));
+    }
+
     /// <summary>Variables for a git process that, when read, wait for the caller of RunAsync to have returned (5 s at most).</summary>
     private sealed class StartProbe(ManualResetEventSlim returned) : IReadOnlyDictionary<string, string>
     {
