@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
+using Codalus.Platform;
 using Codalus.Workbench.Build;
 using Codalus.Workbench.Debugging;
 using Codalus.Workbench.Debugging.Remote;
@@ -138,7 +139,7 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
         {
             if (!program.HasExited)
             {
-                program.Kill(entireProcessTree: true);
+                ProcessTree.Kill(program);
             }
 
             await RemoteShell.RunAsync(target, $"rm -f {signal}", CancellationToken.None);

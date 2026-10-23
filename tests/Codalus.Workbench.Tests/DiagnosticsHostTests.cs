@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using Codalus.Diagnostics.Protocol;
+using Codalus.Platform;
 using Codalus.Rpc;
 using Codalus.Workbench.Diagnostics;
 
@@ -143,7 +144,7 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
     {
         try
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             process.WaitForExit(10_000);
         }
         catch (InvalidOperationException)

@@ -211,7 +211,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("plugins.host", "M1", "Built-in plugins load and run in the plugin host", async () =>
         {
             var builtIn = shell.Plugins.Plugins.Where(p => p.IsBuiltIn).ToList();
-            Check(builtIn.Any(p => p.Id == "codalus.welcome") && builtIn.Any(p => p.Id == "codalus.templates"), $"the built-in plugins are discovered (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
+            Check(builtIn.Any(p => p.Id == "codalus.welcome") && builtIn.Any(p => p.Id == "codalus.dotnettest"), $"the built-in plugins are discovered (found: {string.Join(", ", builtIn.Select(p => p.Id))})");
+            Check(builtIn.All(p => p.Id != "codalus.templates"), "the retired Templates plugin isn't loaded (New Project is the IDE's, ADR 0082)");
             var broken = builtIn.Where(p => p.State is PluginState.Invalid or PluginState.Incompatible or PluginState.Failed).ToList();
             Check(broken.Count == 0, $"no built-in plugin is broken ({string.Join(", ", broken.Select(p => $"{p.Id}: {p.State}"))})");
 
@@ -282,6 +283,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M34d: the UI gallery's empty states, before a solution opens.
         await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Classic's four themes and Harbor's three (M34h)", GalleryEmptyStepAsync).ConfigureAwait(true);
+
+        // 0.6.0: New Project, the classic IDE's three-page wizard (ADR 0082); the website's screenshot.
+        await StepAsync("projects.newProject", "0.6.0", "File → New Project: the three-page wizard finds Console App by search and the C# filter, configures it with its solution in a new trusted folder, picks the framework and creates it; the solution opens with the project and Program.cs (on Windows, Add → New Project adds a WPF Application)", NewProjectStepAsync).ConfigureAwait(true);
 
         // M2: project system (build host, MSBuild evaluation, Solution Explorer).
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>
@@ -418,7 +422,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         }, "language.ready").ConfigureAwait(true);
 
+        await StepAsync("shell.narrowWindow", "0.6.0", "A narrow window: the title row keeps the caption buttons clear and wraps the menu, the toolbar folds its groups into \"…\" drop-downs", NarrowWindowStepAsync).ConfigureAwait(true);
+
         await StepAsync("shell.themeFamilies", "M45", "Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, over the open solution; Harbor follows the system; the family picker in Options", ThemeFamiliesStepAsync, "language.ready").ConfigureAwait(true);
+        await StepAsync("shell.roundedCorners", "D46", "Classic's rounded cards, tabs and toolbar, and menus whose 6 px corners keep the theme's color on X11 without a compositor", RoundedCornersStepAsync).ConfigureAwait(true);
 
         // M34a: the menus as trees with icons, Ctrl+Space through the keyboard, output that follows.
         await UxPassStepsAsync().ConfigureAwait(true);
@@ -692,6 +699,87 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             }
         }, "debug.session").ConfigureAwait(true);
 
+        await StepAsync("debug.dataTip", "0.6.0", "The data tip: the header over a variable hovered while stopped, its elements in a child tip, and the same rows in Locals", async () =>
+        {
+            var lines = File.ReadAllLines(Program);
+            var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+            await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == argsLine, $"the debugger stops at line {argsLine}", 300).ConfigureAwait(true);
+            try
+            {
+                var editor = await OpenAsync(Program).ConfigureAwait(true);
+                var document = editor.Editor.Document;
+                var line = document.GetLineByNumber(argsLine);
+                var column = document.GetText(line).IndexOf(", args)", StringComparison.Ordinal);
+                Check(column >= 0, $"line {argsLine} reads args");
+                await editor.ShowDataTipAsync(line.Offset + column + 3).ConfigureAwait(true);
+                await WaitAsync(() => editor.DataTip is { Header.Bounds.Width: > 0 }, "the data tip opens over args").ConfigureAwait(true);
+                var tip = editor.DataTip!;
+                Check(tip.Header.NameBlock.Text == "args" && tip.Header.ValueBlock.Text is { Length: > 0 }, $"the header shows args and its value: {tip.Header.NameBlock.Text} = {tip.Header.ValueBlock.Text}");
+                var view = editor.Editor.TextArea.TextView;
+
+                // Where the header is, in the real window: its name over the code's (A1), unless the header would end
+                // past the text view's right edge, where it moves left just enough to stay in view (D44, decision 10).
+                // The smoke window is 1280 px wide, so line 4's args, far right in the text view, is that case.
+                (Rect Header, Point Name, Point Code) Where(DataTipCascade shown, int offset) =>
+                    (new Rect(view.PointToClient(shown.Header.PointToScreen(default)), shown.Header.Bounds.Size),
+                     view.PointToClient(shown.Header.NameBlock.PointToScreen(default)),
+                     view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(document.GetLocation(offset)), AvaloniaEdit.Rendering.VisualYPosition.LineTop) - view.ScrollOffset);
+                await RenderedAsync().ConfigureAwait(true); // a popup's window moves a frame after its offsets change
+                var (header, name, code) = Where(tip, line.Offset + column + 2);
+                var where = $"the header at {header}, its name at x {name.X:0.#}, the code's at {code.X:0.#}, the text view {view.Bounds.Width:0.#} wide";
+                Check(header.Left >= -0.5 && header.Right <= view.Bounds.Width + 0.5, $"the header stays in the text view ({where})");
+                var lineBottom = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(document.GetLocation(line.Offset + column + 2)), AvaloniaEdit.Rendering.VisualYPosition.LineBottom).Y - view.ScrollOffset.Y;
+                Check(header.Center.Y >= code.Y && header.Center.Y <= lineBottom, $"the header sits on the hovered line ({where}, the line from y {code.Y:0.#} to {lineBottom:0.#})");
+                Check(code.X - Views.DataTips.DataTipMetrics.NameX + header.Width <= view.Bounds.Width
+                    ? Math.Abs(name.X - code.X) <= 2
+                    : Math.Abs(header.Right - view.Bounds.Width) <= 2,
+                    $"the header's name lies over the code's, or the header ends at the text view's right edge where there's no room ({where})");
+
+                // In windows of their own, the tips' text is the shell's UI size, as the pinned tips' in the editor.
+                Check(Math.Abs(tip.Header.NameBlock.FontSize - window.FontSize) < 0.01 && Math.Abs(tip.Header.ValueBlock.FontSize - window.FontSize) < 0.01,
+                    $"the header's text is {tip.Header.NameBlock.FontSize:0.#} and {tip.Header.ValueBlock.FontSize:0.#} px, the window's {window.FontSize:0.#}");
+                tip.SetOpen(null, tip.Header, tip.Root, true);
+                await WaitAsync(() => tip.Panels is [{ Rows: [{ Node.IsPlaceholder: false }, ..] }], "args' elements open in a child tip").ConfigureAwait(true);
+                var rows = tip.Panels[0].Rows;
+                Check(Math.Abs(rows[0].ValueBlock.FontSize - window.FontSize) < 0.01, $"the child tip's text is {rows[0].ValueBlock.FontSize:0.#} px, the window's {window.FontSize:0.#}");
+                Check(rows.Any(r => r.Node.Value == "\"two words\""), "the child tip lists \"two words\": " + string.Join(", ", rows.Select(r => $"{r.Node.Name} = {r.Node.Value}")));
+                Screenshot("smoke-test-data-tip.png", tip.Popups);
+                editor.HoverPopup.IsOpen = false;
+
+                // With room to its right (line 9's args, near the text's left edge), the header's name lies over the code's.
+                var exitLine = document.GetLineByNumber(Array.FindIndex(lines, l => l.Contains("Array.IndexOf(args", StringComparison.Ordinal)) + 1);
+                var argsAt = exitLine.Offset + document.GetText(exitLine).IndexOf("(args", StringComparison.Ordinal) + 1;
+                await editor.ShowDataTipAsync(argsAt + 1).ConfigureAwait(true);
+                await WaitAsync(() => editor.DataTip is { Header.Bounds.Width: > 0 } shown && !ReferenceEquals(shown, tip), $"the data tip opens over line {exitLine.LineNumber}'s args").ConfigureAwait(true);
+                await RenderedAsync().ConfigureAwait(true);
+                (header, name, code) = Where(editor.DataTip!, argsAt);
+                where = $"the header at {header}, its name at x {name.X:0.#}, the code's at {code.X:0.#}, the text view {view.Bounds.Width:0.#} wide";
+                Check(code.X - Views.DataTips.DataTipMetrics.NameX + header.Width <= view.Bounds.Width && Math.Abs(name.X - code.X) <= 2,
+                    $"with room to its right, the header's name lies over the code's ({where})");
+                editor.HoverPopup.IsOpen = false;
+
+                // Locals: the same rows in one flat list, args expanded, its elements' values in the Value column.
+                shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
+                await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "args"), "Locals lists args").ConfigureAwait(true);
+                shell.Locals.Roots.First(r => r.Name == "args").IsExpanded = true;
+                Views.DataTips.VariableRowList? locals = null;
+                await WaitAsync(() => (locals = window.GetVisualDescendants().OfType<Views.VariablesView>().FirstOrDefault(v => ReferenceEquals(v.DataContext, shell.Locals))?.GetVisualDescendants().OfType<Views.DataTips.VariableRowList>().FirstOrDefault()) is { } list
+                    && list.Rows.Any(r => r.Depth == 1 && r.Node.Value == "\"two words\""), "Locals shows args' elements one level in").ConfigureAwait(true);
+                var argsRow = locals!.RowOf(locals.Rows.First(r => r.Node.Name == "args").Node);
+                var elementRow = locals.RowOf(locals.Rows.First(r => r.Depth == 1).Node);
+                Check(argsRow is not null && elementRow is not null
+                    && Math.Abs(argsRow.ValueBlock.TranslatePoint(default, locals)!.Value.X - elementRow.ValueBlock.TranslatePoint(default, locals)!.Value.X) <= 1,
+                    "Locals keeps the Value column aligned across levels");
+                Screenshot("smoke-test-locals.png");
+            }
+            finally
+            {
+                shell.Run("debug.stop");
+                await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            }
+        }, "debug.session").ConfigureAwait(true);
+
         // M6: Git.
         await StepAsync("git.changes", "M6", "Git status, diff, stage, commit, blame and branches", async () =>
         {
@@ -701,6 +789,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             Check(await shell.OpenDiffAsync(Greeter, staged: false).ConfigureAwait(true) is not null, "a diff document opens");
             await WaitAsync(() => window.GetVisualDescendants().OfType<DiffView>().Any(), "the diff view renders").ConfigureAwait(true);
+            var diffView = window.GetVisualDescendants().OfType<DiffView>().First();
+            await WaitAsync(() => diffView.IsColored(Codalus.Workbench.Git.DiffPaneSide.Old) && diffView.IsColored(Codalus.Workbench.Git.DiffPaneSide.New), "both sides of the diff are in the editor's colors (#86)").ConfigureAwait(true);
+            Screenshot("smoke-test-git-diff.png");
 
             await shell.Git.StageAsync([Greeter, Program]).ConfigureAwait(true);
             await shell.Git.RefreshAsync().ConfigureAwait(true);
@@ -782,9 +873,16 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check((await File.ReadAllTextAsync(Greeter).ConfigureAwait(true)).Contains("Theirs from", StringComparison.Ordinal), "the incoming side won");
         }, "git.changes").ConfigureAwait(true);
 
+        // #23, D38: the Git Changes window's menus from their registered locations, and the branch drop-down.
+        await StepAsync("git.changesMenus", "D38", "Git Changes: a folder's menu from gitChanges/context, the branch drop-down and a branch's menu over it", GitChangesMenusStepAsync, "projects.open").ConfigureAwait(true);
+
         await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
 
         await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
+
+        // #79, D43: Connect to Claude… from AI Chat's off state, with stand-in node and npx: the requirements, the exact
+        // commands and the consent shown; Cancel writes nothing. No network, no agent.
+        await StepAsync("ai.connect", "D43", "AI Chat's off state offers the one-click agents; Connect to Claude shows its requirements, sign-in and exact commands, and Cancel writes nothing", AiConnectStepAsync).ConfigureAwait(true);
 
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source; the solution closed for it keeps its session in .codalus/state", async () =>
@@ -1235,7 +1333,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         // M41a: the Windows Forms designer (ADR 0073, D31: Windows only).
-        const string winFormsDesignerTitle = "The WinForms app's OrderForm opens in the Windows Forms designer; a Button from the Toolbox and its Text set in the Properties window become code in OrderForm.Designer.cs";
+        const string winFormsDesignerTitle = "The WinForms app's OrderForm opens in the Windows Forms designer; a Button from the Toolbox and its Text set in the Properties window become code in OrderForm.Designer.cs; moved onto the counter control, it's drawn in front of it";
         if (OperatingSystem.IsWindows())
         {
             await StepAsync("winforms.designer", "M41a", winFormsDesignerTitle, WinFormsDesignerStepAsync, "windows.desktop").ConfigureAwait(true);
@@ -1254,6 +1352,40 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         else
         {
             Report("winforms.designerDepth", "M41b", winFormsDepthTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the shell's side runs against a fake designer host in the tests on every OS.");
+        }
+
+        // 0.6 (#66): the Toolbox's Enter and a drop through the real host; the designer runs on a copy of the build output,
+        // so the app builds with a form open, and the form loads on the new build.
+        const string winFormsToolboxTitle = "OrderForm in the designer: a TextBox added from the Toolbox with Enter and a CheckBox dropped on the form become code; the app builds while the designer is open (no MSB3027) and the designer loads the form on the new build";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.toolboxAndBuild", "0.6", winFormsToolboxTitle, WinFormsToolboxAndBuildStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.toolboxAndBuild", "0.6", winFormsToolboxTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the copy, the Toolbox's drag, double-click and Enter, and the reload after a build are tested on every OS against a fake designer host.");
+        }
+
+        // 0.6 (#67, D40): the classic IDE's context menus and Lock Controls, through the real host.
+        const string winFormsMenusTitle = "OrderForm in the designer: no Type Here on a list box; the classic IDE's context menu with the designer's verb and Select 'notesSplit.Panel1'; Lock Controls as OrderForm.resx's Locked metadata, a locked control not nudged; copy, paste into a panel and a split container's panel; undone";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.designerMenus", "0.6", winFormsMenusTitle, WinFormsDesignerMenusStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.designerMenus", "0.6", winFormsMenusTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the menus, their enablement, Lock Controls and the paste target are tested on every OS against a fake designer host.");
+        }
+
+        // 0.6 (#68, D41): the Properties window as the classic IDE's, through the real host.
+        const string winFormsPropertiesTitle = "OrderForm in the designer's Properties window: a category collapses; Font expands into FontConverter's parts and Bold writes the whole font; the font editor lists the installed families; ForeColor's drop-down writes Color.SteelBlue; an invalid Location.X opens the dialog (OK goes back to the text, Cancel puts the old value back); the selector picks placeOrderButton and FlatAppearance expands; the form's AcceptButton lists its buttons; undone";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("winforms.properties", "0.6", winFormsPropertiesTitle, WinFormsPropertiesStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("winforms.properties", "0.6", winFormsPropertiesTitle, "skipped", 0, "The Windows Forms designer runs on Windows only (D31); the shell's side runs against a fake designer host in the tests on every OS.");
         }
 
         // M44: WinUI 3 and MAUI's Windows target (ADR 0074, D31: Windows only).
@@ -1296,6 +1428,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         const string wasmTitle = "F5 debugs a Blazor WebAssembly app in the browser: a breakpoint in a .razor file stops";
         const string compoundTitle = "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each";
+        const string compoundHotReloadTitle = "F5 on a Blazor Web App with Hot Reload: the debugger attaches to the server dotnet watch runs, a WebAssembly edit runs in the browser under the debugger, and a rude edit restarts the app with debugging following it";
         if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null)
         {
             // Skipped here, a failure in CI (which must prove it), at once rather than after the steps' timeouts.
@@ -1304,11 +1437,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 : ("skipped", "No Chrome, Edge or Chromium is installed.");
             Report("blazor.wasmDebug", "M16", wasmTitle, outcome, 0, reason);
             Report("blazor.compoundDebug", "M16", compoundTitle, outcome, 0, reason);
+            Report("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, outcome, 0, reason);
         }
         else
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", compoundTitle, CompoundDebugStepAsync).ConfigureAwait(true);
+            await StepAsync("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, CompoundHotReloadStepAsync, "blazor.compoundDebug").ConfigureAwait(true);
         }
 
         // M21: a remote window on the local stand-in server (the shipped remote/server); it disconnects at its end.
@@ -1694,7 +1829,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             if (!program.HasExited)
             {
-                program.Kill(entireProcessTree: true);
+                ProcessTree.Kill(program);
             }
 
             program.Dispose();
@@ -2464,6 +2599,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await RenderedAsync().ConfigureAwait(true);
         Screenshot("winforms-designer.png");
         await GalleryWinFormsAsync(designer).ConfigureAwait(true); // M34g: the designer, the Toolbox and Properties in the gallery
+        await WinFormsDesignerOverlapAsync(designer).ConfigureAwait(true);
 
         while (code.Text.UndoStack.CanUndo)
         {
@@ -2473,6 +2609,338 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(code.Text.Text == original, "undo takes the designer file back to the original");
         shell.Layout.CloseDocument(designer);
         shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+    }
+
+    /// <summary>
+    /// #78: button1 moved onto the counter control through the Properties window is drawn in front of it. The designer
+    /// host's frame is Control.DrawToBitmap, which draws a container's controls in reverse order, so the 2026-10-18
+    /// picture showed the counter's own "+1" where the button was; the host now draws overlapping controls again, back
+    /// to front, and says how many (the button and the counter). The region looked at is inside both, right of the "+1".
+    /// </summary>
+    private async Task WinFormsDesignerOverlapAsync(ViewModels.WinFormsDesignerDocument designer)
+    {
+        var root = designer.Root!;
+        var region = new PixelRect((int)root.ClientX + 318, (int)root.ClientY + 301, 47, 21);
+        designer.SetSelection(["button1"], notify: true);
+        shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
+        await shell.PropertiesWindow.RefreshAsync().ConfigureAwait(true);
+        var location = shell.PropertiesWindow.Categories.Where(c => c.Title != "(DataBindings)").SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "Location");
+        Check(location is not null, "the Properties window shows button1's Location");
+        var before = FramePixels(designer, region);
+        var frames = designer.FrameCount;
+        location!.Text = "290, 300";
+        await WaitAsync(() => designer.DesignerCode!.Text.Text.Contains("button1.Location = new Point(290, 300);", StringComparison.Ordinal) && designer.FrameCount > frames,
+            "button1 moved onto the counter control, in the code and drawn", 60).ConfigureAwait(true);
+        var after = FramePixels(designer, region);
+        var differing = 0;
+        for (var i = 0; i < before.Length; i += 4)
+        {
+            differing += before.AsSpan(i, 4).SequenceEqual(after.AsSpan(i, 4)) ? 0 : 1;
+        }
+
+        var area = region.Width * region.Height;
+        Check(differing * 10 >= area * 3 && designer.FrameRestacked == 2,
+            $"button1 on the counter control is drawn in front of it: {differing} of {area} pixels changed (at least 30 % expected), {designer.FrameRestacked} controls drawn again (2 expected)");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer-overlap.png");
+    }
+
+    /// <summary>The designer's frame's pixels in <paramref name="region"/>, 4 bytes each, as its bitmap holds them.</summary>
+    private static byte[] FramePixels(ViewModels.WinFormsDesignerDocument designer, PixelRect region)
+    {
+        var stride = region.Width * 4;
+        var pixels = new byte[stride * region.Height];
+        var handle = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
+        try
+        {
+            designer.Frame!.CopyPixels(region, handle.AddrOfPinnedObject(), pixels.Length, stride);
+        }
+        finally
+        {
+            handle.Free();
+        }
+
+        return pixels;
+    }
+
+    /// <summary>
+    /// The Toolbox and building with a form open in the shipped app (0.6, #66): OrderForm opened; Enter on the Toolbox's
+    /// TextBox (the form selected) adds textBox1 at the form's default place through the real host's classic creation,
+    /// with the designer active again and nothing armed; a CheckBox dropped on the form (the drop handler's own method: a
+    /// real drag can't be scripted, and the Avalonia drop is tested headless); the app built through Build Project (which
+    /// saves the designer file first), with neither MSB3027 nor MSB3026 (before, the designer host held the app's assembly
+    /// and the build's copy step retried ten times and failed), then the form loaded on a new host with both controls;
+    /// the designer file put back as it was.
+    /// </summary>
+    private async Task WinFormsToolboxAndBuildStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Builds.IsBuilding, "the previous run and build have stopped", 120).ConfigureAwait(true);
+        var app = Path.Combine(Work, "WindowsDesktop", "WinFormsApp");
+        var project = Path.Combine(app, "WinFormsApp.csproj");
+        var form = Path.Combine(app, "OrderForm.cs");
+        Check(shell.Solutions.Projects.Values.Any(p => p.UsesWindowsForms), "the WindowsDesktop solution is still open");
+        await shell.OpenFileAsync(form).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath == form);
+        Check(designer is not null, "OrderForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0 && designer.Host is not null, () => "the designer loads the form and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        var code = designer!.DesignerCode!;
+        var original = await File.ReadAllTextAsync(designer.DesignerPath).ConfigureAwait(true);
+        var root = designer.Root!;
+
+        // Enter on the Toolbox's TextBox, the form selected: textBox1 at the form's default place, selected, the designer active.
+        shell.Layout.ShowToolWindow(ViewModels.ToolboxViewModel.ToolWindowId, focus: false);
+        await WaitAsync(() => window.GetVisualDescendants().OfType<ToolboxView>().Any(v => v.IsEffectivelyVisible), "the Toolbox shows", 30).ConfigureAwait(true);
+        var toolbox = window.GetVisualDescendants().OfType<ToolboxView>().First(v => v.IsEffectivelyVisible);
+        Button? textItem = null;
+        await WaitAsync(() => (textItem = toolbox.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.DataContext is ViewModels.ToolboxItemViewModel { Type: "System.Windows.Forms.TextBox" })) is not null,
+            "the Toolbox lists the TextBox", 30).ConfigureAwait(true);
+        var item = textItem!;
+        item.BringIntoView();
+        designer.SetSelection([root.Name], notify: true);
+        item.Focus();
+        await RenderedAsync().ConfigureAwait(true);
+        item.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter, Source = item });
+        item.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyUpEvent, Key = Avalonia.Input.Key.Enter, Source = item });
+        await WaitAsync(() => code.Text.Text.Contains("textBox1 = new TextBox();", StringComparison.Ordinal) && designer.Selection is ["textBox1"] && designer.Find("textBox1") is not null,
+            () => "Enter on the Toolbox's TextBox adds textBox1: " + designer.Status, 60).ConfigureAwait(true);
+        var textBox = designer.Find("textBox1")!;
+        Check(code.Text.Text.Contains("Controls.Add(textBox1);", StringComparison.Ordinal) && textBox.Parent == root.Name, "textBox1 is on the form: " + textBox.Parent);
+        Check(textBox.X == root.ClientX && textBox.Y == root.ClientY, $"textBox1 is at the form's default place, its client area's corner: {textBox.X}, {textBox.Y}, not {root.ClientX}, {root.ClientY}");
+        Check(shell.Layout.ActiveDocument == designer && shell.Toolbox.Armed is null, "the designer is active again and nothing is armed");
+
+        // A CheckBox dropped on the form's free space.
+        var surface = window.GetVisualDescendants().OfType<DesignerSurface>().First(s => s.IsEffectivelyVisible);
+        await surface.DropToolboxItemAsync("System.Windows.Forms.CheckBox", new Point(root.ClientX + 48, root.ClientY + 300)).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("checkBox1 = new CheckBox();", StringComparison.Ordinal), "the dropped check box is in OrderForm.Designer.cs: " + designer.Status);
+        shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
+
+        var host = designer.Host;
+        var frames = designer.FrameCount;
+        var before = shell.Builds.LastBuild;
+        var built = await shell.BuildProjectAsync(Codalus.Projects.Protocol.BuildTargets.Build, project).WaitAsync(TimeSpan.FromMinutes(10)).ConfigureAwait(true);
+        await WaitAsync(() => BuildDone(before), "the build finishes", 60).ConfigureAwait(true);
+        var output = shell.Builds.Channel.GetText();
+        Check(built, "the app builds with OrderForm open in the designer:\n" + Tail(output, 3000));
+        Check(!output.Contains("MSB3027", StringComparison.Ordinal) && !output.Contains("MSB3026", StringComparison.Ordinal), "no build step waited for or failed on a file the designer holds:\n" + Tail(output, 3000));
+
+        // The build replaced the app's assembly: the designer loads the form on a new host, with the saved check box.
+        await WaitAsync(() => designer.Host != host && designer.FrameCount > frames && !designer.IsRestarting,
+            () => "the designer loads the form on the new build: " + designer.Status + "\n" + Tail(shell.WinFormsDesignerLog.GetText(), 2000), 180).ConfigureAwait(true);
+        Check(designer.Problems is null, "every statement applied after the restart: " + designer.Problems);
+        Check(designer.Components.Any(c => c.Name == "checkBox1") && designer.Components.Any(c => c.Name == "textBox1"), "the text box and the check box are on the form after the restart");
+        foreach (var line in shell.WinFormsDesignerLog.GetText().Split('\n').Where(l => l.StartsWith("Copied the build output", StringComparison.Ordinal) || l.StartsWith("A build replaced", StringComparison.Ordinal)).TakeLast(3))
+        {
+            Console.Out.WriteLine("  " + line.TrimEnd());
+        }
+
+        // The designer file as it was, saved (the build saved the check box).
+        while (code.Text.UndoStack.CanUndo)
+        {
+            code.Text.UndoStack.Undo();
+        }
+
+        await shell.SaveAllAsync().ConfigureAwait(true);
+        Check(await File.ReadAllTextAsync(designer.DesignerPath).ConfigureAwait(true) == original, "undo and save take OrderForm.Designer.cs back to the original");
+        shell.Layout.CloseDocument(designer);
+    }
+
+    /// <summary>
+    /// The classic IDE's context menus and Lock Controls in the shipped app (0.6, #67, D40): OrderForm opened; no Type Here
+    /// over its list box or combo box; the surface's menu of a control on the form and of the list box in the split
+    /// container's panel (the real host's verb first, Select naming the panel), and its picture from the menu's own
+    /// window; Lock Controls written as OrderForm.resx's Locked metadata and not as code, a locked control not nudged,
+    /// and taken away again; copy, paste into a panel and into the split container's panel; everything undone.
+    /// </summary>
+    private async Task WinFormsDesignerMenusStepAsync()
+    {
+        var form = Path.Combine(Work, "WindowsDesktop", "WinFormsApp", "OrderForm.cs");
+        await shell.OpenFileAsync(form).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath == form);
+        Check(designer is not null, "OrderForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0 && designer.Host is not null, () => "the designer loads OrderForm and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        var code = designer!.DesignerCode!;
+        var original = code.Text.Text;
+        var resx = designer.ResourceModels.FirstOrDefault(m => m.Path.EndsWith("OrderForm.resx", StringComparison.OrdinalIgnoreCase));
+        Check(resx is not null, "the designer holds OrderForm.resx");
+        var originalResx = resx!.Text.Text;
+
+        foreach (var name in new[] { "historyListBox", "productComboBox" })
+        {
+            designer.SetSelection([name], notify: true);
+            Check(designer.StripTypeHere is null && designer.MenuPanels.Count == 0, name + " shows no Type Here");
+        }
+
+        await WaitAsync(() => window.GetVisualDescendants().OfType<WinFormsDesignerView>().Any(v => v.IsEffectivelyVisible), "the designer's view shows", 30).ConfigureAwait(true);
+        var view = window.GetVisualDescendants().OfType<WinFormsDesignerView>().First(v => v.IsEffectivelyVisible);
+        List<string?> Names(ContextMenu? menu) => [.. menu?.Items.OfType<MenuItem>().Select(Avalonia.Automation.AutomationProperties.GetName) ?? []];
+        designer.SetSelection(["giftCheckBox"], notify: true);
+        var names = Names(await view.BuildMenuAsync(BuiltIns.WinFormsSurfaceMenu).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true));
+        foreach (var expected in new[] { "View Code", "Bring to Front", "Send to Back", "Align to Grid", "Lock Controls", "Select 'OrderForm'", "Cut", "Copy", "Paste", "Delete", "Properties" })
+        {
+            Check(names.Contains(expected), $"the check box's context menu has {expected}: {string.Join(", ", names)}");
+        }
+
+        // The list box's verbs as the real host answers, however long a busy machine takes (the menu waits only 300 ms for
+        // them, and opens without them after that): the menu is built again until they're in it, or 30 s pass.
+        designer.SetSelection(["historyListBox"], notify: true);
+        designer.PrefetchVerbs();
+        ContextMenu? menu;
+        var waited = Stopwatch.StartNew();
+        while (true)
+        {
+            await designer.SelectionVerbsAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+            menu = await view.BuildMenuAsync(BuiltIns.WinFormsSurfaceMenu).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+            names = Names(menu);
+            if (names.FirstOrDefault()?.StartsWith("Edit Items", StringComparison.Ordinal) == true || waited.Elapsed > TimeSpan.FromSeconds(30))
+            {
+                break;
+            }
+
+            await Task.Delay(250).ConfigureAwait(true);
+        }
+
+        Check(names.FirstOrDefault()?.StartsWith("Edit Items", StringComparison.Ordinal) == true, "the list box's menu starts with its designer's verb: " + string.Join(", ", names));
+        Check(names.Contains("Select 'notesSplit.Panel1'"), "the list box's menu selects the split container's panel: " + string.Join(", ", names));
+        menu!.Open(view.Surface);
+        await WaitAsync(() => menu.IsOpen, "the context menu opens", 10).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer-menu.png", menu.Parent is Avalonia.Controls.Primitives.Popup popup ? [popup] : Array.Empty<Avalonia.Controls.Primitives.Popup>());
+        menu.Close();
+
+        // Lock Controls: the default .resx's Locked metadata, the form's and its controls', never code; a locked control stays put.
+        designer.SetSelection(["giftCheckBox"], notify: true);
+        shell.Run("winforms.lockControls");
+        await WaitAsync(() => resx.Text.Text.Contains("<metadata name=\"giftCheckBox.Locked\"", StringComparison.Ordinal) && resx.Text.Text.Contains("<metadata name=\"$this.Locked\"", StringComparison.Ordinal),
+            () => "Lock Controls writes Locked metadata to OrderForm.resx: " + designer.Status, 60).ConfigureAwait(true);
+        Check(code.Text.Text == original, "Lock Controls leaves OrderForm.Designer.cs alone");
+        Check(designer.Find("giftCheckBox")?.Locked == true && designer.AreControlsLocked, "the check box is locked, and so Lock Controls is checked");
+        Check(shell.Workbench.Menus.GetItems(Workbench.Menus.MenuLocations.MenuBar("format")).Single(i => i.Command == "winforms.lockControls").IsChecked == true, "Format → Lock Controls is checked");
+        await designer.NudgeAsync(1, 0, resize: false).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(code.Text.Text == original, "an arrow key doesn't move a locked control");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-designer-locked.png");
+        shell.Run("winforms.lockControls");
+        await WaitAsync(() => resx.Text.Text == originalResx, "Lock Controls again takes every lock away", 60).ConfigureAwait(true);
+
+        // Copy; paste into a panel, then into the split container's panel the list box is in.
+        designer.SetSelection(["customerTextBox"], notify: true);
+        shell.Run("winforms.copy");
+        designer.SetSelection(["buttonPanel"], notify: true);
+        shell.Run("winforms.paste");
+        await WaitAsync(() => code.Text.Text.Contains("buttonPanel.Controls.Add(customerTextBox1);", StringComparison.Ordinal) && designer.Find("customerTextBox1") is not null,
+            () => "the copy goes into the selected panel: " + designer.Status, 60).ConfigureAwait(true);
+        designer.SetSelection(["historyListBox"], notify: true);
+        shell.Run("winforms.paste");
+        await WaitAsync(() => code.Text.Text.Contains("notesSplit.Panel1.Controls.Add(customerTextBox2);", StringComparison.Ordinal) && designer.Find("customerTextBox2")?.Parent == "notesSplit.Panel1",
+            () => "the copy goes into the split container's panel: " + designer.Status, 60).ConfigureAwait(true);
+
+        for (var i = 0; i < 10 && (code.Text.Text != original || resx.Text.Text != originalResx); i++)
+        {
+            designer.Undo();
+        }
+
+        Check(code.Text.Text == original && resx.Text.Text == originalResx, "undo takes OrderForm.Designer.cs and OrderForm.resx back to the originals");
+        shell.Layout.CloseDocument(designer);
+    }
+
+    /// <summary>
+    /// The Properties window in the shipped app (#68, D41), through the real designer host: OrderForm's notes box with
+    /// Accessibility collapsed and Font expanded into its parts, Bold set as one assignment of the whole font, the font
+    /// editor's families, ForeColor's color drop-down (the screenshot, with Font expanded), an invalid Location.X's
+    /// dialog both ways, the component selector and FlatAppearance's parts, the form's AcceptButton list, and undo.
+    /// </summary>
+    private async Task WinFormsPropertiesStepAsync()
+    {
+        var form = Path.Combine(Work, "WindowsDesktop", "WinFormsApp", "OrderForm.cs");
+        await shell.OpenFileAsync(form).ConfigureAwait(true);
+        var designer = shell.Layout.Documents.OfType<ViewModels.WinFormsDesignerDocument>().FirstOrDefault(d => d.CodePath == form);
+        Check(designer is not null, "OrderForm.cs opens in the designer");
+        await WaitAsync(() => designer!.FrameCount > 0 && designer.Host is not null, () => "the designer loads OrderForm and draws it: " + designer!.Status, 600).ConfigureAwait(true);
+        var code = designer!.DesignerCode!;
+        var original = code.Text.Text;
+        var properties = shell.PropertiesWindow;
+        var grid = properties.Grid;
+        shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
+
+        async Task<ViewModels.PropertyRowViewModel> RowAsync(string component, string path)
+        {
+            await WaitAsync(() => properties.Title.StartsWith(component, StringComparison.Ordinal) && !properties.IsLoading && grid.Find(path) is not null,
+                () => $"the Properties window shows {component}'s {path}: {properties.Title}; " + string.Join(", ", grid.AllRows.Take(60).Select(r => r.Path)), 60).ConfigureAwait(true);
+            return grid.Find(path)!;
+        }
+
+        // A category collapses and its rows go.
+        designer.SetSelection(["notesTextBox"], notify: true);
+        var font = await RowAsync("notesTextBox", "Font").ConfigureAwait(true);
+        var accessibility = grid.Categories.FirstOrDefault(c => c.Title == "Accessibility");
+        Check(accessibility is not null, "the notes box's properties have Accessibility: " + string.Join(", ", grid.Categories.Select(c => c.Title)));
+        grid.SetExpanded(accessibility!, false);
+        Check(!grid.Items.OfType<ViewModels.PropertyRowViewModel>().Any(r => r.Name == "AccessibleName"), "collapsed, Accessibility's rows are gone");
+        grid.SetExpanded(accessibility!, true);
+
+        // Font's parts as FontConverter lists them; Bold is one assignment of the whole font.
+        grid.SetExpanded(font, true);
+        Check(font.Children.Select(c => c.Name).SequenceEqual(["Name", "Size", "Unit", "Bold", "GdiCharSet", "GdiVerticalFont", "Italic", "Strikeout", "Underline"]),
+            "Font's parts: " + string.Join(", ", font.Children.Select(c => c.Name)));
+        var bold = grid.Find("Font.Bold")!;
+        bold.SelectedOption = bold.Options.First(o => o.Value == "True");
+        await WaitAsync(() => code.Text.Text.Contains("notesTextBox.Font = new Font(\"Segoe UI\", 9F, FontStyle.Bold | FontStyle.Italic", StringComparison.Ordinal),
+            () => "Font's Bold writes the whole font: " + designer.Status, 60).ConfigureAwait(true);
+
+        // The font editor lists the installed families (FontNameConverter's); Cancel sends nothing.
+        font = await RowAsync("notesTextBox", "Font").ConfigureAwait(true);
+        font.ModalEditor!.Execute(null);
+        Check(designer.FontEditor is { } fontEditor && fontEditor.Families.Contains("Segoe UI") && fontEditor.IsBold, "the font editor lists the installed families and shows Bold");
+        designer.CloseFontEditor();
+
+        // ForeColor's drop-down, open with Font expanded for the screenshot; Web's SteelBlue is written as Color's.
+        await WaitAsync(() => window.GetVisualDescendants().OfType<PropertiesWindowView>().Any(v => v.IsEffectivelyVisible), "the Properties window shows", 30).ConfigureAwait(true);
+        var view = window.GetVisualDescendants().OfType<PropertiesWindowView>().First(v => v.IsEffectivelyVisible);
+        view.Grid.OpenDropDown(await RowAsync("notesTextBox", "ForeColor").ConfigureAwait(true));
+        await WaitAsync(() => view.Grid.OpenDropDownControl is Views.PropertyEditors.ColorDropDown, "ForeColor's color drop-down opens", 10).ConfigureAwait(true);
+        var colors = (Views.PropertyEditors.ColorDropDown)view.Grid.OpenDropDownControl!;
+        colors.SelectTab(ViewModels.PropertyColors.WebTab);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-properties.png", [view.Grid.DropDownPopup]);
+        colors.PickNamed("SteelBlue");
+        await WaitAsync(() => code.Text.Text.Contains("notesTextBox.ForeColor = Color.SteelBlue;", StringComparison.Ordinal), () => "SteelBlue is written as Color's: " + designer.Status, 60).ConfigureAwait(true);
+
+        // An invalid value (D41 question 14): OK goes back to the cell with the typed text; Cancel puts the old value back.
+        designer.SetSelection(["giftCheckBox"], notify: true);
+        var x = await RowAsync("giftCheckBox", "Location.X").ConfigureAwait(true);
+        var oldX = x.Value;
+        grid.SelectedRow = x;
+        x.Text = "abc";
+        await WaitAsync(() => shell.Dialogs.IsOpen, "the invalid value opens a dialog", 30).ConfigureAwait(true);
+        Check(shell.Dialogs.Message.StartsWith("Property value is not valid.", StringComparison.Ordinal) && shell.Dialogs.Request?.Context == "giftCheckBox · Location.X",
+            "the dialog says the value isn't valid, for giftCheckBox · Location.X: " + shell.Dialogs.Message);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("winforms-properties-invalid.png");
+        shell.Dialogs.Accept();
+        await WaitAsync(() => !shell.Dialogs.IsOpen, "OK closes the dialog", 10).ConfigureAwait(true);
+        Check(grid.Find("Location.X") is { Text: "abc" } typed && typed.Value == oldX && grid.SelectedRow?.Path == "Location.X", "OK goes back to the cell with the typed text");
+        grid.Find("Location.X")!.Text = "-x";
+        await WaitAsync(() => shell.Dialogs.IsOpen, "the invalid value opens the dialog again", 30).ConfigureAwait(true);
+        shell.Dialogs.Cancel();
+        await WaitAsync(() => !shell.Dialogs.IsOpen && grid.Find("Location.X")?.Text == oldX, "Cancel puts the old value back", 30).ConfigureAwait(true);
+        Check(code.Text.Text.Contains("notesTextBox.ForeColor = Color.SteelBlue;", StringComparison.Ordinal) && !code.Text.Text.Contains("abc", StringComparison.Ordinal), "an invalid value writes nothing");
+
+        // The component selector picks placeOrderButton; FlatAppearance expands; the form's AcceptButton lists its buttons.
+        properties.SelectedComponent = properties.ComponentChoices.First(c => c.Name == "placeOrderButton");
+        var flat = await RowAsync("placeOrderButton", "FlatAppearance").ConfigureAwait(true);
+        grid.SetExpanded(flat, true);
+        Check(flat.Children.Any(c => c.Name == "BorderColor") && flat.Children.Any(c => c.Name == "BorderSize"), "FlatAppearance expands into its parts: " + string.Join(", ", flat.Children.Select(c => c.Name)));
+        properties.SelectedComponent = properties.ComponentChoices[0];
+        var accept = await RowAsync("OrderForm", "AcceptButton").ConfigureAwait(true);
+        Check(accept.Options.FirstOrDefault()?.Value == "(none)" && accept.Options.Any(o => o.Value == "cancelButton"), "AcceptButton lists (none) and the form's buttons: " + string.Join(", ", accept.Options.Select(o => o.Value)));
+
+        for (var i = 0; i < 10 && code.Text.Text != original; i++)
+        {
+            designer.Undo();
+        }
+
+        Check(code.Text.Text == original, "undo takes OrderForm.Designer.cs back to the original");
+        shell.Layout.CloseDocument(designer);
     }
 
     /// <summary>
@@ -3081,6 +3549,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await shell.OpenSolutionAsync(Path.Combine(target, "BlazorHosted.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Blazor Web App is open", 300).ConfigureAwait(true);
         shell.Runs.SetStartupProject(Path.Combine(target, "BlazorHosted", "BlazorHosted.csproj"));
+
+        // The launched session: netcoredbg starts the server (blazor.compoundHotReload covers Hot Reload while debugging).
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugHotReloadSetting, false, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
         var line = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [initialized]", StringComparison.Ordinal)) + 1;
         shell.Debugger.Breakpoints.Toggle(counter, line);
@@ -3106,6 +3577,79 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         await WaitAsync(() => !shell.Debugger.IsActive, "the session ends", 60).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Hot Reload while debugging a Blazor Web App (#75, ADR 0040): on the BlazorHosted copy blazor.compoundDebug opened, F5
+    /// runs the server under dotnet watch and attaches netcoredbg to it; the server stops at the breakpoint, an edit to the
+    /// WebAssembly component runs in the browser under the debugger, and a rude edit restarts the app, which debugging
+    /// follows. It ends with dotnet watch and the server gone.
+    /// </summary>
+    private async Task CompoundHotReloadStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous session has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "BlazorHosted");
+        Check(shell.Solutions.Solution?.Path == Path.Combine(target, "BlazorHosted.slnx"), "BlazorHosted is still open");
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugHotReloadSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
+        int Line(string marker) => Array.FindIndex(File.ReadAllLines(counter), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
+        string Thread() => shell.Debugger.Threads.FirstOrDefault(t => t.Id == shell.Debugger.CurrentStop?.ThreadId)?.Name ?? string.Empty;
+        string Log() => "Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + "\nRun:\n" + Tail(shell.HotReloadProgram?.Channel?.GetText() ?? string.Empty, 2000);
+        var original = File.ReadAllText(counter);
+        shell.Debugger.Breakpoints.Toggle(counter, Line("initialized"));
+        shell.Run("debug.start");
+        try
+        {
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, () => "the server under dotnet watch stops at the breakpoint (" + Log() + ")", 600).ConfigureAwait(true);
+            Check(shell.Debugger.IsCompound && shell.HotReloadProgram is not null && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's, which dotnet watch runs: " + Thread());
+            var server = shell.Debugger.ProcessId;
+            var watch = shell.HotReloadProgram!;
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+
+            // A WebAssembly edit: the browser runs it under the debugger; the server refuses it and says so.
+            File.WriteAllText(counter, original.Replace("ticks++;", "ticks += 1000;", StringComparison.Ordinal));
+            await WaitAsync(() => watch.HotReload!.UpdatesRefused, () => "the server refuses the update under the debugger (" + Log() + ")", 180).ConfigureAwait(true);
+            // The browser applies the update on its own and nothing reports when (as in BlazorWebAppHotReloadDebugTests),
+            // and the breakpoint stops before the line runs: the first stop after the update can still read the count the
+            // old code left (0 on a fast runner). So the tick is looked at until the edited line has run.
+            var ticks = string.Empty;
+            var deadline = Stopwatch.StartNew();
+            var previous = shell.Debugger.CurrentStop; // null while it runs
+            while (true)
+            {
+                shell.Debugger.Breakpoints.Toggle(counter, Line("tick"));
+                await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.CurrentStop != previous && Thread().StartsWith("Browser:", StringComparison.Ordinal), () => "the page stops in the edited tick (" + Log() + ")", 180).ConfigureAwait(true);
+                previous = shell.Debugger.CurrentStop;
+                ticks = (await shell.Debugger.EvaluateAsync("ticks", "watch").ConfigureAwait(true)).Result;
+                if ((int.TryParse(ticks, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count) && count >= 1000) || deadline.Elapsed > TimeSpan.FromSeconds(90))
+                {
+                    break;
+                }
+
+                shell.Debugger.Breakpoints.Clear();
+                await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+                await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            }
+
+            Check(int.TryParse(ticks, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value) && value >= 1000, $"the edit runs in the browser: ticks is {ticks} after 90 s");
+            Screenshot("smoke-test-blazor-compound-hot-reload.png");
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+
+            // A rude edit: dotnet watch restarts the app, and debugging follows the new server.
+            File.WriteAllText(counter, original.Replace("private int ticks;", "private long ticks;", StringComparison.Ordinal));
+            await WaitAsync(() => watch.HotReload!.Restarts >= 1 && shell.WatchedServerDebugSession is { State: Workbench.Debugging.WatchedServerState.Attached } session && session.ProcessId != server && shell.Debugger.IsCompound,
+                () => "debugging follows the restarted server (" + Log() + ")", 300).ConfigureAwait(true);
+        }
+        finally
+        {
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.StopAsync().ConfigureAwait(true);
+            File.WriteAllText(counter, original);
+        }
+
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive && shell.WatchedServerDebugSession is null, "the session, dotnet watch and the server end", 120).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -3242,6 +3786,84 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// AI assistance (M28a, ADR 0062) against <see cref="Tests.MockModelServers"/>: the OpenAI-compatible plugin stays
     /// unloaded while AI is off, then a question about a selection streams into AI Chat and its code is applied.
     /// </summary>
+    /// <summary>
+    /// The ai.connect step (D43): stand-in node and npx on the shell's agent search path (so the rows are the same on every
+    /// runner and nothing reaches npm), AI off: AI Chat's connect row, then Connect to Claude… with its rows, the sign-in
+    /// choices, the exact commands and the consent; Cancel leaves ai.agents and ai.enabled as they were.
+    /// </summary>
+    private async Task AiConnectStepAsync()
+    {
+        var settings = shell.Workbench.Settings;
+        var agentsBefore = settings.GetLayerValue(Workbench.Ai.Acp.AcpAgents.AgentsSetting, SettingScope.User)?.GetRawText();
+        var enabledBefore = settings.GetLayerValue(Workbench.Ai.AiService.EnabledSetting, SettingScope.User)?.GetRawText();
+        Check(shell.Ai.State == Workbench.Ai.AiState.Off, "AI assistance is off");
+        shell.AiChat.NewChat(); // the ai.chat step's conversation would keep the empty state away
+        var bin = Path.Combine(Work, "agent-stand-ins");
+        Directory.CreateDirectory(bin);
+        void Program(string name, string version)
+        {
+            // Prints its version; anything else fails, so nothing could start an agent through it.
+            var file = Path.Combine(bin, OperatingSystem.IsWindows() ? name + ".cmd" : name);
+            File.WriteAllText(file, OperatingSystem.IsWindows()
+                ? $"@echo off\r\nif \"%1\"==\"--version\" (echo {version}& exit /b 0)\r\nexit /b 1\r\n"
+                : $"#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo {version}; exit 0; fi\nexit 1\n");
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+        }
+
+        Program("node", "v24.11.1");
+        Program("npx", "11.6.2");
+        shell.AgentSearchPath = bin;
+        var remoteSession = shell.IsRemoteSession;
+        shell.IsRemoteSession = false; // the runner's own SSH_* (a CI runner over SSH) mustn't change the picture
+        try
+        {
+            shell.ShowAiChat();
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(v => v.IsEffectivelyVisible), "AI Chat opens").ConfigureAwait(true);
+            var view = window.GetVisualDescendants().OfType<AiChatView>().First(v => v.IsEffectivelyVisible);
+            await WaitAsync(() => view.GetVisualDescendants().OfType<Avalonia.Controls.StackPanel>().Any(p => p.Name == "ConnectRow" && p.IsEffectivelyVisible), "AI Chat's off state offers to connect an agent").ConfigureAwait(true);
+            // The buttons once the row has made them, shown and bound to their agents. The row's buttons are made again
+            // as the window is laid out (after ai.chat and the gallery's themes): a button read before the screenshot was
+            // detached by the click, with no agent, and the click did nothing (#144's Linux smoke).
+            List<Avalonia.Controls.Button> Buttons() => [.. view.GetVisualDescendants().OfType<Avalonia.Controls.ItemsControl>().First(c => c.Name == "ConnectButtons").GetVisualDescendants().OfType<Avalonia.Controls.Button>().Where(b => b.IsAttachedToVisualTree())];
+            bool Shown(Avalonia.Controls.Button b) => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Tag is string { Length: > 0 };
+            await WaitAsync(() => Buttons() is { Count: 4 } made && made.All(Shown), "the one-click agents' buttons are shown").ConfigureAwait(true);
+            var buttons = Buttons();
+            Check(buttons.Select(b => b.Content as string).SequenceEqual(["Claude", "Codex", "Gemini CLI", "GitHub Copilot"]), "the four one-click agents are buttons");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("ai-chat-connect.png");
+
+            await WaitAsync(() => Buttons().FirstOrDefault(b => b.Content as string == "Claude") is { } shown && Shown(shown), "the Claude button is shown").ConfigureAwait(true);
+            Buttons().First(b => b.Content as string == "Claude").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+            var dialog = shell.ConnectAgent;
+            await WaitAsync(() => dialog.IsOpen, "Connect to Claude opens").ConfigureAwait(true);
+            await WaitAsync(() => dialog.Mode == ConnectAgentMode.Connect, "Connect to Claude shows what it found").ConfigureAwait(true);
+            Check(dialog.Title == "Connect to Claude", "the dialog names the agent");
+            Check(dialog.Requirements.Select(r => r.Name).SequenceEqual(["Node.js 24.11.1", "npx 11.6.2"]), "the stand-in Node.js and npx are found");
+            Check(dialog.Runs.FirstOrDefault()?.Command == Workbench.Ai.Acp.AcpAgentTemplates.Find("claude")!.Agent.CommandLine, "the exact command line is shown");
+            Check(dialog.ShowConsent && !dialog.CanConnect, "Connect waits for the consent while AI is off");
+            Check(dialog.SignInOptions.Select(o => o.Name).SequenceEqual(["Claude subscription", "Anthropic Console account", "API key", "I'm signed in already"]), "Claude's ways to sign in");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("agent-connect.png");
+
+            dialog.Cancel();
+            await WaitAsync(() => !dialog.IsOpen, "Cancel closes it").ConfigureAwait(true);
+            Check(settings.GetLayerValue(Workbench.Ai.Acp.AcpAgents.AgentsSetting, SettingScope.User)?.GetRawText() == agentsBefore, "ai.agents is as it was");
+            Check(settings.GetLayerValue(Workbench.Ai.AiService.EnabledSetting, SettingScope.User)?.GetRawText() == enabledBefore, "ai.enabled is as it was");
+        }
+        finally
+        {
+            shell.AgentSearchPath = null;
+            shell.IsRemoteSession = remoteSession;
+            if (shell.ConnectAgent.IsOpen)
+            {
+                shell.ConnectAgent.Cancel();
+            }
+        }
+    }
+
     private async Task AiChatStepAsync()
     {
         const string Reply = "This adds two numbers. A shorter version:\n\n```csharp\nstatic int Add(int a, int b) => a + b;\n```\n\nThe expression body returns the same value.";
@@ -3517,6 +4139,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             // A failed step leaves no debug session behind: the next one would find it instead of starting its own.
             if (shell.Debugger.IsActive)
             {
+                // What the debugger saw says why a program didn't stop (debug.compound's second program, linux-arm64).
+                Console.Out.WriteLine($"  --- Debug (the end; the session is {shell.Debugger.State}) ---");
+                Console.Out.WriteLine(Tail(shell.DebugLog.GetText(), 4000));
+                Console.Out.Flush();
                 try
                 {
                     await shell.Debugger.StopAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);

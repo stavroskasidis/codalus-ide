@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Codalus.LanguageServices.Protocol;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Node;
 
@@ -178,7 +179,7 @@ public static class Prettier
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             throw;
         }
 

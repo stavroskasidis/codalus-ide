@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Codalus.Debugging;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Debugging.Remote;
 
@@ -60,7 +61,7 @@ public static class RemoteShell
         {
             try
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
             }
             catch (InvalidOperationException)
             {

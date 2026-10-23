@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Aspire;
@@ -38,6 +39,16 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
     private string _logs = string.Empty;
     private string? _dashboard;
     private CancellationTokenSource? _logWatch;
+
+    /// <summary>Each resource's state, by name, as the log watch reads it off the UI thread.</summary>
+    private readonly ConcurrentDictionary<string, string?> _states = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The waits before the selected resource's console is followed again when its stream ended while the resource is
+    /// live: one per stream in a row that brought no new line, after which it gives up until the resource starts again.
+    /// </summary>
+    internal IReadOnlyList<TimeSpan> LogRetryDelays { get; init; } =
+        [TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8)];
 
     public ObservableCollection<AspireResourceRow> Resources { get; } = [];
 
@@ -133,8 +144,15 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
     /// <summary>Applies a change of the resource tree (the dashboard's own resource and hidden ones aren't listed).</summary>
     public void Apply(AspireResourceChange change)
     {
+        var restarted = false;
         if (change.Initial is { } initial)
         {
+            _states.Clear();
+            foreach (var resource in initial)
+            {
+                _states[resource.Name] = resource.State;
+            }
+
             var selected = _selected?.Resource.Name;
             Resources.Clear();
             foreach (var resource in initial.Where(Visible))
@@ -147,6 +165,8 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
         }
         else if (change.Upsert is { } upsert && Visible(upsert))
         {
+            restarted = !IsLive(upsert.Name) && IsLiveState(upsert.State);
+            _states[upsert.Name] = upsert.State;
             var index = IndexOf(upsert.Name);
             var row = new AspireResourceRow(upsert);
             if (index < 0)
@@ -161,16 +181,35 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
                     _selected = row;
                     OnPropertyChanged(nameof(Selected));
                     ShowProperties();
+
+                    // Started again (its restart command): its console is followed again, from its start.
+                    if (restarted)
+                    {
+                        WatchLogs();
+                    }
                 }
             }
         }
-        else if (change.Deleted is { } deleted && IndexOf(deleted) is >= 0 and var at)
+        else if (change.Upsert is { } hidden)
         {
-            Resources.RemoveAt(at);
+            _states[hidden.Name] = hidden.State;
+        }
+        else if (change.Deleted is { } deleted)
+        {
+            _states.TryRemove(deleted, out _);
+            if (IndexOf(deleted) is >= 0 and var at)
+            {
+                Resources.RemoveAt(at);
+            }
         }
 
         UpdateStatus();
     }
+
+    /// <summary>Whether a resource in <paramref name="state"/> runs or is on its way to (its console can still grow).</summary>
+    private static bool IsLiveState(string? state) => state is "Running" or "Starting" or "Waiting" or "Building" or "RuntimeUnhealthy";
+
+    private bool IsLive(string resource) => _states.TryGetValue(resource, out var state) && IsLiveState(state);
 
     private static bool Visible(AspireResource resource) => !resource.IsHidden && !resource.Type.Equals("Parameter", StringComparison.OrdinalIgnoreCase);
 
@@ -215,6 +254,12 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
     private void ShowDetails()
     {
         ShowProperties();
+        WatchLogs();
+    }
+
+    /// <summary>Follows the selected resource's console from its start, in place of the last one followed.</summary>
+    private void WatchLogs()
+    {
         _logWatch?.Cancel();
         _logWatch = null;
         Logs = string.Empty;
@@ -227,35 +272,89 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
         _ = WatchLogsAsync(client, row.Resource.Name, watch.Token);
     }
 
+    /// <summary>
+    /// A resource's console, from the resource service. Its stream can end while the resource runs (a project just
+    /// started: the stream ended after 64 ms with nothing, and the window stayed empty), so while the resource is live
+    /// it's followed again, after <see cref="LogRetryDelays"/> (longer each time), until a stream brings new lines or
+    /// the delays run out; not once the resource stops or goes, nor after another is selected or the AppHost ends (the
+    /// token). Each stream replays the console from its start: lines already shown (by their numbers) are skipped.
+    /// </summary>
     private async Task WatchLogsAsync(AspireResourceClient client, string resource, CancellationToken cancellationToken)
     {
         var text = new System.Text.StringBuilder();
-        try
+        var shown = 0;
+        var empty = 0; // streams in a row that brought no new line
+        while (true)
         {
-            await foreach (var line in client.WatchLogsAsync(resource, cancellationToken).ConfigureAwait(false))
+            var fresh = false;
+            try
             {
-                lock (text)
+                await foreach (var line in client.WatchLogsAsync(resource, cancellationToken).ConfigureAwait(false))
                 {
+                    if (line.Number > 0 && line.Number <= shown)
+                    {
+                        continue;
+                    }
+
+                    fresh = true;
+                    shown = Math.Max(shown, line.Number);
                     text.Append(PlainText(line.Text)).Append('\n');
                     if (text.Length > 200_000)
                     {
                         text.Remove(0, text.Length - 150_000);
                     }
-                }
 
-                var snapshot = text.ToString();
-                Ui.Post(() =>
-                {
-                    if (!cancellationToken.IsCancellationRequested)
+                    var snapshot = text.ToString();
+                    Ui.Post(() =>
                     {
-                        Logs = snapshot;
-                    }
-                });
+                        if (!cancellationToken.IsCancellationRequested)
+                        {
+                            Logs = snapshot;
+                        }
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
+            {
+                // The service went away or broke the stream: the same as one that ended.
+            }
+
+            empty = fresh ? 0 : empty + 1;
+            if (cancellationToken.IsCancellationRequested || LogRetryDelays.Count == 0 || empty > LogRetryDelays.Count
+                || !await WaitWhileLiveAsync(resource, LogRetryDelays[Math.Max(empty - 1, 0)], cancellationToken).ConfigureAwait(false))
+            {
+                return;
             }
         }
-        catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException or IOException or InvalidDataException)
+    }
+
+    /// <summary>Waits <paramref name="delay"/>; false when the resource stopped (or went) meanwhile, or the wait was cancelled.</summary>
+    private async Task<bool> WaitWhileLiveAsync(string resource, TimeSpan delay, CancellationToken cancellationToken)
+    {
+        var until = DateTime.UtcNow + delay;
+        while (IsLive(resource))
         {
+            var left = until - DateTime.UtcNow;
+            if (left <= TimeSpan.Zero)
+            {
+                return true;
+            }
+
+            try
+            {
+                await Task.Delay(left < TimeSpan.FromMilliseconds(100) ? left : TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
         }
+
+        return false;
     }
 
     /// <summary>A console line without its ANSI escape sequences (colors), as the dashboard shows it.</summary>

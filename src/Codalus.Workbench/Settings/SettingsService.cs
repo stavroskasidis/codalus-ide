@@ -91,6 +91,13 @@ public sealed class SettingsService : IDisposable
 
     public event EventHandler<SettingsChangedEventArgs>? Changed;
 
+    /// <summary>
+    /// Keys whose entry in a settings file appeared, went or changed while their effective value didn't (a value equal to
+    /// the default removed by Reset, or one the other layer overrides): only what shows where a value is set needs them,
+    /// such as the Settings editor's Modified mark. Keys whose effective value changed are in <see cref="Changed"/>.
+    /// </summary>
+    public event EventHandler<SettingsChangedEventArgs>? LayersChanged;
+
     public IReadOnlyList<string> Diagnostics
     {
         get
@@ -295,14 +302,47 @@ public sealed class SettingsService : IDisposable
         return SetRawAsync(key, value, scope, cancellationToken);
     }
 
-    private async Task SetRawAsync(string key, JsonElement? value, SettingScope scope, CancellationToken cancellationToken)
+    private Task SetRawAsync(string key, JsonElement? value, SettingScope scope, CancellationToken cancellationToken) =>
+        EditAsync(text => JsoncEditor.SetProperty(text, key, value is { } written ? Readable(written) : null), scope, cancellationToken);
+
+    /// <summary>
+    /// Writes <paramref name="member"/> of the object setting <paramref name="key"/> in the given layer (null removes it),
+    /// leaving the object's other members and the comments inside it as they are (<see cref="JsoncEditor.SetMember"/>;
+    /// Connect and Disconnect of one <c>ai.agents</c> entry). The setting's whole value is validated as
+    /// <see cref="SetAsync(string, JsonElement?, SettingScope, CancellationToken)"/> does.
+    /// </summary>
+    public Task SetMemberAsync(string key, string member, JsonElement? value, SettingScope scope, CancellationToken cancellationToken)
+    {
+        if (Find(key) is { } descriptor && value is not null)
+        {
+            var whole = new System.Text.Json.Nodes.JsonObject();
+            if (GetLayerValue(key, scope) is { ValueKind: JsonValueKind.Object } existing)
+            {
+                foreach (var property in existing.EnumerateObject())
+                {
+                    whole[property.Name] = System.Text.Json.Nodes.JsonNode.Parse(property.Value.GetRawText());
+                }
+            }
+
+            whole[member] = System.Text.Json.Nodes.JsonNode.Parse(value.Value.GetRawText());
+            using var document = JsonDocument.Parse(whole.ToJsonString());
+            if (descriptor.Validate(document.RootElement) is { } error)
+            {
+                throw new ArgumentException($"{key}: {error}", nameof(value));
+            }
+        }
+
+        return EditAsync(text => JsoncEditor.SetMember(text, key, member, value is { } written ? Readable(written) : null), scope, cancellationToken);
+    }
+
+    private async Task EditAsync(Func<string, string> edit, SettingScope scope, CancellationToken cancellationToken)
     {
         var file = scope == SettingScope.User ? UserFile : WorkspaceFile ?? throw new InvalidOperationException("No workspace is open.");
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var text = File.Exists(file) ? ReadShared(file) : string.Empty;
-            var updated = JsoncEditor.SetProperty(text, key, value is { } written ? Readable(written) : null);
+            var updated = edit(text);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
             // The watcher's reload (or another program, an indexer, an antivirus) may be reading the file: on Windows that
             // is a sharing violation for the writer, which passes in moments.
@@ -482,9 +522,12 @@ public sealed class SettingsService : IDisposable
     {
         HashSet<string> changed;
         HashSet<string> registered;
+        HashSet<string> layers;
         lock (_gate)
         {
+            var (user, workspace) = (_user, _workspace);
             change();
+            layers = [.. LayerChanges(user, _user).Concat(LayerChanges(workspace, _workspace))];
             var diagnostics = fileDiagnostics ?? _diagnostics.Where(d => d.StartsWith("[file]", StringComparison.Ordinal)).ToList();
             var effective = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
             foreach (var (key, descriptor) in _descriptors)
@@ -569,7 +612,17 @@ public sealed class SettingsService : IDisposable
         {
             Changed?.Invoke(this, new SettingsChangedEventArgs(changed, registered));
         }
+
+        layers.ExceptWith(changed);
+        if (layers.Count > 0)
+        {
+            LayersChanged?.Invoke(this, new SettingsChangedEventArgs(layers));
+        }
     }
+
+    /// <summary>The keys a settings file added, removed or set to another value.</summary>
+    private static IEnumerable<string> LayerChanges(Dictionary<string, JsonElement> before, Dictionary<string, JsonElement> after) =>
+        before.Keys.Union(after.Keys).Where(k => !(before.TryGetValue(k, out var b) && after.TryGetValue(k, out var a) && b.GetRawText() == a.GetRawText()));
 
     private static Dictionary<string, JsonElement> ReadLayer(string file, List<string> diagnostics)
     {

@@ -212,11 +212,48 @@ public class FindInFilesTests
         Assert.True(Parts(combos[0]).Text.IsFocused);
         ExpectOneField(combos[0], "Shell.Focus", 2);
 
+        // Find in Files and Replace in Files are tabs inside a view (TabStrip.viewTabs): 28 px, the hairline across the
+        // window under them, covered by the selected tab's underline.
+        var modes = view.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.TabStrip>().Single(t => t.Name == "ModeTabs");
+        var frame = view.GetVisualDescendants().OfType<Avalonia.Controls.Border>().Single(b => b.Name == "Frame");
+        Assert.Contains("viewTabs", modes.Classes);
+        Assert.Equal(new Avalonia.Thickness(0, 0, 0, 1), modes.BorderThickness);
+        Assert.Equal(ControlSetTests.Token("Shell.ViewTabs.Rule", variant), ControlSetTests.BrushColor(modes.BorderBrush));
+        Assert.Equal(frame.Bounds.Width - frame.BorderThickness.Left - frame.BorderThickness.Right, modes.Bounds.Width);
+        var mode = (Avalonia.Controls.Control)modes.ContainerFromIndex(modes.SelectedIndex)!;
+        Assert.Equal(28, mode.Bounds.Height);
+        Assert.Equal(modes.Bounds.Height, ControlSetTests.Underline(mode, modes).Bottom);
+
         // Look in under the pointer, over its text: the field's border takes the hover color all around.
         var lookIn = combos[1];
         ControlSetTests.SetState(lookIn, ":pointerover");
         ControlSetTests.SetState(Parts(lookIn).Text, ":pointerover");
         ExpectOneField(lookIn, "Shell.Input.Border.Hover", 1);
+        ControlSetTests.SetState(lookIn, ":pointerover", false);
+        ControlSetTests.SetState(Parts(lookIn).Text, ":pointerover", false);
+
+        // Find what lists what was typed before (ComboBox.history), so its list has no check column; Look in and File
+        // types list choices, and the one in each's text has the check beside it, from the window's first opening.
+        Assert.Contains("history", combos[0].Classes);
+        Assert.DoesNotContain("history", combos[1].Classes);
+        Assert.DoesNotContain("history", combos[2].Classes);
+        var find = f.Shell.FindReplace;
+        find.QueryHistory.Add("Greet");
+        find.QueryHistory.Add("Person");
+        find.Query = "Greet";
+        ShellFixture.Pump();
+        var typed = ControlSetTests.OpenRows(combos[0]);
+        Assert.True(typed[0].IsSelected);
+        Assert.All(typed, r => Assert.False(ControlSetTests.Check(r).IsVisible));
+        combos[0].IsDropDownOpen = false;
+        ShellFixture.Pump();
+        foreach (var (choices, text) in new[] { (lookIn, find.LookIn), (combos[2], find.FileTypes) })
+        {
+            var rows = ControlSetTests.OpenRows(choices);
+            Assert.Equal(text, Assert.Single(rows, r => ControlSetTests.Check(r).IsVisible).Content);
+            choices.IsDropDownOpen = false;
+            ShellFixture.Pump();
+        }
     }
 
     [AvaloniaFact]

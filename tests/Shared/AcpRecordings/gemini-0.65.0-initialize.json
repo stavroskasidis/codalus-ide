@@ -1,0 +1,11 @@
+{
+  "_source": "Read from the code of @google/gemini-cli 0.64.0 (the ACP agent's initialize; its method ids are its AuthType values) and pinned to 0.65.0, not yet recorded from a run: refresh it with eng/record-acp-initialize.sh gemini.",
+  "protocolVersion": 1,
+  "agentCapabilities": { "loadSession": true, "promptCapabilities": { "image": true, "audio": true, "embeddedContext": true } },
+  "agentInfo": { "name": "gemini-cli", "title": "Gemini CLI", "version": "0.65.0" },
+  "authMethods": [
+    { "id": "oauth-personal", "name": "Log in with Google", "description": "Log in with your Google account" },
+    { "id": "gemini-api-key", "name": "Gemini API key", "description": "Use an API key with Gemini Developer API", "_meta": { "api-key": { "provider": "google" } } },
+    { "id": "vertex-ai", "name": "Vertex AI", "description": "Use an API key with Vertex AI GenAI API" }
+  ]
+}

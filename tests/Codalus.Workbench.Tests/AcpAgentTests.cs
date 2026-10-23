@@ -17,7 +17,7 @@ namespace Codalus.Workbench.Tests;
 /// </summary>
 public sealed class AcpAgentTests : IAsyncDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-acp-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-acp-" + Guid.NewGuid().ToString("N"));
     private readonly string _log;
     private readonly WorkbenchServices _workbench;
     private readonly AiService _ai;
@@ -83,7 +83,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
         var env = new Dictionary<string, string> { ["ACP_FAKE_LOG"] = _log };
         foreach (var pair in extraEnv.Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
-            env[pair.Split('=')[0]] = pair.Split('=')[1];
+            env[pair.Split('=', 2)[0]] = pair.Split('=', 2)[1];
         }
 
         var agents = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["stand-in"] = new { command = Dotnet, args = new[] { StandInAgent }, env } });
@@ -114,7 +114,7 @@ public sealed class AcpAgentTests : IAsyncDisposable
         Assert.True(capabilities.GetProperty("fs").GetProperty("readTextFile").GetBoolean());
         Assert.True(capabilities.GetProperty("fs").GetProperty("writeTextFile").GetBoolean());
         Assert.True(capabilities.GetProperty("terminal").GetBoolean());
-        Assert.False(capabilities.GetProperty("auth").GetProperty("terminal").GetBoolean());
+        Assert.True(capabilities.GetProperty("auth").GetProperty("terminal").GetBoolean()); // terminal sign-in (ADR 0083)
         Assert.False(capabilities.TryGetProperty("elicitation", out _)); // not advertised: TODO(issue)
         Assert.Equal(JsonValueKind.Object, capabilities.GetProperty("session").GetProperty("compaction").ValueKind);
         Assert.Equal(JsonValueKind.Object, capabilities.GetProperty("session").GetProperty("notices").ValueKind);
@@ -569,6 +569,160 @@ public sealed class AcpAgentTests : IAsyncDisposable
         Assert.False(File.Exists(_log));
     }
 
+    [Fact]
+    public async Task A_terminal_sign_in_runs_the_configured_command_with_its_args_in_the_agents_folder_then_starts_it_again_and_never_authenticates()
+    {
+        var marker = Path.Combine(_root, "signed-in");
+        await ConfigureAsync($"ACP_FAKE_AUTH=1;ACP_FAKE_TERMINAL_AUTH=1;ACP_FAKE_LOGIN_MARKER={marker}");
+        _agents.ProcessDirectory = Path.Combine(_root, ".ide", "agents");
+        _host.SignIn = methods => methods.Single(m => m.IsTerminal);
+
+        var turn = await AskAsync("hello");
+        Assert.Null(turn.Error);
+        Assert.Equal("Hello from the stand-in.", turn.Answer);
+        var signIn = Assert.Single(_host.TerminalSignIns);
+        Assert.Equal(("stand-in", "Fake terminal login"), (signIn.Agent, signIn.Method));
+        Assert.EndsWith(StandInAgent + " --login", signIn.CommandLine, StringComparison.Ordinal);
+        Assert.Equal(["ACP_FAKE_LOGIN_MODE"], signIn.Variables);
+        Assert.Equal(_agents.ProcessDirectory, signIn.Launch.WorkingDirectory);
+        Assert.Equal("1", signIn.Launch.Environment!["ACP_FAKE_LOGIN_MODE"]);
+        Assert.Null(signIn.Hint);
+
+        // The login ran in the agent's own folder (created first), the agent started again and initialized again, and
+        // authenticate never went to it for a terminal method.
+        var login = File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).Single(m => m.TryGetProperty("login", out _));
+        Assert.Equal(("--login", _agents.ProcessDirectory, "1"), (login.GetProperty("login").GetString()!.Split(' ')[^1], login.GetProperty("cwd").GetString(), login.GetProperty("mode").GetString()));
+        Assert.Equal(2, Received("initialize").Count);
+        Assert.Empty(Received("authenticate"));
+        Assert.Contains("terminal sign-in fake-terminal-login → exit 0", AiLog, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_terminal_sign_in_that_fails_or_is_cancelled_says_so_in_plain_words()
+    {
+        await ConfigureAsync("ACP_FAKE_AUTH=1;ACP_FAKE_TERMINAL_AUTH=1");
+        _host.SignIn = methods => methods.Single(m => m.IsTerminal);
+        _host.TerminalExit = _ => 3;
+        Assert.Equal("stand-in's sign-in ended with exit code 3, so you aren't signed in. Try again, or sign in with the agent's own command in a terminal.", (await AskAsync("hello")).Error);
+
+        _host.TerminalExit = _ => null; // declined, or a remote window
+        Assert.Equal("stand-in needs you to sign in first.", (await AskAsync("hello")).Error);
+    }
+
+    [Fact]
+    public void A_terminal_methods_variable_that_changes_what_runs_is_refused_before_anything_runs()
+    {
+        var config = new AcpAgentConfig("npx", ["-y", "agent@1.0.0"], new Dictionary<string, string>());
+        foreach (var variable in new[] { "PATH", "NODE_OPTIONS", "LD_PRELOAD" })
+        {
+            var method = new AcpAuthMethod { Id = "login", Name = "Login", Type = "terminal", Args = ["--login"], Env = new Dictionary<string, string> { [variable] = "x" } };
+            var refused = Assert.Throws<AcpException>(() => AcpAgentSession.TerminalSignIn("agent", config, method, _root));
+            Assert.Contains(variable, refused.Message, StringComparison.Ordinal);
+        }
+
+        // Claude's remote sign-in (its own TUI) comes with the hint to sign in in a terminal of one's own.
+        var remote = new AcpAuthMethod { Id = "claude-login", Name = "Log in with Claude", Type = "terminal", Args = ["--cli"] };
+        var (run, signIn) = AcpAgentSession.TerminalSignIn("Claude", config, remote, _root);
+        Assert.Equal(["-y", "agent@1.0.0", "--cli"], run.Args);
+        Assert.Equal("npx -y agent@1.0.0 --cli", signIn.CommandLine);
+        Assert.Contains("run claude in a terminal and type /login", signIn.Hint, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Auth_required_on_a_prompt_signs_in_sends_it_again_once_and_later_says_the_earlier_conversation_is_gone()
+    {
+        // Claude's adapter: the session is created signed out, and only the prompt asks for sign-in.
+        var marker = Path.Combine(_root, "signed-in");
+        await ConfigureAsync($"ACP_FAKE_AUTH_ON_PROMPT=1;ACP_FAKE_AUTH_STATUS=silent;ACP_FAKE_TERMINAL_AUTH=1;ACP_FAKE_LOGIN_MARKER={marker}");
+        _host.SignIn = methods => methods.Single(m => m.IsTerminal);
+
+        var first = await AskAsync("hello");
+        Assert.Null(first.Error);
+        Assert.Equal("Hello from the stand-in.", first.Answer);
+        Assert.Empty(first.Notices); // nothing was said before: nothing lost
+        Assert.Equal(2, Received("session/prompt").Count); // refused, then sent again in the new process
+        Assert.Contains("session/prompt (sent again after the sign-in)", AiLog, StringComparison.Ordinal);
+
+        // Signed out elsewhere mid-conversation: signing in again starts a new session, and the turn says so.
+        File.Delete(marker);
+        var second = await AskAsync("hello");
+        Assert.Null(second.Error);
+        Assert.Contains(second.Notices, n => n.Text == "stand-in started a new session when you signed in: it doesn't have the earlier conversation.");
+
+        // A sign-in that doesn't take: the prompt goes once more, and then the turn says it still needs one.
+        File.Delete(marker);
+        _host.TerminalExit = _ => 0; // exits without signing in
+        Assert.Equal("stand-in still needs you to sign in. Sign in again, or with the agent's own command in a terminal.", (await AskAsync("hello")).Error);
+    }
+
+    [Fact]
+    public async Task A_login_judged_by_the_status_push_fails_when_the_agent_still_says_signed_out_even_after_exit_0()
+    {
+        var marker = Path.Combine(_root, "signed-in");
+        await ConfigureAsync($"ACP_FAKE_AUTH_ON_PROMPT=1;ACP_FAKE_AUTH_STATUS=none;ACP_FAKE_TERMINAL_AUTH=1;ACP_FAKE_LOGIN_MARKER={marker};ACP_FAKE_LOGIN_FAILS=1");
+        _host.SignIn = methods => methods.Single(m => m.IsTerminal);
+        var turn = await AskAsync("hello");
+        Assert.Equal("stand-in says you still aren't signed in (Not logged in). Try again, or sign in with the agent's own command in a terminal.", turn.Error);
+        Assert.Contains("_auth/status_update → none", AiLog, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_client_reads_the_status_push_signs_out_only_when_advertised_and_sends_a_key_once_in_meta()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "agent-folder"));
+        AcpAgentConfig Config(string variable)
+        {
+            var env = new Dictionary<string, string> { ["ACP_FAKE_LOG"] = _log };
+            env[variable.Split('=', 2)[0]] = variable.Split('=', 2)[1];
+            return new AcpAgentConfig(Dotnet, [StandInAgent], env);
+        }
+
+        var handler = new RefusingClientHandler(_ => { });
+
+        await using (var client = await AcpClient.StartAsync("claude-like", Config("ACP_FAKE_AUTH_STATUS=account"), Path.Combine(_root, "agent-folder"), handler, TimeSpan.FromSeconds(30), Ct))
+        {
+            Assert.True(client.ReportsAuthStatus);
+            Assert.True(client.CanLogout);
+            var status = await client.WaitForAuthStatusAsync(TimeSpan.FromSeconds(10), Ct);
+            Assert.Equal(("subscription", "Claude Max", "tester@example.com"), (status!.Kind, status.Label, status.Detail));
+            var changed = new TaskCompletionSource<AcpAuthStatus>();
+            client.AuthStatusChanged += (_, s) => changed.TrySetResult(s);
+            await client.LogoutAsync(Ct);
+            Assert.True((await changed.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct)).IsSignedOut);
+            Assert.Single(Received("logout"));
+        }
+
+        await using (var client = await AcpClient.StartAsync("plain", Config("ACP_FAKE_AUTH=1"), Path.Combine(_root, "agent-folder"), handler, TimeSpan.FromSeconds(30), Ct))
+        {
+            Assert.False(client.ReportsAuthStatus);
+            Assert.Null(await client.WaitForAuthStatusAsync(TimeSpan.FromMilliseconds(300), Ct)); // silence is "not reported"
+            Assert.False(client.CanLogout);
+            await Assert.ThrowsAsync<AcpException>(() => client.LogoutAsync(Ct));
+            Assert.Single(Received("logout")); // the first client's only: never sent unadvertised
+
+            await client.AuthenticateAsync("fake-login", Ct, JsonSerializer.SerializeToElement(new Dictionary<string, string> { ["apiKey"] = "sk-test-once" }));
+            var meta = Received("authenticate").Single().GetProperty("params").GetProperty("_meta");
+            Assert.Equal("sk-test-once", meta.GetProperty("api-key").GetProperty("apiKey").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task The_connection_tests_handler_refuses_every_file_terminal_and_permission_request()
+    {
+        var handler = new RefusingClientHandler(_ => { });
+        var env = new Dictionary<string, string> { ["ACP_FAKE_LOG"] = _log, ["ACP_FAKE_PROBE_CLIENT"] = "1" };
+        await using var client = await AcpClient.StartAsync("probe", new AcpAgentConfig(Dotnet, [StandInAgent], env), _root, handler, TimeSpan.FromSeconds(30), Ct);
+        await client.NewSessionAsync(new AcpNewSessionRequest(_root, []), Ct);
+        for (var i = 0; i < 400 && handler.Refused < 3; i++)
+        {
+            await Task.Delay(50, Ct);
+        }
+
+        Assert.Equal(3, handler.Refused);
+        var answers = File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).Where(m => m.TryGetProperty("id", out _) && !m.TryGetProperty("method", out _) && m.TryGetProperty("error", out _)).ToList();
+        Assert.Equal(3, answers.Count);
+    }
+
     private sealed class FakeHost : IAcpHost
     {
         private int _tokens;
@@ -599,6 +753,11 @@ public sealed class AcpAgentTests : IAsyncDisposable
         public Func<IReadOnlyList<AcpAuthMethod>, AcpAuthMethod?> SignIn { get; set; } = _ => null;
 
         public List<string> Reloaded { get; } = [];
+
+        public List<AcpTerminalSignIn> TerminalSignIns { get; } = [];
+
+        /// <summary>A terminal sign-in's exit code without running it; null runs its process for real (the stand-in's --login).</summary>
+        public Func<AcpTerminalSignIn, int?>? TerminalExit { get; set; }
 
         public int McpStarted { get; private set; }
 
@@ -654,6 +813,21 @@ public sealed class AcpAgentTests : IAsyncDisposable
             return Task.CompletedTask;
         }
 
+        public async Task<int?> RunTerminalSignInAsync(AcpTerminalSignIn signIn, CancellationToken cancellationToken)
+        {
+            lock (TerminalSignIns)
+            {
+                TerminalSignIns.Add(signIn);
+            }
+
+            if (TerminalExit is { } exit)
+            {
+                return exit(signIn);
+            }
+
+            return await RunAsync(signIn.Launch, cancellationToken);
+        }
+
         public (AcpMcpServerStdio Server, IDisposable Lifetime)? StartMcpServer(string agent)
         {
             OnStart?.Invoke();
@@ -666,5 +840,29 @@ public sealed class AcpAgentTests : IAsyncDisposable
         {
             public void Dispose() => stop();
         }
+    }
+
+    /// <summary>Runs a launch to its end, as the terminal would (no terminal here): its exit code.</summary>
+    internal static async Task<int?> RunAsync(Codalus.Rpc.ProcessLaunchInfo launch, CancellationToken cancellationToken)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(launch.FileName) { UseShellExecute = false, WorkingDirectory = launch.WorkingDirectory ?? Environment.CurrentDirectory };
+        foreach (var argument in launch.Arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        foreach (var name in launch.UnsetEnvironment ?? [])
+        {
+            start.Environment.Remove(name);
+        }
+
+        foreach (var (key, value) in launch.Environment ?? new Dictionary<string, string>())
+        {
+            start.Environment[key] = value;
+        }
+
+        using var process = System.Diagnostics.Process.Start(start)!;
+        await process.WaitForExitAsync(cancellationToken);
+        return process.ExitCode;
     }
 }

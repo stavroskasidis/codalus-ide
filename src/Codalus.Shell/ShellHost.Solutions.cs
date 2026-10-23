@@ -106,21 +106,26 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// Opens a solution or project: asks for one when <paramref name="path"/> is null, asks whether to trust its
-    /// folder the first time, then loads it (structure first, projects as they are evaluated).
+    /// folder the first time, then loads it (structure first, projects as they are evaluated). With
+    /// <paramref name="trusted"/> the trust is already decided (New Project asks it on its own page, ADR 0082): no prompt,
+    /// and true trusts the folder. Returns whether the solution opened.
     /// </summary>
-    public async Task OpenSolutionAsync(string? path)
+    public Task OpenSolutionAsync(string? path) => OpenSolutionAsync(path, trusted: null);
+
+    /// <inheritdoc cref="OpenSolutionAsync(string?)"/>
+    public async Task<bool> OpenSolutionAsync(string? path, bool? trusted)
     {
         path ??= Window is { } window ? await window.PickSolutionAsync().ConfigureAwait(true) : null;
         if (path is null)
         {
-            return;
+            return false;
         }
 
         var remote = IsRemotePath(path);
         if (remote ? await Codalus.Workbench.FileSystem.FileSystems.DirectoryExistsAsync(path, CancellationToken.None).ConfigureAwait(true) : Directory.Exists(path))
         {
             await OpenFolderWorkspaceAsync(path).ConfigureAwait(true); // a recent folder (folder mode, ADR 0033)
-            return;
+            return Solutions.IsOpen;
         }
 
         path = remote ? path : Codalus.Platform.RealPath.Resolve(path);
@@ -128,12 +133,17 @@ public sealed partial class ShellHost
         {
             Recent.Remove(path);
             Workbench.Notifications.Error(Localizer.Format("msg.solutions.doesntExist", "'{0}' doesn't exist.", RemoteDisplay(path)));
-            return;
+            return false;
         }
 
         var folder = Path.GetDirectoryName(path)!;
-        var trusted = Trust.IsTrusted(folder);
-        if (!trusted)
+        if (trusted == true)
+        {
+            Trust.Trust(folder);
+        }
+
+        trusted ??= Trust.IsTrusted(folder) ? true : null;
+        if (trusted is null)
         {
             var choice = await Dialogs.ShowAsync(new DialogRequest(
                 "Do you trust the authors of this folder?",
@@ -142,11 +152,11 @@ public sealed partial class ShellHost
                 ["Trust and Open", "Open Without Trusting", "Cancel"])).ConfigureAwait(true);
             if (choice.Button is null or "Cancel")
             {
-                return;
+                return false;
             }
 
             trusted = choice.Button == "Trust and Open";
-            if (trusted)
+            if (trusted == true)
             {
                 Trust.Trust(folder);
             }
@@ -171,7 +181,7 @@ public sealed partial class ShellHost
 
             var session = remote ? null : await ReadSolutionSessionAsync(stateKey).ConfigureAwait(true);
             ApplySolutionViewState(session);
-            await Solutions.OpenAsync(path, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None, session?.Configuration, session?.Platform, session?.ActiveFrameworks).ConfigureAwait(true);
+            await Solutions.OpenAsync(path, trusted == true, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None, session?.Configuration, session?.Platform, session?.ActiveFrameworks).ConfigureAwait(true);
             StatusBar.ClearMessage();
             Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
             if (remote)
@@ -188,6 +198,8 @@ public sealed partial class ShellHost
                 await RestoreSolutionStateAsync(stateKey, session).ConfigureAwait(true);
                 await OpenRepositoryAsync(folder).ConfigureAwait(true);
             }
+
+            return true;
         }
         catch (HostRuntimeMissingException ex)
         {
@@ -212,6 +224,8 @@ public sealed partial class ShellHost
                 ReportError($"Could not open {Path.GetFileName(path)}: {ex.Message}");
             }
         }
+
+        return false;
     }
 
     /// <summary>
@@ -328,9 +342,14 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Adds a project (created by a plugin) to the open solution, in the selected solution folder, and selects it.</summary>
-    public async Task AddProjectFileAsync(string project)
+    public Task AddProjectFileAsync(string project) => AddProjectFileAsync(project, Explorer.Selected?.Node.SolutionFolderId);
+
+    /// <summary>
+    /// Adds a project to the open solution in <paramref name="folder"/> (a solution folder's id; null: the root), or to the
+    /// open folder's projects in folder mode, and selects it. New Project passes the folder selected when it opened.
+    /// </summary>
+    public async Task AddProjectFileAsync(string project, string? folder)
     {
-        var folder = Explorer.Selected?.Node.SolutionFolderId;
         try
         {
             Explorer.RevealWhenAvailable("p:" + Path.GetFullPath(project));
@@ -392,6 +411,7 @@ public sealed partial class ShellHost
     {
         var solution = Solutions.Solution;
         Workbench.Context.Set("solutionOpen", solution is not null);
+        Workbench.Context.Set("solutionIsProjectFile", solution?.Format == "project");
         StatusBar.HasSolution = solution is not null;
         Workbench.Context.Set("solutionTrusted", solution?.Trusted ?? false);
         if (solution is not null && !_structureReported)

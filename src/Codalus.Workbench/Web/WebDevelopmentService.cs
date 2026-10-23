@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Xml.Linq;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Web;
 
@@ -137,7 +138,7 @@ public sealed class WebDevelopmentService(Func<string?> dotnetRoot)
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             throw;
         }
 

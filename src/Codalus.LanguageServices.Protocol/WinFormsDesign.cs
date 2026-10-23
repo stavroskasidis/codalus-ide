@@ -136,6 +136,59 @@ public sealed record DesignerCollectionInfo(string OwnerType, string Property, s
     public string Key => OwnerType + ":" + Property;
 }
 
+/// <summary>A form's resource file as the designer starts one (M41b, #67).</summary>
+public static class DesignerResx
+{
+    /// <summary>
+    /// An empty resource file, as the classic IDE's designer starts a form's or a culture's: the C# host creates a missing
+    /// one from it, and the IDE writes it before an edit of a form that has no default .resx (Lock Controls' metadata), so
+    /// the edit goes to a file the designer holds and undoes with it.
+    /// </summary>
+    public const string Empty = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <root>
+          <resheader name="resmimetype">
+            <value>text/microsoft-resx</value>
+          </resheader>
+          <resheader name="version">
+            <value>2.0</value>
+          </resheader>
+          <resheader name="reader">
+            <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+          </resheader>
+          <resheader name="writer">
+            <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+          </resheader>
+        </root>
+
+        """;
+
+    /// <summary>
+    /// A resource file's design-time metadata (#67: <c>name.Locked</c>), read as XML: each <c>metadata</c> element's value
+    /// by its name, a bool for a <c>System.Boolean</c> one, else its text. No <c>data</c> element is read: a
+    /// <c>ResXResourceReader</c> deserializes every data value to list the metadata, and one it can't (a binary-formatted
+    /// <c>TreeNode</c> on .NET 9 and later, a type it can't find) would fail the form's load. Throws
+    /// <see cref="System.Xml.XmlException"/> for a text that isn't XML.
+    /// </summary>
+    public static IReadOnlyDictionary<string, object?> Metadata(string text)
+    {
+        var metadata = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var element in System.Xml.Linq.XDocument.Parse(text).Root?.Elements("metadata") ?? [])
+        {
+            if ((string?)element.Attribute("name") is not { Length: > 0 } name)
+            {
+                continue;
+            }
+
+            var value = element.Element("value")?.Value;
+            var type = ((string?)element.Attribute("type"))?.Split(',')[0].Trim();
+            metadata[name] = type == "System.Boolean" && bool.TryParse(value?.Trim(), out var flag) ? flag : value;
+        }
+
+        return metadata;
+    }
+}
+
 /// <summary>The collections Visual Studio's designer has editors for, by the type that declares them (M41b).</summary>
 public static class DesignerCollections
 {
@@ -143,6 +196,9 @@ public static class DesignerCollections
     public const string Components = "components";
     public const string Locals = "locals";
     public const string Images = "images";
+
+    /// <summary>A new menu item's type: what typed text in a menu's Type Here makes.</summary>
+    public const string MenuItemType = Forms + "ToolStripMenuItem";
 
     private const string Forms = "System.Windows.Forms.";
 
@@ -166,6 +222,8 @@ public static class DesignerCollections
     public static IReadOnlyList<DesignerCollectionInfo> All { get; } =
     [
         new(Forms + "ListBox", "Items", Values, "AddRange", "System.Object", ["System.String"]),
+        new(Forms + "TextBox", "AutoCompleteCustomSource", Values, "AddRange", "System.String", ["System.String"]),
+        new(Forms + "ComboBox", "AutoCompleteCustomSource", Values, "AddRange", "System.String", ["System.String"]),
         new(Forms + "ComboBox", "Items", Values, "AddRange", "System.Object", ["System.String"]),
         new(Forms + "DomainUpDown", "Items", Values, "AddRange", "System.Object", ["System.String"]),
         new(Forms + "ListView", "Columns", Components, "AddRange", Forms + "ColumnHeader", [Forms + "ColumnHeader"]),
@@ -183,6 +241,14 @@ public static class DesignerCollections
     ];
 
     public static DesignerCollectionInfo? Find(string key) => All.FirstOrDefault(c => c.Key == key);
+
+    /// <summary>
+    /// Whether a collection key is a tool strip's items (#67): a <c>MenuStrip</c>'s, <c>ToolStrip</c>'s,
+    /// <c>StatusStrip</c>'s or <c>ContextMenuStrip</c>'s, or a strip derived from them such as a <c>BindingNavigator</c>
+    /// (the host names a derived strip by the type that declares the collection). A list's items (a <c>ListBox</c>'s,
+    /// <c>ComboBox</c>'s, <c>DomainUpDown</c>'s or <c>ListView</c>'s) are not: the surface's Type Here is a strip's alone.
+    /// </summary>
+    public static bool IsStripItems(string key) => Find(key) is { Property: "Items", Kind: Components, ElementType: Forms + "ToolStripItem" };
 
     /// <summary>A strip's or a menu item's items property (<c>Items</c>, <c>DropDownItems</c>), from a collection key.</summary>
     public static string PropertyOf(string key) => key[(key.IndexOf(':', StringComparison.Ordinal) + 1)..];

@@ -28,11 +28,12 @@ public sealed class DesignerActionRowViewModel : ObservableObject
 
     internal ActionItem Item { get; }
 
-    public string Title => Item.DisplayName;
+    /// <summary>The designer's text without its mnemonic marker ("&amp;Insert Standard Items"), as the classic panel's labels show it.</summary>
+    public string Title => DesignerMnemonics.Strip(Item.DisplayName);
 
     public string Description => Item.Unavailable
         ? Localizer.Get("msg.winFormsDesigner.actionUnavailable", "This action opens a Windows Forms dialog the designer doesn't show.")
-        : Item.Description ?? Item.DisplayName;
+        : Item.Description ?? Title;
 
     public bool IsHeader => Item.Kind == DesignerActionKinds.Header;
 
@@ -203,7 +204,11 @@ public sealed class DesignerCollectionEditorViewModel : ObservableObject
         MoveDownCommand = new RelayCommand(() => _ = MoveAsync(1));
         OkCommand = new RelayCommand(() => _ = OkAsync());
         CloseCommand = new RelayCommand(document.CloseCollectionEditor);
+        Grid.ValueRejected += (_, e) => _ = PropertiesWindowViewModel.ShowRejectedAsync(document.Shell.Dialogs, Grid, e);
     }
+
+    /// <summary>The document's values changed (an item's part set, a reset): the item grid reads them again, in place.</summary>
+    internal void OnPropertiesChanged() => _ = LoadPropertiesAsync();
 
     public string Component { get; }
 
@@ -213,8 +218,11 @@ public sealed class DesignerCollectionEditorViewModel : ObservableObject
 
     public ObservableCollection<DesignerCollectionItemViewModel> Items { get; } = [];
 
-    /// <summary>The selected component item's properties.</summary>
-    public ObservableCollection<PropertyRowViewModel> Properties { get; } = [];
+    /// <summary>The selected component item's properties (#68: the shared property grid, refreshed in place after each change).</summary>
+    public PropertyGridViewModel Grid { get; } = new();
+
+    /// <summary>The selected item's properties (the grid's top-level rows).</summary>
+    public IReadOnlyList<PropertyRowViewModel> Properties => [.. Grid.Categories.SelectMany(c => c.Rows)];
 
     /// <summary>Strings edited as text, a line each (a list's items, a list view's items): the String Collection Editor.</summary>
     public bool IsText => Info.Kind == DesignerCollections.Locals || (Info.Kind == DesignerCollections.Values && Info.ItemTypes[0] == "System.String");
@@ -293,16 +301,22 @@ public sealed class DesignerCollectionEditorViewModel : ObservableObject
 
     private async Task LoadPropertiesAsync()
     {
-        Properties.Clear();
         if (!HasProperties || _selected?.Name is not { } name)
+        {
+            Grid.Clear();
+            return;
+        }
+
+        var rows = await _document.ItemRowsAsync(name).ConfigureAwait(true);
+        if (_selected?.Name != name)
         {
             return;
         }
 
-        foreach (var row in await _document.ItemRowsAsync(name).ConfigureAwait(true))
-        {
-            Properties.Add(row);
-        }
+        Grid.Context = name;
+        Grid.Show([.. rows.GroupBy(r => r.Category.Length == 0 ? "Misc" : r.Category).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new PropertyCategoryViewModel(g.Key, [.. g.Select(r => r.Row).OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)]))], alphabetical: false);
+        OnPropertyChanged(nameof(Properties));
     }
 
     private IEnumerable<DesignerCollectionItem> Current => Items.Select(i => i.Item.Name is { } name ? new DesignerCollectionItem { Name = name } : i.Item);
@@ -418,6 +432,477 @@ public sealed class DesignerCollectionEditorViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+        }
+    }
+}
+
+/// <summary>
+/// The font editor (#68, D41 question 2): a panel over the designer surface in the in-window dialog's frame (the title,
+/// the component and property as its context, the buttons in the OS's order), as the classic IDE's font dialog: the
+/// families from the font's Name choices, a style, a size, Strikeout and Underline, and a sample. OK sends only the parts
+/// that changed, in one request: one change, one undo step (the other parts, GdiCharSet and Unit among them, kept by the
+/// host's CreateInstance).
+/// </summary>
+public sealed class DesignerFontEditorViewModel : ObservableObject
+{
+    private readonly WinFormsDesignerDocument _document;
+    private readonly IReadOnlyList<string> _components;
+    private readonly string _path;
+    private readonly (string Family, string Size, bool Bold, bool Italic, bool Strikeout, bool Underline) _initial;
+    private string _family;
+    private string _style;
+    private string _size;
+    private bool _strikeout;
+    private bool _underline;
+
+    internal DesignerFontEditorViewModel(WinFormsDesignerDocument document, IReadOnlyList<string> components, string path, string context, IReadOnlyList<string> families,
+        string family, string size, bool bold, bool italic, bool strikeout, bool underline)
+    {
+        _document = document;
+        _components = components;
+        _path = path;
+        Context = context;
+        Families = families;
+        _family = family;
+        _size = size;
+        _style = StyleOf(bold, italic);
+        _strikeout = strikeout;
+        _underline = underline;
+        _initial = (family, size, bold, italic, strikeout, underline);
+        OkCommand = new RelayCommand(() => _ = OkAsync());
+        CancelCommand = new RelayCommand(document.CloseFontEditor);
+    }
+
+    public string Title => Localizer.Get("msg.winFormsDesigner.fontEditor", "Font");
+
+    /// <summary>What it edits: "placeOrderButton · Font".</summary>
+    public string Context { get; }
+
+    /// <summary>The families the host lists (Font.Name's choices); empty when it lists none, and the family is typed.</summary>
+    public IReadOnlyList<string> Families { get; }
+
+    public IReadOnlyList<string> Styles { get; } =
+    [
+        Localizer.Get("msg.winFormsDesigner.fontRegular", "Regular"),
+        Localizer.Get("msg.winFormsDesigner.fontItalic", "Italic"),
+        Localizer.Get("msg.winFormsDesigner.fontBold", "Bold"),
+        Localizer.Get("msg.winFormsDesigner.fontBoldItalic", "Bold Italic"),
+    ];
+
+    public IReadOnlyList<string> Sizes { get; } = ["8", "9", "10", "11", "12", "14", "16", "18", "20", "22", "24", "26", "28", "36", "48", "72"];
+
+    private string StyleOf(bool bold, bool italic) => Styles[(bold ? 2 : 0) + (italic ? 1 : 0)];
+
+    private int StyleIndex => Math.Max(0, Styles.ToList().IndexOf(_style));
+
+    public string Family
+    {
+        get => _family;
+        set => SetField(ref _family, value ?? string.Empty);
+    }
+
+    public string Style
+    {
+        get => _style;
+        set => SetField(ref _style, value ?? Styles[0]);
+    }
+
+    public string Size
+    {
+        get => _size;
+        set => SetField(ref _size, value ?? string.Empty);
+    }
+
+    public bool Strikeout
+    {
+        get => _strikeout;
+        set => SetField(ref _strikeout, value);
+    }
+
+    public bool Underline
+    {
+        get => _underline;
+        set => SetField(ref _underline, value);
+    }
+
+    public bool IsBold => StyleIndex >= 2;
+
+    public bool IsItalic => StyleIndex % 2 == 1;
+
+    public ICommand OkCommand { get; }
+
+    public ICommand CancelCommand { get; }
+
+    /// <summary>The parts that changed, as dotted paths (<c>Font.Size</c>), for every selected component.</summary>
+    public IReadOnlyList<DesignerPropertyEdit> Edits()
+    {
+        var parts = new List<(string Part, string Text)>();
+        if (_family != _initial.Family)
+        {
+            parts.Add(("Name", _family));
+        }
+
+        if (_size != _initial.Size)
+        {
+            parts.Add(("Size", _size));
+        }
+
+        if (IsBold != _initial.Bold)
+        {
+            parts.Add(("Bold", IsBold ? "True" : "False"));
+        }
+
+        if (IsItalic != _initial.Italic)
+        {
+            parts.Add(("Italic", IsItalic ? "True" : "False"));
+        }
+
+        if (_strikeout != _initial.Strikeout)
+        {
+            parts.Add(("Strikeout", _strikeout ? "True" : "False"));
+        }
+
+        if (_underline != _initial.Underline)
+        {
+            parts.Add(("Underline", _underline ? "True" : "False"));
+        }
+
+        return [.. _components.SelectMany(c => parts.Select(p => new DesignerPropertyEdit(c, _path + "." + p.Part) { Text = p.Text }))];
+    }
+
+    /// <summary>OK: the changed parts in one request; the editor closes (the host's error, if any, stays in the designer's status).</summary>
+    public async Task OkAsync()
+    {
+        var edits = Edits();
+        _document.CloseFontEditor();
+        if (edits.Count > 0)
+        {
+            await _document.SetPropertiesAsync(edits).ConfigureAwait(true);
+        }
+    }
+}
+
+/// <summary>
+/// The String Collection Editor (#68): a string array's items a line each (a text box's Lines), split on any line
+/// ending; OK writes the array.
+/// </summary>
+public sealed class DesignerStringsEditorViewModel : ObservableObject
+{
+    private readonly WinFormsDesignerDocument _document;
+    private readonly IReadOnlyList<string> _components;
+    private readonly string _path;
+    private string _text;
+
+    internal DesignerStringsEditorViewModel(WinFormsDesignerDocument document, IReadOnlyList<string> components, string path, string context, string text)
+    {
+        _document = document;
+        _components = components;
+        _path = path;
+        Context = context;
+        _text = text;
+        OkCommand = new RelayCommand(() => _ = OkAsync());
+        CancelCommand = new RelayCommand(document.CloseStringsEditor);
+    }
+
+    public string Title => Localizer.Get("msg.winFormsDesigner.stringsEditor", "String Collection Editor");
+
+    public string Context { get; }
+
+    public string Prompt => Localizer.Get("msg.winFormsDesigner.stringsPrompt", "Enter the strings in the collection (one per line):");
+
+    public string Text
+    {
+        get => _text;
+        set => SetField(ref _text, value ?? string.Empty);
+    }
+
+    public ICommand OkCommand { get; }
+
+    public ICommand CancelCommand { get; }
+
+    /// <summary>OK: the lines as a <c>string[]</c>, in one request.</summary>
+    public async Task OkAsync()
+    {
+        var items = PropertyText.Lines(_text);
+        _document.CloseStringsEditor();
+        await _document.SetPropertiesAsync([.. _components.Select(c => new DesignerPropertyEdit(c, _path) { Value = DesignerValue.ArrayOf("System.String", [.. items.Select(DesignerValue.String)]) })]).ConfigureAwait(true);
+    }
+}
+
+/// <summary>
+/// An image of the project's resources file (<c>Properties/Resources.resx</c>): a file it references (ResXFileRef) or
+/// bytes it embeds; a new one is a file to import with OK.
+/// </summary>
+public sealed record DesignerProjectResource(string Name, string? FilePath, string? Base64, bool IsNew = false)
+{
+    /// <summary>The image's bytes, or null when its file can't be read.</summary>
+    public async Task<byte[]?> ReadAsync()
+    {
+        try
+        {
+            return FilePath is { } path ? await File.ReadAllBytesAsync(path).ConfigureAwait(false)
+                : Base64 is { } base64 ? Convert.FromBase64String(string.Concat(base64.Where(c => !char.IsWhiteSpace(c))))
+                : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The images of a resources file, in file order: file references of type Bitmap or Icon, and embedded Bitmaps and
+    /// Icons (a mimetype); paths in file references are relative to the resources file.
+    /// </summary>
+    public static IReadOnlyList<DesignerProjectResource> ImagesOf(string resxPath, string text)
+    {
+        var folder = Path.GetDirectoryName(resxPath)!;
+        static bool IsImage(string? type) => type is not null && (type.StartsWith("System.Drawing.Bitmap", StringComparison.Ordinal) || type.StartsWith("System.Drawing.Icon", StringComparison.Ordinal));
+        var list = new List<DesignerProjectResource>();
+        foreach (var entry in Workbench.CustomTools.ResxFile.Parse(text).Entries)
+        {
+            if (entry.Type?.StartsWith("System.Resources.ResXFileRef", StringComparison.Ordinal) == true && entry.Value?.Split(';') is [var file, var type, ..] && IsImage(type.Trim()))
+            {
+                list.Add(new(entry.Name, Path.GetFullPath(Path.Combine(folder, file.Trim().Replace('\\', Path.DirectorySeparatorChar))), null));
+            }
+            else if (IsImage(entry.Type) && entry.Value is { Length: > 0 } base64)
+            {
+                list.Add(new(entry.Name, null, base64));
+            }
+        }
+
+        return list;
+    }
+}
+
+/// <summary>
+/// Select Resource (#68), as the classic IDE's image editor: a local resource (imported into the form's resources, or
+/// cleared) or one of the project's resources file (an image already in <c>Properties/Resources.resx</c>, or a file
+/// imported into it), with a preview; OK sets the image, as a panel over the surface in the in-window dialog's frame.
+/// </summary>
+public sealed class DesignerResourcePickerViewModel : ObservableObject
+{
+    private readonly WinFormsDesignerDocument _document;
+    private readonly string _component;
+    private readonly string _property;
+    private bool _isProject;
+    private string? _localFile;
+    private bool _cleared;
+    private DesignerProjectResource? _selectedResource;
+    private byte[]? _preview;
+    private int _previewVersion;
+
+    internal DesignerResourcePickerViewModel(WinFormsDesignerDocument document, string component, string property, string context, string? resxPath,
+        IReadOnlyList<DesignerProjectResource> resources, string? current)
+    {
+        _document = document;
+        _component = component;
+        _property = property;
+        Context = context;
+        ResxPath = resxPath;
+        ProjectResources = new(resources);
+        ImportLocalCommand = new RelayCommand(() => _ = ImportLocalAsync(null));
+        ClearCommand = new RelayCommand(Clear);
+        ImportProjectCommand = new RelayCommand(() => _ = ImportProjectAsync(null), () => HasResourceFile);
+        OkCommand = new RelayCommand(() => _ = OkAsync());
+        CancelCommand = new RelayCommand(document.CloseResourcePicker);
+        if (current is not null && ProjectResources.FirstOrDefault(r => r.Name == current) is { } resource)
+        {
+            _isProject = true;
+            SelectedResource = resource;
+        }
+    }
+
+    public string Title => Localizer.Get("msg.winFormsDesigner.selectResource", "Select Resource");
+
+    /// <summary>"pictureBox · Image".</summary>
+    public string Context { get; }
+
+    /// <summary>The project's resources file, or null when it has none.</summary>
+    public string? ResxPath { get; }
+
+    public bool HasResourceFile => ResxPath is not null;
+
+    /// <summary>The project's resources files, as the combo box under Project resource file lists them (D41 panel k): <c>Properties\Resources.resx</c>, or none.</summary>
+    public IReadOnlyList<string> ResourceFiles => HasResourceFile ? [ResourceFileName] : [];
+
+    /// <summary>The project's resources file as the classic IDE names it, from the project's folder.</summary>
+    public const string ResourceFileName = "Properties\\Resources.resx";
+
+    /// <summary>Why Project resource file is grayed: the project has no resources file.</summary>
+    public string NoResourceFileText => Localizer.Get("msg.winFormsDesigner.noProjectResourceFile", "Project resource file: none (add Properties/Resources.resx to the project)");
+
+    /// <summary>The first entry of the project's list: no image (D41 panel k), which OK sets as Clear does.</summary>
+    public static DesignerProjectResource NoResource { get; } = new(string.Empty, null, null);
+
+    public bool IsLocal
+    {
+        get => !_isProject;
+        set => IsProject = !value;
+    }
+
+    public bool IsProject
+    {
+        get => _isProject;
+        set
+        {
+            if (SetField(ref _isProject, value && HasResourceFile))
+            {
+                OnPropertyChanged(nameof(IsLocal));
+                _ = UpdatePreviewAsync();
+            }
+        }
+    }
+
+    /// <summary>The file a local resource is imported from, or null.</summary>
+    public string? LocalFile
+    {
+        get => _localFile;
+        private set
+        {
+            if (SetField(ref _localFile, value))
+            {
+                OnPropertyChanged(nameof(LocalText));
+            }
+        }
+    }
+
+    /// <summary>What the local resource will be: the picked file's name, "(none)" after Clear, else nothing (the current image stays).</summary>
+    public string LocalText => _localFile is { } file ? Path.GetFileName(file)
+        : _cleared ? Localizer.Get("msg.winFormsDesigner.noImage", "(none)")
+        : string.Empty;
+
+    /// <summary>The previewed image's file name, for the caption under the preview ("cart.png · 32 × 32"), or null.</summary>
+    public string? PreviewName => _isProject
+        ? _selectedResource is { } resource ? resource.FilePath is { } path ? Path.GetFileName(path) : resource.Name : null
+        : _localFile is { } file ? Path.GetFileName(file) : null;
+
+    public ObservableCollection<DesignerProjectResource> ProjectResources { get; }
+
+    public DesignerProjectResource? SelectedResource
+    {
+        get => _selectedResource;
+        set
+        {
+            if (SetField(ref _selectedResource, value))
+            {
+                _ = UpdatePreviewAsync();
+            }
+        }
+    }
+
+    /// <summary>The chosen image's bytes for the preview, or null.</summary>
+    public byte[]? Preview
+    {
+        get => _preview;
+        private set => SetField(ref _preview, value);
+    }
+
+    public ICommand ImportLocalCommand { get; }
+
+    public ICommand ClearCommand { get; }
+
+    public ICommand ImportProjectCommand { get; }
+
+    public ICommand OkCommand { get; }
+
+    public ICommand CancelCommand { get; }
+
+    private async Task UpdatePreviewAsync()
+    {
+        var version = ++_previewVersion;
+        byte[]? bytes = null;
+        if (_isProject && _selectedResource is { } resource)
+        {
+            bytes = await resource.ReadAsync().ConfigureAwait(true);
+        }
+        else if (!_isProject && _localFile is { } file)
+        {
+            bytes = await new DesignerProjectResource(string.Empty, file, null).ReadAsync().ConfigureAwait(true);
+        }
+
+        if (version == _previewVersion)
+        {
+            Preview = bytes;
+            OnPropertyChanged(nameof(PreviewName));
+        }
+    }
+
+    private Task<string?> PickAsync() =>
+        _document.Shell.Window is { } window
+            ? window.PickFileAsync(Localizer.Get("msg.winFormsDesigner.pickImage", "Import an Image"), "Images", ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.ico"])
+            : Task.FromResult<string?>(null);
+
+    /// <summary>Local resource's Import…: the image file (picked when <paramref name="path"/> is null) for the form's resources.</summary>
+    public async Task ImportLocalAsync(string? path)
+    {
+        path ??= await PickAsync().ConfigureAwait(true);
+        if (path is null)
+        {
+            return;
+        }
+
+        IsProject = false;
+        _cleared = false;
+        LocalFile = path;
+        await UpdatePreviewAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>Local resource's Clear: OK sets no image.</summary>
+    public void Clear()
+    {
+        IsProject = false;
+        _cleared = true;
+        LocalFile = null;
+        OnPropertyChanged(nameof(LocalText));
+        _ = UpdatePreviewAsync();
+    }
+
+    /// <summary>The project resource file's Import…: the image file (picked when null) is added to the list, and copied into the project with OK.</summary>
+    public async Task ImportProjectAsync(string? path)
+    {
+        if (!HasResourceFile)
+        {
+            return;
+        }
+
+        path ??= await PickAsync().ConfigureAwait(true);
+        if (path is null)
+        {
+            return;
+        }
+
+        var resource = new DesignerProjectResource(WinFormsDesignerDocument.ResourceNameOf(path), path, null, IsNew: true);
+        if (ProjectResources.FirstOrDefault(r => r.Name == resource.Name) is { } existing)
+        {
+            ProjectResources.Remove(existing);
+        }
+
+        ProjectResources.Add(resource);
+        IsProject = true;
+        SelectedResource = resource;
+    }
+
+    /// <summary>OK: the image chosen, as one change; nothing when nothing was chosen.</summary>
+    public async Task OkAsync()
+    {
+        _document.CloseResourcePicker();
+        if (_isProject && _selectedResource is { IsNew: true, FilePath: { } file })
+        {
+            await _document.ImportImageAsync(_component, _property, file, toProject: true).ConfigureAwait(true);
+        }
+        else if (_isProject && _selectedResource is { } resource && await resource.ReadAsync().ConfigureAwait(true) is { } bytes)
+        {
+            await _document.UseProjectResourceAsync(_component, _property, resource.Name, bytes).ConfigureAwait(true);
+        }
+        else if (!_isProject && _localFile is { } local)
+        {
+            await _document.ImportImageAsync(_component, _property, local, toProject: false).ConfigureAwait(true);
+        }
+        else if (!_isProject && _cleared || _isProject && _selectedResource is null)
+        {
+            // Clear, or the project list's (none): no image.
+            await _document.SetPropertyAsync([_component], _property, null).ConfigureAwait(true);
         }
     }
 }

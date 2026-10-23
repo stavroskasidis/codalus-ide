@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Codalus.Platform;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Workbench.Projects;
 
@@ -32,8 +34,10 @@ public sealed record TemplateExportRequest(
 /// packages and their updates, install and uninstall, and Export Template. It runs the <c>dotnet</c> CLI in a neutral
 /// folder: listing and installing run no workspace code. Instantiating a template into a project is the build host's
 /// (<c>templates/instantiate</c>). With a hive (<c>CODALUS_TEMPLATE_HIVE</c>, tests) the CLI uses its own settings folder.
+/// It is also New Project's CLI (<see cref="ITemplateCli"/>, ADR 0082): listing templates and creating projects run here,
+/// in the same neutral folder, so both use the same SDK.
 /// </summary>
-public sealed partial class TemplateService
+public sealed partial class TemplateService : ITemplateCli
 {
     public const string HiveVariable = "CODALUS_TEMPLATE_HIVE";
 
@@ -53,6 +57,25 @@ public sealed partial class TemplateService
 
     /// <summary>The installed template packages changed (install, uninstall, update, export).</summary>
     public event EventHandler? Changed;
+
+    /// <inheritdoc/>
+    public string? Hive => _hive;
+
+    /// <summary>
+    /// How long one command may run before it's stopped: a template's post action waiting for input, a download that
+    /// stalls. Reaching it isn't a cancel: the command fails with what it printed and a line that says so.
+    /// </summary>
+    internal TimeSpan CommandTimeout { get; set; } = TimeSpan.FromMinutes(3);
+
+    /// <summary>The folder every command runs in (the shell's state folder): no workspace's <c>global.json</c> applies there.</summary>
+    public string WorkingDirectory => Directory.Exists(_workingDirectory) ? _workingDirectory : Path.GetTempPath();
+
+    /// <inheritdoc/>
+    async Task<CliResult> ITemplateCli.RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
+    {
+        var (exitCode, output) = await RunAsync(args, cancellationToken).ConfigureAwait(false);
+        return new CliResult(exitCode, output);
+    }
 
     // ------------------------------------------------------------------ item templates
 
@@ -388,6 +411,10 @@ public sealed partial class TemplateService
 
     // ------------------------------------------------------------------ the CLI
 
+    /// <summary>
+    /// Runs <c>dotnet &lt;args&gt;</c> in <see cref="WorkingDirectory"/>, in English. The hive goes on <c>dotnet new</c>
+    /// commands only, once: this is its only owner (callers never pass <c>--debug:custom-hive</c>).
+    /// </summary>
     private async Task<(int ExitCode, string Output)> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo(_dotnet())
@@ -396,14 +423,14 @@ public sealed partial class TemplateService
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WorkingDirectory = Directory.Exists(_workingDirectory) ? _workingDirectory : Path.GetTempPath(),
+            WorkingDirectory = WorkingDirectory,
         };
         foreach (var arg in args)
         {
             start.ArgumentList.Add(arg);
         }
 
-        if (_hive is not null)
+        if (_hive is not null && args.Count > 0 && args[0] == "new")
         {
             start.ArgumentList.Add("--debug:custom-hive");
             start.ArgumentList.Add(_hive);
@@ -418,15 +445,32 @@ public sealed partial class TemplateService
             var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromMinutes(3));
+            timeout.CancelAfter(CommandTimeout);
             try
             {
                 await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                process.Kill(entireProcessTree: true);
-                throw;
+                ProcessTree.Kill(process);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+
+                // The limit, not the caller's cancel: a failure, with what the command printed before it was stopped.
+                var printed = string.Empty;
+                try
+                {
+                    printed = string.Concat(await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false));
+                }
+                catch (Exception ex) when (ex is TimeoutException or IOException or OperationCanceledException or ObjectDisposedException)
+                {
+                    // Nothing more to show than the line below.
+                }
+
+                var stopped = Localizer.Format("msg.templates.commandTimedOut", "Stopped dotnet {0}: it didn't finish within {1} minutes.", string.Join(' ', args), Math.Round(CommandTimeout.TotalMinutes, 1));
+                return (-1, (printed.Length > 0 ? printed.TrimEnd() + Environment.NewLine : string.Empty) + stopped + Environment.NewLine);
             }
 
             return (process.ExitCode, (await stdout.ConfigureAwait(false)) + (await stderr.ConfigureAwait(false)));

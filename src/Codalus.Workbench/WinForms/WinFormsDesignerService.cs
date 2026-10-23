@@ -1,5 +1,6 @@
 using Codalus.Projects.Protocol;
 using Codalus.Rpc;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Previewer;
 using Codalus.Workbench.Projects;
 
@@ -43,6 +44,9 @@ public interface IWinFormsDesignerHost : IAsyncDisposable
 
     /// <summary>Runs a designer action, or sets an action's property (M41b).</summary>
     Task<DesignerChangeResult> InvokeActionAsync(DesignerInvokeActionParams parameters, CancellationToken cancellationToken);
+
+    /// <summary>Whether a build replaced what the host loaded since it started (#66): it must start again to show it.</summary>
+    Task<bool> IsOutdatedAsync(CancellationToken cancellationToken);
 
     /// <summary>A line of the host's output (any thread).</summary>
     event EventHandler<string>? Log;
@@ -105,6 +109,9 @@ public sealed class WinFormsDesignerService
 
     /// <summary>The startup project, preferred as the app a library's forms run in.</summary>
     public Func<string?> StartupProject { get; init; } = () => null;
+
+    /// <summary>Whether a build is running (#66): the designer waits for it before it checks the output or builds.</summary>
+    public Func<bool> IsBuilding { get; init; } = () => false;
 
     /// <summary>Starts a designer host for a target (tests give a fake one).</summary>
     public Func<WinFormsDesignerTarget, CancellationToken, Task<IWinFormsDesignerHost>> HostFactory { get; init; } = WinFormsDesignerProcess.StartAsync;
@@ -290,20 +297,88 @@ public sealed class WinFormsDesignerService
         return files;
     }
 
-    /// <summary>Builds when the output is stale, then starts a designer host for the target.</summary>
+    /// <summary>
+    /// Waits for a running build (#66: its output may be half written, and a second build can't start), builds when the
+    /// output is stale, then starts a designer host for the target.
+    /// </summary>
     public async Task<IWinFormsDesignerHost> StartAsync(WinFormsDesignerTarget target, Action<string> progress, CancellationToken cancellationToken)
     {
+        await WaitForBuildAsync(progress, cancellationToken).ConfigureAwait(false);
         if (NeedsBuild(target))
         {
-            progress($"Building {Path.GetFileNameWithoutExtension(target.HostProject ?? target.Project)} for the designer…");
-            if (!await _build(target.HostProject ?? target.Project, cancellationToken).ConfigureAwait(false))
+            bool built;
+            try
+            {
+                built = await BuildAsync(target, progress, cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                // A build started between the wait and this one ("A build is already running."): wait for it, then check again.
+                await WaitForBuildAsync(progress, cancellationToken).ConfigureAwait(false);
+                built = !NeedsBuild(target) || await BuildAsync(target, progress, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!built)
             {
                 throw new PreviewerException("The build failed: the designer needs the project built. See the Error List.");
             }
         }
 
-        progress("Starting the designer…");
+        progress(Localizer.Get("msg.winFormsDesigner.starting", "Starting the designer…"));
         return await HostFactory(target, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Task<bool> BuildAsync(WinFormsDesignerTarget target, Action<string> progress, CancellationToken cancellationToken)
+    {
+        progress(Localizer.Format("msg.winFormsDesigner.building", "Building {0} for the designer…", Path.GetFileNameWithoutExtension(target.HostProject ?? target.Project)));
+        return _build(target.HostProject ?? target.Project, cancellationToken);
+    }
+
+    private async Task WaitForBuildAsync(Action<string> progress, CancellationToken cancellationToken)
+    {
+        var told = false;
+        while (IsBuilding())
+        {
+            if (!told)
+            {
+                progress(Localizer.Get("msg.winFormsDesigner.waitingForBuild", "Waiting for the build to finish…"));
+                told = true;
+            }
+
+            await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The target's assemblies as they are on disk (#66): their lengths and times, or that they're missing. A designer
+    /// whose host didn't start compares it when it becomes active, to start again once a build has replaced them (or
+    /// written them for the first time).
+    /// </summary>
+    public static string OutputStamp(WinFormsDesignerTarget? target)
+    {
+        if (target is null)
+        {
+            return string.Empty;
+        }
+
+        var stamp = new System.Text.StringBuilder();
+        foreach (var file in new[] { target.ProjectAssembly, target.HostAssembly }.OfType<string>().Distinct(SolutionService.PathComparer))
+        {
+            stamp.Append(file).Append('|');
+            try
+            {
+                var info = new FileInfo(file);
+                stamp.Append(info.Exists ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{info.Length}|{info.LastWriteTimeUtc.Ticks}") : "missing");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                stamp.Append('?');
+            }
+
+            stamp.Append(';');
+        }
+
+        return stamp.ToString();
     }
 
     /// <summary>The load request for a model read by the C# host.</summary>
@@ -332,26 +407,42 @@ public sealed record WinFormsDesignerTimeouts
 /// <summary>
 /// The designer host process (ADR 0073): started on the app's runtime (<c>dotnet exec --runtimeconfig … --depsfile …
 /// codalus-winformsdesigner.dll</c>; a library on its own runs on the host's own runtimeconfig), supervised (a crash
-/// restarts it and the document loads the form again), speaking JSON-RPC on stdio. A start waits until the host's window
-/// pumps messages (<c>designer/ready</c>), so a request's limit counts only its own work; a request that runs out of
-/// time fails with what the host says it's doing (<c>designer/status</c>), whether it's still running, and its last
-/// lines of standard error.
+/// restarts it and the document loads the form again), speaking JSON-RPC on stdio. It runs on a copy of the build
+/// output (#66, <see cref="BuildOutputShadowCopy"/>), so a build can replace the original while a form is open: the
+/// launch names the copy's runtimeconfig, deps file and folder, <c>designer/load</c> the copy's assemblies, and the copy
+/// goes when the host ends. A start waits until the host's window pumps messages (<c>designer/ready</c>), so a
+/// request's limit counts only its own work; a request that runs out of time fails with what the host says it's doing
+/// (<c>designer/status</c>), whether it's still running, and its last lines of standard error.
 /// </summary>
 public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
 {
     private const int ErrorLines = 20;
+    private const int EarlyLogLines = 50;
     private static readonly WinFormsDesignerJsonContext s_json = WinFormsDesignerJsonContext.Default;
     private static readonly System.Text.Json.JsonElement s_noParams = EmptyObject();
     private readonly SupervisedProcess _process;
     private readonly WinFormsDesignerTimeouts _timeouts;
     private readonly Queue<string> _errors = new();
     private readonly System.Diagnostics.Stopwatch _started = System.Diagnostics.Stopwatch.StartNew();
+    private readonly BuildOutputShadowCopy? _copy;
+    private readonly Lock _logGate = new();
+    private readonly Queue<string> _earlyLog = new();
+    private EventHandler<string>? _log;
+    private bool _logSubscribed;
     private string? _exited;
 
-    private WinFormsDesignerProcess(SupervisedProcess process, WinFormsDesignerTimeouts timeouts)
+    private WinFormsDesignerProcess(SupervisedProcess process, WinFormsDesignerTimeouts timeouts, ProcessLaunchInfo launch, BuildOutputShadowCopy? copy)
     {
         _process = process;
         _timeouts = timeouts;
+        _copy = copy;
+        Launch = launch;
+        if (copy is not null)
+        {
+            var skipped = copy.Skipped.Count == 0 ? string.Empty : $", skipped: {string.Join(", ", copy.Skipped.Take(3).Select(Path.GetFileName))}{(copy.Skipped.Count > 3 ? $" and {copy.Skipped.Count - 3} more" : string.Empty)}";
+            WriteLog($"Copied the build output ({copy.Files} files, {copy.Bytes / 1048576.0:0.0} MB{skipped}) to {copy.Folder} in {copy.Took.TotalSeconds:0.0} s: builds can replace the original while the designer runs.");
+        }
+
         _process.Log += (_, line) =>
         {
             lock (_errors)
@@ -363,20 +454,77 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
                 }
             }
 
-            Log?.Invoke(this, line);
+            WriteLog(line);
         };
         _process.Restarted += (_, _) => Restarted?.Invoke(this, EventArgs.Empty);
         _process.Crashed += (_, e) =>
         {
             var exit = $"The designer host exited ({e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no exit code"}) after {_started.Elapsed.TotalSeconds:0} s";
             _exited = exit;
-            Log?.Invoke(this, exit + (e.WillRestart ? ": restarting it." : "."));
+            WriteLog(exit + (e.WillRestart ? ": restarting it." : "."));
         };
     }
 
-    public event EventHandler<string>? Log;
+    /// <summary>
+    /// A line of the host's output. The lines written before the first handler (the copy, the host's start and its
+    /// ready line: the document subscribes once the start returns) reach that handler when it's added.
+    /// </summary>
+    public event EventHandler<string>? Log
+    {
+        add
+        {
+            lock (_logGate)
+            {
+                _log += value;
+                if (!_logSubscribed && value is not null)
+                {
+                    _logSubscribed = true;
+                    while (_earlyLog.TryDequeue(out var line))
+                    {
+                        value(this, line);
+                    }
+                }
+            }
+        }
+
+        remove
+        {
+            lock (_logGate)
+            {
+                _log -= value;
+            }
+        }
+    }
 
     public event EventHandler? Restarted;
+
+    /// <summary>How the host was started (tests).</summary>
+    internal ProcessLaunchInfo Launch { get; }
+
+    /// <summary>The copy of the build output the host runs on (tests), or null.</summary>
+    internal string? CopyFolder => _copy?.Folder;
+
+    private void WriteLog(string line)
+    {
+        EventHandler<string>? log;
+        lock (_logGate)
+        {
+            if (!_logSubscribed)
+            {
+                _earlyLog.Enqueue(line);
+                while (_earlyLog.Count > EarlyLogLines)
+                {
+                    _earlyLog.Dequeue();
+                }
+
+                return;
+            }
+
+            log = _log;
+        }
+
+        log?.Invoke(this, line);
+    }
 
     /// <summary>The command line for a target: the app's runtime and dependencies, or the host's own.</summary>
     public static ProcessLaunchInfo LaunchFor(WinFormsDesignerTarget target)
@@ -398,14 +546,45 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
         };
     }
 
-    /// <summary>Starts the host for a target and waits until it's ready (<c>designer/ready</c>).</summary>
+    /// <summary>
+    /// Starts the host for a target on a copy of its build output (#66) and waits until it's ready
+    /// (<c>designer/ready</c>).
+    /// </summary>
     public static Task<IWinFormsDesignerHost> StartAsync(WinFormsDesignerTarget target, CancellationToken cancellationToken) =>
-        StartAsync(LaunchFor(target), WinFormsDesignerTimeouts.Default, cancellationToken);
+        StartAsync(target, WinFormsDesignerTimeouts.Default, cancellationToken);
 
-    internal static async Task<IWinFormsDesignerHost> StartAsync(ProcessLaunchInfo launch, WinFormsDesignerTimeouts timeouts, CancellationToken cancellationToken)
+    /// <summary>
+    /// Copies the app's output (and a designed library's, when it's elsewhere) to <paramref name="copyRoot"/> (by
+    /// default <see cref="BuildOutputShadowCopy.DefaultRoot"/>) and starts the host on the copy; a start that fails
+    /// deletes the copy. <paramref name="launcher"/> starts the process (tests).
+    /// </summary>
+    internal static async Task<IWinFormsDesignerHost> StartAsync(WinFormsDesignerTarget target, WinFormsDesignerTimeouts timeouts, CancellationToken cancellationToken, IProcessLauncher? launcher = null, string? copyRoot = null)
+    {
+        string[] assemblies = [.. new[] { target.HostAssembly, target.ProjectAssembly }.OfType<string>().Distinct(SolutionService.PathComparer)];
+        string[] folders = [.. assemblies.Select(Path.GetDirectoryName).OfType<string>().Distinct(SolutionService.PathComparer)];
+        var copy = await Task.Run(() => BuildOutputShadowCopy.Create(folders, assemblies, copyRoot, cancellationToken: cancellationToken), cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var copied = target with { ProjectAssembly = copy.Map(target.ProjectAssembly), HostAssembly = target.HostAssembly is { } app ? copy.Map(app) : null };
+            var launch = LaunchFor(copied);
+            if (launcher is not null)
+            {
+                launch = launch with { Launcher = launcher };
+            }
+
+            return await StartAsync(launch, timeouts, cancellationToken, copy).ConfigureAwait(false);
+        }
+        catch
+        {
+            await copy.DeleteAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    internal static async Task<IWinFormsDesignerHost> StartAsync(ProcessLaunchInfo launch, WinFormsDesignerTimeouts timeouts, CancellationToken cancellationToken, BuildOutputShadowCopy? copy = null)
     {
         var process = new SupervisedProcess("Windows Forms designer", launch, new SupervisionPolicy { MaxRestarts = 2 });
-        var host = new WinFormsDesignerProcess(process, timeouts);
+        var host = new WinFormsDesignerProcess(process, timeouts, launch, copy);
         process.Initialize = async (connection, isRestart, ct) =>
         {
             try
@@ -445,7 +624,7 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
         try
         {
             var ready = await connection.InvokeAsync(WinFormsDesignerMethods.Ready, s_noParams, s_json.JsonElement, s_json.DesignerStatus, timeout.Token).ConfigureAwait(false);
-            Log?.Invoke(this, $"The designer host is ready after {_started.Elapsed.TotalSeconds:0.0} s: {ready?.State}");
+            WriteLog($"The designer host is ready after {_started.Elapsed.TotalSeconds:0.0} s: {ready?.State}");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -555,8 +734,10 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
             : state + " Its last standard error:" + Environment.NewLine + string.Join(Environment.NewLine, errors);
     }
 
+    /// <summary>Loads a form; the project's assembly and the search folders are the copy's (the document knows only the real paths).</summary>
     public Task<DesignerRenderResult> LoadAsync(DesignerLoadParams parameters, CancellationToken cancellationToken) =>
-        InvokeAsync(WinFormsDesignerMethods.Load, parameters, s_json.DesignerLoadParams, s_json.DesignerRenderResult, cancellationToken, _timeouts.Load);
+        InvokeAsync(WinFormsDesignerMethods.Load, _copy is { } copy ? parameters with { ProjectAssembly = copy.Map(parameters.ProjectAssembly), SearchFolders = [.. parameters.SearchFolders.Select(copy.Map)] } : parameters,
+            s_json.DesignerLoadParams, s_json.DesignerRenderResult, cancellationToken, _timeouts.Load);
 
     public Task<DesignerRenderResult> RenderAsync(CancellationToken cancellationToken) =>
         InvokeAsync(WinFormsDesignerMethods.Render, new DesignerComponentsParams([]), s_json.DesignerComponentsParams, s_json.DesignerRenderResult, cancellationToken);
@@ -597,7 +778,18 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
     public Task<DesignerChangeResult> InvokeActionAsync(DesignerInvokeActionParams parameters, CancellationToken cancellationToken) =>
         InvokeAsync(WinFormsDesignerMethods.InvokeAction, parameters, s_json.DesignerInvokeActionParams, s_json.DesignerChangeResult, cancellationToken);
 
-    public ValueTask DisposeAsync() => _process.DisposeAsync();
+    public Task<bool> IsOutdatedAsync(CancellationToken cancellationToken) =>
+        _copy is { } copy ? Task.Run(copy.IsOutdated, cancellationToken) : Task.FromResult(false);
+
+    /// <summary>Stops the host, then deletes its copy of the build output (never throws: what stays goes at the next sweep).</summary>
+    public async ValueTask DisposeAsync()
+    {
+        await _process.DisposeAsync().ConfigureAwait(false);
+        if (_copy is { } copy)
+        {
+            await copy.DeleteAsync().ConfigureAwait(false);
+        }
+    }
 
     private static System.Text.Json.JsonElement EmptyObject()
     {

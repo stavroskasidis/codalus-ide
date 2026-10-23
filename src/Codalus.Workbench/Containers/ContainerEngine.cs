@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Containers;
 
@@ -182,7 +183,7 @@ public sealed class ContainerEngine(IReadOnlyList<string> tool)
             {
                 try
                 {
-                    process.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(process);
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
                 {

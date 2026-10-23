@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Codalus.Platform;
 using Codalus.Workbench.Output;
 
 namespace Codalus.Workbench.ExternalTools;
@@ -191,7 +192,7 @@ public static class ExternalToolRunner
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             throw;
         }
 

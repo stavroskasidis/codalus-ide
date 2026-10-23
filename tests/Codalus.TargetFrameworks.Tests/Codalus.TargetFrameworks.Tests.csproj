@@ -18,6 +18,7 @@
   <ItemGroup>
     <!-- The headless shell, as in the shell's own UI tests. -->
     <Compile Include="..\Codalus.Shell.Tests\ShellFixture.cs" Link="Shell\ShellFixture.cs" />
+    <Compile Include="..\Codalus.Shell.Tests\HeadlessIsolation.cs" Link="Shell\HeadlessIsolation.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Headless.XUnit" />

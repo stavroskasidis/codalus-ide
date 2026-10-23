@@ -2,6 +2,7 @@ using Avalonia.Headless.XUnit;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.WinForms;
+using static Codalus.Shell.Tests.WinFormsDesignerTestHost;
 
 namespace Codalus.Shell.Tests;
 
@@ -14,60 +15,6 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class WinFormsDesignerDepthShellTests
 {
-    private static async Task<(ShellFixture Fixture, string App, List<FakeWinFormsDesignerHost> Hosts)> OpenAsync()
-    {
-        var f = ShellFixture.Create();
-        var folder = f.CopySample("WindowsDesktop");
-        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
-        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "WinFormsApp.slnx"));
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 240);
-        var hosts = new List<FakeWinFormsDesignerHost>();
-        f.Shell.WinFormsDesigner = new WinFormsDesignerService(f.Shell.Solutions, _ => true, (_, _) => Task.FromResult(true), async (project, names, ct) =>
-        {
-            var properties = await f.Shell.ProjectManagement.GetPropertiesAsync(project, names, null, ct);
-            return properties.Properties.ToDictionary(p => p.Name, p => p.Value, StringComparer.OrdinalIgnoreCase);
-        })
-        {
-            IsWindows = () => true,
-            DesignerHost = () => typeof(WinFormsDesignerDepthShellTests).Assembly.Location,
-            HostFactory = (_, _) =>
-            {
-                var host = new FakeWinFormsDesignerHost();
-                hosts.Add(host);
-                return Task.FromResult<IWinFormsDesignerHost>(host);
-            },
-        };
-        await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: WorkspaceStates.Ready, Projects: 1 }, seconds: 300);
-        return (f, Path.Combine(folder, "WinFormsApp"), hosts);
-    }
-
-    private static async Task<WinFormsDesignerDocument> DesignAsync(ShellFixture f, string path)
-    {
-        await f.Shell.OpenFileAsync(path);
-        var designer = f.Shell.Layout.Documents.OfType<WinFormsDesignerDocument>().Single(d => d.CodePath == path);
-        try
-        {
-            await ShellFixture.PumpUntil(() => designer.FrameCount > 0, seconds: 120);
-        }
-        catch (Xunit.Sdk.XunitException)
-        {
-            Assert.Fail($"No frame: {designer.Status}\n{f.Shell.WinFormsDesignerLog.GetText()}");
-        }
-
-        return designer;
-    }
-
-    private static async Task<List<PropertyRowViewModel>> RowsAsync(ShellFixture f)
-    {
-        f.Shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
-        var properties = f.Shell.PropertiesWindow;
-        properties.ShowEvents = false;
-        await properties.RefreshAsync();
-        return [.. properties.Categories.SelectMany(c => c.Rows)];
-    }
-
-    private static string Code(WinFormsDesignerDocument designer) => designer.DesignerCode!.Text.Text;
-
     [AvaloniaFact]
     public async Task Format_commands_tab_order_snap_lines_pickers_extenders_images_and_smart_tags_become_code()
     {
@@ -168,7 +115,7 @@ public sealed class WinFormsDesignerDepthShellTests
         designer.SetSelection(["placeOrderButton"], notify: true);
         rows = await RowsAsync(f);
         var image = rows.Single(r => r.Name == "Image");
-        Assert.True(image is { HasAction: true, HasSecondaryAction: true, IsReadOnly: true });
+        Assert.True(image is { HasModalEditor: true, IsReadOnly: true });
         var png = Path.Combine(app, "logo.png");
         await File.WriteAllBytesAsync(png, Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), TestContext.Current.CancellationToken);
         await designer.ImportImageAsync("placeOrderButton", "Image", png, toProject: false);
@@ -306,7 +253,11 @@ public sealed class WinFormsDesignerDepthShellTests
         // A data binding: (DataBindings) Text to the binding source's other member.
         designer.SetSelection(["nameTextBox"], notify: true);
         var rows = await RowsAsync(f);
-        var binding = Assert.Single(rows, r => r.Name == "Text" && r.IsChoice);
+        // #68: the bindings are the (DataBindings) row's parts, in Data, not a category of their own.
+        Assert.DoesNotContain(f.Shell.PropertiesWindow.Categories, c => c.Title == "(DataBindings)");
+        var bindings = Assert.Single(rows, r => r.Name == "(DataBindings)");
+        Assert.True(bindings.IsReadOnly);
+        var binding = Assert.Single(bindings.Children, r => r.Name == "Text" && r.IsChoice);
         Assert.Contains(binding.Options, o => o.Value == "itemBindingSource - Quantity");
         binding.SelectedOption = binding.Options.Single(o => o.Value == "itemBindingSource - Quantity");
         await ShellFixture.PumpUntil(() => Code(designer).Contains("nameTextBox.DataBindings.Add(new Binding(\"Text\", itemBindingSource, \"Quantity\", true));", StringComparison.Ordinal));

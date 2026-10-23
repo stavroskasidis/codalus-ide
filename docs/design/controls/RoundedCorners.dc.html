@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rounded corners: Codalus IDE control set</title>
+<link rel="stylesheet" href="./controls.css">
+<script src="./controls.js"></script>
+<script src="../shell-themes/support.js"></script>
+</head>
+<body>
+<!-- This page's own icons. The classic file and folder icons (cl-*) are the app's own pixel drawings
+     (src/Codalus.Shell/Icons/Classic), copied from GitChanges.dc.html and PropertiesWindow.dc.html. The rest are 16 px
+     stroke drawings in the style of Fluent UI System Icons (regular), stand-ins for the toolbar's existing kinds (back,
+     forward, undo, redo, save all, Hot Reload) and the system's pointers (rc-resize, rc-pointer), which keep their own
+     black and white in every theme. -->
+<svg id="rc-sprite" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="i-cl-csharp" viewBox="0 0 16 16"><path fill="currentColor" d="M2 4H5V5H2ZM9 4H10V6H9ZM12 4H13V6H12ZM1 5H3V6H1ZM4 5H6V6H4ZM1 6H2V10H1ZM5 6H6V7H5ZM7 6H15V7H7ZM9 7H10V9H9ZM12 7H13V9H12ZM5 9H6V10H5ZM7 9H15V10H7ZM1 10H3V11H1ZM4 10H6V11H4ZM9 10H10V12H9ZM12 10H13V12H12ZM2 11H5V12H2Z"/></symbol>
+  <symbol id="i-cl-json" viewBox="0 0 16 16"><path fill="currentColor" d="M5 1H10V2H5ZM4 2H5V7H4ZM9 2H11V3H9ZM9 3H10V5H9ZM11 3H12V4H11ZM12 4H13V5H12ZM9 5H14V6H9ZM13 6H14V14H13ZM2 8H4V9H2ZM6 8H8V9H6ZM2 9H3V11H2ZM7 9H8V11H7ZM1 11H3V12H1ZM7 11H9V12H7ZM2 12H3V14H2ZM7 12H8V14H7ZM2 14H4V15H2ZM6 14H8V15H6ZM10 14H13V15H10Z"/></symbol>
+  <symbol id="i-cl-folder" viewBox="0 0 16 16"><path fill="currentColor" d="M2 2H7V3H2ZM1 3H3V4H1ZM6 3H8V4H6ZM1 4H2V6H1ZM7 4H14V5H7ZM6 5H8V6H6ZM13 5H15V6H13ZM1 6H7V7H1ZM14 6H15V12H14ZM1 7H2V12H1ZM1 12H3V13H1ZM13 12H15V13H13ZM2 13H14V14H2Z"/></symbol>
+  <symbol id="i-cl-folder-open" viewBox="0 0 16 16"><path fill="currentColor" d="M2 2H7V3H2ZM1 3H3V4H1ZM6 3H8V4H6ZM1 4H2V11H1ZM7 4H12V5H7ZM11 5H12V6H11ZM5 6H16V7H5ZM4 7H5V9H4ZM14 7H15V9H14ZM3 9H4V11H3ZM13 9H14V11H13ZM1 11H3V13H1ZM12 11H13V13H12ZM2 13H12V14H2Z"/></symbol>
+  <symbol id="i-cl-folder-properties" viewBox="0 0 16 16"><path fill="currentColor" d="M9 3H10V5H9ZM12 3H13V5H12ZM9 5H13V6H9ZM8 6H11V7H8ZM7 7H9V8H7ZM6 8H8V9H6ZM5 9H7V10H5ZM4 10H6V11H4ZM3 11H5V12H3ZM3 12H4V13H3Z"/></symbol>
+  <symbol id="i-cl-project-csharp" viewBox="0 0 16 16"><path fill="currentColor" d="M2 3H13V4H2ZM1 4H2V13H1ZM13 4H14V13H13ZM2 13H13V14H2Z"/><path fill="var(--ic-green)" d="M3 6H6V7H3ZM8 6H9V7H8ZM10 6H11V7H10ZM3 7H4V10H3ZM5 7H6V8H5ZM7 7H12V8H7ZM8 8H9V9H8ZM10 8H11V9H10ZM5 9H6V10H5ZM7 9H12V10H7ZM3 10H6V11H3ZM8 10H9V11H8ZM10 10H11V11H10Z"/></symbol>
+  <symbol id="i-cl-dependencies" viewBox="0 0 16 16"><path fill="currentColor" d="M1 1H5V2H1ZM1 2H2V4H1ZM4 2H5V4H4ZM1 4H5V5H1ZM2 5H3V7H2ZM6 6H10V7H6ZM2 7H7V8H2ZM9 7H10V9H9ZM2 8H3V12H2ZM6 8H7V9H6ZM6 9H10V10H6ZM6 11H10V12H6ZM2 12H7V13H2ZM9 12H10V14H9ZM6 13H7V14H6ZM6 14H10V15H6Z"/><path fill="var(--ic-orange)" d="M7 7H9V9H7ZM7 12H9V14H7Z"/></symbol>
+  <symbol id="i-cl-solution" viewBox="0 0 16 16"><path fill="currentColor" d="M5 1H15V2H5ZM4 2H5V4H4ZM15 2H16V4H15ZM4 4H16V5H4ZM4 5H5V7H4ZM15 5H16V12H15ZM8 12H15V13H8Z"/><path fill="var(--ic-purple)" d="M3 8H4V9H3ZM2 9H3V10H2ZM4 9H5V10H4ZM1 10H2V11H1ZM5 10H6V11H5ZM0 11H1V12H0ZM6 11H7V12H6ZM1 12H2V13H1ZM5 12H6V13H5ZM2 13H3V14H2ZM4 13H5V14H4ZM3 14H4V15H3Z"/></symbol>
+  <symbol id="i-rc-back" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M13.2 8H2.8M6.8 4 2.8 8l4 4"/></symbol>
+  <symbol id="i-rc-forward" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M2.8 8h10.4M9.2 4l4 4-4 4"/></symbol>
+  <symbol id="i-rc-undo" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M3.4 6.2h6.4a3.4 3.4 0 0 1 0 6.8H6.6M5.8 3.6 3.2 6.2l2.6 2.6"/></symbol>
+  <symbol id="i-rc-redo" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" d="M12.6 6.2H6.2a3.4 3.4 0 0 0 0 6.8h3.2M10.2 3.6l2.6 2.6-2.6 2.6"/></symbol>
+  <symbol id="i-rc-save-all" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M4.4 4.4c0-.6.4-1 1-1h6l2.2 2.2v6.6c0 .6-.4 1-1 1H5.4c-.6 0-1-.4-1-1z"/><path d="M6.6 3.4v2.2h4V3.4M2.4 6v7.2c0 .6.4 1 1 1h7.2"/></g></symbol>
+  <symbol id="i-rc-fire" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" d="M8 14.2c2.6 0 4.4-1.8 4.4-4.2 0-2.8-2.4-4.2-3-7.6C7.6 4 6.8 5.4 6.6 7 5.8 6.4 5.4 5.6 5.4 4.8 4.2 6 3.6 7.6 3.6 9.6c0 2.6 1.8 4.6 4.4 4.6z"/></symbol>
+  <symbol id="i-rc-logo" viewBox="0 0 16 16"><path fill="currentColor" d="M8 1.2 14.6 5v6L8 14.8 1.4 11V5zM8 4.2 4.2 6.4v3.2L8 11.8l3.8-2.2V6.4z"/></symbol>
+  <symbol id="i-rc-maximize" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1" fill="none" stroke="currentColor"/></symbol>
+  <symbol id="i-rc-class" viewBox="0 0 16 16"><path fill="currentColor" d="M2 2H14V5H2ZM2 11H14V12H2ZM2 5H3V11H2ZM13 5H14V11H13ZM4 6H11V7H4ZM4 8H9V9H4Z"/></symbol>
+  <symbol id="i-rc-resize" viewBox="0 0 16 16"><path d="M1.2 8 4.6 4.6v2.2h6.8V4.6L14.8 8l-3.4 3.4V9.2H4.6v2.2z" fill="#FFFFFF" stroke="#000000" stroke-linejoin="round"/></symbol>
+  <symbol id="i-rc-pointer" viewBox="0 0 16 16"><path d="M3.5 1.5v11.2l2.7-2.6 1.9 4.4 1.9-.8-1.9-4.3h3.7z" fill="#FFFFFF" stroke="#000000" stroke-linejoin="round"/></symbol>
+</svg>
+<x-dc>
+<helmet>
+<style>
+.sheet{width:1280px;padding:24px 20px 32px;display:flex;flex-direction:column;gap:18px}
+.sheet h1{font-size:20px;line-height:26px;margin:0;font-weight:600;color:var(--strong)}
+.lead{color:var(--muted);max-width:1220px}
+.navs{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.themes{display:flex;flex-wrap:wrap;gap:4px 14px}
+.themes a{color:var(--link);text-decoration:none}
+.themes a.on{color:var(--strong);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.themes .lbl{color:var(--muted)}
+.sec{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.sec h2{font-size:16px;line-height:22px;margin:0;font-weight:600;color:var(--strong)}
+.frame{width:max-content}
+.prow{display:flex;gap:13px;align-items:flex-start}
+.frame .prow{display:block}
+.pnl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pnl h3{font-size:13px;line-height:18px;margin:0;font-weight:600;color:var(--strong);display:flex;flex-direction:column}
+.pnl h3 .src{font-family:var(--mono);font-size:11px;line-height:16px;font-weight:400;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnl .cap{color:var(--muted);font-size:11px;line-height:15px;min-height:30px}
+.stage{position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;overflow:hidden;background:var(--bg);color:var(--fg)}
+.zoom{position:absolute;inset:0;transform-origin:0 0}
+
+/* ---------------------------------------------------------------- the variants' shapes
+   v-now: today's tokens (square panels and tabs, Classic's 4 px transparent gutter or Harbor's 6 px, the 2 px accent line
+   under the tabs). v-new: the proposal (cards with Shell.Card.CornerRadius, tabs with DockDocumentTabItemCornerRadius,
+   controls with Shell.Control.CornerRadius, 6 px gaps on the window's color). The radii are variables set per family. */
+.v-now{--radius:var(--r-now);--card-r:0px;--tab-r:0px}
+.v-new{--radius:var(--ctl-r)}
+.v-new .chk .box{border-radius:var(--chk-r)}
+
+/* The title row (MainWindow.axaml's menus in the title bar on Windows). */
+.ttl{position:absolute;left:0;top:0;right:0;height:32px;display:flex;align-items:center;padding-left:8px;background:var(--title-bar);color:var(--title-bar-fg);white-space:nowrap}
+.ttl .logo{width:16px;height:16px;margin-right:6px;color:var(--title-bar-fg)}
+.ttl .m{display:flex;align-items:center;height:24px;padding:0 7px;border-radius:var(--radius)}
+.ttl .m.open{background:var(--title-hover)}
+.ttl .search{margin-left:12px;width:230px;height:24px;display:flex;align-items:center;gap:6px;padding:0 8px;background:var(--input);border:1px solid var(--input-border);border-radius:var(--radius);color:var(--placeholder);flex:none}
+.ttl .search svg.i{color:var(--placeholder)}
+.ttl .sol{margin-left:10px;height:22px;display:flex;align-items:center;padding:0 8px;border-radius:var(--radius);background:var(--title-chip);color:var(--title-chip-fg);flex:none}
+.kind-hc .ttl .sol{border:1px solid var(--border)}
+.ttl .wbs{margin-left:auto;display:flex;height:32px;flex:none}
+.ttl .wbs span{width:46px;display:flex;align-items:center;justify-content:center}
+.ttl .wbs svg{width:16px;height:16px;color:var(--title-bar-fg)}
+
+/* The standard toolbar: a band today, a card as wide as its buttons proposed. */
+.tbr{position:absolute;display:flex;align-items:center;gap:2px;white-space:nowrap;color:var(--fg)}
+.v-now .tbr{left:0;right:0;top:32px;height:32px;padding:0 4px;background:var(--toolbar);border-bottom:1px solid var(--toolbar-border)}
+.v-new .tbr{left:6px;top:34px;height:30px;padding:0 3px;background:var(--tb-card);border:1px solid var(--border);border-radius:var(--card-r)}
+.tbr .field{margin:0 2px}
+.tbr .tb.run{font-weight:600}
+.ptb .field{margin:0 2px}
+.field .lead-i{margin-left:-2px}
+
+/* The document well: the tab strip and the active document. */
+.well{position:absolute;display:flex;flex-direction:column;min-width:0}
+.v-new .well{border-radius:var(--card-r);overflow:hidden}
+.wt{display:flex;align-items:flex-end;gap:2px;flex:none;position:relative;z-index:1;min-width:0}
+.v-now .wt{height:32px;background:var(--strip-now);gap:0}
+.v-new .wt{height:31px;padding:0 6px;background:var(--strip);border:1px solid var(--border);border-bottom:0;border-radius:var(--card-r) var(--card-r) 0 0}
+.v-new.out .wt{background:transparent;border-color:transparent;padding-left:10px}
+.wd{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;background:var(--panel);position:relative}
+.v-now .wd{border:1px solid var(--border);border-top:2px solid var(--sep-now)}
+.v-now .well.idle .wd{border-top-color:var(--border)}
+.v-new .wd{border:1px solid var(--frame);border-radius:0 0 var(--card-r) var(--card-r)}
+.v-new.out .wd{border-radius:var(--card-r)}
+.v-new .well.idle .wd{border-color:var(--border)}
+
+/* Document tabs. */
+.dt{position:relative;display:flex;align-items:center;gap:6px;height:26px;padding:0 5px 0 9px;color:var(--strip-fg);white-space:nowrap;flex:none}
+.dt .tt{overflow:hidden;text-overflow:ellipsis}
+.dt .pin,.dt .x{width:16px;height:16px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);flex:none;color:currentColor}
+.dt .pin svg,.dt .x svg{width:12px;height:12px}
+.dt .pin svg.up{transform:rotate(-45deg)}
+.dt .pin svg.down{transform:rotate(45deg)}
+.dt.prev .tt{font-style:italic}
+.dt .stripe{position:absolute;left:3px;right:3px;bottom:0;height:3px;border-radius:2px 2px 0 0}
+.dt .flare{position:absolute;bottom:0;display:none;overflow:visible}
+.v-now .dt{height:32px;padding:0 8px 0 10px;color:var(--strip-now-fg)}
+.v-now .dt.on{background:var(--tab-act-now);color:var(--tab-act-now-fg)}
+.v-now .well.idle .dt.on{background:var(--tab-idle-now);color:var(--tab-idle-now-fg)}
+.v-now.bar .dt.on{box-shadow:inset 0 3px 0 var(--accent)}
+.v-now.bar .well.idle .dt.on{box-shadow:none}
+.v-now .dt.hov{background:var(--tab-hover-now);color:var(--tab-hover-now-fg)}
+.v-now .dt.prev,.v-new .dt.prev{background:var(--tab-prev);color:var(--tab-prev-fg)}
+.v-new .dt{border:1px solid transparent;border-bottom:0;border-radius:var(--tab-r) var(--tab-r) 0 0}
+.v-new .dt.hov{background:var(--tab-hover);color:var(--tab-hover-fg)}
+.v-new .dt.on{height:27px;margin-bottom:-1px;z-index:2;background:var(--tab-sel);color:var(--tab-sel-fg);border-color:var(--tab-sel-border);font-weight:600}
+.v-new .well.idle .dt.on{background:var(--tab-idle);color:var(--tab-idle-fg);border-color:var(--tab-idle-border)}
+.v-new.bar .dt.on::before{content:"";position:absolute;left:-1px;right:-1px;top:-1px;height:4px;background:var(--accent);border-radius:var(--tab-r) var(--tab-r) 0 0}
+.v-new.bar .well.idle .dt.on::before{display:none}
+.v-new.feet .dt.on .flare{display:block}
+/* What tokens and styles alone give (no TabStripEdge): the frame closed under the selected tab, or no top edge at all. */
+.v-new.closed .dt.on,.v-new.notop .dt.on{height:26px;margin-bottom:0}
+.v-new.notop .wd{border-top-width:0}
+.flare .f{fill:var(--tab-sel)}
+.flare .s{fill:none;stroke:var(--tab-sel-border)}
+.well.idle .flare .f{fill:var(--tab-idle)}
+.well.idle .flare .s{stroke:var(--tab-idle-border)}
+
+/* The navigation bar and the editor. */
+.nav{display:flex;gap:4px;padding:3px 4px;height:29px;flex:none;background:var(--nav-bg)}
+.nav .field{flex:1 1 0;min-width:0}
+.ed{flex:1 1 auto;min-height:0;overflow:hidden;background:var(--editor);color:var(--editor-fg);font:12px/18px var(--mono);padding-top:3px}
+.ed .ln{display:flex;white-space:pre;height:18px}
+.ed .no{width:46px;padding-right:16px;text-align:right;color:var(--line-no);flex:none}
+.ed .lens{font:11px/18px var(--ui);color:var(--muted)}
+.ed .ln.cur{background:linear-gradient(90deg,transparent 46px,var(--cur-line) 46px)}
+
+/* Tool windows. */
+.pn{position:absolute;display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel);border:1px solid var(--border)}
+.v-new .pn{border-radius:var(--card-r);overflow:hidden}
+.v-new .pn.float{border:0;border-radius:0}
+.v-new .pn.float.round{border-radius:0 0 7px 7px}
+.pcap{height:26px;flex:none;display:flex;align-items:center;padding-left:8px;background:var(--cap-inactive);color:var(--cap-inactive-fg);white-space:nowrap}
+.v-now .pcap{height:24px}
+.pcap.act{background:var(--cap-active);color:var(--cap-active-fg)}
+/* The focused tool window in Classic Light and Dark (outline): a 1 px accent frame round the card (Shell.Card.Focus.BorderBrush),
+   the caption stays on the card with its title semibold. .capfill draws the alternative: today's solid caption. */
+.v-new.outline .pn.focus{border-color:var(--frame)}
+.v-new.outline .pcap.act{background:var(--cap-inactive);color:var(--strong);font-weight:600}
+.v-new.outline.capfill .pn.focus{border-color:var(--border)}
+.v-new.outline.capfill .pcap.act{background:var(--cap-active);color:var(--cap-active-fg);font-weight:400}
+.v-new .pn.slide{box-shadow:var(--pop-shadow);z-index:6}
+.pcap .t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pcap .cb{width:22px;height:22px;display:flex;align-items:center;justify-content:center;flex:none}
+.pcap .cb svg{width:12px;height:12px}
+.ptb{display:flex;align-items:center;gap:2px;height:28px;padding:0 4px;flex:none;white-space:nowrap;min-width:0}
+.ptb .plbl{color:var(--fg);margin:0 2px 0 4px}
+.psr{padding:2px 6px 4px;flex:none}
+.psr .field{width:100%}
+.tree{flex:1 1 auto;min-height:0;overflow:hidden;padding-top:2px}
+.trow{display:flex;align-items:center;height:22px;white-space:nowrap;padding-right:6px;color:var(--fg)}
+.trow .ex{width:16px;flex:none;display:flex;align-items:center;justify-content:center}
+.trow .ex svg{width:12px;height:12px;color:var(--fg)}
+.trow svg.i{margin-right:6px}
+.trow.b .tx{font-weight:600}
+.trow.sel{background:var(--sel);color:var(--sel-fg)}
+.trow.sel svg.i.c-green{color:var(--sel-green)}
+.kind-hc .trow.sel svg.i,.kind-hc .cs .csr.sel svg.i{color:var(--sel-fg)}
+.trow.sel-i{background:var(--sel-inactive);color:var(--sel-inactive-fg)}
+.trow.hover{background:var(--row-hover);color:var(--hover-fg)}
+.trow .tx{overflow:hidden;text-overflow:ellipsis}
+/* Proposed list and tree rows: inset 3 px from the card's sides with the control radius; the selected row in Solution
+   Explorer has a 3 x 14 px pill at its left (Shell.Selection.Indicator, .Inactive without the focus). */
+.trow{position:relative}
+.trow .pill{display:none}
+.v-new .trow{margin:0 3px;border-radius:var(--radius)}
+.v-new .trow.sel .pill,.v-new .trow.sel-i .pill{display:block;position:absolute;left:1px;top:4px;width:3px;height:14px;border-radius:2px;background:var(--pill)}
+.v-new .trow.sel-i .pill{background:var(--pill-i)}
+.pgh{display:flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 8px;font-weight:600;color:var(--strong);flex:none;border-bottom:1px solid var(--soft-border)}
+.pg{flex:1 1 auto;min-height:0;overflow:hidden}
+.pgr{display:grid;grid-template-columns:132px minmax(0,1fr);height:22px;align-items:stretch;border-bottom:1px solid var(--rule)}
+.pgr span{display:flex;align-items:center;padding:0 6px;white-space:nowrap;overflow:hidden;min-width:0}
+.pgr span:first-child{border-right:1px solid var(--rule)}
+.pgr .v{gap:4px}
+.pgr .v .tx{overflow:hidden;text-overflow:ellipsis;flex:1 1 auto}
+.pgr .v svg{width:12px;height:12px;color:var(--muted);flex:none}
+.pgr.cat{display:flex;gap:4px;align-items:center;padding:0 4px;font-weight:600;background:var(--header);color:var(--strong)}
+.pgr.cat svg{width:12px;height:12px}
+.outp{flex:1 1 auto;min-height:0;overflow:hidden;background:var(--editor);color:var(--editor-fg);font:12px/18px var(--mono);padding:3px 8px;white-space:pre}
+.outp .ok{color:var(--ok-fg)}
+
+/* Tool window tabs at the bottom: plain today, hanging from the content proposed (Shell.ToolTab.CornerRadius). */
+.ttabs{display:flex;align-items:flex-start;gap:2px;height:26px;flex:none;padding:0 6px;border-top:1px solid var(--border);background:var(--panel)}
+.ttab{display:flex;align-items:center;height:24px;padding:0 9px;color:var(--fg);white-space:nowrap;margin-top:-1px;border:1px solid transparent;border-top:0;border-radius:0 0 var(--tab-r) var(--tab-r)}
+.ttab.on{height:25px;background:var(--panel);border-color:var(--border);color:var(--link);font-weight:600}
+.v-now .ttabs{background:var(--strip-now);padding:0;gap:0}
+.v-now .ttab{margin-top:0;border:0;height:25px}
+.v-now .ttab.on{background:var(--panel);color:var(--link);font-weight:400}
+
+/* The status bar (its colors are #83's). */
+.sbar{position:absolute;left:0;right:0;bottom:0;height:24px;display:flex;align-items:center;gap:14px;padding:0 10px;background:var(--sb);color:var(--sb-fg);white-space:nowrap}
+.sbar .si{display:flex;align-items:center;gap:4px}
+.sbar .si svg.i{width:12px;height:12px;color:currentColor}
+.sbar .gap{flex:1 1 auto}
+.kind-hc .sbar{border-top:1px solid var(--border)}
+
+/* A floating window's frame: the system's, rounded by Windows 11 and macOS, square on Windows 10 and most Linux
+   window managers. Codalus doesn't draw it. */
+.frm{position:absolute;border:1px solid var(--os-border);background:var(--panel);box-shadow:var(--os-shadow);overflow:hidden}
+.frm.round{border-radius:8px}
+.frm .ost{height:30px;display:flex;align-items:center;padding-left:10px;background:var(--title-bar);color:var(--title-bar-fg);white-space:nowrap}
+.frm .ost .t{flex:1 1 auto}
+.frm .ost span.wb{width:40px;height:30px;display:flex;align-items:center;justify-content:center}
+.frm .ost svg{width:14px;height:14px;color:var(--title-bar-fg)}
+
+/* Popups: menus and drop-downs take Shell.CornerRadius.Overlay (6), IntelliSense, Quick Info and tooltips the control
+   radius, dialogs Shell.CornerRadius.Dialog (8). */
+.pop{position:absolute;z-index:10;background:var(--overlay);border:1px solid var(--overlay-border);box-shadow:var(--pop-shadow);color:var(--fg);white-space:nowrap}
+.pop.menu{border-radius:6px;padding:4px;min-width:0}
+.pop.menu .mi .ic{width:16px;height:16px;flex:none;display:flex;align-items:center;justify-content:center}
+.pop.menu .mi .sub{margin-left:auto;width:12px;height:12px;color:var(--muted)}
+.pop.menu .mi.hover .sub,.pop.menu .mi.hover .sc{color:var(--hover-fg)}
+.pop.compl{border-radius:var(--radius);padding:2px 0}
+.compl .cr{display:flex;align-items:center;gap:6px;height:20px;padding:0 6px;font:12px/20px var(--ui)}
+.compl .cr .m{font-weight:700}
+.compl .cr.sel{background:var(--sel);color:var(--sel-fg)}
+.kind-hc .compl .cr.sel svg.i{color:var(--sel-fg)}
+.pop.qi{border-radius:var(--radius);padding:5px 8px;font:12px/16px var(--mono);white-space:normal;width:300px}
+.pop.qi .doc{font:12px/16px var(--ui);margin-top:4px;color:var(--fg)}
+.pop.tip{border-radius:var(--radius);padding:4px 8px}
+.pop.ddl{border-radius:6px;padding:4px}
+.ddl .di{display:flex;align-items:center;gap:8px;height:24px;padding:0 8px 0 6px;border-radius:var(--radius)}
+.ddl .di .ck{width:14px;height:14px;flex:none}
+.ddl .di.sel{background:var(--sel);color:var(--sel-fg)}
+.ddl .di.hover{background:var(--hover);color:var(--hover-fg)}
+.ptr{position:absolute;width:16px;height:16px;z-index:20}
+
+/* Dialogs and Code Search. */
+.scrim{position:absolute;inset:0;z-index:8;background:var(--scrim)}
+.idlg{position:absolute;z-index:9;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:8px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
+.idlg .dh{display:flex;align-items:center;gap:8px;padding:14px 12px 6px 20px}
+.idlg .dh .t{font-size:14px;line-height:20px;font-weight:600;color:var(--strong);flex:1 1 auto}
+.idlg .db{display:flex;flex-direction:column;gap:6px;padding:6px 20px 16px}
+.idlg .df{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;background:var(--dlg-footer);border-top:1px solid var(--soft-border)}
+.cs{position:absolute;z-index:9;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:8px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
+.cs .csf{padding:8px}
+.cs .csr{display:flex;align-items:center;gap:8px;height:24px;padding:0 10px;white-space:nowrap}
+.cs .csr.sel{background:var(--sel);color:var(--sel-fg)}
+.cs .csr .muted{margin-left:auto}
+.cs .csr.sel .muted{color:inherit}
+
+/* Auto-hidden tool windows: the side strip's text tabs on the window's color, a 3 px bar on the side they open towards. */
+.ahs{position:absolute;display:flex;flex-direction:column;gap:6px;align-items:center;padding-top:4px}
+.atab{writing-mode:vertical-rl;white-space:nowrap;padding:9px 4px 9px 3px;color:var(--fg);position:relative;border-radius:var(--radius)}
+.atab::after{content:"";position:absolute;right:0;top:3px;bottom:3px;width:3px;border-radius:2px;background:var(--border)}
+.atab.on::after{background:var(--accent)}
+.atab.hov{background:var(--tab-hover);color:var(--tab-hover-fg)}
+
+/* Dragging a tab: Dock's preview (DockDragPreviewCornerRadius, 4 already), the drop area and the dock targets. */
+.dragchip{position:absolute;z-index:14;display:flex;align-items:center;gap:6px;height:26px;padding:0 10px 0 8px;background:var(--overlay);border:1px solid var(--frame);border-radius:var(--radius);box-shadow:var(--pop-shadow);white-space:nowrap;color:var(--fg)}
+.dropzone{position:absolute;z-index:11;background:color-mix(in srgb,var(--accent) 20%,transparent);border:1px solid var(--accent);border-radius:var(--card-r)}
+.dtg{position:absolute;z-index:12;width:30px;height:30px;border-radius:var(--radius);background:var(--overlay);border:1px solid var(--overlay-border);box-shadow:var(--pop-shadow);padding:5px;display:flex}
+.dtg i{flex:1;border:1px solid var(--muted);border-radius:2px;position:relative;display:block}
+.dtg i b{position:absolute;background:var(--accent);opacity:.75}
+.dtg.on{border-color:var(--accent)}
+
+/* A notification toast: NotificationCard Floating (Border.overlay, Shell.CornerRadius.Overlay). */
+.toast{position:absolute;z-index:12;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:0 10px;padding:10px 12px;background:var(--overlay);border:1px solid var(--overlay-border);border-radius:6px;box-shadow:var(--pop-shadow);color:var(--fg);white-space:normal}
+.toast .meta{grid-column:2;display:flex;gap:8px;margin-top:4px;font-size:11px}
+.toast .acts{grid-column:2 / span 2;display:flex;justify-content:flex-end;gap:6px;margin-top:8px}
+
+/* Blocks: plain positioned shapes (the gap's measure, a dimension line). */
+.blk{position:absolute}
+.blk.dim{display:flex;align-items:center;justify-content:center;font-size:11px;line-height:14px;color:var(--strong);font-weight:600}
+.blk.vline{background:var(--strong)}
+
+/* The controls row. */
+.ctls{position:absolute;inset:0;background:var(--panel);display:flex;flex-wrap:wrap;align-content:center;align-items:center;gap:10px 12px;padding:0 14px}
+
+/* Numbered marks on the zoomed pictures and their legend. */
+.mk{position:absolute;width:20px;height:20px;border-radius:10px;background:var(--strong);color:var(--bg);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:30;box-shadow:0 0 0 2px var(--bg)}
+.mkl{position:absolute;background:var(--strong);z-index:29}
+.legend{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 18px;margin-top:4px}
+.legend .lg{display:flex;gap:8px;align-items:flex-start;color:var(--fg)}
+.legend .lg .n{flex:none;width:20px;height:20px;border-radius:10px;background:var(--strong);color:var(--bg);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+/* The cards at the bottom. */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:calc(var(--radius) + 3px);padding:14px 18px 16px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.card h2{font-size:14px;line-height:20px;margin:0;font-weight:600;color:var(--strong)}
+.card .note{color:var(--muted)}
+.kgrid{display:flex;flex-direction:column}
+.kh,.kr{display:grid;grid-template-columns:var(--cols)}
+.kh span{display:flex;align-items:center;height:24px;padding:0 8px;font-weight:600;color:var(--muted);background:var(--header);border-bottom:1px solid var(--soft-border);white-space:nowrap;overflow:hidden}
+.kr span{padding:4px 8px;border-bottom:1px solid var(--rule);min-width:0}
+.kr span.mono{font-family:var(--mono);font-size:11px}
+.kr span.new{color:var(--strong);font-weight:600}
+.kr span.same{color:var(--muted)}
+.decide{display:grid;grid-template-columns:1fr 1fr;gap:14px 32px}
+.dq{display:flex;gap:10px;align-items:flex-start}
+.dq .n{flex:none;width:20px;height:20px;border-radius:10px;background:var(--badge);color:var(--badge-fg);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.kind-hc .dq .n{border:1px solid var(--soft-border)}
+.dq b{font-weight:600;color:var(--strong)}
+.dq .tag{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+</style>
+</helmet>
+<div class="{{t.cls}}" style="{{vars}}; min-height: 100vh">
+<main class="{{mainCls}}">
+
+<sc-if value="{{sheet}}">
+<header>
+  <h1>Rounded corners: cards, tabs and controls like the classic IDE's</h1>
+  <div class="lead">Task #84, the design before it is built. The user: "Add rounded corners for tabs/panels/windows etc (screenshot 4 comparison again)". In that screenshot the classic IDE's current look sits behind Codalus: its tool windows, the document well and the toolbar are cards with about 4.5 px corners on a darker window, 6 px apart; the selected tab is a rounded outline that flows into a 1 px frame around the active document; drop-downs, the search box and toggled toolbar buttons have the same corners. Codalus in front has square panels flush against each other, an accent-filled square tab and 2 px control corners (D33). This page draws the whole window now and proposed, then each part close up, on the user's BlazorSudoku solution. Most shapes are token values and styles; the frame's top edge beside the selected tab needs a small control (C). The cards also move a few Classic Light and Dark colors (the toolbar, the tab strip, the selected tab, the focused caption), listed in the colors card at the end; #83 reworks Classic's colors in parallel and may retune them. Only Classic changes shape; the other families take only the shared popup radii. {{t.name}}, {{t.p.family}} family{{familyNote}}.</div>
+  <div class="navs">
+    <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
+    <nav class="themes" aria-label="States"><span class="lbl">One picture:</span><sc-for list="{{stateLinks}}" as="sl"><a href="?theme={{themeQ}}&amp;state={{sl.q}}">{{sl.q}}</a></sc-for></nav>
+  </div>
+</header>
+</sc-if>
+
+<sc-for list="{{sections}}" as="sec">
+<sc-if value="{{sheet}}"><div class="sec"><h2>{{sec.title}}</h2><div class="lead">{{sec.lead}}</div></div></sc-if>
+<sc-for list="{{sec.rows}}" as="row">
+<section class="prow">
+<sc-for list="{{row.items}}" as="s">
+<article class="pnl" style="width:{{s.w}}px" aria-label="{{s.title}}">
+  <sc-if value="{{sheet}}"><h3>{{s.title}}<span class="src">{{s.src}}</span></h3><div class="cap">{{s.cap}}</div></sc-if>
+  <div class="stage" style="width:{{s.w}}px;height:{{s.h}}px" aria-disabled="{{s.nocheckA}}">
+  <div class="scene {{s.vcls}} {{s.themeCls}}" style="{{s.themeVars}}">
+  <div class="zoom" style="{{s.zoomStyle}}">
+
+    <sc-for list="{{s.blocks}}" as="b"><div class="blk {{b.cls}}" style="{{b.style}}">{{b.t}}</div></sc-for>
+
+    <sc-if value="{{s.tr}}">
+    <div class="ttl" style="{{s.tr.style}}">
+      <svg class="logo" aria-hidden="true"><use href="#i-rc-logo"></use></svg>
+      <sc-for list="{{s.tr.menus}}" as="m"><span class="m {{m.cls}}">{{m.t}}</span></sc-for>
+      <sc-if value="{{s.tr.search}}"><span class="search"><svg class="i" aria-hidden="true"><use href="#i-search"></use></svg>Search (Ctrl+Q)</span><span class="sol">BlazorSudoku</span></sc-if>
+      <sc-if value="{{s.tr.wbs}}"><span class="wbs" aria-hidden="true"><span><svg><use href="#i-minus"></use></svg></span><span><svg><use href="#i-rc-maximize"></use></svg></span><span><svg><use href="#i-close"></use></svg></span></span></sc-if>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{s.toolbar}}">
+    <div class="tbr" style="{{s.toolbar.style}}" role="toolbar" aria-label="Standard">
+      <sc-for list="{{s.toolbar.items}}" as="b">
+        <sc-if value="{{b.sep}}"><span class="tb-sep"></span></sc-if>
+        <sc-if value="{{b.i}}"><span class="tb {{b.cls}}" role="button" aria-label="{{b.tip}}"><svg class="i {{b.c}}" aria-hidden="true"><use href="#i-{{b.i}}"></use></svg><sc-if value="{{b.text}}">{{b.text}}</sc-if><sc-if value="{{b.chev}}"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></sc-if></span></sc-if>
+        <sc-if value="{{b.combo}}"><span class="field sm combo {{b.cls}}" style="width:{{b.w}}px" role="combobox" aria-label="{{b.tip}}"><span class="value">{{b.combo}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></sc-if>
+      </sc-for>
+    </div>
+    </sc-if>
+
+    <sc-for list="{{s.wells}}" as="wl">
+    <div class="well {{wl.cls}}" style="{{wl.style}}">
+      <div class="wt" role="tablist" aria-label="Open documents">
+        <sc-for list="{{wl.tabs}}" as="tb">
+          <span class="dt {{tb.cls}}" style="{{tb.style}}" role="tab" aria-selected="{{tb.selA}}" title="{{tb.tip}}">
+            <sc-if value="{{tb.stripe}}"><span class="stripe" style="background:{{tb.stripe}}"></span></sc-if>
+            <svg class="i md" aria-hidden="true"><use href="#i-{{tb.i}}"></use></svg><span class="tt">{{tb.t}}</span>
+            <sc-if value="{{tb.pin}}"><span class="pin" aria-label="{{tb.pinA}}"><svg class="{{tb.pin}}" aria-hidden="true"><use href="#i-pin"></use></svg></span></sc-if>
+            <sc-if value="{{tb.x}}"><span class="x" aria-label="Close"><svg aria-hidden="true"><use href="#i-close"></use></svg></span></sc-if>
+            <svg class="flare" style="{{s.fl.l}}" width="{{s.fl.w}}" height="{{s.fl.w}}" viewBox="{{s.fl.vb}}" aria-hidden="true"><path class="f" d="{{s.fl.f}}"></path><path class="s" d="{{s.fl.s}}"></path></svg>
+            <svg class="flare" style="{{s.fl.r}}" width="{{s.fl.w}}" height="{{s.fl.w}}" viewBox="{{s.fl.vb}}" aria-hidden="true"><path class="f" d="{{s.fl.f}}"></path><path class="s" d="{{s.fl.s}}"></path></svg>
+          </span>
+        </sc-for>
+      </div>
+      <div class="wd">
+        <sc-if value="{{wl.nav}}"><div class="nav"><sc-for list="{{wl.nav}}" as="n"><span class="field sm combo" role="combobox" aria-label="{{n.a}}"><svg class="i {{n.c}} lead-i" aria-hidden="true"><use href="#i-{{n.i}}"></use></svg><span class="value">{{n.t}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></sc-for></div></sc-if>
+        <sc-if value="{{wl.lines}}"><div class="ed"><sc-for list="{{wl.lines}}" as="ln"><div class="ln {{ln.cls}}"><span class="no">{{ln.n}}</span><sc-if value="{{ln.lens}}"><span class="lens">{{ln.lens}}</span></sc-if><sc-for list="{{ln.toks}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></div></sc-for></div></sc-if>
+      </div>
+    </div>
+    </sc-for>
+
+    <sc-for list="{{s.frames}}" as="f">
+    <div class="frm {{f.cls}}" style="{{f.style}}"><div class="ost"><span class="t">{{f.t}}</span><span class="wb"><svg aria-hidden="true"><use href="#i-minus"></use></svg></span><span class="wb"><svg aria-hidden="true"><use href="#i-rc-maximize"></use></svg></span><span class="wb"><svg aria-hidden="true"><use href="#i-close"></use></svg></span></div></div>
+    </sc-for>
+
+    <sc-for list="{{s.pans}}" as="p">
+    <section class="pn {{p.cls}}" style="{{p.style}}" aria-label="{{p.t}}">
+      <div class="pcap {{p.capCls}}"><span class="t">{{p.t}}</span><span class="cb" aria-label="Window position"><svg class="i c-fg" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span><span class="cb" aria-label="Auto Hide"><svg class="i c-fg" aria-hidden="true"><use href="#i-pin"></use></svg></span><span class="cb" aria-label="Close"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+      <sc-if value="{{p.tb}}"><div class="ptb" role="toolbar" aria-label="{{p.t}}">
+        <sc-for list="{{p.tb}}" as="b">
+          <sc-if value="{{b.sep}}"><span class="tb-sep"></span></sc-if>
+          <sc-if value="{{b.lbl}}"><span class="plbl">{{b.lbl}}</span></sc-if>
+          <sc-if value="{{b.i}}"><span class="tb sm {{b.cls}}" role="button" aria-label="{{b.tip}}"><svg class="i {{b.c}}" aria-hidden="true"><use href="#i-{{b.i}}"></use></svg><sc-if value="{{b.chev}}"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></sc-if></span></sc-if>
+          <sc-if value="{{b.combo}}"><span class="field sm combo" style="width:{{b.w}}px" role="combobox" aria-label="{{b.tip}}"><span class="value">{{b.combo}}</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></sc-if>
+        </sc-for>
+      </div></sc-if>
+      <sc-if value="{{p.search}}"><div class="psr"><span class="field sm {{p.searchCls}}" role="searchbox" aria-label="{{p.search}}"><span class="ph">{{p.search}}</span><svg class="i c-fg" aria-hidden="true"><use href="#i-search"></use></svg></span></div></sc-if>
+      <sc-if value="{{p.tree}}"><div class="tree" role="tree" aria-label="{{p.t}}"><sc-for list="{{p.tree}}" as="r"><div class="trow {{r.cls}}" role="treeitem"><span class="pill"></span><span style="width:{{r.ind}}px;flex:none"></span><span class="ex"><sc-if value="{{r.ex}}"><svg aria-hidden="true"><use href="#i-{{r.ex}}"></use></svg></sc-if></span><svg class="i {{r.c}}" aria-hidden="true"><use href="#i-{{r.i}}"></use></svg><span class="tx">{{r.t}}</span></div></sc-for></div></sc-if>
+      <sc-if value="{{p.props}}">
+        <div class="pgh"><span class="grow trim">{{p.props.head}}</span><span class="tb sm" role="button" aria-label="Property Pages"><svg class="i c-blue" aria-hidden="true"><use href="#i-table"></use></svg></span></div>
+        <div class="pg" role="grid" aria-label="Properties"><sc-for list="{{p.props.rows}}" as="r">
+          <sc-if value="{{r.cat}}"><div class="pgr cat" role="row"><svg aria-hidden="true"><use href="#i-chevron-down"></use></svg><span>{{r.cat}}</span></div></sc-if>
+          <sc-if value="{{r.n}}"><div class="pgr" role="row"><span role="rowheader">{{r.n}}</span><span class="v" role="gridcell"><span class="tx">{{r.v}}</span><sc-if value="{{r.combo}}"><svg aria-hidden="true"><use href="#i-chevron-down"></use></svg></sc-if></span></div></sc-if>
+        </sc-for></div>
+      </sc-if>
+      <sc-if value="{{p.out}}"><div class="outp" role="log" aria-label="Output"><sc-for list="{{p.out}}" as="o"><div class="{{o.cls}}">{{o.t}}</div></sc-for></div></sc-if>
+      <sc-if value="{{p.fill}}"><div class="grow"></div></sc-if>
+      <sc-if value="{{p.ttabs}}"><div class="ttabs" role="tablist" aria-label="Tool windows"><sc-for list="{{p.ttabs}}" as="tt"><span class="ttab {{tt.cls}}" role="tab" aria-selected="{{tt.selA}}">{{tt.t}}</span></sc-for></div></sc-if>
+    </section>
+    </sc-for>
+
+    <sc-if value="{{s.status}}">
+    <div class="sbar" role="status"><sc-for list="{{s.status}}" as="si"><sc-if value="{{si.gap}}"><span class="gap"></span></sc-if><sc-if value="{{si.t}}"><span class="si"><sc-if value="{{si.i}}"><svg class="i" aria-hidden="true"><use href="#i-{{si.i}}"></use></svg></sc-if>{{si.t}}</span></sc-if></sc-for></div>
+    </sc-if>
+
+    <sc-for list="{{s.ahs}}" as="a"><div class="ahs" style="{{a.style}}" role="tablist" aria-label="Auto-hidden tool windows"><sc-for list="{{a.tabs}}" as="at"><span class="atab {{at.cls}}" role="tab" aria-selected="{{at.selA}}">{{at.t}}</span></sc-for></div></sc-for>
+
+    <sc-if value="{{s.drag}}">
+      <div class="dropzone" style="{{s.drag.zone}}"></div>
+      <sc-for list="{{s.drag.targets}}" as="dg"><span class="dtg {{dg.cls}}" style="{{dg.style}}" aria-hidden="true"><i><b style="{{dg.fill}}"></b></i></span></sc-for>
+      <div class="dragchip" style="{{s.drag.chip}}"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg><span>GameCell.cs</span></div>
+    </sc-if>
+
+    <sc-if value="{{s.toast}}">
+    <section class="toast" style="{{s.toast.style}}" role="status" aria-label="Notification">
+      <svg class="i c-blue" aria-hidden="true" style="margin-top:1px"><use href="#i-info"></use></svg>
+      <span>Hot Reload applied the change to BlazorSudoku.Server.</span>
+      <span class="tb sm" role="button" aria-label="Dismiss" style="margin:-3px -6px 0 0"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span>
+      <span class="meta"><span class="muted">Hot Reload</span><span class="muted">14:06</span></span>
+      <span class="acts"><span class="btn" role="button">Show Output</span></span>
+    </section>
+    </sc-if>
+
+    <sc-if value="{{s.scrim}}"><div class="scrim"></div></sc-if>
+
+    <sc-for list="{{s.pops}}" as="pp">
+      <sc-if value="{{pp.menu}}"><div class="pop menu" style="{{pp.style}}" role="menu" aria-label="{{pp.a}}"><sc-for list="{{pp.menu}}" as="m"><sc-if value="{{m.sep}}"><div class="msep" role="separator"></div></sc-if><sc-if value="{{m.t}}"><div class="mi {{m.cls}}" role="menuitem"><span class="ic"><sc-if value="{{m.i}}"><svg class="i {{m.c}}" aria-hidden="true"><use href="#i-{{m.i}}"></use></svg></sc-if></span><span>{{m.t}}</span><sc-if value="{{m.k}}"><span class="sc">{{m.k}}</span></sc-if><sc-if value="{{m.sub}}"><svg class="sub" aria-hidden="true"><use href="#i-chevron-right"></use></svg></sc-if></div></sc-if></sc-for></div></sc-if>
+      <sc-if value="{{pp.compl}}"><div class="pop compl" style="{{pp.style}}" role="listbox" aria-label="Completion"><sc-for list="{{pp.compl}}" as="c"><div class="cr {{c.cls}}" role="option"><svg class="i {{c.c}}" aria-hidden="true"><use href="#i-{{c.i}}"></use></svg><span><span class="m">{{c.m}}</span>{{c.t}}</span></div></sc-for></div></sc-if>
+      <sc-if value="{{pp.qi}}"><div class="pop qi" style="{{pp.style}}" role="tooltip"><div><sc-for list="{{pp.qi}}" as="k"><span class="{{k.cls}}">{{k.t}}</span></sc-for></div><div class="doc">{{pp.doc}}</div></div></sc-if>
+      <sc-if value="{{pp.tip}}"><div class="pop tip" style="{{pp.style}}" role="tooltip">{{pp.tip}}</div></sc-if>
+      <sc-if value="{{pp.ddl}}"><div class="pop ddl" style="{{pp.style}}" role="listbox" aria-label="{{pp.a}}"><sc-for list="{{pp.ddl}}" as="d"><div class="di {{d.cls}}" role="option"><span class="ck"><sc-if value="{{d.ck}}"><svg class="i sm c-fg" aria-hidden="true"><use href="#i-check"></use></svg></sc-if></span><span>{{d.t}}</span></div></sc-for></div></sc-if>
+      <sc-if value="{{pp.ptr}}"><svg class="ptr" style="{{pp.style}}" aria-hidden="true"><use href="#i-{{pp.ptr}}"></use></svg></sc-if>
+    </sc-for>
+
+    <sc-if value="{{s.dialog}}">
+    <section class="idlg" style="{{s.dialog.style}}" role="dialog" aria-label="Rename file">
+      <div class="dh"><span class="t">Rename Startup.cs</span><span class="tb" role="button" aria-label="Close"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span></div>
+      <div class="db">
+        <label class="muted">New name</label>
+        <span class="field is-focus"><span class="value">Startup</span><span class="caret"></span><span class="muted">.cs</span></span>
+        <span class="chk on" style="margin-top:6px"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Also rename the class Startup and its references</span>
+      </div>
+      <div class="df"><span class="btn dlg" role="button">Cancel</span><span class="btn dlg primary" role="button">Rename</span></div>
+    </section>
+    </sc-if>
+
+    <sc-if value="{{s.codeSearch}}">
+    <section class="cs" style="{{s.codeSearch.style}}" role="dialog" aria-label="Code Search">
+      <div class="csf"><span class="field is-focus"><svg class="i c-fg" aria-hidden="true"><use href="#i-search"></use></svg><span class="value">UseStatic</span><span class="caret"></span></span></div>
+      <sc-for list="{{s.codeSearch.rows}}" as="r"><div class="csr {{r.cls}}"><svg class="i {{r.c}}" aria-hidden="true"><use href="#i-{{r.i}}"></use></svg><span>{{r.t}}</span><span class="muted small">{{r.w}}</span></div></sc-for>
+    </section>
+    </sc-if>
+
+    <sc-if value="{{s.ctrls}}">
+    <div class="ctls">
+      <span class="btn dlg" role="button">Cancel</span>
+      <span class="btn dlg primary" role="button">Rename</span>
+      <span class="btn has-icon is-hover" role="button"><svg class="i c-folder" aria-hidden="true"><use href="#i-folder-open"></use></svg>Browse…</span>
+      <span class="btn is-focus" role="button">Focused</span>
+      <span class="toolbar" role="toolbar" aria-label="Toolbar buttons">
+        <span class="tb" role="button" aria-label="Refresh"><svg class="i c-green" aria-hidden="true"><use href="#i-refresh"></use></svg></span>
+        <span class="tb is-hover" role="button" aria-label="Filter"><svg class="i c-purple" aria-hidden="true"><use href="#i-filter"></use></svg></span>
+        <span class="tb is-checked" role="button" aria-pressed="true" aria-label="Show All Files"><svg class="i c-fg" aria-hidden="true"><use href="#i-copy"></use></svg></span>
+        <span class="split is-hover"><span class="tb text" role="button"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>BlazorSudoku.Server</span><span class="tb" role="button" aria-label="More"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></span>
+      </span>
+      <span class="field" style="width:120px"><span class="value">Startup.cs</span></span>
+      <span class="field" style="width:190px"><span class="ph">Search Solution Explorer (Ctrl+;)</span><svg class="i c-fg" aria-hidden="true"><use href="#i-search"></use></svg></span>
+      <span class="field combo" style="width:96px"><span class="value">Debug</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+      <span class="field sm combo" style="width:170px"><svg class="i c-orange" aria-hidden="true"><use href="#i-rc-class"></use></svg><span class="value">BlazorSudoku.Server.Startup</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+      <span class="seg" role="group" aria-label="View"><button class="on" aria-pressed="true">Code</button><button aria-pressed="false">Design</button></span>
+      <span class="chk on"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Rename references</span>
+      <span class="chk"><span class="box"></span>Preview changes</span>
+      <span class="sw on"><span class="track"></span>Track active item</span>
+    </div>
+    </sc-if>
+
+  </div>
+  <sc-for list="{{s.marks}}" as="mk"><sc-if value="{{mk.l}}"><div class="mkl" style="{{mk.l}}"></div></sc-if><div class="mk" style="{{mk.style}}" aria-label="Mark {{mk.n}}">{{mk.n}}</div></sc-for>
+  </div>
+  </div>
+  <sc-if value="{{s.legend}}"><div class="legend"><sc-for list="{{s.legend}}" as="lg"><div class="lg"><span class="n">{{lg.n}}</span><span>{{lg.t}}</span></div></sc-for></div></sc-if>
+</article>
+</sc-for>
+</section>
+</sc-for>
+</sc-for>
+
+<sc-if value="{{sheet}}">
+<section class="card" aria-labelledby="h-tokens">
+  <h2 id="h-tokens">The shape tokens, per family</h2>
+  <div class="note">Existing tokens keep their names; seven are new. Each theme sets the family's value (Tokens.axaml); Light, Dark and High contrast share it, as shell-themes.md asks. Bold: a value that changes. Only Classic changes shape: Harbor, Graphite, Daylight and Ember keep theirs and take only the two shared popup radii (Q3). "Today's" means the value doesn't change.</div>
+  <div class="kgrid" role="table" aria-label="Shape tokens" style="--cols:250px 128px 128px 96px 96px 96px minmax(0,1fr)">
+    <div class="kh" role="row"><span role="columnheader">Token</span><span role="columnheader">Classic</span><span role="columnheader">Harbor</span><span role="columnheader">Graphite</span><span role="columnheader">Daylight</span><span role="columnheader">Ember</span><span role="columnheader">Used by</span></div>
+    <sc-for list="{{tokenRows}}" as="tr">
+      <div class="kr" role="row"><span class="mono" role="rowheader">{{tr.k}}</span><sc-for list="{{tr.cells}}" as="c"><span class="{{c.cls}}" role="cell">{{c.t}}</span></sc-for><span role="cell">{{tr.use}}</span></div>
+    </sc-for>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-colors">
+  <h2 id="h-colors">Classic colors this design changes</h2>
+  <div class="note">The cards need fills that differ from the window's: today Classic Light and Dark paint the toolbar and the tab strip in the window's own color (#EEEEF2, #1F1F1F), so as cards they would show only as outlines. These are every color token the proposal touches, with the value it sets; each new value is an existing token's (Shell.Panel, the accent, the toolbar's hover), so #83 can retune it without touching the shapes (Q18). Bold: a value that changes.</div>
+  <div class="kgrid" role="table" aria-label="Color tokens" style="--cols:250px 150px 150px 130px 130px minmax(0,1fr)">
+    <div class="kh" role="row"><span role="columnheader">Token</span><span role="columnheader">Classic Light</span><span role="columnheader">Classic Dark</span><span role="columnheader">Classic Blue</span><span role="columnheader">High Contrast</span><span role="columnheader">Why</span></div>
+    <sc-for list="{{colorRows}}" as="cr">
+      <div class="kr" role="row"><span class="mono" role="rowheader">{{cr.k}}</span><sc-for list="{{cr.cells}}" as="c"><span class="{{c.cls}}" role="cell">{{c.t}}</span></sc-for><span role="cell">{{cr.use}}</span></div>
+    </sc-for>
+  </div>
+  <div class="note">Checked on this page by render.cjs (its rules, plus the state cues it checks on this page alone): text 4.5:1 (7:1 in High contrast); icons, focus rings and check-box outlines 3:1; and, new for this design, the non-text state indicators at 3:1: the selected tab's outline or fill against the strip, the accent frame of the active document and of the focused tool window against the window, the selection pill against its row, and the open auto-hide tab's bar. Decorative, so not checked: card borders, the gaps, the toolbar card's edge and the tool tabs' outline (the selected tool tab is carried by its semibold title in the link color, checked as text). Classic Blue's and High Contrast's tabs and captions are today's fills, unchanged.</div>
+</section>
+
+<section class="card" aria-labelledby="h-measured">
+  <h2 id="h-measured">Measured in the user's screenshot (100 % scale)</h2>
+  <div class="note">Both windows show 12 px Segoe UI with 9 px capitals, so neither is scaled. Radii are fitted against anti-aliased rounded rectangles; colors are read from the pixels. One deliberate departure: the classic IDE outlines its cards differently (the document well has no border, #262626 straight on the #1C1C1C window; tool windows have a #454545 border; the toolbar card a dark #0E0E0E edge), while the proposal gives every card the same 1 px Shell.Border. Codalus's Classic Dark panels and window are 1.08:1 apart (#252526 on #1F1F1F), so without the outline the cards would disappear. If #83 adopts a darker window with lifted cards, the document card can drop its border as the classic IDE does (Q18).</div>
+  <div class="kgrid" role="table" aria-label="Measurements" style="--cols:220px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)">
+    <div class="kh" role="row"><span role="columnheader">Part</span><span role="columnheader">The classic IDE</span><span role="columnheader">Codalus today (Classic Dark)</span><span role="columnheader">Proposed</span></div>
+    <sc-for list="{{measureRows}}" as="mr">
+      <div class="kr" role="row"><span role="rowheader"><b>{{mr.what}}</b></span><span role="cell">{{mr.ide}}</span><span role="cell">{{mr.now}}</span><span role="cell">{{mr.new}}</span></div>
+    </sc-for>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-where">
+  <h2 id="h-where">Where it changes</h2>
+  <div class="note">Most of it is token values the existing setters already apply (Ember's 10 px cards have shipped since 0.3.0 and render alike on all three systems). Four parts need more: the frame's top edge beside the selected tab (a new control, required for the open tab: Dock's DocumentControl puts a 2 px separator and then a full Border under the strip, so styles can only close the frame under the tab or drop its top edge), the document well's card (a control theme), the selection pill (Solution Explorer's row template) and the feet (optional, in the same new control). The tool tabs need no drawing: Dock already interrupts their top line at the selected tab.</div>
+  <div class="kgrid" role="table" aria-label="Changes" style="--cols:230px 110px minmax(0,1fr)">
+    <div class="kh" role="row"><span role="columnheader">File</span><span role="columnheader">Kind</span><span role="columnheader">Change</span></div>
+    <sc-for list="{{whereRows}}" as="wr">
+      <div class="kr" role="row"><span class="mono" role="rowheader">{{wr.f}}</span><span role="cell">{{wr.k}}</span><span role="cell">{{wr.t}}</span></div>
+    </sc-for>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-decide">
+  <h2 id="h-decide">For the maintainer to decide</h2>
+  <div class="note">Each answer in bold is the recommendation, as drawn above; the alternatives are under it.</div>
+  <div class="decide">
+    <sc-for list="{{decisions}}" as="q">
+      <div class="dq"><span class="n">{{q.n}}</span><div><b>{{q.b}}</b> {{q.t}}<sc-if value="{{q.rej}}"><span class="tag">Alternatives: {{q.rej}}</span></sc-if></div></div>
+    </sc-for>
+  </div>
+</section>
+</sc-if>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Classic Dark","options":["Classic Blue","Classic Light","Classic Dark","Classic High Contrast","Harbor Light","Harbor Dark","Harbor High contrast"]},"state":{"editor":"enum","default":"all","options":["all","now","proposed","compare","high-contrast","zoom","tabs","two-groups","edge","tokens-closed","tokens-open","tabs-idle","empty","tool-windows","selection","caption-fill","autohide","drag","toast","floating","menus","dialog","controls"]},"$preview":{"width":1280,"height":7400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = window.CodalusControls;
+    const t = C.theme(this.props.theme);
+    const themeQ = encodeURIComponent(t.name);
+    const themes = C.ORDER.map((name) => ({ name, q: encodeURIComponent(name), cls: name === t.name ? 'on' : '' }));
+
+    // ---------------------------------------------------------------- per-theme values
+    // NOW: today's tokens (Tokens.axaml): the tab strip, the active tab, the line under the tabs, the preview tab, the
+    // title bar's hover and solution chip, the status bar, the control radius and the gutter.
+    // NEW: what the proposal sets; colors are existing tokens' values (Shell.Panel, Shell.Border, Shell.Accent, the
+    // toolbar's hover), so #83 can retune them without touching the shapes.
+    const NOW = {
+      'Classic Blue': { strip: '#364E6F', stripFg: '#FFFFFF', act: '#F5CC84', actFg: '#1E1E1E', idle: '#FDF4BF', idleFg: '#1E1E1E', hov: '#5B7199', hovFg: '#FFFFFF', sep: '#F5CC84', prev: '#68217A', prevFg: '#FFFFFF', tHover: '#B8C0D8', chip: '#FDF4BF', chipFg: '#1E1E1E', sb: '#007ACC', sbFg: '#FFFFFF', r: 2, gap: 4 },
+      'Classic Light': { strip: '#EEEEF2', stripFg: '#1E1E1E', act: '#007ACC', actFg: '#FFFFFF', idle: '#CCCEDB', idleFg: '#1E1E1E', hov: '#0E70C0', hovFg: '#FFFFFF', sep: '#007ACC', prev: '#68217A', prevFg: '#FFFFFF', tHover: '#D7D7DA', chip: '#C9DEF5', chipFg: '#1E1E1E', sb: '#007ACC', sbFg: '#FFFFFF', r: 2, gap: 4 },
+      'Classic Dark': { strip: '#1F1F1F', stripFg: '#F1F1F1', act: '#007ACC', actFg: '#FFFFFF', idle: '#3F3F46', idleFg: '#F1F1F1', hov: '#1177BB', hovFg: '#FFFFFF', sep: '#007ACC', prev: '#68217A', prevFg: '#FFFFFF', tHover: '#353535', chip: '#3E3E40', chipFg: '#F1F1F1', sb: '#007ACC', sbFg: '#FFFFFF', r: 2, gap: 4 },
+      'Classic High Contrast': { strip: '#000000', stripFg: '#FFFFFF', act: '#1AEBFF', actFg: '#000000', idle: '#0E4A7B', idleFg: '#FFFFFF', hov: '#1F1F1F', hovFg: '#FFFFFF', sep: '#1AEBFF', prev: '#1AEBFF', prevFg: '#000000', tHover: '#0E4A7B', chip: '#1F1F1F', chipFg: '#FFFFFF', sb: '#000000', sbFg: '#FFFFFF', r: 2, gap: 4 },
+      'Harbor Light': { strip: '#D5DDEF', stripFg: '#2E3A5C', act: '#FFFFFF', actFg: '#0E1735', idle: '#F4F6FC', idleFg: '#1B2645', hov: '#E0E6F6', hovFg: '#1B2645', sep: '#2B59C3', prev: '#CCD9F6', prevFg: '#0E1735', tHover: '#3C4661', chip: '#343E5A', chipFg: '#E8ECF7', sb: '#2B59C3', sbFg: '#FFFFFF', r: 3, gap: 6 },
+      'Harbor Dark': { strip: '#121827', stripFg: '#B5C0DB', act: '#141A28', actFg: '#F1F4FB', idle: '#19202F', idleFg: '#D9DFEE', hov: '#273350', hovFg: '#D9DFEE', sep: '#6E98FF', prev: '#263C6E', prevFg: '#F1F4FB', tHover: '#2E333F', chip: '#252A36', chipFg: '#E3E8F5', sb: '#2F5FD0', sbFg: '#FFFFFF', r: 3, gap: 6 },
+      'Harbor High contrast': { strip: '#000000', stripFg: '#FFFFFF', act: '#6CD2FF', actFg: '#000000', idle: '#203F4C', idleFg: '#FFFFFF', hov: '#1A323D', hovFg: '#FFFFFF', sep: '#6CD2FF', prev: '#6CD2FF', prevFg: '#000000', tHover: '#1A323D', chip: '#1A323D', chipFg: '#FFFFFF', sb: '#6CD2FF', sbFg: '#000000', r: 3, gap: 6 }
+    };
+    // Classic's proposal. style: outline (an accent outline in the content's color, Classic Light and Dark), fill
+    // (Classic Blue's gold and High Contrast's accent, today's). tbCard is the toolbar card's fill (Shell.Toolbar), strip
+    // the tab strip's (DockDocumentTabStripBackgroundBrush = Shell.Tab.Inactive). idleB is the selected tab's outline in
+    // a group without the focus: a new Shell.Tab.Selected.IndicatorBrush, 3:1 against the strip. Harbor's rows only feed
+    // the page's variables: Harbor keeps today's shapes and colors (Q3).
+    const NEW = {
+      'Classic Blue': { style: 'fill', tbCard: '#D6DBE9', strip: '#364E6F', stripFg: '#FFFFFF', sel: '#F5CC84', selFg: '#1E1E1E', selB: '#F5CC84', idle: '#FDF4BF', idleFg: '#1E1E1E', idleB: '#FDF4BF', hov: '#5B7199', hovFg: '#FFFFFF', frame: '#F5CC84', nav: '#F5F5F5' },
+      'Classic Light': { style: 'outline', tbCard: '#F5F5F5', strip: '#F5F5F5', stripFg: '#1E1E1E', sel: '#FFFFFF', selFg: '#000000', selB: '#007ACC', idle: '#FFFFFF', idleFg: '#1E1E1E', idleB: '#80838F', hov: '#DCEAF8', hovFg: '#1E1E1E', frame: '#007ACC', nav: '#FFFFFF' },
+      'Classic Dark': { style: 'outline', tbCard: '#252526', strip: '#252526', stripFg: '#D0D0D0', sel: '#252526', selFg: '#FFFFFF', selB: '#3794FF', idle: '#252526', idleFg: '#F1F1F1', idleB: '#75757C', hov: '#3E3E40', hovFg: '#F1F1F1', frame: '#3794FF', nav: '#252526' },
+      'Classic High Contrast': { style: 'fill', tbCard: '#000000', strip: '#000000', stripFg: '#FFFFFF', sel: '#1AEBFF', selFg: '#000000', selB: '#1AEBFF', idle: '#0E4A7B', idleFg: '#FFFFFF', idleB: '#6FC3DF', hov: '#1F1F1F', hovFg: '#FFFFFF', frame: '#1AEBFF', nav: '#000000' },
+      'Harbor Light': { style: 'bar', tbCard: '#E3E9F6', strip: 'transparent', stripFg: '#2E3A5C', sel: '#FFFFFF', selFg: '#0E1735', selB: '#BCC7E0', idle: '#F4F6FC', idleFg: '#1B2645', idleB: '#BCC7E0', hov: '#E0E6F6', hovFg: '#1B2645', frame: '#BCC7E0', nav: '#FFFFFF' },
+      'Harbor Dark': { style: 'bar', tbCard: '#1A2030', strip: 'transparent', stripFg: '#B5C0DB', sel: '#141A28', selFg: '#F1F4FB', selB: '#2A3553', idle: '#19202F', idleFg: '#D9DFEE', idleB: '#2A3553', hov: '#273350', hovFg: '#D9DFEE', frame: '#2A3553', nav: '#141A28' },
+      'Harbor High contrast': { style: 'fill', tbCard: '#000000', strip: 'transparent', stripFg: '#FFFFFF', sel: '#6CD2FF', selFg: '#000000', selB: '#6CD2FF', idle: '#203F4C', idleFg: '#FFFFFF', idleB: '#FFFFFF', hov: '#1A323D', hovFg: '#FFFFFF', frame: '#6CD2FF', nav: '#000000' }
+    };
+    // The proposed radii (Shell.Control.CornerRadius, Shell.Check.CornerRadius, Shell.Card.CornerRadius,
+    // DockDocumentTabItemCornerRadius) per family. Harbor's are today's.
+    const SHAPE = { Classic: { ctl: 4, chk: 3, card: 4, tab: 4 }, Harbor: { ctl: 3, chk: 3, card: 0, tab: 0 } };
+    const CUR_LINE = { 'Classic Blue': '#F0F0F0', 'Classic Light': '#F0F0F0', 'Classic Dark': '#2E2E2E', 'Classic High Contrast': '#000000', 'Harbor Light': '#F2F6FE', 'Harbor Dark': '#1A2236', 'Harbor High contrast': '#000000' };
+    const POP_SHADOW = { light: '0 4px 12px rgba(0,0,0,.16)', dark: '0 4px 14px rgba(0,0,0,.5)', hc: 'none' };
+    const OS = { light: ['#9A9A9A', '0 8px 28px rgba(0,0,0,.28)'], dark: ['#555555', '0 8px 28px rgba(0,0,0,.6)'], hc: ['#FFFFFF', 'none'] };
+
+    const extraVars = (name) => {
+      const th = C.THEMES[name], n = NOW[name], w = NEW[name], sh = SHAPE[th.family];
+      return [
+        `--r-now:${n.r}px`, `--strip-now:${n.strip}`, `--strip-now-fg:${n.stripFg}`, `--tab-act-now:${n.act}`, `--tab-act-now-fg:${n.actFg}`,
+        `--tab-idle-now:${n.idle}`, `--tab-idle-now-fg:${n.idleFg}`, `--tab-hover-now:${n.hov}`, `--tab-hover-now-fg:${n.hovFg}`, `--sep-now:${n.sep}`,
+        `--tab-prev:${n.prev}`, `--tab-prev-fg:${n.prevFg}`, `--title-hover:${n.tHover}`, `--title-chip:${n.chip}`, `--title-chip-fg:${n.chipFg}`,
+        `--sb:${n.sb}`, `--sb-fg:${n.sbFg}`,
+        `--ctl-r:${sh.ctl}px`, `--chk-r:${sh.chk}px`, `--card-r:${sh.card}px`, `--tab-r:${sh.tab}px`,
+        `--strip:${w.strip}`, `--strip-fg:${w.stripFg}`, `--tab-sel:${w.sel}`, `--tab-sel-fg:${w.selFg}`, `--tab-sel-border:${w.selB}`,
+        `--tab-idle:${w.idle}`, `--tab-idle-fg:${w.idleFg}`, `--tab-idle-border:${w.idleB}`, `--tab-hover:${w.hov}`, `--tab-hover-fg:${w.hovFg}`,
+        `--frame:${w.frame}`, `--nav-bg:${w.nav}`, `--tb-card:${w.tbCard}`, `--pill:${th.accent}`, `--pill-i:${th.muted}`,
+        `--cur-line:${CUR_LINE[name]}`, `--pop-shadow:${POP_SHADOW[th.kind]}`,
+        `--os-border:${OS[th.kind][0]}`, `--os-shadow:${OS[th.kind][1]}`,
+        // A green icon under 3:1 on the selection takes the selection's text color (Classic Blue's).
+        `--sel-green:${name === 'Classic Blue' ? th.selFg : th.icGreen}`
+      ].join(';');
+    };
+    const vars = `${t.vars};${extraVars(t.name)}`;
+    const fam = t.p.family;
+    // Only Classic changes shape. On a Harbor page the window is drawn as Harbor keeps it, and the detail sections draw
+    // the Classic theme of the same kind (D), nested, so they never show Classic's shapes in Harbor's colors.
+    const D = fam === 'Classic' ? t.name : t.p.kind === 'dark' ? 'Classic Dark' : t.p.kind === 'hc' ? 'Classic High Contrast' : 'Classic Light';
+    const hcName = 'Classic High Contrast';
+    const vNew = (name) => {
+      const w = NEW[name], f = C.THEMES[name].family;
+      return ['v-new', f === 'Harbor' ? 'out' : 'in', w.style, 'feet'].join(' ');
+    };
+    const vNow = (name) => ['v-now', C.THEMES[name].family === 'Harbor' && C.THEMES[name].kind !== 'hc' ? 'bar' : ''].join(' ');
+    // The selected tab's feet: a quarter circle from its side into the frame, drawn outside the tab (r + 1 px square).
+    const flare = (r) => {
+      const w = r + 1, a = r + 0.5;
+      return {
+        w, vb: `0 0 ${w} ${w}`, l: `left:-${w}px`, r: `right:-${w}px;transform:scaleX(-1)`,
+        f: `M${a} 0.5A${r} ${r} 0 0 1 0.5 ${a}L0.5 ${w}L${w} ${w}L${w} 0.5Z`,
+        s: `M${a} 0V0.5A${r} ${r} 0 0 1 0.5 ${a}H0`
+      };
+    };
+
+    // ---------------------------------------------------------------- content
+    const TOOLBAR = [
+      { i: 'rc-back', c: 'c-blue', tip: 'Navigate Backward' }, { i: 'rc-forward', c: 'c-blue', tip: 'Navigate Forward' }, { sep: true },
+      { i: 'folder-open', c: 'c-folder', tip: 'Open' }, { i: 'save', c: 'c-blue', tip: 'Save' }, { i: 'rc-save-all', c: 'c-blue', tip: 'Save All' }, { sep: true },
+      { i: 'rc-undo', c: 'c-blue', tip: 'Undo' }, { i: 'rc-redo', c: 'c-blue', tip: 'Redo' }, { sep: true },
+      { combo: 'Debug', w: 86, tip: 'Configuration' }, { combo: 'Any CPU', w: 86, tip: 'Platform' }, { combo: 'BlazorSudoku.Server', w: 168, tip: 'Startup project' },
+      { i: 'play', c: 'c-green', text: 'BlazorSudoku.Server', cls: 'text run', tip: 'Start Debugging' }, { i: 'play-outline', c: 'c-green', tip: 'Start Without Debugging' },
+      { i: 'rc-fire', c: 'c-orange', chev: true, cls: 'text', tip: 'Hot Reload' }, { sep: true }, { i: 'more', c: 'c-fg', tip: 'More' }
+    ];
+    const MENUS = ['File', 'Edit', 'View', 'Git', 'Project', 'Build', 'Debug', 'Test', 'Analyze', 'Tools', 'Window', 'Help'];
+    const titleRow = (open) => ({ style: '', search: true, wbs: true, menus: MENUS.map((m) => ({ t: m, cls: m === open ? 'open' : '' })) });
+    const CODE = [
+      [31, '        public void ConfigureServices(IServiceCollection services)'],
+      [32, '        {'],
+      [33, '            services.AddControllersWithViews();'],
+      [34, '            services.AddRazorPages();'],
+      [35, '            services.AddSingleton<IPuzzleSeedReader, PuzzleSeedReader>(x => new PuzzleSeedReader(Path.Combine(AppContext.BaseDirectory, "PuzzleSeeds")));'],
+      [36, '        }'],
+      [37, ''],
+      [38, '        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.'],
+      ['lens', '0 references | stavroskasidis, 5 years ago | 1 author, 1 change'],
+      [39, '        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)'],
+      [40, '        {'],
+      [41, '            if (env.IsDevelopment())'],
+      [42, '            {'],
+      [43, '                app.UseDeveloperExceptionPage();'],
+      [44, '                app.UseWebAssemblyDebugging();'],
+      [45, '            }'],
+      [46, '            else'],
+      [47, '            {'],
+      [48, '                app.UseExceptionHandler("/Error");'],
+      [49, '                app.UseHsts();'],
+      [50, '            }'],
+      [51, ''],
+      [52, '            app.UseHttpsRedirection();'],
+      [53, '            app.UseBlazorFrameworkFiles();'],
+      [54, '            app.UseStaticFiles();']
+    ];
+    const lines = (from, count, cur) => {
+      const start = CODE.findIndex(([n]) => n === from);
+      return CODE.slice(start, start + count).map(([n, src]) => n === 'lens'
+        ? { n: '', lens: '        '.replace(/ /g, '\u00A0') + src, toks: [], cls: '' }
+        : { n, lens: '', toks: C.csharp(src), cls: n === cur ? 'cur' : '' });
+    };
+    const NAV = [
+      { i: 'cl-project-csharp', c: 'c-outline', t: 'BlazorSudoku.Server', a: 'Project' },
+      { i: 'rc-class', c: 'c-orange', t: 'BlazorSudoku.Server.Startup', a: 'Type' },
+      { i: 'method', c: 'c-purple', t: 'Configure(IApplicationBuilder app, IWebHostEnvironment env)', a: 'Member' }
+    ];
+    // Tabs: the user's five documents, Startup.cs selected.
+    const tab = (t, o = {}) => {
+      const sel = !!o.on;
+      const json = t.endsWith('.json'), razor = t.endsWith('.razor');
+      return {
+        t: o.dirty ? `${t} \u25CF` : t, i: json ? 'json-file' : razor ? 'code' : 'cs-file',
+        cls: [sel && 'on', o.hov && 'hov', o.prev && 'prev'].filter(Boolean).join(' '),
+        selA: String(sel), pin: o.pinned ? 'up' : (sel || o.hov) ? 'down' : '', pinA: o.pinned ? 'Unpin tab' : 'Pin tab',
+        x: true, stripe: o.stripe || '', style: o.w ? `width:${o.w}px` : '', tip: o.tip || ''
+      };
+    };
+    const TABS = () => [tab('Program.cs'), tab('SudokuGame.cs'), tab('GameCell.cs'), tab('launchSettings.json'), tab('Startup.cs', { on: true })];
+    const SE_TREE = [
+      [4, 'chevron-down', 'cl-solution', 'c-outline', "Solution 'BlazorSudoku' (7 of 7 projects)"],
+      [18, 'chevron-right', 'cl-folder', 'c-folder', 'Engine'],
+      [18, 'chevron-down', 'cl-folder-open', 'c-folder', 'Presentation'],
+      [32, 'chevron-right', 'cl-project-csharp', 'c-outline', 'BlazorSudoku.Client'],
+      [32, 'chevron-down', 'cl-project-csharp', 'c-outline', 'BlazorSudoku.Server', 'b'],
+      [46, 'chevron-right', 'plug', 'c-blue', 'Connected Services'],
+      [46, 'chevron-right', 'cl-dependencies', 'c-outline', 'Dependencies'],
+      [46, 'chevron-right', 'cl-folder-properties', 'c-outline', 'Properties'],
+      [46, 'chevron-right', 'cl-folder', 'c-folder', 'Controllers'],
+      [46, 'chevron-right', 'cl-folder', 'c-folder', 'Pages'],
+      [46, 'chevron-right', 'cl-folder', 'c-folder', 'PuzzleSeeds'],
+      [46, 'chevron-right', 'cl-json', 'c-outline', 'appsettings.json'],
+      [46, '', 'cl-csharp', 'c-green', 'Program.cs'],
+      [46, '', 'cl-csharp', 'c-green', 'Startup.cs', 'sel-i'],
+      [32, 'chevron-right', 'cl-project-csharp', 'c-outline', 'BlazorSudoku.Shared'],
+      [18, 'chevron-right', 'cl-folder', 'c-folder', 'Tests'],
+      [18, 'chevron-right', 'cl-folder', 'c-folder', 'Tools']
+    ].map(([ind, ex, i, c, tx, cls]) => ({ ind, ex, i, c, t: tx, cls: cls || '' }));
+    const SE_TB = [
+      { i: 'solution', c: 'c-blue', chev: true, tip: 'Switch Views' }, { sep: true }, { i: 'history', c: 'c-blue', chev: true, tip: 'Pending Changes Filter' },
+      { i: 'arrow-sort', c: 'c-fg', tip: 'Sync with Active Document' }, { i: 'chevron-up', c: 'c-fg', tip: 'Collapse All' }, { i: 'copy', c: 'c-fg', cls: 'is-checked', tip: 'Show All Files' },
+      { sep: true }, { i: 'filter', c: 'c-purple', tip: 'Filter' }, { i: 'wrench', c: 'c-fg', tip: 'Properties' }
+    ];
+    const se = (style, o = {}) => ({ t: 'Solution Explorer', style, cls: [o.cls, o.act && 'focus'].filter(Boolean).join(' '), capCls: o.act ? 'act' : '', tb: SE_TB, search: 'Search Solution Explorer (Ctrl+;)',
+      tree: o.tree || SE_TREE.map((r) => {
+        // o.sel moves the selection to a row in view (the tree is cut after about eleven rows).
+        const selected = o.sel ? r.t.startsWith(o.sel) : r.cls === 'sel-i';
+        if (selected) return { ...r, cls: o.act ? 'sel' : 'sel-i' };
+        if (o.hover && r.t === o.hover) return { ...r, cls: 'hover' };
+        return { ...r, cls: r.cls === 'sel-i' ? '' : r.cls };
+      }) });
+    const PROPS = { head: 'Startup.cs File Properties', rows: [
+      { cat: 'Advanced' }, { n: 'Build Action', v: 'Compile', combo: true }, { n: 'Copy to Output Directory', v: 'Do not copy', combo: true },
+      { n: 'Custom Tool', v: '' }, { n: 'Custom Tool Namespace', v: '' }, { cat: 'Misc' }, { n: 'File Name', v: 'Startup.cs' },
+      { n: 'Full Path', v: 'D:\\Projects\\BlazorSudoku\\BlazorSudoku.Server\\Startup.cs' }, { n: 'Included By', v: 'A wildcard (default items)' }] };
+    const props = (style) => ({ t: 'Properties', style, tb: [{ i: 'list', c: 'c-fg', cls: 'is-checked', tip: 'Categorized' }, { i: 'arrow-sort', c: 'c-fg', tip: 'Alphabetical' }], props: PROPS });
+    const OUT = [
+      { t: 'Build started at 14:02...' }, { t: '  Determining projects to restore...' }, { t: '  All projects are up-to-date for restore.' },
+      { t: '  BlazorSudoku.Shared -> D:\\Projects\\BlazorSudoku\\BlazorSudoku.Shared\\bin\\Debug\\net8.0\\BlazorSudoku.Shared.dll' },
+      { t: '  BlazorSudoku.Client -> D:\\Projects\\BlazorSudoku\\BlazorSudoku.Client\\bin\\Debug\\net8.0\\BlazorSudoku.Client.dll' },
+      { t: '  BlazorSudoku.Server -> D:\\Projects\\BlazorSudoku\\BlazorSudoku.Server\\bin\\Debug\\net8.0\\BlazorSudoku.Server.dll' },
+      { t: 'Build succeeded in 4.2 s.', cls: 'ok' }
+    ];
+    const TTABS = (sel) => ['Error List', 'Output', 'Find Results'].map((x) => ({ t: x, cls: x === sel ? 'on' : '', selA: String(x === sel) }));
+    const output = (style, o = {}) => ({ t: 'Output', style, capCls: o.act ? 'act' : '', cls: [o.cls, o.act && 'focus'].filter(Boolean).join(' '),
+      tb: [{ lbl: 'Show output from:' }, { combo: 'Build', w: 130, tip: 'Show output from' }, { sep: true }, { i: 'arrow-up', c: 'c-fg', tip: 'Previous Message' }, { i: 'arrow-down', c: 'c-fg', tip: 'Next Message' }, { i: 'clear-all', c: 'c-fg', tip: 'Clear All' }, { i: 'wrap', c: 'c-fg', cls: 'is-checked', tip: 'Word Wrap' }],
+      out: OUT.slice(0, o.lines || OUT.length), ttabs: TTABS('Output') });
+    const STATUS = [{ i: 'error', t: '0' }, { i: 'warning', t: '0' }, { t: 'Ready' }, { gap: true }, { t: 'C#' }, { t: 'CRLF' }, { t: 'UTF-8' }, { t: 'Spaces: 4' }, { t: 'Ln 43, Col 17' }, { i: 'branch', t: 'main' }, { i: 'bell', t: '1' }];
+    const px = (l, tp, w, h) => `left:${l}px;top:${tp}px;width:${w}px;height:${h}px`;
+
+    // ---------------------------------------------------------------- scenes
+    // Every picture is a scene: positioned parts (title row, toolbar, wells, tool windows, popups) drawn in one variant.
+    // variant: now (today, not checked), new (Classic's proposal), keep (Harbor's proposal: today's shapes, checked).
+    // A scene in another theme than the page's is nested: it carries that theme's class and variables.
+    const base = (name, variant) => ({ vcls: variant === 'new' ? vNew(name) : vNow(name), fl: flare(SHAPE[C.THEMES[name].family].tab),
+      themeCls: name === t.name ? '' : C.theme(name).cls, themeVars: name === t.name ? '' : `${C.theme(name).vars};${extraVars(name)}`,
+      zoomStyle: '', nocheckA: variant === 'now' ? 'true' : 'false', blocks: [], wells: [], pans: [], frames: [], pops: [], marks: [], ahs: [] });
+    // The whole window, 1240 x 660: the dock area inside a 6 px margin (proposed) or flush (now, and Harbor kept).
+    const windowScene = (name, variant) => {
+      const s = base(name, variant);
+      const now = variant !== 'new';
+      const g = now ? NOW[name].gap : 6, x0 = now ? 0 : 6, x1 = now ? 1240 : 1234, y0 = now ? 64 : 70, y1 = now ? 636 : 630, rw = 300;
+      const rx = x1 - rw, lw = rx - g - x0, wellH = now ? 400 : 394, seH = 300;
+      s.tr = titleRow(null);
+      s.toolbar = { style: '', items: TOOLBAR };
+      s.wells = [{ style: px(x0, y0, lw, wellH), cls: '', tabs: TABS(), nav: NAV, lines: lines(31, 19, 43) }];
+      s.pans = [se(px(rx, y0, rw, seH)), props(px(rx, y0 + seH + g, rw, y1 - y0 - seH - g)), output(px(x0, y0 + wellH + g, lw, y1 - y0 - wellH - g), { lines: 5 })];
+      s.status = STATUS;
+      return s;
+    };
+    const nested = (s, name) => { s.themeCls = C.theme(name).cls; s.themeVars = `${C.theme(name).vars};${extraVars(name)}`; return s; };
+
+    // A. The whole window. On a Harbor page: Harbor as it stays, and the Classic theme of the same kind for comparison.
+    const sNow = { ...windowScene(t.name, 'now'), w: 1240, h: 660 };
+    const sNew = { ...windowScene(t.name, fam === 'Classic' ? 'new' : 'keep'), w: 1240, h: 660 };
+    const sCompare = { ...windowScene(D, 'new'), w: 1240, h: 660 };
+    const sHc = { ...windowScene(hcName, 'new'), w: 1240, h: 660 };
+
+    // B. Zoomed, 3 x: where the toolbar card, the document well and Solution Explorer meet.
+    const zoomScene = () => {
+      const s = base(D, 'new');
+      s.zoomStyle = 'transform:scale(3);width:405px;height:104px';
+      s.toolbar = { style: 'top:-14px;left:6px', items: TOOLBAR.slice(0, 12) };
+      s.wells = [{ style: px(6, 24, 330, 110), cls: '', tabs: [tab("What's new", { w: 120 }), tab('Startup.cs', { on: true, w: 150 })], nav: NAV.slice(0, 2), lines: null }];
+      s.pans = [se(px(342, 24, 170, 110), { tree: SE_TREE.slice(0, 3) })];
+      const M = (n, x, y, lx, ly) => ({ n, style: `left:${x - 10}px;top:${y - 10}px`, l: lx == null ? '' : lx });
+      const line = (x, y, w, h) => `left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+      s.marks = [
+        M(1, 40, 34, line(18, 34, 22, 2)),
+        M(2, 470, 63, line(450, 54, 2, 18)),
+        M(3, 9, 150, null),
+        M(4, 44, 92, line(18, 72, 2, 20)),
+        M(5, 878, 76, null),
+        M(6, 392, 190, line(404, 165, 2, 18)),
+        M(7, 44, 270, line(19, 270, 25, 2)),
+        M(8, 1017, 250, null),
+        M(9, 1050, 92, line(1026, 72, 2, 20))
+      ].map((m) => ({ ...m, l: m.l || '' }));
+      return s;
+    };
+    const sZoom = { ...zoomScene(), w: 1240, h: 312 };
+    sZoom.legend = [
+      { n: 1, t: 'The toolbar is a card: Shell.Card.CornerRadius 4, 1 px Shell.Border, as wide as its buttons (they still wrap).' },
+      { n: 2, t: '6 px between cards (Shell.Gutter, the splitter), showing the window\'s color (Shell.Gutter.Background = Shell.Background).' },
+      { n: 3, t: '6 px between the cards and the window\'s edges and the status bar (Shell.Dock.Margin 6,0,6,6).' },
+      { n: 4, t: 'The document well is one card holding the tab strip: corners 4, the strip on Shell.Panel with a 1 px Shell.Border.' },
+      { n: 5, t: 'The selected tab: 26 px, top corners 4 (DockDocumentTabItemCornerRadius), a 1 px accent outline (Shell.Tab.Active.Indicator 1,1,1,0) in the content\'s color.' },
+      { n: 6, t: 'Its feet curve into the frame, radius 4 (TabStripEdge, the optional part; without them the joins are square).' },
+      { n: 7, t: 'A 1 px accent frame round the active document: DocumentControl\'s border on the sides and bottom, the top edge beside the tab drawn by TabStripEdge (required); Shell.Border when its group isn\'t active.' },
+      { n: 8, t: '6 px between the document well and Solution Explorer: the same gap, the same splitter.' },
+      { n: 9, t: 'Tool windows are cards: corners 4 (Shell.Panel.CornerRadius.Top and .Bottom), a 1 px Shell.Border all round, the caption inside.' }
+    ];
+    // Corner radius alternatives, 2 x.
+    const radiusScene = (r) => {
+      const s = base(D, 'new');
+      s.themeVars = `${s.themeVars ? s.themeVars + ';' : ''}--card-r:${r}px;--tab-r:${Math.min(r, 6)}px`;
+      s.fl = flare(Math.min(r, 6));
+      s.zoomStyle = 'transform:scale(2);width:200px;height:80px';
+      s.wells = [{ style: px(6, 6, 164, 100), cls: '', tabs: [tab('Startup.cs', { on: true, w: 144 })], nav: null, lines: null }];
+      s.pans = [se(px(176, 6, 120, 100), { tree: [] })];
+      return s;
+    };
+
+    // C. Document tabs.
+    const tabsScene = (o) => {
+      const s = base(D, 'new');
+      s.wells = o.wells;
+      s.blocks = o.blocks || [];
+      return s;
+    };
+    const STATE_TABS = () => [
+      tab('SudokuGame.cs', { pinned: true, tip: 'Pinned' }), tab('Program.cs'), tab('GameCell.cs', { dirty: true }), tab('launchSettings.json', { hov: true }),
+      tab('Startup.cs', { on: true }), tab('Index.razor', { prev: true })
+    ];
+    const sTabs = { ...tabsScene({ wells: [{ style: px(6, 10, 1228, 74), cls: '', tabs: STATE_TABS(), nav: NAV, lines: null }] }), w: 1240, h: 94 };
+    const sTabsIdle = { ...tabsScene({ wells: [{ style: px(6, 10, 1228, 74), cls: 'idle', tabs: STATE_TABS(), nav: NAV, lines: null }] }), w: 1240, h: 94 };
+    const sGroups = { ...tabsScene({ wells: [
+      { style: px(6, 8, 611, 190), cls: '', tabs: [tab('Program.cs'), tab('Startup.cs', { on: true })], nav: NAV.slice(0, 2), lines: lines(39, 7, 43) },
+      { style: px(623, 8, 611, 190), cls: 'idle', tabs: [tab('GameCell.cs', { on: true }), tab('SudokuGame.cs')], nav: [{ i: 'cl-project-csharp', c: 'c-outline', t: 'BlazorSudoku.Shared', a: 'Project' }, { i: 'rc-class', c: 'c-orange', t: 'BlazorSudoku.Shared.GameCell', a: 'Type' }], lines: null }
+    ] }), w: 1240, h: 206 };
+    // The frame's top edge beside the selected tab, 3 x. mode: feet (TabStripEdge with the feet), square (TabStripEdge
+    // without them), closed and notop (what tokens and styles alone give).
+    const footScene = (mode) => {
+      const s = base(D, 'new');
+      if (mode !== 'feet') s.vcls = s.vcls.replace(' feet', '') + (mode === 'closed' || mode === 'notop' ? ' ' + mode : '');
+      s.zoomStyle = 'transform:scale(3);width:204px;height:72px';
+      s.wells = [{ style: px(4, 8, 240, 80), cls: '', tabs: [tab('Program.cs', { w: 34 }), tab('Startup.cs', { on: true, w: 142 })], nav: null, lines: null }];
+      return s;
+    };
+    const sColored = { ...tabsScene({ wells: [{ style: px(6, 10, 598, 74), cls: '', tabs: [
+      tab('Program.cs', { stripe: 'var(--ic-blue)' }), tab('SudokuGame.cs', { stripe: 'var(--ic-green)' }), tab('Startup.cs', { on: true, stripe: 'var(--ic-blue)' }), tab('GameCell.cs', { stripe: 'var(--ic-orange)' })
+    ], nav: null, lines: null }] }), w: 613, h: 94 };
+    const sTabsHc = { ...nested({ ...base(hcName, 'new'), wells: [{ style: px(6, 10, 598, 74), cls: '', tabs: [tab('Program.cs'), tab('GameCell.cs', { hov: true }), tab('Startup.cs', { on: true }), tab('Index.razor', { prev: true })], nav: null, lines: null }] }, hcName), w: 613, h: 94 };
+    // Tabs that don't fit leave from the right (DocumentTabPanel); the edge still runs to the strip's right end.
+    const sOverflow = { ...tabsScene({ wells: [{ style: px(6, 10, 598, 120), cls: '', tabs: [
+      tab('SudokuGame.cs', { pinned: true }), tab('Program.cs'), tab('GameCell.cs'), tab('Startup.cs', { on: true })
+    ], nav: NAV.slice(0, 2), lines: lines(41, 2, 0) }] }), w: 613, h: 140 };
+    // No document open: the card stays (Dock keeps the strip as a drop target), the frame falls back to Shell.Border.
+    const sEmpty = { ...tabsScene({ wells: [{ style: px(6, 10, 598, 120), cls: 'idle', tabs: [], nav: null, lines: null }] }), w: 613, h: 140 };
+
+    // D. Tool windows.
+    const twScene = (pans, extra) => { const s = base(D, 'new'); s.pans = pans; if (extra) s.vcls += ' ' + extra; return s; };
+    const sSe = { ...twScene([se(px(8, 8, 284, 330), { sel: 'Solution' })]), w: 300, h: 346 };
+    const sSeAct = { ...twScene([se(px(8, 8, 284, 330), { act: true, sel: 'Solution', hover: 'Controllers' })]), w: 300, h: 346 };
+    const sSeFill = { ...twScene([se(px(8, 8, 284, 330), { act: true, sel: 'Solution' })], 'capfill'), w: 300, h: 346 };
+    const sOut = { ...twScene([output(px(8, 8, 597, 330), { act: false })]), w: 613, h: 346 };
+
+    // E. Gaps, splitters and floating windows.
+    const gapScene = (resizing) => {
+      const s = base(D, 'new');
+      const split = resizing ? 168 : 140;
+      const h = resizing ? 208 : 186;
+      s.wells = [{ style: px(6, 6, split - 6, h), cls: 'idle', tabs: [tab('Startup.cs', { on: true })], nav: null, lines: lines(41, 9, 0) }];
+      s.pans = [se(px(split + 6, 6, 292 - split - 6, h), { tree: SE_TREE.slice(0, 8) })];
+      if (resizing) s.pops = [{ ptr: 'rc-resize', style: `left:${split - 5}px;top:96px` }];
+      else s.blocks = [
+        { cls: 'vline', style: `left:${split}px;top:195px;width:1px;height:8px`, t: '' }, { cls: 'vline', style: `left:${split + 5}px;top:195px;width:1px;height:8px`, t: '' },
+        { cls: 'vline', style: `left:${split}px;top:198px;width:6px;height:1px`, t: '' },
+        { cls: 'dim', style: `left:${split + 10}px;top:192px;width:34px;height:14px`, t: '6 px' }];
+      return s;
+    };
+    const floatScene = (round) => {
+      const s = base(D, 'new');
+      s.blocks = [{ style: 'inset:0;background:var(--bg)', cls: '', t: '' }];
+      s.frames = [{ cls: round ? 'round' : '', style: px(18, 16, 262, 196), t: 'Solution Explorer' }];
+      s.pans = [se(px(19, 47, 260, 164), { cls: round ? 'float round' : 'float', tree: SE_TREE.slice(0, 6) })];
+      return s;
+    };
+    // Auto-hidden tool windows (Factory.PinDockable): the left strip and Test Explorer slid out over the documents.
+    const TE_TREE = [
+      [4, 'chevron-down', 'beaker', 'c-blue', 'BlazorSudoku.Tests (12)'],
+      [18, 'chevron-down', 'check-circle', 'c-green', 'BlazorSudoku.Tests.Engine (8)'],
+      [32, 'chevron-right', 'check-circle', 'c-green', 'SolverTests (5)'],
+      [32, 'chevron-down', 'check-circle', 'c-green', 'GameCellTests (3)'],
+      [46, '', 'check-circle', 'c-green', 'Set_value_marks_cell_filled', 'sel'],
+      [46, '', 'check-circle', 'c-green', 'Clear_resets_candidates'],
+      [46, '', 'check-circle', 'c-green', 'Invalid_value_throws'],
+      [18, 'chevron-right', 'check-circle', 'c-green', 'BlazorSudoku.Tests.Presentation (4)']
+    ].map(([ind, ex, i, c, tx, cls]) => ({ ind, ex, i, c, t: tx, cls: cls || '' }));
+    const sAutoHide = (() => {
+      const s = base(D, 'new');
+      s.ahs = [{ style: 'left:0;top:6px;width:24px', tabs: [{ t: 'Test Explorer', cls: 'on', selA: 'true' }, { t: 'Toolbox', cls: 'hov', selA: 'false' }, { t: 'Git Changes', cls: '', selA: 'false' }] }];
+      s.wells = [{ style: px(30, 6, 577, 288), cls: 'idle', tabs: [tab('Program.cs'), tab('GameCell.cs'), tab('Startup.cs', { on: true })], nav: NAV.slice(0, 2), lines: lines(39, 12, 0) }];
+      s.pans = [{ t: 'Test Explorer', style: px(30, 6, 262, 288), cls: 'slide focus', capCls: 'act',
+        tb: [{ i: 'run-all', c: 'c-green', tip: 'Run All Tests' }, { i: 'play', c: 'c-green', tip: 'Run' }, { sep: true }, { i: 'filter', c: 'c-purple', tip: 'Filter' }],
+        search: 'Search Test Explorer (Ctrl+E)', tree: TE_TREE }];
+      return s;
+    })();
+    // Dragging GameCell.cs to the right half of the group: Dock's drag preview, the drop area and the dock targets.
+    const sDrag = (() => {
+      const s = base(D, 'new');
+      s.wells = [{ style: px(6, 6, 601, 288), cls: '', tabs: [tab('Program.cs'), tab('Startup.cs', { on: true }), tab('SudokuGame.cs')], nav: NAV.slice(0, 2), lines: lines(39, 12, 0) }];
+      const cx = 292, cy = 150, T = (x, y, fill, cls) => ({ style: `left:${x}px;top:${y}px`, fill, cls: cls || '' });
+      s.drag = { zone: px(308, 38, 296, 253), chip: 'left:404px;top:128px', targets: [
+        T(cx, cy, 'inset:0'), T(cx - 36, cy, 'left:0;top:0;bottom:0;width:45%'), T(cx + 36, cy, 'right:0;top:0;bottom:0;width:45%', 'on'),
+        T(cx, cy - 36, 'left:0;right:0;top:0;height:45%'), T(cx, cy + 36, 'left:0;right:0;bottom:0;height:45%')] };
+      s.pops = [{ ptr: 'rc-pointer', style: 'left:396px;top:116px' }];
+      return s;
+    })();
+    // A notification toast over the documents (MainWindow's Toasts, 14 px from the corner).
+    const sToast = (() => {
+      const s = base(D, 'new');
+      s.wells = [{ style: px(6, 6, 601, 288), cls: '', tabs: [tab('Program.cs'), tab('Startup.cs', { on: true })], nav: NAV.slice(0, 2), lines: lines(39, 12, 0) }];
+      s.toast = { style: 'right:14px;bottom:14px;width:330px' };
+      return s;
+    })();
+
+    // F. Menus and popups.
+    const sMenu = (() => {
+      const s = base(D, 'new');
+      s.tr = { style: '', search: false, wbs: false, menus: MENUS.slice(0, 4).map((m) => ({ t: m, cls: m === 'Edit' ? 'open' : '' })) };
+      s.wells = [{ style: px(6, 40, 286, 294), cls: '', tabs: [tab('Startup.cs', { on: true })], nav: null, lines: lines(41, 14, 0) }];
+      s.pops = [{ style: 'left:71px;top:30px', a: 'Edit', menu: [
+        { t: 'Undo', k: 'Ctrl+Z', i: 'rc-undo', c: 'c-blue' }, { t: 'Redo', k: 'Ctrl+Y', i: 'rc-redo', c: 'c-blue' }, { sep: true },
+        { t: 'Copy', k: 'Ctrl+C', i: 'copy', c: 'c-fg' }, { t: 'Find and Replace', sub: true, i: 'search', c: 'c-fg', cls: 'hover' }, { t: 'Go To', sub: true }, { sep: true },
+        { t: 'Select All', k: 'Ctrl+A' }] }];
+      return s;
+    })();
+    const sCtx = (() => {
+      const s = base(D, 'new');
+      s.pans = [{ ...se(px(6, 6, 286, 328)), tb: null, search: null, tree: SE_TREE.slice(4, 16).map((r) => ({ ...r, ind: r.ind - 28, cls: r.t === 'Startup.cs' ? 'sel' : '' })) }];
+      s.pops = [{ style: 'left:112px;top:42px', a: 'Startup.cs', menu: [
+        { t: 'Open', k: 'Enter' }, { t: 'View Code', k: 'F7', i: 'code', c: 'c-blue' }, { sep: true },
+        { t: 'Copy', k: 'Ctrl+C', i: 'copy', c: 'c-fg' }, { t: 'Delete', k: 'Del', i: 'trash', c: 'c-red' }, { t: 'Rename', k: 'F2', cls: 'hover' }, { sep: true },
+        { t: 'Properties', k: 'Alt+Enter', i: 'wrench', c: 'c-fg' }] }];
+      return s;
+    })();
+    const sCompl = (() => {
+      const s = base(D, 'new');
+      const typed = [[50, '    }'], [51, ''], [52, '    app.UseHttpsRedirection();'], [53, '    app.UseBlazorFrameworkFiles();'], [54, '    app.UseStaticFiles();'], [55, '    app.UseStatic', 'cur'], [56, ''], [57, '    app.UseRouting();'], [58, ''], [59, '    app.UseEndpoints(endpoints =>'], [60, '    {'], [61, '        endpoints.MapRazorPages();'], [62, '    });']]
+        .map(([n, src, cls]) => ({ n, lens: '', toks: C.csharp(src), cls: cls || '' }));
+      s.wells = [{ style: px(6, 6, 286, 328), cls: '', tabs: [tab('Startup.cs', { on: true })], nav: null, lines: typed }];
+      s.pops = [
+        { style: 'left:108px;top:149px;width:176px', compl: [
+          { i: 'method', c: 'c-purple', m: 'UseStatic', t: 'Files', cls: 'sel' }, { i: 'method', c: 'c-purple', m: 'UseStatus', t: 'CodePages' },
+          { i: 'method', c: 'c-purple', m: 'Use', t: 'Session' }, { i: 'wrench', c: 'c-blue', m: '', t: 'ApplicationServices' }] },
+        { style: 'left:12px;top:236px;width:274px', qi: C.csharp('IApplicationBuilder UseStaticFiles(this IApplicationBuilder app)'), doc: 'Enables static file serving for the current request path.' }
+      ];
+      return s;
+    })();
+    const sDdl = (() => {
+      const s = base(D, 'new');
+      s.toolbar = { style: 'left:6px;top:6px', items: [{ combo: 'Debug', w: 86, cls: 'is-open', tip: 'Configuration' }, { i: 'play', c: 'c-green', tip: 'Start' }, { i: 'play-outline', c: 'c-green', tip: 'Start Without Debugging' }, { i: 'rc-fire', c: 'c-orange', cls: 'is-hover', tip: 'Hot Reload' }] };
+      s.wells = [{ style: px(6, 44, 286, 290), cls: 'idle', tabs: [tab('Startup.cs', { on: true })], nav: null, lines: lines(41, 14, 0) }];
+      s.pops = [
+        { style: 'left:12px;top:38px;width:150px', a: 'Configuration', ddl: [{ t: 'Debug', ck: true, cls: 'sel' }, { t: 'Release', cls: 'hover' }, { t: 'Configuration Manager...' }] },
+        { style: 'left:168px;top:42px', tip: 'Hot Reload (Alt+F10)' }, { ptr: 'rc-pointer', style: 'left:150px;top:24px' }
+      ];
+      return s;
+    })();
+
+    // G. Dialogs.
+    const behind = () => { const s = base(D, 'new'); s.wells = [{ style: px(6, 6, 601, 322), cls: '', tabs: TABS().slice(2), nav: NAV, lines: lines(38, 14, 0) }]; return s; };
+    const sDialog = (() => {
+      const s = behind();
+      s.scrim = true;
+      s.dialog = { style: 'left:146px;top:64px;width:320px' };
+      return s;
+    })();
+    const sCodeSearch = (() => {
+      const s = behind();
+      s.codeSearch = { style: 'left:110px;top:40px;width:392px', rows: [
+        { i: 'method', c: 'c-purple', t: 'UseStaticFiles(this IApplicationBuilder app)', w: 'StaticFileExtensions', cls: 'sel' },
+        { i: 'method', c: 'c-purple', t: 'UseStaticFiles(this IApplicationBuilder app, string requestPath)', w: 'StaticFileExtensions' },
+        { i: 'cl-csharp', c: 'c-green', t: 'Startup.cs', w: 'BlazorSudoku.Server' },
+        { i: 'method', c: 'c-purple', t: 'UseStaticWebAssets(this IWebHostBuilder builder)', w: 'HostingAbstractionsWebHostBuilderExtensions' }] };
+      return s;
+    })();
+
+    // H. Controls now and proposed.
+    const ctrlScene = (variant) => { const s = base(D, variant); s.ctrls = true; return s; };
+
+    // ---------------------------------------------------------------- panels
+    const kindName = D.replace('Classic ', '');
+    const S = {
+      now: ['Now', 'Views/MainWindow.axaml, Theming/Tokens.axaml (Classic: Shell.Gutter 4, transparent; corners 0)', 'Today: panels square and flush (a 4 px transparent gutter in Classic, 6 px of window in Harbor), the toolbar a full-width band, the active tab filled and square over a 2 px line, 2 px control corners. A picture of today, not checked for contrast.', () => sNow],
+      proposed: fam === 'Classic'
+        ? ['Proposed', 'Tokens.axaml values, ShellStyles.axaml, TabStripEdge (new), a DocumentDockControl theme, Views/MainWindow.axaml', 'Cards with 4 px corners on the window\'s color, 6 px apart and 6 px from the edges; the toolbar a card as wide as its buttons; the document well one card with its tabs; the selected tab outlined in the accent and open into a 1 px accent frame round the active document (the edge beside it and its feet drawn by TabStripEdge); controls with 4 px corners. The editor has the focus, so no tool window is framed.', () => sNew]
+        : [`Proposed for ${t.name}: today's shapes`, 'Q3: only Classic changes shape', 'Harbor keeps its square panels on 6 px of window, its 3 px accent bar and 3 px controls. It takes only the shared changes: menus 6 px (Fluent\'s 5 today), dialogs and Code Search 8, and the hard-coded control radii moved onto Shell.Control.CornerRadius (3 in Harbor). Checked for contrast like the proposals.', () => sNew],
+      compare: [`${D}, proposed, for comparison`, 'The family that changes shape', `Classic's proposal in its ${kindName} theme at the same size: Classic becomes 4 px cards with the tab strip inside, Harbor stays square on its window-colored gutters. A rounded Harbor is a separate, later decision (Q3).`, () => sCompare],
+      'high-contrast': [`${hcName}, proposed`, 'The family\'s shapes in High contrast (shell-themes.md: each family keeps its shapes)', 'Every card keeps its 1 px border in Shell.Border; the active tab stays filled with the accent and black text, as shell-themes.md asks of High contrast; the frame and the edge beside the tab are the accent.', () => sHc],
+      zoom: ['Measured: where the toolbar, the document well and Solution Explorer meet, 3 x', 'The values in the legend below are the classic IDE\'s, measured', 'The numbers name the parts; the legend gives their sizes and tokens.', () => sZoom],
+      'r4': ['4 px: proposed for Classic', 'The classic IDE\'s, measured 4 to 5 px', 'Cards and tabs at 4 px, 2 x. The classic IDE uses one radius on everything.', () => ({ ...radiusScene(4), w: 405, h: 168 })],
+      'r6': ['6 px', 'Reads at a glance', 'Rounder, still dense; stops matching the screenshot.', () => ({ ...radiusScene(6), w: 405, h: 168 })],
+      'r8': ['8 px', 'For comparison (Ember has 10)', 'Starts to look like Ember, which has 10 px cards on 8 px gutters.', () => ({ ...radiusScene(8), w: 404, h: 168 })],
+      tabs: ['Tab states, active group', 'DocumentTabStripItem styles (ShellStyles.axaml:105-143)', 'From the left: SudokuGame.cs pinned (the pin upright, pinned tabs first), Program.cs, GameCell.cs modified (●), launchSettings.json under the pointer (Shell.Tab.Hover, top corners), Startup.cs selected in the active group (outline, pin lying down, close), Index.razor previewing (italic, Shell.Tab.Preview).', () => sTabs],
+      'tabs-idle': ['The same tabs, the group not active', 'DocumentTabStripItem:selected:not(:active) /template/ Border#PART_TabGutter (a new style)', 'The focus is in a tool window: the selected tab keeps its shape, outlined in a new Shell.Tab.Selected.IndicatorBrush that reaches 3:1 against the strip (#75757C in Dark, #80838F in Light), its title semibold; the frame and the edge fall back to Shell.Border.', () => sTabsIdle],
+      'two-groups': ['Two groups side by side', 'A vertical split: two document wells, 6 px apart', 'The left group has the focus (accent outline, edge and frame); the right one outlines its selected tab in Shell.Tab.Selected.IndicatorBrush.', () => sGroups],
+      'edge-feet': ['Recommended: TabStripEdge, with the feet, 3 x', 'Controls/TabStripEdge.cs (new), in DocumentTabStrip.BottomContent', 'A 1 px row under the tabs, drawn by code: the frame\'s top edge from the strip\'s left end to the selected tab and from the tab to the right end; the tab\'s sides and fill continued through the row, so the tab opens into its document; and the two feet (quarter circles of the tab\'s radius) above it.', () => ({ ...footScene('feet'), w: 613, h: 216 })],
+      'edge-square': ['TabStripEdge without the feet, 3 x', 'The same control, the curves left out', 'The edge either side of the tab is still drawn by code; only the feet are missing, so the joins are square. The fallback if the feet slip.', () => ({ ...footScene('square'), w: 613, h: 216 })],
+      'tok-closed': ['Tokens and styles alone, option 1, 3 x', 'DockDocumentTabStripSeparatorSize 0; DocumentControl PART_Border 1,1,1,1 in the accent', 'Without TabStripEdge the frame is a whole Border under the strip: its top edge runs under the selected tab and closes it off from its document. With Dock\'s default separator size (2) there would also be a 2 px gap between the tab and the frame.', () => ({ ...footScene('closed'), w: 613, h: 216 })],
+      'tok-open': ['Tokens and styles alone, option 2, 3 x', 'DocumentControl PART_Border 1,0,1,1', 'The frame without its top edge: the tab\'s sides stop at the strip, and nothing marks the document\'s top edge beside the tab.', () => ({ ...footScene('notop'), w: 613, h: 216 })],
+      overflow: ['Tabs that don\'t fit', 'Controls/DocumentTabPanel.cs (M34e), TabStripEdge', 'Tabs leave from the right, never a pinned or the selected one; the edge runs on to the strip\'s right end, past the last tab. DocumentTabPanel couldn\'t draw it: it sits inside the strip\'s ScrollViewer and clips to the tabs.', () => sOverflow],
+      empty: ['No document open', 'DocumentControl with no visible dockables', 'The card stays with its empty strip (Dock keeps it as a drop target) and a Shell.Border frame; with no selected tab TabStripEdge draws one unbroken edge. The empty area keeps Shell.Panel; a start page is out of scope.', () => sEmpty],
+      colored: ['Tabs colored by project', 'TabAccent, TabAccentThickness (M34d)', 'The project\'s stripe stays along the tab\'s bottom edge, inset by the radius so it doesn\'t poke past the rounded shape.', () => sColored],
+      'tabs-hc': [`Tabs in ${hcName}`, 'Shell.Tab.Active stays the accent fill', 'Filled accent with black text for the active tab; an outline for the hovered one would be invisible, so the hover keeps Shell.Tab.Hover.', () => sTabsHc],
+      'se': ['Solution Explorer, without the focus', 'ToolChromeControl PART_Border, DeferredContentPresenter (ShellStyles.axaml:190-197); ListBoxItem', 'A card: caption, toolbar, search box and tree inside one 1 px border with 4 px corners. The selected row, the solution as in the screenshot, is inset 3 px with 4 px corners in Shell.Selection.Inactive, its pill in Shell.Selection.Indicator.Inactive (the muted text color).', () => sSe],
+      'se-active': ['With the focus', 'ToolChromeControl:active, Shell.Card.Focus.BorderBrush (new)', 'Classic Light and Dark show the focus as the documents do: a 1 px accent frame round the card, the caption on the card with its title semibold. The selected row takes Shell.Selection and the accent pill; the row under the pointer (Controllers) the same inset shape. Blue and High Contrast keep their solid captions.', () => sSeAct],
+      'caption-fill': ['Alternative: today\'s solid caption', 'Shell.Caption.Active unchanged', 'The focused caption filled with the accent as today, clipped by the card\'s top corners; the card keeps its Shell.Border outline. Not recommended in Light and Dark: a solid band beside an outlined tab gives the focus two looks (Q9).', () => sSeFill],
+      'output': ['Output, with the tool window tabs', 'ToolTabStripItem:selected /template/ Border (the template doesn\'t bind CornerRadius)', 'The tabs sit inside the card at its bottom; the selected one hangs from the content with rounded bottom corners, its title in the link color as today. Dock already breaks the strip\'s top line at the selected tab (ToolTabStrip moves PART_BorderLeftFill and PART_BorderRightFill to its sides), so only the radius is new.', () => sOut],
+      gap: ['Docked side by side', 'ProportionalStackPanelSplitter (Shell.Gutter 6)', 'The 6 px gap is the splitter: its whole width can be grabbed, and it shows the window\'s color.', () => ({ ...gapScene(false), w: 298, h: 220 })],
+      resize: ['Resizing', 'The same splitter under the pointer', 'Under the pointer it only changes the pointer, as the classic IDE does; Dock resizes the cards live while dragging.', () => ({ ...gapScene(true), w: 298, h: 220 })],
+      'float-11': ['Floating: Windows 11 and macOS', 'Dock\'s HostWindow, a system frame', 'The system rounds the frame (8 px on Windows 11, about 10 on macOS). Inside, the tool window fills the client area: no margin, no second set of corners.', () => ({ ...floatScene(true), w: 298, h: 220 })],
+      'float-10': ['Floating: Windows 10, some Linux desktops', 'Linux: whatever the window manager draws', 'Square frames; Codalus doesn\'t fake rounded ones (a transparent window would need a compositor and lose the system\'s shadow and snapping).', () => ({ ...floatScene(false), w: 298, h: 220 })],
+      autohide: ['Auto-hidden tool windows', 'Dock\'s pinned dockables (Factory.PinDockable, LayoutManager.cs:471): the side strip and the sliding panel', 'The strip\'s tabs are text on the window\'s color with a 3 px bar on the side they open towards (Shell.Border, the accent for the open one) and the control radius under the pointer (Toolbox). Test Explorer slides out as a card with the popup shadow and, with the focus, the accent frame. The dock area starts 6 px after the strip.', () => ({ ...sAutoHide, w: 613, h: 300 })],
+      drag: ['Dragging a tab', 'Dock\'s drag preview (DockDragPreviewCornerRadius, 4 already) and dock targets', 'GameCell.cs follows the pointer as a 4 px card outlined in the accent; the drop area (the right half) takes the card radius; the five dock targets are 4 px squares with the popup shadow, the one under the pointer outlined in the accent.', () => ({ ...sDrag, w: 613, h: 300 })],
+      toast: ['A notification', 'NotificationCard Floating (Border.overlay, Shell.CornerRadius.Overlay)', 'Toasts keep the overlay radius, 6 px, as menus do; their buttons and the close button take the control radius.', () => ({ ...sToast, w: 613, h: 300 })],
+      menu: ['A menu', 'Fluent\'s MenuFlyoutPresenter: OverlayCornerRadius 5 → Shell.CornerRadius.Overlay 6', 'The menu bar\'s open item and the menu\'s rows take the control radius, inset 4 px; the menu 6 px.', () => ({ ...sMenu, w: 298, h: 340 })],
+      ctx: ['A context menu', 'ContextMenu, the same presenter', 'The same shape as the menus.', () => ({ ...sCtx, w: 298, h: 340 })],
+      compl: ['Completion list and Quick Info', 'Border.intelliSense (Shell.Control.CornerRadius)', 'The editor\'s popups take the control radius, as the data tip (#82) does: 4 px in Classic.', () => ({ ...sCompl, w: 298, h: 340 })],
+      ddl: ['Drop-down and tooltip', 'ComboBox popup (Shell.CornerRadius.Overlay), ToolTip', 'A drop-down list 6 px like the menus; a tooltip the control radius.', () => ({ ...sDdl, w: 298, h: 340 })],
+      dialog: ['An in-window dialog', 'DialogView.axaml:65 (8, hard-coded) → Shell.CornerRadius.Dialog', 'Dialogs keep 8 px, now a token; their buttons and fields the control radius.', () => ({ ...sDialog, w: 613, h: 334 })],
+      'code-search': ['Code Search', 'CodeSearchView.axaml:20 (10) → Shell.CornerRadius.Dialog', 'From 10 px to the dialogs\' 8, so the shell has two overlay radii: 6 for menus and lists, 8 for dialogs.', () => ({ ...sCodeSearch, w: 613, h: 334 })],
+      'ctl-now': ['Now', 'Shell.Control.CornerRadius 2 (Classic)', 'A picture of today, not checked for contrast.', () => ({ ...ctrlScene('now'), w: 1240, h: 96 })],
+      'ctl-new': ['Proposed', 'Shell.Control.CornerRadius 4, Shell.Check.CornerRadius 3, Shell.Focus.CornerRadius 6, Fluent\'s ControlCornerRadius 4', 'Buttons, toolbar buttons, split buttons, text, search and combo boxes, the navigation bar\'s combo boxes, the segmented control and the focus ring take 4 px; check boxes 3 px so they don\'t read as radio buttons.', () => ({ ...ctrlScene('new'), w: 1240, h: 96 })]
+    };
+
+    const SECTIONS = [
+      fam === 'Classic'
+        ? { title: 'A. The whole window', lead: 'The user\'s window: Startup.cs open among Program.cs, SudokuGame.cs, GameCell.cs and launchSettings.json, Solution Explorer and Properties docked right, Output at the bottom.', rows: [['now'], ['proposed']] }
+        : { title: 'A. The whole window', lead: `The user's window in ${t.name} as Harbor keeps it, then ${D} proposed. Only Classic changes shape (Q3), so sections B to I draw ${D}.`, rows: [['proposed'], ['compare']] },
+      { title: 'B. Sizes', lead: 'The classic IDE has one radius, about 4.5 px, on cards, tabs and controls, and 6 px between cards. Avalonia draws a corner\'s outer edge at the radius, so 4 renders as the measured shape with its border.', rows: [['zoom'], ['r4', 'r6', 'r8']] },
+      { title: 'C. Document tabs', lead: 'The strip lives inside the well\'s card. Only the selected tab has a shape of its own; the others are text until the pointer is over them. Dock\'s DocumentControl stacks the strip, a 2 px separator and a whole Border, so the frame\'s top edge beside the selected tab needs a new control, TabStripEdge: tokens and styles alone can only run the frame under the tab or drop its top edge (the two "tokens alone" pictures).', rows: [['tabs'], ['tabs-idle'], ['two-groups'], ['edge-feet', 'edge-square'], ['tok-closed', 'tok-open'], ['overflow', 'empty'], ['colored', 'tabs-hc']] },
+      { title: 'D. Tool windows', lead: 'Each tool window is one card; the caption, toolbar, search box and content sit inside it. Lists and trees inset their rows 3 px with the control radius.', rows: [['se', 'se-active', 'caption-fill'], ['output']] },
+      { title: 'E. Gaps, splitters, auto-hide, dragging and floating windows', lead: 'Codalus rounds what it draws; the main window\'s and floating windows\' frames stay the system\'s.', rows: [['gap', 'resize', 'float-11', 'float-10'], ['autohide', 'drag'], ['toast']] },
+      { title: 'F. Menus and popups', lead: 'Today there are four overlay radii (Fluent\'s 5 for menus, 6 for combo popups and Border.overlay, 8 for dialogs, 10 for Code Search). Proposed: 6 for menus, lists and toasts, 8 for dialogs, the control radius for the editor\'s popups and tooltips.', rows: [['menu', 'ctx', 'compl', 'ddl']] },
+      { title: 'G. Dialogs', lead: 'Over the editor; the scrim is Shell.Dialog.Scrim.', rows: [['dialog', 'code-search']] },
+      { title: 'H. Buttons, inputs and combo boxes', lead: 'The control set (D33) unchanged except its corners: 2 → 4 px in Classic.', rows: [['ctl-now'], ['ctl-new']] },
+      { title: 'I. High contrast', lead: `The family that changes, in ${hcName}.`, rows: [['high-contrast']] }
+    ];
+    const ONE = { now: 'now', proposed: 'proposed', compare: 'compare', 'high-contrast': 'high-contrast', zoom: 'zoom', tabs: 'tabs', 'two-groups': 'two-groups', edge: 'edge-feet', 'tokens-closed': 'tok-closed', 'tokens-open': 'tok-open', 'tabs-idle': 'tabs-idle', empty: 'empty', 'tool-windows': 'se-active', selection: 'se', 'caption-fill': 'caption-fill', autohide: 'autohide', drag: 'drag', toast: 'toast', floating: 'float-11', menus: 'ctx', dialog: 'dialog', controls: 'ctl-new' };
+    const state = Object.keys(ONE).includes(this.props.state) ? this.props.state : 'all';
+    const sheet = state === 'all';
+    const panel = (key) => { const [ttl, src, cap, make] = S[key]; const sc = make(); return { ...sc, title: ttl, src, cap, legend: sc.legend || null }; };
+    let sections, mainCls = 'sheet';
+    if (sheet) sections = SECTIONS.map((sec) => ({ ...sec, rows: sec.rows.map((keys) => ({ items: keys.map(panel) })) }));
+    else { mainCls = 'frame'; sections = [{ rows: [{ items: [panel(ONE[state])] }] }]; }
+
+    // ---------------------------------------------------------------- the cards
+    const N = (x) => ({ t: x, cls: 'new' }), K = (x) => ({ t: x, cls: 'same' });
+    const tokenRows = [
+      { k: 'Shell.Control.CornerRadius', cells: [N('2 → 4'), K('3'), K('3'), K('6'), K('6')], use: 'Buttons, toolbar and split buttons, text, search and combo boxes, segments, menu rows, list and tree rows, IntelliSense, Quick Info, data tips, tooltips; the hard-coded radii of the tab pin, the navigation bar, the search and solution-name boxes and Border.editorHover move to it' },
+      { k: 'ControlCornerRadius (Fluent\'s)', cells: [N('3 → 4'), K('3'), K('3'), K('3'), K('3')], use: 'Fluent controls Codalus doesn\'t restyle, so they match Shell.Control.CornerRadius (Daylight\'s and Ember\'s 6 against Fluent\'s 3 is older: a TODO)' },
+      { k: 'Shell.Check.CornerRadius', cells: [N('2 → 3'), K('3'), K('3'), K('4'), K('4')], use: 'Check boxes (at most 4, so they never read as radio buttons)' },
+      { k: 'Shell.Focus.CornerRadius', cells: [N('4 → 6'), K('5'), K('5'), K('8'), K('8')], use: 'The focus ring: the control\'s radius + 2' },
+      { k: 'Shell.Card.CornerRadius (new)', cells: [N('4'), K('0'), K('0'), K('0'), K('10')], use: 'The whole card: the document well, the toolbar card' },
+      { k: 'Shell.Panel.CornerRadius.Top, .Bottom', cells: [N('0 → 4,4,0,0 · 0,0,4,4'), K('0'), K('0'), K('0'), K('10')], use: 'Tool windows: the caption (top) and the content (bottom), as Ember today' },
+      { k: 'Shell.Card.BorderThickness (new)', cells: [N('1'), K('0'), K('0'), K('0'), K('0')], use: 'The cards\' outline in Shell.Border (today the caption has 1,1,1,0 and Dock\'s ToolControl adds 1,0,1,0 sides below it: no bottom edge)' },
+      { k: 'DockDocumentTabItemCornerRadius (Dock\'s)', cells: [N('0 → 4,4,0,0'), K('0'), K('0'), K('6'), K('7')], use: 'Document tabs: the selected and the hovered tab\'s shape' },
+      { k: 'DockDocumentTabStripSeparatorSize, DockDocumentContentBorderThickness (Dock\'s)', cells: [N('2 → 0 · 1 → 1,0,1,1'), K('today\'s'), K('today\'s'), K('today\'s'), K('today\'s')], use: 'No separator under the strip and no top edge on DocumentControl\'s border: TabStripEdge draws that edge' },
+      { k: 'Shell.ToolTab.CornerRadius (new)', cells: [N('0,0,4,4'), K('0'), K('0'), K('0'), K('0')], use: 'The selected tool window tab, hanging from the content (on ToolTabStripItem /template/ Border)' },
+      { k: 'Shell.Tab.Active.Indicator', cells: [N('0 → 1,1,1,0'), K('0,3,0,0'), K('0,0,0,2'), K('0'), K('1')], use: 'The selected tab\'s outline (Classic) or bar (Harbor), on PART_TabGutter; its brushes are in the colors card' },
+      { k: 'Shell.Gutter', cells: [N('4 → 6'), K('6'), K('1'), K('1'), K('8')], use: 'The gap between docked cards: Dock\'s splitter (Shell.Gutter.Background is in the colors card)' },
+      { k: 'Shell.Dock.Margin (new)', cells: [N('6,0,6,6'), K('0'), K('0'), K('0'), K('0')], use: 'Around the dock area in the main window; 0 in floating windows' },
+      { k: 'Shell.Toolbar.Margin, .HorizontalAlignment (new)', cells: [N('6,0,6,6, Left'), K('0, Stretch'), K('0, Stretch'), K('0, Stretch'), K('0, Stretch')], use: 'The toolbar as a card as wide as its buttons, or today\'s band' },
+      { k: 'Shell.CornerRadius.Overlay (shared)', cells: [N('6; Fluent\'s OverlayCornerRadius 5 → 6'), N('menus 5 → 6'), N('menus 5 → 6'), N('menus 5 → 6'), N('menus 5 → 6')], use: 'Menus, context menus, flyouts, drop-down lists, toasts, Border.overlay' },
+      { k: 'Shell.CornerRadius.Dialog (new, shared)', cells: [N('8'), N('8'), N('8'), N('8'), N('8')], use: 'In-window dialogs (8 today, hard-coded), Code Search (10 today)' }
+    ];
+    const colorRows = [
+      { k: 'Shell.Toolbar', cells: [N('#EEEEF2 → #F5F5F5'), N('#1F1F1F → #252526'), K('#D6DBE9'), K('#000000')], use: 'The toolbar card\'s fill, Shell.Panel\'s value (the band had the window\'s color). Also the Properties window\'s toolbar (PropertiesWindowView.axaml:69), which sits on Shell.Panel anyway' },
+      { k: 'DockDocumentTabStripBackgroundBrush', cells: [N('#EEEEF2 → #F5F5F5'), N('#1F1F1F → #252526'), N('#CCD5F0 → #364E6F'), K('#000000')], use: 'The strip inside the well\'s card, one fill with its unselected tabs: Shell.Tab.Inactive\'s value' },
+      { k: 'Shell.Tab.Inactive', cells: [N('#EEEEF2 → #F5F5F5'), N('#1F1F1F → #252526'), K('#364E6F'), K('#000000')], use: 'Unselected tabs: text on the strip' },
+      { k: 'Shell.Tab.Active, .Foreground', cells: [N('#007ACC → #FFFFFF · #FFFFFF → #000000'), N('#007ACC → #252526 · #FFFFFF'), K('#F5CC84 · #1E1E1E'), K('#1AEBFF · #000000')], use: 'The selected tab of the active group takes the content\'s color, its title the strongest text, semibold' },
+      { k: 'Shell.Tab.Active.IndicatorBrush', cells: [N('none → #007ACC'), N('none → #3794FF'), K('none'), K('none')], use: 'The accent: the selected tab\'s outline, the edge beside it, the feet and the active document\'s frame (4.1:1 and 5.0:1 against the strip)' },
+      { k: 'Shell.Tab.Selected', cells: [N('#CCCEDB → #FFFFFF'), N('#3F3F46 → #252526'), K('#FDF4BF'), K('#0E4A7B')], use: 'The selected tab of a group without the focus: the content\'s color, like the active one' },
+      { k: 'Shell.Tab.Selected.IndicatorBrush (new)', cells: [N('#80838F'), N('#75757C'), K('none (its fill, 7.6:1)'), N('#6FC3DF')], use: 'That tab\'s outline, 3:1 against the strip (3.5:1 in Light, 3.4:1 in Dark), so it stays findable when its fill matches the strip' },
+      { k: 'Shell.Tab.Hover, .Foreground', cells: [N('#0E70C0 → #DCEAF8 · #FFFFFF → #1E1E1E'), N('#1177BB → #3E3E40 · #FFFFFF → #F1F1F1'), K('#5B7199 · #FFFFFF'), K('#1F1F1F · #FFFFFF')], use: 'A tab under the pointer: the toolbar\'s hover, not a blue fill that would outshine the selected tab' },
+      { k: 'Shell.Caption.Active, .Foreground, .FontWeight', cells: [N('#007ACC → #EEEEF2 · #FFFFFF → #000000 · SemiBold'), N('#007ACC → #252526 · #FFFFFF · SemiBold'), K('#FFF29D · #1E1E1E'), K('#1AEBFF · #000000')], use: 'The focused tool window\'s caption stays on the card (Shell.Caption.Inactive\'s fill) with a semibold title; the frame shows the focus (Q9)' },
+      { k: 'Shell.Card.Focus.BorderBrush (new)', cells: [N('#007ACC'), N('#3794FF'), N('Shell.Border'), N('Shell.Border')], use: 'The focused tool window\'s frame (3.9:1 and 5.4:1 against the window)' },
+      { k: 'Shell.Selection.Indicator, .Inactive (new)', cells: [N('#007ACC · #646464'), N('#3794FF · #A6A6A6'), N('#0E70C0 · #4D5A73'), N('#1AEBFF · #FFFFFF')], use: 'The selection pill in Solution Explorer: the accent with the focus, the muted text without (at least 3.3:1 on the selection)' },
+      { k: 'Shell.Gutter.Background', cells: [N('none → #EEEEF2'), N('none → #1F1F1F'), N('none → #CCD5F0'), N('none → #000000')], use: 'The gaps show the window: Shell.Background\'s value' }
+    ];
+    const measureRows = [
+      { what: 'Corner radius', ide: 'About 4.5 px on every shape: tool windows, the document well, the toolbar card, the selected tab, toggled buttons, the search box, drop-downs', now: '0 on panels and tabs; 2 on controls (D33)', new: '4 on Classic\'s cards, tabs and controls; the other families unchanged' },
+      { what: 'Gaps', ide: '6 px between cards and below the toolbar card, on the window\'s #1C1C1C', now: '4 px, transparent (the same color as the panels around it)', new: '6 px on Shell.Background; 6 px margin to the edges' },
+      { what: 'Toolbar', ide: 'A card, 30 px with its border, #262626 with a #0E0E0E border, ending after its last button', now: 'A full-width band, #1F1F1F, a bottom line', new: 'A card, Shell.Toolbar moved to Shell.Panel\'s value (#252526), a Shell.Border outline, as wide as its buttons' },
+      { what: 'Tool windows', ide: 'A card #282828 with a 1 px #454545 border; the caption is text on the card', now: 'Square, a 24 px caption band outlined on three sides (1,1,1,0), the content on two (Dock\'s 1,0,1,0): no bottom edge', new: 'A card with a 1 px Shell.Border all round; caption 26 px inside, clipped by the corners' },
+      { what: 'Document well', ide: 'A card #262626 holding the tabs; the selected tab 26 px, #282828, a 1 px accent (#9184EE) outline whose feet curve (r 4) into a 1 px accent frame', now: 'Tabs on the window, the active tab filled #007ACC and square (34 px), a 2 px accent line under the strip', new: 'A card holding the tabs; the selected tab outlined in the accent, open into a 1 px accent frame, the edge beside it and the feet (r 4) drawn by TabStripEdge; unselected tabs plain text' },
+      { what: 'List and tree selection', ide: 'An inset highlight (#353535, 3 px from the card, about 4 px corners) with a 3 × 16 px accent pill at its left', now: 'Full-width square rows', new: 'Rows inset 3 px with the control radius; the pill (3 × 14) in Solution Explorer' },
+      { what: 'Card borders', ide: 'Mixed: the document well none, tool windows #454545, the toolbar card a dark #0E0E0E edge', now: 'The caption on three sides, the content on two, no bottom edge', new: 'One 1 px Shell.Border on every card (the departure noted above)' },
+      { what: 'Popups', ide: 'Data tip about 2 px with a 4 px shadow; menus round', now: 'Menus 5 (Fluent), combo popups 6, dialogs 8, Code Search 10', new: 'Menus, lists and toasts 6, dialogs 8, the editor\'s popups and tooltips 4' }
+    ];
+    const whereRows = [
+      { f: 'Theming/Tokens.axaml', k: 'Values', t: 'Classic\'s four dictionaries take the shape values and the colors card\'s values, with DockDocumentTabStripSeparatorSize 0, DockDocumentContentBorderThickness 1,0,1,1 and ControlCornerRadius 4. The new per-theme tokens go in all sixteen (Harbor, Graphite, Daylight and Ember with today\'s look). Shell.CornerRadius.Dialog 8 and an OverlayCornerRadius override (6) in the shared dictionary.' },
+      { f: 'Theming/ShellStyles.axaml', k: 'Styles', t: 'Tool windows outlined all round (the content presenter 1,0,1,1 with the bottom radius, ToolControl\'s PART_Border 0) and framed in Shell.Card.Focus.BorderBrush while :active; DocumentControl\'s PART_Border painted over the card\'s sides and bottom (margin -1,0,-1,-1), the accent while :active; DocumentTabStripItem:selected:not(:active) /template/ Border#PART_TabGutter in Shell.Tab.Selected.IndicatorBrush (it stays transparent today, :135-142); ToolTabStripItem:selected /template/ Border with Shell.ToolTab.CornerRadius (the template doesn\'t bind CornerRadius); ListBoxItem and TreeViewItem with Shell.Control.CornerRadius and a 3,0 margin; Border.standardToolbar as a card (:980-984); Button.tabPin (:153), ComboBox.navigationBar (:1011), the search and solution-name boxes (:1138, :1147), Border.overlay (:1205) and Border.editorHover (:1239) on the tokens.' },
+      { f: 'Controls/TabStripEdge.cs (new)', k: 'Drawing (required)', t: 'A 1 px control set as DocumentTabStrip.BottomContent (a style with a Template setter; the template\'s bottom row spans the whole strip, and Codalus doesn\'t use it today). Render finds the selected DocumentTabStripItem and draws, in the frame\'s brush, the edge from the strip\'s left end to the tab and from the tab to the right end, the tab\'s sides and fill through its row and, optionally, the feet (quarter circles of DockDocumentTabItemCornerRadius) above it; it re-renders on selection, layout and :active changes. No selected tab: one unbroken edge. DocumentTabPanel can\'t do it: it sits in the strip\'s ScrollViewer, clips to its bounds and never reaches the leading spacer, the create button or the trailing fill.' },
+      { f: 'Theming/Docking.axaml (new) or ShellStyles.axaml', k: 'Control theme', t: 'A DocumentDockControl theme wrapping Dock\'s 15-line template (MIT, already a dependency) in a Border with Shell.Card.CornerRadius, a 1 px Shell.Border and ClipToBounds, so the strip and the document share one card. Without it, Ember\'s way: tabs on the window, a rounded document card.' },
+      { f: 'Views/SolutionExplorerView.axaml', k: 'Template', t: 'The row\'s ItemTemplate gets the 3 × 14 pill at its left edge, before the indentation, visible on $parent[ListBoxItem].IsSelected, in Shell.Selection.Indicator or .Inactive by the list\'s focus. Compiled bindings, no reflection.' },
+      { f: 'Views/MainWindow.axaml:108', k: 'Layout', t: 'The DockControl takes Margin Shell.Dock.Margin; the StandardToolbar host takes Shell.Toolbar.Margin and .HorizontalAlignment. Floating HostWindows keep 0.' },
+      { f: 'Views/DialogView.axaml:65, Views/CodeSearchView.axaml:20', k: 'Values', t: 'The frames\' 8 and 10 become Shell.CornerRadius.Dialog.' },
+      { f: 'Other views: TODO(issue)', k: 'Values', t: 'Cards move to the tokens: AccountsView :17 :23 :40 :73, PullRequestsView :64, DumpView :11, ParallelStacksView :18, GitChangesView :295, SettingsView :38. Badges, chips, pills, pipes, avatars and bubbles keep their shapes: PullRequestsView :37, BreakpointsView :31, GitChangesView :97 :129, PackageManagerView :22 :56, GitHistoryView :31, HttpResponseView :15 :59, FindResultsView :34, AiChatView :22 :34, ShellStyles :477 :546 :587 :675, Controls.axaml :270, BuildTimingsView :68, ThemePictureView :69 :75. SetupWindow\'s own look (:21 :34 :64 :78 :100 :156) is deferred.' },
+      { f: 'tests/…/ThemeFamilyTests.cs, ControlSetTests.cs, contrast-pairs.txt, PolishTests, headless UI tests', k: 'Tests', t: 'Classic\'s gutter (4 → 6) and caption radius (0 → 4) at ThemeFamilyTests.cs:596-598; each family\'s shapes, Harbor\'s unchanged; the new color pairs, text at 4.5:1 (7:1 in High contrast) and the state indicators at 3:1 (the selected tab\'s outline, the frames, the pill); the 280 px clipped-text walk with the 6 px margins; TabStripEdge leaves exactly the selected tab\'s span open and follows the selection; the well and the tool windows clip to their corners; a smoke step for rounded popups on X11.' },
+      { f: 'docs/ui-guidelines.md, design/controls.md, design/shell-themes.md, ADR 0077, roadmap.md', k: 'Docs', t: 'The Shapes table; D33\'s "Classic 2 px" (a new decision, D4x, numbered at merge, since #82 and #86 are drawn on this branch too); the checkpoint; the website\'s theme screenshots from the smoke test and the Features page.' }
+    ];
+    const decisions = [
+      { n: 1, b: 'Classic takes the classic IDE\'s shapes:', t: 'one 4 px radius on cards, tabs and controls, 6 px gaps on the window\'s color and a 6 px margin around the dock area. This replaces D33\'s 2 px control corners (a new decision, numbered at merge).', rej: 'D33\'s 2 px and square panels; Ember\'s 10 px.' },
+      { n: 2, b: 'Cards at 4 px in Classic (B):', t: 'the measured 4 to 5 px; 6 px reads more at a glance but stops matching the screenshot.', rej: '6 px; 8 px.' },
+      { n: 3, b: 'Only Classic changes shape in this task.', t: 'Harbor keeps its square panels on 6 px of window, its 3 px accent bar and 3 px controls; Graphite, Daylight and Ember keep theirs. Every family takes the shared popup radii (menus 6, dialogs 8). Rounding Harbor is a separate, later decision that needs its own shape language: Classic now owns 4 px cards with the strip inside, Ember owns 10 px cards with tabs on the window, and a rounded Harbor would land between them, hard to tell from either.', rej: 'Harbor at 6 px now (the first draft: it differed from Classic only in tint, the bar and 2 px of radius); every family.' },
+      { n: 4, b: 'The active tab is outlined in the accent, in the content\'s color, with a 1 px accent frame round the active document,', t: 'replacing the accent-filled tab and the 2 px line under the strip in Classic Light and Dark. Classic Blue keeps its gold fill and High Contrast its accent fill.', rej: 'keeping the accent fill with rounded corners.' },
+      { n: 5, b: 'A new control, TabStripEdge, draws the frame\'s top edge beside the selected tab:', t: 'a 1 px row in DocumentTabStrip.BottomContent, with no Dock template copied. This part is required for the open tab: tokens and styles alone can only run the frame under the tab or drop its top edge (C).', rej: 'copying DocumentTabStrip\'s template to add fill parts like ToolTabStrip\'s; drawing it in the DocumentDockControl theme; the tokens-only look (a line under the tab).' },
+      { n: 6, b: 'The feet are drawn too,', t: 'by TabStripEdge, as the classic IDE has them. They are the optional part: if they slip, ship the square joins first.', rej: 'square joins for good.' },
+      { n: 7, b: 'The document well is one card holding its tab strip,', t: 'through a DocumentDockControl control theme that wraps Dock\'s template in a rounded Border; DocumentControl\'s frame paints over the card\'s sides and bottom.', rej: 'Ember\'s way (tabs on the window, a rounded document), which needs no template; the edge is TabStripEdge\'s either way.' },
+      { n: 8, b: 'The selected tab of a group without the focus keeps its shape, outlined at 3:1:', t: 'a new Shell.Tab.Selected.IndicatorBrush (#75757C in Dark, #80838F in Light) and a semibold title; that group\'s frame and edge fall back to Shell.Border.', rej: 'a subtle fill (today\'s #3F3F46 in Dark) with a Shell.Border outline, 1.5:1.' },
+      { n: 9, b: 'The focused tool window gets the documents\' accent frame in Classic Light and Dark;', t: 'its caption stays on the card with a semibold title, so the focus looks the same on documents and tool windows. Classic Blue and High Contrast keep their solid captions, as they keep their filled tabs. The screenshot doesn\'t show a focused tool window, so this is our call (D).', rej: 'today\'s solid accent caption, clipped by the card\'s corners (drawn in D).' },
+      { n: 10, b: 'The toolbar becomes a card as wide as its buttons,', t: 'with the same radius and border as the other cards; it still wraps when the window is narrow.', rej: 'today\'s full-width band; a full-width band with rounded ends.' },
+      { n: 11, b: 'Tool windows are outlined all round and their bottom tabs hang from the content', t: '(rounded bottom corners, the selected one outlined, its title in the link color as today). Dock already breaks the strip\'s top line at the selected tab; only the radius is new.', rej: 'plain text tabs on the window\'s color.' },
+      { n: 12, b: 'Lists and trees inset their rows 3 px with the control radius; Solution Explorer adds the accent pill', t: 'at the selected row\'s left, as in the screenshot (ListBoxItem and TreeViewItem styles; the pill in Solution Explorer\'s row template). Other lists get the pill when they share an item template.', rej: 'today\'s full-width square rows; the pill in every list now (ListBoxItem and TreeViewItem control themes).' },
+      { n: 13, b: 'Auto-hidden tool windows: text tabs on the window\'s color with a 3 px bar,', t: 'the accent for the open one and the control radius under the pointer; the panel slides out as a card with the popup shadow (E).', rej: 'today\'s Dock look.' },
+      { n: 14, b: 'The gap is the splitter: 6 px to grab, no paint under the pointer,', t: 'as the classic IDE; the pointer changes and Dock resizes live.', rej: 'a 2 px accent line under the pointer.' },
+      { n: 15, b: 'High Contrast keeps the family\'s radii', t: 'with every card\'s 1 px border, as shell-themes.md asks of each family (I).', rej: 'square shapes in High Contrast.' },
+      { n: 16, b: 'Two overlay radii and one control radius:', t: 'Shell.CornerRadius.Overlay 6 for menus, context menus, drop-down lists and toasts (overriding Fluent\'s 5), a new Shell.CornerRadius.Dialog 8 for dialogs and Code Search (10 today); the editor\'s popups and tooltips the control radius, with Fluent\'s ControlCornerRadius set to it in Classic.', rej: 'today\'s four overlay radii (5, 6, 8, 10).' },
+      { n: 17, b: 'Window frames stay the system\'s:', t: 'Windows 11 and macOS round them, Windows 10 doesn\'t, and on Linux it\'s the window manager\'s choice; floating windows fill their frame with no margin. Rounded popups get a smoke-test check on X11 without a compositor.', rej: 'drawing our own rounded frames (transparent windows, no system shadow or snapping).' },
+      { n: 18, b: 'Coordinate the colors with #83:', t: 'this design moves Classic Light and Dark\'s toolbar, tab strip and unselected tabs onto Shell.Panel\'s value, the selected tab onto the content\'s color and the focused caption onto the card (the colors card lists every token). #83 reworks the same palette, so land its palette first or in the same release and rebase these values onto it. If #83 adopts the classic IDE\'s #1C1C1C window with #262626 and #282828 cards, the document card can drop its border, as the classic IDE does.', rej: 'changing no colors here (the toolbar and strip cards would be invisible in Classic Dark: #1F1F1F on the #1F1F1F window).' }
+    ];
+
+    const familyNote = fam === 'Harbor' ? ` (Harbor keeps its shapes: the window is drawn as it stays, the details in ${D})` : '';
+    return { t, vars, themeQ, themes, stateLinks: Object.keys(ONE).map((q) => ({ q })), sheet, mainCls, sections, tokenRows, colorRows, measureRows, whereRows, decisions, familyNote };
+  }
+}
+</script>
+</body>
+</html>

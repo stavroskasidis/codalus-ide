@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Codalus.Platform;
 using Codalus.Projects.Protocol;
 using Codalus.Workbench.Output;
 using Codalus.Workbench.Projects;
@@ -88,12 +89,12 @@ public sealed class RunningProgram : IDisposable
     /// </summary>
     public async Task StopAsync()
     {
-        // Ending the tree lists the system's processes to find the program's children. On macOS that listing can block
-        // for many minutes (task information of a crashed process that ReportCrash holds: `ps -o pcpu,rss` blocks the
-        // same way; seen after a debugging session closed its browser): the tree's end then gets a while, and after it
-        // the program alone is ended, so its run ends (a child it started, if any, is left; the dev server's
-        // BrowserDebugHost ends with its owner). The wait is asynchronous: waiting on the UI thread froze the IDE for
-        // those 10 s (the command sweep's Start with Hot Reload on macOS, right after the run before it was stopped).
+        // Ending the tree finds the program's children (ProcessTree.Kill). .NET's own walk blocked for many minutes on
+        // macOS (it reads the task information of every process, and a crashed process's is held while ReportCrash
+        // writes its report; seen after a debugging session closed its browser), and the listing may still be slow: the
+        // tree's end gets a while, and after it the program alone is ended, so its run ends (a child it started, if any,
+        // is left; the dev server's BrowserDebugHost ends with its owner). The wait is asynchronous: waiting on the UI
+        // thread froze the IDE for those 10 s (the command sweep's Start with Hot Reload on macOS, after the run before).
         var tree = Task.Run(() => Kill(entireProcessTree: true));
         try
         {
@@ -108,7 +109,7 @@ public sealed class RunningProgram : IDisposable
     /// <summary>How long <see cref="StopAsync"/> lets the tree's end take before it ends the program alone.</summary>
     private static readonly TimeSpan s_treeKillWait = TimeSpan.FromSeconds(10);
 
-    /// <summary>Ends the process tree in place of <see cref="Process.Kill(bool)"/> (tests: a process listing that blocks).</summary>
+    /// <summary>Ends the process tree in place of <see cref="ProcessTree.Kill"/> (tests: a process listing that blocks).</summary>
     internal Action<Process>? KillTree { get; init; }
 
     private void Kill(bool entireProcessTree)
@@ -121,9 +122,13 @@ public sealed class RunningProgram : IDisposable
                 {
                     killTree(_process);
                 }
+                else if (entireProcessTree)
+                {
+                    ProcessTree.Kill(_process);
+                }
                 else
                 {
-                    _process.Kill(entireProcessTree);
+                    _process.Kill();
                 }
             }
         }
@@ -170,9 +175,27 @@ public sealed class RunService : IDisposable
                 return chosen;
             }
 
-            return projects.Select(p => p.Path).FirstOrDefault(IsExecutable);
+            return DefaultStartupProject(projects.Select(p => p.Path), _solutions.Projects);
         }
     }
+
+    /// <summary>
+    /// The startup project when none is chosen: the first executable project in the solution's order, except that a
+    /// Blazor Web App's WebAssembly client gives way to its server (task #90): the client is an executable project too,
+    /// and often listed first, but on its own its dev host serves nothing at "/".
+    /// </summary>
+    public static string? DefaultStartupProject(IEnumerable<string> order, IReadOnlyDictionary<string, ProjectInfo> projects)
+    {
+        var executables = order.Where(path => IsExecutable(projects, path)).ToList();
+        var first = executables.FirstOrDefault();
+        return first is not null && BlazorProjects.WebAppServerOf(first, projects) is { } server && executables.Contains(server, SolutionService.PathComparer)
+            ? server
+            : first;
+    }
+
+    private static bool IsExecutable(IReadOnlyDictionary<string, ProjectInfo> projects, string projectPath) =>
+        projects.TryGetValue(projectPath, out var project) && project.OutputType is { } type
+        && (type.Equals("Exe", StringComparison.OrdinalIgnoreCase) || type.Equals("WinExe", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The user's choice (null: the default), for saving with the solution's state.</summary>
     public string? ChosenStartupProject => _startupProject;
@@ -205,9 +228,7 @@ public sealed class RunService : IDisposable
     public event EventHandler? RunningChanged;
 
     /// <summary>Whether a project builds a program (OutputType Exe or WinExe, once evaluated).</summary>
-    public bool IsExecutable(string projectPath) =>
-        _solutions.Projects.TryGetValue(projectPath, out var project) && project.OutputType is { } type
-        && (type.Equals("Exe", StringComparison.OrdinalIgnoreCase) || type.Equals("WinExe", StringComparison.OrdinalIgnoreCase));
+    public bool IsExecutable(string projectPath) => IsExecutable(_solutions.Projects, projectPath);
 
     /// <summary>Sets the single startup project (Set as Startup Project): multiple startup projects are turned off.</summary>
     public void SetStartupProject(string? projectPath)
@@ -446,7 +467,11 @@ public sealed class RunService : IDisposable
     /// applied (so <c>--no-launch-profile</c>), restarting on rude edits instead of asking, and plain-text messages. A
     /// <paramref name="framework"/> picks one framework of a multi-targeted project (MAUI's Windows target, M44).
     /// </summary>
-    public LaunchPlan HotReloadPlan(string projectPath, LaunchPlan plan, string? commandLineArgs, string? framework = null)
+    /// <param name="announceProcess">
+    /// The app's Hot Reload agent logs its start with <see cref="HotReloadOutput.AgentLogPrefix"/> (with its process id from
+    /// SDK 11 on), so the debugger can attach to the app <c>dotnet watch</c> starts (#75).
+    /// </param>
+    public LaunchPlan HotReloadPlan(string projectPath, LaunchPlan plan, string? commandLineArgs, string? framework = null, bool announceProcess = false)
     {
         var dotnet = DotnetRoot is { } root && File.Exists(Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"))
             ? Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")
@@ -468,6 +493,13 @@ public sealed class RunService : IDisposable
             ["DOTNET_WATCH_RESTART_ON_RUDE_EDIT"] = "true",
             ["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "1",
         };
+        if (announceProcess)
+        {
+            // dotnet watch sets this itself only at its Trace level, so ours reaches the agent in the app (it prints the
+            // "Loaded into process" line to standard error).
+            environment["HOTRELOAD_DELTA_CLIENT_LOG_MESSAGES"] = HotReloadOutput.AgentLogPrefix;
+        }
+
         return plan with { FileName = dotnet, Arguments = arguments.TrimEnd(), ArgumentList = null, Wsl = null, Environment = environment };
     }
 
@@ -478,7 +510,8 @@ public sealed class RunService : IDisposable
     /// </summary>
     /// <param name="openBrowser">False keeps the launch profile's browser closed (browser debugging opens its own, ADR 0026).</param>
     /// <param name="targetFramework">The framework to run (null: the active one); a Hot Reload run passes it to <c>dotnet watch</c>.</param>
-    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken, bool hotReload = false, bool openBrowser = true, string? targetFramework = null)
+    /// <param name="announceProcess">A Hot Reload run's app says its process id (<see cref="HotReloadPlan"/>), to debug it (#75).</param>
+    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken, bool hotReload = false, bool openBrowser = true, string? targetFramework = null, bool announceProcess = false)
     {
         var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken, targetFramework).ConfigureAwait(false);
         var name = Path.GetFileNameWithoutExtension(projectPath);
@@ -497,7 +530,7 @@ public sealed class RunService : IDisposable
 
         if (hotReload)
         {
-            plan = HotReloadPlan(projectPath, plan, profile?.CommandLineArgs, targetFramework);
+            plan = HotReloadPlan(projectPath, plan, profile?.CommandLineArgs, targetFramework, announceProcess);
             externalConsole = false;
         }
 
@@ -509,8 +542,9 @@ public sealed class RunService : IDisposable
     /// Starts a plan made elsewhere (folder mode's launch configurations, ADR 0033): its output goes to a "Run: name"
     /// channel. <paramref name="key"/> identifies what runs (a project or a program).
     /// </summary>
-    public RunningProgram StartPlan(string key, string name, LaunchPlan plan) =>
-        Launch(key, name, plan, _output.GetOrCreate("codalus.run." + name, "Run: " + name), console: false, hotReload: false, string.Empty);
+    /// <param name="hotReload">The plan runs <c>dotnet watch</c> (<see cref="HotReloadPlan"/>): its output feeds a Hot Reload session.</param>
+    public RunningProgram StartPlan(string key, string name, LaunchPlan plan, bool hotReload = false) =>
+        Launch(key, name, plan, _output.GetOrCreate("codalus.run." + name, "Run: " + name), console: false, hotReload, string.Empty);
 
     /// <summary>
     /// Follows a program the system started for us (a packaged app activated through Windows, M44): it is listed as
@@ -577,7 +611,7 @@ public sealed class RunService : IDisposable
             throw new InvalidOperationException($"{plan.FileName} did not start.");
         }
 
-        var program = new RunningProgram(projectPath, name, process, console ? null : channel) { HotReload = hotReload ? new HotReloadSession() : null, KillTree = KillTree };
+        var program = new RunningProgram(projectPath, name, process, console ? null : channel) { HotReload = hotReload ? new HotReloadSession(plan.WorkingDirectory) : null, KillTree = KillTree };
         var browserOpened = plan.BrowserUrl is null;
         void OpenBrowserOnce()
         {
@@ -593,7 +627,15 @@ public sealed class RunService : IDisposable
 
             if (Uri.TryCreate(plan.BrowserUrl, UriKind.Absolute, out var url))
             {
-                _openBrowser(url);
+                // On the output reader's thread: a failure here (no xdg-open, task #90) ended the IDE.
+                try
+                {
+                    _openBrowser(url);
+                }
+                catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or ArgumentException or PlatformNotSupportedException or UnauthorizedAccessException)
+                {
+                    channel.AppendErrorLine($"The browser couldn't be opened at {url}: {ex.Message}");
+                }
             }
         }
 
@@ -603,6 +645,13 @@ public sealed class RunService : IDisposable
             {
                 if (line is null)
                 {
+                    return;
+                }
+
+                // The Hot Reload agent's own log (#75) feeds the session only.
+                if (program.HotReload is { } agentSession && HotReloadOutput.IsAgentLine(line))
+                {
+                    agentSession.OnLine(line);
                     return;
                 }
 

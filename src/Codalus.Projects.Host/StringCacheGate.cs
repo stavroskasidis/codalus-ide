@@ -43,6 +43,18 @@ internal static class StringCacheGate
         }
     }
 
+    /// <summary>How many ends of builds wait for the gate now (for tests).</summary>
+    internal static int WaitingCount
+    {
+        get
+        {
+            lock (s_sync)
+            {
+                return s_waiting;
+            }
+        }
+    }
+
     /// <summary>Holds the gate shared until the result is disposed: around anything that loads, evaluates or edits projects.</summary>
     public static Scope Enter()
     {

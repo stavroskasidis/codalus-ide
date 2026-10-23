@@ -1,0 +1,82 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.GitCompareView"
+             x:DataType="vm:GitCompareViewModel"
+             AutomationProperties.Name="{Binding Title}">
+  <DockPanel>
+    <!-- The header (C1): the comparison in diff order and its count, Tree or List, Refresh. -->
+    <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,0,0,1" Padding="8,4">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+          <controls:SegmentedControl x:Name="ViewSwitch" SelectedIndex="{Binding ViewIndex}" AutomationProperties.Name="{l:T gitCompare.view}">
+            <controls:SegmentedControlItem Icon="type-hierarchy" Content="{l:T gitCompare.tree}" />
+            <controls:SegmentedControlItem Icon="list" Content="{l:T gitCompare.list}" />
+          </controls:SegmentedControl>
+          <Button x:Name="RefreshButton" Classes="toolbar icon" controls:ButtonIcon.Kind="refresh" ToolTip.Tip="{l:T gitCompare.refresh}" AutomationProperties.Name="{l:T gitCompare.refresh}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <controls:Icon Kind="compare" />
+          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+          <TextBlock Text="·" Classes="muted" />
+          <TextBlock Text="{Binding CountText}" Classes="muted" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+    <!-- While it compares (C2): an indeterminate bar under the header and a status line. -->
+    <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="2" MinHeight="2" />
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="10,6" Text="{Binding StatusText}" IsVisible="{Binding IsLoading}" />
+    <TextBlock DockPanel.Dock="Bottom" Classes="muted small" Margin="10,6" TextWrapping="Wrap" Text="{Binding Hint}" IsVisible="{Binding HasFiles}" />
+    <Panel>
+      <!-- No differences (C3), with the next step. -->
+      <StackPanel Classes="emptyState" IsVisible="{Binding IsEmpty}">
+        <controls:Icon Kind="compare" />
+        <TextBlock Text="{Binding EmptyText}" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center" />
+        <Button x:Name="HistoryButton" Classes="iconText" controls:ButtonIcon.Kind="history" Content="{l:T gitCompare.viewHistory}" HorizontalAlignment="Center" />
+      </StackPanel>
+      <TreeView x:Name="Tree" Classes="changeTree" ItemsSource="{Binding Tree}" IsVisible="{Binding IsTreeView}" Background="Transparent" Margin="4" AutomationProperties.Name="{Binding Title}">
+        <TreeView.Styles>
+          <Style Selector="TreeViewItem" x:DataType="vm:GitChangeNode">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            <Setter Property="MinHeight" Value="22" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          </Style>
+        </TreeView.Styles>
+        <TreeView.ItemTemplate>
+          <TreeDataTemplate x:DataType="vm:GitChangeNode" ItemsSource="{Binding Children}">
+            <Grid ColumnDefinitions="Auto,*,18" Background="Transparent">
+              <controls:Icon Kind="{Binding Icon}" Margin="0,0,6,0" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="{Binding Text}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Row.OldName}" IsVisible="{Binding Row.HasOldName, FallbackValue=False}" Classes="muted" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Grid.Column="2" Text="{Binding Letter}" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding Description}" />
+            </Grid>
+          </TreeDataTemplate>
+        </TreeView.ItemTemplate>
+      </TreeView>
+      <ListBox x:Name="List" ItemsSource="{Binding Items}" IsVisible="{Binding IsListView}" Background="Transparent" Margin="4" AutomationProperties.Name="{Binding Title}">
+        <ListBox.Styles>
+          <Style Selector="ListBoxItem" x:DataType="vm:GitFileRow">
+            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          </Style>
+        </ListBox.Styles>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:GitFileRow">
+            <Grid ColumnDefinitions="2*,3*,18" Background="Transparent">
+              <DockPanel ClipToBounds="True">
+                <controls:Icon DockPanel.Dock="Left" Kind="{Binding Icon}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding OldName}" IsVisible="{Binding HasOldName}" Classes="muted" Margin="6,0,0,0" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              </DockPanel>
+              <TextBlock Grid.Column="1" Text="{Binding Location}" Classes="muted" Margin="6,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="2" Text="{Binding Letter}" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding Description}" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Panel>
+  </DockPanel>
+</UserControl>

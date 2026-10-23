@@ -104,29 +104,7 @@ public sealed partial class GitService
 
         var (_, message, _) = await GitAsync(["show", "-s", "--format=%B", hash], cancellationToken, readOnly: true).ConfigureAwait(false);
         var (_, names, _) = await GitAsync(["show", "-z", "--format=", "--name-status", "-M", "--first-parent", "-m", hash], cancellationToken, readOnly: true).ConfigureAwait(false);
-        var files = new List<(char, string, string?)>();
-        var parts = names.Split('\0');
-        for (var i = 0; i < parts.Length; i++)
-        {
-            var status = parts[i].Trim('\n');
-            if (status.Length == 0 || i + 1 >= parts.Length)
-            {
-                continue;
-            }
-
-            if (status[0] is 'R' or 'C' && i + 2 < parts.Length)
-            {
-                files.Add((status[0], Path.Combine(Root!, parts[i + 2]), Path.Combine(Root!, parts[i + 1])));
-                i += 2;
-            }
-            else
-            {
-                files.Add((status[0], Path.Combine(Root!, parts[i + 1]), null));
-                i++;
-            }
-        }
-
-        return new GitCommitDetails(commit, message.TrimEnd(), [.. files.Select(f => (f.Item1, f.Item2.Replace('/', Path.DirectorySeparatorChar), f.Item3?.Replace('/', Path.DirectorySeparatorChar)))]);
+        return new GitCommitDetails(commit, message.TrimEnd(), ParseNameStatus(Root!, names));
     }
 
     /// <summary>The commits that changed lines <paramref name="startLine"/>–<paramref name="endLine"/> of a file (1-based).</summary>

@@ -1,0 +1,443 @@
+using System.Text.Json;
+using Avalonia.Controls;
+using Codalus.Platform;
+using Codalus.Projects.Protocol;
+using Codalus.Shell.Infrastructure;
+using Codalus.Shell.ViewModels;
+using Codalus.Workbench.Localization;
+using Codalus.Workbench.Output;
+using Codalus.Workbench.Projects;
+
+namespace Codalus.Shell;
+
+/// <summary>
+/// New Project and New Solution (ADR 0082): the three-page wizard in a window of its own, owned by the main window and
+/// not modal. The wizard asks everything on its own pages and writes the files (phase 1); it closes before the main
+/// window opens or changes anything (phase 2): the new solution opens with the trust chosen on page 2, the project is
+/// added through the build host, a trusted solution restores, and the template's start file opens.
+/// </summary>
+public sealed partial class ShellHost
+{
+    public const string DefaultLocationSetting = "templates.defaultLocation";
+
+    private NewProjectViewModel? _newProject;
+    private Window? _newProjectWindow;
+    private Task<string?>? _newProjectResult;
+
+    /// <summary>New Project's templates: the catalog over <see cref="Templates"/>'s CLI. Tests set a stand-in.</summary>
+    public ProjectTemplateCatalog ProjectTemplates { get; internal set; } = null!;
+
+    /// <summary>New Project's creation through the CLI. Tests set a stand-in.</summary>
+    public NewProjectService NewProjects { get; internal set; } = null!;
+
+    /// <summary>What New Project remembers (<c>&lt;state&gt;/new-project.json</c>).</summary>
+    public NewProjectHistory NewProjectHistory { get; internal set; } = null!;
+
+    /// <summary>The CLI New Project installs template packs with (<see cref="Templates"/>). Tests set a stand-in.</summary>
+    internal ITemplateCli NewProjectCli { get; set; } = null!;
+
+    /// <summary>The open wizard's model (tests).</summary>
+    public NewProjectViewModel? NewProjectModel => _newProject;
+
+    /// <summary>Whether the wizard is open.</summary>
+    public bool IsNewProjectOpen => _newProject is not null;
+
+    /// <summary>The open wizard's window (tests, the smoke test's screenshots).</summary>
+    public Window? NewProjectWindowView => _newProjectWindow;
+
+    /// <summary>The wizard's window for a model (<see cref="Views.NewProjectWindow"/>). Tests may set none and drive the model alone.</summary>
+    internal Func<NewProjectViewModel, Window?>? NewProjectWindowFactory { get; set; }
+
+    /// <summary>The OS the wizard's pages are for (its Windows only tags, its keys); null is this one. Tests set it.</summary>
+    internal bool? NewProjectIsWindows { get; set; }
+
+    /// <inheritdoc cref="NewProjectIsWindows"/>
+    internal bool? NewProjectIsMacOS { get; set; }
+
+    /// <summary>How long Create waits for the build host to load the new project before it adds container support to it.</summary>
+    internal TimeSpan NewProjectLoadTimeout { get; set; } = TimeSpan.FromMinutes(2);
+
+    private OutputChannel TemplatesLog => Workbench.Output.GetOrCreate("codalus.templates", "Templates");
+
+    private void InitializeNewProject()
+    {
+        NewProjectCli = Templates;
+        ProjectTemplates = new ProjectTemplateCatalog(Templates);
+        NewProjects = new NewProjectService(Templates);
+        NewProjectHistory = new NewProjectHistory(Path.Combine(Paths.State, "new-project.json"));
+        NewProjectWindowFactory = model => new Views.NewProjectWindow { DataContext = model };
+    }
+
+    /// <summary>
+    /// Opens the wizard (or activates the open one) and returns what Create made when it's done: the project's path, or
+    /// the solution's for Blank Solution; null when it's cancelled or closed.
+    /// </summary>
+    public Task<string?> OpenNewProjectWizardAsync(NewProjectContext open)
+    {
+        var context = Snapshot(open);
+        if (_newProject is { } current && _newProjectResult is { } pending)
+        {
+            // The same New Project again comes back to the open wizard. Another one (Add New Project, New Solution, a
+            // template, from the start window) replaces it, unless it is creating: then it stays, and this one is dropped.
+            var same = IsSameRequest(current.Context, context);
+            if (same || current.IsCreating)
+            {
+                _newProjectWindow?.Activate();
+                return same ? pending : Task.FromResult<string?>(null);
+            }
+
+            current.OnClosed();
+        }
+
+        var completion = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var model = new NewProjectViewModel(NewProjectServices(), context);
+        _newProject = model;
+        _newProjectResult = completion.Task;
+
+        // The main window stays usable: when it opens another workspace or closes this one, Add New Project (which goes
+        // into the workspace that was open) closes, and New Project stops offering to add to it.
+        void OnSolutionChanged(object? sender, EventArgs e) => Ui.Post(() =>
+        {
+            if (_newProject != model || IsWorkspaceOpen(context.WorkspacePath))
+            {
+                return;
+            }
+
+            if (context.Mode == NewProjectMode.Add)
+            {
+                model.OnClosed();
+            }
+            else
+            {
+                model.OnWorkspaceChanged();
+            }
+        });
+
+        if (context.Workspace != NewProjectWorkspace.None)
+        {
+            Solutions.SolutionChanged += OnSolutionChanged;
+        }
+
+        model.Finished += (_, finished) =>
+        {
+            Solutions.SolutionChanged -= OnSolutionChanged;
+            _newProject = null;
+            _newProjectResult = null;
+            var window = _newProjectWindow;
+            _newProjectWindow = null;
+            window?.Close();
+            if (finished is null)
+            {
+                completion.TrySetResult(null);
+                return;
+            }
+
+            _ = FinishAsync();
+
+            // The command completes whatever happens here (a plugin awaits it): with what was made, said if it didn't open.
+            async Task FinishAsync()
+            {
+                var made = finished.Result.ProjectPath ?? finished.Result.SolutionPath;
+                try
+                {
+                    made = await FinishNewProjectAsync(finished).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    TemplatesLog.AppendLine($"[new project] {ex}");
+                    var why = ex is OperationCanceledException ? Localizer.Get("msg.newProject.buildHostTimedOut", "the build host didn't answer in time.") : ex.Message;
+                    ShowTemplatesError(Localizer.Format("msg.newProject.openFailed", "Created {0}, but couldn't open it: {1}", made, why));
+                }
+                finally
+                {
+                    completion.TrySetResult(made);
+                }
+            }
+        };
+
+        if (NewProjectWindowFactory?.Invoke(model) is { } window)
+        {
+            _newProjectWindow = window;
+            window.Closed += (_, _) =>
+            {
+                if (_newProjectWindow == window)
+                {
+                    _newProjectWindow = null;
+                    model.OnClosed();
+                }
+            };
+            if (Window is Window owner && owner.IsVisible)
+            {
+                window.Show(owner);
+            }
+            else
+            {
+                window.Show();
+            }
+        }
+
+        _ = model.LoadAsync();
+        return completion.Task;
+    }
+
+    /// <summary>The workspace as the wizard opens: what's open, its trust, and (for Add New Project) the selected solution folder.</summary>
+    private NewProjectContext Snapshot(NewProjectContext open)
+    {
+        var solution = Solutions.Solution;
+        var workspace = solution switch
+        {
+            null => NewProjectWorkspace.None,
+            { IsFolder: true } => NewProjectWorkspace.Folder,
+            { Format: "project" } => NewProjectWorkspace.ProjectFile,
+            _ => NewProjectWorkspace.Solution,
+        };
+        var folderId = open.Mode == NewProjectMode.Add && workspace == NewProjectWorkspace.Solution ? Explorer.Selected?.Node.SolutionFolderId : null;
+        return open with
+        {
+            Workspace = workspace,
+            WorkspacePath = solution?.Path,
+            WorkspaceDirectory = solution?.Directory,
+            WorkspaceName = solution?.Name,
+            WorkspaceTrusted = solution?.Trusted ?? false,
+            WorkspaceProjects = solution is null ? [] : [.. solution.Projects.Select(p => p.Path)],
+            SolutionFolderId = folderId,
+            SolutionFolderName = folderId is null ? null : solution?.Folders.FirstOrDefault(f => f.Id == folderId)?.Name,
+            DefaultLocationSetting = Workbench.Settings.GetString(DefaultLocationSetting, string.Empty),
+            IsWindows = NewProjectIsWindows ?? open.IsWindows,
+            IsMacOS = NewProjectIsMacOS ?? open.IsMacOS,
+        };
+    }
+
+    /// <summary>Whether two openings ask for the same New Project: its kind, template, start window, workspace and solution folder.</summary>
+    private static bool IsSameRequest(NewProjectContext open, NewProjectContext asked) =>
+        open.Mode == asked.Mode
+        && open.FromStartWindow == asked.FromStartWindow
+        && string.Equals(open.Template, asked.Template, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(open.Language, asked.Language, StringComparison.OrdinalIgnoreCase)
+        && (open.Mode != NewProjectMode.Add || (string.Equals(open.WorkspacePath, asked.WorkspacePath, StringComparison.Ordinal) && open.SolutionFolderId == asked.SolutionFolderId));
+
+    /// <summary>Whether the workspace at <paramref name="path"/> is the one open now.</summary>
+    private bool IsWorkspaceOpen(string? path) =>
+        path is not null && Solutions.Solution is { } solution && SolutionService.PathComparer.Equals(solution.Path, path);
+
+    private NewProjectServices NewProjectServices() => new()
+    {
+        Catalog = ProjectTemplates,
+        Creator = NewProjects,
+        History = NewProjectHistory,
+        Cli = NewProjectCli,
+        IsTrusted = Trust.IsTrusted,
+        Trust = Trust.Trust,
+        InstallMore = () => Run("tools.templates"),
+        ShowOutput = log =>
+        {
+            TemplatesLog.AppendLine(log);
+            Workbench.Output.Show(TemplatesLog);
+        },
+        BackToStartWindow = () => Ui.Post(ShowStartWindow),
+    };
+
+    /// <summary>
+    /// Phase 2, in the main window once the wizard has closed: open the new solution with the trust chosen (no prompt)
+    /// and add the project through the build host, or add it to the open solution or folder (in the solution folder
+    /// selected when the wizard opened); restore a trusted solution; add container support; open the start file.
+    /// </summary>
+    internal async Task<string?> FinishNewProjectAsync(NewProjectCompletion completion)
+    {
+        var (request, plan, result) = (completion.Request, completion.Plan, completion.Result);
+        TemplatesLog.AppendLine(result.Log);
+        if (plan.CreatesSolution && result.SolutionPath is { } solution)
+        {
+            if (!await OpenSolutionAsync(solution, completion.Trusted).ConfigureAwait(true))
+            {
+                ShowCreatedNotOpened(solution);
+                return result.ProjectPath ?? solution;
+            }
+
+            foreach (var project in new[] { result.ProjectPath }.Concat(result.ExtraProjects).OfType<string>())
+            {
+                Explorer.RevealWhenAvailable("p:" + Path.GetFullPath(project));
+                await Solutions.AddProjectAsync(project, null, CancellationToken.None).ConfigureAwait(true);
+            }
+        }
+        else if (result.ProjectPath is { } added)
+        {
+            // The workspace the wizard was adding to may have closed while it created the files (the main window stays usable).
+            if (completion.WorkspacePath is { } target && !IsWorkspaceOpen(target))
+            {
+                ShowTemplatesError(Localizer.Format("msg.newProject.notAdded", "Created {0}, but didn't add it: {1} isn't open any more.", added, Path.GetFileName(target)));
+                return added;
+            }
+
+            foreach (var project in new[] { added }.Concat(result.ExtraProjects))
+            {
+                await AddProjectFileAsync(project, completion.SolutionFolderId).ConfigureAwait(true);
+            }
+        }
+
+        if (result.ProjectPath is { } created)
+        {
+            if (result.Aspire is { } aspire && Solutions.Solution is { Trusted: true })
+            {
+                await EnlistInAspireAsync(created, aspire, plan.CreatesSolution ? null : completion.SolutionFolderId, plan.CreatesSolution).ConfigureAwait(true);
+            }
+
+            if (Solutions.Solution is { Trusted: true } && Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true))
+            {
+                _ = Solutions.RestoreAsync(null, CancellationToken.None);
+            }
+
+            if (request.HostOptions.Docker && request.Member?.HostOptions.Docker == true && Solutions.Solution is { Trusted: true })
+            {
+                // The build host answers AddProject before it has evaluated the project, and container support reads the
+                // evaluated project (its framework, whether it's a web project, its references): it waits for that first.
+                if (await WaitForProjectAsync(created, result.Aspire?.ServiceDefaults, NewProjectLoadTimeout).ConfigureAwait(true) is { } loaded)
+                {
+                    await AddDockerSupportAsync(loaded).ConfigureAwait(true);
+                }
+                else
+                {
+                    ShowTemplatesError(Localizer.Format("msg.newProject.dockerNotAdded", "Created {0}, but container support wasn't added: the project didn't load in time. Use Add Docker Support on it once it has.", Path.GetFileName(created)));
+                }
+            }
+
+            foreach (var file in result.FilesToOpen)
+            {
+                await OpenFileAsync(file).ConfigureAwait(true);
+            }
+        }
+
+        return result.ProjectPath ?? result.SolutionPath;
+    }
+
+    /// <summary>
+    /// The open solution's path for <paramref name="project"/> once the build host has evaluated it (with its project
+    /// reference to <paramref name="reference"/>, when there is one, so what reads it sees the reference), or null after
+    /// <paramref name="timeout"/>. Paths compare by their real path: a solution opens by its real path (a symbolic link
+    /// resolved; on macOS the temporary folder's <c>/var</c> is <c>/private/var</c>).
+    /// </summary>
+    internal async Task<string?> WaitForProjectAsync(string project, string? reference, TimeSpan timeout)
+    {
+        var target = RealPath.Resolve(Path.GetFullPath(project));
+        var referenced = reference is null ? null : RealPath.Resolve(Path.GetFullPath(reference));
+        static bool Same(string path, string real) => SolutionService.PathComparer.Equals(path, real) || SolutionService.PathComparer.Equals(RealPath.Resolve(path), real);
+        bool Loaded(ProjectInfo info, bool withReference) =>
+            Same(info.Path, target) && (!withReference || referenced is null || info.References.Any(r => r.Kind == ReferenceKinds.Project && r.Path is { } path && Same(path, referenced)));
+        string? Find(bool withReference) => Solutions.Projects.Values.FirstOrDefault(p => Loaded(p, withReference))?.Path;
+
+        var found = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnProjectChanged(object? sender, ProjectInfo info)
+        {
+            if (Loaded(info, withReference: true))
+            {
+                found.TrySetResult(info.Path);
+            }
+        }
+
+        Solutions.ProjectChanged += OnProjectChanged;
+        try
+        {
+            if (Find(withReference: true) is { } loaded)
+            {
+                return loaded;
+            }
+
+            try
+            {
+                return await found.Task.WaitAsync(timeout).ConfigureAwait(true);
+            }
+            catch (TimeoutException)
+            {
+                return Find(withReference: false);
+            }
+        }
+        finally
+        {
+            Solutions.ProjectChanged -= OnProjectChanged;
+        }
+    }
+
+    /// <summary>
+    /// Enlist in Aspire orchestration, in the open solution: the AppHost and ServiceDefaults New Project created join it,
+    /// the web project references the ServiceDefaults and the AppHost references the web project (through the build
+    /// host), and a new solution starts with the AppHost. Lines it couldn't add itself are shown, to add by hand.
+    /// </summary>
+    private async Task EnlistInAspireAsync(string project, AspireResult aspire, string? folder, bool newSolution)
+    {
+        if (aspire.CreatedServiceDefaults)
+        {
+            await Solutions.AddProjectAsync(aspire.ServiceDefaults, folder, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        if (aspire.CreatedAppHost)
+        {
+            await Solutions.AddProjectAsync(aspire.AppHost, folder, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        await Solutions.AddProjectReferenceAsync(project, aspire.ServiceDefaults, CancellationToken.None).ConfigureAwait(true);
+        await Solutions.AddProjectReferenceAsync(aspire.AppHost, project, CancellationToken.None).ConfigureAwait(true);
+        if (newSolution)
+        {
+            SetStartupProject(aspire.AppHost);
+        }
+
+        if (aspire.ManualSteps is { } steps)
+        {
+            TemplatesLog.AppendLine(steps);
+            ShowTemplatesError(Localizer.Format("msg.newProject.aspireManual", "Enlisted in Aspire orchestration, but add these lines yourself (Output → Templates has them): {0}", steps.Split('\n')[0]));
+        }
+    }
+
+    /// <summary>The files are there but the solution didn't open: say so, with Open.</summary>
+    private void ShowCreatedNotOpened(string solution)
+    {
+        var open = Localizer.Get("msg.newProject.open", "Open");
+        var notification = Workbench.Notifications.Info(Localizer.Format("msg.newProject.createdNotOpened", "Created {0}. It wasn't opened.", solution), open);
+        _ = notification.Result.ContinueWith(
+            t =>
+            {
+                if (t.Result == open)
+                {
+                    Ui.Post(() => _ = OpenSolutionAsync(solution));
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnRanToCompletion,
+            TaskScheduler.Default);
+    }
+
+    private void ShowTemplatesError(string message)
+    {
+        var show = Localizer.Get("msg.newProject.showOutput", "Show Output");
+        var notification = Workbench.Notifications.Error(message, show);
+        _ = notification.Result.ContinueWith(
+            t =>
+            {
+                if (t.Result == show)
+                {
+                    Ui.Post(() => Workbench.Output.Show(TemplatesLog));
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnRanToCompletion,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>A command's result: a path as a JSON string, or null.</summary>
+    internal static JsonElement? PathResult(string? path)
+    {
+        if (path is null)
+        {
+            return null;
+        }
+
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStringValue(path);
+        }
+
+        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        return document.RootElement.Clone();
+    }
+}

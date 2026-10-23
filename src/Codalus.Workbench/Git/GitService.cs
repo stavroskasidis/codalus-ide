@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Git;
 
@@ -52,6 +53,39 @@ public sealed partial class GitService : IDisposable
         string directory, IReadOnlyList<string> arguments, CancellationToken cancellationToken, string? input = null, bool check = true, bool readOnly = false,
         IReadOnlyDictionary<string, string>? environment = null)
     {
+        for (var attempt = 0; ; attempt++)
+        {
+            var result = await RunOnceAsync(directory, arguments, input, readOnly, environment, cancellationToken).ConfigureAwait(false);
+            if (!readOnly && attempt < s_lockRetryDelays.Length && IsLockBusy(result.ExitCode, result.Error))
+            {
+                await Task.Delay(s_lockRetryDelays[attempt], cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            if (check && result.ExitCode != 0)
+            {
+                var message = (result.Error.Trim().Length > 0 ? result.Error : result.Output).Trim();
+                throw new GitException(message.Length > 0 ? message : $"git {(arguments.Count > 0 ? arguments[0] : string.Empty)} failed (exit code {result.ExitCode.ToString(CultureInfo.InvariantCulture)}).", result.ExitCode);
+            }
+
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Whether git failed only because a lock file it creates (<c>index.lock</c>, a ref's) exists: on Windows the
+    /// antivirus or the search indexer can hold the last command's lock open for a moment after git deleted it, so the
+    /// next write finds it there (the Windows command sweep's Stage File, right after other git commands). Such a command
+    /// changed nothing, so a write tries again a few times before it reports the lock.
+    /// </summary>
+    internal static bool IsLockBusy(int exitCode, string error) => exitCode != 0 && error.Contains(".lock': File exists", StringComparison.Ordinal);
+
+    /// <summary>The waits before a write that found a lock busy tries again: about 1.5 s in all.</summary>
+    private static readonly TimeSpan[] s_lockRetryDelays = [TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(800)];
+
+    private async Task<(int ExitCode, string Output, string Error)> RunOnceAsync(
+        string directory, IReadOnlyList<string> arguments, string? input, bool readOnly, IReadOnlyDictionary<string, string>? environment, CancellationToken cancellationToken)
+    {
         var process = await Task.Run(() => Start(directory, arguments, input is not null, readOnly, environment), CancellationToken.None).ConfigureAwait(false);
         using (process)
         {
@@ -71,7 +105,7 @@ public sealed partial class GitService : IDisposable
             {
                 try
                 {
-                    process.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(process);
                 }
                 catch (InvalidOperationException)
                 {
@@ -86,10 +120,65 @@ public sealed partial class GitService : IDisposable
                 Log?.Invoke(this, $"> git {string.Join(' ', arguments)}" + (result.ExitCode == 0 ? string.Empty : $"\n{result.Item3.TrimEnd()}"));
             }
 
-            if (check && result.ExitCode != 0)
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Runs git with bytes in and out (a file's content, a patch), in the repository: no text decoding, so a byte
+    /// order mark, line endings and any encoding pass unchanged (#86).
+    /// </summary>
+    private async Task<(int ExitCode, byte[] Output, string Error)> RunBytesAsync(IReadOnlyList<string> arguments, byte[]? input, bool readOnly, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var result = await RunBytesOnceAsync(arguments, input, readOnly, cancellationToken).ConfigureAwait(false);
+            if (readOnly || attempt >= s_lockRetryDelays.Length || !IsLockBusy(result.ExitCode, result.Error))
             {
-                var message = (result.Item3.Trim().Length > 0 ? result.Item3 : result.Item2).Trim();
-                throw new GitException(message.Length > 0 ? message : $"git {(arguments.Count > 0 ? arguments[0] : string.Empty)} failed (exit code {result.ExitCode.ToString(CultureInfo.InvariantCulture)}).", result.ExitCode);
+                return result;
+            }
+
+            await Task.Delay(s_lockRetryDelays[attempt], cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<(int ExitCode, byte[] Output, string Error)> RunBytesOnceAsync(IReadOnlyList<string> arguments, byte[]? input, bool readOnly, CancellationToken cancellationToken)
+    {
+        var root = Root ?? throw new InvalidOperationException("No git repository is open.");
+        var process = await Task.Run(() => Start(root, arguments, input is not null, readOnly, null), CancellationToken.None).ConfigureAwait(false);
+        using (process)
+        {
+            var output = new MemoryStream();
+            var copy = process.StandardOutput.BaseStream.CopyToAsync(output, cancellationToken);
+            var error = process.StandardError.ReadToEndAsync(cancellationToken);
+            if (input is not null)
+            {
+                await process.StandardInput.BaseStream.WriteAsync(input, cancellationToken).ConfigureAwait(false);
+                process.StandardInput.Close();
+            }
+
+            try
+            {
+                await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    ProcessTree.Kill(process);
+                }
+                catch (InvalidOperationException)
+                {
+                }
+
+                throw;
+            }
+
+            await copy.ConfigureAwait(false);
+            var result = (process.ExitCode, output.ToArray(), await error.ConfigureAwait(false));
+            if (!readOnly)
+            {
+                Log?.Invoke(this, $"> git {string.Join(' ', arguments)}" + (result.ExitCode == 0 ? string.Empty : $"\n{result.Item3.TrimEnd()}"));
             }
 
             return result;
@@ -289,6 +378,9 @@ public sealed partial class GitService : IDisposable
 
     private string Relative(string path) => Path.GetRelativePath(Root!, Real(path)).Replace('\\', '/');
 
+    /// <summary>A file's path relative to the repository, with <c>/</c>, as patches and git's specs name it.</summary>
+    public string RelativePath(string path) => Relative(path);
+
     /// <summary>Git reports real paths (symbolic links resolved); callers may pass another spelling of the same file.</summary>
     private static string Real(string path) => Codalus.Platform.RealPath.Resolve(path);
 
@@ -360,6 +452,51 @@ public sealed partial class GitService : IDisposable
         var spec = revision == ":" ? ":" + Relative(path) : $"{revision}:{Relative(path)}";
         var (code, output, _) = await RunAsync(root, ["show", spec], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
         return code == 0 ? output : null;
+    }
+
+    /// <summary>A file's bytes at <paramref name="revision"/> (<c>:</c> = the index), unchanged; null when it isn't there.</summary>
+    public async Task<byte[]?> ShowBytesAsync(string path, string revision, CancellationToken cancellationToken = default)
+    {
+        if (Root is null)
+        {
+            return null;
+        }
+
+        var spec = revision == ":" ? ":" + Relative(path) : $"{revision}:{Relative(path)}";
+        var (code, output, _) = await RunBytesAsync(["show", spec], null, readOnly: true, cancellationToken).ConfigureAwait(false);
+        return code == 0 ? output : null;
+    }
+
+    /// <summary>
+    /// Applies a patch made of bytes (the diff document's rows, #86): to the index (<paramref name="cached"/>) or the
+    /// working tree, in reverse to take changes out. Throws git's message when it doesn't apply.
+    /// </summary>
+    public async Task ApplyPatchAsync(byte[] patch, bool cached, bool reverse, CancellationToken cancellationToken = default)
+    {
+        List<string> arguments = ["apply", "--whitespace=nowarn"];
+        if (cached)
+        {
+            arguments.Add("--cached");
+        }
+
+        if (reverse)
+        {
+            arguments.Add("-R");
+        }
+
+        arguments.Add("-");
+        try
+        {
+            var (code, _, error) = await RunBytesAsync(arguments, patch, readOnly: false, cancellationToken).ConfigureAwait(false);
+            if (code != 0)
+            {
+                throw new GitException(error.Trim().Length > 0 ? error.Trim() : $"git apply failed (exit code {code.ToString(CultureInfo.InvariantCulture)}).", code);
+            }
+        }
+        finally
+        {
+            await RefreshAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     // ------------------------------------------------------------------ commits
@@ -447,9 +584,11 @@ public sealed partial class GitService : IDisposable
 
     // ------------------------------------------------------------------ remotes
 
-    public Task FetchAsync(CancellationToken cancellationToken = default) => MutateAsync(["fetch", "--prune"], cancellationToken);
+    public Task FetchAsync(CancellationToken cancellationToken = default) =>
+        WithFetchGateAsync(() => MutateAsync(["fetch", "--prune"], cancellationToken), cancellationToken);
 
-    public Task PullAsync(CancellationToken cancellationToken = default) => MutateAsync(["pull"], cancellationToken);
+    public Task PullAsync(CancellationToken cancellationToken = default) =>
+        WithFetchGateAsync(() => MutateAsync(["pull"], cancellationToken), cancellationToken);
 
     /// <summary>Pushes the current branch; the first push sets the upstream on the first remote (usually origin).</summary>
     public async Task PushAsync(CancellationToken cancellationToken = default)
@@ -484,5 +623,6 @@ public sealed partial class GitService : IDisposable
         Close();
         _lifetime.Dispose();
         _refreshGate.Dispose();
+        FetchGate.Dispose();
     }
 }

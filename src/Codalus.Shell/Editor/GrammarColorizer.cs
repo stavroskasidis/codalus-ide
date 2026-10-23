@@ -26,6 +26,7 @@ public sealed class GrammarColorizer : DocumentColorizingTransformer
         ("meta.preprocessor", "preprocessor"),
         ("keyword.preprocessor", "preprocessor"),
         ("keyword.control", "controlKeyword"),
+        ("keyword.operator.expression", "keyword"), // new, typeof, nameof, is, as… (D45)
         ("keyword.operator", "operator"),
         ("keyword", "keyword"),
         ("storage.modifier", "modifier"),

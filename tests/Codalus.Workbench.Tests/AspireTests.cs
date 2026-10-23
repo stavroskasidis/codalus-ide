@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Codalus.Platform;
 using Codalus.Workbench.Aspire;
 
 namespace Codalus.Workbench.Tests;
@@ -28,7 +29,7 @@ public sealed class AspireTests : IAsyncLifetime
         {
             try
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
                 await process.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or TimeoutException)
@@ -57,7 +58,7 @@ public sealed class AspireTests : IAsyncLifetime
 
         public void OnExit() => _exited.TrySetResult(process.ExitCode);
 
-        public void Terminate() => process.Kill(entireProcessTree: true);
+        public void Terminate() => ProcessTree.Kill(process);
     }
 
     private static Process StartProcess(string fileName, IEnumerable<string> arguments, string workingDirectory, IReadOnlyDictionary<string, string> environment, Action<string> onLine)
@@ -308,7 +309,7 @@ internal static class AspireRuntime
                 {
                     try
                     {
-                        process.Kill(entireProcessTree: true);
+                        ProcessTree.Kill(process);
                     }
                     catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
                     {

@@ -76,9 +76,11 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
         UseUserDotnet();
-        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.GitSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings()]);
+        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.GitSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings(), .. BuiltIns.TemplatesSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
+        Theme.Changed += (_, _) => UseFamilyDefaults();
+        UseFamilyDefaults();
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
         {
             var log = Workbench.Log.GetText();
@@ -184,11 +186,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterPackageCommands(this);
         BuiltIns.RegisterProjectManagementCommands(this);
         BuiltIns.RegisterProjectSystemCommands(this);
+        BuiltIns.RegisterTemplatesCommands(this);
         BuiltIns.RegisterEditCommands(this);
         BuiltIns.RegisterMenuBar(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterEditorContextMenu(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterDocumentTabContextMenu(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
+        BuiltIns.RegisterGitChangesMenus(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
         BuiltIns.RegisterWebMenus(Workbench.Menus);
         BuiltIns.RegisterDataMenus(Workbench.Menus);
@@ -203,6 +207,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
         BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
         BuiltIns.RegisterProjectSystemMenus(Workbench.Menus);
+        BuiltIns.RegisterTemplatesMenus(Workbench.Menus);
         BuiltIns.RegisterTerminalMenus(Workbench.Menus);
         BuiltIns.RegisterInteractiveMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
@@ -222,6 +227,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         ApplyKeyboardScheme();
         Workbench.Settings.Changed += (_, e) => Ui.Post(() => OnSettingsChanged(e));
         Layout.ActiveDocumentChanged += (_, document) => Workbench.Context.Set("activeDocumentKind", document?.Kind);
+        Layout.ActiveDocumentChanged += (_, _) => UpdateDiffContext();
         Layout.ActiveDocumentChanged += (_, _) => OnSqlEditorActivated();
         Notifications.Changed += (_, _) => UpdateStatusItems();
         Theme.Changed += (_, _) => UpdateStatusItems();
@@ -473,7 +479,9 @@ public sealed partial class ShellHost : IAsyncDisposable
         var roots = Options.PluginDirs.Select(d => (d, false))
             .Append((Paths.PluginsDirectory, false))
             .Append((builtIn, true));
-        Plugins.AddPlugins(PluginDiscovery.Scan(roots, Workbench.Platform, Options.EnableProposedApi));
+        var retired = new List<(string Id, string Directory)>();
+        Plugins.AddPlugins(PluginDiscovery.Scan(roots, Workbench.Platform, Options.EnableProposedApi, retired));
+        Plugins.ReportRetired(retired);
 
         // Plugins' file icon themes (API 1.0): the setting, applied.
         RegisterIconThemes();
@@ -601,11 +609,14 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public void Run(string commandId) => _ = RunAsync(commandId, []);
 
-    public async Task RunAsync(string commandId, IReadOnlyList<JsonElement> args)
+    public Task RunAsync(string commandId, IReadOnlyList<JsonElement> args) => RunAsync(commandId, args, Workbench.Context);
+
+    /// <summary>Runs a command whose enablement is read in <paramref name="scope"/> (a menu with keys of its own, D38).</summary>
+    public async Task RunAsync(string commandId, IReadOnlyList<JsonElement> args, Workbench.Context.IContextKeyReader scope)
     {
         try
         {
-            await Workbench.Commands.ExecuteAsync(commandId, args, CancellationToken.None).ConfigureAwait(false);
+            await Workbench.Commands.ExecuteAsync(commandId, args, scope, CancellationToken.None).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -987,6 +998,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Infrastructure.SafeClipboard.Busy -= OnClipboardBusy;
+        var designers = StopWinFormsDesignersAsync();
         var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
         await FlushSolutionStateAsync().ConfigureAwait(false);
@@ -1023,6 +1035,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         await Plugins.DisposeAsync().ConfigureAwait(false);
         Tests.Dispose(); // after the test plugin: its last results can't schedule a notification any more
+        await designers.ConfigureAwait(false);
         Workbench.Dispose();
         RestartIfRequested(openSolution);
     }

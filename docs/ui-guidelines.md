@@ -14,6 +14,8 @@ Review a surface against each line, in Classic and every theme family (Harbor, G
   - Code shown outside an editor (a template's preview, a definition) is a `CodeViewer`, in the editor's colors, never plain text in a text box.
 - **Toolbars**
   - A tool window's toolbar is one `controls:ToolbarPanel`: one row, 24 px buttons (`Button.toolbar`, `Shell.Size.ToolbarButton`), 16 px icons, inputs of `Shell.Size.Input`. It never wraps: what doesn't fit goes into its overflow menu (»), buttons by their `AutomationProperties.Name`, toggle buttons as checkable entries, combo boxes as submenus of their choices.
+  - The standard toolbar (under the title row) is one `controls:ToolbarGroupsPanel`: one row that never wraps; in a narrow window items fold from the right, group by group, and each group with folded items ends in a "…" drop-down listing them (0.6.0).
+  - The title row is a `controls:TitleBarPanel`: the caption buttons' room (138 px on Windows, none elsewhere) and 40 px of drag area always stay clear at the first row's right end. As the window narrows the solution's name trims, the search box shrinks to its icon, then the menu (`controls:TitleMenuPanel`) wraps onto a second row with the search box at its end, as in the classic IDE (0.6.0).
   - A search or filter box takes the rest of the row, or a row of its own under the toolbar when the toolbar is long (the Solution Explorer, the Test Explorer).
   - A `Border.toolbarSpacer` takes what is left of the row instead, down to nothing, so the items after it sit at the right end (AI Chat's Agent switch, Request Log and Configure, M34h).
   - Every icon-only button has a tooltip with its name and, when it has one, its shortcut (the menus' format: `Run All Tests (Ctrl+R, A)`), and an `AutomationProperties.Name`.
@@ -24,7 +26,7 @@ Review a surface against each line, in Classic and every theme family (Harbor, G
     tree purple, Git's commands the Git family's orange, as in the menus. Where an icon's kind would give the wrong family in
     a toolbar, its `Icon` takes an `accent-*` class.
 - **Typography**
-  - UI text is 9 pt: `Shell.FontSize.Body` (12 px), the window's default; don't set it again.
+  - UI text is 9 pt: `Shell.FontSize.Body` (12 px), the window's default and every popup's (menus, flyouts, IntelliSense, data tips: the `PopupRoot, OverlayPopupHost` style, since a popup's content inherits from its own root, not the window); don't set it again.
   - Secondary text (details, counts, dates) is `Shell.FontSize.Small` (11 px), usually with `TextBlock.muted`.
   - Two heading sizes: `TextBlock.heading` (`Shell.FontSize.Title`, 18 px, page titles) and `TextBlock.subheading` (`Shell.FontSize.Heading`, 14 px, sections, detail panes and the in-window dialog's title, M34h).
   - Titles are sentence case except command and window names, which are title case as in the menus. Use the product's terms: solution, project, tool window, document.
@@ -81,6 +83,7 @@ All tokens are in `src/Codalus.Shell/Theming/Tokens.axaml`. Colors and the famil
 | `Shell.Error.Foreground`, `Shell.Warning.Foreground` | Error and warning text (4.5:1 on every surface, 7:1 in the families' High contrast; M34g), through `TextBlock.error` and `.warning` |
 | `Shell.Diff.Added`, `Shell.Diff.Removed` | Diffs, and passed tests (graphics: gutters, icons) |
 | `Shell.Merge.Conflict`, `.Conflict.Border`, `.Resolved.Border` | The merge editor's conflict blocks: an unresolved block's muted red fill (opaque, under the code; none in High Contrast) and dashed outline, and a resolved block's solid outline |
+| `Shell.Diff.Added.Line`, `.Removed.Line`, `.Added.Word`, `.Removed.Word`, `.Added.WordBorder`, `.Removed.WordBorder`, `Shell.Diff.Filler` | The diff document (#86, D45): removed and added lines' fills and their changed words' deeper fills with a 1 px border, all opaque under the code (`Shell.Editor.Foreground` at 4.5:1, the syntax colors at 3:1; High Contrast's fills are the background, so only the borders show), and the hatching of filler lines |
 | `Shell.Diff.Added.Foreground`, `Shell.Diff.Removed.Foreground` | Added and removed lines as text (a preview of changes; 4.5:1 on every surface, 7:1 in the families' High contrast; M34g) |
 | `Shell.Toolbar`, `Shell.Toolbar.Border`, `Shell.TitleBar*`, `Shell.Search*` | The title row and the standard toolbar: `Shell.TitleBar.Hover` for the menu bar's items, `.Chip` behind the solution's name, `Shell.Search.Foreground` for the search box's text |
 | `Shell.Toolbar.Start`, `.Foreground`, `.Icon` | The Start button (filled with the accent in Daylight) |
@@ -88,7 +91,7 @@ All tokens are in `src/Codalus.Shell/Theming/Tokens.axaml`. Colors and the famil
 | `Shell.Tab.Active`, `.Selected`, `.Inactive`, `.Hover`, `.Preview` (each with `.Foreground`) | Document tabs: the active tab, the selected tab of a pane without the focus, other tabs, pointer over, the preview tab |
 | `Shell.TabColor.1`–`8` | Tabs colored by project (`workbench.editor.colorTabsByProject`) |
 | `Shell.Caption.Active`, `Shell.Caption.Inactive` (with `.Foreground`) | Tool window captions with and without the focus |
-| `Shell.Editor.*` | The editor: text, line numbers, inlay hints, guides, brackets, folding; the current line, the breakpoint glyph and line, and the current statement's line (`.CurrentLine`, `.Breakpoint`, `.Breakpoint.Line`, `.CurrentStatement`) |
+| `Shell.Editor.*` | The editor: text, line numbers and the caret line's number (`.LineNumbers`, `.LineNumbers.Current`), inlay hints, CodeLens (`.CodeLens.Foreground`), guides, brackets, folding; the current line, the breakpoint glyph and line, and the current statement's line (`.CurrentLine`, `.Breakpoint`, `.Breakpoint.Line`, `.CurrentStatement`) |
 | `Shell.Icon.Run`, `.Stop`, `.Save`, `.Open`, `.Build`, `.Git`, `.Test`, `.Navigate` | Command icon families (white in High Contrast) |
 | `Shell.Icon.Outline` | The gray of the classic file icons' pages and outlines |
 
@@ -98,11 +101,21 @@ The design's layout differences between the families, as values each theme sets 
 
 | Token | Harbor | Graphite | Daylight | Ember | Classic |
 |---|---|---|---|---|---|
-| `Shell.Gutter`, `Shell.Gutter.Background` (between docked windows) | 6, window | 1, border | 1, border | 8, window | 4, none |
-| `Shell.Panel.CornerRadius.Top`, `.Bottom` (tool windows, the document well) | 0 | 0 | 0 | 10 | 0 |
-| `DockDocumentTabItemCornerRadius` (Dock's, document tabs) | 0 | 0 | 6 | 7 | 0 |
-| `Shell.Tab.Active.Indicator`, `.IndicatorBrush` (the active tab's border) | 3 on top, accent | 2 below, accent | none | 1 around, accent | none |
-| `Shell.Caption.Active.FontWeight`, `.Marker` (the focused tool window's title) | normal (an accent caption) | bold, an accent dot | bold | bold | normal |
+| `Shell.Gutter`, `Shell.Gutter.Background` (between docked windows) | 6, window | 1, border | 1, border | 8, window | 6, window (D46; was 4, none) |
+| `Shell.Panel.CornerRadius.Top`, `.Bottom` (tool windows, the document well's content) | 0 | 0 | 0 | 10 | 4 |
+| `Shell.Card.CornerRadius`, `.BorderThickness`, `.Background` (the document well as one card holding its tabs, D46) | none | none | none | none | 4, 1 px `Shell.Border`, the strip's fill |
+| `Shell.Card.Content.BorderThickness`, `Shell.ToolControl.BorderThickness` (a tool window outlined all round) | Dock's | Dock's | Dock's | Dock's | 1,0,1,1 on the content, none on Dock's `ToolControl` |
+| `Shell.Card.Focus.BorderBrush` (the focused tool window's frame) | the border | the border | the border | the border | the accent (Light, Dark) |
+| `DockDocumentTabItemCornerRadius` (Dock's, document tabs) | 0 | 0 | 6 | 7 | 4,4,0,0 |
+| `Shell.Tab.Active.Indicator`, `.IndicatorBrush` (the active tab's border) | 3 on top, accent | 2 below, accent | none | 1 around, accent | 1,1,1,0, accent (Blue and High Contrast keep their filled tab) |
+| `Shell.Tab.Selected.IndicatorBrush`, `Shell.Tab.Selected.FontWeight` (the selected tab of a group without the focus) | none, normal | none, normal | none, normal | none, normal | 3:1 against the strip, semibold |
+| `Shell.TabStripEdge.Height`, `Shell.Well.Frame.Active`, `Shell.Well.Frame.Margin`, `DockDocumentTabStripSeparatorSize`, `DockDocumentContentBorderThickness` (the active document's frame and its edge beside the selected tab, `TabStripEdge`) | 0, Dock's 2 px separator and frame | the same | the same | the same | 1 px edge, the accent while active, no separator, the frame over the card's sides and bottom |
+| `Shell.Dock.Margin`, `Shell.Toolbar.Margin`, `.HorizontalAlignment`, `.BorderThickness`, `.CornerRadius` (the dock area and the toolbar) | 0, a full-width band | the same | the same | the same | 6 px of window, a card as wide as its buttons |
+| `Shell.ToolTab.CornerRadius` (the selected tool window tab) | 0 | 0 | 0 | 0 | 0,0,4,4 |
+| `Shell.Row.Margin`, `Shell.Row.CornerRadius`, `Shell.Selection.Indicator`, `.Inactive` (list and tree rows, Solution Explorer's pill) | full width, none | the same | the same | the same | inset 3 px, 4 px corners, the accent pill (muted without the focus) |
+| `Shell.AutoHide.BarThickness`, `Shell.AutoHide.Bar` (auto-hidden tool windows' tabs) | none | none | none | none | a 3 px bar |
+| `Shell.Control.CornerRadius.Compact` (the tab's pin, the navigation bar) | 2 | 2 | 2 | 2 | 4 |
+| `Shell.Caption.Active.FontWeight`, `.Marker` (the focused tool window's title) | normal (an accent caption) | bold, an accent dot | bold | bold | semibold on the card in Light and Dark (D46), normal on Blue's and High Contrast's captions |
 | `Shell.StatusBar.ShowDot` (a dot for the state) | no | no | no | yes | no |
 
 ### Spacing, sizes and type
@@ -122,7 +135,7 @@ The design's layout differences between the families, as values each theme sets 
 | `Shell.Size.Row` | 22 | List and tree rows |
 | `Shell.Size.ToolWindowMinWidth` | 280 | The narrowest a docked tool window is designed for |
 | `Shell.FontSize.Body`, `Small`, `Heading`, `Title` | 12, 11, 14, 18 | Text (see Typography) |
-| `Shell.CornerRadius`, `Shell.CornerRadius.Overlay` | 3, 6 | Toolbar chrome from before M34h; popups and dialogs (controls take `Shell.Control.CornerRadius`, below) |
+| `Shell.CornerRadius`, `Shell.CornerRadius.Overlay`, `Shell.CornerRadius.Dialog` | 3, 6, 8 | Toolbar chrome from before M34h; menus, drop-down lists, flyouts and toasts (Fluent's `OverlayCornerRadius` is set to it); in-window dialogs and Code Search (D46; controls take `Shell.Control.CornerRadius`, below) |
 
 ### Classes
 
@@ -130,13 +143,13 @@ The design's layout differences between the families, as values each theme sets 
 
 ## The control set
 
-One look for every button, field, choice, tab and row (M34h, D33): the design and its pictures are [`design/controls.md`](design/controls.md), approved on 2026-10-18. The shell's control themes (`Theming/Controls.axaml`: `Button`, `ToggleButton`, `DropDownButton`, `CheckBox`, `RadioButton`, `ToggleSwitch`, `SegmentedControl`) and `ShellStyles.axaml` (text and combo boxes, split buttons, tabs, rows, chips) draw the set, so a plain control has the look already: a view picks a kind with a class and never sets colors, heights or corners on a control itself. `ControlSetTests` checks the states, and the smoke test's gallery photographs the whole set in every theme (`controls-*`, `Infrastructure/ControlGallery.cs`).
+One look for every button, field, choice, tab and row (M34h, D33): the design and its pictures are [`design/controls.md`](design/controls.md), approved on 2026-10-18. The shell's control themes (`Theming/Controls.axaml`: `Button`, `ToggleButton`, `DropDownButton`, `CheckBox`, `RadioButton`, `ToggleSwitch`, `SegmentedControl`, `ComboBoxItem`, `TabControl`) and `ShellStyles.axaml` (text and combo boxes, split buttons, tabs, rows, chips) draw the set, so a plain control has the look already: a view picks a kind with a class and never sets colors, heights or corners on a control itself. `ControlSetTests` checks the states, and the smoke test's gallery photographs the whole set in every theme (`controls-*`, `Infrastructure/ControlGallery.cs`).
 
 ### Which button
 
 | Kind | When | How |
 |---|---|---|
-| Primary | The one main action of a dialog, page or form (OK, Invoke, Add Reference, Send); at most one in view. A destructive primary keeps the accent and names what it does (Remove, not OK). | `<Button Classes="accent" …/>` (the dialog's default button is drawn so on its own) |
+| Primary | The one main action of a dialog, page or form (OK, Invoke, Add Reference, Send); at most one in view. A destructive action (Discard, Delete, Drop Stash, Reset) is a plain button named for what it does (Delete, not OK), and Cancel is the default and the primary, so Enter never destroys (D38). | `<Button Classes="accent" …/>` (the dialog's default button is drawn so on its own) |
 | Default | Every other text button. | `<Button Content="{l:T …}"/>` |
 | Subtle | A secondary action in a crowded row (Reset beside Invoke): flat until hovered. | `Classes="subtle"` |
 | Icon only | A familiar command with a standard glyph (refresh, start, stop, delete, open, copy, move up and down, clear, filter, pin, collapse). A tooltip with its name and shortcut in the menus' format (`Refresh (F5)`) and an `AutomationProperties.Name`: a tooltip isn't a name. | `<Button Classes="icon" controls:ButtonIcon.Kind="refresh" ToolTip.Tip="{l:T …}" AutomationProperties.Name="{l:T …}"/>` |
@@ -164,8 +177,8 @@ Patterns the views use (M34h):
 
 - One height per context: **28 px** (`Shell.Size.Control`, the default) for buttons, text boxes and combo boxes in dialogs, documents and pages; **24 px** in tool windows, toolbars, form grids and dense rows (`Classes="compact"` on a button; inside a `controls:ToolbarPanel` buttons, text boxes and combo boxes are 24 px on their own).
 - Inside a button: 12 px on each side (`Shell.Padding.Button`), 10 before an icon, 6 between the icon and the text (`Shell.Space.ButtonIcon`); 8 at 24 px (`Shell.Padding.ButtonCompact`). Icons 16 px, chevrons 12 px.
-- Corners: `Shell.Control.CornerRadius` (Classic 2, Harbor and Graphite 3, Daylight and Ember 6); dialogs and popups `Shell.CornerRadius.Overlay`.
-- A dialog's buttons are right-aligned in its footer, the primary is the default (Enter) and Cancel answers Escape. **Windows and Linux** put the primary first (`OK` `Cancel`); **macOS** puts it last (`Cancel` `OK`). A request lists its buttons primary first; `DialogViewModel` reverses them on macOS (`PrimaryLast`).
+- Corners: `Shell.Control.CornerRadius` (Classic 4 since D46, was 2 under D33; Harbor and Graphite 3, Daylight and Ember 6); menus, drop-down lists and toasts `Shell.CornerRadius.Overlay` (6), dialogs and Code Search `Shell.CornerRadius.Dialog` (8), the editor's popups and tooltips the control radius.
+- A dialog's buttons are right-aligned in its footer, the default (Enter) is the primary and Cancel answers Escape. **Windows and Linux** show them as the request lists them, primary first (`OK` `Cancel`); **macOS** puts the default button last (`Cancel` `OK`). A request lists its buttons primary first; on macOS `DialogViewModel` moves the `DefaultButton` to the trailing edge (`PrimaryLast`, `DialogViewModel.Order`) rather than reversing the list, so a destructive request whose default is Cancel reads `Delete` `Cancel` on every OS and a habitual click on the trailing button never deletes (D38). `Dialogs.ConfirmAsync(danger: true)`'s callers still make the action the default; they follow in a TODO(issue).
 
 ### Focus
 
@@ -179,7 +192,7 @@ Patterns the views use (M34h):
 - Placeholders are `Shell.Input.Placeholder`, the muted text at full opacity; a placeholder names what goes in the box.
 - **A path on this computer** is typed or browsed for: `<controls:PathBox Text="{Binding Folder}" AutomationProperties.Name="{l:T …}"/>` is the text box with the Browse button beside it (the `folder-open` icon, "Browse…"), which opens the OS's folder picker (`Kind="File"` for a file, `Patterns="*.db;*.sqlite"` to filter) where the typed path is. `BaseFolder` reads a relative path from a folder and writes a choice inside it relative to it (a project's publish folder). The input dialog has the same button (`DialogRequest.Browse`, `BrowseFolder`), plugins' input boxes with `InputBoxOptions.Browse`, and settings with `SettingDescriptor.Browse`. `PathBoxTests` fails on a `TextBox` bound to a path-like name; a path in a container or on another machine stays a text box.
 - Search boxes: `<TextBox Classes="search" PlaceholderText="{l:T …}"/>` has its search icon, and a clear button once there is text; in a toolbar it takes the rest of the row. A match count goes in its `InnerRightContent`.
-- Combo boxes: the field with a 12 px chevron; focused from the keyboard or open, the focus edge.
+- Combo boxes: the field with a 12 px chevron; focused from the keyboard or open, the focus edge. The open list has 24 px rows with a 16 px check column, so every row's text starts at the same place, and the check beside the chosen row (`ComboBoxItem`'s control theme). Two kinds of list have no check column, on purpose: the editor's navigation bar (`ComboBox.navigationBar`) and a history (`<ComboBox Classes="history" IsEditable="True" …>`, an editable box whose list is what was typed before, as Find what's and Replace with's, where a check would only mark the entry that equals the typed text). An editable box that lists choices (Look in's scopes, File types' presets, Counters' processes) keeps the check: bind its `ItemsSource` before its `Text`, since it chooses the item that matches its text only when the text changes.
 - **Check box** in lists, forms and dialogs that commit with OK, and for Options' booleans: the title is the check box's own label, once. **Radio buttons** for one of a few choices that need descriptions. **Switch** (`ToggleSwitch`, its label as `Content`) only for an on/off that takes effect at once and has its own place: AI Chat's Agent mode.
 - **Chip toggles** for the parts that go with something, each on or off, in a wrapping row (AI Chat's context: Selection, Current file, Errors…): `<ToggleButton Classes="chip" controls:ButtonIcon.Kind="document-text" Content="{l:T …}"/>`, a 22 px pill with a 12 px icon, checked in the toolbar's checked tint with its accent edge (M34h).
 - **A composer** (`Border.composer`, M34h): one field that holds a multi-line text box and its own row of actions under the text (a hint, the primary Send), with the text box's border and its focus edge around both; the text box inside is bare.
@@ -193,7 +206,7 @@ Patterns the views use (M34h):
   ```
 
   It is a list underneath: Tab reaches the chosen segment, the arrow keys, Home and End move the choice, and there is always one. It can bind `ItemsSource` and `SelectedItem` too.
-- **Tabs** inside a view (`TabControl`, 28 px) switch between different content (Body, Headers, Request): muted until selected, the selected one bold with a 2 px accent underline; a count goes in a `Border.badge` in the header (`<StackPanel Orientation="Horizontal" Spacing="6"><TextBlock …/><Border Classes="badge"><TextBlock Text="{Binding Count}"/></Border></StackPanel>`), which takes the accent on the selected tab.
+- **Tabs** inside a view (`TabControl`, 28 px) switch between different content (Body, Headers, Request): muted until selected, the selected one bold with a 2 px accent underline; a count goes in a `Border.badge` in the header (`<StackPanel Orientation="Horizontal" Spacing="6"><TextBlock …/><Border Classes="badge"><TextBlock Text="{Binding Count}"/></Border></StackPanel>`), which takes the accent on the selected tab. A 1 px line in `Shell.ViewTabs.Rule` runs under the strip and the selected tab's underline covers it: a `TabControl` draws it on its own (on the content's side for `TabStripPlacement="Bottom"`, `"Left"` or `"Right"`, with the selected tab's underline there). A `TabStrip` used as tabs (pages bound to a list, or tabs that drive a view model's index) takes `<TabStrip Classes="viewTabs" …>` for the same tabs and line, with 6 px of padding at its ends, and no item styles of its own. When the strip shares its row with other tools (HTTP Response's body tools), the row draws the line instead, across the tools too: `<Border BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.ViewTabs.Rule}" Padding="6,0">` around the row, and `BorderThickness="0" Padding="0"` on the strip; the tabs still reach over the row's line.
 
 ### Menus
 
@@ -210,6 +223,7 @@ One look for every menu, context menu and drop-down's menu (the maintainer's 0.5
 - A find match in result text is `Shell.Match.Background` with bold `Shell.Match.Background.Foreground`, underlined on a selected row.
 - On a selected row, an icon under 3:1 takes the selection's text color (in practice the orange icons on Classic Blue's and Harbor Light's selections); in High Contrast every icon on a selection is black.
 - **Chips** say a state in a word (`200 OK`, `Fault s:Client`, `GET`): `<Border Classes="chip success"><TextBlock Text="200 OK"/></Border>` with `success`, `error`, `warning` or `info` (none: neutral; `square` for a method). **Badges** are counts: `<Border Classes="badge"><TextBlock Text="3"/></Border>`. Color never carries the meaning alone; High contrast outlines both.
+- **The property grid** (`Views/PropertyGridView`, the Properties window's and the collection editor's, #68, D41): rows of 22 px with `Shell.Grid.Rule` lines; a 16 px gutter in `Shell.Toolbar` down the left with the chevrons (chrome glyphs in the text color, never +/- boxes), headers on `Shell.Toolbar`, and 16 px more indent for each level of parts; names and values split at 45 % by a draggable line; a set value bold in the value cell, a read-only one muted; the arrow and the "…" only on the selected row, inside its value cell; a color's swatch before its text; one editor control per row (a text box only where the value is typed), and a drop-down's control built the first time one of its kind opens, in the overlay's chrome, at the body font size; a 76 px description pane under a 5 px splitter. While the grid scrolls, its rows end 6 px before its right edge, where the overlay thumb is.
 - Empty and error states: an icon, one sentence and the next step, centered: `<StackPanel Classes="emptyState"><controls:Icon Kind="…"/><TextBlock Text="{l:T …}"/><Button Classes="iconText" …/></StackPanel>`.
 
 ### Dialogs
@@ -218,8 +232,15 @@ The in-window dialog (`DialogView`, from `DialogViewModel.ShowAsync(new DialogRe
 
 - Header: a 28 px tile with the request's `Icon` in its color (a dangerous request gets the warning icon), the title at 14 px semibold, a muted line with its `Context` (the type and file it acts on), and a close button (Escape).
 - Body: `Shell.Padding.Dialog` (20 px at the sides). A checklist is a bordered list with a header row (Select all, `2 of 4`), rows of 30 px with each item's `Icon`, its label in the editor's font and its detail; Space checks the selected row, and a reorderable one has Move Up and Move Down as icon buttons beside it (Alt+Up, Alt+Down).
-- Footer: `Border.dialogFooter` (`Shell.Dialog.Footer`, a top separator, `Shell.Padding.DialogFooter`), a keyboard hint on the left (`Border.kbd` keys), the buttons on the right in the OS's order, the default one the only primary.
+- Footer: `Border.dialogFooter` (`Shell.Dialog.Footer`, a top separator, `Shell.Padding.DialogFooter`), a keyboard hint on the left (`Border.kbd` keys), the buttons on the right in the OS's order, the default one the only primary (Cancel for Discard and Delete, which are plain buttons named for the action).
+- A single choice (Delete's "Also delete origin/x on the server") is one check box with its note and its list under it (`DialogRequest.Option`), never the checklist with Select all and `0 of 1`.
 - Width 520 px (`Shell.Size.Dialog.Width`), growing with its content up to 720 (`Shell.Size.Dialog.MaxWidth`; 960 with notes), narrower only in a smaller window. A preview of changes takes three quarters of the window instead (`DialogView.PreviewSize`: at least 640 × 400 where there is room, at most the window less 16 px on each side), its changes on the editor's background filling what the header, message and footer leave, each added or removed line marked in the diff's color at its left edge. The window behind is dimmed by `Shell.Dialog.Scrim`.
+
+**Wizards** (New Project, 0.6.0, [ADR 0082](adr/0082-new-project-wizard.md); the setup window, M46) are windows of their own, owned by the main window and not modal (`Show(owner)`, never `ShowDialog`): the in-window dialog draws only in the main window, so a wizard asks every question on its own pages (trust, installing what it needs) and closes before the main window opens or changes anything.
+
+- Back, then Next (Create or Done on the last page) on the right of `Border.dialogFooter` on every OS, the forward one the only primary; Cancel joins them while the last step runs, with its progress on the left. Alt+Left and Alt+Right move between the pages, Enter goes forward, Escape closes. On macOS ⌥← and ⌥→ move by word in a text box, so a wizard with text boxes leaves them to the focused one and moves between its pages with ⌘[ and ⌘] (New Project).
+- Each page reserves the access keys of its buttons and labels; options whose labels come from elsewhere (a template's) keep their own letter where it's free and lose it otherwise, and the IDE's options take the first free letter of their label (`AccessKeyAllocator`). A label is a `Label` with `Target`, so its key focuses its field (a `PathBox` passes the focus to its text box).
+- Each page focuses its first field when it opens (a name with its text selected), and Tab follows the reading order.
 
 ### Tokens of the control set
 
@@ -237,6 +258,7 @@ Colors (every theme; the values are in [`design/controls.md`](design/controls.md
 | `Shell.Selection.Inactive`, `.Foreground` | A list's selection without the focus |
 | `Shell.Row.Hover` (and `Shell.Row.Hover.Outline`, High contrast's) | A row under the pointer |
 | `Shell.Grid.Header`, `Shell.Grid.Rule` | Column headers; row separators |
+| `Shell.ViewTabs.Rule` | The line under a tab strip inside a view (decorative, no contrast pair) |
 | `Shell.Match.Background`, `.Foreground` | A find match in result text |
 | `Shell.Badge`, `.Foreground` | Count badges, neutral chips |
 | `Shell.Status.Success`, `.Error`, `.Warning`, `.Info` (each with `.Foreground`) | Chips |
@@ -251,7 +273,7 @@ Sizes and shapes:
 | `Shell.Size.Button.MinWidth` | 80 | A button row's text buttons (`Button.dialog`) |
 | `Shell.Padding.Button`, `Shell.Padding.ButtonCompact` | 12,0; 8,0 | Inside a button at 28 and 24 px |
 | `Shell.Space.ButtonIcon` | 6 | Between a button's icon and its text |
-| `Shell.Control.CornerRadius` | Classic 2, Harbor 3, Graphite 3, Daylight 6, Ember 6 | Buttons, fields, segments (per family; `Shell.Check.CornerRadius` for check boxes) |
+| `Shell.Control.CornerRadius` | Classic 4 (D46), Harbor 3, Graphite 3, Daylight 6, Ember 6 | Buttons, fields, segments, tooltips and the editor's popups (per family; `Shell.Check.CornerRadius` for check boxes: Classic 3; Fluent's `ControlCornerRadius` matches in Classic) |
 | `Shell.Focus.Thickness`, `Shell.Focus.Offset` (`Shell.Focus.Margin`, `.CornerRadius`) | 2, 1 (−3) | The focus ring |
 | `Shell.Padding.Dialog`, `Shell.Padding.DialogFooter` | 20,16; 20,12 | A dialog's header and body; its footer |
 | `Shell.Size.Dialog.Width`, `Shell.Size.Dialog.MaxWidth` | 520, 720 | The in-window dialog |
@@ -287,4 +309,4 @@ color, and High Contrast draws every icon in the foreground.
 
 ## The gallery
 
-`eng/smoke-test.sh` runs the real app through the smoke test, whose `shell.galleryEmpty` and `shell.gallery` steps photograph every registered tool window, the main documents (Options, Keyboard Shortcuts, Project Properties, NuGet, Configuration Manager, Add New Item, the Template Manager, Check Environment), the in-window dialog's forms (a preview of changes, a checklist, a name with an error) and the window's chrome, empty, with data and in an error state, in seven themes: Classic's Blue, Light, Dark and High Contrast and Harbor's Light, Dark and High contrast (M34h; Harbor is the family new installs start with, [ADR 0077](adr/0077-theme-families.md)). `CODALUS_GALLERY_THEMES=all` adds the other families' nine variants. Since M34g they also photograph Code Search's floating window (empty, nothing found, Feature Search, results with the preview), the WCF Test Client (empty, a missing address, a WSDL file's form), the first-run setup's four steps, Options' color theme cards and the Service References document's WCF page; `wcf.testClient` adds the test client with a response and a fault, and on Windows `winforms.designer` adds the Windows Forms designer, the Toolbox and the Properties window, and `wpf.preview` the WPF preview; `netfx.projects` adds Solution Explorer with a project that can't build, Convert to SDK-Style's preview and the Error List's reason, and on Windows the Call Stack and Modules of a desktop-CLR session. The pictures, `{surface}-{state}-{theme}.png` by the theme's id (`nuget-data-harbor.dark.png`), and an index (`index.md`, a column per theme by its name) are in `gallery/` next to the report (`artifacts/smoke-test/gallery` by default; CI uploads them with the smoke test's artifact). AI Chat is photographed with the `ai.chat` step's conversation (a question, and an agent's turn with a step) with AI on, docked and at its design's size in a window of its own (`aichat-design-data-*`, M34h). Review a milestone's surfaces there against the checklist; the maintainer approves the gallery at M34's checkpoints (D25).
+`eng/smoke-test.sh` runs the real app through the smoke test, whose `shell.galleryEmpty` and `shell.gallery` steps photograph every registered tool window, the main documents (Options, Keyboard Shortcuts, Project Properties, NuGet, Configuration Manager, Add New Item, the Template Manager, Check Environment), the in-window dialog's forms (a preview of changes, a checklist, a name with an error) and the window's chrome, empty, with data and in an error state, in seven themes: Classic's Blue, Light, Dark and High Contrast and Harbor's Light, Dark and High contrast (M34h; Harbor is the family new installs start with, [ADR 0077](adr/0077-theme-families.md)). `CODALUS_GALLERY_THEMES=all` adds the other families' nine variants. Since M34g they also photograph Code Search's floating window (empty, nothing found, Feature Search, results with the preview), the WCF Test Client (empty, a missing address, a WSDL file's form), the first-run setup's four steps, Options' color theme cards and the Service References document's WCF page; since 0.6.0 New Project's pages (`newproject-*`: the templates, no match, a template pack to install, a reserved name, Blazor's options, and Configure's Solution choice with a solution open); `wcf.testClient` adds the test client with a response and a fault, and on Windows `winforms.designer` adds the Windows Forms designer, the Toolbox and the Properties window (with data, and in its `editors` state with Font expanded into its parts, #68), and `wpf.preview` the WPF preview; `netfx.projects` adds Solution Explorer with a project that can't build, Convert to SDK-Style's preview and the Error List's reason, and on Windows the Call Stack and Modules of a desktop-CLR session. The pictures, `{surface}-{state}-{theme}.png` by the theme's id (`nuget-data-harbor.dark.png`), and an index (`index.md`, a column per theme by its name) are in `gallery/` next to the report (`artifacts/smoke-test/gallery` by default; CI uploads them with the smoke test's artifact). AI Chat is photographed with the `ai.chat` step's conversation (a question, and an agent's turn with a step) with AI on, docked and at its design's size in a window of its own (`aichat-design-data-*`, M34h). Review a milestone's surfaces there against the checklist; the maintainer approves the gallery at M34's checkpoints (D25).

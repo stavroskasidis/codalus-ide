@@ -39,6 +39,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 - Built-in features register through the same registries as plugins (`BuiltIns*.cs`).
 - Git, docker/podman, `dotnet ef`, netcoredbg and similar are the user's CLIs, one process per operation, parsing machine-readable output.
 - Never run managed code in a forked child (the terminal uses `openpty` + `posix_spawn`, not `forkpty`).
+- End a process tree with `ProcessTree.Kill` (`Codalus.Platform`), never `Process.Kill(entireProcessTree: true)`: on macOS .NET's walk reads every process's task information and blocks for minutes while ReportCrash holds a crashed one (`ProcessTreeTests` checks `src/`).
 - `AiService` is the only code that may send workspace content to a model. AI is off by default. The one exception is external agents over ACP (ADR 0079): they call their own provider, so they're off by default, configured in user settings only (`ai.agents`), run only in trusted workspaces, are labeled in AI Chat, and everything the IDE gives them passes the same checks (exclusions, redaction, the preview, approvals).
 - Secrets go only to the OS credential store through `SecretStorage`.
 - The plugin API is a public contract (ADR 0003, 0058): `PublicAPI.txt` is checked by `PublicApiTests`; deprecate with `[Obsolete(DiagnosticId = "CODALUS0001")]`, never remove in a minor version; note changes in `docs/plugins.md`.

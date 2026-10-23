@@ -53,7 +53,7 @@ public sealed class WinFormsDesignerLanguageTests(WinFormsLanguageFixture winFor
         Assert.Contains("System.Drawing", model.Imports);
         Assert.Equal("WinFormsApp.Controls.CounterControl", model.Components.Single(c => c.Name == "counterControl").Type);
 
-        // #76: read with every type of the restored project.
+        // #76: read with every type of the restored project, so the designer doesn't read it again when the C# service loads.
         Assert.False(result.IsPartial);
 
         // The compiler says which members are an enum's: DockStyle.Fill is, Color.SteelBlue and SystemColors.GrayText aren't.
@@ -72,6 +72,34 @@ public sealed class WinFormsDesignerLanguageTests(WinFormsLanguageFixture winFor
         var control = await winForms.Client.WinFormsReadAsync(Uri(winForms.File("WinFormsApp", "Controls", "CounterControl.cs")), Ct);
         Assert.Equal("System.Windows.Forms.UserControl", control!.Model!.BaseType);
         Assert.False(control.IsPartial);
+    }
+
+    /// <summary>
+    /// #76: a read is partial only when the compiler couldn't bind a type of the file. Through the restored project's
+    /// compilation MainForm is complete; with a control the project doesn't have (a library's, not referenced yet) it's
+    /// partial, so the designer reads it again once the C# service has loaded the projects.
+    /// </summary>
+    [Fact]
+    public async Task A_read_is_partial_only_when_a_type_of_the_file_doesnt_bind()
+    {
+        var main = await winForms.Client.WinFormsReadAsync(Uri(Form("MainForm.cs")), Ct);
+        Assert.True(main is { IsDesignable: true, IsPartial: false, Problem: null }, $"MainForm: {main}");
+
+        var designer = Form("MainForm.Designer.cs");
+        await winForms.OpenAsync(designer);
+        try
+        {
+            await winForms.EditAsync(designer, "counterControl = new Controls.CounterControl();", "counterControl = new Contoso.Controls.FancyCounter();");
+            var unbound = await winForms.Client.WinFormsReadAsync(Uri(Form("MainForm.cs")), Ct);
+            Assert.True(unbound is { IsDesignable: true, IsPartial: true }, $"MainForm with an unknown control: {unbound}");
+            Assert.EndsWith("FancyCounter", unbound.Model!.Components.Single(c => c.Name == "counterControl").Type, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await winForms.Languages.CloseAsync(designer);
+        }
+
+        Assert.False((await winForms.Client.WinFormsReadAsync(Uri(Form("MainForm.cs")), Ct))!.IsPartial);
     }
 
     [Fact]
@@ -152,6 +180,7 @@ public sealed class WinFormsDesignerLanguageTests(WinFormsLanguageFixture winFor
         Assert.Equal("mainMenuStrip", inventory.TrayOrder[0]);
         Assert.Equal("inventoryErrorProvider", inventory.TrayOrder[^1]);
         Assert.Equal("System.Windows.Forms.BindingSource", inventory.Model!.Components.Single(c => c.Name == "itemBindingSource").Type);
+        Assert.False(inventory.IsPartial); // #76: a menu strip, a binding source, an error provider, all bound
 
         // A rename of a localized component: the designer file, every culture's .resx, and the handler's file untouched.
         var renamed = await winForms.Client.WinFormsEditAsync(new WinFormsEditParams(new TextDocumentIdentifier(Uri(Form("AboutForm.Designer.cs"))),

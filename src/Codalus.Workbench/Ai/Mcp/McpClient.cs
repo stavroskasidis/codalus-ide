@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Ai.Mcp;
 
@@ -354,7 +355,7 @@ public sealed class McpClient : IAsyncDisposable
         {
             try
             {
-                _process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(_process);
             }
             catch (InvalidOperationException)
             {

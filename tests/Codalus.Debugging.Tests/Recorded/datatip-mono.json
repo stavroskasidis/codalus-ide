@@ -1,0 +1,1033 @@
+{
+  "runtime": "mono",
+  "source": "Written from the reference source's field layout (List, Dictionary, Queue and Stack in mscorlib, HashSet in System.Core) as the the Mono engine (MonoDebugSession, Mono's class libraries being the reference source's) lists members (sorted by ordinal name, elements [i]); not recorded: that engine doesn't run on this machine.",
+  "locals": [
+    {
+      "name": "forecasts",
+      "value": "{System.Collections.Generic.List<Debuggee.Forecast>}",
+      "type": "System.Collections.Generic.List<Debuggee.Forecast>",
+      "evaluateName": "forecasts",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Capacity",
+          "value": "4",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_items",
+          "value": "{Debuggee.Forecast[4]}",
+          "type": "Debuggee.Forecast[]",
+          "evaluateName": null,
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "{Debuggee.Forecast}",
+              "type": "Debuggee.Forecast",
+              "evaluateName": null,
+              "variablesReference": 1
+            },
+            {
+              "name": "[1]",
+              "value": "{Debuggee.Forecast}",
+              "type": "Debuggee.Forecast",
+              "evaluateName": null,
+              "variablesReference": 1
+            },
+            {
+              "name": "[2]",
+              "value": "{Debuggee.Forecast}",
+              "type": "Debuggee.Forecast",
+              "evaluateName": null,
+              "variablesReference": 1
+            },
+            {
+              "name": "[3]",
+              "value": "null",
+              "type": "Debuggee.Forecast",
+              "evaluateName": null,
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_size",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_syncRoot",
+          "value": "null",
+          "type": "object",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "properties",
+      "value": "{System.Collections.Generic.Dictionary<System.String, System.Object>}",
+      "type": "System.Collections.Generic.Dictionary<System.String, System.Object>",
+      "evaluateName": "properties",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Comparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer<string>}",
+          "type": "System.Collections.Generic.GenericEqualityComparer<string>",
+          "evaluateName": null,
+          "variablesReference": 1
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_syncRoot",
+          "value": "null",
+          "type": "object",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "buckets",
+          "value": "{int[7]}",
+          "type": "int[]",
+          "evaluateName": null,
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "3",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "1",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "4",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[4]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[5]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[6]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "comparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer<string>}",
+          "type": "System.Collections.Generic.GenericEqualityComparer<string>",
+          "evaluateName": null,
+          "variablesReference": 1
+        },
+        {
+          "name": "count",
+          "value": "4",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "entries",
+          "value": "{System.Collections.Generic.Dictionary<System.String, System.Object>.Entry[7]}",
+          "type": "System.Collections.Generic.Dictionary<System.String, System.Object>.Entry[]",
+          "evaluateName": null,
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "{System.Collections.Generic.Dictionary<System.String, System.Object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<System.String, System.Object>.Entry",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "1798518155",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\"server.Features\"",
+                  "type": "String",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "1",
+                  "type": "int",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[1]",
+              "value": "{System.Collections.Generic.Dictionary<System.String, System.Object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<System.String, System.Object>.Entry",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "-1",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[2]",
+              "value": "{System.Collections.Generic.Dictionary<System.String, System.Object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<System.String, System.Object>.Entry",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "1367684090",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\"application.Services\"",
+                  "type": "String",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "\"services\"",
+                  "type": "string",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[3]",
+              "value": "{System.Collections.Generic.Dictionary<System.String, System.Object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<System.String, System.Object>.Entry",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "802710105",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\"__MiddlewareDescriptions\"",
+                  "type": "String",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "{System.Collections.Generic.List<string>}",
+                  "type": "System.Collections.Generic.List<string>",
+                  "evaluateName": null,
+                  "variablesReference": 1
+                }
+              ]
+            },
+            {
+              "name": "[4]",
+              "value": "{System.Collections.Generic.Dictionary<System.String, System.Object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<System.String, System.Object>.Entry",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[5]",
+              "value": "{System.Collections.Generic.Dictionary<System.String, System.Object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<System.String, System.Object>.Entry",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[6]",
+              "value": "{System.Collections.Generic.Dictionary<System.String, System.Object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<System.String, System.Object>.Entry",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "freeCount",
+          "value": "1",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "freeList",
+          "value": "1",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "keys",
+          "value": "null",
+          "type": "object",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "values",
+          "value": "null",
+          "type": "object",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "version",
+          "value": "5",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "ids",
+      "value": "{System.Collections.Generic.HashSet<System.Int32>}",
+      "type": "System.Collections.Generic.HashSet<System.Int32>",
+      "evaluateName": "ids",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Comparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer<int>}",
+          "type": "System.Collections.Generic.GenericEqualityComparer<int>",
+          "evaluateName": null,
+          "variablesReference": 1
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "m_buckets",
+          "value": "{int[7]}",
+          "type": "int[]",
+          "evaluateName": null,
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "1",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[4]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[5]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[6]",
+              "value": "4",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "m_comparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer<int>}",
+          "type": "System.Collections.Generic.GenericEqualityComparer<int>",
+          "evaluateName": null,
+          "variablesReference": 1
+        },
+        {
+          "name": "m_count",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "m_freeList",
+          "value": "1",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "m_lastIndex",
+          "value": "4",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "m_siInfo",
+          "value": "null",
+          "type": "object",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "m_slots",
+          "value": "{System.Collections.Generic.HashSet<System.Int32>.Slot[7]}",
+          "type": "System.Collections.Generic.HashSet<System.Int32>.Slot[]",
+          "evaluateName": null,
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "{System.Collections.Generic.HashSet<System.Int32>.Slot}",
+              "type": "System.Collections.Generic.HashSet<System.Int32>.Slot",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "3",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "3",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[1]",
+              "value": "{System.Collections.Generic.HashSet<System.Int32>.Slot}",
+              "type": "System.Collections.Generic.HashSet<System.Int32>.Slot",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "-1",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[2]",
+              "value": "{System.Collections.Generic.HashSet<System.Int32>.Slot}",
+              "type": "System.Collections.Generic.HashSet<System.Int32>.Slot",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "8",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "8",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[3]",
+              "value": "{System.Collections.Generic.HashSet<System.Int32>.Slot}",
+              "type": "System.Collections.Generic.HashSet<System.Int32>.Slot",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "13",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "13",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[4]",
+              "value": "{System.Collections.Generic.HashSet<System.Int32>.Slot}",
+              "type": "System.Collections.Generic.HashSet<System.Int32>.Slot",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[5]",
+              "value": "{System.Collections.Generic.HashSet<System.Int32>.Slot}",
+              "type": "System.Collections.Generic.HashSet<System.Int32>.Slot",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[6]",
+              "value": "{System.Collections.Generic.HashSet<System.Int32>.Slot}",
+              "type": "System.Collections.Generic.HashSet<System.Int32>.Slot",
+              "evaluateName": null,
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "0",
+                  "type": "Int32",
+                  "evaluateName": null,
+                  "variablesReference": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "m_version",
+          "value": "5",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "queue",
+      "value": "{System.Collections.Generic.Queue<System.String>}",
+      "type": "System.Collections.Generic.Queue<System.String>",
+      "evaluateName": "queue",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_array",
+          "value": "{string[4]}",
+          "type": "string[]",
+          "evaluateName": null,
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "\"fifth\"",
+              "type": "String",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "null",
+              "type": "String",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "\"third\"",
+              "type": "String",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "\"fourth\"",
+              "type": "String",
+              "evaluateName": null,
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_head",
+          "value": "2",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_size",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_syncRoot",
+          "value": "null",
+          "type": "object",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_tail",
+          "value": "1",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "7",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "stack",
+      "value": "{System.Collections.Generic.Stack<System.Int32>}",
+      "type": "System.Collections.Generic.Stack<System.Int32>",
+      "evaluateName": "stack",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_array",
+          "value": "{int[4]}",
+          "type": "int[]",
+          "evaluateName": null,
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "1",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "2",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "3",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "0",
+              "type": "Int32",
+              "evaluateName": null,
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_size",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_syncRoot",
+          "value": "null",
+          "type": "object",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "3",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "squares",
+      "value": "{int[3]}",
+      "type": "int[]",
+      "evaluateName": "squares",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "[0]",
+          "value": "1",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "[1]",
+          "value": "4",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        },
+        {
+          "name": "[2]",
+          "value": "9",
+          "type": "Int32",
+          "evaluateName": null,
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "summary",
+      "value": "\"Balmy\"",
+      "type": "String",
+      "evaluateName": "summary",
+      "variablesReference": 0
+    }
+  ]
+}

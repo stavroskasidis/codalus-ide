@@ -64,7 +64,8 @@ public sealed class StartWindowViewModel : ObservableObject
         _shell = shell;
         _clock = clock ?? (() => DateTimeOffset.Now);
         shell.Recent.Changed += (_, _) => Ui.Post(Refresh);
-        CreateProjectCommand = Action("templates.newProject");
+        // The command, so its enablement applies; with fromStartWindow, Back on New Project's first page comes back here.
+        CreateProjectCommand = Action("templates.newProject", BuiltIns.FromStartWindowArgument());
         OpenSolutionCommand = Action("workbench.openSolution");
         OpenFolderCommand = Action("workbench.openFolder");
         CloneCommand = Action("git.clone");
@@ -159,10 +160,10 @@ public sealed class StartWindowViewModel : ObservableObject
         _shell.OpenRecentInNewWindow(row.Entry.Path);
     }
 
-    private RelayCommand Action(string command) => new(() =>
+    private RelayCommand Action(string command, params System.Text.Json.JsonElement[] args) => new(() =>
     {
         CloseRequested?.Invoke(this, EventArgs.Empty);
-        _shell.Run(command);
+        _shell.Run(command, args);
     });
 
     private static string GroupTitle(string group) => group switch

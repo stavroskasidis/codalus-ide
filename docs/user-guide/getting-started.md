@@ -90,7 +90,7 @@ The setup doesn't ask about AI: it stays off until you turn it on ([AI assistanc
   - Pin one with its pin button.
   - Right-click for Open in New Window, Copy Path and Remove from List (`Delete` removes the selected entry).
   - An entry whose files are gone offers to leave the list.
-- **Actions**: on the right, Create a new project, Open a project or solution, Open a folder, and Clone a repository.
+- **Actions**: on the right, Create a new project (New Project, [New projects and solutions](solutions.md#new-projects-and-solutions); Back on its first page returns here), Open a project or solution, Open a folder, and Clone a repository.
 - **Continue without code** (or `Esc`) opens the empty IDE.
 
 File → Start Window brings it back. Environment → On Startup (`workbench.startup`) can open an empty window or the last solution instead.

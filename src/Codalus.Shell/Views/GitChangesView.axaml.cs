@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Git;
@@ -37,7 +38,24 @@ public sealed partial class GitChangesView : UserControl, IPaneView
                     e.Handled = true;
                 }
             };
+
+            // The menu of a file, a folder or the repository node: gitChanges/context, built for the node (D38).
+            list.ContextRequested += (_, e) => OnContextRequested(list, e);
         }
+
+        DataContextChanged += (_, _) => AttachBranchPicker();
+        BranchPicker.CloseRequested += (_, _) =>
+        {
+            CloseBranchPicker();
+            BranchButton.Focus();
+        };
+        BranchPopup.Closed += (_, _) =>
+        {
+            if (Branches is { IsOpen: true } branches)
+            {
+                branches.IsOpen = false;
+            }
+        };
 
         // The Changes menu's view options say what they'd switch to.
         if (ViewOptionsButton.Flyout is MenuFlyout viewMenu)
@@ -244,7 +262,10 @@ public sealed partial class GitChangesView : UserControl, IPaneView
         return true;
     }
 
-    /// <summary>A row's button or context menu item: on a file (list or tree), or on a folder of the tree (all its files).</summary>
+    /// <summary>
+    /// A row's hover button (T1): Stage, Unstage or Discard, which run the menu's commands on the node, on the files the
+    /// window shows under it (question 2).
+    /// </summary>
     private void OnFileAction(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not GitChangesViewModel vm || sender is not Control { Tag: string action, DataContext: { } target })
@@ -252,28 +273,157 @@ public sealed partial class GitChangesView : UserControl, IPaneView
             return;
         }
 
-        var node = target as GitChangeNode;
-        if ((target as GitFileRow ?? node?.Row) is { } row)
+        var command = action switch
         {
-            _ = Report(action switch
-            {
-                "stage" => vm.StageAsync(row),
-                "unstage" => vm.UnstageAsync(row),
-                "discard" => vm.RunAsync("git.discard:" + row.Status.Path),
-                "open" => vm.OpenFileAsync(row),
-                _ => vm.OpenDiffAsync(row),
-            });
+            "stage" => "git.stage",
+            "unstage" => "git.unstage",
+            _ => "git.discard",
+        };
+        _ = Report(target switch
+        {
+            GitChangeNode node => vm.RunOnAsync(command, node),
+            GitFileRow row => vm.RunOnAsync(command, row),
+            _ => Task.CompletedTask,
+        });
+    }
+
+    /// <summary>The menu of the node under the pointer (or the selected one, from the keyboard), which becomes selected.</summary>
+    private void OnContextRequested(Control list, ContextRequestedEventArgs e)
+    {
+        if (DataContext is not GitChangesViewModel vm)
+        {
+            return;
         }
-        else if (node is not null)
+
+        var item = (e.Source as Avalonia.Visual)?.FindAncestorOfType<TreeViewItem>(includeSelf: true)?.DataContext
+            ?? (e.Source as Avalonia.Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext
+            ?? (list as TreeView)?.SelectedItem ?? (list as ListBox)?.SelectedItem;
+        var menu = item switch
         {
-            _ = Report(action switch
-            {
-                "stage" => vm.StageAsync(node),
-                "unstage" => vm.UnstageAsync(node),
-                _ => Task.CompletedTask,
-            });
+            GitChangeNode node => vm.MenuOf(node),
+            GitFileRow row => vm.MenuOf(row),
+            _ => null,
+        };
+        if (menu is null)
+        {
+            return;
+        }
+
+        switch (list)
+        {
+            case TreeView tree:
+                tree.SelectedItem = item;
+                break;
+            case ListBox box:
+                box.SelectedItem = item;
+                break;
+        }
+
+        e.Handled = true;
+
+        // From the keyboard (Shift+F10, the Menu key), under the selected row rather than where the pointer last was.
+        if (!e.TryGetPosition(list, out _)
+            && ((list as TreeView)?.TreeContainerFromItem(item!) ?? (list as ListBox)?.ContainerFromItem(item!)) is Control container)
+        {
+            menu.Placement = PlacementMode.BottomEdgeAlignedLeft;
+            menu.Open(container);
+            return;
+        }
+
+        menu.Open(list);
+    }
+
+    // ------------------------------------------------------------------ the branch drop-down (D38)
+
+    private GitBranchPickerViewModel? Branches => (DataContext as GitChangesViewModel)?.Branches;
+
+    private GitBranchPickerViewModel? _attached;
+
+    private void AttachBranchPicker()
+    {
+        if (_attached is not null)
+        {
+            _attached.Opened -= OnBranchPickerOpened;
+        }
+
+        _attached = Branches;
+        if (_attached is not null)
+        {
+            _attached.Opened += OnBranchPickerOpened;
         }
     }
+
+    private void OnBranchButton(object? sender, RoutedEventArgs e)
+    {
+        if (Branches is { } branches)
+        {
+            branches.IsOpen = !branches.IsOpen;
+        }
+    }
+
+    private void OnBranchPickerOpened(object? sender, bool open)
+    {
+        BranchPopup.IsOpen = open;
+        var top = TopLevel.GetTopLevel(this);
+        if (open)
+        {
+            BranchPicker.FocusSearch();
+            if (top is not null)
+            {
+                top.AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            }
+
+            if (top is WindowBase window)
+            {
+                window.Deactivated += OnWindowDeactivated;
+            }
+        }
+        else
+        {
+            top?.RemoveHandler(PointerPressedEvent, OnWindowPointerPressed);
+            if (top is WindowBase window)
+            {
+                window.Deactivated -= OnWindowDeactivated;
+            }
+        }
+    }
+
+    /// <summary>A press outside the drop-down and its button closes it (the menu over it is a popup of its own, B7).</summary>
+    private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (BranchPicker.IsMenuOpen)
+        {
+            return;
+        }
+
+        if (e.Source is Avalonia.Visual source
+            && (source.FindAncestorOfType<GitBranchPickerView>(includeSelf: true) is not null || source.FindAncestorOfType<Button>(includeSelf: true) == BranchButton))
+        {
+            return;
+        }
+
+        CloseBranchPicker();
+    }
+
+    private void OnWindowDeactivated(object? sender, EventArgs e)
+    {
+        // The branch's menu takes the focus on some OSes; the drop-down stays open under it (B7).
+        if (!BranchPicker.IsMenuOpen)
+        {
+            CloseBranchPicker();
+        }
+    }
+
+    private void CloseBranchPicker()
+    {
+        if (Branches is { IsOpen: true } branches)
+        {
+            branches.IsOpen = false;
+        }
+    }
+
+    /// <summary>The drop-down's content (tests and the smoke test).</summary>
+    internal GitBranchPickerView BranchPickerView => BranchPicker;
 
     private void OnSortColumn(object? sender, RoutedEventArgs e)
     {

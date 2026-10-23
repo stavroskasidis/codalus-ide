@@ -84,7 +84,7 @@ internal static partial class BuiltIns
         Show("git.pullRequests", "Pull Requests", PullRequestsViewModel.ToolWindowId);
         Add("git.createPullRequest", "Create Pull Request…", shell.CreatePullRequestAsync, "gitRepository && hostingRepository");
         Show("git.workItems", "Work Items", WorkItemsViewModel.ToolWindowId);
-        Add("git.publish", "Publish to a Git Host…", shell.PublishAsync, "solutionOpen");
+        Add("git.publish", "Publish to a Git Host…", shell.PublishAndReadRemotesAsync, "solutionOpen");
         Add("hosting.showChecks", "Show Checks", shell.ShowChecksAsync, "hostingRepository");
         Add("hosting.refresh", "Refresh Pull Requests and Checks", shell.RefreshHostingAsync, "gitRepository");
         Show("git.worktrees", "Worktrees", WorktreesViewModel.ToolWindowId, "gitRepository");

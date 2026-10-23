@@ -11,6 +11,7 @@ using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 using Codalus.Shell.Controls;
+using Codalus.Shell.Editor;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
@@ -225,6 +226,14 @@ public sealed class MergeEditorView : UserControl, IPaneView
     private readonly TextBlock _position;
     private readonly Button _accept;
     private readonly ComboBox _zoom;
+    private readonly SourceLineColorizer _currentColors;
+    private readonly SourceLineColorizer _incomingColors;
+    private readonly SourceLineColorizer _resultColors;
+    private SourceTokens? _currentTokens;
+    private SourceTokens? _incomingTokens;
+    private SourceTokens? _resultTokens;
+    private int _colorsVersion;
+    private Avalonia.Threading.DispatcherTimer? _resultColorsTimer;
     private bool _syncing;
 
     public MergeEditorView(MergeEditorViewModel viewModel, EditorFont font)
@@ -237,6 +246,13 @@ public sealed class MergeEditorView : UserControl, IPaneView
         _incoming.Document = new TextDocument(viewModel.IncomingText);
         _result = Editor(font, readOnly: false, viewModel.ResultTitle);
         _result.Document = viewModel.Result;
+        // Each pane in the editor's colors (#86): the versions' texts and the result's, tokenized by the file's grammar.
+        _currentColors = new SourceLineColorizer(line => (_currentTokens, line));
+        _incomingColors = new SourceLineColorizer(line => (_incomingTokens, line));
+        _resultColors = new SourceLineColorizer(line => (_resultTokens, line));
+        _current.TextArea.TextView.LineTransformers.Add(_currentColors);
+        _incoming.TextArea.TextView.LineTransformers.Add(_incomingColors);
+        _result.TextArea.TextView.LineTransformers.Add(_resultColors);
         _current.TextArea.TextView.BackgroundRenderers.Add(new ConflictBlockRenderer(viewModel, MergePane.Current));
         _incoming.TextArea.TextView.BackgroundRenderers.Add(new ConflictBlockRenderer(viewModel, MergePane.Incoming));
         _result.TextArea.TextView.BackgroundRenderers.Add(new ConflictBlockRenderer(viewModel, MergePane.Result));
@@ -362,7 +378,14 @@ public sealed class MergeEditorView : UserControl, IPaneView
         _viewModel.NavigateRequested += OnNavigateRequested;
         _font.PropertyChanged += OnFontChanged;
         ActualThemeVariantChanged += OnThemeChanged;
+        _result.Document.Changed += OnResultTextChanged;
+        if (_viewModel.Services is { } services)
+        {
+            services.Editor.ThemeChanged += OnEditorThemeChanged;
+        }
+
         Refresh();
+        _ = ColorAsync(all: true);
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -371,8 +394,78 @@ public sealed class MergeEditorView : UserControl, IPaneView
         _viewModel.NavigateRequested -= OnNavigateRequested;
         _font.PropertyChanged -= OnFontChanged;
         ActualThemeVariantChanged -= OnThemeChanged;
+        _result.Document.Changed -= OnResultTextChanged;
+        if (_viewModel.Services is { } services)
+        {
+            services.Editor.ThemeChanged -= OnEditorThemeChanged;
+        }
+
+        _resultColorsTimer?.Stop();
+        _colorsVersion++;
         base.OnDetachedFromVisualTree(e);
     }
+
+    /// <summary>The token type colored at a 1-based line and 0-based character of a pane, or -1 (tests).</summary>
+    internal int ColoredTypeAt(MergePane pane, int line, int character) => pane switch
+    {
+        MergePane.Current => _currentColors.TypeAt(line, character),
+        MergePane.Incoming => _incomingColors.TypeAt(line, character),
+        _ => _resultColors.TypeAt(line, character),
+    };
+
+    /// <summary>
+    /// Colors the panes off the UI thread: the two versions once, the result again after each pause in editing (its
+    /// lines keep their old colors meanwhile).
+    /// </summary>
+    private async Task ColorAsync(bool all)
+    {
+        if (_viewModel.Services is not { } services)
+        {
+            return;
+        }
+
+        var version = ++_colorsVersion;
+        var language = services.LanguageOf(_viewModel.Path);
+        var theme = services.Editor.Theme;
+        foreach (var colors in new[] { _currentColors, _incomingColors, _resultColors })
+        {
+            colors.Theme = theme;
+        }
+
+        if (all || _currentTokens is null)
+        {
+            var current = await services.Tokenizer.TokenizeAsync(_current.Text, language, theme.Id, CancellationToken.None).ConfigureAwait(true);
+            var incoming = await services.Tokenizer.TokenizeAsync(_incoming.Text, language, theme.Id, CancellationToken.None).ConfigureAwait(true);
+            (_currentTokens, _incomingTokens) = (current, incoming);
+        }
+
+        var result = _result.Text;
+        var resultTokens = await services.Tokenizer.TokenizeAsync(result, language, theme.Id, CancellationToken.None).ConfigureAwait(true);
+        if (version != _colorsVersion || result != _result.Text)
+        {
+            return; // edited meanwhile: the next pause colors it
+        }
+
+        _resultTokens = resultTokens;
+
+        foreach (var editor in (TextEditor[])[_current, _incoming, _result])
+        {
+            editor.TextArea.TextView.Redraw();
+        }
+    }
+
+    private void OnResultTextChanged(object? sender, EventArgs e)
+    {
+        _resultColorsTimer ??= new Avalonia.Threading.DispatcherTimer(TimeSpan.FromMilliseconds(300), Avalonia.Threading.DispatcherPriority.Background, (_, _) =>
+        {
+            _resultColorsTimer!.Stop();
+            _ = ColorAsync(all: false);
+        });
+        _resultColorsTimer.Stop();
+        _resultColorsTimer.Start();
+    }
+
+    private void OnEditorThemeChanged(object? sender, EventArgs e) => Ui.Post(() => _ = ColorAsync(all: true));
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {

@@ -17,25 +17,8 @@ namespace Codalus.LanguageServices.Host.WinForms;
 /// </summary>
 internal sealed partial class ResxText
 {
-    /// <summary>An empty resource file, as Visual Studio's designer starts a form's culture's.</summary>
-    public const string Empty = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <root>
-          <resheader name="resmimetype">
-            <value>text/microsoft-resx</value>
-          </resheader>
-          <resheader name="version">
-            <value>2.0</value>
-          </resheader>
-          <resheader name="reader">
-            <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-          </resheader>
-          <resheader name="writer">
-            <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-          </resheader>
-        </root>
-
-        """;
+    /// <summary>An empty resource file, as the classic IDE's designer starts a form's culture's (<see cref="DesignerResx.Empty"/>).</summary>
+    public const string Empty = DesignerResx.Empty;
 
     private static readonly string[] s_records = ["Name", "Type", "Parent", "ZOrder"];
 
@@ -229,6 +212,7 @@ internal sealed partial class ResxText
             if (existing is not null)
             {
                 Replace(existing.Start, existing.End, string.Empty);
+                RemoveUnusedAssembly(existing);
             }
 
             return;
@@ -250,6 +234,7 @@ internal sealed partial class ResxText
             }
 
             Replace(existing.Start, existing.End, AssemblyFor(resource) + Element(key, resource, metadata));
+            RemoveUnusedAssembly(existing);
             return;
         }
 
@@ -271,10 +256,45 @@ internal sealed partial class ResxText
     /// <summary>Removes every key about <paramref name="component"/> (its properties, records and metadata).</summary>
     public void RemoveComponent(string component)
     {
-        foreach (var entry in Entries().Where(e => e.Element is "data" or "metadata" && ComponentOf(e.Name) == component).Reverse())
+        var removed = Entries().Where(e => e.Element is "data" or "metadata" && ComponentOf(e.Name) == component).Reverse().ToList();
+        foreach (var entry in removed)
         {
             Replace(entry.Start, entry.End, string.Empty);
         }
+
+        foreach (var entry in removed)
+        {
+            RemoveUnusedAssembly(entry);
+        }
+    }
+
+    /// <summary>
+    /// The assembly alias an entry's type names (<c>mscorlib</c> for <c>System.Boolean, mscorlib</c>, as the resource
+    /// writer shortens a type whose assembly it declared), or null for a fully qualified or bare type.
+    /// </summary>
+    private static string? AliasOf(Entry entry) =>
+        entry.Attributes.GetValueOrDefault("type")?.Split(',', 2) is [_, var rest] && !rest.Contains(',', StringComparison.Ordinal) ? rest.Trim() : null;
+
+    /// <summary>
+    /// The <c>assembly</c> declaration a removed entry used, removed with it when no entry uses it any more (#67: Lock
+    /// Controls' <c>System.Boolean, mscorlib</c> brings <c>mscorlib</c>'s, so unlocking takes it away again and the file
+    /// is as it was), as the resource writer declares only the aliases its entries use.
+    /// </summary>
+    private void RemoveUnusedAssembly(Entry removed)
+    {
+        if (AliasOf(removed) is not { } alias)
+        {
+            return;
+        }
+
+        var entries = Entries();
+        if (entries.Any(e => e.Element is "data" or "metadata" && AliasOf(e) == alias)
+            || entries.FirstOrDefault(e => e.Element == "assembly" && e.Name == alias) is not { } declared)
+        {
+            return;
+        }
+
+        Replace(declared.Start, declared.End, string.Empty);
     }
 
     /// <summary>Renames a component's keys (<c>okButton.Text</c> → <c>closeButton.Text</c>) and the records that name it (its <c>Name</c>, its controls' <c>Parent</c>).</summary>

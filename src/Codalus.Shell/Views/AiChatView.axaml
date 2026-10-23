@@ -79,7 +79,7 @@
           <TextBlock Text="{Binding ProviderLabel}" TextTrimming="CharacterEllipsis" MaxWidth="200" VerticalAlignment="Center" />
         </StackPanel>
       </DropDownButton>
-      <!-- Who answers (M48, ADR 0079): Built-in, each external agent of ai.agents, then Add agent…; shown while AI is on. -->
+      <!-- Who answers (M48, ADR 0079): Built-in, each external agent of ai.agents, then Connect, More agents… and Manage Agents… (D43); shown while AI is on. -->
       <DropDownButton x:Name="AgentPicker" Classes="toolbar" IsVisible="{Binding HasAgents}"
                       ToolTip.Tip="{l:T aiChat.whoAnswersTheBuiltIn}" AutomationProperties.Name="{l:T aiChat.agentPicker}">
         <TextBlock Text="{Binding SelectedAgentLabel}" TextTrimming="CharacterEllipsis" MaxWidth="160" VerticalAlignment="Center" />
@@ -109,16 +109,50 @@
         </ItemsControl>
       </ScrollViewer>
 
-      <!-- Empty states: an icon, one sentence and the next step. -->
-      <StackPanel Classes="emptyState" IsVisible="{Binding ShowOffState}">
-        <controls:Icon Kind="sparkle" />
-        <TextBlock Text="{Binding OffMessage}" />
-        <Button x:Name="TurnOn" Classes="accent" Content="{l:T aiChat.turnOnAiAssistance}" AutomationProperties.Name="{l:T aiChat.turnOnAiAssistance}" />
+      <!--
+        Empty states: an icon, one sentence and the next step. While AI is off or has no provider, a row under it offers
+        to connect a coding agent that brings its own provider (D43): the one-click agents, More agents…, and what
+        Connect does; in a remote window the buttons are disabled, with the reason.
+      -->
+      <StackPanel VerticalAlignment="Center" IsVisible="{Binding !HasTurns}">
+        <StackPanel Classes="emptyState" IsVisible="{Binding ShowOffState}">
+          <controls:Icon Kind="sparkle" />
+          <TextBlock Text="{Binding OffMessage}" />
+          <Button x:Name="TurnOn" Classes="accent" Content="{l:T aiChat.turnOnAiAssistance}" AutomationProperties.Name="{l:T aiChat.turnOnAiAssistance}" />
+        </StackPanel>
+        <StackPanel Classes="emptyState" IsVisible="{Binding ShowProviderState}">
+          <controls:Icon Kind="sparkle" />
+          <TextBlock Text="{l:T aiChat.chooseAProviderAndAModel}" />
+          <Button x:Name="ChooseProvider" Classes="iconText" controls:ButtonIcon.Kind="sparkle" Content="{l:T aiChat.chooseProvider}" />
+        </StackPanel>
+        <StackPanel x:Name="ConnectRow" IsVisible="{Binding ShowConnectRow}" HorizontalAlignment="Center" MaxWidth="380" Margin="24,0,24,24" Spacing="8"
+                    AutomationProperties.Name="{l:T aiChat.orConnectACodingAgent}">
+          <TextBlock Classes="small" FontWeight="SemiBold" Text="{l:T aiChat.orConnectACodingAgent}" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
+          <ItemsControl x:Name="ConnectButtons" ItemsSource="{Binding ConnectAgents}" HorizontalAlignment="Center">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Center" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:AiConnectAgent">
+                <Button Classes="iconText" controls:ButtonIcon.Kind="bot" Content="{Binding Name}" Tag="{Binding Id}" Click="OnConnectClick"
+                        IsEnabled="{Binding $parent[UserControl].((vm:AiChatViewModel)DataContext).CanConnectAgents}"
+                        ToolTip.Tip="{Binding AccessibleName}" AutomationProperties.Name="{Binding AccessibleName}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <DockPanel IsVisible="{Binding IsConnectBlocked}" HorizontalAlignment="Center">
+            <controls:Icon DockPanel.Dock="Left" Kind="window-remote" Width="12" Height="12" Margin="0,2,6,0" VerticalAlignment="Top" />
+            <TextBlock x:Name="ConnectBlocked" Classes="muted small" Text="{Binding ConnectBlockedReason}" TextWrapping="Wrap" />
+          </DockPanel>
+          <Button x:Name="MoreAgents" Classes="link" HorizontalAlignment="Center" IsVisible="{Binding CanConnectAgents}" Content="{l:T aiChat.moreAgents}" AutomationProperties.Name="{l:T aiChat.moreAgents}" />
+          <TextBlock Classes="muted small" IsVisible="{Binding CanConnectAgents}" Text="{l:T aiChat.connectChecksAndTests}" TextWrapping="Wrap" TextAlignment="Center" />
+        </StackPanel>
       </StackPanel>
-      <StackPanel Classes="emptyState" IsVisible="{Binding ShowProviderState}">
-        <controls:Icon Kind="sparkle" />
-        <TextBlock Text="{l:T aiChat.chooseAProviderAndAModel}" />
-        <Button x:Name="ChooseProvider" Classes="iconText" controls:ButtonIcon.Kind="sparkle" Content="{l:T aiChat.chooseProvider}" />
+      <StackPanel Classes="emptyState" IsVisible="{Binding ShowExternalReadyState}">
+        <controls:Icon Kind="bot" />
+        <TextBlock x:Name="ExternalReady" Text="{Binding ExternalReadyMessage}" />
       </StackPanel>
       <StackPanel Classes="emptyState" IsVisible="{Binding ShowReadyState}">
         <controls:Icon Kind="comment" />

@@ -335,6 +335,49 @@ public partial class PolishTests
         await f.Shell.PropertiesWindow.RefreshAsync();
         Check("properties (designer, events)", new ContentControl { Content = propertiesTool }, ToolWindowMinWidth, 480);
         f.Shell.PropertiesWindow.ShowEvents = false;
+
+        // #68: Font expanded into its parts; the drop-downs (color, alignment) as they open; the font editor, the String
+        // Collection Editor and Select Resource over the surface; the invalid-value dialog.
+        designer.SetSelection(["notesTextBox"], notify: true);
+        await f.Shell.PropertiesWindow.RefreshAsync();
+        var grid = f.Shell.PropertiesWindow.Grid;
+        await ShellFixture.PumpUntil(() => grid.Find("Font") is not null && !f.Shell.PropertiesWindow.IsLoading, seconds: 30);
+        var font = grid.Find("Font")!;
+        grid.Toggle(font);
+        Check("properties (designer, Font expanded)", new ContentControl { Content = propertiesTool }, ToolWindowMinWidth, 480);
+        foreach (var (path, kind) in new[] { ("ForeColor", "color"), ("TextAlign", "choice"), ("Font.Name", "choice") })
+        {
+            var dropDown = Views.PropertyEditors.PropertyDropDowns.Create(kind);
+            ((Views.PropertyEditors.IPropertyDropDown)dropDown).Open(grid.Find(path)!, grid, () => { });
+            Check($"properties drop-down ({path})", new Border { Classes = { "overlay" }, Child = dropDown, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top }, ToolWindowMinWidth, 420);
+        }
+
+        designer.SetSelection(["placeOrderButton"], notify: true);
+        await f.Shell.PropertiesWindow.RefreshAsync();
+        await ShellFixture.PumpUntil(() => grid.Find("TextAlign") is { Kind: PropertyRowKind.ContentAlignment } && !f.Shell.PropertiesWindow.IsLoading, seconds: 30);
+        var alignment = Views.PropertyEditors.PropertyDropDowns.Create("alignment");
+        ((Views.PropertyEditors.IPropertyDropDown)alignment).Open(grid.Find("TextAlign")!, grid, () => { });
+        Check("properties drop-down (TextAlign alignment)", new Border { Classes = { "overlay" }, Child = alignment, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top }, ToolWindowMinWidth, 420);
+        grid.Find("Font")!.ModalEditor!.Execute(null);
+        Assert.NotNull(designer.FontEditor);
+        Check("winforms-designer (font editor)", new ContentControl { Content = designer }, DocumentMinWidth, 480);
+        designer.CloseFontEditor();
+        grid.Find("Image")!.ModalEditor!.Execute(null);
+        await ShellFixture.PumpUntil(() => designer.ResourcePicker is not null);
+        Check("winforms-designer (select resource)", new ContentControl { Content = designer }, DocumentMinWidth, 480);
+        designer.CloseResourcePicker();
+        designer.SetSelection(["notesTextBox"], notify: true);
+        await f.Shell.PropertiesWindow.RefreshAsync();
+        await ShellFixture.PumpUntil(() => grid.Find("Lines") is not null && !f.Shell.PropertiesWindow.IsLoading, seconds: 30);
+        grid.Find("Lines")!.ModalEditor!.Execute(null);
+        await ShellFixture.PumpUntil(() => designer.StringsEditor is not null);
+        Check("winforms-designer (string collection editor)", new ContentControl { Content = designer }, DocumentMinWidth, 480);
+        designer.CloseStringsEditor();
+        grid.Find("Location.X")!.Text = "abc";
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Check("properties (invalid value)", new DialogView { DataContext = f.Shell.Dialogs }, DialogMinWidth, 360);
+        f.Shell.Dialogs.Cancel();
+        await ShellFixture.PumpUntil(() => !f.Shell.Dialogs.IsOpen);
         f.Shell.Layout.CloseDocument(designer);
 
         // A designer that can't start: its reason where the form would be.

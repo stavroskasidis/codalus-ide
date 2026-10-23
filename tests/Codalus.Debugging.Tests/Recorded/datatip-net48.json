@@ -1,0 +1,1033 @@
+{
+  "runtime": "net48",
+  "source": "Written from the reference source's field layout (List, Dictionary, Queue and Stack in mscorlib, HashSet in System.Core) as the the .NET Framework engine (NetFxDebugSession) lists members (sorted by ordinal name, elements [i]); not recorded: that engine doesn't run on this machine.",
+  "locals": [
+    {
+      "name": "forecasts",
+      "value": "{System.Collections.Generic.List<Debuggee.Forecast>}",
+      "type": "System.Collections.Generic.List<Debuggee.Forecast>",
+      "evaluateName": "forecasts",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Capacity",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "forecasts.Capacity",
+          "variablesReference": 0
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "forecasts.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "_items",
+          "value": "{Debuggee.Forecast[4]}",
+          "type": "Debuggee.Forecast[]",
+          "evaluateName": "forecasts._items",
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "{Debuggee.Forecast}",
+              "type": "Debuggee.Forecast",
+              "evaluateName": "forecasts._items[0]",
+              "variablesReference": 1
+            },
+            {
+              "name": "[1]",
+              "value": "{Debuggee.Forecast}",
+              "type": "Debuggee.Forecast",
+              "evaluateName": "forecasts._items[1]",
+              "variablesReference": 1
+            },
+            {
+              "name": "[2]",
+              "value": "{Debuggee.Forecast}",
+              "type": "Debuggee.Forecast",
+              "evaluateName": "forecasts._items[2]",
+              "variablesReference": 1
+            },
+            {
+              "name": "[3]",
+              "value": "null",
+              "type": "Debuggee.Forecast",
+              "evaluateName": "forecasts._items[3]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_size",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "forecasts._size",
+          "variablesReference": 0
+        },
+        {
+          "name": "_syncRoot",
+          "value": "null",
+          "type": "object",
+          "evaluateName": "forecasts._syncRoot",
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "forecasts._version",
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "properties",
+      "value": "{System.Collections.Generic.Dictionary<string, object>}",
+      "type": "System.Collections.Generic.Dictionary<string, object>",
+      "evaluateName": "properties",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Comparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer<string>}",
+          "type": "System.Collections.Generic.GenericEqualityComparer<string>",
+          "evaluateName": "properties.Comparer",
+          "variablesReference": 1
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "properties.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "_syncRoot",
+          "value": "null",
+          "type": "object",
+          "evaluateName": "properties._syncRoot",
+          "variablesReference": 0
+        },
+        {
+          "name": "buckets",
+          "value": "{int[7]}",
+          "type": "int[]",
+          "evaluateName": "properties.buckets",
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "3",
+              "type": "int",
+              "evaluateName": "properties.buckets[0]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties.buckets[1]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "1",
+              "type": "int",
+              "evaluateName": "properties.buckets[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "4",
+              "type": "int",
+              "evaluateName": "properties.buckets[3]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[4]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties.buckets[4]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[5]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties.buckets[5]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[6]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "properties.buckets[6]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "comparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer<string>}",
+          "type": "System.Collections.Generic.GenericEqualityComparer<string>",
+          "evaluateName": "properties.comparer",
+          "variablesReference": 1
+        },
+        {
+          "name": "count",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "properties.count",
+          "variablesReference": 0
+        },
+        {
+          "name": "entries",
+          "value": "{System.Collections.Generic.Dictionary<string, object>.Entry[7]}",
+          "type": "System.Collections.Generic.Dictionary<string, object>.Entry[]",
+          "evaluateName": "properties.entries",
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "{System.Collections.Generic.Dictionary<string, object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<string, object>.Entry",
+              "evaluateName": "properties.entries[0]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "1798518155",
+                  "type": "int",
+                  "evaluateName": "properties.entries[0].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\"server.Features\"",
+                  "type": "string",
+                  "evaluateName": "properties.entries[0].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "properties.entries[0].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "1",
+                  "type": "int",
+                  "evaluateName": "properties.entries[0].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[1]",
+              "value": "{System.Collections.Generic.Dictionary<string, object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<string, object>.Entry",
+              "evaluateName": "properties.entries[1]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "properties.entries[1].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties.entries[1].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "properties.entries[1].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties.entries[1].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[2]",
+              "value": "{System.Collections.Generic.Dictionary<string, object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<string, object>.Entry",
+              "evaluateName": "properties.entries[2]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "1367684090",
+                  "type": "int",
+                  "evaluateName": "properties.entries[2].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\"application.Services\"",
+                  "type": "string",
+                  "evaluateName": "properties.entries[2].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "properties.entries[2].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "\"services\"",
+                  "type": "string",
+                  "evaluateName": "properties.entries[2].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[3]",
+              "value": "{System.Collections.Generic.Dictionary<string, object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<string, object>.Entry",
+              "evaluateName": "properties.entries[3]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "802710105",
+                  "type": "int",
+                  "evaluateName": "properties.entries[3].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "\"__MiddlewareDescriptions\"",
+                  "type": "string",
+                  "evaluateName": "properties.entries[3].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties.entries[3].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "{System.Collections.Generic.List<string>}",
+                  "type": "System.Collections.Generic.List<string>",
+                  "evaluateName": "properties.entries[3].value",
+                  "variablesReference": 1
+                }
+              ]
+            },
+            {
+              "name": "[4]",
+              "value": "{System.Collections.Generic.Dictionary<string, object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<string, object>.Entry",
+              "evaluateName": "properties.entries[4]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties.entries[4].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties.entries[4].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties.entries[4].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties.entries[4].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[5]",
+              "value": "{System.Collections.Generic.Dictionary<string, object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<string, object>.Entry",
+              "evaluateName": "properties.entries[5]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties.entries[5].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties.entries[5].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties.entries[5].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties.entries[5].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[6]",
+              "value": "{System.Collections.Generic.Dictionary<string, object>.Entry}",
+              "type": "System.Collections.Generic.Dictionary<string, object>.Entry",
+              "evaluateName": "properties.entries[6]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties.entries[6].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "key",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties.entries[6].key",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "properties.entries[6].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "null",
+                  "type": "object",
+                  "evaluateName": "properties.entries[6].value",
+                  "variablesReference": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "freeCount",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "properties.freeCount",
+          "variablesReference": 0
+        },
+        {
+          "name": "freeList",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "properties.freeList",
+          "variablesReference": 0
+        },
+        {
+          "name": "keys",
+          "value": "null",
+          "type": "object",
+          "evaluateName": "properties.keys",
+          "variablesReference": 0
+        },
+        {
+          "name": "values",
+          "value": "null",
+          "type": "object",
+          "evaluateName": "properties.values",
+          "variablesReference": 0
+        },
+        {
+          "name": "version",
+          "value": "5",
+          "type": "int",
+          "evaluateName": "properties.version",
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "ids",
+      "value": "{System.Collections.Generic.HashSet<int>}",
+      "type": "System.Collections.Generic.HashSet<int>",
+      "evaluateName": "ids",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Comparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer<int>}",
+          "type": "System.Collections.Generic.GenericEqualityComparer<int>",
+          "evaluateName": "ids.Comparer",
+          "variablesReference": 1
+        },
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "ids.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "m_buckets",
+          "value": "{int[7]}",
+          "type": "int[]",
+          "evaluateName": "ids.m_buckets",
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids.m_buckets[0]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids.m_buckets[1]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids.m_buckets[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "1",
+              "type": "int",
+              "evaluateName": "ids.m_buckets[3]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[4]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids.m_buckets[4]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[5]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "ids.m_buckets[5]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[6]",
+              "value": "4",
+              "type": "int",
+              "evaluateName": "ids.m_buckets[6]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "m_comparer",
+          "value": "{System.Collections.Generic.GenericEqualityComparer<int>}",
+          "type": "System.Collections.Generic.GenericEqualityComparer<int>",
+          "evaluateName": "ids.m_comparer",
+          "variablesReference": 1
+        },
+        {
+          "name": "m_count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "ids.m_count",
+          "variablesReference": 0
+        },
+        {
+          "name": "m_freeList",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "ids.m_freeList",
+          "variablesReference": 0
+        },
+        {
+          "name": "m_lastIndex",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "ids.m_lastIndex",
+          "variablesReference": 0
+        },
+        {
+          "name": "m_siInfo",
+          "value": "null",
+          "type": "object",
+          "evaluateName": "ids.m_siInfo",
+          "variablesReference": 0
+        },
+        {
+          "name": "m_slots",
+          "value": "{System.Collections.Generic.HashSet<int>.Slot[7]}",
+          "type": "System.Collections.Generic.HashSet<int>.Slot[]",
+          "evaluateName": "ids.m_slots",
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "{System.Collections.Generic.HashSet<int>.Slot}",
+              "type": "System.Collections.Generic.HashSet<int>.Slot",
+              "evaluateName": "ids.m_slots[0]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "3",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[0].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[0].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "3",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[0].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[1]",
+              "value": "{System.Collections.Generic.HashSet<int>.Slot}",
+              "type": "System.Collections.Generic.HashSet<int>.Slot",
+              "evaluateName": "ids.m_slots[1]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[1].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[1].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[1].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[2]",
+              "value": "{System.Collections.Generic.HashSet<int>.Slot}",
+              "type": "System.Collections.Generic.HashSet<int>.Slot",
+              "evaluateName": "ids.m_slots[2]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "8",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[2].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "-1",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[2].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "8",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[2].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[3]",
+              "value": "{System.Collections.Generic.HashSet<int>.Slot}",
+              "type": "System.Collections.Generic.HashSet<int>.Slot",
+              "evaluateName": "ids.m_slots[3]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "13",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[3].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[3].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "13",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[3].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[4]",
+              "value": "{System.Collections.Generic.HashSet<int>.Slot}",
+              "type": "System.Collections.Generic.HashSet<int>.Slot",
+              "evaluateName": "ids.m_slots[4]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[4].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[4].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[4].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[5]",
+              "value": "{System.Collections.Generic.HashSet<int>.Slot}",
+              "type": "System.Collections.Generic.HashSet<int>.Slot",
+              "evaluateName": "ids.m_slots[5]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[5].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[5].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[5].value",
+                  "variablesReference": 0
+                }
+              ]
+            },
+            {
+              "name": "[6]",
+              "value": "{System.Collections.Generic.HashSet<int>.Slot}",
+              "type": "System.Collections.Generic.HashSet<int>.Slot",
+              "evaluateName": "ids.m_slots[6]",
+              "variablesReference": 1,
+              "children": [
+                {
+                  "name": "hashCode",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[6].hashCode",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "next",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[6].next",
+                  "variablesReference": 0
+                },
+                {
+                  "name": "value",
+                  "value": "0",
+                  "type": "int",
+                  "evaluateName": "ids.m_slots[6].value",
+                  "variablesReference": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "m_version",
+          "value": "5",
+          "type": "int",
+          "evaluateName": "ids.m_version",
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "queue",
+      "value": "{System.Collections.Generic.Queue<string>}",
+      "type": "System.Collections.Generic.Queue<string>",
+      "evaluateName": "queue",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "queue.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "_array",
+          "value": "{string[4]}",
+          "type": "string[]",
+          "evaluateName": "queue._array",
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "\"fifth\"",
+              "type": "string",
+              "evaluateName": "queue._array[0]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "null",
+              "type": "string",
+              "evaluateName": "queue._array[1]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "\"third\"",
+              "type": "string",
+              "evaluateName": "queue._array[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "\"fourth\"",
+              "type": "string",
+              "evaluateName": "queue._array[3]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_head",
+          "value": "2",
+          "type": "int",
+          "evaluateName": "queue._head",
+          "variablesReference": 0
+        },
+        {
+          "name": "_size",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "queue._size",
+          "variablesReference": 0
+        },
+        {
+          "name": "_syncRoot",
+          "value": "null",
+          "type": "object",
+          "evaluateName": "queue._syncRoot",
+          "variablesReference": 0
+        },
+        {
+          "name": "_tail",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "queue._tail",
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "7",
+          "type": "int",
+          "evaluateName": "queue._version",
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "stack",
+      "value": "{System.Collections.Generic.Stack<int>}",
+      "type": "System.Collections.Generic.Stack<int>",
+      "evaluateName": "stack",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "Count",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "stack.Count",
+          "variablesReference": 0
+        },
+        {
+          "name": "_array",
+          "value": "{int[4]}",
+          "type": "int[]",
+          "evaluateName": "stack._array",
+          "variablesReference": 1,
+          "children": [
+            {
+              "name": "[0]",
+              "value": "1",
+              "type": "int",
+              "evaluateName": "stack._array[0]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[1]",
+              "value": "2",
+              "type": "int",
+              "evaluateName": "stack._array[1]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[2]",
+              "value": "3",
+              "type": "int",
+              "evaluateName": "stack._array[2]",
+              "variablesReference": 0
+            },
+            {
+              "name": "[3]",
+              "value": "0",
+              "type": "int",
+              "evaluateName": "stack._array[3]",
+              "variablesReference": 0
+            }
+          ]
+        },
+        {
+          "name": "_size",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "stack._size",
+          "variablesReference": 0
+        },
+        {
+          "name": "_syncRoot",
+          "value": "null",
+          "type": "object",
+          "evaluateName": "stack._syncRoot",
+          "variablesReference": 0
+        },
+        {
+          "name": "_version",
+          "value": "3",
+          "type": "int",
+          "evaluateName": "stack._version",
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "squares",
+      "value": "{int[3]}",
+      "type": "int[]",
+      "evaluateName": "squares",
+      "variablesReference": 1,
+      "children": [
+        {
+          "name": "[0]",
+          "value": "1",
+          "type": "int",
+          "evaluateName": "squares[0]",
+          "variablesReference": 0
+        },
+        {
+          "name": "[1]",
+          "value": "4",
+          "type": "int",
+          "evaluateName": "squares[1]",
+          "variablesReference": 0
+        },
+        {
+          "name": "[2]",
+          "value": "9",
+          "type": "int",
+          "evaluateName": "squares[2]",
+          "variablesReference": 0
+        }
+      ]
+    },
+    {
+      "name": "summary",
+      "value": "\"Balmy\"",
+      "type": "string",
+      "evaluateName": "summary",
+      "variablesReference": 0
+    }
+  ]
+}

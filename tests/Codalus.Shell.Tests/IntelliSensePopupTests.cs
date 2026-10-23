@@ -118,6 +118,47 @@ public class IntelliSensePopupTests
         }
     }
 
+    /// <summary>
+    /// A popup's text is the window's UI size (Shell.FontSize.Body, 12 px), in a window of its own as in the windowed app
+    /// and in the window's overlay layer: its content inherits from the popup's root, which Fluent's themes set to 14 px.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_popups_text_is_the_windows_size_in_a_window_of_its_own_or_the_overlay(bool ownWindow)
+    {
+        var (window, editor) = ShowEditor("builder.AddTab(", lines: 12);
+        var popup = new SignatureHelpPopup(editor.TextArea, BuilderHelp(), () => EditorTheme.Dark);
+        var copy = new MenuItem { Header = "Copy" };
+        var menu = new ContextMenu { Items = { copy } };
+        editor.ContextMenu = menu;
+        try
+        {
+            using (ownWindow ? TestAppBuilder.PopupsInWindowsOfTheirOwn() : null)
+            {
+                popup.Show();
+                menu.Open(editor);
+            }
+
+            IntelliSenseLayout.Arrange(editor.TextArea, null, popup);
+            ShellFixture.Pump();
+
+            Assert.IsType(ownWindow ? typeof(Avalonia.Controls.Primitives.PopupRoot) : window.GetType(), TopLevel.GetTopLevel(popup.SignatureBlock));
+            Assert.IsType(ownWindow ? typeof(Avalonia.Controls.Primitives.PopupRoot) : window.GetType(), TopLevel.GetTopLevel(copy));
+            Assert.Equal(12, window.FontSize);
+            Assert.Equal(window.FontSize, popup.SignatureBlock.FontSize);
+            Assert.Equal(window.FontSize, popup.SummaryBlock.FontSize);
+            Assert.True(copy.IsEffectivelyVisible);
+            Assert.Equal(window.FontSize, copy.FontSize);
+        }
+        finally
+        {
+            menu.Close();
+            popup.Hide();
+            window.Close();
+        }
+    }
+
     [AvaloniaFact]
     public void Plain_signature_help_from_other_servers_bolds_the_active_parameter_of_its_label()
     {

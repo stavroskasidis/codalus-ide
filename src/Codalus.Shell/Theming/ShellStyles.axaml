@@ -5,7 +5,10 @@
         xmlns:core="using:Dock.Model.Core"
         xmlns:docking="using:Codalus.Shell.Docking"
         xmlns:editing="using:AvaloniaEdit.Editing"
-        xmlns:collections="using:System.Collections">
+        xmlns:collections="using:System.Collections"
+        xmlns:dmc="using:Dock.Model.Controls"
+        xmlns:dockControls="using:Dock.Avalonia.Controls"
+        xmlns:dockConverters="using:Dock.Avalonia.Converters">
   <Styles.Resources>
     <!-- Dock's document tab strip takes its panel from this resource (a style can't replace it): ours fits (M34e). -->
     <ItemsPanelTemplate x:Key="DockDocumentTabStripHorizontalItemsPanel">
@@ -17,6 +20,38 @@
       Its glyph, Visual Studio's thin X: Dock stretches the geometry over the button less a 2 px margin (12 px), so the
       geometry spans a 12-unit box (the two specks in its corners) with the X in its middle 8 units, about 1 px thick.
     -->
+    <!--
+      The document well as one card holding its tab strip (rounded corners, D46 question 7): Dock's DocumentDockControl
+      template (Dock.Avalonia.Themes.Fluent 12.1.0.7, MIT) inside a Border with the card's radius, outline and fill, the
+      tab strip's (transparent in Classic, so the card's corners round it). It doesn't clip: DocumentControl's frame
+      paints over its sides and bottom, and the frame clips the document to the card's bottom corners. In the families
+      the card has no radius, outline or fill (Shell.Card.*), so the well looks as before.
+    -->
+    <ControlTheme x:Key="{x:Type DocumentDockControl}" TargetType="DocumentDockControl" x:DataType="dmc:IDocumentDock">
+      <Setter Property="(AutomationProperties.AutomationId)" Value="{Binding Id}" />
+      <Setter Property="(AutomationProperties.Name)" Value="{Binding Title}" />
+      <Setter Property="(DockProperties.IsDragEnabled)" Value="{Binding CanDrag}" />
+      <Setter Property="(DockProperties.IsDropEnabled)" Value="{Binding CanDrop}" />
+      <Setter Property="(DockProperties.DockGroup)" Value="{Binding DockGroup}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="PART_Card"
+                  CornerRadius="{DynamicResource Shell.Card.CornerRadius}"
+                  BorderThickness="{DynamicResource Shell.Card.BorderThickness}"
+                  BorderBrush="{DynamicResource Shell.Border}"
+                  Background="{DynamicResource Shell.Card.Background}">
+            <DockableControl TrackingMode="Visible">
+              <Panel>
+                <DocumentControl IsActive="{Binding IsActive}"
+                                 IsVisible="{Binding LayoutMode, Converter={x:Static dockConverters:DocumentLayoutModeMatchConverter.Instance}, ConverterParameter=Tabbed}" />
+                <dockControls:MdiDocumentControl IsActive="{Binding IsActive}"
+                                                 IsVisible="{Binding LayoutMode, Converter={x:Static dockConverters:DocumentLayoutModeMatchConverter.Instance}, ConverterParameter=Mdi}" />
+              </Panel>
+            </DockableControl>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
     <StreamGeometry x:Key="DockIconCloseGeometry">M0,0 L0.01,0 L0,0.01 Z M12,12 L11.99,12 L12,11.99 Z M2.75,2 L6,5.25 L9.25,2 L10,2.75 L6.75,6 L10,9.25 L9.25,10 L6,6.75 L2.75,10 L2,9.25 L5.25,6 L2,2.75 Z</StreamGeometry>
   </Styles.Resources>
 
@@ -141,6 +176,32 @@
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Tab.Active.IndicatorBrush}" />
   </Style>
   <!--
+    Rounded corners (D46): Classic outlines the selected tab, in the accent in the active group and at 3:1 against the
+    strip in the others (Shell.Tab.Selected.IndicatorBrush, transparent in the families), with a semibold title; the
+    frame's top edge beside it is TabStripEdge's, a row under the strip.
+  -->
+  <Style Selector="DocumentTabStripItem:selected:not(:active) /template/ Border#PART_TabGutter">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Tab.Selected.IndicatorBrush}" />
+  </Style>
+  <Style Selector="DocumentTabStripItem:selected">
+    <Setter Property="FontWeight" Value="{DynamicResource Shell.Tab.Selected.FontWeight}" />
+  </Style>
+  <Style Selector="DocumentTabStrip">
+    <Setter Property="BottomContent">
+      <Template>
+        <controls:TabStripEdge />
+      </Template>
+    </Setter>
+  </Style>
+  <Style Selector="controls|TabStripEdge">
+    <Setter Property="Height" Value="{DynamicResource Shell.TabStripEdge.Height}" />
+    <Setter Property="Margin" Value="{DynamicResource Shell.TabStripEdge.Margin}" />
+    <Setter Property="ActiveBrush" Value="{DynamicResource Shell.Well.Frame.Active}" />
+    <Setter Property="InactiveBrush" Value="{DynamicResource DockDocumentContentBorderBrush}" />
+    <Setter Property="ActiveTabBrush" Value="{DynamicResource Shell.Tab.Active.IndicatorBrush}" />
+    <Setter Property="InactiveTabBrush" Value="{DynamicResource Shell.Tab.Selected.IndicatorBrush}" />
+  </Style>
+  <!--
     The tab's pin and close buttons, as Visual Studio's: 16 px squares with a hover background, a thin 8 px glyph in the
     tab's text color (Dock's close glyph was a heavy one).
   -->
@@ -150,7 +211,7 @@
     <Setter Property="Padding" Value="0" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius.Compact}" />
     <Setter Property="Foreground" Value="{Binding $parent[DocumentTabStripItem].Foreground}" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -164,6 +225,17 @@
     instead of Dock's sideways scrolling that took pinned tabs out of view.
   -->
 
+  <!--
+    Auto-hidden tool windows (D46 question 13): Classic's tabs are text on the window's color with a 3 px bar
+    (Shell.AutoHide.*, none in the families). The panel that slides out is a tool window card like the others.
+    TODO(issue): the accent bar for the open one, the control radius under the pointer and the popup shadow on the
+    sliding panel (Dock's ToolPinItemControl has no open state, and its button's corners are set by its template).
+  -->
+  <Style Selector="ToolPinItemControl /template/ Border">
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.AutoHide.BarThickness}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.AutoHide.Bar}" />
+  </Style>
+
   <!-- Tool window tabs: a hover that keeps its text readable, and the selected tab's title in the link color. -->
   <Style Selector="ToolTabStripItem:pointerover:not(:selected)">
     <Setter Property="Background" Value="{DynamicResource Shell.Tab.Hover}" />
@@ -171,6 +243,10 @@
   </Style>
   <Style Selector="ToolTabStripItem:selected">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Link}" />
+  </Style>
+  <!-- Rounded corners (D46): Classic's selected tool window tab hangs from the content with rounded bottom corners. -->
+  <Style Selector="ToolTabStripItem:selected /template/ Border">
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.ToolTab.CornerRadius}" />
   </Style>
 
   <!-- Tool window captions: Shell.Caption.Active with the focus, Shell.Caption.Inactive without (M34d). -->
@@ -198,6 +274,28 @@
   <Style Selector="DocumentControl /template/ Border#PART_Border">
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.Panel.CornerRadius.Bottom}" />
     <Setter Property="ClipToBounds" Value="True" />
+    <!-- Classic's frame paints over the well card's sides and bottom (D46); the accent while the group is active. -->
+    <Setter Property="Margin" Value="{DynamicResource Shell.Well.Frame.Margin}" />
+    <!-- What a document doesn't cover inside the frame (an empty minimap's column) is the card's, not the window's. -->
+    <Setter Property="Background" Value="{DynamicResource Shell.Well.Background}" />
+  </Style>
+  <Style Selector="DocumentControl:active /template/ Border#PART_Border">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Well.Frame.Active}" />
+  </Style>
+  <!--
+    Rounded corners (D46): Classic's tool windows are cards outlined all round. The content takes the card's sides and
+    bottom (Shell.Card.Content.BorderThickness, through ToolChromeControl's BorderThickness, which its template gives
+    the content), Dock's ToolControl drops its own sides, and the focused one is framed in the accent
+    (Shell.Card.Focus.BorderBrush, the families' border color).
+  -->
+  <Style Selector="ToolChromeControl">
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.Card.Content.BorderThickness}" />
+  </Style>
+  <Style Selector="ToolChromeControl:active">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Card.Focus.BorderBrush}" />
+  </Style>
+  <Style Selector="ToolControl /template/ Border#PART_Border">
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.ToolControl.BorderThickness}" />
   </Style>
   <Style Selector="ToolChromeControl /template/ TextBlock#PART_Title">
     <Setter Property="Padding" Value="{DynamicResource Shell.Caption.Active.MarkerPadding}" />
@@ -251,10 +349,10 @@
 
   <!--
     The control set (M34h, docs/design/controls.md): what Fluent's templates draw for fields, choices, tabs and rows,
-    restyled from the Shell.* tokens; the buttons, check boxes, radio buttons, switches and the segmented control have
-    their own control themes (Theming/Controls.axaml). A style outranks Fluent's control theme in any state, and a style
-    with a class or a state outranks what a template sets, so each state is restated here. docs/ui-guidelines.md lists
-    the classes.
+    restyled from the Shell.* tokens; the buttons, check boxes, radio buttons, switches, the segmented control, a combo
+    box list's rows and the TabControl have their own control themes (Theming/Controls.axaml). A style outranks Fluent's
+    control theme in any state, and a style with a class or a state outranks what a template sets, so each state is
+    restated here. docs/ui-guidelines.md lists the classes.
   -->
 
   <!-- The primary button's icon is drawn in the accent's text, as its label. -->
@@ -359,7 +457,8 @@
 
   <!--
     Combo boxes: the field with a 12 px chevron; open or focused from the keyboard, the field keeps the focus edge. The
-    list's rows are 24 px, the chosen one in the selection's colors.
+    list's rows (24 px, a check beside the chosen one in the selection's colors) are ComboBoxItem's control theme in
+    Theming/Controls.axaml; the navigation bar's lists and a history's (ComboBox.history) opt out of the check below.
   -->
   <Style Selector="ComboBox">
     <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
@@ -433,23 +532,23 @@
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
     <Setter Property="Padding" Value="4,0" />
   </Style>
-  <Style Selector="ComboBoxItem">
-    <Setter Property="MinHeight" Value="24" />
+  <!--
+    A history (ComboBox.history: an editable combo box whose list is what was typed before, Find and Replace's Find what
+    and Replace with): a check there would only mark the entry that equals the typed text, so its rows have no check
+    column (docs/design/controls.md, "Where the build differs"). Other editable combo boxes list choices (Look in's
+    scopes, File types' presets, Counters' processes) and keep the check beside the chosen one.
+  -->
+  <Style Selector="ComboBox.history ComboBoxItem">
     <Setter Property="Padding" Value="8,3" />
-    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
   </Style>
-  <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
-    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
-  </Style>
-  <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
-    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  <Style Selector="ComboBox.history ComboBoxItem /template/ Path#CheckGlyph">
+    <Setter Property="IsVisible" Value="False" />
   </Style>
 
   <!--
     Tabs inside a view (TabControl, 28 px): different content (Body, Headers, Request), not a view switch (that is a
-    SegmentedControl). Muted until selected; the selected one bold with a 2 px accent underline. Counts go in a
+    SegmentedControl). Muted until selected; the selected one bold with a 2 px accent underline, which covers the strip's
+    hairline in Shell.ViewTabs.Rule (TabControl's control theme draws it, in Theming/Controls.axaml). Counts go in a
     Border.badge in the header, which takes the accent on the selected tab.
   -->
   <Style Selector="TabItem">
@@ -477,10 +576,78 @@
     <Setter Property="CornerRadius" Value="1" />
     <Setter Property="VerticalAlignment" Value="Bottom" />
   </Style>
+  <!-- A strip at the bottom (the data editor's results) has its line on top, so the underline goes there. -->
+  <Style Selector="TabItem[TabStripPlacement=Bottom]:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="VerticalAlignment" Value="Top" />
+  </Style>
+  <!--
+    A strip at the left or right has its line on the content's side, so the underline stands there, the tab's height,
+    out over the 10 px padding to the tab's edge (the tabs of a side strip are as wide as the widest).
+  -->
+  <Style Selector="TabItem[TabStripPlacement=Left]:selected /template/ Border#PART_SelectedPipe, TabItem[TabStripPlacement=Right]:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="Width" Value="2" />
+    <Setter Property="Height" Value="NaN" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="TabItem[TabStripPlacement=Left]:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="HorizontalAlignment" Value="Right" />
+    <Setter Property="Margin" Value="0,0,-10,0" />
+  </Style>
+  <Style Selector="TabItem[TabStripPlacement=Right]:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="Margin" Value="-10,0,0,0" />
+  </Style>
   <Style Selector="TabItem:disabled /template/ Border#PART_LayoutRoot">
     <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
   </Style>
   <Style Selector="TabItem:selected Border.badge">
+    <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.AccentForeground}" />
+  </Style>
+  <!--
+    A TabStrip used as tabs inside a view (Find Results' pages, HTTP Response's Body, Headers and Request, Find and
+    Replace's and Code Search's two kinds): Classes="viewTabs" draws the TabItems' look and the hairline under the strip,
+    6 px of padding at its ends, and no item styles of its own in the view. A row the strip shares with other tools
+    (HTTP Response's, Code Search's) draws the line itself, across the row, in Shell.ViewTabs.Rule; its strip takes
+    BorderThickness="0" Padding="0", and the tabs still reach 1 px over the row's line.
+  -->
+  <Style Selector="TabStrip.viewTabs">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.ViewTabs.Rule}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="Padding" Value="6,0" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs /template/ ItemsPresenter#PART_ItemsPresenter">
+    <Setter Property="Margin" Value="0,0,0,-1" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem">
+    <Setter Property="FocusAdorner" Value="{StaticResource Shell.FocusRing}" />
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+    <Setter Property="FontWeight" Value="Normal" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Tab}" />
+    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:pointerover /template/ Border#PART_LayoutRoot, TabStrip.viewTabs TabStripItem:pressed /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+    <Setter Property="Height" Value="2" />
+    <Setter Property="Margin" Value="-4,0,-4,0" />
+    <Setter Property="CornerRadius" Value="1" />
+    <Setter Property="VerticalAlignment" Value="Bottom" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:disabled /template/ Border#PART_LayoutRoot">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
+  </Style>
+  <Style Selector="TabStrip.viewTabs TabStripItem:selected Border.badge">
     <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
     <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.AccentForeground}" />
   </Style>
@@ -504,6 +671,28 @@
   </Style>
   <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+  </Style>
+  <!-- Rounded corners (D46): Classic insets its rows 3 px with the control radius (Shell.Row.*, 0 in the families). -->
+  <Style Selector="ListBoxItem">
+    <Setter Property="Margin" Value="{DynamicResource Shell.Row.Margin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Row.CornerRadius}" />
+  </Style>
+  <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
+    <Setter Property="Margin" Value="{DynamicResource Shell.Row.Margin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Row.CornerRadius}" />
+  </Style>
+  <!-- Solution Explorer's selection pill (D46 question 12): the accent with the focus, muted without; transparent in the families. -->
+  <Style Selector="Border.selectionPill">
+    <Setter Property="Width" Value="3" />
+    <Setter Property="Height" Value="14" />
+    <Setter Property="CornerRadius" Value="1.5" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Indicator.Inactive}" />
+  </Style>
+  <Style Selector="ListBox:focus-within Border.selectionPill">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Indicator}" />
   </Style>
   <Style Selector="ListBox.rows ListBoxItem">
     <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Row}" />
@@ -769,6 +958,21 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.Disabled.Foreground}" />
   </Style>
   <!--
+    The Toolbox's armed item (#66, docs/design/controls/Toolbox.dc.html): drawn as the selection, as the classic IDE
+    highlights its selected tool, under the pointer and pressed too; Shell.Selection.Inactive once the Toolbox hasn't
+    the focus (the designer has it). Its icon takes the selection's text in High Contrast, as icons do there. The hint
+    that sat above the list (and moved every item, so a double-click's second click landed on another) is the designer's status line.
+  -->
+  <Style Selector="Button.toolboxItem.armed /template/ ContentPresenter#PART_ContentPresenter, Button.toolboxItem.armed:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.toolboxItem.armed:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <Style Selector=":is(UserControl).toolbox:not(:focus-within) Button.toolboxItem.armed /template/ ContentPresenter#PART_ContentPresenter, :is(UserControl).toolbox:not(:focus-within) Button.toolboxItem.armed:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Inactive}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
+  </Style>
+  <!--
     A split button (the control set): the default button's look with its arrow; in a toolbar (the Hot Reload button and
     its menu's arrow) flat like the buttons beside it. Its two parts are Buttons in its template that Fluent styles
     itself, so every state is restated on their presenters: the hover color and border under the pointer or pressed or
@@ -860,6 +1064,8 @@
   </Style>
   <Style Selector="ToolTip">
     <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+    <!-- Tooltips take the control radius, as the editor's popups (D46 question 16); menus and lists the overlay's. -->
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
   </Style>
   <!-- A selected row's text is Shell.Selection.Foreground (M45: a High contrast family selects with its accent, black text). -->
   <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
@@ -977,10 +1183,17 @@
   <Style Selector="WindowDrawnDecorations:not(:fullscreen) /template/ Panel#PART_TitleTextPanel">
     <Setter Property="IsVisible" Value="False" />
   </Style>
+  <!--
+    The standard toolbar: a full-width band in the families, a card as wide as its buttons in Classic (D46 question 10),
+    which still wraps when the window is narrow.
+  -->
   <Style Selector="Border.standardToolbar">
     <Setter Property="Background" Value="{DynamicResource Shell.Toolbar}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Border}" />
-    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.Toolbar.BorderThickness}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Toolbar.CornerRadius}" />
+    <Setter Property="Margin" Value="{DynamicResource Shell.Toolbar.Margin}" />
+    <Setter Property="HorizontalAlignment" Value="{DynamicResource Shell.Toolbar.HorizontalAlignment}" />
   </Style>
   <Style Selector="Border.toolbarSeparator">
     <Setter Property="Width" Value="1" />
@@ -1008,7 +1221,7 @@
     <Setter Property="Padding" Value="6,0,4,0" />
     <Setter Property="Margin" Value="1,0" />
     <Setter Property="FontSize" Value="12" />
-    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius.Compact}" />
     <Setter Property="HorizontalAlignment" Value="Stretch" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
@@ -1040,10 +1253,14 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
     <Setter Property="Opacity" Value="1" />
   </Style>
+  <!-- Its member lists have no check column, as the classic IDE's don't (docs/design/controls.md, "Where the build differs"). -->
   <Style Selector="ComboBox.navigationBar ComboBoxItem">
     <Setter Property="MinHeight" Value="0" />
     <Setter Property="Padding" Value="6,3" />
     <Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar ComboBoxItem /template/ Path#CheckGlyph">
+    <Setter Property="IsVisible" Value="False" />
   </Style>
 
   <Style Selector="controls|Icon.start">
@@ -1136,11 +1353,17 @@
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Search.Border}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="4" />
-    <Setter Property="MinWidth" Value="220" />
     <Setter Property="MinHeight" Value="24" />
     <Setter Property="Padding" Value="8,2" />
     <Setter Property="HorizontalContentAlignment" Value="Left" />
     <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <!-- In a narrow window (0.6.0) the title row shrinks the search box to its icon (TitleBarPanel.CompactClass). -->
+  <Style Selector="Button.searchBox:not(.compact)">
+    <Setter Property="MinWidth" Value="220" />
+  </Style>
+  <Style Selector="Button.searchBox.compact TextBlock.searchText">
+    <Setter Property="IsVisible" Value="False" />
   </Style>
   <Style Selector="Border.solutionName">
     <Setter Property="Background" Value="{DynamicResource Shell.TitleBar.Chip}" />
@@ -1197,12 +1420,32 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
   </Style>
 
+  <!--
+    A popup that is a window of its own (menus, drop-down lists, tooltips) where the window system can't make its
+    corners transparent (X11 without a compositor): what its rounded border leaves uncovered takes the window's color
+    instead of black (D46 question 17; the smoke step shell.roundedCorners checks it).
+  -->
+  <Style Selector="PopupRoot">
+    <Setter Property="TransparencyBackgroundFallback" Value="{DynamicResource Shell.Background}" />
+  </Style>
+  <!--
+    A popup's UI text is the window's 9 pt (Shell.FontSize.Body), as the main window's (the Window style above). Its
+    content inherits from the popup's root, not from the window it opens over, and Fluent's themes for both roots (a
+    window of its own, PopupRoot; one drawn in the window's overlay layer, OverlayPopupHost) set Avalonia's 14 px
+    (ControlContentThemeFontSize): menus, drop-down lists, flyouts, IntelliSense, Quick Info and the data tips drew at
+    14 px in the windowed app (the smoke steps editor.intelliSense and debug.dataTip check it). A control that sets its
+    own size (the ToolTip style, TextBlock.small) still does.
+  -->
+  <Style Selector="PopupRoot, OverlayPopupHost">
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+  </Style>
+
   <!-- Floating surfaces: command palette and toasts. -->
   <Style Selector="Border.overlay">
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
     <Setter Property="BoxShadow" Value="0 6 18 0 #40000000" />
   </Style>
 
@@ -1236,7 +1479,7 @@
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
     <Setter Property="Padding" Value="8,6" />
   </Style>
   <!--
@@ -1251,6 +1494,120 @@
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
     <Setter Property="Padding" Value="8,6" />
     <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <!--
+    The data tip (D44, docs/design/controls/DataTip.dc.html): the header over the hovered expression and a tip per
+    expanded level, on the overlay color with the family's control corners; rows 20 px with a separator between names
+    and values, the row whose child tip is open marked (outlined too in high contrast). The text is the popups' UI size
+    (the PopupRoot, OverlayPopupHost style), the same as the pinned tips' in the editor.
+  -->
+  <Style Selector="Border.dataTip, Border.dataTipHeader">
+    <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="Border.dataTip">
+    <Setter Property="Padding" Value="0,2" />
+  </Style>
+  <Style Selector="Border.dataTipRow">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Border.dataTipRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource Shell.Row.Hover}" />
+  </Style>
+  <Style Selector="Border.dataTipRow.open">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection.Inactive}" />
+    <Setter Property="BoxShadow" Value="{DynamicResource Shell.Row.Hover.Outline}" />
+  </Style>
+  <Style Selector="Border.dataTipRow.selected">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <Style Selector="Border.dataTipSeparator">
+    <Setter Property="Width" Value="1" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="Border.dataTipHeader Border.dataTipSeparator">
+    <Setter Property="Margin" Value="0,3" />
+  </Style>
+  <Style Selector="Border.dataTipChevron:pointerover">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+  </Style>
+  <Style Selector="Border.dataTipValueBox">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Input}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    <Setter Property="Padding" Value="4,0" />
+    <Setter Property="MinHeight" Value="16" />
+  </Style>
+  <Style Selector="TextBlock.dataTipValue.error, TextBlock.dataTipValue.changed">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Error.Foreground}" />
+  </Style>
+  <Style Selector="Border.dataTipView Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="Height" Value="18" />
+    <Setter Property="Padding" Value="2,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+  </Style>
+  <Style Selector="Border.dataTipView Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+  </Style>
+  <Style Selector="Button.dataTipPin">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="Width" Value="20" />
+    <Setter Property="Height" Value="18" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+  </Style>
+  <Style Selector="Button.dataTipPin:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+  </Style>
+  <!-- A value edited in place (A11, A12): a compact box; the engine's refusal reddens its edge. -->
+  <Style Selector="TextBox.dataTipEdit">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Height" Value="18" />
+    <Setter Property="Padding" Value="3,0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="TextBox.dataTipEdit.error /template/ Border#PART_BorderElement">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Error}" />
+  </Style>
+  <Style Selector="TextBox.dataTipEdit.error">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Error}" />
+  </Style>
+  <!-- A row's pin shows on the row under the pointer, and on the selected one. -->
+  <Style Selector="Border.dataTipRow Button.dataTipRowPin">
+    <Setter Property="Opacity" Value="0" />
+  </Style>
+  <Style Selector="Border.dataTipRow:pointerover Button.dataTipRowPin, Border.dataTipRow.selected Button.dataTipRowPin">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+  <!-- Locals, Autos, Watch and QuickWatch (D44, decision 9): the data tip's rows, flat, under a Name | Value | Type header. -->
+  <Style Selector="ListBox.variableRows ListBoxItem">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Grid.variableRowsHeader">
+    <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
+  </Style>
+  <Style Selector="Border.pinnedDataTipComment">
+    <Setter Property="Padding" Value="6,1" />
   </Style>
   <Style Selector="Border.intelliSense.completionPopup">
     <Setter Property="Padding" Value="0" />

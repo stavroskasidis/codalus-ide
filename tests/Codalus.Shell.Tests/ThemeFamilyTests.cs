@@ -594,9 +594,9 @@ public partial class ThemeFamilyTests
         Assert.Equal(new CornerRadius(10, 10, 0, 0), caption.CornerRadius);
 
         await Use("dark");
-        Assert.Equal(4, Gutter()); // Classic keeps Dock's
+        Assert.Equal(6, Gutter()); // Classic's cards on 6 px of window (D46, was Dock's 4)
         Assert.False(Dot());
-        Assert.Equal(new CornerRadius(0), caption.CornerRadius);
+        Assert.Equal(new CornerRadius(4, 4, 0, 0), caption.CornerRadius);
         if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
         {
             Directory.CreateDirectory(snapshots);

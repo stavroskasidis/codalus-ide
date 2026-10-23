@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using Codalus.Platform;
 using Codalus.Plugins.Proposed;
 using Codalus.Rpc;
 
@@ -444,7 +445,7 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
                 {
                     try
                     {
-                        process.Kill(entireProcessTree: true);
+                        ProcessTree.Kill(process);
                     }
                     catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException)
                     {

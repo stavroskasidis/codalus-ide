@@ -3,6 +3,7 @@
 - **Status:** accepted (M48, 2026-10-18; D34)
 - **Date:** 2026-10-18
 - **Deciders:** maintainer (D34: the exception below is the maintainer's choice)
+- **Amended by:** [ADR 0083](0083-connecting-external-agents-from-templates.md) (0.6.0: terminal sign-in, Connect from templates, agents' keys)
 - **Amends:** [ADR 0062](0062-ai-provider-api-and-data-boundaries.md) (`AiService` is no longer the only code whose data reaches a model), [ADR 0063](0063-agent-mode-safety-model.md) (an external agent's requests pass the same checks as agent mode's tools; `codalus mcp` gets a pipe per session)
 
 ## Context
@@ -68,3 +69,5 @@ Such an agent calls its own model provider, with its own account and data policy
 - `Codalus.Rpc` can now speak newline-delimited JSON-RPC; MCP's client and server keep their own small writers for now.
 - Tests never reach a real agent: a stand-in agent (`tests/Codalus.AcpAgent.Fake`, its script in `tests/Shared/StandInAcpAgent.cs`) plays scripted sessions.
 - Deferred (`TODO(issue)`): HTTP MCP servers in `session/new` (when the agent advertises `mcpCapabilities.http`), elicitation, terminal sign-in, `session/load` and resuming a conversation, config options, images and embedded resources in prompts, agents in remote windows (they would run on this machine).
+
+*Amended by [ADR 0083](0083-connecting-external-agents-from-templates.md) (0.6.0, D43):* terminal sign-in is no longer deferred: Codalus advertises `auth.terminal` and runs an agent's terminal method in its own terminal, then starts the agent again. Add agent… is replaced by Connect to *agent*… from templates, which checks what the agent needs, signs it in, tests it and only then writes its entry. Entries may name `secretEnv` (values only in SecretStorage, under the shell's own id) and `unsetEnv`. `auth_required` on a prompt offers sign-in and sends the prompt again once. Connect, like the agents themselves, is refused in remote windows.

@@ -48,6 +48,22 @@ public sealed record DialogRequest(string Title, string Message, IReadOnlyList<s
 
     /// <summary>A muted line under the title saying what the dialog acts on (the type and file; M34h), or null.</summary>
     public string? Context { get; init; }
+
+    /// <summary>
+    /// One check box with its own note and list under it (Delete's "Also delete origin/x on the server", D38's P7), drawn as
+    /// a single choice rather than <see cref="Choices"/>' checklist; its id is in <see cref="DialogResult.Checked"/> when checked.
+    /// </summary>
+    public DialogOption? Option { get; init; }
+}
+
+/// <summary>A dialog's single check box: its note (wrapped under it) and lines (a list in the editor's font), and whether it can change.</summary>
+public sealed record DialogOption(string Id, string Label, bool Checked)
+{
+    public string? Note { get; init; }
+
+    public IReadOnlyList<DetailLine>? Lines { get; init; }
+
+    public bool IsEnabled { get; init; } = true;
 }
 
 /// <summary>An item of a dialog's checklist.</summary>
@@ -112,8 +128,8 @@ public sealed class DialogButtonViewModel(string label, bool isDefault, ICommand
 
 /// <summary>
 /// One in-window modal dialog at a time (confirmations, names, the trust prompt). Requests made while one is open
-/// wait for it to close. Its buttons show in the OS's order (M34h, docs/design/controls.md): the request lists them
-/// primary first, as Windows and Linux show them; macOS shows them reversed, the primary last.
+/// wait for it to close. Its buttons show in the OS's order (M34h and D38, docs/design/controls.md): the request lists
+/// them primary first, as Windows and Linux show them; macOS puts the default button last (<see cref="Order"/>).
 /// </summary>
 public sealed class DialogViewModel : ObservableObject
 {
@@ -155,11 +171,50 @@ public sealed class DialogViewModel : ObservableObject
                 OnPropertyChanged(nameof(Context));
                 OnPropertyChanged(nameof(HasContext));
                 OnPropertyChanged(nameof(ShowsMoveHint));
+                OnPropertyChanged(nameof(HasOption));
+                OnPropertyChanged(nameof(OptionLabel));
+                OnPropertyChanged(nameof(OptionEnabled));
+                OnPropertyChanged(nameof(OptionNote));
+                OnPropertyChanged(nameof(HasOptionNote));
+                OnPropertyChanged(nameof(OptionLines));
+                OnPropertyChanged(nameof(HasOptionLines));
             }
         }
     }
 
-    /// <summary>The buttons' order: the primary last (macOS) or first (Windows and Linux). Tests set it.</summary>
+    private bool _optionChecked;
+
+    /// <summary>The request has a single check box (<see cref="DialogRequest.Option"/>).</summary>
+    public bool HasOption => _request?.Option is not null;
+
+    public string OptionLabel => _request?.Option?.Label ?? string.Empty;
+
+    public bool OptionEnabled => _request?.Option?.IsEnabled ?? false;
+
+    public bool OptionChecked
+    {
+        get => _optionChecked;
+        set => SetField(ref _optionChecked, value);
+    }
+
+    public string? OptionNote => _request?.Option?.Note;
+
+    public bool HasOptionNote => _request?.Option?.Note is { Length: > 0 };
+
+    public IReadOnlyList<DetailLine> OptionLines => _request?.Option?.Lines ?? [];
+
+    public bool HasOptionLines => _request?.Option?.Lines is { Count: > 0 };
+
+    /// <summary>
+    /// The buttons in the OS's order (D38, question 1): as the request lists them (primary first) on Windows and Linux; with
+    /// <paramref name="primaryLast"/> (macOS), the default button goes to the trailing edge and the others keep the reverse
+    /// of their order before it, so [Cancel] [Rename] for a request whose primary is the default, and [Delete] [Cancel] for
+    /// one whose default is Cancel: a destructive action never takes the place where the Mac keeps its default button.
+    /// </summary>
+    public static IReadOnlyList<string> Order(IReadOnlyList<string> buttons, string? defaultButton, bool primaryLast) =>
+        !primaryLast ? buttons : [.. buttons.Where(b => b != defaultButton).Reverse(), .. buttons.Where(b => b == defaultButton)];
+
+    /// <summary>The buttons' order: the default last (macOS, <see cref="Order"/>) or as listed (Windows and Linux). Tests set it.</summary>
     public bool PrimaryLast { get; set; } = PrimaryLastOnThisOs;
 
     /// <summary>The header's icon kind: the request's, the warning icon for a dangerous one, or null.</summary>
@@ -330,7 +385,8 @@ public sealed class DialogViewModel : ObservableObject
         Request = request;
         Error = request.Validate?.Invoke(_input);
         Buttons.Clear();
-        foreach (var label in PrimaryLast ? request.Buttons.Reverse() : request.Buttons)
+        OptionChecked = request.Option?.Checked ?? false;
+        foreach (var label in Order(request.Buttons, DefaultButton, PrimaryLast))
         {
             Buttons.Add(new DialogButtonViewModel(label, label == DefaultButton, new RelayCommand(() => Choose(label))));
         }
@@ -394,7 +450,8 @@ public sealed class DialogViewModel : ObservableObject
             return;
         }
 
-        Close(new DialogResult(button, HasInput ? _input : null) { Checked = [.. Choices.Where(c => c.IsChecked).Select(c => c.Id)] });
+        IEnumerable<string> option = _request?.Option is { } single && _optionChecked ? [single.Id] : [];
+        Close(new DialogResult(button, HasInput ? _input : null) { Checked = [.. Choices.Where(c => c.IsChecked).Select(c => c.Id), .. option] });
     }
 
     private void Close(DialogResult result)
@@ -420,6 +477,9 @@ public sealed class DialogViewModel : ObservableObject
 
     // ------------------------------------------------------------------ common dialogs
 
+    // TODO(issue): D38's question 1 makes a destructive action a plain button with Cancel the default (Discard, Delete, as
+    // ui-guidelines.md now says); ConfirmAsync(danger: true)'s callers (Solution Explorer's Delete and Remove, Remove
+    // Connection, Uninstall Template Package and others) still make the action the accented default, so Enter deletes there.
     public async Task<bool> ConfirmAsync(string title, string message, string action, bool danger = false) =>
         (await ShowAsync(new DialogRequest(title, message, [action, "Cancel"]) { IsDanger = danger }).ConfigureAwait(true)).Button == action;
 

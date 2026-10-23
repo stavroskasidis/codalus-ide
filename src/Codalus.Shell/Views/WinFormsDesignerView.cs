@@ -17,10 +17,11 @@ namespace Codalus.Shell.Views;
 /// The Windows Forms designer's view (M41a and M41b, ADR 0073): the designer host's frame of the form, and over it the
 /// surface's own adorners and gestures: selection (a click; Ctrl or Shift to add; a rubber band), moving (a drag, into
 /// another container when dropped in one) and resizing (the primary selection's eight grab handles) with Visual
-/// Studio's snap lines (Alt turns them off), the arrow keys (Shift to resize), Delete, Ctrl+C, Ctrl+V and Ctrl+D,
-/// Ctrl+Z and Ctrl+Y (the designer's undo), a double-click (the default event's handler), the Toolbox (a click or a
-/// drag with an item armed, or an item dragged in), tab order mode, smart tags, menus and tool strips edited in place
-/// (Type Here), the component tray, and the collection editors.
+/// Studio's snap lines (Alt turns them off), the arrow keys (Shift to resize), Delete, Ctrl+C, Ctrl+X, Ctrl+V and
+/// Ctrl+D, Ctrl+A (Select All), Esc (the parent), Ctrl+Z and Ctrl+Y (the designer's undo), a double-click (the default
+/// event's handler), the Toolbox (a click or a drag with an item armed, or an item dragged in), tab order mode, smart
+/// tags, menus and tool strips edited in place (Type Here), the component tray, the collection editors, and the classic
+/// IDE's context menus of the surface and the tray (#67), with a locked control's lock.
 /// </summary>
 public sealed class WinFormsDesignerView : UserControl, IPaneView
 {
@@ -35,6 +36,11 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
     private readonly ScrollViewer _scroll;
     private readonly Canvas _overlay = new() { ClipToBounds = false };
     private readonly Border _collectionHost = new() { IsVisible = false, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, BorderThickness = new Thickness(1) };
+
+    /// <summary>The editor panels (#68: the font editor, the String Collection Editor, Select Resource), above the collection editor.</summary>
+    private readonly Panel _editorHost = new() { IsVisible = false, Background = Brushes.Transparent };
+    private readonly Grid _surfaceArea;
+    private ItemsControl? _tray;
     private string? _renaming;
 
     public WinFormsDesignerView(WinFormsDesignerDocument document)
@@ -104,15 +110,17 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         Avalonia.Automation.AutomationProperties.SetLiveSetting(message, Avalonia.Automation.AutomationLiveSetting.Polite);
         _collectionHost.Bind(Border.BackgroundProperty, _collectionHost.GetResourceObservable("Shell.Panel"));
         _collectionHost.Bind(Border.BorderBrushProperty, _collectionHost.GetResourceObservable("Shell.Border"));
-        var surfaceArea = new Grid { Children = { _scroll, message, _collectionHost } };
+        _surfaceArea = new Grid { Children = { _scroll, message, _collectionHost, _editorHost } };
 
-        Content = new DockPanel { Children = { toolbar, problemBar, trayBar, surfaceArea } };
+        Content = new DockPanel { Children = { toolbar, problemBar, trayBar, _surfaceArea } };
 
-        // The document's state, without reflection bindings (the shell is Native AOT).
+        // The document's state, without reflection bindings (the shell is Native AOT). With a Toolbox item armed, the
+        // status line says what a click or a drag on the form does (#66: that hint sat above the Toolbox's list).
         void Update()
         {
-            status.Text = document.Status;
-            ToolTip.SetTip(status, string.IsNullOrEmpty(document.Status) ? null : document.Status);
+            var line = document.Toolbox.ArmedText ?? document.Status;
+            status.Text = line;
+            ToolTip.SetTip(status, string.IsNullOrEmpty(line) ? null : line);
             message.Text = document.Status;
             message.IsVisible = document.Frame is null && !string.IsNullOrEmpty(document.Status);
             busy.IsVisible = document.IsBusy;
@@ -124,6 +132,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         }
 
         Update();
+        ShowEditorPanel(); // a panel opened before the view was made (#68)
         document.PropertyChanged += (_, e) => Infrastructure.Ui.Post(() =>
         {
             Update();
@@ -135,22 +144,130 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             {
                 ShowCollectionEditor();
             }
+            else if (e.PropertyName is nameof(WinFormsDesignerDocument.FontEditor) or nameof(WinFormsDesignerDocument.StringsEditor) or nameof(WinFormsDesignerDocument.ResourcePicker))
+            {
+                ShowEditorPanel();
+            }
         });
         document.SurfaceChanged += (_, _) => Infrastructure.Ui.Post(Update);
+
+        // The Toolbox outlives the designer: its armed item is followed only while the view is shown.
+        void OnToolboxChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ToolboxViewModel.ArmedText))
+            {
+                Infrastructure.Ui.Post(Update);
+            }
+        }
+
+        AttachedToVisualTree += (_, _) =>
+        {
+            document.Toolbox.PropertyChanged += OnToolboxChanged;
+            Update();
+        };
+        DetachedFromVisualTree += (_, _) => document.Toolbox.PropertyChanged -= OnToolboxChanged;
         Avalonia.Automation.AutomationProperties.SetName(_surface, document.Title);
+
+        // The classic IDE's context menu (#67): a right-click (which selected what it's on), Shift+F10 or the Menu key.
         _surface.ContextRequested += (_, e) =>
         {
-            if (MenuBuilder.Context(document.Shell, BuiltIns.WinFormsSurfaceMenu) is { } menu)
-            {
-                menu.Open(_surface);
-                e.Handled = true;
-            }
+            e.Handled = true;
+            _ = OpenMenuAsync(BuiltIns.WinFormsSurfaceMenu, _surface, fromPointer: e.TryGetPosition(_surface, out Point _));
         };
     }
 
     public DesignerSurface Surface => _surface;
 
+    /// <summary>The document this view shows (Edit's commands act on it while it has the focus).</summary>
+    public WinFormsDesignerDocument Document => _document;
+
     public void FocusPrimary() => _surface.Focus();
+
+    /// <summary>
+    /// Whether <paramref name="focused"/> is the surface or the component tray (an item, its background), where Edit's
+    /// commands act on the components (#67); the view's collection editor and smart tag panel aren't.
+    /// </summary>
+    internal bool HoldsComponentFocus(Avalonia.Visual focused) =>
+        focused == _surface || _surface.IsVisualAncestorOf(focused) || (_tray is { } tray && (focused == tray || tray.IsVisualAncestorOf(focused)));
+
+    // ------------------------------------------------------------------ the context menus (#67)
+
+    /// <summary>
+    /// A context menu of the designer (the surface's, a tray item's, the tray's background), as the classic IDE builds it:
+    /// the registered entries with their enablement of the moment, Select '…' naming the primary selection's parent, the
+    /// component's verbs first in the group of Show Smart Tag (a disabled one grayed: D40, 3), and in a tray item's, Rename
+    /// (F2) before Line Up Icons. Null when nothing is to show.
+    /// </summary>
+    internal async Task<ContextMenu?> BuildMenuAsync(string location)
+    {
+        IReadOnlyList<Workbench.WinForms.DesignerActionItem> verbs = location == BuiltIns.WinFormsTrayBackgroundMenu ? [] : await _document.ContextVerbsAsync();
+        _document.PublishContext();
+        var shell = _document.Shell;
+        var items = shell.Workbench.Menus.GetItems(location);
+        var menu = MenuBuilder.Context(shell, location, titleFor: command => command == "winforms.selectParent" && _document.ParentOfPrimary is { } parent
+            ? Localizer.Format("msg.winFormsDesigner.selectParent", "Select '{0}'", parent)
+            : null);
+        if (menu is null)
+        {
+            return null;
+        }
+
+        if (verbs.Count > 0)
+        {
+            var at = 0;
+            foreach (var verb in verbs)
+            {
+                // The designer's text, its mnemonic as the entry's access key ("&Edit Columns..." reads "Edit Columns...").
+                var entry = MenuEntry.Create(DesignerMnemonics.Strip(verb.DisplayName), null, click: () => _ = _document.InvokeVerbAsync(verb));
+                entry.Header = DesignerMnemonics.ToAccessKey(verb.DisplayName);
+                entry.IsEnabled = !verb.Unavailable;
+                menu.Items.Insert(at++, entry);
+            }
+
+            if (items.Count > 0 && items[0].Command != "winforms.smartTag")
+            {
+                menu.Items.Insert(at, new Separator());
+            }
+        }
+
+        if (location == BuiltIns.WinFormsTrayMenu && _document.Selection is [var selected]
+            && items.FirstOrDefault(i => i.Command == "winforms.lineUpIcons") is { } lineUp
+            && menu.Items.OfType<MenuItem>().FirstOrDefault(i => Avalonia.Automation.AutomationProperties.GetName(i) == lineUp.Title) is { } lineUpEntry)
+        {
+            menu.Items.Insert(menu.Items.IndexOf(lineUpEntry), MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.rename", "Rename"), "rename", keys: "F2", click: () => StartRename(selected)));
+        }
+
+        return menu;
+    }
+
+    /// <summary>The context menu the view opened last (tests: the gestures that open one).</summary>
+    internal ContextMenu? LastMenu { get; private set; }
+
+    /// <summary>
+    /// Opens a context menu: at the pointer for a right-click, else (Shift+F10, the Menu key) under the primary selection
+    /// on the surface, or under the tray.
+    /// </summary>
+    private async Task OpenMenuAsync(string location, Control target, bool fromPointer)
+    {
+        if (await BuildMenuAsync(location) is not { } menu || !target.IsAttachedToVisualTree())
+        {
+            return;
+        }
+
+        LastMenu = menu;
+
+        if (!fromPointer)
+        {
+            menu.Placement = PlacementMode.AnchorAndGravity;
+            menu.PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.BottomLeft;
+            menu.PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight;
+            menu.PlacementRect = target == _surface && _document.PrimarySelection is { } primary && _document.Find(primary) is { Width: > 0 } view
+                ? new Rect(view.X, view.Y, view.Width, view.Height)
+                : new Rect(target.Bounds.Size);
+        }
+
+        menu.Open(target);
+    }
 
     // ------------------------------------------------------------------ the component tray
 
@@ -167,7 +284,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         DragDrop.SetAllowDrop(tray, true);
         DragDrop.AddDragOverHandler(tray, (_, e) =>
         {
-            e.DragEffects = e.DataTransfer.Contains(TrayFormat) ? DragDropEffects.Move : DragDropEffects.None;
+            e.DragEffects = e.DataTransfer.Contains(TrayFormat) ? DragDropEffects.Move : TrayToolOf(e.DataTransfer) is not null ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         });
         DragDrop.AddDropHandler(tray, (_, e) =>
@@ -178,8 +295,20 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 e.Handled = true;
                 _ = _document.MoveTrayItemAsync(name, before == name ? null : before);
             }
+            else if (TrayToolOf(e.DataTransfer) is { } type)
+            {
+                // A component from the Toolbox (#66), as the classic component tray takes one: the host puts it in the tray.
+                e.Handled = true;
+                _ = _document.CreateAsync(type, 0, 0);
+            }
         });
-        tray.ContextMenu = new ContextMenu { Items = { MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.lineUpIcons", "Line Up Icons"), "layout", click: () => _ = _document.LineUpTrayAsync()) } };
+        // Its background's menu: Paste, then Line Up Icons (#67, D40: 10). An item's own menu handles its request first.
+        tray.ContextRequested += (_, e) =>
+        {
+            e.Handled = true;
+            _ = OpenMenuAsync(BuiltIns.WinFormsTrayBackgroundMenu, tray, fromPointer: e.TryGetPosition(tray, out Point _));
+        };
+        _tray = tray;
         return tray;
     }
 
@@ -254,14 +383,19 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                     break;
             }
         };
-        var rename = MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.rename", "Rename"), "rename", click: () => StartRename(item.Name));
-        var delete = MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.delete", "Delete"), "trash", click: () =>
+        // The classic IDE's menu (#67): the item is selected first unless it's in the selection (which then stays, as a
+        // right-click on the surface keeps it), then its menu opens (on the tray, which outlives the item's button:
+        // selecting draws the tray again).
+        button.ContextRequested += (_, e) =>
         {
-            item.Select.Execute(null);
-            _ = _document.DeleteSelectionAsync();
-        });
-        var lineUp = MenuEntry.Create(Localizer.Get("msg.winFormsDesigner.lineUpIcons", "Line Up Icons"), "layout", click: () => _ = _document.LineUpTrayAsync());
-        button.ContextMenu = new ContextMenu { Items = { rename, delete, new Separator(), lineUp } };
+            e.Handled = true;
+            if (!_document.Selection.Contains(item.Name))
+            {
+                item.Select.Execute(null);
+            }
+
+            _ = OpenMenuAsync(BuiltIns.WinFormsTrayMenu, _tray ?? (Control)button, fromPointer: e.TryGetPosition(button, out Point _));
+        };
 
         // Dragged before another tray component: the tray's order.
         PointerPressedEventArgs? pressed = null;
@@ -279,6 +413,14 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         }, RoutingStrategies.Tunnel);
         return button;
     }
+
+    /// <summary>
+    /// A Toolbox item the tray takes (#66): a component that isn't a control (a timer, a tool tip, a context menu), as
+    /// the classic component tray does; a control is refused. Not in tab order mode or while the host starts again.
+    /// </summary>
+    private string? TrayToolOf(IDataTransfer data) =>
+        !_document.IsTabOrderMode && !_document.IsRestarting && data.TryGetValue(ToolboxFormat) is { Length: > 0 } type
+        && _document.Toolbox.Items.FirstOrDefault(i => i.Type == type) is { IsControl: false } ? type : null;
 
     public void StartRename(string name)
     {
@@ -355,6 +497,11 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             _overlay.Children.Remove(old);
         }
 
+        foreach (var old in _surfaceArea.Children.Where(c => c.Tag is "actions").ToList())
+        {
+            _surfaceArea.Children.Remove(old);
+        }
+
         if (_document.ActionPanel is not { } panel || _document.Find(panel.Component) is not { } view)
         {
             return;
@@ -388,10 +535,35 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 e.Handled = true;
             }
         };
+        if (IsTrayOnly(view))
+        {
+            // A tray component (the host sends it 0 × 0 at the form's corner): just above the tray, at its item (#67: its
+            // menu's Show Smart Tag opened it over the form's caption). The tray is drawn again when the selection changes,
+            // so the item's place is taken again once it's laid out.
+            border.HorizontalAlignment = HorizontalAlignment.Left;
+            border.VerticalAlignment = VerticalAlignment.Bottom;
+            void Place()
+            {
+                var item = _tray?.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Tag as string == view.Name);
+                border.Margin = new Thickness(Math.Max(6, item?.TranslatePoint(default, _surfaceArea)?.X ?? 6), 6, 6, 6);
+            }
+
+            Place();
+            Avalonia.Threading.Dispatcher.UIThread.Post(Place, Avalonia.Threading.DispatcherPriority.Loaded);
+            _surfaceArea.Children.Add(border);
+            return;
+        }
+
         Canvas.SetLeft(border, view.X + view.Width + 14);
         Canvas.SetTop(border, view.Y);
         _overlay.Children.Add(border);
     }
+
+    /// <summary>A component only in the tray (a timer, a tool tip, a context menu strip), not a strip drawn on the form too.</summary>
+    private static bool IsTrayOnly(DesignerComponentView view) => !view.IsItem && (view.Width <= 0 || view.Height <= 0 || !view.IsControl);
+
+    /// <summary>The smart tag panel shown, or null (tests: where it opens).</summary>
+    internal Border? ActionsPanel => _overlay.Children.Concat(_surfaceArea.Children).OfType<Border>().FirstOrDefault(c => c.Tag is "actions");
 
     private static Control ActionRow(DesignerActionRowViewModel row)
     {
@@ -551,6 +723,9 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         var left = new StackPanel { Children = { list, buttons } };
 
         var details = new StackPanel { Spacing = 4, Width = 300, Margin = new Thickness(12, 0, 0, 0) };
+
+        // One grid view for the editor's life (#68), shown again for each item: a view made per item would stay subscribed to the grid.
+        PropertyGridView? itemGrid = null;
         void Details()
         {
             details.Children.Clear();
@@ -569,9 +744,10 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 return;
             }
 
-            foreach (var row in editor.Properties)
+            if (editor.HasProperties)
             {
-                details.Children.Add(PropertyRow(row));
+                // The item's properties in the shared property grid (#68), refreshed in place after each change.
+                details.Children.Add(itemGrid ??= new PropertyGridView { DataContext = editor.Grid, Height = 300 });
             }
         }
 
@@ -590,53 +766,333 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 });
             }
         };
-        editor.Properties.CollectionChanged += (_, _) => Infrastructure.Ui.Post(Details);
         list.SelectedItem = editor.Selected;
         Details();
-        return new StackPanel { Orientation = Orientation.Horizontal, Children = { left, new ScrollViewer { Content = details, MaxHeight = 300 } } };
+        return new StackPanel { Orientation = Orientation.Horizontal, Children = { left, editor.HasProperties ? details : new ScrollViewer { Content = details, MaxHeight = 300 } } };
     }
 
-    /// <summary>A collection item's property in the editor's grid: its name and its editor (text, choice, flags), or its value.</summary>
-    private static Grid PropertyRow(PropertyRowViewModel row)
+    // ------------------------------------------------------------------ the editor panels (#68)
+
+    /// <summary>
+    /// The font editor or the String Collection Editor: a panel over the surface (and over the collection editor) in the
+    /// in-window dialog's frame, as the approved mockup draws it (D41 question 2): the title, what it edits as the context
+    /// line, a close button, the body, and OK and Cancel in the OS's order. Esc cancels, Enter in a list or box confirms.
+    /// </summary>
+    private void ShowEditorPanel()
     {
-        Control editor;
-        if (row.IsChoice || row.IsDock)
+        _editorHost.Children.Clear();
+        Control? panel = _document.FontEditor is { } font ? FontPanel(font)
+            : _document.StringsEditor is { } strings ? StringsPanel(strings)
+            : _document.ResourcePicker is { } picker ? ResourcePanel(picker)
+            : null;
+        _editorHost.IsVisible = panel is not null;
+        if (panel is not null)
         {
-            var combo = new ComboBox { ItemsSource = row.Options.Select(o => o.Label).ToList(), SelectedItem = row.SelectedOption?.Label, HorizontalAlignment = HorizontalAlignment.Stretch };
-            combo.SelectionChanged += (_, _) => row.SelectedOption = row.Options.FirstOrDefault(o => o.Label == combo.SelectedItem as string);
-            editor = combo;
+            _editorHost.Children.Add(panel);
+            Infrastructure.Ui.Post(() => panel.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(c => c.Focusable && c is TextBox or ListBox)?.Focus());
         }
-        else if (row.IsTextEditor)
+    }
+
+    /// <summary>The in-window dialog's frame around an editor's body.</summary>
+    internal static Border EditorFrame(string title, string context, Control body, System.Windows.Input.ICommand ok, System.Windows.Input.ICommand cancel)
+    {
+        var heading = new TextBlock { Text = title, Classes = { "subheading" }, TextWrapping = TextWrapping.Wrap };
+        var line = new TextBlock { Text = context, Classes = { "muted", "small" }, TextTrimming = TextTrimming.CharacterEllipsis };
+        ToolTip.SetTip(line, context);
+        var close = new Button { Classes = { "subtle", "icon", "compact" }, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(8, 0, 0, 0), IsTabStop = false, Command = cancel, Content = new Icon { Kind = "close", Width = 16, Height = 16 } };
+        Avalonia.Automation.AutomationProperties.SetName(close, Localizer.Get("msg.winFormsDesigner.close", "Close"));
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(20, 16, 12, 4), Children = { new StackPanel { Children = { heading, line } }, close } };
+        Grid.SetColumn(close, 1);
+        Button Action(string text, System.Windows.Input.ICommand command, bool accent)
         {
-            var box = new TextBox { Text = row.Text };
-            box.LostFocus += (_, _) => row.Text = box.Text ?? string.Empty;
-            editor = box;
-        }
-        else if (row.IsFlags || row.IsAnchor)
-        {
-            var flags = new WrapPanel();
-            foreach (var flag in row.Flags)
+            var button = new Button { Content = text, Command = command, Classes = { "dialog" } };
+            if (accent)
             {
-                var toggle = new ToggleButton { Content = flag.Name, IsChecked = flag.IsChecked, Classes = { "toolbar" }, Padding = new Thickness(4, 0) };
-                toggle.IsCheckedChanged += (_, _) => flag.IsChecked = toggle.IsChecked == true;
-                flags.Children.Add(toggle);
+                button.Classes.Add("accent");
             }
 
-            editor = flags;
-        }
-        else
-        {
-            editor = new SelectableTextBlock { Text = row.Value, Margin = new Thickness(4, 3) };
+            Avalonia.Automation.AutomationProperties.SetName(button, text);
+            return button;
         }
 
-        Avalonia.Automation.AutomationProperties.SetName(editor, row.Name);
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*") };
-        var name = new TextBlock { Text = row.Name, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = row.IsSet ? FontWeight.SemiBold : FontWeight.Normal };
-        ToolTip.SetTip(name, row.Description);
-        Grid.SetColumn(editor, 1);
-        grid.Children.Add(name);
-        grid.Children.Add(editor);
-        return grid;
+        var okButton = Action(Localizer.Get("msg.winFormsDesigner.ok", "OK"), ok, accent: true);
+        var cancelButton = Action(Localizer.Get("msg.winFormsDesigner.cancel", "Cancel"), cancel, accent: false);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        buttons.Children.AddRange(DialogViewModel.PrimaryLastOnThisOs ? [cancelButton, okButton] : [okButton, cancelButton]);
+        var footer = new Border { Classes = { "dialogFooter" }, Child = buttons };
+        DockPanel.SetDock(header, Avalonia.Controls.Dock.Top);
+        DockPanel.SetDock(footer, Avalonia.Controls.Dock.Bottom);
+        var frame = new Border
+        {
+            Classes = { "overlay" },
+            CornerRadius = new CornerRadius(8),
+            ClipToBounds = true,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(16),
+            // The body scrolls when the surface is shorter than the editor.
+            Child = new DockPanel { Children = { header, footer, new ScrollViewer { HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled, Content = new Border { Padding = new Thickness(20, 12, 20, 16), Child = body } } } },
+        };
+        Avalonia.Automation.AutomationProperties.SetName(frame, title);
+        KeyboardNavigation.SetTabNavigation(frame, KeyboardNavigationMode.Cycle);
+        frame.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                cancel.Execute(null);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter && e.Source is not TextBox { AcceptsReturn: true })
+            {
+                ok.Execute(null);
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+        return frame;
+    }
+
+    private static TextBlock Label(string text) => new() { Text = text, FontWeight = FontWeight.SemiBold, FontSize = 11, Margin = new Thickness(0, 0, 0, 4) };
+
+    /// <summary>A text box over a list (the font editor's family, style and size): picking in the list fills the box.</summary>
+    private static StackPanel Picker(string label, IReadOnlyList<string> items, Func<string> get, Action<string> set, double width)
+    {
+        var box = new TextBox { Text = get(), Width = width, Margin = new Thickness(0, 0, 0, 4) };
+        var list = new ListBox { ItemsSource = items, Width = width, Height = 110, SelectedItem = items.FirstOrDefault(i => string.Equals(i, get(), StringComparison.OrdinalIgnoreCase)) };
+        PropertyEditors.PropertyDropDowns.CompactRows(list);
+        Avalonia.Automation.AutomationProperties.SetName(box, label);
+        Avalonia.Automation.AutomationProperties.SetName(list, label);
+        box.TextChanged += (_, _) => set(box.Text ?? string.Empty);
+        list.SelectionChanged += (_, _) =>
+        {
+            if (list.SelectedItem is string item && item != box.Text)
+            {
+                box.Text = item;
+            }
+        };
+        if (list.SelectedItem is { } selected)
+        {
+            list.ScrollIntoView(selected);
+        }
+
+        return new StackPanel { Children = { Label(label), box, list } };
+    }
+
+    private static Border FontPanel(DesignerFontEditorViewModel editor)
+    {
+        var sample = new TextBlock { Text = "AaBbYyZz", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        void UpdateSample()
+        {
+            sample.FontFamily = editor.Family.Length == 0 ? FontFamily.Default : new FontFamily(editor.Family);
+            sample.FontSize = float.TryParse(editor.Size, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var points) && points is > 1 and < 200 ? points * 96 / 72 : 12;
+            sample.FontWeight = editor.IsBold ? FontWeight.Bold : FontWeight.Normal;
+            sample.FontStyle = editor.IsItalic ? FontStyle.Italic : FontStyle.Normal;
+            sample.TextDecorations = editor.Underline && editor.Strikeout ? [.. TextDecorations.Underline, .. TextDecorations.Strikethrough]
+                : editor.Underline ? TextDecorations.Underline
+                : editor.Strikeout ? TextDecorations.Strikethrough
+                : null;
+        }
+
+        editor.PropertyChanged += (_, _) => UpdateSample();
+        UpdateSample();
+        Control family = editor.Families.Count > 0
+            ? Picker(Localizer.Get("msg.winFormsDesigner.fontFamily", "Font"), editor.Families, () => editor.Family, v => editor.Family = v, 168)
+            : new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.fontFamily", "Font")), BoundBox(editor.Family, v => editor.Family = v, 168, Localizer.Get("msg.winFormsDesigner.fontFamily", "Font")) } };
+        var columns = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            Children =
+            {
+                family,
+                Picker(Localizer.Get("msg.winFormsDesigner.fontStyle", "Font style"), editor.Styles, () => editor.Style, v => editor.Style = v, 108),
+                Picker(Localizer.Get("msg.winFormsDesigner.fontSize", "Size"), editor.Sizes, () => editor.Size, v => editor.Size = v, 64),
+            },
+        };
+        CheckBox Check(string text, bool value, Action<bool> set)
+        {
+            var check = new CheckBox { Content = text, IsChecked = value };
+            check.IsCheckedChanged += (_, _) => set(check.IsChecked == true);
+            Avalonia.Automation.AutomationProperties.SetName(check, text);
+            return check;
+        }
+
+        var effects = new StackPanel
+        {
+            Width = 120,
+            Spacing = 6,
+            Children =
+            {
+                Label(Localizer.Get("msg.winFormsDesigner.fontEffects", "Effects")),
+                Check(Localizer.Get("msg.winFormsDesigner.strikeout", "Strikeout"), editor.Strikeout, v => editor.Strikeout = v),
+                Check(Localizer.Get("msg.winFormsDesigner.underline", "Underline"), editor.Underline, v => editor.Underline = v),
+            },
+        };
+        var sampleBox = new Border { Height = 56, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Child = sample, ClipToBounds = true };
+        sampleBox.Bind(Border.BackgroundProperty, sampleBox.GetResourceObservable("Shell.Input"));
+        sampleBox.Bind(Border.BorderBrushProperty, sampleBox.GetResourceObservable("Shell.Input.Border"));
+        var sampleColumn = new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.fontSample", "Sample")), sampleBox } };
+        var lower = new Grid { ColumnDefinitions = new ColumnDefinitions("120,*"), ColumnSpacing = 12, Margin = new Thickness(0, 4, 0, 0), Children = { effects, sampleColumn } };
+        Grid.SetColumn(sampleColumn, 1);
+        return EditorFrame(editor.Title, editor.Context, new StackPanel { Spacing = 8, Children = { columns, lower } }, editor.OkCommand, editor.CancelCommand);
+    }
+
+    private static TextBox BoundBox(string value, Action<string> set, double width, string name)
+    {
+        var box = new TextBox { Text = value, Width = width };
+        box.TextChanged += (_, _) => set(box.Text ?? string.Empty);
+        Avalonia.Automation.AutomationProperties.SetName(box, name);
+        return box;
+    }
+
+    /// <summary>
+    /// Select Resource, as the approved panel (k) draws it (D41): Resource context's two options, Local resource with its
+    /// Import… and Clear, and Project resource file with the project's resources files in a combo box, their images under
+    /// "(none)" and Import…; the side not chosen is grayed. The preview has the image's file name and size under it.
+    /// </summary>
+    private static Border ResourcePanel(DesignerResourcePickerViewModel picker)
+    {
+        Button Small(string text, System.Windows.Input.ICommand command, string? icon = null)
+        {
+            var button = new Button { Content = text, Command = command, Classes = { "dialog" }, MinWidth = 76 };
+            if (icon is not null)
+            {
+                button.Classes.Add("iconText");
+                ButtonIcon.SetKind(button, icon);
+            }
+
+            Avalonia.Automation.AutomationProperties.SetName(button, text);
+            return button;
+        }
+
+        var local = new RadioButton { Content = Localizer.Get("msg.winFormsDesigner.localResourceOption", "Local resource"), GroupName = "resource", IsChecked = picker.IsLocal };
+        var project = new RadioButton { Content = Localizer.Get("msg.winFormsDesigner.projectResourceOption", "Project resource file"), GroupName = "resource", IsChecked = picker.IsProject, IsEnabled = picker.HasResourceFile };
+        if (!picker.HasResourceFile)
+        {
+            ToolTip.SetTip(project, picker.NoResourceFileText);
+        }
+
+        local.IsCheckedChanged += (_, _) => picker.IsLocal = local.IsChecked == true;
+        project.IsCheckedChanged += (_, _) => picker.IsProject = project.IsChecked == true;
+        var import = Localizer.Get("msg.winFormsDesigner.import", "Import…");
+        var importLocal = Small(import, picker.ImportLocalCommand, "import");
+        var clear = Small(Localizer.Get("msg.winFormsDesigner.clear", "Clear"), picker.ClearCommand);
+        var localRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(24, 4, 0, 8), Children = { importLocal, clear } };
+
+        var files = new ComboBox { ItemsSource = picker.ResourceFiles, SelectedIndex = picker.HasResourceFile ? 0 : -1, Width = 232, PlaceholderText = Localizer.Get("msg.winFormsDesigner.noImage", "(none)") };
+        Avalonia.Automation.AutomationProperties.SetName(files, Localizer.Get("msg.winFormsDesigner.projectResourceOption", "Project resource file"));
+        var noneLabel = Localizer.Get("msg.winFormsDesigner.noImage", "(none)");
+        var list = new ListBox
+        {
+            Width = 232,
+            Height = 96,
+            Margin = new Thickness(0, 6, 0, 0),
+            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DesignerProjectResource>((resource, _) =>
+                new TextBlock { Text = ReferenceEquals(resource, DesignerResourcePickerViewModel.NoResource) ? noneLabel : resource?.Name, VerticalAlignment = VerticalAlignment.Center }),
+        };
+        PropertyEditors.PropertyDropDowns.CompactRows(list);
+        Avalonia.Automation.AutomationProperties.SetName(list, Localizer.Get("msg.winFormsDesigner.projectResources", "Project resources"));
+        var filling = false;
+        void FillList()
+        {
+            filling = true;
+            List<DesignerProjectResource> items = picker.HasResourceFile ? [DesignerResourcePickerViewModel.NoResource, .. picker.ProjectResources] : [];
+            list.ItemsSource = items;
+            list.SelectedItem = picker.SelectedResource ?? (picker.HasResourceFile ? DesignerResourcePickerViewModel.NoResource : null);
+            filling = false;
+        }
+
+        FillList();
+        picker.ProjectResources.CollectionChanged += (_, _) => FillList();
+        list.SelectionChanged += (_, _) =>
+        {
+            if (!filling && list.SelectedItem is DesignerProjectResource resource)
+            {
+                picker.SelectedResource = ReferenceEquals(resource, DesignerResourcePickerViewModel.NoResource) ? null : resource;
+            }
+        };
+        var importProject = Small(import, picker.ImportProjectCommand, "import");
+        importProject.HorizontalAlignment = HorizontalAlignment.Left;
+        importProject.Margin = new Thickness(0, 6, 0, 0);
+        var projectBox = new StackPanel { Margin = new Thickness(24, 4, 0, 0), Children = { files, list, importProject } };
+
+        // The side not chosen is grayed (panel k: Import… and Clear grayed while Project resource file is chosen).
+        void UpdateSides()
+        {
+            importLocal.IsEnabled = clear.IsEnabled = picker.IsLocal;
+            projectBox.IsEnabled = picker.IsProject;
+        }
+
+        UpdateSides();
+
+        var image = new Image { Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, MaxWidth = 138, MaxHeight = 138 };
+        var none = new TextBlock { Text = Localizer.Get("msg.winFormsDesigner.noPreview", "No image"), Classes = { "muted", "small" }, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var preview = new Border { Width = 140, Height = 140, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), ClipToBounds = true, Child = new Grid { Children = { none, image } } };
+        preview.Bind(Border.BackgroundProperty, preview.GetResourceObservable("Shell.Input"));
+        preview.Bind(Border.BorderBrushProperty, preview.GetResourceObservable("Shell.Input.Border"));
+        var caption = new TextBlock { Classes = { "muted", "small" }, Margin = new Thickness(0, 4, 0, 0), MaxWidth = 140, TextTrimming = TextTrimming.CharacterEllipsis };
+        void UpdatePreview()
+        {
+            var old = image.Source as IDisposable;
+            Avalonia.Media.Imaging.Bitmap? bitmap = null;
+            if (picker.Preview is { } bytes)
+            {
+                try
+                {
+                    using var stream = new MemoryStream(bytes);
+                    bitmap = new Avalonia.Media.Imaging.Bitmap(stream);
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException or IOException)
+                {
+                    bitmap = null; // an image Avalonia can't decode (an icon, a metafile): no preview
+                }
+            }
+
+            image.Source = bitmap;
+            none.IsVisible = bitmap is null;
+
+            // "cart.png · 32 × 32" (D41 panel k): the file and its size in pixels.
+            caption.Text = bitmap is not null && picker.PreviewName is { } name
+                ? Localizer.Format("msg.winFormsDesigner.previewCaption", "{0} · {1} × {2}", name, bitmap.PixelSize.Width, bitmap.PixelSize.Height)
+                : string.Empty;
+            caption.IsVisible = caption.Text.Length > 0;
+            ToolTip.SetTip(caption, caption.IsVisible ? caption.Text : null);
+            old?.Dispose();
+        }
+
+        picker.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(DesignerResourcePickerViewModel.Preview):
+                    UpdatePreview();
+                    break;
+                case nameof(DesignerResourcePickerViewModel.IsProject):
+                    local.IsChecked = picker.IsLocal;
+                    project.IsChecked = picker.IsProject;
+                    UpdateSides();
+                    break;
+                case nameof(DesignerResourcePickerViewModel.SelectedResource) when !ReferenceEquals(list.SelectedItem, picker.SelectedResource ?? DesignerResourcePickerViewModel.NoResource):
+                    filling = true;
+                    list.SelectedItem = picker.SelectedResource ?? DesignerResourcePickerViewModel.NoResource;
+                    filling = false;
+                    break;
+            }
+        };
+        UpdatePreview();
+        var choices = new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.resourceContext", "Resource context")), local, localRow, project, projectBox } };
+        var previewColumn = new StackPanel { Children = { Label(Localizer.Get("msg.winFormsDesigner.preview", "Preview")), preview, caption } };
+        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), ColumnSpacing = 20, Children = { choices, previewColumn } };
+        Grid.SetColumn(previewColumn, 1);
+        return EditorFrame(picker.Title, picker.Context, body, picker.OkCommand, picker.CancelCommand);
+    }
+
+    private static Border StringsPanel(DesignerStringsEditorViewModel editor)
+    {
+        var box = new TextBox { Text = editor.Text, AcceptsReturn = true, NewLine = "\r\n", TextWrapping = TextWrapping.NoWrap, Width = 356, Height = 150 };
+        box.TextChanged += (_, _) => editor.Text = box.Text ?? string.Empty;
+        Avalonia.Automation.AutomationProperties.SetName(box, editor.Title);
+        var prompt = new TextBlock { Text = editor.Prompt, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) };
+        return EditorFrame(editor.Title, editor.Context, new StackPanel { Children = { prompt, box } }, editor.OkCommand, editor.CancelCommand);
     }
 }
 
@@ -646,6 +1102,10 @@ public sealed class DesignerSurface : Control
     /// <summary>A grab handle's side in device pixels at 100 % (odd, so it centers on the frame's line).</summary>
     private const int Handle = 7;
     private const double Glyph = 12;
+
+    /// <summary>A locked control's lock (#67, D40: 6): a 12 px tile centered on the frame's top-left corner, the lock 10 px in it.</summary>
+    private const double LockTile = 12;
+    private const double LockIcon = 10;
     private readonly WinFormsDesignerDocument _document;
     private readonly WinFormsDesignerView _view;
     private Point? _pressed;
@@ -677,25 +1137,62 @@ public sealed class DesignerSurface : Control
             InvalidateMeasure();
             InvalidateVisual();
         });
+        document.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(WinFormsDesignerDocument.IsRestarting))
+            {
+                Infrastructure.Ui.Post(OnRestartingChanged);
+            }
+        };
         DragDrop.SetAllowDrop(this, true);
         DragDrop.AddDragOverHandler(this, (_, e) =>
         {
-            e.DragEffects = e.DataTransfer.Contains(WinFormsDesignerView.ToolboxFormat) ? DragDropEffects.Copy : DragDropEffects.None;
+            // TODO(issue): show the tool's outline and snap lines while a Toolbox item is dragged over the form, as the classic IDE does.
+            e.DragEffects = AcceptsToolboxDrop(e.DataTransfer, e.GetPosition(this)) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         });
         DragDrop.AddDropHandler(this, (_, e) =>
         {
-            if (e.DataTransfer.TryGetValue(WinFormsDesignerView.ToolboxFormat) is { Length: > 0 } type)
+            var at = e.GetPosition(this);
+            if (AcceptsToolboxDrop(e.DataTransfer, at) && e.DataTransfer.TryGetValue(WinFormsDesignerView.ToolboxFormat) is { Length: > 0 } type)
             {
-                var at = e.GetPosition(this);
                 e.Handled = true;
-                _ = _document.CreateAsync(type, at.X, at.Y);
+                Focus();
+                _ = DropToolboxItemAsync(type, at);
             }
         });
     }
 
+    /// <summary>
+    /// A Toolbox item dropped here creates it (#66): on the form only (outside it the cursor says no drop, as the classic
+    /// IDE's), not in tab order mode (tools are ignored there), not while the host starts again.
+    /// </summary>
+    private bool AcceptsToolboxDrop(IDataTransfer data, Point at) =>
+        data.Contains(WinFormsDesignerView.ToolboxFormat) && !_document.IsTabOrderMode && !_document.IsRestarting && _document.HitTest(at.X, at.Y) is not null;
+
+    /// <summary>What a Toolbox item dropped at <paramref name="at"/> (frame coordinates) does: the drop handler's own work (tests and the smoke test).</summary>
+    internal Task DropToolboxItemAsync(string type, Point at) => _document.CreateAsync(type, at.X, at.Y);
+
     /// <summary>The snap lines of the gesture in progress (tests).</summary>
     public IReadOnlyList<DesignerSnapLine> SnapLines => _snap?.Lines ?? [];
+
+    /// <summary>
+    /// The designer host starts again (#66): a gesture in progress ends (its frame is about to be replaced) and the
+    /// surface takes none until the form is back, showing the wait cursor.
+    /// </summary>
+    private void OnRestartingChanged()
+    {
+        if (_document.IsRestarting)
+        {
+            _pressed = null;
+            _mode = Mode.None;
+            _snap = null;
+            _moved = false;
+        }
+
+        Cursor = new Cursor(_document.IsRestarting ? StandardCursorType.Wait : StandardCursorType.Arrow);
+        InvalidateVisual();
+    }
 
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -743,11 +1240,12 @@ public sealed class DesignerSurface : Control
             }
 
             var rect = Rect(WinFormsDesignerDocument.Bounds(view));
-            if (_mode == Mode.Move && _moved && view != _document.Root && _snap is not null && _document.Find(_document.PrimarySelection ?? string.Empty) is { } primary)
+            var locked = view.Locked == true;
+            if (_mode == Mode.Move && _moved && view != _document.Root && !locked && _snap is not null && _document.Find(_document.PrimarySelection ?? string.Empty) is { } primary)
             {
                 rect = rect.Translate(new Vector(_snap.Bounds.X - primary.X, _snap.Bounds.Y - primary.Y));
             }
-            else if (_mode == Mode.Move && _moved && view != _document.Root)
+            else if (_mode == Mode.Move && _moved && view != _document.Root && !locked)
             {
                 rect = rect.Translate(_current - _pressed!.Value);
             }
@@ -771,14 +1269,26 @@ public sealed class DesignerSurface : Control
                 context.DrawRectangle(null, thin, outline.Deflate(stroke / 2));
             }
 
+            // A locked control: no grab handles, its lock where the top-left one would be (the smart tag stays: D40, 4).
+            if (locked && !view.IsItem)
+            {
+                RenderLock(context, rect, stroke, accent, handleFill);
+            }
+
             if (name == _document.PrimarySelection && !view.IsItem)
             {
-                foreach (var handle in Handles(rect))
+                if (!locked)
                 {
-                    context.FillRectangle(accent, handle);
-                    context.FillRectangle(handleFill, handle.Deflate(stroke));
+                    foreach (var handle in Handles(rect))
+                    {
+                        context.FillRectangle(accent, handle);
+                        context.FillRectangle(handleFill, handle.Deflate(stroke));
+                    }
                 }
 
+                // TODO(issue): the Dock text sits over a docked menu strip's first item and is under 4.5:1 on the form's
+                // light colors in the dark and High Contrast themes (D40: 12): leave it out on strips that take Type Here,
+                // and draw it on a panel-colored tile like the lock's.
                 RenderLayoutAdorners(context, view, rect, thin, accent);
                 if (view.HasActions && _mode == Mode.None)
                 {
@@ -902,6 +1412,38 @@ public sealed class DesignerSurface : Control
 
     private static Rect GlyphRect(Rect rect) => new(rect.Right + 4, rect.Top - 2, Glyph, Glyph);
 
+    /// <summary>
+    /// A locked control's lock (#67, D40: 6), close to the classic IDE's glyph that straddles the corner: a 12 px tile
+    /// centered on the frame's top-left corner (the grab handle's place), the panel color with an accent edge like the
+    /// smart tag's glyph, and Fluent's filled lock 10 px in it, in the palette's yellow (the form is drawn in Windows'
+    /// light colors in every theme, where a bare yellow glyph wouldn't show).
+    /// </summary>
+    private void RenderLock(DrawingContext context, Rect rect, double stroke, IBrush accent, IBrush fill)
+    {
+        var corner = Handles(rect)[0].Center;
+        var tile = new Rect(corner.X - (LockTile / 2), corner.Y - (LockTile / 2), LockTile, LockTile);
+        context.FillRectangle(fill, tile);
+        FillOutline(context, tile, stroke, accent);
+        if (IconSet.GetFilled(LockedIconKind) is not { } icon)
+        {
+            return;
+        }
+
+        var yellow = Token("Shell.Icon.Yellow") ?? accent;
+        var scale = LockIcon / icon.DesignSize;
+        var inset = (LockTile - LockIcon) / 2;
+        using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(tile.X + inset, tile.Y + inset)))
+        {
+            foreach (var layer in icon.Layers)
+            {
+                context.DrawGeometry(yellow, null, layer.Geometry);
+            }
+        }
+    }
+
+    /// <summary>The lock's icon kind (Fluent's lock_closed_16_filled, colored yellow in CommandIcons).</summary>
+    internal const string LockedIconKind = "locked";
+
     /// <summary>The smart tag's glyph: a small box with an arrow, at the selected component's top right.</summary>
     private static void RenderGlyph(DrawingContext context, Rect glyph, Pen pen, IBrush accent, IBrush fill)
     {
@@ -1018,9 +1560,10 @@ public sealed class DesignerSurface : Control
         return DesignerRect.Between(left, top, Math.Max(left + 1, right), Math.Max(top + 1, bottom));
     }
 
-    private int HandleAt(Point point)
+    internal int HandleAt(Point point)
     {
-        if (_document.PrimarySelection is not { } primary || _document.Find(primary) is not { IsControl: true, IsPart: false } view)
+        // A locked control has no grab handles (#67), the form's own included.
+        if (_document.PrimarySelection is not { } primary || _document.Find(primary) is not { IsControl: true, IsPart: false } view || view.Locked == true)
         {
             return -1;
         }
@@ -1047,7 +1590,7 @@ public sealed class DesignerSurface : Control
             return;
         }
 
-        if (_mode == Mode.Move && view.IsControl && view != _document.Root && !view.IsPart)
+        if (_mode == Mode.Move && view.IsControl && view != _document.Root && !view.IsPart && view.Locked != true)
         {
             var moving = new HashSet<string>(_document.Selection, StringComparer.Ordinal);
             var bounds = WinFormsDesignerDocument.Bounds(view);
@@ -1063,12 +1606,33 @@ public sealed class DesignerSurface : Control
     {
         base.OnPointerPressed(e);
         Focus();
+        if (_document.IsRestarting)
+        {
+            e.Handled = true;
+            return;
+        }
+
         var point = e.GetPosition(this);
         var properties = e.GetCurrentPoint(this).Properties;
-        if (properties.IsRightButtonPressed && !_document.IsTabOrderMode && _document.HitTest(point.X, point.Y) is { } target && !_document.Selection.Contains(target.Name))
+        if (properties.IsRightButtonPressed && !_document.IsTabOrderMode)
         {
-            // A right-click selects what it's on first, for the context menu.
-            _document.Click(point.X, point.Y, toggle: false);
+            // A right-click selects what it's on first, for the context menu (#67): a menu's row or a strip's item (it gets
+            // the surface's menu, D40: 9), else the control; then that one's verbs are fetched for the menu.
+            var (row, _) = _document.MenuHitTest(point.X, point.Y);
+            var rightItem = row ?? _document.Components.FirstOrDefault(c => c.IsItem && c.Visible && WinFormsDesignerDocument.Bounds(c).Contains(point.X, point.Y))?.Name;
+            if (rightItem is not null)
+            {
+                if (!_document.Selection.Contains(rightItem))
+                {
+                    _document.SetSelection([rightItem], notify: true);
+                }
+            }
+            else if (_document.HitTest(point.X, point.Y) is { } target && !_document.Selection.Contains(target.Name))
+            {
+                _document.Click(point.X, point.Y, toggle: false);
+            }
+
+            _document.PrefetchVerbs();
         }
 
         if (!properties.IsLeftButtonPressed)
@@ -1216,6 +1780,11 @@ public sealed class DesignerSurface : Control
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        if (_document.IsRestarting)
+        {
+            return;
+        }
+
         var point = e.GetPosition(this);
         if (_pressed is { } pressed)
         {
@@ -1302,6 +1871,11 @@ public sealed class DesignerSurface : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        if (_document.IsRestarting && e.Key != Key.Escape)
+        {
+            return;
+        }
+
         var primary = (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0;
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         var item = _document.PrimarySelection is { } selected && _document.Find(selected) is { IsItem: true } itemView ? itemView : null;
@@ -1335,9 +1909,9 @@ public sealed class DesignerSurface : Control
                 {
                     Toolbox.Disarm();
                 }
-                else if (_document.PrimarySelection is { } current && _document.Find(current) is { } view && (view.Owner ?? view.Parent) is { } parent)
+                else
                 {
-                    _document.SetSelection([parent], notify: true);
+                    _document.SelectParent();
                 }
 
                 break;
@@ -1345,8 +1919,7 @@ public sealed class DesignerSurface : Control
                 _document.Copy();
                 break;
             case Key.X when primary:
-                _document.Copy();
-                _ = _document.DeleteSelectionAsync();
+                _ = _document.CutAsync();
                 break;
             case Key.V when primary:
                 _ = _document.PasteAsync();
@@ -1362,11 +1935,7 @@ public sealed class DesignerSurface : Control
                 _document.Redo();
                 break;
             case Key.A when primary:
-                if (_document.Root is { } root)
-                {
-                    _document.SetSelection([.. _document.ChildrenOf(root.Name).Select(c => c.Name)], notify: true);
-                }
-
+                _document.SelectAll();
                 break;
             default:
                 return;

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Codalus.Platform;
 
 namespace Codalus.Rpc;
 
@@ -76,6 +77,11 @@ public sealed class LocalProcessLauncher : IProcessLauncher
         foreach (var argument in launch.Arguments)
         {
             psi.ArgumentList.Add(argument);
+        }
+
+        foreach (var name in launch.UnsetEnvironment ?? [])
+        {
+            psi.Environment.Remove(name);
         }
 
         foreach (var (key, value) in launch.Environment ?? new Dictionary<string, string>())
@@ -157,7 +163,7 @@ public sealed class LocalHostProcess : IHostProcess
     {
         try
         {
-            _process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(_process);
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException or AggregateException)
         {

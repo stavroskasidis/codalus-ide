@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Codalus IDE tests",
+  "classifications": [ "Common", "Aspire", "Cloud" ],
+  "identity": "Codalus.Tests.Aspire.AppHost",
+  "name": "Aspire AppHost (test stand-in)",
+  "shortName": "aspire-apphost",
+  "sourceName": "Aspire.AppHost1",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "project" },
+  "symbols": {
+    "skipRestore": { "type": "parameter", "datatype": "bool", "defaultValue": "false" }
+  }
+}

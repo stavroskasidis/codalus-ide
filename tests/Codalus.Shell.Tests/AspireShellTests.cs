@@ -1,6 +1,7 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Codalus.Debugging;
+using Codalus.Platform;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Debugging;
 
@@ -34,7 +35,33 @@ public sealed class AspireShellTests
         ShellFixture.PumpUntil(
             () => f.Shell.AspireWindow.Resources.Count(r => r.Resource.Type == "Project" && r.Resource.State == "Running") == 2
                 && f.Shell.AspireWindow.Resources.Any(r => r.Name == "cache"),
-            seconds: 300);
+            seconds: 300,
+            describe: () => "the api and the frontend to run and the cache to be listed: " + Describe(f));
+
+    /// <summary>What the Aspire window, the debugger and the AppHost's output show, for a failed wait.</summary>
+    private static string Describe(ShellFixture f) =>
+        $"resources [{string.Join(", ", f.Shell.AspireWindow.Resources.Select(r => $"{r.Name} ({r.Resource.Type}) {r.Resource.State}"))}]; "
+        + $"debugger {f.Shell.Debugger.State}, programs [{string.Join(", ", f.Shell.Debugger.Processes.Select(p => $"{p.Name} {p.Id?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no id"}{(p.Ended ? " ended" : string.Empty)}"))}]; "
+        + $"last build {(f.Shell.Builds.LastBuild is { } build ? $"{build.Result.Errors} error(s){(build.Result.Canceled ? ", canceled" : string.Empty)}" : "none")}\n"
+        + $"Aspire output:\n{Tail(f.Shell.AspireLog.GetText())}\nDebug Console:\n{Tail(f.Shell.DebugLog.GetText())}";
+
+    private static string Tail(string text, int length = 3000) => text.Length <= length ? text : text[^length..];
+
+    /// <summary>The projects' output in their Run channels (Ctrl+F5), for a failure's message.</summary>
+    private static string Programs(ShellFixture f) =>
+        string.Concat(f.Shell.Runs.Running.Select(r => $"\n--- {r.Name}:\n{Tail(r.Channel?.GetText())}"));
+
+    private static string Tail(string? text) => text is null ? string.Empty : text.Length > 4000 ? text[^4000..] : text;
+
+    /// <summary>
+    /// Until a program says it listens, from its Run channel; one that never does (it failed to start) fails the test
+    /// with every program's output.
+    /// </summary>
+    private static Task ListeningAsync(ShellFixture f, string program) =>
+        ShellFixture.PumpUntil(
+            () => f.Shell.Runs.Running.Any(r => r.Name == program && r.Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true),
+            seconds: 60,
+            () => $"{program} never said it listens.{Programs(f)}");
 
     [AvaloniaFact]
     public async Task Ctrl_F5_on_the_apphost_runs_its_projects_and_the_aspire_window_shows_them()
@@ -55,8 +82,15 @@ public sealed class AspireShellTests
 
             // The projects run as the IDE's programs: their Run channels, and their logs in the window.
             await ShellFixture.PumpUntil(() => f.Shell.Runs.Running.Any(r => r.Name == "Api") && f.Shell.Runs.Running.Any(r => r.Name == "Frontend"));
+            // Both serve before the request: the frontend's WaitFor(api) waits only for the api's process (no health
+            // check). A failed answer says why: in Development the frontend's 500 is its exception, in plain text.
+            await ListeningAsync(f, "Frontend");
+            await ListeningAsync(f, "Api");
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            Assert.StartsWith("Frontend: Sunny, from the api", await http.GetStringAsync(Endpoint(f, "frontend"), TestContext.Current.CancellationToken), StringComparison.Ordinal);
+            using var answer = await http.GetAsync(Endpoint(f, "frontend"), TestContext.Current.CancellationToken);
+            var page = await answer.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+            Assert.True(answer.IsSuccessStatusCode, $"The frontend answered {(int)answer.StatusCode}: {Tail(page)}{Programs(f)}");
+            Assert.StartsWith("Frontend: Sunny, from the api", page, StringComparison.Ordinal);
             f.Shell.AspireWindow.Selected = f.Shell.AspireWindow.Resources.Single(r => r.Name == "api");
             await ShellFixture.PumpUntil(() => f.Shell.AspireWindow.Logs.Contains("Now listening on", StringComparison.Ordinal), seconds: 60);
             Assert.DoesNotContain('\u001b', f.Shell.AspireWindow.Logs); // the console's colors are left out
@@ -160,7 +194,7 @@ internal static class AspireRuntime
                 {
                     try
                     {
-                        process.Kill(entireProcessTree: true);
+                        ProcessTree.Kill(process);
                     }
                     catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
                     {

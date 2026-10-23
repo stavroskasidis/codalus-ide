@@ -57,6 +57,21 @@ public sealed class AcpMcpCapabilities
     public bool Sse { get; init; }
 }
 
+/// <summary><c>agentCapabilities.auth</c>: <c>logout</c> is there (<c>{}</c>) when the agent can sign out.</summary>
+public sealed class AcpAgentAuthCapabilities
+{
+    public AcpEmpty? Logout { get; init; }
+}
+
+/// <summary>
+/// <c>agentCapabilities._meta</c>, the vendor extensions Codalus reads: <c>authStatus</c> (<c>{}</c>) marks an agent that
+/// pushes who is signed in on <c>_auth/status_update</c> (Claude's adapter, ADR 0083).
+/// </summary>
+public sealed class AcpAgentCapabilitiesMeta
+{
+    public AcpEmpty? AuthStatus { get; init; }
+}
+
 public sealed class AcpAgentCapabilities
 {
     public bool LoadSession { get; init; }
@@ -64,9 +79,17 @@ public sealed class AcpAgentCapabilities
     public AcpPromptCapabilities? PromptCapabilities { get; init; }
 
     public AcpMcpCapabilities? McpCapabilities { get; init; }
+
+    public AcpAgentAuthCapabilities? Auth { get; init; }
+
+    [JsonPropertyName("_meta")]
+    public AcpAgentCapabilitiesMeta? Meta { get; init; }
 }
 
-/// <summary>A way to sign in: <c>agent</c> (the default; the agent runs it on <c>authenticate</c>) or <c>terminal</c>.</summary>
+/// <summary>
+/// A way to sign in: <c>agent</c> (the default; the agent runs it on <c>authenticate</c>) or <c>terminal</c> (the client
+/// runs the agent's own command with <see cref="Args"/> and <see cref="Env"/> in a terminal, then starts it again).
+/// </summary>
 public sealed class AcpAuthMethod
 {
     public string Id { get; init; } = "";
@@ -78,6 +101,9 @@ public sealed class AcpAuthMethod
     public string? Type { get; init; }
 
     public IReadOnlyList<string>? Args { get; init; }
+
+    /// <summary>A terminal method's variables, set over the agent's own for the sign-in only.</summary>
+    public IReadOnlyDictionary<string, string>? Env { get; init; }
 
     public bool IsTerminal => Type == "terminal";
 }
@@ -93,7 +119,38 @@ public sealed class AcpInitializeResponse
     public AcpImplementation? AgentInfo { get; init; }
 }
 
-public sealed record AcpAuthenticateRequest(string MethodId);
+public sealed record AcpAuthenticateRequest(string MethodId)
+{
+    /// <summary>
+    /// <c>_meta</c>: an API key given once with the request (Codex's <c>api-key</c> method reads
+    /// <c>_meta["api-key"].apiKey</c> and keeps the key in its own store; ADR 0083), or null.
+    /// </summary>
+    [JsonPropertyName("_meta")]
+    public AcpAuthenticateMeta? Meta { get; init; }
+}
+
+public sealed record AcpAuthenticateMeta([property: JsonPropertyName("api-key")] JsonElement? ApiKey);
+
+/// <summary>
+/// <c>_auth/status_update</c>, a vendor extension of Claude's adapter (not the ACP schema's): who the agent's own process
+/// is signed in as. <c>kind</c> <c>none</c> is signed out; no push at all means the agent couldn't tell.
+/// </summary>
+public sealed class AcpAuthStatusUpdate
+{
+    public AcpAuthStatus? AuthStatus { get; init; }
+}
+
+public sealed class AcpAuthStatus
+{
+    /// <summary><c>none</c> (signed out), or how it is signed in (a subscription, an API key, a gateway…).</summary>
+    public string Kind { get; init; } = "";
+
+    public string? Label { get; init; }
+
+    public string? Detail { get; init; }
+
+    public bool IsSignedOut => Kind == "none";
+}
 
 // ------------------------------------------------------------------ sessions
 
@@ -370,6 +427,10 @@ public static class AcpMethods
 {
     public const string Initialize = "initialize";
     public const string Authenticate = "authenticate";
+    public const string Logout = "logout";
+
+    /// <summary>Claude's adapter's push of who is signed in (a vendor extension, <see cref="AcpAuthStatusUpdate"/>).</summary>
+    public const string AuthStatusUpdate = "_auth/status_update";
     public const string SessionNew = "session/new";
     public const string SessionPrompt = "session/prompt";
     public const string SessionCancel = "session/cancel";
@@ -395,6 +456,7 @@ public static class AcpMethods
 [JsonSerializable(typeof(AcpInitializeRequest))]
 [JsonSerializable(typeof(AcpInitializeResponse))]
 [JsonSerializable(typeof(AcpAuthenticateRequest))]
+[JsonSerializable(typeof(AcpAuthStatusUpdate))]
 [JsonSerializable(typeof(AcpNewSessionRequest))]
 [JsonSerializable(typeof(AcpNewSessionResponse))]
 [JsonSerializable(typeof(AcpSetModeRequest))]

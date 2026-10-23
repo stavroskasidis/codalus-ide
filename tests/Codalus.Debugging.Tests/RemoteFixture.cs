@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Codalus.Platform;
 using Codalus.Workbench.Debugging.Remote;
 
 namespace Codalus.Debugging.Tests;
@@ -90,7 +91,7 @@ public static class RemoteFixture
         var error = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(TimeSpan.FromSeconds(seconds)))
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             return (-1, "timed out");
         }
 

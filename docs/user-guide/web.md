@@ -56,7 +56,7 @@ The toolbar's **Hot Reload** button (the flame, next to Start) starts with Hot R
 
 The status bar shows the state (watching, applied in N ms, compile errors, restarting); click it to see the output. The **Hot Reload on Start Without Debugging** setting (`run.hotReload`) makes `Ctrl+F5` start with Hot Reload. It needs .NET 6 or later: for an older startup project the command is disabled, and its menu item says so.
 
-**While debugging a Blazor WebAssembly app**, Hot Reload works too: Start Debugging runs its dev server under `dotnet watch`, so saving a file (or `Alt+F10`) applies the edit to the app in the browser while the debugger stays attached, and breakpoints stop in the changed code. The **Hot Reload while debugging** setting (`debug.hotReload`, on by default) turns it off. Other apps, and a Blazor Web App's server, run under the debugger itself, and the .NET runtime refuses Hot Reload's updates to a program a debugger runs: restart the session to see an edit there.
+**While debugging a Blazor WebAssembly app**, Hot Reload works too: Start Debugging runs its dev server under `dotnet watch`, so saving a file (or `Alt+F10`) applies the edit to the app in the browser while the debugger stays attached, and breakpoints stop in the changed code. **In a Blazor Web App**, edits to WebAssembly components update in the browser while you debug the server and the page; edits to code the server runs wait for Restart, and edits that need a restart restart the app ([Debugging the server and the page together](#debugging-the-server-and-the-page-together)). The **Hot Reload while debugging** setting (`debug.hotReload`, on by default) turns it off. Other apps run under the debugger itself, and the .NET runtime refuses Hot Reload's updates to a program a debugger runs: restart the session to see an edit there, or use Start with Hot Reload.
 
 ## Razor and Blazor
 
@@ -95,6 +95,17 @@ A **Blazor Web App with WebAssembly components** (its launch profile has `inspec
 - **Breakpoints in the page's scripts** stop in the browser too.
 - **One stop shows at a time.** If the server and the browser both stop, the second shows when you continue the first. **Break All** pauses both.
 - **Ending:** stopping the session closes the browser and stops the server. Closing the browser ends the session.
+- **The startup project:** a Blazor Web App's server is the default startup project, even when the solution lists its `.Client` project first (on its own, the client's dev host serves nothing at `/`).
+
+**With Hot Reload** (the setting `debug.hotReload`, on by default), `F5` runs the server under `dotnet watch`, as Start with Hot Reload does, and the debugger attaches to it once it serves:
+- **Edits to WebAssembly components apply while you debug:** save the file (or `Alt+F10`), and the browser runs the changed code; breakpoints stop in it. The status bar says *Hot Reload: sent to the browser*: whether the browser applied it isn't reported back.
+- **Edits to code the server runs** take effect after Restart (`Ctrl+Shift+F5`): the .NET runtime doesn't apply edits to a program a debugger is attached to. That includes components the server prerenders, or runs interactively (InteractiveServer, or InteractiveAuto before WebAssembly loads). Codalus IDE says so once per session, and the server's breakpoints in edited files wait for the restart, with the reason in the margin and the Breakpoints window; the page still stops at them.
+- **Edits that need a restart** (a changed signature or field type, `Program.cs`) restart the app, and debugging follows it: the debugger attaches to the new server and the page opens again in a new browser window. An edit made while stopped in the browser applies when you continue.
+- **The server's startup code** has already run when the debugger attaches, so its breakpoints don't stop. Set a breakpoint in the server's `Program.cs` (or `Startup.cs`) and `F5` debugs the server from its start instead, without Hot Reload; the Debug Console says why.
+- **The server's console output** shows in the Debug Console and in Output, *Run: <name>*.
+- **It needs the .NET SDK 10.0.400 or later** (or 11); with an older SDK, `F5` debugs without Hot Reload and the Debug Console says why.
+- If the debugger can't attach to the server, only the page is debugged, with Hot Reload, and a notification says so. Turn off `debug.hotReload` to debug the server from its start.
+- A Blazor Web App made by the .NET 11 template has no `inspectUri`: .NET 11 expects the IDE to start the WebAssembly debugging proxy, which Codalus IDE doesn't do yet. Its page opens under the browser debugger for scripts, but breakpoints in its WebAssembly components don't bind yet. Add the `inspectUri` line and `app.UseWebAssemblyDebugging()` from the .NET 10 template to debug them.
 
 **Other ASP.NET Core apps** whose launch profile opens a browser (`launchBrowser`) debug their page's scripts the same way. The **JavaScript debugging for ASP.NET Core** setting (`debug.javaScript`, on by default) controls it; off, the profile's browser opens as a plain browser.
 

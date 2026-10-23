@@ -27,9 +27,18 @@ public sealed class SymbolBrowserTests
         await circle.LoadAsync();
         Assert.Contains(circle.Children, m => m is { Name: "Area", Detail: "double Area()" });
 
-        // The selection's declaration and summary; Enter goes to it.
+        // The selection's declaration and summary.
         view.Selected = circle;
         await ShellFixture.PumpUntil(() => view.Declaration == "public sealed class Circle", seconds: 30);
+
+        // The projects changing (a reload, the build host's evaluation after the language service is ready) lists the
+        // same roots: the tree keeps its nodes, so the selection stays (the tree used to clear it, and Enter did nothing).
+        await view.RefreshAsync();
+        await ShellFixture.PumpUntil(() => true);
+        Assert.Same(circle, view.Selected);
+        Assert.Same(lib, view.Roots.Single(r => r.Name == "Lib"));
+
+        // Enter goes to it.
         await view.OpenSelectedAsync();
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == Path.Combine(folder, "src", "Lib", "Shapes.cs"), seconds: 30);
 

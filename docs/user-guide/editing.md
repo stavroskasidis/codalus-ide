@@ -47,6 +47,7 @@ The completion list, parameter info and Quick Info show code in the editor's own
   - **Fix** (`Alt+.`) applies the top fix. **Other Fixes** (`Alt+Enter`) opens the quick actions there. **Add to Chat** asks AI Chat about the error, with the code around it; it shows only while AI assistance is on.
   - It doesn't open while the completion list or parameter info is open.
   - It stays open while the pointer is on the symbol or on its way to it, so its buttons are in reach. Moving the pointer elsewhere, scrolling or zooming closes it, and a click in the code acts where you click (`Ctrl+Click` goes to the definition).
+- Summaries and descriptions come from your code's documentation comments, and for a referenced assembly (a NuGet package, .NET itself) from the XML documentation file next to it. When a localized one is installed beside it, in a folder named for your OS's language (`de`, `pt-br`, `zh-hans`), that one shows instead, as in the classic IDE.
 - The C# Interactive window has the same completion list and parameter info. Other languages' servers get them too, with plain-text signatures.
 
 ## Other languages
@@ -137,7 +138,7 @@ Settings under **Text Editor** turn each of these on or off.
 - **Inheritance margin**: arrows in the margin of members and types that implement, override or are overridden. Click an arrow to see and open the related symbols.
 - **Navigation bar**: above the editor, the document's types and the members of the type at the caret.
 - **Sticky scroll**: the lines of the enclosing namespace, type and member stay at the top while you scroll, drawn as in the editor (colors, indentation, line numbers). Click one to go there.
-- **Indentation guides** and **bracket pair colors**: matching brackets share a color by nesting depth.
+- **Indentation guides** and **bracket pair colors**: matching brackets share a color by nesting depth. Bracket pair colors are off by default in the Classic themes, as in the classic IDE, and on in the other families; **Text Editor → Bracket Pair Colorization** (`editor.bracketPairColorization`) sets them for every theme.
 - **Overview ruler**: beside the scroll bar, marks for errors, warnings, Git changes, breakpoints, find results and the caret. Click to scroll there. The square at the top is the document's health (red: errors, yellow: warnings, green: none); click it for the next problem.
 - **Inline diagnostics** (off by default): error and warning messages at the end of their lines.
 

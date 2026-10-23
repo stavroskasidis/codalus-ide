@@ -896,7 +896,11 @@ public sealed class AiChatViewTests
 
         public Codalus.Workbench.Ai.Acp.IAcpHost AcpHost => ((IAiChatHost)shell).AcpHost;
 
-        public Task<string?> AddExternalAgentAsync() => ((IAiChatHost)shell).AddExternalAgentAsync();
+        public Task<string?> ConnectExternalAgentAsync(string? templateId) => ((IAiChatHost)shell).ConnectExternalAgentAsync(templateId);
+
+        public Task ManageExternalAgentsAsync() => ((IAiChatHost)shell).ManageExternalAgentsAsync();
+
+        public string? WhyAgentsCantConnect => ((IAiChatHost)shell).WhyAgentsCantConnect;
 
         public async Task RunAgentAsync(string question, IReadOnlyList<AiContextItem> items, AiSelectionAnchor? anchor, CancellationToken cancellationToken)
         {

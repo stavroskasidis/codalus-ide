@@ -9,10 +9,11 @@ namespace Codalus.WinForms.Designer;
 
 /// <summary>
 /// Smart tags (M41b, ADR 0073): a component's designer actions, from its designer's <c>DesignerActionList</c>s and its
-/// verbs, for the IDE's panel. A property sets the action list's property, a method runs, as Visual Studio's panel
-/// does, and the state's difference writes what they did (a docking, a new tab page, a tool strip's standard items).
-/// A method that would open one of Windows Forms' dialogs (the ones whose names end with "…") opens the IDE's own
-/// editor instead (a collection's, an image import), or says it isn't available.
+/// verbs, for the IDE's panel, and (#67) the verbs of its context menu, as the classic IDE's <c>MenuCommandService</c>
+/// lists them. A property sets the action list's property, a method runs, as the classic IDE's panel does, and the
+/// state's difference writes what they did (a docking, a new tab page, a tool strip's standard items). A method that
+/// would open one of Windows Forms' dialogs (the ones whose names end with "…") opens the IDE's own editor instead (a
+/// collection's, an image import), or says it isn't available.
 /// </summary>
 internal sealed partial class DesignerSession
 {
@@ -121,7 +122,57 @@ internal sealed partial class DesignerSession
             items.Add(new ActionItem(DesignerActionKinds.Method, VerbPrefix + verb.Text, verb.Text) { Unavailable = !verb.Enabled });
         }
 
-        return new DesignerActionsResult([.. items]);
+        return new DesignerActionsResult([.. items]) { Verbs = [.. Verbs(component)] };
+    }
+
+    /// <summary>
+    /// The context menu's verbs (#67), as the classic IDE's <c>MenuCommandService.EnsureVerbs</c> lists them: none for an
+    /// inherited read-only component; the action methods marked <c>IncludeAsDesignerVerb</c> first, then the designer's
+    /// visible <c>Verbs</c> (a disabled one listed as unavailable); of two with the same text (ignoring case) the later one
+    /// stays, at its own place. A verb that would open a dialog maps as a smart tag's method does.
+    /// </summary>
+    private List<ActionItem> Verbs(IComponent component)
+    {
+        var verbs = new List<ActionItem>();
+        if (TypeDescriptor.GetAttributes(component)[typeof(InheritanceAttribute)] is InheritanceAttribute { InheritanceLevel: InheritanceLevel.InheritedReadOnly })
+        {
+            return verbs;
+        }
+
+        foreach (var list in ActionListsOf(component))
+        {
+            try
+            {
+                foreach (var method in list.GetSortedActionItems().OfType<DesignerActionMethodItem>().Where(m => m.IncludeAsDesignerVerb))
+                {
+                    verbs.Add(Describe(component, method));
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                Console.Error.WriteLine($"An action list of {component.Site?.Name} failed: {ex.Message}");
+            }
+        }
+
+        try
+        {
+            foreach (DesignerVerb verb in (IEnumerable<DesignerVerb>?)Host.GetDesigner(component)?.Verbs?.Cast<DesignerVerb>() ?? [])
+            {
+                if (verb.Visible)
+                {
+                    var display = verb.Text ?? string.Empty;
+                    verbs.Add(Dialog(component, new ActionItem(DesignerActionKinds.Method, VerbPrefix + display, display) { Unavailable = !verb.Enabled }, display, null));
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Console.Error.WriteLine($"{component.Site?.Name}'s verbs couldn't be read: {ex.Message}");
+        }
+
+        // Merged by the text as it reads ("&Edit Items..." and "Edit Items..." are one entry): the IDE shows the mnemonic as its
+        // access key, so two that differ only by it would look the same.
+        return [.. verbs.Where((verb, i) => !verbs.Skip(i + 1).Any(later => string.Equals(DesignerMnemonics.Strip(later.DisplayName), DesignerMnemonics.Strip(verb.DisplayName), StringComparison.OrdinalIgnoreCase)))];
     }
 
     private static ActionItem Describe(DesignerActionList list, DesignerActionPropertyItem item)
@@ -163,14 +214,29 @@ internal sealed partial class DesignerSession
     {
         var display = item.DisplayName ?? item.MemberName ?? string.Empty;
         var member = string.IsNullOrEmpty(item.MemberName) ? VerbPrefix + display : item.MemberName;
-        var result = new ActionItem(DesignerActionKinds.Method, member, display) { Category = item.Category, Description = item.Description };
+        return Dialog(component, new ActionItem(DesignerActionKinds.Method, member, display) { Category = item.Category, Description = item.Description }, display, item.MemberName);
+    }
+
+    /// <summary>
+    /// The action methods that open a Windows Forms dialog although their text has no "…" (#67): an image list's
+    /// <c>ImageListActionList.ChooseImages</c>, "Choose images", whose collection editor would go to the host's UI
+    /// service, which shows no dialog, so the verb would do nothing.
+    /// </summary>
+    private static readonly HashSet<string> s_dialogMethods = new(StringComparer.Ordinal) { "ChooseImages" };
+
+    /// <summary>
+    /// A method or a verb whose text ends with "…", or one of <see cref="s_dialogMethods"/> (a Windows Forms dialog): the
+    /// IDE's editor of the collection or image it's about, or unavailable.
+    /// </summary>
+    private ActionItem Dialog(IComponent component, ActionItem result, string display, string? memberName)
+    {
         var name = display.TrimEnd();
-        if (!name.EndsWith("...", StringComparison.Ordinal) && !name.EndsWith('…'))
+        if (!name.EndsWith("...", StringComparison.Ordinal) && !name.EndsWith('…') && (memberName is null || !s_dialogMethods.Contains(memberName)))
         {
             return result;
         }
 
-        var hint = (display + " " + item.MemberName).ToUpperInvariant();
+        var hint = (display + " " + memberName).ToUpperInvariant();
         var collections = CollectionsOf(component).Select(c => c.Info).ToList();
         DesignerCollectionInfo? Pick(params string[] properties) => collections.FirstOrDefault(c => properties.Contains(c.Property));
         var collection = hint.Contains("COLUMN", StringComparison.Ordinal) || hint.Contains("ROW", StringComparison.Ordinal) ? Pick("ColumnStyles", "Columns")
@@ -208,8 +274,9 @@ internal sealed partial class DesignerSession
     {
         if (parameters.Member.StartsWith(VerbPrefix, StringComparison.Ordinal))
         {
+            // The designer's own verbs first, also when the action service lists the actions (#67: the context menu's).
             var text = parameters.Member[VerbPrefix.Length..];
-            foreach (DesignerVerb verb in LooseVerbs(component) ?? [])
+            foreach (DesignerVerb verb in (IEnumerable<DesignerVerb>?)Host.GetDesigner(component)?.Verbs?.Cast<DesignerVerb>() ?? [])
             {
                 if (verb.Text == text)
                 {

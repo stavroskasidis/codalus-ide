@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Node;
 
@@ -245,7 +246,7 @@ public static class Npm
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             throw;
         }
 

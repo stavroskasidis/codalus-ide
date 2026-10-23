@@ -15,6 +15,16 @@ Open it for a project with **Manage NuGet Packages…** (the project's or its De
 
 Each package in the list shows its version as a badge: the installed version with a check (green), then an available update in the accent color (**↑ 1.1.0**); a package you haven't installed shows its latest version. **prerelease**, **deprecated** and **vulnerable** badges sit under the version.
 
+### Verified owners
+
+A blue badge with a check after a package's ID means **nuget.org reserved the ID's prefix for one of the package's owners** (nuget.org's [ID prefix reservation](https://learn.microsoft.com/nuget/nuget-org/id-prefix-reservation)): only they can publish packages whose IDs start with it. Its tooltip says so; screen readers read it as "verified owner". It vouches for who holds the prefix, not for the **Authors** shown, which are free text, and it stays on a deprecated or vulnerable version (the owner is still verified).
+
+The badge shows only when the package can be nobody else's copy:
+- it comes from nuget.org itself (`https://api.nuget.org`). A mirror, a private feed or a feed with nuget.org as its upstream never shows it, even when it passes nuget.org's mark on, so if you reach nuget.org only through such a feed you won't see the badge;
+- nuget.org is the only source that could provide it: you chose nuget.org in the source box (or it is your only enabled source), or **package source mapping** maps the ID to nuget.org alone. In *All sources* with several sources and no mapping, restore could take the same ID and version from any of them, so no badge shows.
+
+Browse shows it in the list and in the details. Installed, Updates and Consolidate show no badge in their lists; their details ask nuget.org once, beside the details, and show it in the heading when the answer comes. **Offline**, or when nuget.org doesn't answer, no badge shows.
+
 The **details** pane on the right shows the selected package:
 - the version picker (the installed, latest, deprecated and vulnerable versions are marked, and for a project the versions that don't support its target frameworks, from the package's dependency groups; the details open on the newest version that does)
 - **Install**, **Update** and **Uninstall** (at solution level, tick the projects first)
@@ -44,6 +54,8 @@ Setting **NuGet → Offline** limits the package manager to local sources (folde
 **Package Sources…** (Project menu, or the gear in the package manager) lists the sources of the solution's `NuGet.Config` files in priority order. You can:
 - add, remove, rename, enable and disable sources, and change their order
 - map package patterns to a source (**package source mapping**: `Contoso.*` restores only from that source; `*` matches everything)
+
+With package source mapping, the package manager's search and the details' versions leave out copies from sources an ID isn't mapped to, since restore would refuse them: with `Contoso.*` mapped to nuget.org, a local feed's `Contoso.Verified` build isn't offered.
 
 Saving writes each change to the file that defines the source. New sources and mappings go into the solution folder's `nuget.config`, which is created when there is none, so your user-wide settings and other solutions don't change. Machine-wide sources are read-only.
 

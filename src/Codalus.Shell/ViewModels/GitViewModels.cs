@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text;
 using Codalus.Shell.Docking;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Git;
@@ -57,6 +56,11 @@ public sealed class GitFileRow(GitFileStatus status, bool staged, GitLfsStatus? 
     public bool CanStage => !Staged;
 
     public bool CanUnstage => Staged;
+
+    /// <summary>A rename's old name ("← Tokens.cs"), or null.</summary>
+    public string? OldName => Status.OriginalPath is { } old ? "← " + System.IO.Path.GetFileName(old) : null;
+
+    public bool HasOldName => Status.OriginalPath is not null;
 
     public string AccessibleName => $"{Name} in {Folder}, {Description}{(Staged ? ", staged" : string.Empty)}{(Badge is { } badge ? ", " + badge : string.Empty)}";
 }
@@ -119,9 +123,37 @@ public sealed class GitChangeNode(string key, string text, GitFileRow? row, bool
 
     public bool CanUnstage => Staged;
 
-    public bool CanDiscard => Row is { CanStage: true };
+    /// <summary>A file with unstaged changes, or a folder (or the repository) of the Changes section (T1: Discard on a folder's hover buttons).</summary>
+    public bool CanDiscard => Row is { CanStage: true } || (Row is null && Section == "changes");
 
-    public string AccessibleName => Row?.AccessibleName ?? Text;
+    /// <summary>The node's path: the repository's folder, a folder's or a file's (with the OS's separators).</summary>
+    public string FullPath { get; init; } = string.Empty;
+
+    /// <summary>Its path from the repository's folder, with '/' (empty for the repository).</summary>
+    public string RelativePath { get; init; } = string.Empty;
+
+    /// <summary>The section it's in: <c>changes</c>, <c>staged</c> or <c>conflicts</c>.</summary>
+    public string Section { get; init; } = string.Empty;
+
+    /// <summary>The changed files at and under it that the window shows (a filter can hide some).</summary>
+    public int ShownFiles => Rows.Count();
+
+    /// <summary>The changed files at and under it in its section, shown or not.</summary>
+    public int TotalFiles { get; set; }
+
+    /// <summary>"2 of 5 files" on a folder while a filter hides some of its files (T6, question 15); null otherwise.</summary>
+    public string? CountText => Row is null && ShownFiles < TotalFiles
+        ? Localizer.Format("msg.gitChanges.filesOfTotal", "{0} of {1} files", ShownFiles, TotalFiles)
+        : null;
+
+    public bool HasCountText => CountText is not null;
+
+    /// <summary>A file's description; a folder's name and its count (every folder's, question 15).</summary>
+    public string AccessibleName => Row?.AccessibleName ?? (IsRepository
+        ? Localizer.Format("msg.gitChanges.repositoryAccessibleName", "{0}, repository, {1} changed files", Text, TotalFiles)
+        : TotalFiles == 1
+            ? Localizer.Format("msg.gitChanges.folderAccessibleNameOne", "{0}, folder, 1 changed file", Text)
+            : Localizer.Format("msg.gitChanges.folderAccessibleName", "{0}, folder, {1} changed files", Text, TotalFiles));
 }
 
 /// <summary>A repository of the solution (several repositories, M13b).</summary>
@@ -295,13 +327,88 @@ public sealed partial class GitChangesViewModel : ObservableObject
     private void RebuildViews()
     {
         var root = _git.Root ?? string.Empty;
-        Fill(StagedTree, BuildTree(root, Staged.Where(Matches), "staged", staged: true, _collapsed, OnExpandedChanged));
-        Fill(ChangesTree, BuildTree(root, Changes.Where(Matches), "changes", staged: false, _collapsed, OnExpandedChanged));
-        Fill(ConflictsTree, BuildTree(root, Conflicts.Where(Matches), "conflicts", staged: false, _collapsed, OnExpandedChanged));
+        Fill(StagedTree, BuildTree(root, Staged.Where(Matches), "staged", staged: true, _collapsed, OnExpandedChanged, Staged));
+        Fill(ChangesTree, BuildTree(root, Changes.Where(Matches), "changes", staged: false, _collapsed, OnExpandedChanged, Changes));
+        Fill(ConflictsTree, BuildTree(root, Conflicts.Where(Matches), "conflicts", staged: false, _collapsed, OnExpandedChanged, Conflicts));
         Fill(StagedItems, Sorted(Staged.Where(Matches)));
         Fill(ChangesItems, Sorted(Changes.Where(Matches)));
         Fill(ConflictsItems, Sorted(Conflicts.Where(Matches)));
+        foreach (var name in new[] { nameof(StagedHeader), nameof(ChangesHeader), nameof(ConflictsHeader), nameof(IsFiltered), nameof(StagedFilteredOut), nameof(ChangesFilteredOut), nameof(FilteredOutText) })
+        {
+            OnPropertyChanged(name);
+        }
     }
+
+    /// <summary>A filter is hiding files (the menu's folder actions then act on the files shown, question 2).</summary>
+    public bool IsFiltered => _filterText.Trim().Length > 0;
+
+    /// <summary>The section's files: <c>changes</c>, <c>staged</c> or <c>conflicts</c>.</summary>
+    public IReadOnlyList<GitFileRow> SectionRows(string section) => section switch
+    {
+        "staged" => Staged,
+        "conflicts" => Conflicts,
+        _ => Changes,
+    };
+
+    /// <summary>
+    /// The section's files at or under <paramref name="path"/> (a file, a folder or the repository's folder), every one
+    /// or (<paramref name="shownOnly"/>) only those the filter shows.
+    /// </summary>
+    public IReadOnlyList<GitFileRow> RowsUnder(string path, string section, bool shownOnly)
+    {
+        var full = System.IO.Path.TrimEndingDirectorySeparator(path);
+        return [.. SectionRows(section).Where(r => (!shownOnly || Matches(r)) && IsUnder(r.Status.Path, full))];
+
+        static bool IsUnder(string file, string folder) =>
+            Workbench.Projects.SolutionService.PathComparer.Equals(file, folder)
+            || file.StartsWith(folder + System.IO.Path.DirectorySeparatorChar, Workbench.Projects.SolutionService.PathComparer == StringComparer.Ordinal ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The tree's node for <paramref name="path"/> in <paramref name="section"/>, or null.</summary>
+    public GitChangeNode? FindNode(string section, string path)
+    {
+        var tree = section switch { "staged" => StagedTree, "conflicts" => ConflictsTree, _ => ChangesTree };
+        return tree.SelectMany(Flatten).FirstOrDefault(n => Workbench.Projects.SolutionService.PathComparer.Equals(n.FullPath, System.IO.Path.TrimEndingDirectorySeparator(path)));
+
+        static IEnumerable<GitChangeNode> Flatten(GitChangeNode node) => node.Children.SelectMany(Flatten).Prepend(node);
+    }
+
+    /// <summary>Expand All and Collapse All on a folder or the repository node: it and every folder under it.</summary>
+    public void SetExpandedUnder(string section, string path, bool expanded)
+    {
+        if (FindNode(section, path) is not { } node)
+        {
+            return;
+        }
+
+        Apply(node);
+
+        void Apply(GitChangeNode n)
+        {
+            if (n.IsFile)
+            {
+                return;
+            }
+
+            n.IsExpanded = expanded;
+            foreach (var child in n.Children)
+            {
+                Apply(child);
+            }
+        }
+    }
+
+    /// <summary>The staged section has files, but the filter shows none of them.</summary>
+    public bool StagedFilteredOut => IsFiltered && Staged.Count > 0 && !Staged.Any(Matches);
+
+    public bool ChangesFilteredOut => IsFiltered && Changes.Count > 0 && !Changes.Any(Matches);
+
+    /// <summary>"No files match “Greeter”." in a section the filter empties (T6).</summary>
+    public string FilteredOutText => Localizer.Format("msg.gitChanges.noFilesMatch", "No files match “{0}”.", _filterText.Trim());
+
+    private static string Header(string title, int shown, int total) => shown < total
+        ? Localizer.Format("msg.gitChanges.sectionOfTotal", "{0} ({1} of {2})", title, shown, total)
+        : string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{title} ({total})");
 
     private void OnExpandedChanged(GitChangeNode node, bool expanded)
     {
@@ -337,7 +444,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
     /// name; a folder with nothing but one folder in it is shown with it (<c>src\Data</c>). Keys in
     /// <paramref name="collapsed"/> start collapsed.
     /// </summary>
-    public static IReadOnlyList<GitChangeNode> BuildTree(string root, IEnumerable<GitFileRow> rows, string section, bool staged, IReadOnlySet<string> collapsed, Action<GitChangeNode, bool>? expandedChanged = null)
+    public static IReadOnlyList<GitChangeNode> BuildTree(string root, IEnumerable<GitFileRow> rows, string section, bool staged, IReadOnlySet<string> collapsed, Action<GitChangeNode, bool>? expandedChanged = null, IReadOnlyList<GitFileRow>? all = null)
     {
         var top = new TreeFolder();
         foreach (var row in rows)
@@ -363,11 +470,30 @@ public sealed partial class GitChangesViewModel : ObservableObject
         }
 
         var key = section + ":";
-        var repository = new GitChangeNode(key, root.Replace('/', System.IO.Path.DirectorySeparatorChar), null, isRepository: true, staged, !collapsed.Contains(key), expandedChanged);
-        Add(repository, top, key);
+        var rootPath = root.Replace('/', System.IO.Path.DirectorySeparatorChar);
+        var repository = new GitChangeNode(key, rootPath, null, isRepository: true, staged, !collapsed.Contains(key), expandedChanged) { FullPath = rootPath, Section = section };
+        Add(repository, top, key, string.Empty);
+        var everything = (all ?? []).Select(r => r.Status.RelativePath.Replace('\\', '/')).ToList();
+        Count(repository);
         return [repository];
 
-        void Add(GitChangeNode parent, TreeFolder folder, string parentKey)
+        // Each folder's files in the section, shown or not (all: the section's rows before the filter).
+        void Count(GitChangeNode node)
+        {
+            if (node.IsFile)
+            {
+                return;
+            }
+
+            var prefix = node.IsRepository ? string.Empty : node.RelativePath + "/";
+            node.TotalFiles = all is null ? node.ShownFiles : everything.Count(p => p.StartsWith(prefix, StringComparison.Ordinal));
+            foreach (var child in node.Children)
+            {
+                Count(child);
+            }
+        }
+
+        void Add(GitChangeNode parent, TreeFolder folder, string parentKey, string parentRelative)
         {
             foreach (var (name, child) in folder.Folders.OrderBy(f => f.Key, StringComparer.OrdinalIgnoreCase))
             {
@@ -381,14 +507,25 @@ public sealed partial class GitChangesViewModel : ObservableObject
                 }
 
                 var folderKey = parentKey + "/" + string.Join('/', names);
-                var node = new GitChangeNode(folderKey, string.Join(System.IO.Path.DirectorySeparatorChar, names), null, isRepository: false, staged, !collapsed.Contains(folderKey), expandedChanged);
+                var relative = (parentRelative.Length > 0 ? parentRelative + "/" : string.Empty) + string.Join('/', names);
+                var node = new GitChangeNode(folderKey, string.Join(System.IO.Path.DirectorySeparatorChar, names), null, isRepository: false, staged, !collapsed.Contains(folderKey), expandedChanged)
+                {
+                    FullPath = System.IO.Path.Combine(rootPath, relative.Replace('/', System.IO.Path.DirectorySeparatorChar)),
+                    RelativePath = relative,
+                    Section = section,
+                };
                 parent.Children.Add(node);
-                Add(node, contents, folderKey);
+                Add(node, contents, folderKey, relative);
             }
 
             foreach (var file in folder.Files.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase))
             {
-                parent.Children.Add(new GitChangeNode(parentKey + "/" + file.Name, file.Name, file, isRepository: false, staged, expanded: false));
+                parent.Children.Add(new GitChangeNode(parentKey + "/" + file.Name, file.Name, file, isRepository: false, staged, expanded: false)
+                {
+                    FullPath = file.Status.Path,
+                    RelativePath = file.Status.RelativePath.Replace('\\', '/'),
+                    Section = section,
+                });
             }
         }
     }
@@ -409,19 +546,56 @@ public sealed partial class GitChangesViewModel : ObservableObject
         ? string.Empty
         : status.Branch ?? Localizer.Format("msg.gitChanges.detachedAt", "(detached at {0})", status.Head?[..Math.Min(7, status.Head.Length)]);
 
+    /// <summary>The branch button's accessible name (B20): "Branch: main".</summary>
+    public string BranchAccessibleName => Localizer.Format("msg.gitChanges.branchAccessibleName", "Branch: {0}", BranchName);
+
     /// <summary>Whether the branch tracks a remote branch (otherwise outgoing and incoming commits are unknown).</summary>
     public bool IsPublished => _git.Status?.Upstream is not null;
 
     public bool IsNotPublished => HasRepository && !IsPublished;
+
+    private bool _hasRemote = true;
+
+    /// <summary>The repository has a remote (set by the shell from <c>git remote</c>): without one, the link publishes to a Git host (B18).</summary>
+    public bool HasRemote
+    {
+        get => _hasRemote;
+        set
+        {
+            if (SetField(ref _hasRemote, value))
+            {
+                OnPropertyChanged(nameof(ShowPublishBranch));
+                OnPropertyChanged(nameof(ShowPublishToHost));
+                OnPropertyChanged(nameof(OutgoingIncomingTooltip));
+            }
+        }
+    }
+
+    /// <summary>HEAD is detached: no branch to push or pull (B14).</summary>
+    public bool IsDetached => _git.Status is { Branch: null };
+
+    /// <summary>The repository has no commits yet (B16).</summary>
+    public bool IsUnborn => _git.Status is { Branch: not null, Head: null };
+
+    /// <summary>Publish branch: a branch with no upstream in a repository with a remote (question 19).</summary>
+    public bool ShowPublishBranch => IsNotPublished && _hasRemote && !IsDetached && !IsUnborn;
+
+    /// <summary>Publish to a Git Host…: a repository with no remote (B18), not detached and with commits.</summary>
+    public bool ShowPublishToHost => HasRepository && !_hasRemote && !IsDetached && !IsUnborn;
 
     /// <summary>"2 / 1": the commits to push (outgoing) and to pull (incoming).</summary>
     public string OutgoingIncomingText => _git.Status is { } status
         ? string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{status.Ahead} / {status.Behind}")
         : string.Empty;
 
-    public string OutgoingIncomingTooltip => _git.Status is { Upstream: { } upstream } status
-        ? Localizer.Format("msg.gitChanges.outgoingIncoming", "{0} outgoing / {1} incoming (tracking {2})", status.Ahead, status.Behind, upstream)
-        : Localizer.Get("msg.gitChanges.notPublished", "The branch isn't published: push it to create its remote branch.");
+    public string OutgoingIncomingTooltip => _git.Status switch
+    {
+        { Upstream: { } upstream } status => Localizer.Format("msg.gitChanges.outgoingIncoming", "{0} outgoing / {1} incoming (tracking {2})", status.Ahead, status.Behind, upstream),
+        { Branch: null } status => Localizer.Format("msg.gitChanges.headIsDetached", "HEAD is detached at {0}: there is no branch to push or pull.", status.Head?[..Math.Min(7, status.Head.Length)]),
+        { Head: null } => Localizer.Get("msg.gitChanges.noCommitsYet", "No commits yet: there is nothing to push."),
+        not null when !_hasRemote => Localizer.Get("msg.gitChanges.noRemote", "The repository has no remote: publish it to a Git host, or add one with Manage Remotes… in the ⋯ menu."),
+        _ => Localizer.Get("msg.gitChanges.notPublished", "The branch isn't published: push it to create its remote branch."),
+    };
 
     public bool IsMerging => _git.Status?.IsMerging ?? false;
 
@@ -461,9 +635,10 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     public bool HasConflicts => Conflicts.Count > 0;
 
-    public string StagedHeader => $"Staged Changes ({Staged.Count})";
+    /// <summary>"Staged Changes (2)", or "(0 of 2)" while a filter hides some (T6).</summary>
+    public string StagedHeader => Header(Localizer.Get("msg.gitChanges.stagedChanges", "Staged Changes"), Staged.Count(Matches), Staged.Count);
 
-    public string ChangesHeader => Changes.Count > 0 ? $"Changes ({Changes.Count})" : "Changes";
+    public string ChangesHeader => Changes.Count > 0 ? Header(Localizer.Get("msg.gitChanges.changes", "Changes"), Changes.Count(Matches), Changes.Count) : Localizer.Get("msg.gitChanges.changes", "Changes");
 
     /// <summary>The commit button commits the staged changes when there are some, otherwise every change.</summary>
     public string CommitText => HasStaged
@@ -481,7 +656,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
     /// <summary>A message is required, and something to commit (or the last commit to amend).</summary>
     public bool CanCommit => !string.IsNullOrWhiteSpace(_message) && (HasStaged || HasChanges || Amend);
 
-    public string ConflictsHeader => $"Merge Conflicts ({Conflicts.Count})";
+    public string ConflictsHeader => Header(Localizer.Get("msg.gitChanges.mergeConflicts", "Merge Conflicts"), Conflicts.Count(Matches), Conflicts.Count);
 
     public string Message
     {
@@ -784,7 +959,8 @@ public sealed partial class GitChangesViewModel : ObservableObject
         RebuildViews();
         foreach (var name in new[]
         {
-            nameof(HasRepository), nameof(HasNoRepository), nameof(BranchName), nameof(IsPublished), nameof(IsNotPublished), nameof(OutgoingIncomingText),
+            nameof(HasRepository), nameof(HasNoRepository), nameof(BranchName), nameof(BranchAccessibleName), nameof(IsPublished), nameof(IsNotPublished), nameof(OutgoingIncomingText),
+            nameof(IsDetached), nameof(IsUnborn), nameof(ShowPublishBranch), nameof(ShowPublishToHost),
             nameof(OutgoingIncomingTooltip), nameof(IsMerging), nameof(HasStaged), nameof(HasChanges), nameof(HasConflicts), nameof(StagedHeader),
             nameof(ChangesHeader), nameof(ConflictsHeader), nameof(OperationText), nameof(CommitText), nameof(CommitAndPushText), nameof(CommitAndSyncText),
             nameof(CanCommit),
@@ -853,410 +1029,43 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     /// <summary>Runs a shell command (fetch, pull, push, discard…), which reports its own errors.</summary>
     public Task RunAsync(string command) => _run(command);
-}
 
-/// <summary>A row of a side-by-side diff: a line on either side (null = filler), and its change kind.</summary>
-public sealed record DiffRow(int? OldLine, int? NewLine, char Kind);
+    /// <summary>The branch drop-down's list (D38), set by the shell.</summary>
+    public GitBranchPickerViewModel? Branches { get; set; }
 
-/// <summary>A file's diff (work tree against the index, or the index against HEAD), inline or side by side.</summary>
-public sealed class DiffViewModel : ObservableObject
-{
-    private readonly GitService? _git;
-    private bool _sideBySide = true;
-    private string _summary = string.Empty;
+    /// <summary>A node's menu from gitChanges/context: its path, section, kind (file, folder, repository) and the files shown; set by the shell.</summary>
+    public Func<string, string, string, IReadOnlyList<string>, Avalonia.Controls.ContextMenu?>? MenuFor { get; set; }
 
-    public DiffViewModel(GitService git, string path, bool staged)
-    {
-        _git = git;
-        Path = path;
-        Staged = staged;
-    }
+    /// <summary>The menu of a tree node (null when no entry applies).</summary>
+    public Avalonia.Controls.ContextMenu? MenuOf(GitChangeNode node) =>
+        MenuFor?.Invoke(node.FullPath, node.Section, node.IsRepository ? "repository" : node.IsFile ? "file" : "folder", [.. node.Rows.Select(r => r.Status.Path)]);
 
-    /// <summary>Two files, side by side (<c>codalus diff left right</c>): no Git, no staging.</summary>
-    public DiffViewModel(string leftPath, string rightPath)
-    {
-        LeftPath = leftPath;
-        Path = rightPath;
-    }
+    /// <summary>The menu of a list row (a file).</summary>
+    public Avalonia.Controls.ContextMenu? MenuOf(GitFileRow row) =>
+        MenuFor?.Invoke(row.Status.Path, SectionOf(row), "file", [row.Status.Path]);
+
+    /// <summary>Runs a command with arguments (the hover buttons run the menu's commands on a node: D38's T1), set by the shell.</summary>
+    public Func<string, IReadOnlyList<System.Text.Json.JsonElement>, Task>? RunWithArguments { get; set; }
 
     /// <summary>
-    /// Two versions of a file read by <paramref name="oldText"/> and <paramref name="newText"/> (revisions, M13: a commit
-    /// against its parent, a branch against the working tree…). <paramref name="key"/> identifies the document.
+    /// The arguments of <c>gitChanges/context</c>'s commands for a node: its path, its section and the files the window
+    /// shows under it (question 2).
     /// </summary>
-    public DiffViewModel(string path, string key, string oldTitle, Func<Task<string>> oldText, string newTitle, Func<Task<string>> newText)
-    {
-        Path = path;
-        Key = key;
-        _oldTitle = oldTitle;
-        _newTitle = newTitle;
-        _oldProvider = oldText;
-        _newProvider = newText;
-    }
+    public static IReadOnlyList<System.Text.Json.JsonElement> ArgumentsFor(string path, string section, IEnumerable<string> shown) =>
+    [
+        System.Text.Json.JsonSerializer.SerializeToElement(path, Docking.ShellJsonContext.Default.String),
+        System.Text.Json.JsonSerializer.SerializeToElement(section, Docking.ShellJsonContext.Default.String),
+        System.Text.Json.JsonSerializer.SerializeToElement(shown.ToArray(), Docking.ShellJsonContext.Default.StringArray),
+    ];
 
-    private readonly string? _oldTitle;
-    private readonly string? _newTitle;
-    private readonly Func<Task<string>>? _oldProvider;
-    private readonly Func<Task<string>>? _newProvider;
+    /// <summary>Runs <paramref name="command"/> on a tree node, with the files shown under it.</summary>
+    public Task RunOnAsync(string command, GitChangeNode node) =>
+        RunWithArguments is { } run ? run(command, ArgumentsFor(node.FullPath, node.Section, node.Rows.Select(r => r.Status.Path))) : Task.CompletedTask;
 
-    /// <summary>A revision comparison's document key; null otherwise.</summary>
-    public string? Key { get; }
+    /// <summary>Runs <paramref name="command"/> on a list row (a file).</summary>
+    public Task RunOnAsync(string command, GitFileRow row) =>
+        RunWithArguments is { } run ? run(command, ArgumentsFor(row.Status.Path, SectionOf(row), [row.Status.Path])) : Task.CompletedTask;
 
-    public bool IsRevisionComparison => _oldProvider is not null;
-
-    public string Path { get; }
-
-    /// <summary>The left file of a file comparison; null for Git diffs.</summary>
-    public string? LeftPath { get; }
-
-    public bool IsFileComparison => LeftPath is not null;
-
-    public bool Staged { get; }
-
-    public FileDiff? Diff { get; private set; }
-
-    public string OldText { get; private set; } = string.Empty;
-
-    public string NewText { get; private set; } = string.Empty;
-
-    public IReadOnlyList<string> OldLines { get; private set; } = [];
-
-    public IReadOnlyList<string> NewLines { get; private set; } = [];
-
-    /// <summary>Aligned rows of both texts (side by side, and in that order for the inline view).</summary>
-    public IReadOnlyList<DiffRow> Rows { get; private set; } = [];
-
-    public bool SideBySide
-    {
-        get => _sideBySide;
-        set
-        {
-            if (SetField(ref _sideBySide, value))
-            {
-                OnPropertyChanged(nameof(Inline));
-                Changed?.Invoke(this, EventArgs.Empty);
-            }
-        }
-    }
-
-    public bool Inline
-    {
-        get => !_sideBySide;
-        set => SideBySide = !value;
-    }
-
-    public string Summary
-    {
-        get => _summary;
-        private set => SetField(ref _summary, value);
-    }
-
-    public string OldTitle => _oldTitle ?? LeftPath ?? (Staged ? "HEAD" : "Index");
-
-    public string NewTitle => _newTitle ?? (IsFileComparison ? Path : Staged ? "Index (staged)" : "Working tree");
-
-    public bool CanStage => !Staged && !IsFileComparison && !IsRevisionComparison;
-
-    public bool CanUnstage => Staged;
-
-    /// <summary>The texts or rows changed; views rebuild.</summary>
-    public event EventHandler? Changed;
-
-    public async Task LoadAsync()
-    {
-        if (_oldProvider is not null && _newProvider is not null)
-        {
-            await LoadTextsAsync(await _oldProvider().ConfigureAwait(true), await _newProvider().ConfigureAwait(true)).ConfigureAwait(true);
-            return;
-        }
-
-        if (_git is null)
-        {
-            await LoadFilesAsync().ConfigureAwait(true);
-            return;
-        }
-
-        var oldText = await _git.ShowAsync(Path, Staged ? "HEAD" : ":").ConfigureAwait(true) ?? string.Empty;
-        string newText;
-        if (Staged)
-        {
-            newText = await _git.ShowAsync(Path, ":").ConfigureAwait(true) ?? string.Empty;
-        }
-        else
-        {
-            try
-            {
-                newText = File.Exists(Path) ? await File.ReadAllTextAsync(Path).ConfigureAwait(true) : string.Empty;
-            }
-            catch (IOException)
-            {
-                newText = string.Empty;
-            }
-        }
-
-        Diff = await _git.DiffAsync(Path, Staged).ConfigureAwait(true);
-        OldText = oldText;
-        NewText = newText;
-        OldLines = LineDiff.Lines(oldText);
-        NewLines = LineDiff.Lines(newText);
-        var ops = await Task.Run(() => LineDiff.Diff(OldLines, NewLines)).ConfigureAwait(true);
-        Rows = Align(ops);
-        var hunks = Diff?.Hunks.Count ?? 0;
-        Summary = Diff is null ? "No changes." : Diff.IsBinary ? "Binary file." : $"{hunks} change{(hunks == 1 ? string.Empty : "s")}: +{Diff.Hunks.Sum(h => h.Added)} −{Diff.Hunks.Sum(h => h.Removed)}";
-        Changed?.Invoke(this, EventArgs.Empty);
-    }
-
-    private async Task LoadFilesAsync()
-    {
-        static async Task<string> ReadAsync(string path)
-        {
-            try
-            {
-                return File.Exists(path) ? await File.ReadAllTextAsync(path).ConfigureAwait(false) : string.Empty;
-            }
-            catch (IOException)
-            {
-                return string.Empty;
-            }
-        }
-
-        await LoadTextsAsync(await ReadAsync(LeftPath!).ConfigureAwait(true), await ReadAsync(Path).ConfigureAwait(true)).ConfigureAwait(true);
-    }
-
-    private async Task LoadTextsAsync(string oldText, string newText)
-    {
-        OldText = oldText;
-        NewText = newText;
-        OldLines = LineDiff.Lines(OldText);
-        NewLines = LineDiff.Lines(NewText);
-        var ops = await Task.Run(() => LineDiff.Diff(OldLines, NewLines)).ConfigureAwait(true);
-        Rows = Align(ops);
-        var added = ops.Count(o => o.Kind == '+');
-        var removed = ops.Count(o => o.Kind == '-');
-        Summary = added + removed == 0 ? "The files are identical." : $"+{added} −{removed}";
-        Changed?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>Pairs removed and added runs line by line ('~' rows), so side-by-side views align.</summary>
-    private static List<DiffRow> Align(IReadOnlyList<DiffOp> ops)
-    {
-        var rows = new List<DiffRow>(ops.Count);
-        var i = 0;
-        while (i < ops.Count)
-        {
-            if (ops[i].Kind == ' ')
-            {
-                rows.Add(new DiffRow(ops[i].OldIndex + 1, ops[i].NewIndex + 1, ' '));
-                i++;
-                continue;
-            }
-
-            var removed = new List<int>();
-            var added = new List<int>();
-            while (i < ops.Count && ops[i].Kind != ' ')
-            {
-                if (ops[i].Kind == '-')
-                {
-                    removed.Add(ops[i].OldIndex + 1);
-                }
-                else
-                {
-                    added.Add(ops[i].NewIndex + 1);
-                }
-
-                i++;
-            }
-
-            for (var k = 0; k < Math.Max(removed.Count, added.Count); k++)
-            {
-                int? oldLine = k < removed.Count ? removed[k] : null;
-                int? newLine = k < added.Count ? added[k] : null;
-                rows.Add(new DiffRow(oldLine, newLine, oldLine is null ? '+' : newLine is null ? '-' : '~'));
-            }
-        }
-
-        return rows;
-    }
-
-    /// <summary>The inline text: removed lines (old) and added lines (new) interleaved, with each row's kind.</summary>
-    public (string Text, IReadOnlyList<char> Kinds) InlineText()
-    {
-        var text = new StringBuilder();
-        var kinds = new List<char>();
-        foreach (var row in Rows)
-        {
-            if (row.Kind == ' ')
-            {
-                text.Append(NewLines[row.NewLine!.Value - 1]).Append('\n');
-                kinds.Add(' ');
-                continue;
-            }
-
-            if (row.OldLine is { } oldLine)
-            {
-                text.Append(OldLines[oldLine - 1]).Append('\n');
-                kinds.Add('-');
-            }
-
-            if (row.NewLine is { } newLine)
-            {
-                text.Append(NewLines[newLine - 1]).Append('\n');
-                kinds.Add('+');
-            }
-        }
-
-        return (text.ToString(), kinds);
-    }
-
-    /// <summary>The git hunk that covers a new-side (or, for removals, old-side) line.</summary>
-    public DiffHunk? HunkAt(int? newLine, int? oldLine)
-    {
-        if (Diff is null)
-        {
-            return null;
-        }
-
-        foreach (var hunk in Diff.Hunks)
-        {
-            if (newLine is { } n && n >= hunk.NewStart && n < hunk.NewStart + Math.Max(1, hunk.NewCount))
-            {
-                return hunk;
-            }
-
-            if (oldLine is { } o && o >= hunk.OldStart && o < hunk.OldStart + Math.Max(1, hunk.OldCount))
-            {
-                return hunk;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>The first changed row after (or before) <paramref name="row"/>, for next/previous change.</summary>
-    public int? NextChange(int row, int direction)
-    {
-        for (var i = row + direction; i >= 0 && i < Rows.Count; i += direction)
-        {
-            if (Rows[i].Kind != ' ' && (i - direction < 0 || i - direction >= Rows.Count || Rows[i - direction].Kind == ' '))
-            {
-                return i;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Stages, unstages or discards only the changed lines in the given rows (per-line staging, M13): a removal is
-    /// chosen by its old line, an addition by its new line.
-    /// </summary>
-    public async Task ApplyToLinesAsync(IReadOnlyCollection<int> rows, string action)
-    {
-        if (Diff is null || _git is null)
-        {
-            return;
-        }
-
-        var oldLines = rows.Where(r => r >= 0 && r < Rows.Count).Select(r => Rows[r].OldLine).OfType<int>().ToHashSet();
-        var newLines = rows.Where(r => r >= 0 && r < Rows.Count).Select(r => Rows[r].NewLine).OfType<int>().ToHashSet();
-        foreach (var hunk in Diff.Hunks)
-        {
-            var chosen = new HashSet<int>();
-            int oldNo = hunk.OldStart, newNo = hunk.NewStart;
-            for (var i = 0; i < hunk.Lines.Count; i++)
-            {
-                switch (hunk.Lines[i].Kind)
-                {
-                    case ' ':
-                        oldNo++;
-                        newNo++;
-                        break;
-                    case '-':
-                        if (oldLines.Contains(oldNo++))
-                        {
-                            chosen.Add(i);
-                        }
-
-                        break;
-                    case '+':
-                        if (newLines.Contains(newNo++))
-                        {
-                            chosen.Add(i);
-                        }
-
-                        break;
-                }
-            }
-
-            if (chosen.Count == 0)
-            {
-                continue;
-            }
-
-            switch (action)
-            {
-                case "stage":
-                    await _git.StageLinesAsync(Diff, hunk, chosen).ConfigureAwait(true);
-                    break;
-                case "unstage":
-                    await _git.UnstageLinesAsync(Diff, hunk, chosen).ConfigureAwait(true);
-                    break;
-                case "discard":
-                    await _git.DiscardLinesAsync(Diff, hunk, chosen).ConfigureAwait(true);
-                    break;
-            }
-
-            break; // the diff changed: one hunk per action
-        }
-
-        await LoadAsync().ConfigureAwait(true);
-    }
-
-    public async Task ApplyToHunkAsync(DiffHunk hunk, string action)
-    {
-        if (Diff is null || _git is null)
-        {
-            return;
-        }
-
-        switch (action)
-        {
-            case "stage":
-                await _git.StageHunkAsync(Diff, hunk).ConfigureAwait(true);
-                break;
-            case "unstage":
-                await _git.UnstageHunkAsync(Diff, hunk).ConfigureAwait(true);
-                break;
-            case "discard":
-                await _git.DiscardHunkAsync(Diff, hunk).ConfigureAwait(true);
-                break;
-        }
-
-        await LoadAsync().ConfigureAwait(true);
-    }
-}
-
-/// <summary>A diff document tab.</summary>
-public sealed class DiffDocument : ShellDocument
-{
-    public DiffDocument(DiffViewModel viewModel, EditorFont font)
-    {
-        ViewModel = viewModel;
-        Font = font;
-        Id = viewModel.Key is { } key ? "diff:revisions:" + key : viewModel.LeftPath is { } left ? IdFor(left, viewModel.Path) : IdFor(viewModel.Path, viewModel.Staged);
-        Title = viewModel.IsRevisionComparison
-            ? $"{System.IO.Path.GetFileName(viewModel.Path)} ({viewModel.OldTitle} ↔ {viewModel.NewTitle})"
-            : viewModel.LeftPath is { } leftPath
-                ? $"{System.IO.Path.GetFileName(leftPath)} ↔ {System.IO.Path.GetFileName(viewModel.Path)}"
-                : $"{System.IO.Path.GetFileName(viewModel.Path)} ({(viewModel.Staged ? "Staged" : "Working Tree")})";
-    }
-
-    public static string IdFor(string path, bool staged) => $"diff:{(staged ? "staged" : "worktree")}:{path}";
-
-    public static string IdFor(string left, string right) => $"diff:files:{left}|{right}";
-
-    public override string Kind => "diff";
-
-    public DiffViewModel ViewModel { get; }
-
-    public EditorFont Font { get; }
+    /// <summary>The section a file row is in.</summary>
+    public string SectionOf(GitFileRow row) => row.Staged ? "staged" : Conflicts.Contains(row) ? "conflicts" : "changes";
 }

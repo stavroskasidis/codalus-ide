@@ -45,6 +45,7 @@ public sealed partial class ShellHost
             ProcessDirectory = Path.Combine(Paths.State, "external-agents"),
         };
         AcpHost = new ShellAcpHost(this);
+        InitializeAgentConnect();
 
         // The agent works in one workspace: closing it, or opening another, stops it.
         Solutions.SolutionChanged += (_, _) => Ui.Post(() =>
@@ -63,75 +64,15 @@ public sealed partial class ShellHost
         });
     }
 
-    /// <summary>The PATH "Add agent…" looks for the agents' CLIs on; null: this process's (tests set a folder of stand-ins).</summary>
-    public string? AgentSearchPath { get; set; }
-
     /// <summary>
-    /// "Add agent…" (M48): the known ACP agents (<see cref="AcpAgentCatalog"/>) in the palette, each with its description,
-    /// the exact command it would run and its pinned version, marked installed when its CLI is on the PATH and added when
-    /// <c>ai.agents</c> has it. Choosing one asks first (what runs, and that npx downloads it), then writes its entry to
-    /// the user's settings only. Nothing is downloaded or run here: the agent starts when a chat with it does. Returns the
-    /// agent to choose (one already added, or the one just added), or null.
+    /// The PATH More agents… and the Connect dialog look for programs on (Node.js, npx, the agents' CLIs); null: this
+    /// process's. Tests and the smoke step set a folder of stand-ins.
     /// </summary>
-    public async Task<string?> AddExternalAgentAsync()
+    public string? AgentSearchPath
     {
-        var catalog = AcpAgentCatalog.Agents;
-        var installed = await AcpAgentCatalog.FindInstalledAsync(catalog, AgentSearchPath, TimeSpan.FromSeconds(3), CancellationToken.None).ConfigureAwait(true);
-        var configured = ExternalAgents.Configured;
-        var items = catalog.Select(agent => new QuickPickItem(agent.Name)
-        {
-            Detail = agent.Description + " · " + agent.CommandLine,
-            KeyLabel = configured.ContainsKey(agent.Id)
-                ? Localizer.Format("msg.acp.catalogAdded", "{0} · added", Version(agent))
-                : installed.Contains(agent.Id) ? Localizer.Format("msg.acp.catalogInstalled", "{0} · installed", Version(agent)) : Version(agent),
-            Icon = "sparkle",
-            Tag = agent,
-        }).ToList();
-        if (await Palette.ShowAsync(items, Localizer.Get("msg.acp.whichAgent", "Which agent? Nothing is downloaded or run until you start a chat with it.")).ConfigureAwait(true) is not { Tag: AcpKnownAgent chosen })
-        {
-            return null;
-        }
-
-        if (configured.ContainsKey(chosen.Id))
-        {
-            return chosen.Id; // already there: chosen, not added again
-        }
-
-        // An entry of that name Codalus can't use (no command, a mistyped one): replacing it is the user's choice.
-        var replace = AcpAgentCatalog.HasEntry(Workbench.Settings, chosen.Id);
-        var add = replace ? Localizer.Get("msg.acp.replace", "Replace") : Localizer.Get("msg.acp.add", "Add");
-        var runs = chosen.UsesNpx
-            ? Localizer.Format("msg.acp.addNpx", "When you start a chat with it, Codalus will run {0}: npx downloads that package from npm the first time and runs it as you, with your account's access to your files, not only this folder's.", chosen.CommandLine)
-            : Localizer.Format("msg.acp.addInstalled", "When you start a chat with it, Codalus will run {0}: {1} must be installed and on your PATH (Codalus doesn't download it; tested with {2}), and it runs as you, with your account's access to your files, not only this folder's.", chosen.CommandLine, chosen.Cli, chosen.Version);
-        var message = replace
-            ? Localizer.Format("msg.acp.replaceEntry", "Your settings have an entry named {0} that Codalus can't use. Replace it?", chosen.Id) + "\n\n" + runs
-            : runs;
-        var answer = await Dialogs.ShowAsync(new DialogRequest(
-            replace ? Localizer.Format("msg.acp.replaceTitle", "Replace {0}?", chosen.Name) : Localizer.Format("msg.acp.addTitle", "Add {0}?", chosen.Name),
-            message + "\n\n" + Localizer.Get("aiChat.externalAgentUsesItsOwn", AcpAgents.Label),
-            [add, Localizer.Get("msg.acp.cancel", "Cancel")])
-        {
-            DefaultButton = add,
-            Icon = "sparkle",
-            Context = Localizer.Format("msg.acp.addContext", "{0} in your user settings (ai.agents)", chosen.Id),
-        }).ConfigureAwait(true);
-        if (answer.Button != add)
-        {
-            return null;
-        }
-
-        if (!await AcpAgentCatalog.AddAsync(Workbench.Settings, chosen, CancellationToken.None, replace).ConfigureAwait(true))
-        {
-            ShowMessage(Localizer.Format("msg.acp.notAdded", "{0} wasn't added: your settings already have an entry with that name.", chosen.Name));
-            return null;
-        }
-
-        return chosen.Id;
+        get => AgentConnector.SearchPath;
+        set => AgentConnector.SearchPath = value;
     }
-
-    /// <summary>An entry's version as the list shows it: pinned for npx, the one tested with for an installed CLI.</summary>
-    private static string Version(AcpKnownAgent agent) =>
-        agent.UsesNpx ? agent.Version : Localizer.Format("msg.acp.testedWith", "tested with {0}", agent.Version);
 
     /// <summary>Shows a dialog that closes (as cancelled) when <paramref name="cancellationToken"/> is cancelled: the turn was stopped.</summary>
     private async Task<DialogResult> ShowCancellableAsync(DialogRequest request, CancellationToken cancellationToken)
@@ -301,6 +242,50 @@ public sealed partial class ShellHost
                     Context = Context(agent, null),
                 }, cancellationToken).ConfigureAwait(true);
                 return methods.FirstOrDefault(m => m.Name == choice.Button);
+            }).Unwrap();
+
+        /// <summary>
+        /// An agent's terminal sign-in from a chat (ADR 0083): its exact command line and the names of the variables it
+        /// sets are shown first, then it runs in the IDE's terminal; refused in a remote window, whose terminal runs there.
+        /// </summary>
+        public Task<int?> RunTerminalSignInAsync(AcpTerminalSignIn signIn, CancellationToken cancellationToken) =>
+            Ui.RunAsync(async () =>
+            {
+                if (shell.Remote is not null)
+                {
+                    shell.ShowMessage(Localizer.Get("msg.acp.connect.remote", "Agents can't be connected from a remote window: they would run on this machine, while the folder and its terminal are on the remote one. Connect it from a local window."));
+                    return null;
+                }
+
+                var run = Localizer.Get("msg.acp.signInRun", "Sign In in Terminal");
+                var details = new List<DetailLine> { new(signIn.CommandLine) };
+                if (signIn.Variables.Count > 0)
+                {
+                    details.Add(new DetailLine(Localizer.Get("msg.acp.withEnvironment", "With these environment variables:"), "header"));
+                    details.AddRange(signIn.Variables.Select(v => new DetailLine(v)));
+                }
+
+                if (signIn.Hint is { } hint)
+                {
+                    details.Add(new DetailLine(hint, "note"));
+                }
+
+                var choice = await shell.ShowCancellableAsync(new DialogRequest(
+                    Localizer.Format("msg.acp.signInTerminalTitle", "Sign in to {0} in the Terminal?", signIn.Agent),
+                    Localizer.Format("msg.acp.signInTerminalMessage", "{0} signs in with its own command ({1}) in the Terminal; Codalus starts it again when the command ends. Codalus doesn't see or keep its credentials.", signIn.Agent, signIn.Method),
+                    [run, Localizer.Get("msg.acp.cancel", "Cancel")])
+                {
+                    Details = details,
+                    DefaultButton = run,
+                    Icon = "terminal",
+                    Context = Context(signIn.Agent, null),
+                }, cancellationToken).ConfigureAwait(true);
+                if (choice.Button != run)
+                {
+                    return null;
+                }
+
+                return await shell.RunAgentTerminalAsync(Localizer.Format("msg.acp.connect.signInTitle", "{0} sign-in", signIn.Agent), signIn.Launch, cancellationToken).ConfigureAwait(true);
             }).Unwrap();
 
         public Task ReloadFromDiskAsync(string path) =>

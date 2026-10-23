@@ -60,6 +60,10 @@ public sealed class CompoundDebugTests
             await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
             f.Shell.Runs.SetStartupProject(Path.Combine(folder, "BlazorHosted", "BlazorHosted.csproj"));
 
+            // The launched session (netcoredbg starts the server, which stops in its startup code): Hot Reload while
+            // debugging has its own tests (BlazorWebAppHotReloadDebugTests, #75).
+            await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugHotReloadSetting, false, Workbench.Settings.SettingScope.User, CancellationToken.None);
+
             // The component runs on the server (prerendering) and then in the browser; the script in the browser.
             var counter = Path.Combine(folder, "BlazorHosted.Client", "Pages", "Counter.razor");
             var initialized = Line(counter, "initialized");

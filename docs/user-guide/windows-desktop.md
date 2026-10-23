@@ -31,7 +31,7 @@ On Linux and macOS, Start, Start Without Debugging and the Performance Profiler 
 
 ## New projects and items
 
-File → New Project lists **WPF Application**, **WPF Class Library**, **WPF User Control Library**, **WPF Custom Control Library**, **Windows Forms App**, **Windows Forms Class Library** and **Windows Forms Control Library**. On Linux and macOS they come last, marked "Windows only".
+File → New Project lists **WPF Application**, **WPF Class Library**, **WPF User Control Library**, **WPF Custom Control Library**, **Windows Forms App**, **Windows Forms Class Library** and **Windows Forms Control Library** (the **Desktop** project type filter shows them). On Linux and macOS they have a **Windows only** tag: their projects build there but run on Windows.
 
 **Add New Item** (`Ctrl+Shift+A`) offers, in a WPF project:
 - **Window**, **Page** and **User Control**: the `.xaml` file and its `.xaml.cs` code-behind;
@@ -91,26 +91,44 @@ Running or debugging a WPF app loads a small agent into it (a .NET startup hook)
 
 On Windows, a form's or user control's `.cs` file opens in the **Windows Forms designer**: double-click it in Solution Explorer (it has a form icon) or open it. **View Code** (`F7`) shows its code, and **View Designer** (`Shift+F7`, or the Solution Explorer's and the editor's context menu) shows the designer again. The `.Designer.cs` file itself opens as code. To open forms as code by default, turn **Open Forms in the Designer** off (Settings → Windows Forms, `windowsForms.openInDesigner`).
 
-The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply.
-- **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent, `Ctrl+A` everything on the form.
+The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply. A form you open while its project is still loading opens in the designer too; once the project has loaded, the designer reads it again.
+- **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent (for a control in a split container, that panel). `Ctrl+A` (or Edit → **Select All**) selects every component of the form, as the classic IDE does: the controls inside containers and the [component tray](#the-component-tray)'s components too. Moved with the arrow keys or a drag, a control inside a selected container moves with its container.
 - **Move** the selected controls by dragging them; dropped on a panel, a group box, a tab page or a split container's panel, a control moves into it. The arrow keys move them a pixel, `Shift`+arrows resize them.
 - **Resize** the selected control with its grab handles (the form from its right and bottom ones).
 - **Snap lines** show while you move or resize a control, as in Visual Studio: its edges line up with its neighbours' (blue), its text with theirs (a magenta baseline: a label with its text box), and it keeps their margins and the form's padding (dashed: 12 pixels from the form's edge, 6 between two controls). Hold `Alt` to move freely.
-- **Delete**, **Cut** (`Ctrl+X`), **Copy** (`Ctrl+C`), **Paste** (`Ctrl+V`, into the selected container, a little lower and to the right, with new names) and **Duplicate** (`Ctrl+D`). Deleting a container deletes what's inside. Pasted controls keep their items, tool tips and data bindings; their event handlers stay hooked up when you paste into the same form (in another form the handlers aren't there, so they're left out).
-- **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Y`) are the designer file's own: the designer's changes are edits of `.Designer.cs`, so they undo in the code view too, and the designer loads the form again from the code.
+- **Delete**, **Cut** (`Ctrl+X`), **Copy** (`Ctrl+C`), **Paste** (`Ctrl+V`) and **Duplicate** (`Ctrl+D`), also from the Edit menu and the [context menu](#the-context-menu-and-locked-controls). Paste puts the copies into the selected container, or into the container of the selected control (a group box, a panel, a split container's panel), else the form, a little lower and to the right, with new names, as the classic IDE does. Deleting a container deletes what's inside. Pasted controls keep their items, tool tips and data bindings; their event handlers stay hooked up when you paste into the same form (in another form the handlers aren't there, so they're left out).
+- **Undo** (`Ctrl+Z`, or Edit → Undo) and **Redo** (`Ctrl+Y`) are the designer file's own: the designer's changes are edits of `.Designer.cs`, so they undo in the code view too, and the designer loads the form again from the code.
 - **Double-click** a control to go to its default event's handler (a button's `Click`, a form's `Load`), written in the form's code file when it doesn't exist yet.
 - A docked control shows its dock, and an anchored one (other than top and left) lines to the edges it's anchored to.
 
 **Every change is written as code**, the way Visual Studio's designer writes it, in your file's own style (for .NET, or for .NET Framework with `this.` and full type names): a moved button changes its one `Location` line; a new one adds its field, its creation, its commented section with its properties in Visual Studio's order and its `Controls.Add`. The rest of the file doesn't move, so source control and local history show only what changed. The changes are in the designer file's editor until you save (`Ctrl+S` saves the designer).
 
+**Building while a form is open.** The designer runs on a copy of your build output (in your temp folder), as the classic IDE does, so you can build while a form is open. After a build that changes your app, the designer loads the form again on the new build, so your own controls show their changes; a designer that isn't the active tab does it when you switch to it. While it loads again, the form takes no clicks or drops; changes you make in the Properties window, or with a Toolbox double-click or `Enter`, apply once it's back; your unsaved changes and the selection stay. A designer you open while a build runs waits for the build to finish (closing it stops the wait). When the designer can't start (your project doesn't build yet, or a file of the output is in use), the status line says why, and it starts after your next successful build, or when you switch to it after a build outside the IDE; **Load the form again** on the designer's toolbar tries at once. The copy goes when you close the form or exit; a publish folder or another build's output inside your output folder (a `dotnet publish -r win-x64` folder) isn't copied.
+
+### The context menu and locked controls
+
+Right-click a control (or press `Shift+F10` or the Menu key) for the classic IDE's context menu:
+- the control's own commands from its Windows Forms designer, first (a tab control's **Add Tab** and **Remove Tab**, a list box's **Edit Items...**), with **Show Smart Tag** (`Shift+Alt+F10`) when it has [smart tag tasks](#smart-tags);
+- **View Code** (`F7`), **Bring to Front**, **Send to Back**, **Align to Grid**, **Lock Controls**;
+- **Select '_parent_'**, which selects the control's container (`Select 'shippingGroupBox'`, `Select 'OrderForm'`);
+- **Cut**, **Copy**, **Paste**, **Delete**, and **Properties** (`F4`).
+
+Entries that don't apply are grayed, as in the classic IDE: with the form selected there's nothing to cut, copy, delete, order or align; **Paste** is grayed until you copy something; a component that isn't a control (a timer in the tray) grays the commands for controls. A command its designer turns off is grayed too (**Remove Tab** when there are no tab pages). Two or more selected controls have no commands of their own. A command keeps its designer's words, and the underlined letter a Windows Forms command has (**Insert Standard Items** on a menu strip) chooses it while the menu is open. A menu or tool strip's item gets the same menu for now, with **Select** naming its strip (for an item in a drop-down, the menu item it's in, which `Esc` selects too).
+
+A component in the tray has its own commands first (an image list's **Choose images**, which opens its **Images** editor), then **View Code**, **Cut**, **Copy**, **Paste**, **Delete**, **Rename** (`F2`), **Line Up Icons** and **Properties**; right-clicking it keeps a selection it's in, so **Delete** takes them all. Its smart tag opens just above the tray. The tray's background has **Paste** and **Line Up Icons**.
+
+**Lock Controls** (in the context menu, and at the bottom of the Format menu) locks every control of the form, so a drag, the arrow keys and the grab handles can't move or resize them by mistake. A locked control shows a small lock on its top-left corner and no grab handles; its smart tag stays. **Lock Controls** is checked while the form or any control on it is locked, and choosing it then unlocks them all. A control's **Locked** property (Properties window, Design) locks it alone. The Properties window still changes a locked control's location and size, and **Bring to Front**, **Send to Back**, cut, copy and delete still work on it. Locks are kept in the form's `.resx`, as the classic IDE keeps them (`button1.Locked`), not in the code, and undo takes them back; a form without a `.resx` gets one.
+
 ### The Format menu and tab order
 
-With the designer active, the **Format** menu (and the surface's context menu) lines up the selected controls against the primary selection (the one with white grab handles), as Visual Studio's does:
+With the designer active, the **Format** menu lines up the selected controls against the primary selection (the one with white grab handles), as the classic IDE's does:
 - **Align**: Lefts, Centers, Rights, Tops, Middles, Bottoms, and to Grid (8 pixels);
 - **Make Same Size**: Width, Height, both, and Size to Grid;
 - **Horizontal Spacing** and **Vertical Spacing**: Make Equal, Increase, Decrease, Remove;
 - **Center in Form**: Horizontally, Vertically;
-- **Order**: **Bring to Front** and **Send to Back**, which change the order of the parent's `Controls.Add` (its z-order).
+- **Order**: **Bring to Front** and **Send to Back**, which change the order of the parent's `Controls.Add` (its z-order). Controls that overlap are drawn in that order, the front one over the others, as your app shows them.
+
+The primary selection stays the reference even when it's locked; locked controls themselves aren't moved or resized. The entries are grayed when the selection doesn't suit them, as in the classic IDE: Lefts to Bottoms and Make Same Size need two controls or more, the spacing commands two or more in one container, and a selection with a component that isn't a control (or the form) grays the commands for controls. **Align to Grid** and **Size to Grid** stay available whatever the snap lines do. **Lock Controls** is at the bottom (see [above](#the-context-menu-and-locked-controls)).
 
 View → **Tab Order** numbers every control with its `TabIndex` (a group box's controls as `5.0`, `5.1`…). Click the controls in the order the `Tab` key should visit them: each container counts from 0. `Esc` or View → Tab Order again ends it.
 
@@ -120,7 +138,7 @@ A control or component with designer tasks shows a small arrow at its top right 
 
 ### Menus and tool strips
 
-Select a menu strip, a tool strip, a status strip or a context menu strip to edit it on the form: **Type Here** at its end adds an item. In a menu, type the item's text (`&File`; a `-` makes a separator); in a tool strip or a status strip, choose the item's type (a button, a label, a combo box, a drop-down button…). Items are named as in Visual Studio (`fileToolStripMenuItem`, `toolStripButton1`).
+Select a menu strip, a tool strip, a status strip or a context menu strip to edit it on the form: **Type Here** at its end adds an item. In a menu, type the item's text (`&File`; a `-` makes a separator); in a tool strip or a status strip, choose the item's type (a button, a label, a combo box, a drop-down button…). Items are named as in Visual Studio (`fileToolStripMenuItem`, `toolStripButton1`). Only these strips have **Type Here**: a list box's, combo box's, domain up-down's or list view's items are edited in its **Items** [collection editor](#collections) (a list box's, combo box's and list view's smart tag also has **Edit Items…**).
 - Select a menu item to open its drop-down, with its own **Type Here**; `Enter` or a click on the selected item edits its text in place.
 - `Ctrl`+arrows move the selected item among its siblings; `Delete` deletes it (and its drop-down's items).
 - An item's properties are in the Properties window; its items are also in the **Items** collection editor.
@@ -129,14 +147,17 @@ The items are written as Visual Studio writes them: their fields, creations and 
 
 ### The component tray
 
-Components that don't show on the form (a timer, a tool tip, a binding source, an image list, an error provider, and the form's menu and tool strips) are in the **component tray** under it, with their icons. Click one to select it; `F2` (or its context menu's **Rename**) renames it in place; `Delete` deletes it; drag one to move it among the others, or **Line Up Icons** to arrange them in rows. The arrangement is kept in the form's `.resx` (Visual Studio's `TrayLocation`), so both IDEs show the same order.
+Components that don't show on the form (a timer, a tool tip, a binding source, an image list, an error provider, and the form's menu and tool strips) are in the **component tray** under it, with their icons. Click one to select it; `F2` (or its [context menu](#the-context-menu-and-locked-controls)'s **Rename**) renames it in place; `Delete` deletes it; drag one to move it among the others, or **Line Up Icons** to arrange them in rows. The arrangement is kept in the form's `.resx` (the classic IDE's `TrayLocation`), so both IDEs show the same order.
 
 ### Collections
 
 Properties that are collections show **(Collection)** and a **…** button in the Properties window (or the smart tag's **Edit Items…** task), which opens their editor:
 - **items as text**, one a line: a list box's, a combo box's or a domain up-down's `Items`;
 - **members**, added (of a type you choose), removed and moved up and down, each with its properties: a list view's `Columns`, a tab control's `TabPages`, a tool strip's or menu's `Items` and `DropDownItems`, a data grid view's `Columns`;
-- a list view's `Items` (by text, written as `ListViewItem` locals), a table layout panel's `ColumnStyles` and `RowStyles` (size type and size), an image list's `Images`.
+- a list view's `Items` (by text, written as `ListViewItem` locals), a table layout panel's `ColumnStyles` and `RowStyles` (size type and size), an image list's `Images`;
+- a text box's or combo box's `AutoCompleteCustomSource`, as text, one string a line (written as `AutoCompleteCustomSource.AddRange(new string[] { … })`).
+
+A member's properties are in the same grid as the Properties window's (categories, parts, editors), read again after each change.
 
 The code gets Visual Studio's form for each: `Items.AddRange(new object[] { … })`, `Columns.AddRange(new ColumnHeader[] { … })`, `ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F))`, `Images.SetKeyName(0, "save.png")`.
 
@@ -144,13 +165,15 @@ The code gets Visual Studio's form for each: `Items.AddRange(new object[] { … 
 
 Set the form's **Localizable** property to `True` to translate it, as in Visual Studio: its localizable properties (texts, sizes, locations, images…) move from the code to the form's `.resx`, and each control's section starts with `resources.ApplyResources(button1, "button1")`. The form's **Language** property (in the Properties window, with the form selected) chooses the language you design: **(Default)**, or a culture (`fr`, `fr-CA`, `de`…, from the list or typed). In a culture, the form shows its translation, and what you change goes to that culture's file (`OrderForm.fr.resx`, created when needed), only where it differs from the default. Renaming a control renames its resource keys in every culture's file; deleting it removes them. Setting **Localizable** back to `False` moves the values back to the code.
 
-An **image** property (`Image`, `BackgroundImage`, a form's `Icon`) has two buttons in the Properties window: one imports an image file into the form's `.resx` (written as `(Image)resources.GetObject("button1.Image")`), the other copies it into the project's `Resources` folder and adds it to `Properties/Resources.resx` (written as `Properties.Resources.save`).
+An **image** property (`Image`, `BackgroundImage`, a form's `Icon`) opens **Select Resource** from its "…", as in the classic IDE, with a preview of the image and its file name and size under it (`cart.png · 32 × 32`). Choose where the image comes from; the other side's buttons are grayed:
+- **Local resource**: **Import…** an image file into the form's `.resx` (written as `(Image)resources.GetObject("button1.Image")`), or **Clear** the image;
+- **Project resource file**: choose the resources file (`Properties\Resources.resx`), then one of its images (the files it references and the images it holds), or **(none)** for no image, or **Import…** a file, which OK copies into the project's `Resources` folder and adds there; the code reads `Properties.Resources.save`. Opened again, the image the code uses is the one picked.
 
 The `.resx` files are saved with the form (`Ctrl+S`), and undo takes back the code and the resources together.
 
 ### Data binding
 
-A form with a `BindingSource` (from the Toolbox's **Data** category, its `DataSource` set to one of your classes, such as `typeof(Customer)`) can bind its controls' properties to the class's members: the Properties window's **(DataBindings)** category lists a control's bindable properties (`Text`, `Checked`, `Tag`…), each with a list of the binding sources' members (`customerBindingSource - Name`). The code gets `textBox1.DataBindings.Add(new Binding("Text", customerBindingSource, "Name", true))`; **(none)** removes it. Visual Studio's Data Sources window isn't there: set the binding source's `DataSource` in the Properties window or the code.
+A form with a `BindingSource` (from the Toolbox's **Data** category, its `DataSource` set to one of your classes, such as `typeof(Customer)`) can bind its controls' properties to the class's members: the Properties window's **(DataBindings)** row, at the top of **Data**, expands into a control's bindable properties (`Text`, `Checked`, `Tag`…), each with a list of the binding sources' members (`customerBindingSource - Name`). The code gets `textBox1.DataBindings.Add(new Binding("Text", customerBindingSource, "Name", true))`; **(none)** removes it. The classic IDE's Data Sources window isn't there: set the binding source's `DataSource` in the Properties window or the code.
 
 **Code the designer can't read** (an `if` or a loop in `InitializeComponent`, a lambda as an event handler, a call to one of the form's own methods, a field that isn't a component) opens as code instead, at that line, and a notification says why, as in Visual Studio. The .NET SDK's `WFO3000` analyzers already flag most of it as errors.
 
@@ -158,25 +181,51 @@ A form with a `BindingSource` (from the Toolbox's **Data** category, its `DataSo
 
 View → **Toolbox** (`Ctrl+Alt+X`) lists Windows Forms' controls and components by Visual Studio's categories: **Common Controls**, **Containers**, **Menus & Toolbars**, **Data**, **Components**, **Printing** and **Dialogs**. Your project's own controls and components (and those of the projects it references) come first, under **_Project_ Components**; mark a class `[ToolboxItem(false)]` to leave it out. The search box filters them. Each control and component has an icon of its own (a button, a check box, a tree, a grid, a timer…); one of yours or a vendor's takes the icon of the control its name ends with (`OrderTextBox` a text box's), else a generic control's or component's.
 
-Click an item, then click on the form (it gets its default size) or drag a rectangle (it gets that size); or drag the item onto the form. It's named as in Visual Studio (`button1`, `textBox2`…) and selected; `Esc` or the **Pointer** cancels.
+Click an item (or press `Space` on it), then click on the form (it gets its default size) or drag a rectangle (it gets that size): the item stays highlighted until then, and the designer's status line says what a click on the form does. Or drag the item onto the form; a component that doesn't show on the form (a timer, a tool tip) can also be dropped on the component tray. It's named as in Visual Studio (`button1`, `textBox2`…) and selected; `Esc` or the **Pointer** cancels.
+
+**Double-click** an item, or press `Enter` on it, to add it at once, as in the classic IDE: into the selected container (the form when nothing is selected, or the container of the selected control), at its top-left corner, or a little below and to the right of the selected control, so repeated double-clicks cascade. The designer then has the focus, so the arrow keys move the new control and `F4` shows its properties. Nothing is added in tab order mode, and nothing can be dropped there.
+
+Items are created as the classic IDE creates them, whichever way you add them: a label sizes itself to its text, a split container added to a container whose other controls are all docked fills it, the first menu strip becomes the form's main menu, and a control added to a tab control goes to its selected page.
 
 ### Properties and events
 
-With the designer active, the **Properties** window (`F4`) shows the selected component's properties, as a classic IDE's property grid:
-- by category or alphabetically (its toolbar), values the code sets in bold, the selected property's description at the bottom;
-- for several selected components, the properties they share, a value they differ in left blank, and a value set on all of them;
-- edited as text (`12, 9` for a point, `Segoe UI, 9pt, style=Bold` for a font, `255, 128, 0` or a name for a color, with a swatch), from a list (enums, `True`/`False`, `Dock`), or with a toggle per flag (`Anchor`'s Top, Bottom, Left and Right);
-- with a picker for **Dock** (a box with the five positions) and **Anchor** (a cross with its four sides to toggle);
-- **(Name)** renames the component, in the designer file and wherever the form's code uses it;
-- **extender properties** that other components give it: a tool tip's **ToolTip on toolTip1** (written as `toolTip1.SetToolTip(button1, "…")`), a help provider's, an error provider's.
+With the designer active, the **Properties** window (`F4`) is the classic IDE's property grid for the selected component:
+- **The component list** at the top names the selection and its type; open it to select the form or any of its components by name (each with its type, the list as wide as its longest entry). It is blank with several components selected.
+- **The toolbar**: **Categorized** and **Alphabetical**, then **Properties** and **Events**, then **Property Pages**, which is grayed for a form's components (it opens a project's properties, or Configuration Manager for the solution, when Solution Explorer has one selected).
+- **Categories collapse** (click a header or its chevron, or press `Left` on it), and stay so as you select other components. In Alphabetical, **(DataBindings)** and **(Name)** come first, as there.
+- **Values the code sets are bold**, read-only values muted, and a clipped name or value shows whole in a tooltip. With several components selected, the grid has the properties they share, and a value they differ in is blank (Location's X blank and its Y 8 when only their Ys match).
+- **Expandable properties** open into their parts (Font, Location, Size, Padding, Margin, FlatAppearance…): edit one part (`Font` → `Bold` → `True`) and the code gets one assignment of the whole value (`button1.Font = new Font("Segoe UI", 9F, FontStyle.Bold, GraphicsUnit.Point, 0);`), the other parts kept.
+- **Type any value in place**, converted as the property's type reads it (`12, 9` for a point, `255, 128, 0` or a name for a color): `Enter` commits, `Esc` puts the value back. A property with standard values has an arrow: an exclusive list for **AcceptButton**, **CancelButton**, **ContextMenuStrip** and **ImageList** (**(none)**, then the form's components of a fitting type) and for `True`/`False` and enums, and the font's **Name** lists the computer's font families (type a family in the font editor's **Font** box); **Cursor** (with each cursor's picture) also takes typing.
+- **The editors** open from the arrow on the selected row (or `F4` or `Alt+Down` there):
+  - colors in three tabs: **Custom** (48 basic colors and 16 slots; right-click a slot for **Define Color**), **Web** (the named colors) and **System**;
+  - **TextAlign**'s nine positions in a 3×3 grid; **Dock**'s five positions and **Anchor**'s four sides;
+  - **multi-line text** (a `Text`, or any text such as a **ToolTip on toolTip1**, with line breaks shows each as `⏎` and is edited only here, so its lines are never joined; `Ctrl+Enter` commits);
+  - a menu item's **ShortcutKeys** as Ctrl, Shift and Alt with a key; flags as check boxes; a **date** as a month calendar with **Today** (picking a day keeps the time).
+- **Editors behind "…"** open as panels over the form, as the classic IDE's dialogs, with OK and Cancel; while one is open, the Properties window shows the component but takes no input:
+  - **Font**: the family, the style, the size, Strikeout and Underline, with a sample; OK writes only what changed, as one undo step;
+  - **String Collection Editor** for a string array (a text box's **Lines**), a line each;
+  - **Select Resource** for an image (see [Localizable forms and images](#localizable-forms-and-images));
+  - the **collection editor** for a collection (see [Collections](#collections)), whose item properties use the same grid.
+- **An invalid value** (`abc` for a location's X) opens **Property value is not valid.** with the reason: **OK** goes back to the cell with what you typed, to correct it; **Cancel** puts the old value back.
+- **Right-click a row** for **Reset** (the property's default, its assignment removed, or an extender property cleared; grayed when there's nothing to reset) and **Description**, which shows or hides the description pane at the bottom (drag the line above it to resize it, and the line between names and values to move it).
+- **Double-click a value** to cycle it (`True` and `False`, an enum's values) or open its editor. Select a read-only value's text to copy part of it, or press `Ctrl+C` (`⌘C` on macOS) on a row to copy its whole value.
+- **Several edits at once** (the font editor's OK) apply all or none: when one value isn't valid, nothing changes.
+- **(Name)** renames the component, in the designer file and wherever the form's code uses it; **extender properties** that other components give it (a tool tip's **ToolTip on toolTip1**, written as `toolTip1.SetToolTip(button1, "…")`, a help provider's, an error provider's) are in the grid too.
+- **The keys**: `Up` and `Down` move between rows (over category headers), `Right` and `Left` expand and collapse a row or a category, `Enter` commits, `Esc` reverts, and `F4` or `Alt+Down` opens the selected row's drop-down. Elsewhere, `F4` still shows the Properties window.
 
-**Events** (its toolbar) lists the component's events with their handlers. Type a method's name to hook the event to it; clear it to unhook the event (the method stays). The arrow next to an event goes to its handler, writing `button1_Click` in the code file first when there's none.
+An editor that is one of Windows Forms' own dialogs has no "…": a value its converter reads from text (a masked text box's **Mask**) is typed in its cell, and the description says so; one it can't (a data grid view's **DefaultCellStyle**) is read-only, and the description says to set it in the code.
+
+**Events** (its toolbar) lists the component's events with their handlers. Type a method's name to hook the event to it; clear it to unhook the event (the method stays). Double-click an event's name, or press `Enter` on it, to go to its handler, writing `button1_Click` in the code file first when there's none. Select another component and the events are its own, the view staying on Events. With several components selected the grid shows their shared properties, **Properties** checked and **Events** grayed.
 
 ### Limits
 
 - Not yet: Visual Studio's Data Sources window (bind through a `BindingSource` instead), complex data binding's designer (a grid's `DataSource` is an ordinary property), the component designer (a class that is a component but not a control opens as code), and a design surface for WPF (its XAML Previewer shows the window, and selects both ways).
+- The Properties window doesn't have **Modifiers**, **GenerateMember** and **Locked** yet (Design shows **(Name)** only; use **Lock Controls** to lock controls), the events of several selected components, a list of the code's compatible methods in an event's cell, **(ApplicationSettings)**, **(Advanced)** data bindings, a control's component editor (its **Property Pages**), or a search box; editors that are Windows Forms' own dialogs are typed in their cell or set in the code, as above.
 - Smart tag tasks and collection items that open one of Windows Forms' own dialogs (a data grid view's **Add Column…**, a binding source's data source wizard) aren't available; set those properties in the Properties window.
 - The designer runs your code (your controls' constructors), so it works only in folders you trust.
+- A menu or tool strip item's own context menu (Convert To, Insert, Set Image…, Edit DropDownItems…) isn't there yet: it gets the form's menu. Copy and paste work within Codalus IDE only (not through the system clipboard), and bringing several controls to the front is one undo step each.
+- No outline or snap lines show while you drag an item from the Toolbox over the form (they show once it's there, when you move it), and a control dropped on a flow layout panel isn't inserted at the point you drop it.
+- The copies of your build output live in your temp folder's `codalus-winformsdesigner` folder and are removed when the designer closes (or, after a crash, the next time a designer starts). A file another program holds open in your output (a LocalDB database, your running app's log) isn't copied, which the **Windows Forms Designer** output lists. At design time your controls see the copy's folder as theirs (`AppContext.BaseDirectory`, `Assembly.Location`).
 
 On Linux and macOS, forms open as code (the status bar says once that the designer is Windows only), View Designer says so, and the code edits, completes and builds as usual.
 

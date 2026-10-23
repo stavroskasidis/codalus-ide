@@ -38,7 +38,8 @@ public sealed partial class AiChatView : UserControl, IPaneView
             () => _vm?.AgentChoices ?? [],
             () => _vm?.SelectedAgentIndex ?? 0,
             i => { if (_vm is { } vm) { vm.SelectedAgentIndex = i; } },
-            (Localizer.Get("msg.acp.addAgent", "Add agent…"), () => _ = _vm?.AddAgentAsync()));
+            () => _vm?.AgentMenuActions ?? []);
+        MoreAgents.Click += (_, _) => _ = _vm?.MoreAgentsAsync();
         ModePicker.Flyout = Choices(() => _vm?.ModeNames ?? [], () => _vm?.SelectedModeIndex ?? -1, i => { if (_vm is { } vm) { vm.SelectedModeIndex = i; } });
         CommandList.SelectionChanged += (_, _) =>
         {
@@ -87,9 +88,10 @@ public sealed partial class AiChatView : UserControl, IPaneView
 
     /// <summary>
     /// A picker's menu (M48: who answers, and the agent's mode): one radio item per choice, the current one checked,
-    /// built as it opens so it shows the choices of now, and an action after a separator ("Add agent…").
+    /// built as it opens so it shows the choices of now, then groups of actions, each after a separator (D43: Connect to
+    /// each one-click agent not connected yet; More agents… and Manage Agents…).
     /// </summary>
-    private static MenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose, (string Label, Action Run)? last = null)
+    private static MenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose, Func<IReadOnlyList<IReadOnlyList<AiAgentMenuAction>>>? actions = null)
     {
         var flyout = new MenuFlyout();
         flyout.Opening += (_, _) =>
@@ -106,13 +108,30 @@ public sealed partial class AiChatView : UserControl, IPaneView
                 flyout.Items.Add(item);
             }
 
-            if (last is { } action)
+            foreach (var group in actions?.Invoke() ?? [])
             {
+                if (group.Count == 0)
+                {
+                    continue;
+                }
+
                 flyout.Items.Add(new Separator());
-                flyout.Items.Add(MenuEntry.Create(action.Label, "new", click: action.Run));
+                foreach (var action in group)
+                {
+                    flyout.Items.Add(MenuEntry.Create(action.Label, action.Icon, click: () => _ = action.Run()));
+                }
             }
         };
         return flyout;
+    }
+
+    /// <summary>A one-click agent's button in the off state: Connect to it (D43).</summary>
+    private void OnConnectClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string id })
+        {
+            _ = _vm?.ConnectAsync(id);
+        }
     }
 
     /// <summary>An external agent's slash command goes into the input, ready for its argument.</summary>

@@ -136,7 +136,7 @@ internal static class TestWatchdog
         }
 
         var processes = ProcessTree(out var table);
-        text.AppendLine("Processes (pid, ppid, elapsed, %cpu, command):");
+        text.AppendLine(OperatingSystem.IsMacOS() ? "Processes (pid, ppid, elapsed, command):" : "Processes (pid, ppid, elapsed, %cpu, command):");
         text.AppendLine(table);
         Write(text.ToString());
 
@@ -175,13 +175,17 @@ internal static class TestWatchdog
         }
 
         var rows = new List<(int Pid, int Parent, string Line, string Command)>();
-        foreach (var line in Run("ps", ["-A", "-o", "pid=,ppid=,etime=,pcpu=,args="], TimeSpan.FromSeconds(20)).Split('\n'))
+        // No %cpu on macOS: ps reads each process's task information for it, which blocks for minutes while ReportCrash
+        // holds a crashed process's (the hangs this reports came with one).
+        var columns = OperatingSystem.IsMacOS() ? "pid=,ppid=,etime=,args=" : "pid=,ppid=,etime=,pcpu=,args=";
+        var count = columns.Split(',').Length;
+        foreach (var line in Run("ps", ["-A", "-o", columns], TimeSpan.FromSeconds(20)).Split('\n'))
         {
-            var fields = line.Split(' ', 5, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var fields = line.Split(' ', count, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             // The ps listing itself, a child of this process, isn't one of the tests' processes.
-            if (fields.Length == 5 && !fields[4].StartsWith("ps -A -o ", StringComparison.Ordinal) && int.TryParse(fields[0], CultureInfo.InvariantCulture, out var pid) && int.TryParse(fields[1], CultureInfo.InvariantCulture, out var parent))
+            if (fields.Length == count && !fields[^1].StartsWith("ps -A -o ", StringComparison.Ordinal) && int.TryParse(fields[0], CultureInfo.InvariantCulture, out var pid) && int.TryParse(fields[1], CultureInfo.InvariantCulture, out var parent))
             {
-                rows.Add((pid, parent, line.TrimEnd(), fields[4]));
+                rows.Add((pid, parent, line.TrimEnd(), fields[^1]));
             }
         }
 
@@ -243,7 +247,7 @@ internal static class TestWatchdog
 
             if (!process.WaitForExit(limit))
             {
-                process.Kill(entireProcessTree: true);
+                process.Kill(); // ps and dotnet-stack start nothing, and .NET's tree walk can block on macOS (ProcessTree.Kill)
                 return $"{program} didn't finish within {limit.TotalSeconds} seconds.";
             }
 

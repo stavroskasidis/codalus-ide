@@ -35,13 +35,30 @@ public sealed record TypeDisplayParams(string TypeName, IReadOnlyList<string> Mo
 /// What the attributes on a type (or its nearest base type that has them) say: <c>[DebuggerDisplay]</c>'s value and name
 /// strings, <c>[DebuggerTypeProxy]</c>'s type, and the members <c>[DebuggerBrowsable]</c> hides or flattens.
 /// </summary>
+/// <remarks>
+/// <see cref="Members"/> lists the type's fields, properties and events and its base types', most derived first (null
+/// when the type isn't in the modules): what the data tip groups and draws by (D44).
+/// </remarks>
 public sealed record TypeDisplayResult(
     string? Display,
     string? Name,
     string? TypeProxy,
     IReadOnlyList<string> Hidden,
     IReadOnlyList<string> RootHidden,
-    string? Module);
+    string? Module,
+    IReadOnlyList<TypeMember>? Members = null);
+
+/// <summary>
+/// A member of a type or of one of its base types (D44). <see cref="Kind"/>: <c>field</c>, <c>property</c>, <c>event</c>,
+/// <c>constant</c> or <c>indexer</c> (netcoredbg lists one by its name, with the exception its call without arguments
+/// throws). An explicit interface implementation is named as the metadata names it
+/// (<c>System.Collections.ICollection.IsSynchronized</c>), as netcoredbg does. <see cref="Access"/>: <c>public</c>, <c>private</c>, <c>protected</c>, <c>internal</c>,
+/// <c>protected internal</c> or <c>private protected</c> (a property's most accessible accessor's).
+/// <see cref="DeclaringType"/> and <see cref="Module"/> say whose it is (the solution's own code, or a library's);
+/// <see cref="CanWrite"/> is false for a property without a setter, a read-only field and a constant; <see cref="Type"/>
+/// is its declared type.
+/// </summary>
+public sealed record TypeMember(string Name, string Kind, string Access, bool IsStatic, string DeclaringType, string? Module, bool CanWrite, string? Type);
 
 public sealed record OpenDumpParams(string Path);
 

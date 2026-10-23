@@ -50,6 +50,9 @@ internal sealed partial class DesignerSession
 
         public Dictionary<(string Component, string Property), CollectionState> Collections { get; } = [];
 
+        /// <summary>The components' design-time Locked (#67), by name (empty: the root), for those that have one.</summary>
+        public Dictionary<string, bool> Locked { get; } = new(StringComparer.Ordinal);
+
         public List<string> ChildrenOf(string key)
         {
             if (!Children.TryGetValue(key, out var list))
@@ -75,6 +78,11 @@ internal sealed partial class DesignerSession
 
             state.Order.Add(name);
             state.Components[name] = component;
+            if (LockedOf(component) is { } locked)
+            {
+                state.Locked[name] = locked.GetValue(component) is true;
+            }
+
             foreach (var property in Serialize(component))
             {
                 state.Properties[(name, property.Name)] = property;
@@ -495,6 +503,17 @@ internal sealed partial class DesignerSession
         foreach (var key in before.Bindings.Keys.Where(k => !skip.Contains(k.Component) && !after.Bindings.ContainsKey(k)))
         {
             changes.Add(new DesignerPropertyChange(key.Component, key.Property, null) { DataBinding = true });
+        }
+
+        // The control designers' Locked (#67): design-time metadata in the default resources, whatever the language shown
+        // (it isn't localized), as the classic IDE writes it; unlocked, the entry goes (only a non-default value is written).
+        foreach (var (name, locked) in after.Locked)
+        {
+            if (!skip.Contains(name) && before.Locked.GetValueOrDefault(name) != locked)
+            {
+                var key = ResourceValues.Key(name, "Locked");
+                resources.Add(new DesignerResourceEntry(key, locked ? ResourceValues.Of(key, true) : null) { Metadata = true });
+            }
         }
 
         // The components that came: the one created, and what something else created (a smart tag's, a collection's).

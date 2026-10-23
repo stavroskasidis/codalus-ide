@@ -85,6 +85,17 @@ internal sealed partial class SmokeTest
         ["debug.createDump"] = "writes a full dump of the program (6.7 GB on macOS); the debug.companion step covers dumps",
         ["debug.webPage"] = "starts a browser under the JavaScript debugger (the blazor.* steps cover it)",
         ["debug.webPageFile"] = "starts a browser under the JavaScript debugger (the blazor.* steps cover it)",
+        ["ai.agents.connect"] = "opens Connect to an agent, whose test downloads the agent from npm and starts it (the ai.connect step covers the dialog with stand-ins)",
+        ["ai.agents.connect.claude"] = "opens Connect to Claude, whose test downloads the adapter from npm and starts it (the ai.connect step covers the dialog with stand-ins)",
+        ["ai.agents.connect.codex"] = "opens Connect to Codex, whose test downloads it from npm and starts it",
+        ["ai.agents.connect.gemini"] = "opens Connect to Gemini CLI, whose test downloads it from npm and starts it",
+        ["ai.agents.connect.copilot"] = "opens Connect to GitHub Copilot, whose test downloads it from npm and starts it",
+        ["ai.agents.connect.pi"] = "opens Connect to pi, whose test downloads it from npm and installs pi's CLI",
+        ["ai.agents.connect.opencode"] = "opens Connect to OpenCode, whose install runs npm install -g",
+        ["ai.agents.connect.goose"] = "opens Connect to goose, whose install runs Homebrew",
+        ["ai.agents.check"] = "starts the user's configured agent (npx downloads it) to check its sign-in",
+        ["ai.agents.disconnect"] = "can start the user's agent to sign it out, and removes its entry and key",
+        ["ai.agents.manage"] = "lists the configured agents, whose actions start them (Check Connection, Disconnect)",
     };
 
     /// <summary>Commands for plugins, CodeLens and the agent: they take arguments, and no menu, key or palette entry runs them.</summary>
@@ -598,6 +609,9 @@ internal sealed partial class SmokeTest
 
         if (shell.Debugger.State == DebugState.Stopped)
         {
+            // The context follows the state on the UI thread: until it does, the commands' enablement is the running
+            // program's (Pause enabled, then disabled before its click: #145's Linux run).
+            await WaitAsync(() => Equals(shell.Workbench.Context.GetValue("debugStopped"), true) && !Equals(shell.Workbench.Context.GetValue("debugRunning"), true), "the context says the program is stopped", 10).ConfigureAwait(true);
             await FocusSweepEditorAsync(select: false).ConfigureAwait(true);
             return null;
         }

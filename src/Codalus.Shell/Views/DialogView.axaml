@@ -62,7 +62,7 @@
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
   </UserControl.Styles>
-  <Border x:Name="Frame" Classes="overlay" CornerRadius="8" Padding="0" ClipToBounds="True"
+  <Border x:Name="Frame" Classes="overlay" CornerRadius="{DynamicResource Shell.CornerRadius.Dialog}" Padding="0" ClipToBounds="True"
           KeyboardNavigation.TabNavigation="Cycle"
           AutomationProperties.Name="{Binding Title}">
     <DockPanel>
@@ -127,6 +127,27 @@
           <controls:Icon Kind="error" Classes="error" Width="12" Height="12" Margin="0,2,4,0" VerticalAlignment="Top" DockPanel.Dock="Left" />
           <TextBlock Classes="error small" Text="{Binding Error}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
         </DockPanel>
+        <!-- A single choice (D38's P7): one check box with its note and its list under it, not the checklist's Select all. -->
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8" Spacing="4" IsVisible="{Binding HasOption}">
+          <CheckBox x:Name="Option" IsChecked="{Binding OptionChecked}" IsEnabled="{Binding OptionEnabled}" AutomationProperties.Name="{Binding OptionLabel}">
+            <TextBlock Text="{Binding OptionLabel}" TextWrapping="Wrap" />
+          </CheckBox>
+          <TextBlock Margin="28,0,0,0" Text="{Binding OptionNote}" TextWrapping="Wrap" IsVisible="{Binding HasOptionNote}" Classes.muted="{Binding !OptionEnabled}" />
+          <Border Margin="28,2,0,0" IsVisible="{Binding HasOptionLines}" BorderBrush="{DynamicResource Shell.Input.Border}" BorderThickness="1"
+                  CornerRadius="{DynamicResource Shell.Control.CornerRadius}" Background="{DynamicResource Shell.Editor.Background}" MaxHeight="120">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding OptionLines}" Margin="0,4" TextElement.Foreground="{DynamicResource Shell.Editor.Foreground}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DetailLine">
+                    <Border Classes="line" Classes.header="{Binding IsHeader}">
+                      <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" Classes.header="{Binding IsHeader}" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Border>
+        </StackPanel>
         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasChoices}" DockPanel.Dock="Top">
           <Border BorderBrush="{DynamicResource Shell.Input.Border}" BorderThickness="1" CornerRadius="{DynamicResource Shell.Control.CornerRadius}"
                   Background="{DynamicResource Shell.Input}" ClipToBounds="True">

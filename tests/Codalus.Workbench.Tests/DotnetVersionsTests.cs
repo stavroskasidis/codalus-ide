@@ -54,4 +54,21 @@ public sealed class DotnetVersionsTests
         Assert.Equal((".NET 11.0 (STS)", false), DotnetSupport.Status("11.0.100", today));
         Assert.Equal(("Preview of .NET 12.0", false), DotnetSupport.Status("12.0.100-preview.1", today));
     }
+    [Fact]
+    public void Frameworks_are_labeled_by_their_support()
+    {
+        var today = new DateOnly(2026, 10, 21);
+        Assert.Equal(".NET 10.0 (Long Term Support)", DotnetSupport.FrameworkLabel("net10.0", preview: false, today));
+        Assert.Equal(".NET 11.0 (Standard Term Support)", DotnetSupport.FrameworkLabel("net11.0", preview: false, today));
+        Assert.Equal(".NET 11.0 (Preview)", DotnetSupport.FrameworkLabel("net11.0", preview: true, today));
+        Assert.Equal(".NET 9.0 (Standard Term Support)", DotnetSupport.FrameworkLabel("net9.0", preview: false, today));
+        Assert.Equal(".NET 9.0 (Out of support)", DotnetSupport.FrameworkLabel("net9.0", preview: false, new DateOnly(2026, 11, 11)));
+        Assert.Equal(".NET 7.0 (Out of support)", DotnetSupport.FrameworkLabel("net7.0", preview: false, today));
+        Assert.Equal(".NET Core 3.1 (Out of support)", DotnetSupport.FrameworkLabel("netcoreapp3.1", preview: false, today));
+        Assert.Equal(".NET 12.0", DotnetSupport.FrameworkLabel("net12.0", preview: false, today)); // not in the table yet
+        Assert.Equal(".NET Standard 2.1", DotnetSupport.FrameworkLabel("netstandard2.1", preview: false, today));
+        Assert.Equal(".NET Framework 4.8", DotnetSupport.FrameworkLabel("net48", preview: false, today));
+        Assert.Equal(".NET Framework 4.7.2", DotnetSupport.FrameworkLabel("net472", preview: false, today));
+        Assert.Equal("uap10.0", DotnetSupport.FrameworkLabel("uap10.0", preview: false, today));
+    }
 }

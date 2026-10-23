@@ -475,7 +475,8 @@ public sealed record WinFormsReadResult(string? CodeFile, string? DesignerFile, 
 
     /// <summary>
     /// Read without all of the project's types (#76): from Miscellaneous Files (the C# host doesn't have the project
-    /// yet), from a compilation without Windows Forms (before the restore), or with types named by their syntax.
+    /// yet), from a compilation without Windows Forms (before the restore), or with types named by their syntax. The
+    /// designer reads the form again once the C# service has loaded the projects.
     /// </summary>
     public bool IsPartial { get; init; }
 }

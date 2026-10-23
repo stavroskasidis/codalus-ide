@@ -1,39 +1,18 @@
 using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Interactivity;
-using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
-using Codalus.Shell.ViewModels;
 
 namespace Codalus.Shell.Views;
 
-/// <summary>The Properties window (F4): the row that has the focus (or was clicked) shows its description.</summary>
+/// <summary>The Properties window (F4): the component selector or the title, its toolbar, and the property grid (#68).</summary>
 public sealed partial class PropertiesWindowView : UserControl, IPaneView
 {
     public PropertiesWindowView()
     {
         InitializeComponent();
-        Grid.AddHandler(GotFocusEvent, (_, e) => Select(e.Source), RoutingStrategies.Bubble);
-        Grid.AddHandler(PointerPressedEvent, (_, e) => Select(e.Source), RoutingStrategies.Tunnel);
     }
 
-    private void Select(object? source)
-    {
-        if (DataContext is PropertiesWindowViewModel vm && (source as Avalonia.Visual)?.FindAncestorOfType<Border>(includeSelf: true) is { DataContext: PropertyRowViewModel row })
-        {
-            vm.SelectedRow = row;
-        }
-    }
+    /// <summary>The property grid's view (tests).</summary>
+    public PropertyGridView Grid => GridView;
 
-    public void FocusPrimary()
-    {
-        if (Grid.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(e => e.Focusable && e.IsEffectivelyVisible) is { } first)
-        {
-            first.Focus();
-        }
-        else
-        {
-            Focus();
-        }
-    }
+    public void FocusPrimary() => GridView.FocusPrimary();
 }

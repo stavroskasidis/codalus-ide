@@ -717,6 +717,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
                 IsDeprecated = package.Deprecated,
                 VulnerabilitySeverity = package.VulnerabilitySeverity,
                 Source = package.Source,
+                IsVerified = package.Verified,
             });
         }
 
@@ -873,7 +874,9 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
                 PackageTab.Updates => row.LatestVersion,
                 _ => row.InstalledVersion is { } installed && installed != "multiple" ? installed : null,
             };
-            var result = await _packages.DetailsAsync(row.Id, _includePrerelease, wanted, _tab == PackageTab.Browse ? SourceFilter : null, token, TargetFrameworks).ConfigureAwait(true);
+            // D39: a Browse row's verified owner is what its search said; elsewhere the host asks nuget.org beside the details.
+            var browse = _tab == PackageTab.Browse;
+            var result = await _packages.DetailsAsync(row.Id, _includePrerelease, wanted, browse ? SourceFilter : null, token, TargetFrameworks, browse ? row.IsVerified : null).ConfigureAwait(true);
             token.ThrowIfCancellationRequested();
             details.Apply(result);
             UpdateDetailsInstallState(details);
@@ -1201,6 +1204,12 @@ public sealed class PackageRowViewModel(string id) : ObservableObject
 
     public string? Source { get; init; }
 
+    /// <summary>
+    /// nuget.org reserved the ID's prefix for one of the package's owners (D39): a badge after the ID. Only Browse rows
+    /// have it, from the search; the installed data has no such field.
+    /// </summary>
+    public bool IsVerified { get; init; }
+
     public bool IsDeprecated { get; init; }
 
     public int VulnerabilitySeverity { get; init; } = -1;
@@ -1300,7 +1309,7 @@ public sealed class PackageRowViewModel(string id) : ObservableObject
 
     public string Initial => IsHeader || Id.Length == 0 ? string.Empty : Id[..1].ToUpperInvariant();
 
-    public string AccessibleName => IsHeader ? Id : $"{Id} {VersionLine}{(IsPrerelease ? ", prerelease" : string.Empty)}{(IsDeprecated ? ", deprecated" : string.Empty)}{(IsVulnerable ? ", vulnerable" : string.Empty)}{(IsInstalled ? ", installed" : string.Empty)}{(IsUpdatable ? ", update available" : string.Empty)}";
+    public string AccessibleName => IsHeader ? Id : $"{Id} {VersionLine}{(IsPrerelease ? ", prerelease" : string.Empty)}{(IsDeprecated ? ", deprecated" : string.Empty)}{(IsVulnerable ? ", vulnerable" : string.Empty)}{(IsInstalled ? ", installed" : string.Empty)}{(IsUpdatable ? ", update available" : string.Empty)}{(IsVerified ? ", verified owner" : string.Empty)}";
 
     internal static string FormatDownloads(long downloads) => downloads switch
     {
@@ -1511,6 +1520,9 @@ public sealed class PackageDetailsViewModel : ObservableObject
 
     public string? Source => Package?.Source;
 
+    /// <summary>The heading's verified-owner badge (D39 question 11): the details' Source is nuget.org and nuget.org says verified.</summary>
+    public bool IsVerified => Package?.Verified == true;
+
     public string? Readme => Package?.Readme;
 
     public bool HasReadme => Readme is not null;
@@ -1610,7 +1622,7 @@ public sealed class PackageDetailsViewModel : ObservableObject
         foreach (var name in new[]
                  {
                      nameof(Package), nameof(Title), nameof(Description), nameof(Authors), nameof(LicenseText), nameof(LicenseUrl), nameof(HasLicenseUrl),
-                     nameof(ProjectUrl), nameof(HasProjectUrl), nameof(Published), nameof(DownloadsText), nameof(Tags), nameof(Source), nameof(Readme),
+                     nameof(ProjectUrl), nameof(HasProjectUrl), nameof(Published), nameof(DownloadsText), nameof(Tags), nameof(Source), nameof(IsVerified), nameof(Readme),
                      nameof(HasReadme), nameof(Dependencies), nameof(DeprecationText), nameof(IsDeprecated), nameof(VulnerabilityText), nameof(IsVulnerable),
                      nameof(AdvisoryUrls), nameof(RequireLicenseAcceptance),
                  })
