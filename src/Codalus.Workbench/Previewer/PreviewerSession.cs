@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Previewer;
 
@@ -685,7 +686,7 @@ public sealed class PreviewerSession : IAsyncDisposable
         {
             if (!_process.HasExited)
             {
-                _process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(_process);
                 await _process.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token).ConfigureAwait(false);
             }
         }

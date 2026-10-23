@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using Codalus.Diagnostics.Protocol;
+using Codalus.Platform;
 using Codalus.Rpc;
 using Codalus.Workbench.Diagnostics;
 
@@ -127,7 +128,7 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
     {
         try
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             process.WaitForExit(10_000);
         }
         catch (InvalidOperationException)

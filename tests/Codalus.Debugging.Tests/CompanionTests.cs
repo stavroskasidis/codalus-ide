@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Codalus.Debugging.Host;
+using Codalus.Platform;
 
 namespace Codalus.Debugging.Tests;
 
@@ -221,7 +222,7 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
         finally
         {
             dumps.Dispose(); // closes the dump file
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             File.Delete(dump);
         }
     }

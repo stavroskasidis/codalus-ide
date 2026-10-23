@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Setup;
 
@@ -66,7 +67,7 @@ public static class LoginShellPath
             _ = process.StandardError.ReadToEndAsync();
             if (!process.WaitForExit(timeout))
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
                 return null;
             }
 

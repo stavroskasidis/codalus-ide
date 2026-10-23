@@ -66,6 +66,8 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Plugins can no longer read other plugins' secrets**: a plugin host's secret requests must name one of its own plugins, and the shell's own secrets (external agents' keys) are out of every plugin's reach.
 - **Fixed:** the completion list, its description, parameter info, Quick Info and other popups that open in a window of their own drew their text at 14 px instead of the 12 px of the rest of the IDE.
 - **Fixed:** the Aspire window's console output could stay empty for a running project: when the AppHost's log stream for it ended early, the window never asked again. It now follows the stream again while the resource runs (a few times, waiting longer each time), without repeating lines already shown, and again when the resource is restarted.
+- **Fixed:** Class View lost its selection, and collapsed, whenever the solution's projects changed (a reload, or the build host finishing an evaluation after the language service was ready), so `Enter` right after could do nothing. A reload that leaves the same projects now keeps the tree as it is, and the Object Browser keeps its project.
+- **Fixed:** on macOS, stopping something that runs in its own processes (a template or git command past its time limit, a program you run or debug, a host, a remote session, Aspire's resources) could hang for minutes while any program on the Mac was crashing: ending the process tree read every process's details, and macOS holds a crashed process's until its crash report is written. Codalus IDE now finds the processes to end from the system's list of each process's children.
 
 ## 0.5.0
 

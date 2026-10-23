@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using Codalus.Platform;
 using Codalus.Workbench.Build;
 using Codalus.Workbench.Debugging;
 
@@ -372,7 +373,7 @@ public sealed class WatchedServerSessionTests
         }
         finally
         {
-            shell.Kill(entireProcessTree: true);
+            ProcessTree.Kill(shell);
         }
     }
 

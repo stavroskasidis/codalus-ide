@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Git;
 
@@ -71,7 +72,7 @@ public sealed partial class GitService : IDisposable
             {
                 try
                 {
-                    process.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(process);
                 }
                 catch (InvalidOperationException)
                 {
@@ -123,7 +124,7 @@ public sealed partial class GitService : IDisposable
             {
                 try
                 {
-                    process.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(process);
                 }
                 catch (InvalidOperationException)
                 {

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Codalus.Data.Protocol;
+using Codalus.Platform;
 using Codalus.Platform.Credentials;
 using Codalus.Rpc;
 using Codalus.Workbench.Data;
@@ -117,7 +118,7 @@ internal sealed class ContainerDatabase : IAsyncDisposable
             var stderr = process.StandardError.ReadToEndAsync();
             if (!process.WaitForExit(TimeSpan.FromSeconds(timeoutSeconds)))
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
                 return (-1, "timed out");
             }
 

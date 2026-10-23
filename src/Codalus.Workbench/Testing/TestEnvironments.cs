@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
+using Codalus.Platform;
 using Codalus.Workbench.Build;
 using Codalus.Workbench.Containers;
 using Codalus.Workbench.Debugging.Remote;
@@ -367,7 +368,7 @@ public sealed class EnvironmentTestRunner(TestEnvironment environment, string so
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             throw;
         }
 

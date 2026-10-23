@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using Avalonia.Headless.XUnit;
+using Codalus.Platform;
 using Codalus.Workbench.Debugging;
 using Codalus.Workbench.Node;
 
@@ -195,7 +196,10 @@ public sealed class BlazorWasmTests
         {
             try
             {
-                page?.Kill(entireProcessTree: true);
+                if (page is not null)
+                {
+                    ProcessTree.Kill(page);
+                }
             }
             catch (InvalidOperationException)
             {

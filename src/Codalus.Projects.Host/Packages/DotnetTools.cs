@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using Codalus.Platform;
 using Codalus.Projects.Protocol;
 
 namespace Codalus.Projects.Host.Packages;
@@ -258,7 +259,7 @@ internal static class DotnetProcess
         {
             try
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException)
             {

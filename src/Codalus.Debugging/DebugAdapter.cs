@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Codalus.Platform;
 using Codalus.Rpc;
 
 namespace Codalus.Debugging;
@@ -582,7 +583,7 @@ public sealed partial class DebugAdapter : IDebugAdapter
     {
         try
         {
-            program.Kill(entireProcessTree: true);
+            ProcessTree.Kill(program);
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
         {

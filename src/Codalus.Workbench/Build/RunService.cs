@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Codalus.Platform;
 using Codalus.Projects.Protocol;
 using Codalus.Workbench.Output;
 using Codalus.Workbench.Projects;
@@ -88,12 +89,12 @@ public sealed class RunningProgram : IDisposable
     /// </summary>
     public async Task StopAsync()
     {
-        // Ending the tree lists the system's processes to find the program's children. On macOS that listing can block
-        // for many minutes (task information of a crashed process that ReportCrash holds: `ps -o pcpu,rss` blocks the
-        // same way; seen after a debugging session closed its browser): the tree's end then gets a while, and after it
-        // the program alone is ended, so its run ends (a child it started, if any, is left; the dev server's
-        // BrowserDebugHost ends with its owner). The wait is asynchronous: waiting on the UI thread froze the IDE for
-        // those 10 s (the command sweep's Start with Hot Reload on macOS, right after the run before it was stopped).
+        // Ending the tree finds the program's children (ProcessTree.Kill). .NET's own walk blocked for many minutes on
+        // macOS (it reads the task information of every process, and a crashed process's is held while ReportCrash
+        // writes its report; seen after a debugging session closed its browser), and the listing may still be slow: the
+        // tree's end gets a while, and after it the program alone is ended, so its run ends (a child it started, if any,
+        // is left; the dev server's BrowserDebugHost ends with its owner). The wait is asynchronous: waiting on the UI
+        // thread froze the IDE for those 10 s (the command sweep's Start with Hot Reload on macOS, after the run before).
         var tree = Task.Run(() => Kill(entireProcessTree: true));
         try
         {
@@ -108,7 +109,7 @@ public sealed class RunningProgram : IDisposable
     /// <summary>How long <see cref="StopAsync"/> lets the tree's end take before it ends the program alone.</summary>
     private static readonly TimeSpan s_treeKillWait = TimeSpan.FromSeconds(10);
 
-    /// <summary>Ends the process tree in place of <see cref="Process.Kill(bool)"/> (tests: a process listing that blocks).</summary>
+    /// <summary>Ends the process tree in place of <see cref="ProcessTree.Kill"/> (tests: a process listing that blocks).</summary>
     internal Action<Process>? KillTree { get; init; }
 
     private void Kill(bool entireProcessTree)
@@ -121,9 +122,13 @@ public sealed class RunningProgram : IDisposable
                 {
                     killTree(_process);
                 }
+                else if (entireProcessTree)
+                {
+                    ProcessTree.Kill(_process);
+                }
                 else
                 {
-                    _process.Kill(entireProcessTree);
+                    _process.Kill();
                 }
             }
         }

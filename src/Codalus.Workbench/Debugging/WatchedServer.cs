@@ -192,7 +192,7 @@ public static class WatchedServer
         try
         {
             using var process = Process.GetProcessById(processId);
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)
         {

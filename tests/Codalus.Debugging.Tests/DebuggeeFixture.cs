@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Threading.Channels;
+using Codalus.Platform;
 
 namespace Codalus.Debugging.Tests;
 
@@ -60,7 +61,7 @@ public sealed class DebuggeeFixture : IAsyncLifetime
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             Assert.Fail($"{dll} didn't end within 2 minutes.");
         }
 

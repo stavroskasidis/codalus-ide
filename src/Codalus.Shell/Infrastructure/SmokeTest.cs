@@ -1829,7 +1829,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             if (!program.HasExited)
             {
-                program.Kill(entireProcessTree: true);
+                ProcessTree.Kill(program);
             }
 
             program.Dispose();

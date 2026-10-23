@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Codalus.Platform;
 using Codalus.Workbench.Previewer;
 
 namespace Codalus.Workbench.Tests;
@@ -129,7 +130,7 @@ public sealed class WpfLiveAgentTests(WpfFixture wpf, ITestOutputHelper output) 
         {
             if (!app.HasExited)
             {
-                app.Kill(entireProcessTree: true);
+                ProcessTree.Kill(app);
             }
 
             app.WaitForExit(); // also waits for the redirected output to end

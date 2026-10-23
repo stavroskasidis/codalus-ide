@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Avalonia.Headless.XUnit;
+using Codalus.Platform;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Settings;
 
@@ -50,7 +51,7 @@ public sealed class HotReloadRestartTests
         {
             treeEnding.Set();
             Thread.Sleep(s_treeEnding);
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
         };
 
         await f.Shell.StartWithHotReloadAsync();

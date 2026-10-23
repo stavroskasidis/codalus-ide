@@ -603,7 +603,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             await reading.CancelAsync().ConfigureAwait(false);
             return (-1, $"{program} didn't answer within {limit.TotalSeconds:0} seconds.");
         }
