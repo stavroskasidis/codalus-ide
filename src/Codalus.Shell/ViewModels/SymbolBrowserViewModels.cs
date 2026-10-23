@@ -197,10 +197,15 @@ public sealed class SymbolBrowserViewModel : ObservableObject, IDisposable
             .Where(p => p.Path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || p.Path.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase))
             .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        Projects.Clear();
-        foreach (var project in projects)
+        // Only a changed list is filled again: clearing it clears the picker, whose binding sets Project to null and
+        // rebuilds the roots, which collapses the tree and clears its selection.
+        if (!projects.Select(p => p.Path).SequenceEqual(Projects.Select(p => p.Path), SolutionService.PathComparer))
         {
-            Projects.Add(project);
+            Projects.Clear();
+            foreach (var project in projects)
+            {
+                Projects.Add(project);
+            }
         }
 
         if (_project is null || !projects.Any(p => SolutionService.PathComparer.Equals(p.Path, _project.Path)))
@@ -241,7 +246,9 @@ public sealed class SymbolBrowserViewModel : ObservableObject, IDisposable
             }
         }
 
-        if (cts.IsCancellationRequested)
+        // The same roots (projects reloaded, none added or removed) keep their nodes: replacing them would collapse the
+        // tree and clear its selection.
+        if (cts.IsCancellationRequested || roots.Select(Key).SequenceEqual(Roots.Select(Key)))
         {
             return;
         }
@@ -252,6 +259,8 @@ public sealed class SymbolBrowserViewModel : ObservableObject, IDisposable
             Roots.Add(root);
         }
     }
+
+    private static (string Project, string? Id, string Name) Key(SymbolBrowserNode node) => (node.Project, node.Id, node.Name);
 
     private async Task<IReadOnlyList<SymbolBrowserNode>> ChildrenAsync(string project, string? parent, string? query = null, CancellationToken cancellationToken = default)
     {
