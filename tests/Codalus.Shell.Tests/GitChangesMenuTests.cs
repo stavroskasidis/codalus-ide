@@ -356,8 +356,10 @@ public sealed class GitChangesMenuTests
         // B14: a detached HEAD: the banner, no check, Merge and Rebase name HEAD.
         Git(folder, "switch", "-q", "--detach", "main");
         await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        // Loaded again after the switch: an opening keeps the last list shown (not loading) until its own load replaces
+        // it, so waiting for rows read the old ones first on macOS, main still current.
         picker.IsOpen = true;
-        await ShellFixture.PumpUntil(() => picker.Rows.Count > 0 && !picker.IsLoading);
+        await picker.LoadAsync();
         Assert.StartsWith("HEAD is detached at ", picker.Banner, StringComparison.Ordinal);
         Assert.DoesNotContain(picker.Rows, r => r.IsCurrent);
         Assert.Contains("Merge 'feature/sign-in' into HEAD", Menu("refs/heads/feature/sign-in"));
