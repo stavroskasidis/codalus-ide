@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.7.0
+
+- **Fixed:** a tool window that shows itself without taking the focus (Output when a build starts, Notifications, the Error List) took the active frame's accent from the document group you were working in, though the keyboard stayed in the editor.
+
 ## 0.6.0
 
 - **The Windows Forms designer's Properties window works as the classic IDE's** ([user guide](docs/user-guide/windows-desktop.md#properties-and-events)):

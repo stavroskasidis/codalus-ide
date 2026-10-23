@@ -95,6 +95,10 @@ public sealed class LayoutManager : ObservableObject
         }
 
         var tool = GetOrCreateTool(descriptor);
+
+        // Dock focuses whatever it makes active (InitActiveDockable calls SetFocusedDockable): without this, a tool window
+        // that shows itself (Output, Error List, Notifications) would take the active frame from the group the user is in.
+        var focused = focus ? null : _root.FocusedDockable;
         if (IsPinned(tool))
         {
             Factory.PreviewPinnedDockable(tool);
@@ -117,6 +121,10 @@ public sealed class LayoutManager : ObservableObject
             }
 
             FocusRequested?.Invoke(this, tool);
+        }
+        else if (focused is { Owner: IDock focusedOwner } && !ReferenceEquals(focused, tool) && !ReferenceEquals(_root.FocusedDockable, focused))
+        {
+            Factory.SetFocusedDockable(focusedOwner, focused);
         }
 
         return tool;
