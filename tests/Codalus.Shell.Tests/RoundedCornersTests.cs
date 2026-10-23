@@ -237,6 +237,13 @@ public sealed class RoundedCornersTests
         f.Shell.Layout.OpenDocument(f.Shell.Layout.ActiveDocument!, focus: true);
         await ShellFixture.PumpUntil(() => edge.IsGroupActive);
         Assert.Equal(Color.Parse("#007ACC"), ((ISolidColorBrush)edge.FrameBrush!).Color);
+
+        // A tool window that shows itself without the focus (Output on a build, Notifications) leaves the frame active:
+        // Dock focuses whatever it makes active, and a late one turned the frame to the border on CI (#150's run).
+        f.Shell.Layout.ShowToolWindow(BuiltIns.NotificationsWindow, focus: false);
+        ShellFixture.Pump();
+        Assert.True(edge.IsGroupActive);
+        Assert.Equal(Color.Parse("#007ACC"), ((ISolidColorBrush)edge.FrameBrush!).Color);
     }
 
     [AvaloniaFact]
