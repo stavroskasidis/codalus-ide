@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Codalus.Debugging;
+using Codalus.Platform;
 using Codalus.Workbench.Build;
 
 namespace Codalus.Workbench.Debugging;
@@ -42,7 +43,7 @@ public sealed class ConsoleWindowLauncher : ITerminalLauncher
             {
                 if (!window.HasExited)
                 {
-                    window.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(window);
                 }
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)

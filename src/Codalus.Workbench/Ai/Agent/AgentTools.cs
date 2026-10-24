@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Codalus.Platform;
 using Codalus.Plugins.Protocol;
 
 namespace Codalus.Workbench.Ai.Agent;
@@ -346,7 +347,7 @@ public sealed partial class AgentTools(AiService ai, IAgentHost host, string wor
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             cancellationToken.ThrowIfCancellationRequested();
             return AgentToolResult.Error($"The command didn't finish within {CommandTimeout.TotalSeconds:0} seconds and was stopped. Output so far:\n{Cut(output.ToString())}");
         }

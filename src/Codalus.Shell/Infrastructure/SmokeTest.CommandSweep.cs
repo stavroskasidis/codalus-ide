@@ -609,6 +609,9 @@ internal sealed partial class SmokeTest
 
         if (shell.Debugger.State == DebugState.Stopped)
         {
+            // The context follows the state on the UI thread: until it does, the commands' enablement is the running
+            // program's (Pause enabled, then disabled before its click: #145's Linux run).
+            await WaitAsync(() => Equals(shell.Workbench.Context.GetValue("debugStopped"), true) && !Equals(shell.Workbench.Context.GetValue("debugRunning"), true), "the context says the program is stopped", 10).ConfigureAwait(true);
             await FocusSweepEditorAsync(select: false).ConfigureAwait(true);
             return null;
         }

@@ -1829,7 +1829,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             if (!program.HasExited)
             {
-                program.Kill(entireProcessTree: true);
+                ProcessTree.Kill(program);
             }
 
             program.Dispose();
@@ -4139,6 +4139,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             // A failed step leaves no debug session behind: the next one would find it instead of starting its own.
             if (shell.Debugger.IsActive)
             {
+                // What the debugger saw says why a program didn't stop (debug.compound's second program, linux-arm64).
+                Console.Out.WriteLine($"  --- Debug (the end; the session is {shell.Debugger.State}) ---");
+                Console.Out.WriteLine(Tail(shell.DebugLog.GetText(), 4000));
+                Console.Out.Flush();
                 try
                 {
                     await shell.Debugger.StopAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Codalus.Platform;
 using Codalus.Workbench.Wcf;
 
 namespace Codalus.Workbench.Tests;
@@ -31,7 +32,7 @@ public sealed class WcfServiceIntegrationTests : IAsyncLifetime
     {
         if (_service is { HasExited: false })
         {
-            _service.Kill(entireProcessTree: true);
+            ProcessTree.Kill(_service);
             await _service.WaitForExitAsync(CancellationToken.None);
         }
 

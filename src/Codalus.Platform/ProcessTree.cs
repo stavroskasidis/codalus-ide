@@ -1,14 +1,105 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 
+#if CODALUS_PROCESS_TREE_INTERNAL
+namespace Codalus.Platform.Internal;
+#else
 namespace Codalus.Platform;
+#endif
 
 /// <summary>
 /// The processes a process started, by their ids: <c>/proc</c> on Linux, <c>proc_listchildpids</c> on macOS, a
-/// Toolhelp snapshot on Windows. .NET has no public way to read a process's parent.
+/// Toolhelp snapshot on Windows (.NET has no public way to read a process's parent), and ending a process with them.
 /// </summary>
+/// <remarks>
+/// Codalus.Rpc and the hosts that use it compile this file in as an internal copy (CODALUS_PROCESS_TREE_INTERNAL, in
+/// Codalus.Platform.Internal so that code seeing both never finds two) instead of referencing Codalus.Platform: every
+/// host would otherwise ship the whole assembly for this one class, which the size gate caught (the markup host +0.3 MB,
+/// 0.6.0's release run).
+/// </remarks>
+#if CODALUS_PROCESS_TREE_INTERNAL
+internal static partial class ProcessTree
+#else
 public static partial class ProcessTree
+#endif
 {
+    /// <summary>
+    /// Ends <paramref name="process"/> and every process it started, as <see cref="Process.Kill(bool)"/> with
+    /// <c>entireProcessTree</c> does, but on macOS and Linux finds the children with <see cref="Children"/>. .NET's walk
+    /// lists the system's processes, and on macOS reads each one's task information to do so, which blocks for many
+    /// minutes while ReportCrash holds a crashed process (anywhere on the machine): the caller's thread with it, and on
+    /// CI every test that ended a process tree, until HangDump ended the run. As in .NET's walk, each process is stopped
+    /// before its children are listed, so none starts another meanwhile, and the stopped ones are then ended. A process
+    /// that can't be stopped (it ended, or isn't ours) is left with its children, and this process never ends itself.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No process is associated with <paramref name="process"/>.</exception>
+    public static void Kill(Process process)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            process.Kill(entireProcessTree: true);
+            return;
+        }
+
+        if (process.HasExited)
+        {
+            return;
+        }
+
+        var stopped = new List<int>();
+        try
+        {
+            Stop(process.Id, stopped);
+
+            // A process stopped in the middle of a fork has a child the listing missed: it shows once the fork is done.
+            // Look again, after a moment, until a look finds no one new (a child it missed kept the host's standard
+            // output open, so its end went unnoticed: HostRuntimeTests on macOS). .NET's walk, slower, never missed one.
+            for (var round = 0; round < 10; round++)
+            {
+                var count = stopped.Count;
+                Thread.Sleep(10);
+                foreach (var id in stopped.ToArray())
+                {
+                    foreach (var child in Children(id))
+                    {
+                        Stop(child, stopped);
+                    }
+                }
+
+                if (stopped.Count == count)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            foreach (var id in stopped)
+            {
+                _ = kill(id, SigKill);
+            }
+        }
+    }
+
+    private static void Stop(int processId, List<int> stopped)
+    {
+        if (processId == Environment.ProcessId || stopped.Contains(processId) || kill(processId, SigStop) != 0)
+        {
+            return;
+        }
+
+        stopped.Add(processId);
+        foreach (var child in Children(processId))
+        {
+            Stop(child, stopped);
+        }
+    }
+
+    private const int SigKill = 9;
+
+    private static int SigStop => OperatingSystem.IsMacOS() ? 17 : 19;
+
     /// <summary>The ids of <paramref name="processId"/>'s child processes that are running; empty when there are none, or they can't be listed.</summary>
     public static IReadOnlyList<int> Children(int processId)
     {
@@ -163,6 +254,9 @@ public static partial class ProcessTree
     private const uint ProcessQueryLimitedInformation = 0x1000;
 
     private static readonly IntPtr InvalidHandle = new(-1);
+
+    [LibraryImport("libc", EntryPoint = "kill")]
+    private static partial int kill(int processId, int signal);
 
     [LibraryImport("/usr/lib/libSystem.dylib")]
     private static partial int proc_listchildpids(int processId, [Out] int[] buffer, int bufferSize);

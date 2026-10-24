@@ -1,6 +1,7 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Codalus.Debugging;
+using Codalus.Platform;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Debugging;
 
@@ -193,7 +194,7 @@ internal static class AspireRuntime
                 {
                     try
                     {
-                        process.Kill(entireProcessTree: true);
+                        ProcessTree.Kill(process);
                     }
                     catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
                     {

@@ -389,7 +389,7 @@ public sealed partial class ShellHost
                 try
                 {
                     using var process = Process.GetProcessById(_started.Task.Result);
-                    process.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(process);
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
                 {

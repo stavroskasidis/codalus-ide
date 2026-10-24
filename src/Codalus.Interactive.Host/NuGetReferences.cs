@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Codalus.Platform.Internal;
 using Microsoft.CodeAnalysis;
 
 namespace Codalus.Interactive.Host;
@@ -105,7 +106,7 @@ internal sealed class NuGetReferences(string workingDirectory)
         process.BeginErrorReadLine();
         if (!process.WaitForExit(TimeSpan.FromMinutes(5)))
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             return new([], $"Restoring {id} timed out.");
         }
 

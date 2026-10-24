@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using Codalus.Platform;
 using Codalus.Platform.Pty;
 using Codalus.Remote.Protocol;
 using Codalus.Rpc;
@@ -251,7 +252,7 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
         {
             try
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
@@ -401,7 +402,7 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
         {
             try
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
             {

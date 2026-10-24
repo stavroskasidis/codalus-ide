@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Codalus.Platform;
 using Codalus.Workbench.Localization;
 
 namespace Codalus.Workbench.Projects;
@@ -451,7 +452,7 @@ public sealed partial class TemplateService : ITemplateCli
             }
             catch (OperationCanceledException)
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
                 if (cancellationToken.IsCancellationRequested)
                 {
                     throw;

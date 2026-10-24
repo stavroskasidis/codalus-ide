@@ -125,7 +125,7 @@ public sealed class PluginTemplateTests : IDisposable
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             throw;
         }
 

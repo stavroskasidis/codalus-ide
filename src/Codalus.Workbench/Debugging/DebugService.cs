@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Codalus.Debugging;
+using Codalus.Platform;
 using Codalus.Workbench.Build;
 using Codalus.Workbench.Projects;
 
@@ -1161,7 +1162,7 @@ public sealed class DebugService : IAsyncDisposable
             using var process = System.Diagnostics.Process.GetProcessById(pid);
             if (!process.HasExited)
             {
-                process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(process);
             }
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)

@@ -2,6 +2,11 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.7.0
+
+- **Fixed:** on Windows, **Restart to update** could start the old version again and offer the same update ([user guide](docs/user-guide/troubleshooting.md#common-problems)). The IDE ran in its install folder, so the programs it started did too, and one that keeps running after the IDE exits held the folder the update replaces: adb's server, started when the IDE lists Android devices. The IDE now moves to your home folder when it starts in its own (a terminal opened without a solution starts there too). An earlier install still starts adb in its folder: run `adb kill-server` (or restart Windows), then **Restart to update**.
+- **Fixed:** a tool window that shows itself without taking the focus (Output when a build starts, Notifications, the Error List) took the active frame's accent from the document group you were working in, though the keyboard stayed in the editor.
+
 ## 0.6.0
 
 - **The Windows Forms designer's Properties window works as the classic IDE's** ([user guide](docs/user-guide/windows-desktop.md#properties-and-events)):
@@ -66,7 +71,9 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Plugins can no longer read other plugins' secrets**: a plugin host's secret requests must name one of its own plugins, and the shell's own secrets (external agents' keys) are out of every plugin's reach.
 - **Fixed:** the completion list, its description, parameter info, Quick Info and other popups that open in a window of their own drew their text at 14 px instead of the 12 px of the rest of the IDE.
 - **Fixed:** the Aspire window's console output could stay empty for a running project: when the AppHost's log stream for it ended early, the window never asked again. It now follows the stream again while the resource runs (a few times, waiting longer each time), without repeating lines already shown, and again when the resource is restarted.
-- **Fixed:** on Windows, **Restart to update** could start the old version again and offer the same update ([user guide](docs/user-guide/troubleshooting.md#common-problems)). The IDE ran in its install folder, so the programs it started did too, and one that keeps running after the IDE exits held the folder the update replaces: adb's server, started when the IDE lists Android devices. The IDE now moves to your home folder when it starts in its own (a terminal opened without a solution starts there too). An earlier install still starts adb in its folder: run `adb kill-server` (or restart Windows), then **Restart to update**.
+- **Fixed:** Class View lost its selection, and collapsed, whenever the solution's projects changed (a reload, or the build host finishing an evaluation after the language service was ready), so `Enter` right after could do nothing. A reload that leaves the same projects now keeps the tree as it is, and the Object Browser keeps its project.
+- **Fixed:** on macOS, stopping something that runs in its own processes (a template or git command past its time limit, a program you run or debug, a host, a remote session, Aspire's resources) could hang for minutes while any program on the Mac was crashing: ending the process tree read every process's details, and macOS holds a crashed process's until its crash report is written. Codalus IDE now finds the processes to end from the system's list of each process's children.
+- **Fixed:** on Windows, a Git command (Stage, Unstage, Discard, a stash) sometimes failed with "Unable to create '…/.git/index.lock': File exists" right after another one: the antivirus or the search indexer can hold the last command's lock file for a moment. Codalus IDE now tries such a command again for a moment before it reports the lock.
 
 ## 0.5.0
 

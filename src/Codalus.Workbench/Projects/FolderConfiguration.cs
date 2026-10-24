@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Projects;
 
@@ -281,7 +282,7 @@ public static partial class FolderConfiguration
         }
         catch (OperationCanceledException)
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             throw;
         }
 

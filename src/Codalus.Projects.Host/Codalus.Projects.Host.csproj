@@ -12,6 +12,7 @@
     <TieredPGO>true</TieredPGO>
     <InvariantGlobalization>true</InvariantGlobalization>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+      <DefineConstants>$(DefineConstants);CODALUS_PROCESS_TREE_INTERNAL</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -59,4 +60,8 @@
   <Target Name="CodalusPublishEfAgent" AfterTargets="Publish" DependsOnTargets="CodalusEfAgentFiles">
     <Copy SourceFiles="@(_CodalusEfAgentFiles)" DestinationFolder="$(PublishDir)efagent" SkipUnchangedFiles="true" />
   </Target>
+  <ItemGroup>
+    <!-- ProcessTree.Kill, compiled in (internal) instead of referencing Codalus.Platform for one class (its remarks). -->
+    <Compile Include="..\Codalus.Platform\ProcessTree.cs" Link="Platform\ProcessTree.cs" />
+  </ItemGroup>
 </Project>

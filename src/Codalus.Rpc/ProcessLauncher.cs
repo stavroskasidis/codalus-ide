@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Codalus.Platform.Internal;
 
 namespace Codalus.Rpc;
 
@@ -162,7 +163,7 @@ public sealed class LocalHostProcess : IHostProcess
     {
         try
         {
-            _process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(_process);
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException or AggregateException)
         {
