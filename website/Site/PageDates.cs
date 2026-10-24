@@ -20,8 +20,9 @@ internal sealed class PageDates(SiteOptions options)
     private static Dictionary<string, string> Read(string repoRoot)
     {
         var dates = new Dictionary<string, string>(StringComparer.Ordinal);
-        var head = Git(repoRoot, "rev-parse", "--show-toplevel", "--is-shallow-repository");
-        if (head is not [var top, "false", ..] || Path.GetFullPath(top).TrimEnd('/', '\\') != Path.GetFullPath(repoRoot).TrimEnd('/', '\\'))
+        // The root of its own repository (no prefix; comparing paths would trip over symlinks such as macOS's /var),
+        // with the whole history.
+        if (Git(repoRoot, "rev-parse", "--show-prefix", "--is-shallow-repository") is not ["", "false", ..])
         {
             return dates;
         }
