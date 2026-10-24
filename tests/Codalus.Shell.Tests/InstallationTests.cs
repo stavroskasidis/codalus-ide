@@ -34,6 +34,32 @@ public sealed class InstallationTests
         Assert.Equal("@echo off\r\n\"%~dp0..\\current\\codalus.exe\" %*\r\nexit /b %ERRORLEVEL%\r\n", Installation.CommandScript);
     }
 
+    // ------------------------------------------------------------------ the working folder
+
+    private const string Home = @"C:\Users\me";
+    private static readonly string[] s_app = [@"C:\Users\me\AppData\Local\Codalus", @"C:\Users\me\AppData\Local\Codalus\current\"];
+
+    [Fact]
+    public void Started_in_its_install_folder_the_app_moves_to_the_users_home()
+    {
+        // Velopack starts it in current\, and adb's server, started from there, kept the folder the update replaces.
+        Assert.Equal(Home, Installation.WorkingFolderOutside(@"C:\Users\me\AppData\Local\Codalus\current", s_app, Home, ignoreCase: true));
+        Assert.Equal(Home, Installation.WorkingFolderOutside(@"c:\users\me\appdata\local\codalus\current\plugins\", s_app, Home, ignoreCase: true));
+        Assert.Equal(Home, Installation.WorkingFolderOutside(@"C:\Users\me\AppData\Local\Codalus", s_app, Home, ignoreCase: true));
+        Assert.Equal("/home/me", Installation.WorkingFolderOutside("/opt/codalus/plugins", ["/opt/codalus/"], "/home/me", ignoreCase: false));
+    }
+
+    [Fact]
+    public void Started_anywhere_else_the_app_keeps_its_working_folder()
+    {
+        Assert.Null(Installation.WorkingFolderOutside(@"D:\Projects\app", s_app, Home, ignoreCase: true)); // `codalus .` in a terminal
+        Assert.Null(Installation.WorkingFolderOutside(@"C:\Users\me\AppData\Local\Codalus-dev", s_app, Home, ignoreCase: true));
+        Assert.Null(Installation.WorkingFolderOutside(Home, s_app, Home, ignoreCase: true));
+        Assert.Null(Installation.WorkingFolderOutside("/opt/Codalus", ["/opt/codalus"], "/home/me", ignoreCase: false));
+        Assert.Null(Installation.WorkingFolderOutside(@"C:\Users\me\AppData\Local\Codalus\current", s_app, string.Empty, ignoreCase: true)); // no home
+        Assert.Null(Installation.WorkingFolderOutside(@"C:\apps\codalus\bin", [@"C:\apps\codalus"], @"C:\apps\codalus\home", ignoreCase: true));
+    }
+
     // ------------------------------------------------------------------ macOS: updates staged on the bundle's volume
 
     private const string HomeCache = "/Users/me/Library/Caches/velopack/Codalus/packages";

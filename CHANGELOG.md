@@ -4,6 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.7.0
 
+- **Fixed:** on Windows, **Restart to update** could start the old version again and offer the same update ([user guide](docs/user-guide/troubleshooting.md#common-problems)). The IDE ran in its install folder, so the programs it started did too, and one that keeps running after the IDE exits held the folder the update replaces: adb's server, started when the IDE lists Android devices. The IDE now moves to your home folder when it starts in its own (a terminal opened without a solution starts there too). An earlier install still starts adb in its folder: run `adb kill-server` (or restart Windows), then **Restart to update**.
 - **Fixed:** a tool window that shows itself without taking the focus (Output when a build starts, Notifications, the Error List) took the active frame's accent from the document group you were working in, though the keyboard stayed in the editor.
 
 ## 0.6.0
