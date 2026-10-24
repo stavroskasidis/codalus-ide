@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using System.Net;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Codalus.Website.Site;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -15,7 +18,16 @@ public sealed class WebsiteTests : IDisposable
 
     private readonly string _temp = Directory.CreateTempSubdirectory("codalus-website-").FullName;
 
-    public void Dispose() => Directory.Delete(_temp, recursive: true);
+    public void Dispose()
+    {
+        // git's objects are read-only, which Windows won't delete.
+        foreach (var file in Directory.EnumerateFiles(_temp, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+
+        Directory.Delete(_temp, recursive: true);
+    }
 
     [Fact]
     public async Task The_site_exports_every_page_with_every_link_and_anchor_resolved()
@@ -169,6 +181,54 @@ public sealed class WebsiteTests : IDisposable
         Assert.Contains("href=\"docs/#debugging-the-server-and-the-page-together\"", html, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task The_home_and_download_pages_describe_the_product_to_search_engines()
+    {
+        var options = Options(stable: "v0.6.0");
+        foreach (var path in new[] { "", "download/" })
+        {
+            var html = await Get(options, path);
+            var json = Regex.Match(html, "<script type=\"application/ld\\+json\">(?<json>.*?)</script>", RegexOptions.Singleline);
+            Assert.True(json.Success, $"no JSON-LD on /{path}");
+
+            var app = JsonElement.Parse(json.Groups["json"].Value);
+            Assert.Equal("SoftwareApplication", app.GetProperty("@type").GetString());
+            Assert.Equal("Codalus IDE", app.GetProperty("name").GetString());
+            Assert.Equal("0.6.0", app.GetProperty("softwareVersion").GetString());
+            Assert.Equal("0", app.GetProperty("offers").GetProperty("price").GetString());
+            Assert.Equal("https://github.com/stavroskasidis/codalus-ide", app.GetProperty("sameAs")[0].GetString());
+        }
+
+        Assert.DoesNotContain("application/ld+json", await Get(options, "features/"), StringComparison.Ordinal);
+        Assert.DoesNotContain("softwareVersion", await Get(Options(), ""), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_sitemap_dates_each_page_by_its_sources_last_commit_with_the_whole_history_only()
+    {
+        var repo = FakeRepository("The guide.");
+        var noGit = await Get(Options() with { RepoRoot = repo }, "sitemap.xml");
+        Assert.Contains("<loc>https://codalus.dev/docs/</loc>", noGit, StringComparison.Ordinal);
+        Assert.DoesNotContain("<lastmod>", noGit, StringComparison.Ordinal);
+
+        Git(repo, null, "init", "-q");
+        Git(repo, "2026-10-01T12:00:00Z", "add", "docs/user-guide/README.md");
+        Git(repo, "2026-10-01T12:00:00Z", "commit", "-q", "-m", "Guide");
+        Git(repo, "2026-10-05T12:00:00Z", "add", ".");
+        Git(repo, "2026-10-05T12:00:00Z", "commit", "-q", "-m", "Getting started");
+        Git(repo, "2026-10-09T12:00:00Z", "commit", "-q", "--allow-empty", "-m", "Elsewhere");
+
+        var sitemap = await Get(Options() with { RepoRoot = repo }, "sitemap.xml");
+        Assert.Contains("<loc>https://codalus.dev/docs/</loc><lastmod>2026-10-01</lastmod>", sitemap, StringComparison.Ordinal);
+        Assert.Contains("<loc>https://codalus.dev/docs/getting-started/</loc><lastmod>2026-10-05</lastmod>", sitemap, StringComparison.Ordinal);
+        Assert.Contains("<loc>https://codalus.dev/</loc></url>", sitemap, StringComparison.Ordinal);
+
+        // A shallow clone would date every page to its newest commit.
+        var shallow = Path.Combine(_temp, "shallow");
+        Git(_temp, null, "clone", "-q", "--depth", "1", new Uri(repo).AbsoluteUri, shallow);
+        Assert.DoesNotContain("<lastmod>", await Get(Options() with { RepoRoot = shallow }, "sitemap.xml"), StringComparison.Ordinal);
+    }
+
     private static SiteOptions Options(string? stable = null, string? nightly = null, string basePath = "/") =>
         new SiteOptions { RepoRoot = s_repoRoot, Stable = stable, Nightly = nightly, BasePath = basePath }.Resolved();
 
@@ -195,6 +255,27 @@ public sealed class WebsiteTests : IDisposable
         File.WriteAllText(Path.Combine(guide, "README.md"), "# User guide\n\nThe guide.\n\n" + readmeBody + "\n");
         File.WriteAllText(Path.Combine(guide, "getting-started.md"), "# Installing and first start\n\n## Prerequisites\n\n## First start\n");
         return repo;
+    }
+
+    private static void Git(string dir, string? date, params string[] args)
+    {
+        var start = new ProcessStartInfo("git") { WorkingDirectory = dir, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var arg in (string[])["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", .. args])
+        {
+            start.ArgumentList.Add(arg);
+        }
+
+        if (date is not null)
+        {
+            start.Environment["GIT_AUTHOR_DATE"] = date;
+            start.Environment["GIT_COMMITTER_DATE"] = date;
+        }
+
+        using var git = Process.Start(start)!;
+        var stderr = git.StandardError.ReadToEndAsync();
+        git.StandardOutput.ReadToEnd();
+        git.WaitForExit();
+        Assert.True(git.ExitCode == 0, $"git {string.Join(' ', args)}: {stderr.Result}");
     }
 
     /// <summary>The site served on a loopback port.</summary>

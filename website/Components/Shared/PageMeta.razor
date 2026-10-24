@@ -1,4 +1,6 @@
+@using System.Text.Json.Nodes
 @inject SiteOptions Site
+@inject Releases Releases
 @inject NavigationManager Nav
 
 <PageTitle>@FullTitle</PageTitle>
@@ -8,6 +10,10 @@
     <meta property="og:description" content="@Description" />
     <meta property="og:url" content="@Canonical" />
     <link rel="canonical" href="@Canonical" />
+    @if (Software)
+    {
+        @((MarkupString)$"<script type=\"application/ld+json\">{SoftwareJson()}</script>")
+    }
 </HeadContent>
 
 @code {
@@ -18,7 +24,39 @@
 
     [Parameter] public bool Exact { get; set; }
 
+    /// <summary>Describe the product to search engines too: schema.org's <c>SoftwareApplication</c> as JSON-LD.</summary>
+    [Parameter] public bool Software { get; set; }
+
     private string FullTitle => Exact ? Title : $"{Title} · Codalus IDE";
 
     private string Canonical => Site.BaseUrl + Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0];
+
+    // Markup, since Razor would encode the type's +. The serializer escapes <, > and &, so nothing in it can close
+    // the script element.
+    private string SoftwareJson()
+    {
+        var app = new JsonObject
+        {
+            ["@context"] = "https://schema.org",
+            ["@type"] = "SoftwareApplication",
+            ["name"] = "Codalus IDE",
+            ["alternateName"] = "Codalus",
+            ["description"] = Description,
+            ["url"] = Site.BaseUrl,
+            ["applicationCategory"] = "DeveloperApplication",
+            ["operatingSystem"] = "Windows, macOS, Linux",
+            ["downloadUrl"] = Site.BaseUrl + "download/",
+            ["screenshot"] = Site.BaseUrl + "assets/screenshots/editor-dark.png",
+            ["license"] = "https://opensource.org/license/mit",
+            ["isAccessibleForFree"] = true,
+            ["offers"] = new JsonObject { ["@type"] = "Offer", ["price"] = "0", ["priceCurrency"] = "USD" },
+            ["sameAs"] = new JsonArray(Site.GitHub),
+        };
+        if (Releases.Stable is { } version)
+        {
+            app["softwareVersion"] = version;
+        }
+
+        return app.ToJsonString();
+    }
 }

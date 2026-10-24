@@ -31,8 +31,8 @@ Every release on the [releases page](https://github.com/stavroskasidis/codalus-i
 | macOS | `codalus-<version>-osx-arm64.pkg` | Open it and choose to install for you (`~/Applications`) or for every user (`/Applications`). The app belongs to you either way, and updates itself. |
 | macOS | `codalus-<version>-osx-arm64.app.zip` | The app on its own: unzip it and move it where you like. |
 | Linux | `.AppImage` | `chmod +x` the file and run it. It updates itself. |
-| Linux | `.deb` and `.rpm` | Install from our apt or dnf repository, so that they update with the system (the instructions are on the [download page](https://stavroskasidis.com/codalus-ide/download/#linux)), or install the file: `sudo apt install ./codalus-<version>-linux-x64.deb`, `sudo dnf install ./codalus-<version>-linux-x64.rpm`. |
-| Linux (openSUSE) | `.rpm` | `zypper` installs from the same rpm repository (the [download page](https://stavroskasidis.com/codalus-ide/download/#zypper) has the commands), so it updates with the system. |
+| Linux | `.deb` and `.rpm` | Install from our apt or dnf repository, so that they update with the system (the instructions are on the [download page](https://codalus.dev/download/#linux)), or install the file: `sudo apt install ./codalus-<version>-linux-x64.deb`, `sudo dnf install ./codalus-<version>-linux-x64.rpm`. |
+| Linux (openSUSE) | `.rpm` | `zypper` installs from the same rpm repository (the [download page](https://codalus.dev/download/#zypper) has the commands), so it updates with the system. |
 | Linux (Arch) | AUR | `codalus-bin`: `yay -S codalus-bin`, or `makepkg -si` in a clone of `https://aur.archlinux.org/codalus-bin.git`. Each stable release also has its PKGBUILD (`aur-codalus-bin-<version>.zip`). |
 | Linux | `.tar.gz` | Extract it and run `codalus/codalus`. |
 

@@ -66,6 +66,7 @@ internal static class SiteHost
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton<Releases>();
         builder.Services.AddSingleton<UserGuide>();
+        builder.Services.AddSingleton<PageDates>();
         builder.Services.AddRazorComponents();
 
         var app = builder.Build();
@@ -96,22 +97,33 @@ internal static class SiteHost
         }
     }
 
-    /// <summary>The pages a sitemap lists, relative to the site's base.</summary>
-    public static IEnumerable<string> PageUrls(UserGuide guide) => s_pages.Concat(guide.Pages.Select(p => p.Url));
+    /// <summary>The pages a sitemap lists, relative to the site's base, with the file each is written in.</summary>
+    public static IEnumerable<(string Url, string Source)> Pages(UserGuide guide) => s_pages.Concat(guide.Pages.Select(p => (p.Url, p.Source)));
 
-    private static readonly string[] s_pages = ["", "features/", "download/"];
+    private static readonly (string Url, string Source)[] s_pages =
+    [
+        ("", "website/Components/Pages/Home.razor"),
+        ("features/", "website/Components/Pages/Features.razor"),
+        ("download/", "website/Components/Pages/Download.razor"),
+    ];
 
     private static void MapData(WebApplication app)
     {
         app.MapGet("/docs/search-index.json", (UserGuide guide) =>
             Results.Json(guide.Pages.Select(p => new { title = p.Title, url = p.Url, sections = p.Sections })));
 
-        app.MapGet("/sitemap.xml", (UserGuide guide, SiteOptions site) =>
+        app.MapGet("/sitemap.xml", (UserGuide guide, SiteOptions site, PageDates dates) =>
         {
             var xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
-            foreach (var url in PageUrls(guide))
+            foreach (var (url, source) in Pages(guide))
             {
-                xml.Append("  <url><loc>").Append(site.BaseUrl).Append(url).Append("</loc></url>\n");
+                xml.Append("  <url><loc>").Append(site.BaseUrl).Append(url).Append("</loc>");
+                if (dates.Of(source) is { } day)
+                {
+                    xml.Append("<lastmod>").Append(day).Append("</lastmod>");
+                }
+
+                xml.Append("</url>\n");
             }
 
             return Results.Text(xml.Append("</urlset>\n").ToString(), "application/xml", Encoding.UTF8);

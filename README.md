@@ -7,7 +7,9 @@
 
 Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs natively on Windows, macOS and Linux: a rich semantic editor, a real project system, and integrated build, debugging and Git.
 
-> **Status: pre-release (0.x).** The MVP (milestones M0–M7) is done, and the post-MVP milestones are under way ([roadmap](docs/roadmap.md#status)). Installers for Windows, macOS and Linux are on the [releases page](https://github.com/stavroskasidis/codalus-ide/releases): the latest stable release is 0.2.1, and nightly builds follow `develop` ([installing](docs/user-guide/getting-started.md)). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
+**Website: [codalus.dev](https://codalus.dev/)**: [download](https://codalus.dev/download/), [features](https://codalus.dev/features/) and the [user guide](https://codalus.dev/docs/).
+
+> **Status: pre-release (0.x).** The MVP (milestones M0–M7) is done, and the post-MVP milestones are under way ([roadmap](docs/roadmap.md#status)). Installers for Windows, macOS and Linux are on the [download page](https://codalus.dev/download/) and the [releases page](https://github.com/stavroskasidis/codalus-ide/releases): stable releases come from `master`, and nightly builds follow `develop` ([installing](docs/user-guide/getting-started.md)). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
 
 ## Features
 
@@ -57,7 +59,7 @@ Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs nativ
 
 ## Documentation
 
-- [Website](https://stavroskasidis.com/codalus-ide/): downloads, features and the user guide.
+- [Website](https://codalus.dev/): downloads, features and the user guide.
 - [User guide](docs/user-guide/README.md): installing, solutions, NuGet, editing, build and run, debugging, web development, data, containers, profiling, Avalonia, remote development, testing, Git, terminal and C# Interactive, older .NET versions, settings, troubleshooting.
 - [Roadmap](docs/roadmap.md): the post-MVP milestones and the decisions behind them.
 - [Writing plugins](docs/plugins.md).
