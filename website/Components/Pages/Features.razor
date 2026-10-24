@@ -4,11 +4,11 @@
 <PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF, Windows Forms and WinUI 3, .NET Framework, Visual Basic, F#, WCF, profiling and more." />
 
 <div class="container">
-    <section class="page-intro">
+    <section class="page-intro rise">
         <p class="eyebrow">Features</p>
-        <h1 class="display display-l">Everything you need to build for .NET. Nothing to bolt on.</h1>
+        <h1 class="display display-l">Everything you need to build for .NET. <span class="accent">Nothing to bolt on.</span></h1>
         <p class="lead">Write, run, debug, test and ship from one fast, native IDE on Windows, macOS and Linux. The tools you'd otherwise collect one extension at a time are already here, and they work together from the first launch.</p>
-        <div class="hero-actions" style="justify-content: flex-start">
+        <div class="hero-actions">
             <a class="button" href="download/" data-download-os>
                 <Icon Name="download" Size="18" />
                 <span data-label>Download</span>
@@ -17,42 +17,56 @@
         </div>
     </section>
 
-    <section class="tour" style="padding-top: 48px" aria-label="Screenshot tour" data-tabs>
-        <div class="tabs" role="tablist" aria-label="Screenshots" hidden>
+    <section class="viewer tour rise rise-3" aria-label="Screenshot tour" data-tabs>
+        <div class="tabs tabs-rail" role="tablist" aria-label="Screenshots" hidden>
             @foreach (var shot in s_shots)
             {
                 <button class="tab" type="button" role="tab" id="tab-@shot.Key" aria-controls="shot-@shot.Key" data-key="@shot.Key">@shot.Label</button>
             }
         </div>
-        @foreach (var (shot, i) in s_shots.Select((s, i) => (s, i)))
-        {
-            <figure class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key">
-                <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@shot.Alt" />
-                <figcaption><strong>@shot.Label</strong><span>@shot.Caption</span></figcaption>
-            </figure>
-        }
+        <div class="tour-shots">
+            @foreach (var (shot, i) in s_shots.Select((s, i) => (s, i)))
+            {
+                <figure class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key">
+                    <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@shot.Alt" />
+                    <figcaption><strong>@shot.Label</strong><span>@shot.Caption</span></figcaption>
+                </figure>
+            }
+        </div>
     </section>
 
     <section class="section themes" aria-labelledby="themes">
         <div class="head-row">
-            <h2 class="heading" id="themes">Classic, and four theme families.</h2>
+            <div class="section-head">
+                <p class="eyebrow">Make it yours</p>
+                <h2 class="heading" id="themes">Classic, and four theme families.</h2>
+            </div>
             <p class="muted small">Classic, the default, in Blue, Light, Dark and High Contrast, and Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast, following your system or not. A classic layout in each: the menu and search in the title bar, the Solution Explorer on the right, and a status bar colored by state.</p>
         </div>
         <div class="grid grid-wide">
             @foreach (var (family, variant, line) in s_families)
             {
-                <figure>
+                <figure class="lift reveal">
                     <img src="assets/screenshots/theme-@(family.ToLowerInvariant()).png" width="1280" height="800" loading="lazy" alt="Codalus IDE in the @family family, @variant" />
-                    <figcaption>@family, @variant: @line</figcaption>
+                    <figcaption><strong>@family <span>@variant</span></strong><span>@(char.ToUpperInvariant(line[0]) + line[1..])</span></figcaption>
                 </figure>
             }
         </div>
     </section>
 
     <section class="section" aria-labelledby="all">
-        <h2 class="heading" id="all" style="margin-bottom: 36px">Everything in the box</h2>
+        <div class="section-head" style="margin-bottom: 28px">
+            <p class="eyebrow">The full list</p>
+            <h2 class="heading" id="all">Everything in the box</h2>
+        </div>
+        <nav class="chips" aria-label="Feature areas">
+            @foreach (var (id, title) in s_areas)
+            {
+                <a href="features/#@id">@title</a>
+            }
+        </nav>
         <div class="feature-lists">
-            <div>
+            <div class="card lift reveal" id="editor">
                 <h3>Editor</h3>
                 <ul>
                     <li>Tabs with preview and split views, multiple carets, folding and a minimap</li>
@@ -64,7 +78,7 @@
                     <li>CodeLens with references, Git history and test status</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="navigation">
                 <h3>Navigation</h3>
                 <ul>
                     <li>Go to Definition and Implementation, into decompiled code</li>
@@ -77,7 +91,7 @@
                     <li>Library code from Source Link before decompiling</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="solutions-and-nuget">
                 <h3>Solutions and NuGet</h3>
                 <ul>
                     <li>.sln and .slnx, SDK-style projects and solution filters</li>
@@ -94,7 +108,7 @@
                     <li>Check Environment: a missing .NET SDK or git offered to install, and the .NET runtime Codalus itself needs: one notification that installs it and starts the helper processes again</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="build-run-and-test">
                 <h3>Build, run and test</h3>
                 <ul>
                     <li>Build, Rebuild and Clean on MSBuild, cancellable</li>
@@ -106,7 +120,7 @@
                     <li>Code coverage with Coverlet</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="debugging">
                 <h3>Debugging</h3>
                 <ul>
                     <li>Launch (F5) and attach, stepping and threads</li>
@@ -120,7 +134,7 @@
                     <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="git-and-hosting">
                 <h3>Git and hosting</h3>
                 <ul>
                     <li>Per-file, per-change and per-line staging, from Git Changes or the diff, and blame</li>
@@ -135,7 +149,7 @@
                     <li>GitHub, Azure DevOps and GitLab</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="web">
                 <h3>Web</h3>
                 <ul>
                     <li>Razor and Blazor, with C# features inside the markup and components, HTML and directives each in their own color</li>
@@ -146,7 +160,7 @@
                     <li>Scaffolding, OpenAPI and gRPC service references, the dev certificate and user secrets</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="data-containers-and-cloud">
                 <h3>Data, containers and cloud</h3>
                 <ul>
                     <li>EF Core migrations, model views and reverse engineering</li>
@@ -157,7 +171,7 @@
                     <li>Publish profiles, including container images</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="make-it-yours">
                 <h3>Make it yours</h3>
                 <ul>
                     <li>A first-run setup: the theme family and mode, previewed live, the keyboard scheme, your settings from VS Code, a .vssettings file or settings sync, and a check of the .NET SDK and git, before the start window</li>
@@ -169,7 +183,7 @@
                     <li>Customize menus and toolbars; saved window layouts and distraction-free mode</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="ai-assistance-your-way">
                 <h3>AI assistance, your way</h3>
                 <ul>
                     <li>Off until you turn it on, with no telemetry; nothing is sent until you choose a provider</li>
@@ -185,7 +199,7 @@
                     <li>Files .gitignore or a .codalusignore excludes, and secrets, are never sent; a request log of what was</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="net-maui">
                 <h3>.NET MAUI</h3>
                 <ul>
                     <li>Android devices and emulators on Windows, Linux and macOS; iOS simulators, iPhones and Mac Catalyst on macOS; Windows Machine (the Windows target) on Windows</li>
@@ -197,7 +211,7 @@
                     <li>The Windows target runs and debugs as a desktop app (netcoredbg, Hot Reload with dotnet watch), packaged or unpackaged</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="wpf-windows-forms-and-winui-3">
                 <h3>WPF, Windows Forms and WinUI 3</h3>
                 <ul>
                     <li>WPF and Windows Forms projects open, edit and build on Windows, Linux and macOS</li>
@@ -221,7 +235,7 @@
                     <li>WinUI XAML: x:Bind paths checked against the page's class as errors, x:Load and x:DefaultBindMode, ThemeResource and resources through App.xaml's merged dictionaries, WinUI's compiler errors in their files</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="net-framework">
                 <h3>.NET Framework</h3>
                 <ul>
                     <li>net48, net472 and the other .NET Framework projects open, restore and build on Windows, Linux and macOS, with no targeting pack: the reference assemblies come from NuGet</li>
@@ -234,7 +248,7 @@
                     <li>New .NET Framework console apps and class libraries, and the installed .NET Framework in Check Environment</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="visual-basic">
                 <h3>Visual Basic</h3>
                 <ul>
                     <li>Completion, Quick Info, signature help and live errors, from the same language service as C#</li>
@@ -245,7 +259,7 @@
                     <li>VB tests in the Test Explorer, and debugging with breakpoints, stepping and locals</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="fsharp">
                 <h3>F#</h3>
                 <ul>
                     <li>FsAutoComplete, Ionide's language server, installed for you: completion with unopened namespaces, Quick Info, live errors and FSharpLint</li>
@@ -258,7 +272,7 @@
                     <li>F# item templates and project properties</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="wcf">
                 <h3>WCF</h3>
                 <ul>
                     <li>Add Service Reference with your dotnet-svcutil: from a service's metadata, a WSDL file or a CoreWCF service you run</li>
@@ -269,7 +283,7 @@
                     <li>system.serviceModel completion, hover and checks in app.config and web.config</li>
                 </ul>
             </div>
-            <div>
+            <div class="card lift reveal" id="and-more">
                 <h3>And more</h3>
                 <ul>
                     <li>Remote development over SSH, in WSL and in containers; Dev Containers; reconnecting after a network drop; the Test Explorer and workspace plugins on the remote machine; tests in WSL, Docker or over SSH</li>
@@ -286,15 +300,46 @@
                 </ul>
             </div>
         </div>
-        <div class="notice" style="margin-top: 56px">
+        <div class="rule-note">
             <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, Hot Reload while debugging server-side code, and translations of the interface.</p>
-            <a class="link-arrow" href="@Site.Blob("docs/roadmap.md")">See the roadmap</a>
+            <a class="link-arrow" href="@Site.Blob("docs/roadmap.md")">See the roadmap <Icon Name="arrow" Size="16" /></a>
+        </div>
+    </section>
+
+    <section class="section" aria-labelledby="cta">
+        <div class="band reveal">
+            <div class="band-text">
+                <h2 id="cta">All of it, in one download.</h2>
+            </div>
+            <a class="button button-light" href="download/" data-download-os><span data-label>Download for your platform</span></a>
         </div>
     </section>
 </div>
 
 @code {
     private sealed record Shot(string Key, string Label, string File, string Alt, string Caption);
+
+    /// <summary>The areas of "Everything in the box", by their cards' ids, for the links above them.</summary>
+    private static readonly (string Id, string Title)[] s_areas =
+    [
+        ("editor", "Editor"),
+        ("navigation", "Navigation"),
+        ("solutions-and-nuget", "Solutions and NuGet"),
+        ("build-run-and-test", "Build, run and test"),
+        ("debugging", "Debugging"),
+        ("git-and-hosting", "Git and hosting"),
+        ("web", "Web"),
+        ("data-containers-and-cloud", "Data, containers and cloud"),
+        ("make-it-yours", "Make it yours"),
+        ("ai-assistance-your-way", "AI assistance"),
+        ("net-maui", ".NET MAUI"),
+        ("wpf-windows-forms-and-winui-3", "WPF, Windows Forms and WinUI 3"),
+        ("net-framework", ".NET Framework"),
+        ("visual-basic", "Visual Basic"),
+        ("fsharp", "F#"),
+        ("wcf", "WCF"),
+        ("and-more", "And more"),
+    ];
 
     /// <summary>Classic, the default (D36), and the theme families (M45), each in the variant its screenshot shows.</summary>
     private static readonly (string Family, string Variant, string Line)[] s_families =
