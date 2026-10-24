@@ -5,7 +5,7 @@ namespace Codalus.Website.Site;
 internal sealed record SiteOptions
 {
     public const string DefaultRepository = "stavroskasidis/codalus-ide";
-    public const string DefaultBaseUrl = "https://stavroskasidis.com/codalus-ide/";
+    public const string DefaultBaseUrl = "https://codalus.dev/";
 
     /// <summary>The repository checkout: <c>website/wwwroot</c> and <c>docs/user-guide</c> are read from it.</summary>
     public string RepoRoot { get; init; } = "";

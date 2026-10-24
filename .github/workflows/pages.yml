@@ -79,7 +79,10 @@ jobs:
     if: ${{ !cancelled() && (needs.scope.result == 'skipped' || needs.scope.outputs.docs-only == 'true') }}
     runs-on: ubuntu-latest
     steps:
+      # The whole history: the sitemap dates each page by its source's last commit (website/Site/PageDates.cs).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Tools
         run: sudo apt-get update && sudo apt-get install -y apt-utils createrepo-c rpm
       - name: The release's own packages (from this run)
