@@ -27,7 +27,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 |---|---|
 | Shell (UI, views, `ShellHost.<Feature>.cs`) | `src/Codalus.Shell` |
 | Services behind the UI | `src/Codalus.Workbench/<Area>/` |
-| Hosts (build, C# language, markup, debug, plugin, data, diagnostics, T4, REPL, remote server) | `src/Codalus.*.Host`, `src/Codalus.Remote.Server` |
+| Hosts (build, C# language, markup, debug, plugin, data, diagnostics, T4, REPL, remote server, WPF previewer, WinForms designer) | `src/Codalus.*.Host`, `src/Codalus.Remote.Server`, `src/Codalus.Previewer.Wpf`, `src/Codalus.WinForms.Designer` |
 | Wire protocols | `docs/*-protocol.md`, `docs/protocol.md` (LSP plus `codalus/` extensions) |
 | Plugin API and built-in plugins | `src/Codalus.Plugins.Abstractions`, `src/Plugins/`, `docs/plugins.md` |
 | Fixtures | `samples/` (standalone; they don't inherit the repo's build settings) |

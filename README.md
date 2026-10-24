@@ -81,6 +81,8 @@ The UI shell (`codalus`, Native AOT) is kept light and responsive. Heavy service
 | `src/Codalus.Diagnostics.*` | The diagnostics host (`codalus-diaghost`) for profiling, and the benchmark events. |
 | `src/Codalus.Remote.*` | The remote server (`codalus-server`) and its protocol. |
 | `src/Codalus.Previewer.Agent` | The Avalonia previewer's and Live Visual Tree's agent. |
+| `src/Codalus.Previewer.Wpf`, `src/Codalus.WinForms.Designer` | Windows only: the WPF previewer's designer host and agent (`codalus-wpfpreviewer`), and the Windows Forms designer host (`codalus-winformsdesigner`). |
+| `src/ThirdParty` | Vendored sources: Mono's soft debugger client (`Mono.Debugger.Soft`) for the Mono debugger adapter. |
 | `src/Codalus.Templates` | The `dotnet new codalus-plugin` template. |
 | `src/Codalus.Markup.Host` | The markup host (`codalus-markuphost`): JSON with schemas, XML and MSBuild, YAML and `.editorconfig`. |
 | `src/Codalus.Interactive.*` | The C# Interactive host (`codalus-replhost`) and its protocol. |
