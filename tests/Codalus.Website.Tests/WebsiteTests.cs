@@ -18,7 +18,16 @@ public sealed class WebsiteTests : IDisposable
 
     private readonly string _temp = Directory.CreateTempSubdirectory("codalus-website-").FullName;
 
-    public void Dispose() => Directory.Delete(_temp, recursive: true);
+    public void Dispose()
+    {
+        // git's objects are read-only, which Windows won't delete.
+        foreach (var file in Directory.EnumerateFiles(_temp, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+
+        Directory.Delete(_temp, recursive: true);
+    }
 
     [Fact]
     public async Task The_site_exports_every_page_with_every_link_and_anchor_resolved()
