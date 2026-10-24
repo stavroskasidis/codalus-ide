@@ -77,10 +77,14 @@
         try {
           await navigator.clipboard.writeText(pre.innerText.trim());
           button.textContent = "Copied";
+          button.classList.add("is-copied");
         } catch {
           button.textContent = "Select and copy";
         }
-        setTimeout(() => (button.textContent = "Copy"), 1600);
+        setTimeout(() => {
+          button.textContent = "Copy";
+          button.classList.remove("is-copied");
+        }, 1600);
       });
       wrap.append(button);
     }
