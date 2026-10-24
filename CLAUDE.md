@@ -2,6 +2,10 @@
 
 Codalus IDE: a .NET IDE built on Avalonia, shipped as a Native AOT shell that supervises out-of-process hosts. Milestone notes are in `docs/checkpoints/`, the plan in `docs/roadmap.md`, and every design decision in `docs/adr/`. Read the ADR and checkpoint of an area before changing it; this file holds only the rules and where to look.
 
+## Before building
+
+- When asked for a new feature, a significant change, a refactor or a design decision and the request leaves real choices open (behavior, scope, protocol or plugin-API shape, UX, edge cases), use skill `grill-me` (`.claude/skills/grill-me/`) before writing code or a plan: one multiple-choice question at a time, answering from the code, ADRs and checkpoints yourself where they settle it. Skip it for small, clear changes; always use it when the user says "grill me" or asks to stress-test a plan.
+
 ## Build, test, run
 
 ```bash
