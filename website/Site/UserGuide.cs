@@ -10,7 +10,8 @@ namespace Codalus.Website.Site;
 
 /// <summary>One page of the user guide, rendered.</summary>
 /// <param name="Slug">The page's name in its address: <c>docs/&lt;slug&gt;/</c>; empty for the README (<c>docs/</c>).</param>
-internal sealed record GuidePage(string Slug, string Source, string Title, string Description, string Html, IReadOnlyList<SearchSection> Sections)
+/// <param name="Outline">The page's ## headings, for its "On this page" list.</param>
+internal sealed record GuidePage(string Slug, string Source, string Title, string Description, string Html, IReadOnlyList<SearchSection> Sections, IReadOnlyList<GuideHeading> Outline)
 {
     /// <summary>The page's address, relative to the site's base.</summary>
     public string Url => GuideUrl(Slug);
@@ -20,6 +21,9 @@ internal sealed record GuidePage(string Slug, string Source, string Title, strin
 
 /// <summary>A part of a page for the docs search: the text under one heading.</summary>
 internal sealed record SearchSection(string Heading, string Id, string Text);
+
+/// <summary>A heading of a page and its anchor.</summary>
+internal sealed record GuideHeading(string Text, string Id);
 
 /// <summary>
 /// The user guide (<c>docs/user-guide/*.md</c>) as site pages, in the order the README lists them. Links between guide
@@ -115,7 +119,11 @@ internal sealed partial class UserGuide(SiteOptions options)
             description = description[..description.LastIndexOf(' ', 157)] + "…";
         }
 
-        return new GuidePage(slug, $"{Folder}/{file}", title, description, document.ToHtml(s_pipeline), Sections(document, source));
+        var outline = document.OfType<HeadingBlock>()
+            .Where(h => h.Level == 2 && h.GetAttributes().Id is { Length: > 0 })
+            .Select(h => new GuideHeading(InlineText(h.Inline), h.GetAttributes().Id!))
+            .ToList();
+        return new GuidePage(slug, $"{Folder}/{file}", title, description, document.ToHtml(s_pipeline), Sections(document, source), outline);
     }
 
     /// <summary>

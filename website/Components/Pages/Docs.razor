@@ -35,7 +35,7 @@
                 </nav>
             </div>
         </details>
-        <article class="docs-main">
+        <article class="docs-main rise">
             <p class="breadcrumb">
                 @if (current.Slug.Length == 0)
                 {
@@ -63,6 +63,16 @@
                 </div>
             </div>
         </article>
+        @if (current.Outline.Count > 1)
+        {
+            <nav class="docs-toc rise rise-2" aria-label="On this page">
+                <span>On this page</span>
+                @foreach (var heading in current.Outline)
+                {
+                    <a href="@(current.Url)#@heading.Id">@heading.Text</a>
+                }
+            </nav>
+        }
     </div>
 }
 
