@@ -7,70 +7,85 @@
 
 <div class="container">
     <section class="hero">
-        @if (Releases.Stable is { } stable)
-        {
-            <a class="pill" href="@Releases.ReleaseUrl(stable)"><span class="pill-tag">NEW</span>Version @stable is out: see what's in it <Icon Name="arrow" Size="14" /></a>
-        }
-        else if (Releases.OnlyNightly)
-        {
-            <a class="pill" href="@Releases.ReleaseUrl(Releases.Nightly)"><span class="pill-tag">PREVIEW</span>Nightly builds are available while 0.x takes shape <Icon Name="arrow" Size="14" /></a>
-        }
-        <h1 class="display display-xl">A real .NET IDE, native on Windows, macOS and Linux.</h1>
-        <p class="lead">Codalus IDE is an open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git. Free, MIT-licensed, and without telemetry.</p>
-        <div class="hero-actions">
-            <a class="button" href="download/" data-download-os @attributes="DownloadFiles">
-                <Icon Name="download" Size="18" />
-                <span data-label>Download</span>
-            </a>
-            <a class="button button-quiet" href="docs/">Read the user guide</a>
+        <div class="hero-main">
+            @if (Releases.Stable is { } stable)
+            {
+                <a class="pill rise" href="@Releases.ReleaseUrl(stable)"><span class="pill-tag">NEW</span>Version @stable is out: see what's in it <Icon Name="arrow" Size="14" /></a>
+            }
+            else if (Releases.OnlyNightly)
+            {
+                <a class="pill rise" href="@Releases.ReleaseUrl(Releases.Nightly)"><span class="pill-tag">PREVIEW</span>Nightly builds are available while 0.x takes shape <Icon Name="arrow" Size="14" /></a>
+            }
+            <h1 class="display display-xl rise rise-1">A real .NET IDE.<br /><span class="accent">Native on every desktop.</span></h1>
+            <p class="lead rise rise-2">An open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git. Free, MIT-licensed, and without telemetry.</p>
+            <div class="hero-actions rise rise-3">
+                <a class="button" href="download/" data-download-os @attributes="DownloadFiles">
+                    <Icon Name="download" Size="18" />
+                    <span data-label>Download</span>
+                </a>
+                <a class="button button-quiet" href="docs/">Read the user guide</a>
+            </div>
         </div>
-        <p class="fineprint">Windows 11 x64 · macOS 15+ on Apple silicon · Linux x64 and arm64 · needs the .NET 11 SDK · <a href="download/">Other downloads and package repositories</a></p>
-        <figure class="shot shot-hero">
-            <img src="assets/screenshots/editor-dark.png" width="1280" height="800" alt="Codalus IDE with a C# solution open: the Start page, the editor with inlay hints, Find Results and the Solution Explorer" />
-        </figure>
+        <dl class="facts rise rise-4" aria-label="Platforms">
+            <div><dt>Windows</dt><dd>11 x64</dd></div>
+            <div><dt>macOS</dt><dd>15+ Apple silicon</dd></div>
+            <div><dt>Linux</dt><dd>x64 and arm64</dd></div>
+            <div><dt>Needs</dt><dd>.NET 11 SDK</dd></div>
+            <div class="facts-link"><a href="download/">Other downloads and package repositories</a></div>
+        </dl>
+    </section>
+
+    <section class="viewer rise rise-5" aria-label="Screenshots" data-tabs>
+        <div class="tabs tabs-bar" role="tablist" aria-label="Screenshots" hidden>
+            @foreach (var shot in s_shots)
+            {
+                <button class="tab" type="button" role="tab" id="tab-@shot.Key" aria-controls="shot-@shot.Key" data-key="@shot.Key">@shot.Label</button>
+            }
+        </div>
+        @foreach (var (shot, i) in s_shots.Select((s, i) => (s, i)))
+        {
+            <figure class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key">
+                <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@shot.Alt" />
+                <figcaption><strong>@shot.Label</strong><span>@shot.Caption</span></figcaption>
+            </figure>
+        }
     </section>
 
     <section class="section" aria-labelledby="everything">
-        <div class="section-head">
-            <p class="eyebrow">The whole inner loop</p>
-            <h2 class="heading" id="everything">From opening a solution to shipping it, in one window.</h2>
+        <div class="head-row">
+            <div class="section-head">
+                <p class="eyebrow">The whole inner loop</p>
+                <h2 class="heading" id="everything">From opening a solution to shipping it, in one window.</h2>
+            </div>
+            <a class="link-arrow" href="features/">Every feature, with screenshots <Icon Name="arrow" Size="16" /></a>
         </div>
-        <div class="grid">
-            <FeatureCard Icon="code" Title="C# on Roslyn">Semantic highlighting, completion, live diagnostics, refactorings with previews, your analyzers and source generators, and Code Search across the whole solution.</FeatureCard>
-            <FeatureCard Icon="projects" Title="A real project system">.sln and .slnx, SDK-style and .NET Framework projects on MSBuild, property pages, configurations, multi-targeting and NuGet.</FeatureCard>
-            <FeatureCard Icon="bug" Title="Debugging">Conditional breakpoints and logpoints, data tips, Watch, visualizers, PerfTips, and Blazor in the browser.</FeatureCard>
-            <FeatureCard Icon="flask" Title="Testing">A Test Explorer for xUnit, NUnit, MSTest and TUnit, test margins in the editor, and coverage with Coverlet.</FeatureCard>
-            <FeatureCard Icon="branch" Title="Git and pull requests">Hunk staging, a history graph, a 3-way merge editor, interactive rebase, and GitHub, Azure DevOps and GitLab.</FeatureCard>
-            <FeatureCard Icon="terminal" Title="Terminal and C# Interactive">Your own shells with clickable file:line links, and a C# REPL that loads NuGet packages and your project.</FeatureCard>
-            <FeatureCard Icon="globe" Title="Web, Razor and Blazor">C# inside .razor and .cshtml, .http files, an Endpoints Explorer, and HTML, CSS and TypeScript servers.</FeatureCard>
-            <FeatureCard Icon="pulse" Title="Profiling">Live .NET counters, CPU traces with flame graphs and hot lines in the editor, memory snapshots and .NET Async, through EventPipe.</FeatureCard>
-            <FeatureCard Icon="database" Title="Data and EF Core">Migrations and model views on your own dotnet-ef, and a Database Explorer for SQL Server, PostgreSQL, MySQL and SQLite.</FeatureCard>
-            <FeatureCard Icon="box" Title="Containers and Aspire">Run and debug in a container with docker or podman, and debug an Aspire AppHost with all its projects.</FeatureCard>
-            <FeatureCard Icon="layout" Title="Avalonia XAML">Completion and binding paths in .axaml files, XAML diagnostics, and a live previewer beside the code.</FeatureCard>
-            <FeatureCard Icon="puzzle" Title="Plugins">A versioned, out-of-process plugin API, and any LSP language server added without writing code.</FeatureCard>
+        <div class="groups">
+            <div class="card group lift reveal">
+                <div class="group-head"><span class="group-icon"><Icon Name="code" Size="20" /></span><h3>Write</h3></div>
+                <div class="group-item"><h4>C# on Roslyn</h4><p>Semantic highlighting, completion, live diagnostics, refactorings with previews, your analyzers and source generators, and Code Search across the whole solution.</p></div>
+                <div class="group-item"><h4>A real project system</h4><p>.sln and .slnx, SDK-style and .NET Framework projects on MSBuild, property pages, configurations, multi-targeting and NuGet.</p></div>
+                <div class="group-item"><h4>Web, Razor and Blazor</h4><p>C# inside .razor and .cshtml, .http files, an Endpoints Explorer, and HTML, CSS and TypeScript servers.</p></div>
+                <div class="group-item"><h4>Avalonia XAML</h4><p>Completion and binding paths in .axaml files, XAML diagnostics, and a live previewer beside the code.</p></div>
+            </div>
+            <div class="card group lift reveal">
+                <div class="group-head"><span class="group-icon group-icon-amber"><Icon Name="bug" Size="20" /></span><h3>Run and fix</h3></div>
+                <div class="group-item"><h4>Debugging</h4><p>Conditional breakpoints and logpoints, data tips, Watch, visualizers, PerfTips, and Blazor in the browser.</p></div>
+                <div class="group-item"><h4>Testing</h4><p>A Test Explorer for xUnit, NUnit, MSTest and TUnit, test margins in the editor, and coverage with Coverlet.</p></div>
+                <div class="group-item"><h4>Profiling</h4><p>Live .NET counters, CPU traces with flame graphs and hot lines in the editor, memory snapshots and .NET Async, through EventPipe.</p></div>
+                <div class="group-item"><h4>Containers and Aspire</h4><p>Run and debug in a container with docker or podman, and debug an Aspire AppHost with all its projects.</p></div>
+            </div>
+            <div class="card group lift reveal">
+                <div class="group-head"><span class="group-icon"><Icon Name="branch" Size="20" /></span><h3>Ship and extend</h3></div>
+                <div class="group-item"><h4>Git and pull requests</h4><p>Hunk staging, a history graph, a 3-way merge editor, interactive rebase, and GitHub, Azure DevOps and GitLab.</p></div>
+                <div class="group-item"><h4>Data and EF Core</h4><p>Migrations and model views on your own dotnet-ef, and a Database Explorer for SQL Server, PostgreSQL, MySQL and SQLite.</p></div>
+                <div class="group-item"><h4>Terminal and C# Interactive</h4><p>Your own shells with clickable file:line links, and a C# REPL that loads NuGet packages and your project.</p></div>
+                <div class="group-item"><h4>Plugins</h4><p>A versioned, out-of-process plugin API, and any LSP language server added without writing code.</p></div>
+            </div>
         </div>
-        <p><a class="link-arrow" href="features/">See every feature, with screenshots <Icon Name="arrow" Size="16" /></a></p>
-    </section>
-
-    <section class="section split" aria-labelledby="debug">
-        <div class="split-text">
-            <p class="eyebrow">F5 just works</p>
-            <h2 class="heading" id="debug">Debug the way you're used to.</h2>
-            <p>Launch or attach, step through threads, and read values where they are. The debugger is netcoredbg over DAP, included in every package.</p>
-            <ul class="ticks">
-                <li>Breakpoints with conditions, hit counts and logpoints</li>
-                <li>Call Stack, Locals, Autos, Watch and QuickWatch</li>
-                <li>PerfTips, Run to Click and exception settings</li>
-                <li>A server and its Blazor page as one session</li>
-            </ul>
-        </div>
-        <figure class="shot split-media">
-            <img src="assets/screenshots/debugging.png" width="1280" height="800" loading="lazy" alt="Paused at a breakpoint: the current line highlighted with a PerfTip, and the Exception Settings window open" />
-        </figure>
     </section>
 
     <section class="section" aria-labelledby="arch">
-        <div class="panel arch">
+        <div class="panel arch reveal">
             <div class="split-text">
                 <p class="eyebrow">Built to stay responsive</p>
                 <h2 class="heading" id="arch">A light native shell. Heavy work out of process.</h2>
@@ -78,7 +93,7 @@
             </div>
             <div class="arch-diagram">
                 <div class="arch-shell"><strong>codalus</strong><span>UI shell · Native AOT</span></div>
-                <div class="arch-wire" aria-hidden="true">JSON-RPC · LSP · DAP</div>
+                <div class="arch-wire">JSON-RPC · LSP · DAP</div>
                 <ul class="arch-hosts" aria-label="Processes the shell supervises">
                     @foreach (var (name, role) in s_hosts)
                     {
@@ -90,7 +105,7 @@
     </section>
 
     <section class="section" aria-label="Principles">
-        <div class="principles">
+        <div class="principles reveal">
             <div>
                 <h3>Open source</h3>
                 <p>MIT-licensed and developed in the open on GitHub. Every third-party component is listed with its license.</p>
@@ -111,18 +126,22 @@
     </section>
 
     <section class="section" aria-labelledby="cta">
-        <div class="cta">
-            <h2 class="heading" id="cta">Open your solution in Codalus IDE.</h2>
-            <p>Installers for Windows, macOS and Linux that update themselves, plus apt and dnf repositories. You need the .NET 11 SDK (or newer) and git 2.30 or newer.</p>
+        <div class="band reveal">
+            <div class="band-text">
+                <h2 id="cta">Open your solution in Codalus IDE.</h2>
+                <p>Installers for Windows, macOS and Linux that update themselves, plus apt and dnf repositories. You need the .NET 11 SDK (or newer) and git 2.30 or newer.</p>
+            </div>
             <div class="hero-actions">
-                <a class="button" href="download/" data-download-os @attributes="DownloadFiles"><span data-label>Download for your platform</span></a>
-                <a class="button button-quiet" href="@Site.GitHub">Star on GitHub</a>
+                <a class="button button-light" href="download/" data-download-os @attributes="DownloadFiles"><span data-label>Download for your platform</span></a>
+                <a class="button button-ghost" href="@Site.GitHub">Star on GitHub</a>
             </div>
         </div>
     </section>
 </div>
 
 @code {
+    private sealed record Shot(string Key, string Label, string File, string Alt, string Caption);
+
     /// <summary>
     /// The offered release's recommended file for each OS: site.js points the Download buttons at the visitor's, so a
     /// click downloads it. Without a release (or without script) the buttons lead to the Download page.
@@ -143,5 +162,21 @@
         ("markuphost", "JSON · XML · YAML"),
         ("replhost", "C# Interactive"),
         ("pluginhost", "your plugins"),
+    ];
+
+    private static readonly Shot[] s_shots =
+    [
+        new("editor", "Editor", "editor-dark.png",
+            "Codalus IDE with a C# solution open: the Start page, the editor with inlay hints, Find Results and the Solution Explorer",
+            "The Start page, inlay hints, Find Results and the Solution Explorer."),
+        new("debugging", "Debugging", "debugging.png",
+            "Paused at a breakpoint: the current line highlighted with a PerfTip, and the Exception Settings window open",
+            "Paused at a breakpoint, with a PerfTip and the Exception Settings window."),
+        new("intellisense", "IntelliSense", "intellisense.png",
+            "Typing a call in the editor: the completion list below the line with an icon per kind, the selected method's description beside it and the kind filters under it, and parameter info above the line",
+            "Completion with an icon per kind and kind filters, and parameter info above the line."),
+        new("profiling", "Profiler", "profiler.png",
+            "A CPU profiling report: the sample timeline above a flame graph of the program's hot methods",
+            "CPU traces with flame graphs, through EventPipe."),
     ];
 }

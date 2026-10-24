@@ -5,11 +5,21 @@
 <PageMeta Title="Download" Description="Download Codalus IDE for Windows, macOS and Linux: installers that update themselves, a portable zip, an AppImage, and apt and dnf repositories." />
 
 <div class="container">
-    <section class="page-intro">
-        <p class="eyebrow">Download@(Releases.Offered is { } offered ? $" · {offered}" : "")</p>
-        <h1 class="display display-l">Install Codalus IDE</h1>
-        <p class="lead">Free and open source. The installers update themselves from signed feeds, and the debugger is included.</p>
-    </section>
+    <div class="intro-split rise">
+        <section class="page-intro">
+            <p class="eyebrow">Download@(Releases.Offered is { } offered ? $" · {offered}" : "")</p>
+            <h1 class="display display-l">Install Codalus IDE</h1>
+            <p class="lead">Free and open source. The installers update themselves from signed feeds, and the debugger is included.</p>
+        </section>
+        <section class="requirements" aria-labelledby="prereq">
+            <p id="prereq">Before you install</p>
+            <ul>
+                <li><a href="https://dotnet.microsoft.com/download/dotnet/11.0">.NET 11 SDK</a><span>RC 2 or later, or newer</span></li>
+                <li><a href="https://git-scm.com/downloads">git</a><span>2.30 or newer, on the PATH</span></li>
+            </ul>
+            <p>Codalus runs its helper processes on .NET 11 (release candidate 2 or later until .NET 11's release in November), and builds your solutions with any SDK from 2.1.200 on. When that runtime is missing, Codalus says so and offers to install it, and it doesn't download an update whose runtime isn't installed. <a href="docs/getting-started/#prerequisites">Details</a></p>
+        </section>
+    </div>
 
     @if (Releases.OnlyNightly)
     {
@@ -24,18 +34,11 @@
         </div>
     }
 
-    <section style="padding-top: 32px" aria-labelledby="prereq">
-        <div class="notice">
-            <p><strong id="prereq">Before you install:</strong> the <a href="https://dotnet.microsoft.com/download/dotnet/11.0">.NET 11 SDK</a> (release candidate 2 or later until .NET 11's release in November) or newer, and <a href="https://git-scm.com/downloads">git</a> 2.30 or newer on the PATH. Codalus runs its helper processes on .NET 11, and builds your solutions with any SDK from 2.1.200 on. When that runtime is missing, Codalus says so and offers to install it, and it doesn't download an update whose runtime isn't installed.</p>
-            <a class="link-arrow" href="docs/getting-started/#prerequisites">Details</a>
-        </div>
-    </section>
-
-    <section style="padding-top: 40px" aria-label="Downloads" data-tabs data-tabs-hash data-tabs-detect>
-        <div class="tabs" role="tablist" aria-label="Operating system" hidden>
-            <button class="tab" type="button" role="tab" id="tab-windows" aria-controls="windows-panel" data-key="windows">Windows</button>
-            <button class="tab" type="button" role="tab" id="tab-macos" aria-controls="macos-panel" data-key="macos">macOS</button>
-            <button class="tab" type="button" role="tab" id="tab-linux" aria-controls="linux-panel" data-key="linux">Linux</button>
+    <section class="rise rise-2" style="padding-top: 56px" aria-label="Downloads" data-tabs data-tabs-hash data-tabs-detect>
+        <div class="tabs tabs-os" role="tablist" aria-label="Operating system" hidden>
+            <button class="tab" type="button" role="tab" id="tab-windows" aria-controls="windows-panel" data-key="windows"><span class="tab-name">Windows</span><span class="tab-req">Windows 11 · x64</span></button>
+            <button class="tab" type="button" role="tab" id="tab-macos" aria-controls="macos-panel" data-key="macos"><span class="tab-name">macOS</span><span class="tab-req">macOS 15+ · Apple silicon</span></button>
+            <button class="tab" type="button" role="tab" id="tab-linux" aria-controls="linux-panel" data-key="linux"><span class="tab-name">Linux</span><span class="tab-req">x64 or arm64 · X11 or Wayland</span></button>
         </div>
 
         <div class="os-panel" role="tabpanel" id="windows-panel" aria-labelledby="tab-windows">
@@ -107,7 +110,7 @@
 
     <section class="section" aria-label="Channels and verification">
         <div class="grid grid-wide">
-            <div class="card card-outline">
+            <div class="card card-outline lift reveal">
                 <h2>Stable and nightly</h2>
                 <p>
                     Stable releases come from master. Nightly builds come from each change to develop that passes the tests on every platform, and are marked as prereleases.
@@ -116,14 +119,14 @@
                         @("The newest is ")<a href="@Releases.ReleaseUrl(nightly)">@nightly</a>@(".")
                     }
                 </p>
-                <a class="link-arrow" href="@Releases.ReleasesUrl">All releases</a>
+                <a class="link-arrow" href="@Releases.ReleasesUrl">All releases <Icon Name="arrow" Size="16" /></a>
             </div>
-            <div class="card card-outline">
+            <div class="card card-outline lift reveal">
                 <h2>Check the download</h2>
                 <p>Every release lists the SHA-256 of each file in SHA256SUMS.txt. The .rpm packages and the apt and dnf repositories are signed with the project's key.</p>
-                <a class="link-arrow" href="@Site.Blob("eng/packaging/linux/codalus-packages.asc")">The signing key</a>
+                <a class="link-arrow" href="@Site.Blob("eng/packaging/linux/codalus-packages.asc")">The signing key <Icon Name="arrow" Size="16" /></a>
             </div>
-            <div class="card card-outline">
+            <div class="card card-outline lift reveal">
                 <h2>Build from source</h2>
                 <Commands Text="@Source" />
             </div>
@@ -131,12 +134,12 @@
     </section>
 
     <section class="section" aria-labelledby="next">
-        <div class="cta cta-row">
-            <div>
+        <div class="band reveal">
+            <div class="band-text">
                 <h2 id="next">Installed? Open a solution.</h2>
                 <p>File → Open Solution or Project (Ctrl+Shift+O), or <code>codalus path/to/App.slnx</code>. Trust the folder, and the projects load, restore and light up.</p>
             </div>
-            <a class="button" href="docs/getting-started/#first-start">Getting started</a>
+            <a class="button button-light" href="docs/getting-started/#first-start">Getting started</a>
         </div>
     </section>
 </div>
