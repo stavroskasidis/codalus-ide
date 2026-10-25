@@ -689,17 +689,70 @@ public sealed partial class ShellHost : IEditorServices
 
     // ------------------------------------------------------------------ navigation history
 
+    /// <summary>A caret move of more lines than this within a document is a step of the history, as in the classic IDE.</summary>
+    internal const int HistoryLineJump = 10;
+
+    /// <summary>Where the caret of the active editor is, for the history when it leaves (M50).</summary>
+    private (string Path, Position Position)? _historyCaret;
+    private bool _movingInHistory;
+
     private void RememberLocation()
     {
         if (ActiveEditor is { Controller: { } controller } editor && !editor.Model.IsReadOnly)
         {
-            _back.Add((editor.Model.Path, editor.Model.PositionAt(controller.Editor.CaretOffset)));
-            if (_back.Count > 50)
-            {
-                _back.RemoveAt(0);
-            }
+            Remember((editor.Model.Path, editor.Model.PositionAt(controller.Editor.CaretOffset)));
+        }
+    }
 
+    private void Remember((string Path, Position Position) location)
+    {
+        if (_movingInHistory)
+        {
+            return;
+        }
+
+        // Go To Definition remembers where it started, and then the editor's change remembers it again: once is enough.
+        if (_back is [.., var last] && SolutionPaths.Comparer.Equals(last.Path, location.Path) && last.Position.Line == location.Position.Line)
+        {
             _forward.Clear();
+            return;
+        }
+
+        _back.Add(location);
+        if (_back.Count > 50)
+        {
+            _back.RemoveAt(0);
+        }
+
+        _forward.Clear();
+    }
+
+    /// <summary>
+    /// The history's steps besides the jumps (M50, Back and Forward did nothing after ordinary navigation): leaving a
+    /// document for another, and a caret move of more than <see cref="HistoryLineJump"/> lines within one.
+    /// </summary>
+    private void TrackHistory()
+    {
+        var current = ActiveEditor is { Controller: { } controller } editor && !editor.Model.IsReadOnly
+            ? (editor.Model.Path, editor.Model.PositionAt(controller.Editor.CaretOffset))
+            : ((string Path, Position Position)?)null;
+        if (_historyCaret is { } previous && current is { } now
+            && (!SolutionPaths.Comparer.Equals(previous.Path, now.Path) || Math.Abs(previous.Position.Line - now.Position.Line) > HistoryLineJump))
+        {
+            Remember(previous);
+        }
+
+        if (current is not null)
+        {
+            _historyCaret = current;
+        }
+    }
+
+    private void OnHistoryCaretChanged(object? sender, EventArgs e)
+    {
+        if (ActiveEditor?.Controller == sender)
+        {
+            TrackHistory();
         }
     }
 
@@ -721,7 +774,16 @@ public sealed partial class ShellHost : IEditorServices
 
         var (path, position) = from[^1];
         from.RemoveAt(from.Count - 1);
-        await OpenFileAsync(path, preview: false, position).ConfigureAwait(true);
+        _movingInHistory = true;
+        try
+        {
+            await OpenFileAsync(path, preview: false, position).ConfigureAwait(true);
+        }
+        finally
+        {
+            _movingInHistory = false;
+            _historyCaret = ActiveEditor is { Controller: { } arrived } at && !at.Model.IsReadOnly ? (at.Model.Path, at.Model.PositionAt(arrived.Editor.CaretOffset)) : null;
+        }
     }
 
     // ------------------------------------------------------------------ saving and closing
@@ -1042,16 +1104,20 @@ public sealed partial class ShellHost : IEditorServices
     private void OnActiveEditorChanged()
     {
         ErrorList.OnActiveDocumentChanged();
+        Explorer.OnActiveDocumentChanged();
         FollowAnalysisProject();
         OnNavigationEditorChanged();
         TrackCopies(ActiveEditor?.Controller);
         Workbench.Context.Set("editorLanguageId", ActiveEditor?.Model.LanguageId);
         Workbench.Context.Set("editorExtension", ActiveEditor?.Model.Path is { } activePath ? Path.GetExtension(activePath).ToLowerInvariant() : null);
         FollowXamlEditor();
+        TrackHistory();
         if (ActiveEditor is { Controller: { } controller } editor)
         {
             controller.CaretChanged -= OnCaretChanged;
             controller.CaretChanged += OnCaretChanged;
+            controller.CaretChanged -= OnHistoryCaretChanged;
+            controller.CaretChanged += OnHistoryCaretChanged;
             controller.CaretChanged -= OnPreviewCaretChanged;
             controller.CaretChanged += OnPreviewCaretChanged;
             UpdateEditorStatus(editor);

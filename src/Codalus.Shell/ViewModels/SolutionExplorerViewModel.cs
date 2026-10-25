@@ -152,6 +152,15 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             {
                 Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
             }
+
+            if (e.Affects(TrackActiveItemSetting))
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    OnPropertyChanged(nameof(TrackActiveItem));
+                    OnActiveDocumentChanged();
+                });
+            }
         };
         solutions.CompilerInputsChanged += (_, _) => QueueRefresh();
         solutions.SolutionChanged += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(OnSolutionChangedForDisk);
@@ -371,6 +380,46 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         Reveal(node.Id);
     }
 
+    /// <summary>
+    /// Track Active Item (M50, the classic IDE's): Solution Explorer selects each document as it becomes active. Off by
+    /// default; the toolbar's toggle and <see cref="TrackActiveItemSetting"/> turn it on.
+    /// </summary>
+    public const string TrackActiveItemSetting = "solutionExplorer.trackActiveItem";
+
+    public bool TrackActiveItem
+    {
+        get => _shell.Workbench.Settings.GetBoolean(TrackActiveItemSetting, false);
+        set
+        {
+            if (value != TrackActiveItem)
+            {
+                _ = _shell.Workbench.Settings.SetAsync(TrackActiveItemSetting, value, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The active document changed: with Track Active Item on, its file is selected, without a message when it isn't in
+    /// the solution, and the search box's filter kept when the file is among its matches.
+    /// </summary>
+    public void OnActiveDocumentChanged()
+    {
+        if (!TrackActiveItem || _shell.ActiveEditor?.Model.Path is not { } path || _root is null || FindByPath(_root, path) is not { } node)
+        {
+            return;
+        }
+
+        if (_filter.Length > 0 && !Rows.Any(r => r.Id == node.Id))
+        {
+            Filter = string.Empty;
+        }
+
+        Reveal(node.Id);
+    }
+
+    /// <summary>Raised when a row was revealed: the view scrolls it into view at once, selected or not before.</summary>
+    public event EventHandler<ExplorerRowViewModel>? RevealRequested;
+
     private static ExplorerNode? FindByPath(ExplorerNode node, string path)
     {
         if (node.Kind is not ExplorerNodeKind.Solution and not ExplorerNodeKind.Project && node.Path is { } nodePath && SolutionService.PathComparer.Equals(nodePath, path))
@@ -476,7 +525,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSolution));
         if (_pendingReveal is { } pending && _root is not null && Path(_root, pending) is not null)
         {
-            Reveal(pending);
+            Reveal(pending, rebuild: true);
             return;
         }
         var rows = new List<(ExplorerNode Node, int Depth)>();
@@ -635,7 +684,10 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     }
 
     /// <summary>Selects (and reveals) the node with <paramref name="id"/>.</summary>
-    public void Reveal(string id)
+    public void Reveal(string id) => Reveal(id, rebuild: false);
+
+    /// <summary><paramref name="rebuild"/>: the tree was just rebuilt and its rows aren't applied yet.</summary>
+    private void Reveal(string id, bool rebuild)
     {
         if (_root is null || Path(_root, id) is not { } path)
         {
@@ -647,13 +699,24 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             _pendingReveal = null;
         }
 
+        // Rebuilding the tree costs a frame or more in a large solution: only when a row must appear (M50, the sync's
+        // slow scroll).
+        var expanded = false;
         foreach (var ancestor in path.SkipLast(1))
         {
-            _expanded.Add(ancestor.Id);
+            expanded |= _expanded.Add(ancestor.Id);
         }
 
-        Refresh();
+        if (rebuild || expanded || !Rows.Any(r => r.Id == id))
+        {
+            Refresh();
+        }
+
         Selected = Rows.FirstOrDefault(r => r.Id == id);
+        if (Selected is { } revealed && revealed.Id == id)
+        {
+            RevealRequested?.Invoke(this, revealed);
+        }
     }
 
     private static List<ExplorerNode>? Path(ExplorerNode node, string id)

@@ -7,7 +7,7 @@
              x:DataType="vm:SolutionExplorerViewModel">
   <DockPanel>
   <!-- The toolbar and search box of a classic IDE's Solution Explorer (M29). Each icon in its family's color (M34h): Home
-       navigates (blue), Sync with Active Document is a refresh (green), Collapse All and Switch Views act on the solution's
+       navigates (blue), Sync with Active Document is a refresh (green), Track Active Item (M50) keeps it in step (blue), Collapse All and Switch Views act on the solution's
        tree (purple), Show All Files shows the folder's files (tan), Properties the Properties window's grid (blue). -->
   <StackPanel DockPanel.Dock="Top" IsVisible="{Binding HasSolution}">
     <controls:ToolbarPanel Spacing="1">
@@ -17,6 +17,9 @@
       <Button Classes="toolbar" Command="{Binding SyncCommand}" ToolTip.Tip="{l:T solutionExplorer.syncWithActiveDocument}" AutomationProperties.Name="{l:T solutionExplorer.syncWithActiveDocument}">
         <controls:Icon Kind="link" Classes="accent-green" />
       </Button>
+      <ToggleButton Classes="toolbar" IsChecked="{Binding TrackActiveItem}" ToolTip.Tip="{l:T solutionExplorer.trackActiveItem}" AutomationProperties.Name="{l:T solutionExplorer.trackActiveItem}">
+        <controls:Icon Kind="sync" />
+      </ToggleButton>
       <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="{l:T solutionExplorer.collapseAll}" AutomationProperties.Name="{l:T solutionExplorer.collapseAll}">
         <controls:Icon Kind="collapse-all" Classes="accent-purple" />
       </Button>

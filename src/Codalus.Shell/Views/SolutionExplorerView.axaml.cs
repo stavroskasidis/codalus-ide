@@ -44,6 +44,8 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
             {
                 vm.SearchRequested -= OnSearchRequested;
                 vm.SearchRequested += OnSearchRequested;
+                vm.RevealRequested -= OnRevealRequested;
+                vm.RevealRequested += OnRevealRequested;
             }
         };
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
@@ -79,6 +81,21 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     }
 
     private SolutionExplorerViewModel? ViewModel => DataContext as SolutionExplorerViewModel;
+
+    /// <summary>
+    /// A revealed row comes into view at once (M50): the list scrolls only when its selection changes, so a row that was
+    /// already selected but scrolled away stayed hidden.
+    /// </summary>
+    private void OnRevealRequested(object? sender, ExplorerRowViewModel row)
+    {
+        if (!List.IsEffectivelyVisible)
+        {
+            return;
+        }
+
+        List.UpdateLayout();
+        List.ScrollIntoView(row);
+    }
 
     private ShellHost? Shell => (TopLevel.GetTopLevel(this) as MainWindow)?.DataContext as ShellHost;
 

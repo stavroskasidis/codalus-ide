@@ -4,7 +4,8 @@ namespace Codalus.Plugins.Welcome;
 /// The built-in Start page. It uses only the public plugin API (ADR 0003): a tree tool window, commands, a
 /// setting and a status bar item. Shell features are reached through built-in commands, as any plugin would.
 /// A tip of the day runs what it describes. Get Started (M23a's theme, keyboard scheme and importers at the top of the
-/// page) is the shell's first-run setup since M46: Help → Get Started opens it.
+/// page) is the shell's first-run setup since M46: Help → Set Up Codalus IDE opens it (M50 took Get Started off
+/// the Help menu; the command stays for key bindings and the palette).
 /// </summary>
 public sealed class WelcomePlugin : ICodalusPlugin
 {

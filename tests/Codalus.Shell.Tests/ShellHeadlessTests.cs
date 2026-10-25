@@ -324,7 +324,12 @@ public class ShellHeadlessTests
         tree.Activate(await ItemAsync("Tip", "Next Tip"));
         await ShellFixture.PumpUntil(() => TipShown() is { } next && next != firstTip, seconds: 30);
 
-        // Get Started is the first-run setup (M46): Help → Get Started opens it.
+        // Get Started is the first-run setup (M46). It's off the Help menu since M50, which keeps Set Up Codalus IDE
+        // for it beside the Start page; the command still opens it.
+        var help = f.Shell.Workbench.Menus.GetItems("menuBar/help").Select(i => i.Command).ToList();
+        Assert.Contains("welcome.show", help);
+        Assert.Contains("help.setUp", help);
+        Assert.DoesNotContain("welcome.showOnboarding", help);
         await f.RunAsync("welcome.showOnboarding");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
         await f.Shell.SetupModel!.FinishAsync(done: false);

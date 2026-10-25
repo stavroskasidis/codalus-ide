@@ -28,7 +28,7 @@ public sealed class FrameworkVersion : IComparable<FrameworkVersion>, IEquatable
 
     public int Patch { get; }
 
-    /// <summary>The pre-release label without its dash (<c>rc.2.26504.105</c>), or empty for a release.</summary>
+    /// <summary>The pre-release label without its dash (<c>rc.3.26522.148</c>), or empty for a release.</summary>
     public string Prerelease => string.Join('.', _prerelease);
 
     public bool IsPrerelease => _prerelease.Length > 0;
@@ -193,7 +193,7 @@ public sealed record FrameworkReference(string Name, FrameworkVersion Version, R
     public static FrameworkReference Create(string name, FrameworkVersion version, RollForwardPolicy rollForward = RollForwardPolicy.Minor, bool rollForwardToPrerelease = false) =>
         new(name, version, rollForward, PreferRelease: !version.IsPrerelease && !rollForwardToPrerelease);
 
-    /// <summary>"Microsoft.NETCore.App 11.0.0-rc.2.26504.105 (rollForward Major)".</summary>
+    /// <summary>"Microsoft.NETCore.App 11.0.0-rc.3.26522.148 (rollForward Major)".</summary>
     public override string ToString() => $"{Name} {Version} (rollForward {RollForward})";
 }
 

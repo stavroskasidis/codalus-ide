@@ -206,6 +206,12 @@ internal static partial class BuiltIns
                 Category = "Solution Explorer",
                 Description = "C# and Visual Basic files expand into the types and members they declare; choosing one goes to it.",
             },
+            SettingDescriptor.Create(ViewModels.SolutionExplorerViewModel.TrackActiveItemSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "Track Active Item",
+                Category = "Solution Explorer",
+                Description = "Selects the active document in Solution Explorer as you switch documents, as Sync with Active Document does.",
+            },
             SettingDescriptor.Create("errorList.groupBy", "\"none\"", SettingType.String, shell) with
             {
                 Title = "Group By",

@@ -292,12 +292,13 @@ public sealed class OutputPresenter
                 Paint(start, end, brush, OutputAttributes.None);
             }
 
-            // The process's own colors and attributes win: they're the most specific.
+            // The process's own colors and attributes win: they're the most specific. Bold is the bright color at the
+            // regular weight (M50): a bold typeface in the Output window's font was hard to read.
             for (var i = first; i < runs.Count && runs[i].Start < end; i++)
             {
                 var style = runs[i].Style;
                 var foreground = style.Foreground >= 0 ? BrushFor(style) : null;
-                var attributes = style.Attributes & (OutputAttributes.Bold | OutputAttributes.Italic | OutputAttributes.Underline);
+                var attributes = style.Attributes & (OutputAttributes.Italic | OutputAttributes.Underline);
                 if (foreground is not null || attributes != OutputAttributes.None)
                 {
                     Paint(Math.Max(start, runs[i].Start), Math.Min(end, runs[i].End), foreground, attributes);
@@ -321,11 +322,12 @@ public sealed class OutputPresenter
 
                 if (attributes != OutputAttributes.None)
                 {
-                    var typeface = element.TextRunProperties.Typeface;
-                    element.TextRunProperties.SetTypeface(new Typeface(
-                        typeface.FontFamily,
-                        (attributes & OutputAttributes.Italic) != 0 ? FontStyle.Italic : typeface.Style,
-                        (attributes & OutputAttributes.Bold) != 0 ? FontWeight.Bold : typeface.Weight));
+                    if ((attributes & OutputAttributes.Italic) != 0)
+                    {
+                        var typeface = element.TextRunProperties.Typeface;
+                        element.TextRunProperties.SetTypeface(new Typeface(typeface.FontFamily, FontStyle.Italic, typeface.Weight));
+                    }
+
                     if ((attributes & OutputAttributes.Underline) != 0)
                     {
                         element.TextRunProperties.SetTextDecorations(TextDecorations.Underline);

@@ -40,6 +40,6 @@ public static class IdeRuntime
         return [.. references.GroupBy(r => r.Name, StringComparer.Ordinal).Select(g => g.MaxBy(r => r.Version)!)];
     }
 
-    /// <summary>"11.0.0-rc.2.26504.105" for a message; the channel to install is <see cref="Channel"/>.</summary>
+    /// <summary>"11.0.0-rc.3.26522.148" for a message; the channel to install is <see cref="Channel"/>.</summary>
     public static string Channel(FrameworkReference reference) => $"{reference.Version.Major}.{reference.Version.Minor}";
 }

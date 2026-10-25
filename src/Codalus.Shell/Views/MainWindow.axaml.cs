@@ -28,6 +28,25 @@ public sealed partial class MainWindow : Window, IShellWindow
     private PixelPoint _normalPosition;
     private Size _normalSize;
 
+    /// <summary>
+    /// The mouse's back and forward buttons (XButton1 and XButton2) are Navigate Backward and Forward anywhere in the
+    /// window (M50), as in the classic IDE: nothing handled them before.
+    /// </summary>
+    private void OnMouseNavigation(object? sender, PointerPressedEventArgs e)
+    {
+        var command = e.GetCurrentPoint(this).Properties.PointerUpdateKind switch
+        {
+            PointerUpdateKind.XButton1Pressed => "workbench.navigateBack",
+            PointerUpdateKind.XButton2Pressed => "workbench.navigateForward",
+            _ => null,
+        };
+        if (command is not null && _shell is { } shell)
+        {
+            shell.Run(command);
+            e.Handled = true;
+        }
+    }
+
     /// <summary>For the XAML runtime loader and designer; the shell attaches through the other constructor.</summary>
     public MainWindow() => InitializeComponent();
 
@@ -48,6 +67,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
+        AddHandler(PointerPressedEvent, OnMouseNavigation, RoutingStrategies.Tunnel, handledEventsToo: true);
         SwitcherLayer.PointerPressed += (_, e) =>
         {
             if (e.Source == SwitcherLayer)
