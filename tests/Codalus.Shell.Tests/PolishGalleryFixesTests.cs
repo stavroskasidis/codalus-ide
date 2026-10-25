@@ -162,10 +162,11 @@ public partial class PolishTests
             return icons;
         }
 
-        // Solution Explorer (the maintainer's finding): Home blue, Sync green, Collapse All and Switch Views purple, Show All
-        // Files tan, Properties blue.
+        // Solution Explorer (the maintainer's finding): Home blue, Sync green, Track Active Item blue (M50), Collapse All and
+        // Switch Views purple, Show All Files tan, Properties blue.
         var explorer = Toolbar(new SolutionExplorerView { DataContext = f.Shell.Explorer });
-        Assert.True(explorer.Count == 6, string.Join(", ", explorer));
+        Assert.True(explorer.Count == 7, string.Join(", ", explorer));
+        Assert.Equal(Token("Shell.Icon.Blue", variant), explorer.Single(i => i.Name == "Track Active Item").Color);
         Assert.True(explorer.Select(i => i.Color).Distinct().Count() >= 4, string.Join(", ", explorer));
         Assert.Equal(Token("Shell.Icon.Blue", variant), explorer.Single(i => i.Name == "Home").Color);
         Assert.Equal(Token("Shell.Icon.Green", variant), explorer.Single(i => i.Name == "Sync with Active Document").Color);
