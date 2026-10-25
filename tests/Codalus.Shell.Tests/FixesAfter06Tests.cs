@@ -6,6 +6,8 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.VisualTree;
 using Codalus.Shell.Editor;
+using Codalus.Shell.Theming;
+using Dock.Avalonia.Controls;
 
 namespace Codalus.Shell.Tests;
 
@@ -73,5 +75,45 @@ public class FixesAfter06Tests
         await f.RunAsync("workbench.navigateForward");
         ShellFixture.Pump();
         Assert.Equal("Second.txt", Where().Name);
+    }
+
+    /// <summary>
+    /// The pin and X in a tool window's header were much larger than the document tab's (the maintainer's screenshot 4):
+    /// now the same 16 px buttons with the same 12 px glyphs, in every theme, the menu's arrow scaled with them.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Tool_window_header_buttons_are_the_size_of_the_document_tabs()
+    {
+        await using var f = ShellFixture.Create();
+        var file = Path.Combine(f.UserData, "a.txt");
+        await File.WriteAllTextAsync(file, "x");
+        await f.Shell.OpenFileAsync(file, preview: false);
+        foreach (var theme in ThemeService.Themes)
+        {
+            f.Window.RequestedThemeVariant = theme.Variant;
+            ShellFixture.Pump();
+            ShellFixture.Pump();
+            var chrome = f.Window.GetVisualDescendants().OfType<ToolChromeControl>().First(c => c.IsEffectivelyVisible);
+            var tab = f.Window.GetVisualDescendants().OfType<DocumentTabStripItem>().First(c => c.IsEffectivelyVisible);
+            Control Part(Visual root, string name) => root.GetVisualDescendants().OfType<Control>().Single(c => c.Name == name);
+            var tabClose = (Control)Part(tab, "PART_ClosePath").GetVisualParent()!.GetVisualParent()!;
+            var tabGlyph = Part(tab, "PART_ClosePath").Bounds.Size;
+            foreach (var name in new[] { "PART_PinButton", "PART_CloseButton", "PART_MenuButton" })
+            {
+                var button = Part(chrome, name);
+                Assert.True(Math.Abs(button.Bounds.Width - tabClose.Bounds.Width) < 0.5, $"{theme.Id}: {name} is {button.Bounds.Width} wide, the tab's X {tabClose.Bounds.Width}");
+            }
+
+            foreach (var name in new[] { "PART_PinPath", "PART_ClosePath" })
+            {
+                var glyph = ((Control)Part(chrome, name).GetVisualParent()!.GetVisualParent()!).Bounds.Size; // the Viewbox
+                Assert.True(glyph.Width <= tabGlyph.Width + 0.5 && glyph.Height <= tabGlyph.Height + 0.5, $"{theme.Id}: {name}'s glyph is {glyph}, the tab's X {tabGlyph}");
+            }
+
+            var arrow = ((Control)Part(chrome, "PART_MenuPath").GetVisualParent()!.GetVisualParent()!).Bounds.Size;
+            Assert.True(arrow.Width <= tabGlyph.Width && arrow.Height <= tabGlyph.Height, $"{theme.Id}: the menu's arrow is {arrow}");
+        }
+
+        f.Window.RequestedThemeVariant = null;
     }
 }
