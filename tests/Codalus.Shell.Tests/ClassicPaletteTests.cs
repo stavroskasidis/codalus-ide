@@ -15,6 +15,8 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class ClassicPaletteTests
 {
+    private static readonly string[] s_classicIds = ["light", "dark", "highContrast"];
+
     private static Color Over(uint argb, Color background)
     {
         var color = Color.FromUInt32(argb);
@@ -61,6 +63,36 @@ public sealed class ClassicPaletteTests
         }
 
         Assert.Equal(0xFFC586C0u, EditorTheme.HighContrast.TokenColor("controlKeyword"));
+    }
+
+    /// <summary>
+    /// M50 (the maintainer's screenshot 5): a Blazor component's parameter (<c>Sources</c> on
+    /// <c>&lt;SourcesDemo Sources="@sources"&gt;</c>) had the HTML attribute's color in every theme. Classic gives it the
+    /// classic IDE's Razor Component Attribute color, bold; the families their own color; HTML attributes are unchanged.
+    /// </summary>
+    [Fact]
+    public void Component_parameters_have_their_own_color_in_every_theme_and_classic_draws_them_bold()
+    {
+        var parameter = Array.IndexOf(Codalus.LanguageServices.Protocol.TokenTypes.All, "razorComponentAttribute");
+        var attribute = Array.IndexOf(Codalus.LanguageServices.Protocol.TokenTypes.All, "markupAttribute");
+        Assert.Equal(0xFF800080u, EditorTheme.Light.TokenColor("razorComponentAttribute"));
+        Assert.Equal(0xFFFF0000u, EditorTheme.Light.TokenColor("markupAttribute"));
+        Assert.Equal(0xFF9CDCFEu, EditorTheme.Dark.TokenColor("markupAttribute"));
+        foreach (var theme in new[] { EditorTheme.Light, EditorTheme.Dark, EditorTheme.HighContrast })
+        {
+            Assert.True(theme.IsBold(parameter), theme.Id);
+            Assert.False(theme.IsBold(attribute), theme.Id);
+        }
+
+        foreach (var id in s_classicIds.Concat(EditorTheme.FamilyPalettes.Keys))
+        {
+            var theme = EditorTheme.For(id);
+            Assert.NotEqual(theme.TokenColor("markupAttribute"), theme.TokenColor("razorComponentAttribute"));
+            Assert.True(theme.IsBold(parameter) == id is "light" or "dark" or "highContrast", id);
+        }
+
+        // The user's colors keep Classic's weight.
+        Assert.True(EditorTheme.Dark.WithOverrides(new Dictionary<string, uint> { ["razorComponentAttribute"] = 0xFF123456 }, new Dictionary<string, uint>()).IsBold(parameter));
     }
 
     [Fact]

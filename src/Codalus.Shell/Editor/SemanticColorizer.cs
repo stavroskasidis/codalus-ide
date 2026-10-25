@@ -1,3 +1,4 @@
+using Avalonia.Media;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 using Codalus.LanguageServices.Protocol;
@@ -127,6 +128,17 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
             var end = Math.Min(line.EndOffset, start + token.Length);
             if (start >= end || Theme.Token(token.Type) is not { } brush)
             {
+                continue;
+            }
+
+            if (Theme.IsBold(token.Type))
+            {
+                ChangeLinePart(start, end, element =>
+                {
+                    element.TextRunProperties.SetForegroundBrush(brush);
+                    var typeface = element.TextRunProperties.Typeface;
+                    element.TextRunProperties.SetTypeface(new Typeface(typeface.FontFamily, typeface.Style, FontWeight.Bold));
+                });
                 continue;
             }
 
