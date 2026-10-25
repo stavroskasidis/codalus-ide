@@ -63,6 +63,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         DataContext = shell;
         ApplyPlacement(shell.InitialPlacement);
         MenuBuilder.Attach(this, MenuBar, shell);
+        DockDropSizer.Attach(this, shell.Layout.Factory);
         SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);

@@ -8,6 +8,8 @@ using Avalonia.VisualTree;
 using Codalus.Shell.Editor;
 using Codalus.Shell.Theming;
 using Dock.Avalonia.Controls;
+using Dock.Model;
+using Dock.Model.Core;
 
 namespace Codalus.Shell.Tests;
 
@@ -115,5 +117,40 @@ public class FixesAfter06Tests
         }
 
         f.Window.RequestedThemeVariant = null;
+    }
+
+    /// <summary>
+    /// A tool window dragged to the other side landed with no width (the maintainer's screenshots 1–3): it lands at the
+    /// width it had, never under 200 px, whatever proportion Dock gave its new pane.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData("Main", 0.5)] // the window's left edge: Dock's global proportion
+    [InlineData("Main", 0.0)] // the proportion the maintainer's saved layout left it
+    [InlineData("Center", 0.0)] // beside the documents
+    public async Task A_tool_window_dragged_across_keeps_its_width(string target, double proportion)
+    {
+        await using var f = ShellFixture.Create();
+        var layout = f.Shell.Layout;
+        await ShellFixture.PumpUntil(() => layout.OpenToolWindows.Any(t => t.Id == "welcome.view")); // the Start page takes its column first
+        ShellFixture.Pump();
+        ShellFixture.Pump();
+        var tool = layout.OpenToolWindows.First(t => t.Id == "solutionExplorer");
+        ToolChromeControl? Frame() => f.Window.GetVisualDescendants().OfType<ToolChromeControl>().SingleOrDefault(c => c.IsEffectivelyVisible && c.DataContext == tool.Owner);
+        ToolChromeControl Chrome() => Frame() ?? throw new InvalidOperationException("no chrome; owner " + tool.Owner?.GetType().Name + " p=" + tool.Owner?.Proportion + " chromes: " + string.Join(", ", f.Window.GetVisualDescendants().OfType<ToolChromeControl>().Select(c => $"{(c.DataContext as IDock)?.ActiveDockable?.Id}:{c.IsEffectivelyVisible}:{c.Bounds.Width:0}")));
+        var before = Chrome().Bounds.Width;
+        Assert.True(before >= 150, $"Solution Explorer starts {before} wide");
+
+        static IDockable? Find(IDockable d, string id) => d.Id == id ? d : (d as IDock)?.VisibleDockables?.Select(c => Find(c, id)).FirstOrDefault(x => x is not null);
+        var dock = (IDock)Find(layout.Root, target)!;
+        Assert.True(new DockManager(new DockService()).ValidateDockable(tool, dock, DragAction.Move, DockOperation.Left, true));
+        tool.Owner!.Proportion = proportion;
+        tool.Owner.CollapsedProportion = proportion;
+        var wanted = Math.Max(before, Codalus.Shell.Docking.DockDropSizer.MinimumSize);
+        await ShellFixture.PumpUntil(() => Frame() is { } c && Math.Abs(c.Bounds.Width - wanted) < 12, seconds: 10, describe: () => $"Solution Explorer is {Frame()?.Bounds.Width} wide, not {wanted}");
+        if (target == "Main")
+        {
+            var left = f.Window.GetVisualDescendants().OfType<ToolChromeControl>().Where(c => c.IsEffectivelyVisible).Min(c => c.TranslatePoint(default, f.Window)!.Value.X);
+            Assert.Equal(left, Chrome().TranslatePoint(default, f.Window)!.Value.X, 1); // the window's left edge: the leftmost
+        }
     }
 }
