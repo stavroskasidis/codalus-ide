@@ -44,7 +44,7 @@
         </div>
         @foreach (var (shot, i) in s_shots.Select((s, i) => (s, i)))
         {
-            <div class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key"><figure>
+            <div class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key" hidden="@(i != 0)"><figure>
                 <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@shot.Alt" />
                 <figcaption><strong>@shot.Label</strong><span>@shot.Caption</span></figcaption>
             </figure></div>

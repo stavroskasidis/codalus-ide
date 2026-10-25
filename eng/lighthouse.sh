@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Lighthouse on every page of an exported website (M50): performance, accessibility, best practices and SEO must each
-# score at least the minimum (95 by default) on Lighthouse's mobile defaults, or this fails, listing what each page got.
+# score at least the minimum (95 by default) on Lighthouse's mobile defaults, or this fails, listing what each page got
+# (a page under it is judged by the median of three runs).
 # Usage: eng/lighthouse.sh <exported-site-dir> [minimum]
 # Needs Node.js (npx) and Chrome or Chromium (CHROME_PATH, else the one Lighthouse finds). The site is served from the
 # folder on a local port, so it must be exported with --base-url at its root ("/" as its base path).
@@ -53,24 +54,43 @@ while IFS= read -r file; do
   pages+=("$page")
 done < <(find "$site" -name index.html | sort)
 
+# Lighthouse's scores vary from run to run (its own advice: take the median of several). A page under the minimum is
+# run twice more and judged by each category's median of the three.
+judge() {
+  python3 - "$minimum" "$1" "$@" <<'PY'
+import json, statistics, sys
+minimum, page, reports = int(sys.argv[1]), sys.argv[2], sys.argv[4:]
+runs = []
+for path in reports:
+    try:
+        categories = json.load(open(path))["categories"]
+        runs.append([round((categories[c]["score"] or 0) * 100) for c in ("performance", "accessibility", "best-practices", "seo")])
+    except (OSError, ValueError, KeyError):
+        pass
+if not runs:
+    print(f"{page:<40} no report"); sys.exit(1)
+scores = [round(statistics.median(column)) for column in zip(*runs)]
+note = f"  (median of {len(runs)} runs)" if len(runs) > 1 else ""
+print(f"{page:<40} " + " ".join(f"{s:5d}" for s in scores) + note)
+sys.exit(1 if min(scores) < minimum else 0)
+PY
+}
+
+run() {
+  npx --yes "lighthouse@$version" "http://127.0.0.1:$port/$1" --quiet --output=json --output-path="$2" \
+    --only-categories=performance,accessibility,best-practices,seo --chrome-flags="--headless=new --no-sandbox" > /dev/null 2>&1 || true
+}
+
 failed=0
 printf '%-40s %5s %5s %5s %5s\n' page perf a11y best seo
 for page in "${pages[@]}"; do
-  report="$out/$(echo "${page:-home}" | tr '/' '_').json"
-  npx --yes "lighthouse@$version" "http://127.0.0.1:$port/$page" --quiet --output=json --output-path="$report" \
-    --only-categories=performance,accessibility,best-practices,seo --chrome-flags="--headless=new --no-sandbox" > /dev/null 2>&1 || true
-  line="$(python3 - "$report" "$minimum" "${page:-/}" <<'PY'
-import json, sys
-path, minimum, page = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-try:
-    categories = json.load(open(path))["categories"]
-except (OSError, ValueError, KeyError):
-    print(f"{page:<40} no report"); sys.exit(1)
-scores = [round((categories[c]["score"] or 0) * 100) for c in ("performance", "accessibility", "best-practices", "seo")]
-print(f"{page:<40} " + " ".join(f"{s:5d}" for s in scores))
-sys.exit(1 if min(scores) < minimum else 0)
-PY
-)" || failed=1
+  name="$out/$(echo "${page:-home}" | tr '/' '_')"
+  run "$page" "$name.json"
+  if ! line="$(judge "${page:-/}" "$name.json")"; then
+    run "$page" "$name.2.json"
+    run "$page" "$name.3.json"
+    line="$(judge "${page:-/}" "$name.json" "$name.2.json" "$name.3.json")" || failed=1
+  fi
   echo "$line"
 done
 
