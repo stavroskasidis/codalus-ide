@@ -101,7 +101,7 @@ public sealed class DesignerActionRowViewModel : ObservableObject
 }
 
 /// <summary>
-/// A component's smart tag panel (M41b): its designer actions, as Visual Studio's panel shows them (headers,
+/// A component's smart tag panel (M41b): its designer actions, as the classic IDE's panel shows them (headers,
 /// properties edited in place, links that run methods), from the designer host's action lists.
 /// </summary>
 public sealed class DesignerActionPanelViewModel
@@ -178,7 +178,7 @@ public sealed class DesignerCollectionItemViewModel : ObservableObject
 }
 
 /// <summary>
-/// A collection editor (M41b), as Visual Studio's: the items listed, added (of a type, for a strip's or a grid's),
+/// A collection editor (M41b), as the classic IDE's: the items listed, added (of a type, for a strip's or a grid's),
 /// removed and reordered, a component item's properties in a grid of their own. Component items (columns, menu items,
 /// tab pages) and images change as you edit (each change undoable); texts (a list's items, a list view's), and a
 /// table's styles, change together with OK.
@@ -321,7 +321,7 @@ public sealed class DesignerCollectionEditorViewModel : ObservableObject
 
     private IEnumerable<DesignerCollectionItem> Current => Items.Select(i => i.Item.Name is { } name ? new DesignerCollectionItem { Name = name } : i.Item);
 
-    /// <summary>Add: a new component item of the chosen type (named as Visual Studio names it), an image from a file, a new style.</summary>
+    /// <summary>Add: a new component item of the chosen type (named as the classic IDE names it), an image from a file, a new style.</summary>
     public async Task AddAsync(string? imagePath = null)
     {
         switch (Info.Kind)

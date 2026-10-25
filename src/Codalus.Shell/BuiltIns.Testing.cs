@@ -11,7 +11,7 @@ namespace Codalus.Shell;
 /// <summary>The Test Explorer, the Test menu and their commands and key bindings (ADR 0010).</summary>
 internal static partial class BuiltIns
 {
-    /// <summary>Visual Studio's test chords (Ctrl+R, …) and Ctrl+E, T for the Test Explorer.</summary>
+    /// <summary>The classic IDE's test chords (Ctrl+R, …) and Ctrl+E, T for the Test Explorer.</summary>
     public const string TestingKeybindings = """
         [
           { "key": "primary+r a", "command": "testing.runAll" },

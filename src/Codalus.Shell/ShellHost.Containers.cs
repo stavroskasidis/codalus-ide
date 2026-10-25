@@ -14,7 +14,7 @@ namespace Codalus.Shell;
 
 /// <summary>
 /// Containers (M17a, ADR 0042): the Containers window, Add Docker Support, running and debugging a project in a
-/// container through its "Container (Dockerfile)" launch profile, and compose files (and Visual Studio's <c>.dcproj</c>)
+/// container through its "Container (Dockerfile)" launch profile, and compose files (and the classic IDE's <c>.dcproj</c>)
 /// up, down and debugged. Everything goes through the user's docker or podman.
 /// </summary>
 public sealed partial class ShellHost
@@ -467,7 +467,7 @@ public sealed partial class ShellHost
         return false;
     }
 
-    /// <summary>The .dcproj's <c>DockerServiceName</c> (the service Visual Studio debugs), or null.</summary>
+    /// <summary>The .dcproj's <c>DockerServiceName</c> (the service the classic IDE debugs), or null.</summary>
     public static string? ComposeServiceName(string dcproj)
     {
         try

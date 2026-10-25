@@ -210,7 +210,7 @@ public sealed record ProjectInfo(
     public bool IsNonSdkStyle { get; init; }
 
     /// <summary>
-    /// Why the project can't build in Codalus IDE although it loads (M43a: it imports Visual Studio's own targets), or
+    /// Why the project can't build in Codalus IDE although it loads (M43a: it imports the classic IDE's own targets), or
     /// null. Such projects are left out of solution builds and restores.
     /// </summary>
     public string? CannotBuildReason { get; init; }

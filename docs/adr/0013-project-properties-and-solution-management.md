@@ -6,7 +6,7 @@
 
 ## Context
 
-M9b asks for Visual Studio's project property pages (Application, Build, Package, Code Analysis, Signing, Debug), each showing the evaluated value, **where it comes from** and its conditions, and writing the minimal change; a launch profile editor; project, assembly and analyzer references; and solution management: Configuration Manager, build dependencies and order, load and unload, solution filters (`.slnf`), `global.json` SDK selection and SDK and workload status. F# and VB pages must be able to reuse the machinery.
+M9b asks for the classic IDE's project property pages (Application, Build, Package, Code Analysis, Signing, Debug), each showing the evaluated value, **where it comes from** and its conditions, and writing the minimal change; a launch profile editor; project, assembly and analyzer references; and solution management: Configuration Manager, build dependencies and order, load and unload, solution filters (`.slnf`), `global.json` SDK selection and SDK and workload status. F# and VB pages must be able to reuse the machinery.
 
 Constraints: MSBuild only runs in the build host (ADR 0004); the shell is Native AOT; edits keep the files' formatting; solution files are read and written with `Microsoft.VisualStudio.SolutionPersistence`.
 
@@ -15,7 +15,7 @@ Constraints: MSBuild only runs in the build host (ADR 0004); the shell is Native
 **Property pages**
 1. Hand-written views per page. Fast to start, but every language and page is new UI code, and provenance logic is repeated.
 2. **A page schema** (pages, properties, editors, options) interpreted by one shell view, with a generic host API that reads any property with provenance and writes it with a condition scope.
-3. Visual Studio's XAML rule files (CPS). They describe the same thing, but they ship with Visual Studio (not redistributable) and assume CPS.
+3. The classic IDE's XAML rule files (CPS). They describe the same thing, but they ship with the classic IDE (not redistributable) and assume CPS.
 
 **Load and unload**
 1. Remove unloaded projects from the solution file. Changes a shared file for a personal preference.

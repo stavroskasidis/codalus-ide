@@ -390,7 +390,7 @@ internal static class WinFormsFeature
         return new WinFormsEditResult(new WorkspaceEdit([.. documents]), after, null) { Handler = handlerLocation };
     }
 
-    /// <summary>Visual Studio's name for a new handler: <c>button1_Click</c>, <c>MainForm_Load</c>.</summary>
+    /// <summary>The classic IDE's name for a new handler: <c>button1_Click</c>, <c>MainForm_Load</c>.</summary>
     public static string DefaultHandler(DesignerModel model, string component, string eventName) =>
         $"{(component.Length == 0 ? model.ClassName : component)}_{eventName}";
 
@@ -435,7 +435,7 @@ internal static class WinFormsFeature
 
     /// <summary>
     /// The handler in the code file: where it is when the class has it, else a new empty method at the end of the
-    /// class (Visual Studio's shape, with an empty line in its body, where the caret goes).
+    /// class (the classic IDE's shape, with an empty line in its body, where the caret goes).
     /// </summary>
     private static async Task<(TextDocumentEdit? Edit, Location? Location)> EnsureHandlerAsync(
         Context context, Func<string, SourceText?> openText, Func<string, int?> version, string className, string handler, string[] parameters, CancellationToken cancellationToken)

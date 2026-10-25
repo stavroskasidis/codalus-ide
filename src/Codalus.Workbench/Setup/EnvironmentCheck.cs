@@ -64,7 +64,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
 
     /// <summary>
     /// The .NET the hosts need, or later (they roll forward, ADR 0025): the runtime the IDE was built for, a release
-    /// candidate's full version included (<c>11.0.0-rc.2.26504.105</c>), since the hosts are built with the same SDK.
+    /// candidate's full version included (<c>11.0.0-rc.3.26522.148</c>), since the hosts are built with the same SDK.
     /// </summary>
     public string HostsRuntime { get; init; } = DefaultHostsRuntime();
 

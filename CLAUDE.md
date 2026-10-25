@@ -60,15 +60,15 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 
 ## UI rules
 
-- The product is "Codalus IDE" ("Codalus" short, CLI `codalus`). Never use "Visual Studio" in UI strings, setting values or theme names. ("Daedalus Studio" is the pre-0.2.0 name, kept only in old ADRs and checkpoints.)
-- Every icon is colored in the Visual Studio palette (`docs/ui-guidelines.md`): new icon kinds get a color in `CommandIcons.s_kindColors`. Icons are compiled at build time from committed SVGs (`eng/get-*-icons.sh`, `eng/icons/`); never parse SVG at runtime.
+- The product is "Codalus IDE" ("Codalus" short, CLI `codalus`). Never write the classic IDE's product name, or its two-letter abbreviation, anywhere in the repository's current files (UI strings, setting values, theme names, code, comments, docs, the website): write "the classic IDE" ("Classic IDE" in a heading or a name). `ProductNameTests` (`tests/Codalus.Workbench.Tests`) checks every tracked file and lists the exceptions: the `.sln` format's own text, `THIRD-PARTY-NOTICES.md`, and functional strings (install paths, other tools' theme names); `Microsoft.VisualStudio.*` package IDs and VS Code are other names. ("Daedalus Studio" is the pre-0.2.0 name, kept only in old ADRs and checkpoints.)
+- Every icon is colored in the classic IDE's palette (`docs/ui-guidelines.md`): new icon kinds get a color in `CommandIcons.s_kindColors`. Icons are compiled at build time from committed SVGs (`eng/get-*-icons.sh`, `eng/icons/`); never parse SVG at runtime.
 - UI text is localized (`docs/translating.md`); views use `{l:T key}`.
 
 ## Website
 
 `website/` is a static-SSR Blazor app exported to GitHub Pages (`--export <dir>` fails on broken links). Links are relative to the site, never rooted; in-page links carry their path (`docs/git/#stash`); page links end with `/`.
 
-**Keep the website up to date** in the same change as anything users can see: Features page (and Home for headlines), the user guide page, fresh screenshots from the smoke test (`website/wwwroot/assets/screenshots/`), and the Download page. Run `tests/Codalus.Website.Tests` and the export before pushing. Only `master` deploys.
+**Keep the website up to date** in the same change as anything users can see: Features page (and Home for headlines), the user guide page, fresh screenshots from the smoke test (`website/wwwroot/assets/screenshots/`), and the Download page. Run `tests/Codalus.Website.Tests` and the export before pushing; `eng/lighthouse.sh <export>` (also run by `pages.yml`) needs 95+ in every Lighthouse category on every page. Only `master` deploys.
 
 ## CI and releases
 

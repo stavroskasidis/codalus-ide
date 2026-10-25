@@ -11,7 +11,7 @@ Since the MVP, Visual Basic projects only loaded, built and ran. Their files wer
 The research for M35 found the following:
 - **Mixed solutions.** A C# project and a VB project in one Roslyn workspace reference each other as compilations. Definitions across the languages find metadata symbols, which `SymbolFinder.FindSourceDefinitionAsync` maps back to source.
 - **The compiler's arguments.** The design-time build gives VB its `vbc` arguments. On Unix, MSBuild turns `\"` in an item into `/"`, which breaks VB's quoted `/define:` (`CONFIG=\"Debug\"`). The compilation then fails to load, and emitting it throws.
-- **Editor behaviour.** Visual Studio's "pretty listing" (adding `End If`, fixing keyword casing, closing XML literals' tags) lives in Roslyn's Visual Studio editor layers (`EditorFeatures`), which depend on Visual Studio's editor. It isn't in `Features`.
+- **Editor behaviour.** the classic IDE's "pretty listing" (adding `End If`, fixing keyword casing, closing XML literals' tags) lives in Roslyn's the classic IDE's editor layers (`EditorFeatures`), which depend on the classic IDE's editor. It isn't in `Features`.
 - **Debugging.** netcoredbg debugs VB programs through portable PDBs, but it evaluates expressions as C#.
 
 ## Options

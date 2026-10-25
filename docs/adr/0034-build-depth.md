@@ -6,7 +6,7 @@
 
 ## Context
 
-M26b is the build half of M26 (ADR 0033 covers M26a). It asks for Batch Build; build settings (MSBuild verbosity for the Output window and a log, parallel project builds, what Run does when projects are out of date, code analysis on build); a fast up-to-date check verified against real MSBuild runs; build timings with the critical path and the slowest targets and tasks; binary logs with a structured log viewer built on MSBuild Structured Log Viewer's `StructuredLogger` library; and pre-build and post-build events in the property pages, stored as Visual Studio stores them.
+M26b is the build half of M26 (ADR 0033 covers M26a). It asks for Batch Build; build settings (MSBuild verbosity for the Output window and a log, parallel project builds, what Run does when projects are out of date, code analysis on build); a fast up-to-date check verified against real MSBuild runs; build timings with the critical path and the slowest targets and tasks; binary logs with a structured log viewer built on MSBuild Structured Log Viewer's `StructuredLogger` library; and pre-build and post-build events in the property pages, stored as the classic IDE stores them.
 
 Constraints: MSBuild runs only in the build host (ADR 0004) and only for trusted folders; a wrong skip is a bug, not a trade-off; the shell is Native AOT.
 
@@ -33,10 +33,10 @@ Constraints: MSBuild runs only in the build host (ADR 0004) and only for trusted
 - A document lists every project × configuration × platform the projects declare (from the Configuration Manager's data) with checkboxes remembered for the session, and builds, rebuilds or cleans the checked ones in turn through `build/batch` (one exclusive build: one restore per project, the up-to-date check per entry), with a result per entry.
 
 **Build events as targets**
-- `buildEvents/get` and `buildEvents/set` read and write `<Target Name="PreBuild" BeforeTargets="PreBuildEvent">` and `<Target Name="PostBuild" AfterTargets="PostBuildEvent">`, each with an `Exec Command`, and the `RunPostBuildEvent` property (absent for the default, `OnBuildSuccess`): exactly what Visual Studio writes in SDK-style projects. An empty command removes its target. The property pages gain a Build Events page.
+- `buildEvents/get` and `buildEvents/set` read and write `<Target Name="PreBuild" BeforeTargets="PreBuildEvent">` and `<Target Name="PostBuild" AfterTargets="PostBuildEvent">`, each with an `Exec Command`, and the `RunPostBuildEvent` property (absent for the default, `OnBuildSuccess`): exactly what the classic IDE writes in SDK-style projects. An empty command removes its target. The property pages gain a Build Events page.
 
 ## Consequences
 
 - No-op builds of an unchanged solution take an evaluation per project instead of an MSBuild build.
 - `MSBuild.StructuredLogger` loads in the build host only, against the SDK's MSBuild; binary logs are read through the open solution's build host.
-- `TODO(issue)`: per-project skipping inside a solution build that has out-of-date projects (MSBuild's own incrementality handles them today); files a custom target reads without declaring them aren't tracked (declare them as `UpToDateCheckInput`, as in Visual Studio); the binary log viewer has no timeline or project-graph view yet (the tree, search and summary are there).
+- `TODO(issue)`: per-project skipping inside a solution build that has out-of-date projects (MSBuild's own incrementality handles them today); files a custom target reads without declaring them aren't tracked (declare them as `UpToDateCheckInput`, as in the classic IDE); the binary log viewer has no timeline or project-graph view yet (the tree, search and summary are there).

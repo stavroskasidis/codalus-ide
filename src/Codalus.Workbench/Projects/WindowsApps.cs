@@ -145,7 +145,7 @@ public static class WindowsApps
     /// The Windows App SDK runtime's framework packages a packaged app depends on, for <paramref name="architecture"/>
     /// (<c>x64</c>, <c>x86</c>, <c>arm64</c>), from the restored runtime package (<c>Microsoft.WindowsAppSDK.Runtime</c>
     /// in 1.8 and later, <c>Microsoft.WindowsAppSDK</c> before): its <c>tools\MSIX\win10-&lt;arch&gt;\Microsoft.WindowsAppRuntime.&lt;x.y&gt;.msix</c>.
-    /// Registering installs them when they're missing, as a deployment from Visual Studio does.
+    /// Registering installs them when they're missing, as a deployment from the classic IDE does.
     /// </summary>
     public static IReadOnlyList<string> FrameworkPackages(ProjectInfo project, string packagesRoot, string architecture, Func<string, IEnumerable<string>> listFiles)
     {

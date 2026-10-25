@@ -5,7 +5,7 @@ using Codalus.Workbench.Snippets;
 namespace Codalus.Shell;
 
 /// <summary>
-/// Editing depth (M12b): snippets (built in, from plugins, the user's; Insert Snippet, Surround With, Visual Studio
+/// Editing depth (M12b): snippets (built in, from plugins, the user's; Insert Snippet, Surround With, the classic IDE
 /// <c>.snippet</c> import).
 /// </summary>
 public sealed partial class ShellHost
@@ -109,7 +109,7 @@ public sealed partial class ShellHost
         await OpenFileAsync(file).ConfigureAwait(true);
     }
 
-    /// <summary>Imports Visual Studio <c>.snippet</c> files into the user's snippets (by language).</summary>
+    /// <summary>Imports the classic IDE's <c>.snippet</c> files into the user's snippets (by language).</summary>
     public async Task ImportVisualStudioSnippetsAsync()
     {
         if (Window is null || await Window.PickFileAsync("Import Snippets", "Code snippets (.snippet)", ["*.snippet"]).ConfigureAwait(true) is not { } path)

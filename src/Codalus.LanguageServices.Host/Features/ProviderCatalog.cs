@@ -11,7 +11,7 @@ namespace Codalus.LanguageServices.Host.Features;
 /// <summary>
 /// Code fix providers, refactoring providers and IDE analyzers. Roslyn's built-in ones live in the Features assemblies,
 /// exported for MEF; they are found by their export attributes and created through their (importing) parameterless
-/// constructors, the way other Roslyn hosts outside Visual Studio do it. Providers that need MEF-imported services
+/// constructors, the way other Roslyn hosts outside the classic IDE do it. Providers that need MEF-imported services
 /// in their constructor are skipped. Projects' analyzer packages add their own code fixes.
 /// </summary>
 internal static class ProviderCatalog

@@ -5,8 +5,8 @@ using Codalus.Projects.Protocol;
 namespace Codalus.Projects.Host;
 
 /// <summary>
-/// Docker Compose projects (<c>.dcproj</c>, M17a, ADR 0042): the project file Visual Studio adds for a compose file.
-/// Its SDK (<c>Microsoft.Docker.Sdk</c>) ships only with Visual Studio, so it is never evaluated or built: its items
+/// Docker Compose projects (<c>.dcproj</c>, M17a, ADR 0042): the project file the classic IDE adds for a compose file.
+/// Its SDK (<c>Microsoft.Docker.Sdk</c>) ships only with the classic IDE, so it is never evaluated or built: its items
 /// are read from the XML, and it loads as a solution item whose compose file the shell runs.
 /// </summary>
 internal static class ComposeProject

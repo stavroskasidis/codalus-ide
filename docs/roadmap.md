@@ -1,8 +1,8 @@
 # Post-MVP roadmap
 
-This is the plan for everything after the MVP, M0–M7. The MVP's milestones came from the original project brief, `ide-prompt.md`, which was removed after M7. It turns the mission's one-line post-MVP list into milestones that future sessions can plan and build one at a time. It also covers the rest of the Visual Studio feature set that the mission's "parity is reachable" goal implies. The [Visual Studio parity matrix](#visual-studio-parity-matrix) maps every VS feature area to the milestone that delivers it, or records it as a gap or a non-goal. It is the checklist that keeps this plan complete.
+This is the plan for everything after the MVP, M0–M7. The MVP's milestones came from the original project brief, `ide-prompt.md`, which was removed after M7. It turns the mission's one-line post-MVP list into milestones that future sessions can plan and build one at a time. It also covers the rest of the classic IDE's feature set that the mission's "parity is reachable" goal implies. The [classic IDE parity matrix](#classic-ide-parity-matrix) maps every classic IDE feature area to the milestone that delivers it, or records it as a gap or a non-goal. It is the checklist that keeps this plan complete.
 
-- **Status:** written 2026-10-08 while M1 was in progress, and checked against Visual Studio 2026 on 2026-10-09. The MVP (M0–M7) is done; M8 was built on 2026-10-09 (checkpoints [M8a](checkpoints/m8a.md) and [M8b](checkpoints/m8b.md)), and M9 the same day ([M9a](checkpoints/m9a.md), [M9b](checkpoints/m9b.md)). On 2026-10-09 the maintainer gave a standing go-ahead for M9 through M16, built in order with each milestone validated on Windows, Linux and macOS. On 2026-10-10 the maintainer added a platform and release phase (M30–M33), placed next, after M16b and before M16c. The same day they added UI polish (M34) as the last milestone before Visual Basic and F#, which were renumbered M35 and M36 so that they stay last. The repository went public on 2026-10-11 (D29). By 2026-10-14 phases 1–9 were built except M28 and M30b (M28 followed on 2026-10-15), M34a–e were pulled forward, M37–M39 were added and built, and 0.1.0, 0.2.0 and 0.2.1 were released; the [status table](#status) is the current state.
+- **Status:** written 2026-10-08 while M1 was in progress, and checked against the classic IDE (2026) on 2026-10-09. The MVP (M0–M7) is done; M8 was built on 2026-10-09 (checkpoints [M8a](checkpoints/m8a.md) and [M8b](checkpoints/m8b.md)), and M9 the same day ([M9a](checkpoints/m9a.md), [M9b](checkpoints/m9b.md)). On 2026-10-09 the maintainer gave a standing go-ahead for M9 through M16, built in order with each milestone validated on Windows, Linux and macOS. On 2026-10-10 the maintainer added a platform and release phase (M30–M33), placed next, after M16b and before M16c. The same day they added UI polish (M34) as the last milestone before Visual Basic and F#, which were renumbered M35 and M36 so that they stay last. The repository went public on 2026-10-11 (D29). By 2026-10-14 phases 1–9 were built except M28 and M30b (M28 followed on 2026-10-15), M34a–e were pulled forward, M37–M39 were added and built, and 0.1.0, 0.2.0 and 0.2.1 were released; the [status table](#status) is the current state.
 - **Authority:** the original project brief's fixed decisions and non-goals still apply. The brief (`ide-prompt.md`) was removed after M7. Its non-goals are restated under [Out of scope](#out-of-scope), and its decisions live on in the ADRs. ADRs win over this document once they are accepted.
 - **Licences:** the licences given below are what we believe them to be when this was written. Check each one again before adopting it, and record it in `THIRD-PARTY-NOTICES.md`. If a licence is ambiguous, stop and ask the maintainer.
 
@@ -47,7 +47,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M26 | Build and project-system depth | done (M26a and M26b at checkpoint). M26a ([m26a](checkpoints/m26a.md), ADR 0033): the Properties window, Show All Files, Include and Exclude, links and moves between projects, Add New Item, Export Template, the template manager, folder mode with tasks and launch configurations, External Tools; M26b ([m26b](checkpoints/m26b.md), ADR 0034, 0035): build settings, the fast up-to-date check, Batch Build, Build Timings with the critical path, binary logs and their viewer, build events, custom tools (ResX, T4 in its own host, plugins) |
 | M27 | Data and Entity Framework Core tooling | done (M27a and M27b at checkpoint): the Entity Framework window over the user's dotnet-ef (migrations with their SQL shown first, scripts, bundles, compiled models, reverse engineering, the model view; [m27a](checkpoints/m27a.md), ADR 0036); the Database Explorer in `codalus-datahost` (SQL Server, PostgreSQL, MySQL/MariaDB, SQLite), table data with explicit commit, CSV/JSON export and import, the query editor with results, messages, cancel, history and plans, the SQL language service (ScriptDom), `.sqlproj` loading and builds ([m27b](checkpoints/m27b.md), ADRs 0037 and 0038); schema compare and publish are a gap (D15: DacFx is proprietary) |
 | M28 | AI assistance | M28a at checkpoint ([m28a](checkpoints/m28a.md), ADR 0062), 2026-10-15: the language model provider API (proposed), the OpenAI-compatible (with Ollama) and Anthropic provider plugins, the data boundary (off by default, a workspace can only turn it off, ignored files and secrets never sent, the request log), AI Chat with the context the user chooses and code applied after a preview; validated on Linux only, so it needs checking on Windows and the Mac. M28b at checkpoint ([m28b](checkpoints/m28b.md)), 2026-10-15: inline suggestions and next edit suggestions (each with its own switch, off by default), and AI actions (commit messages, pull request descriptions, Ask AI in the exception helper and for a failing test, Fix with AI, Generate Tests, profile summaries); also Linux only. M28c at checkpoint ([m28c](checkpoints/m28c.md), ADR 0063), 2026-10-15: agent mode (workspace-confined tools, every change in the preview, every command and MCP tool after an approval whose default is Reject, trusted folders only, a step limit), the MCP client for user-configured servers, and `codalus mcp` exposing the IDE's context to external agents; Linux only. M28 is done |
-| M29 | Visual Studio look and feel | done (at checkpoint, [m29](checkpoints/m29.md)): title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
+| M29 | Classic IDE look and feel | done (at checkpoint, [m29](checkpoints/m29.md)): title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
 | M30 | .NET 11 and following .NET releases | M30a at checkpoint ([m30a](checkpoints/m30a.md)): .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b at checkpoint ([m30b](checkpoints/m30b.md)), 2026-10-16, moved forward by the maintainer onto the .NET 11 release candidate: Codalus on .NET 11 RC2 (`allowPrerelease`), Native AOT on 11 with no new warnings, Roslyn 5.12 (the RC2 SDK's compiler) with C# 15 and the .NET 11 SDK's Razor generator, the hosts still rolling forward (ADR 0025 amended), the .NET 11 SDK as the prerequisite, `net11.0` in the regular fixtures; validated on Linux only (Windows and macOS by CI). Finished on the GA SDK in November 2026 (`TODO(issue)`) |
 | M31 | Automated release cycle and installers | done (M31 and M31b at checkpoint). M31 ([m31](checkpoints/m31.md), ADR 0028): `develop`/`master`, `VERSION` and `codalus-release`, Velopack installers on every platform, `.deb`/`.rpm`, signed apt and dnf repositories, the release workflows (since 2026-10-14 the one `pipeline.yml`, with `pages.yml`); M31b ([m31b](checkpoints/m31b.md)): the first published releases, pulled forward by the maintainer on 2026-10-13: nightlies from `develop`, 0.1.0 from `master`, Linux ARM64 packages, the apt and dnf repositories on Pages; unsigned until certificates (D19) |
 | M32 | Self-update | done (at checkpoint, [m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
@@ -57,18 +57,18 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M37 | Environment setup | done (at checkpoint, [m37](checkpoints/m37.md)): a missing or mismatched .NET SDK (a solution's `global.json`), git, Git LFS, Docker, Podman and WSL found, Help → Check Environment, installs with the user's consent (winget, `dotnet-install` into `~/.dotnet`, `xcode-select`, the distribution's packages in the terminal); MAUI's workloads come with M20 |
 | M38 | Start window | done (at checkpoint, [m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
 | M40 | WinForms and WPF projects, WPF XAML and previewer | done (M40a and M40b at checkpoint), 2026-10-16, Windows only (D31). M40a ([m40a](checkpoints/m40a.md), ADR 0071): WinForms and WPF projects open, edit and build on every OS (the build host sets `EnableWindowsTargeting` off Windows), run, debug, test and Hot Reload on Windows and say "Windows only" elsewhere; the WPF and Windows Forms templates in New Project and Add New Item with their code-behind nested; WPF XAML editing on the M19a engine (WPF's dialect, styles, triggers and setters, resources through `App.xaml` and merged dictionaries, binding paths from `d:DataContext` as warnings, the markup compiler's `MC` errors in their files). M40b ([m40b](checkpoints/m40b.md), ADR 0072): the WPF previewer, a designer host of our own (`codalus-wpfpreviewer`, `net8.0-windows`, on the app's own .NET and WPF, trusted folders only) behind the same `PreviewerSession` and remote protocol as Avalonia's: WPF's loader on the edited text without `x:Class` and event handlers, App.xaml's resources, `d:DesignInstance` and the design size, frames from `RenderTargetBitmap`, zoom and scale, selection both ways; the Live Visual Tree and Live Property Explorer for WPF apps through the same assembly as a startup hook (`LogicalTreeHelper`, `VisualTreeHelper`, `DependencyPropertyHelper.GetValueSource`, editing, highlight, pick, Go to XAML); off Windows both say Windows only; the Windows package alone ships it. Validated on Linux only (the Windows-only tests and smoke step by CI) |
-| M41 | Windows Forms designer | done (M41a and M41b at checkpoint), 2026-10-17, Windows only (D31). M41a ([m41a](checkpoints/m41a.md), ADR 0073), 2026-10-16: a Roslyn reader of `InitializeComponent` into a CodeDOM-like model and a writer of minimal edits in Visual Studio's style (both in the C# host, round-trip tests on every OS), a designer host of our own on the app's Windows Forms (`codalus-winformsdesigner`, Windows Forms' `DesignSurface`, frames to the shell, changes back as code), the surface (selection, rubber band, move into containers, grab handles, nudge, delete, copy, paste, duplicate, undo through the designer file's text), the Toolbox with the project's own controls, the Properties window and its Events view over the designer's selection, View Code and View Designer; off Windows forms open as code. M41b ([m41b](checkpoints/m41b.md), ADR 0073 amended), 2026-10-17: snap lines and the Format menu (align, same size, spacing, center, z-order as `Controls.Add`'s order), tab order mode, Dock and Anchor pickers and adorners, the component tray (`TrayLocation`), extender properties (`toolTip1.SetToolTip`), smart tags run in the host, menus and tool strips edited with Type Here, collection editors, localizable forms per culture into each `.resx` (edited as text by the C# host, saved and undone with the code), images into the form's or the project's resources, simple data binding (`DataBindings.Add`), paste with event hookups within a form; the designer host answers with the surface's state difference. Gaps: the Data Sources window, the component designer, the WPF design surface (deferred). Validated on Linux only (the Windows-only tests and smoke steps by CI) |
-| M42 | WCF | done (at checkpoint, [m42](checkpoints/m42.md), ADR 0069), 2026-10-16: Add Service Reference for WCF through the user's `dotnet-svcutil` (local or global tool, installed with consent, trusted folders only) into `Connected Services/<name>/` with Visual Studio's `ConnectedService.json`, Update and Remove; the CoreWCF templates in New Project, and running CoreWCF services' metadata found; the WCF Test Client of our own (WSDL and XSD read with `System.Xml.Linq`, SOAP 1.1 and SOAP 1.2 with WS-Addressing over `HttpClient`, a form per operation, raw XML, the response as a tree and XML); the `system.serviceModel` schema for `app.config` and `web.config`. Gaps: message security, duplex, NetTcp and MEX-only metadata in the test client. Validated on Linux; Windows and macOS from CI |
-| M43 | .NET Framework | done: M43a ([m43a](checkpoints/m43a.md), ADR 0075) and M43b ([m43b](checkpoints/m43b.md), ADR 0076), 2026-10-17, Windows only (D31). M43a: SDK-style `net4x` projects and non-SDK-style ones open, restore and build on every OS through the `Microsoft.NETFramework.ReferenceAssemblies` packages (MIT; for old-style projects through a targets file the build host imports with `CustomBeforeMicrosoftCommonTargets`), C# 7.3 and binding redirects; `packages.config` packages restored by the build host through the SDK's NuGet libraries, the Dependencies node from `<Reference>`, `HintPath` and `packages.config`; projects on Visual Studio's own targets open with IntelliSense and say why they can't build; Convert to SDK-Style (our own converter, a preview diff, golden files); Start Without Debugging runs the `.exe` on Windows, "Windows only" elsewhere; New Project's .NET Framework console app and library; the installed .NET Framework in Check Environment. M43b: after its spike, the desktop-CLR debugger is a managed DAP adapter of our own (`codalus-debughost --netfx-dap`) on the installed .NET Framework's ICorDebug through ClrDebug (MIT), not a netcoredbg port: breakpoints (conditions, function breakpoints), stepping with Just My Code, stacks, threads, locals and members, a C# expression evaluator with func-eval, exceptions with M14a's settings, attach; F5, multiple startup projects, Attach to Process and Debug Test route to it; VSTest's .NET Framework test hosts (xUnit 2, NUnit 3, MSTest v2, old-style test projects by `ProjectTypeGuids`); old-style projects build portable PDBs. Validated on Linux (the DAP layer against a fake ICorDebug); the ICorDebug side and the tests on .NET Framework by Windows CI |
+| M41 | Windows Forms designer | done (M41a and M41b at checkpoint), 2026-10-17, Windows only (D31). M41a ([m41a](checkpoints/m41a.md), ADR 0073), 2026-10-16: a Roslyn reader of `InitializeComponent` into a CodeDOM-like model and a writer of minimal edits in the classic IDE's style (both in the C# host, round-trip tests on every OS), a designer host of our own on the app's Windows Forms (`codalus-winformsdesigner`, Windows Forms' `DesignSurface`, frames to the shell, changes back as code), the surface (selection, rubber band, move into containers, grab handles, nudge, delete, copy, paste, duplicate, undo through the designer file's text), the Toolbox with the project's own controls, the Properties window and its Events view over the designer's selection, View Code and View Designer; off Windows forms open as code. M41b ([m41b](checkpoints/m41b.md), ADR 0073 amended), 2026-10-17: snap lines and the Format menu (align, same size, spacing, center, z-order as `Controls.Add`'s order), tab order mode, Dock and Anchor pickers and adorners, the component tray (`TrayLocation`), extender properties (`toolTip1.SetToolTip`), smart tags run in the host, menus and tool strips edited with Type Here, collection editors, localizable forms per culture into each `.resx` (edited as text by the C# host, saved and undone with the code), images into the form's or the project's resources, simple data binding (`DataBindings.Add`), paste with event hookups within a form; the designer host answers with the surface's state difference. Gaps: the Data Sources window, the component designer, the WPF design surface (deferred). Validated on Linux only (the Windows-only tests and smoke steps by CI) |
+| M42 | WCF | done (at checkpoint, [m42](checkpoints/m42.md), ADR 0069), 2026-10-16: Add Service Reference for WCF through the user's `dotnet-svcutil` (local or global tool, installed with consent, trusted folders only) into `Connected Services/<name>/` with the classic IDE's `ConnectedService.json`, Update and Remove; the CoreWCF templates in New Project, and running CoreWCF services' metadata found; the WCF Test Client of our own (WSDL and XSD read with `System.Xml.Linq`, SOAP 1.1 and SOAP 1.2 with WS-Addressing over `HttpClient`, a form per operation, raw XML, the response as a tree and XML); the `system.serviceModel` schema for `app.config` and `web.config`. Gaps: message security, duplex, NetTcp and MEX-only metadata in the test client. Validated on Linux; Windows and macOS from CI |
+| M43 | .NET Framework | done: M43a ([m43a](checkpoints/m43a.md), ADR 0075) and M43b ([m43b](checkpoints/m43b.md), ADR 0076), 2026-10-17, Windows only (D31). M43a: SDK-style `net4x` projects and non-SDK-style ones open, restore and build on every OS through the `Microsoft.NETFramework.ReferenceAssemblies` packages (MIT; for old-style projects through a targets file the build host imports with `CustomBeforeMicrosoftCommonTargets`), C# 7.3 and binding redirects; `packages.config` packages restored by the build host through the SDK's NuGet libraries, the Dependencies node from `<Reference>`, `HintPath` and `packages.config`; projects on the classic IDE's own targets open with IntelliSense and say why they can't build; Convert to SDK-Style (our own converter, a preview diff, golden files); Start Without Debugging runs the `.exe` on Windows, "Windows only" elsewhere; New Project's .NET Framework console app and library; the installed .NET Framework in Check Environment. M43b: after its spike, the desktop-CLR debugger is a managed DAP adapter of our own (`codalus-debughost --netfx-dap`) on the installed .NET Framework's ICorDebug through ClrDebug (MIT), not a netcoredbg port: breakpoints (conditions, function breakpoints), stepping with Just My Code, stacks, threads, locals and members, a C# expression evaluator with func-eval, exceptions with M14a's settings, attach; F5, multiple startup projects, Attach to Process and Debug Test route to it; VSTest's .NET Framework test hosts (xUnit 2, NUnit 3, MSTest v2, old-style test projects by `ProjectTypeGuids`); old-style projects build portable PDBs. Validated on Linux (the DAP layer against a fake ICorDebug); the ICorDebug side and the tests on .NET Framework by Windows CI |
 | M44 | MAUI on Windows and WinUI 3 | done (at checkpoint, [m44](checkpoints/m44.md), ADR 0074), 2026-10-16, Windows only (D31): MAUI's Windows target on "Windows Machine" in the device picker (first on Windows when nothing is chosen; Windows only elsewhere); WinUI 3 projects load on every OS (the build host leaves out WinUI's XAML compiler's design-time pass off Windows) and build, run, debug (netcoredbg) and Hot Reload on Windows; packaged (MSIX) apps registered from their build's layout (`Add-AppxPackage -Register`, the Windows App SDK runtime from the restored package), started through `IApplicationActivationManager` (`codalus-debughost --activate-app`), followed or attached to, with Developer Mode explained and its Settings page; Developer Mode and the Windows App SDK runtime in Check Environment; WinUI XAML on the M19 engine (`Microsoft.UI.Xaml`, `x:Bind` paths as errors against the page's class or `x:DataType`, `x:Load`, `x:DefaultBindMode`, `ThemeResource`, resources through `App.xaml` and `ms-appx:///`, `WMC` errors in their files); WinUI items in Add New Item. Gaps: a previewer, XAML Hot Reload, WinUI project templates, building off Windows, start-up breakpoints in packaged apps. Validated on Linux only (the Windows-only tests and smoke step by CI) |
 | M45 | Theme families | done (at checkpoint, [m45](checkpoints/m45.md), ADR 0077), 2026-10-17, taken up while M43 is in progress: Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, from the [designs](design/shell-themes.md) (every color, read by the tests), as Avalonia theme variants inheriting Classic's of their kind; Blue, Light, Dark and High Contrast kept as the Classic family; `workbench.colorTheme` takes `<family>` (follows the system, high contrast included) or `<family>.<variant>`, today's values read as Classic, Harbor following the system for new installs; the shapes as tokens applied by `ShellStyles.axaml` (gutters, Ember's rounded cards, Daylight's and Ember's rounded tabs, the active tab's indicator, bold focused captions and Graphite's dot, Ember's status dot, Daylight's filled Start); the editor's C# classification colors, current line and debugger lines, the terminal's colors; the family picker with pictures in Options and every variant in Color Theme, previewed; the `themeFamily` context key; contrast pairs in all sixteen themes (7:1 for text in the families' High contrast); the smoke step `shell.themeFamilies`. Gaps: Daylight's rail and toolbar groups, Ember's run controls in the title bar, Graphite's search box in the title row and modified-tab dot, tool window tabs in the header, the full gallery in every family on CI. Validated on Linux only |
-| M47 | Code Search | done (at checkpoint, [m47](checkpoints/m47.md), ADR 0078), 2026-10-17, on top of M46: Visual Studio's Code Search window in place of Go To All's list and the search box's: one floating, resizable window under the title row (`Ctrl+T`, `Ctrl+,`; Feature Search on `Ctrl+Q` and the search box), dockable as the Code Search tool window, its size, position, pin and preview remembered; the chips and prefixes (`f:`, `t:`, `m:`, `x:`, `:` for a line, `Alt` and the letter); two-line results from the files, the persistent index, every language service's `workspace/symbol`, external items (`codalus/externalSymbols`) and Find in Files' engine, ranked by match, kind, recent files and the active project, interleaved or grouped; the editable preview on the document's own model (`Ctrl+S`, undo, an unsaved edit opens the document); the scope; Incomplete results while projects load or the index builds, then a refresh; the persistent index (`codalus/symbolIndex` from syntax, kept in `.codalus/state/<solution>/`, files changed since left out), so a second open searches before the host loads; a 140,000-symbol query within the 100 ms budget; Go To File, Type, Member and Text; the smoke step `navigation.codeSearch`. No plugin API change (none existed for search providers). Gaps: members of external types, a harness scenario for the budget, a proposed search-provider API. Validated on Linux only |
+| M47 | Code Search | done (at checkpoint, [m47](checkpoints/m47.md), ADR 0078), 2026-10-17, on top of M46: the classic IDE's Code Search window in place of Go To All's list and the search box's: one floating, resizable window under the title row (`Ctrl+T`, `Ctrl+,`; Feature Search on `Ctrl+Q` and the search box), dockable as the Code Search tool window, its size, position, pin and preview remembered; the chips and prefixes (`f:`, `t:`, `m:`, `x:`, `:` for a line, `Alt` and the letter); two-line results from the files, the persistent index, every language service's `workspace/symbol`, external items (`codalus/externalSymbols`) and Find in Files' engine, ranked by match, kind, recent files and the active project, interleaved or grouped; the editable preview on the document's own model (`Ctrl+S`, undo, an unsaved edit opens the document); the scope; Incomplete results while projects load or the index builds, then a refresh; the persistent index (`codalus/symbolIndex` from syntax, kept in `.codalus/state/<solution>/`, files changed since left out), so a second open searches before the host loads; a 140,000-symbol query within the 100 ms budget; Go To File, Type, Member and Text; the smoke step `navigation.codeSearch`. No plugin API change (none existed for search providers). Gaps: members of external types, a harness scenario for the budget, a proposed search-provider API. Validated on Linux only |
 | M49 | The hosts' .NET runtime | at checkpoint ([m49](checkpoints/m49.md), [ADR 0080](adr/0080-the-hosts-dotnet-runtime.md)), 2026-10-18, on `claude/m49-host-runtime`: each framework-dependent host's runtime checked before it starts by hostfxr's own rules (`rollForward`, `DOTNET_ROLL_FORWARD`, pre-releases), so a missing one is named instead of a process that exits at once; the IDE's runtime as a Check Environment row, and the .NET root that has it preferred; one notification ("Codalus IDE needs the .NET … runtime, which isn't installed (found: …)") with Install .NET through M37's flow, then the failed plugins, language services and solution started again without a restart; a host that exits says why (its standard error's first lines in the error and the Output channel) and isn't restarted when it exits during startup; each release's runtime in its signed feed, and an update whose runtime isn't installed warned about instead of downloaded (D35: not self-contained hosts or a bundled runtime). Validated on Linux only; the Mac's check with the broken 0.4.0 nightly is the maintainer's to hand over |
 | M46 | First-run setup | done (at checkpoint, [m46](checkpoints/m46.md); no ADR: its state is a setting), 2026-10-17, on top of M45: the setup in a window of its own at the first start of a user data folder, before the start window (`workbench.setupCompleted` records Done or Skip setup); not for a command line that opens something, `--skip-setup` or `CODALUS_SKIP_SETUP=1`, the smoke test, benchmarks and screenshots, a synced profile (sync's target set) or a folder used before it existed (settings or a saved window), which isn't written to; Appearance (the four families as cards with pictures, Light, Dark, High contrast or Match system, Harbor following the system preselected, the window and the IDE repainting through `ThemeService.Preview`), Keyboard (Default, VS Code, ReSharper, Emacs), Your settings (VS Code, `.vssettings`, an export, settings sync from a folder or a Git repository, the synced settings winning), Tools (M37's check of the .NET SDK and git, the exact command shown and nothing run without the yes); Next and Back save a step, Skip setup keeps what's saved, Done opens the start window; keys (arrows, Alt+Right, Alt+Left, Esc), accessible names, the catalogue; Help → Set Up Codalus IDE and Help → Get Started (the Start page's Get Started list folded in); AI not asked about; the smoke step `shell.setup` and the website's `setup.png`. Validated on Linux only |
 | M48 | External agents over ACP | done (at checkpoint, [m48](checkpoints/m48.md), ADR 0079, D34), 2026-10-18: an Agent Client Protocol client (protocol version 1, schema 1.12.0) on `Codalus.Rpc` with newline-delimited framing and source-generated JSON; `ai.agents` (user settings only); AI Chat's agent picker (Built-in, then each agent), the external agent label, one agent process per chat session (stopped on New Chat, another agent, the workspace closing, exit), AI on and a trusted workspace required; `session/new` with the workspace as `cwd` and `codalus mcp` by its absolute path with a pipe of the session's own (`--agent-session`); messages, thoughts, plans, tool calls with locations, diffs and live output, slash commands, modes, notices and compaction; `fs/read_text_file` (the editor's buffer, confined, excluded files refused, redacted), `fs/write_text_file` through the preview into the buffer, `session/request_permission` without always-allow and Reject the default, `terminal/*` approved and timed out, sign-in through the agent; Stop as `session/cancel`; a stand-in agent for the tests. Gaps: HTTP MCP servers, elicitation, terminal sign-in, `session/load`. Validated on Linux only. 0.6 (#79, D43, [ADR 0083](adr/0083-connecting-external-agents-from-templates.md), [checkpoint](checkpoints/connect-agents.md)): Connect to *agent* from templates (requirements, installs with the user's package managers, sign-in, a connection test, then the entry written), terminal sign-in, `secretEnv` keys in SecretStorage, Disconnect; validated on Linux, Windows and macOS open. |
 | M35 | Visual Basic | done (at checkpoint, [m35](checkpoints/m35.md), ADR 0066): VB in the C# host's workspace (completion, Quick Info, signature help, live diagnostics, classification with XML literals, navigation, references and rename across C# and VB, code fixes and refactorings, formatting, outline and folding), our own pretty listing (`End` constructs, keyword casing, XML end tags), VB snippets and item templates, New Project in any language, VB property pages, VB tests from source, debugging tested on netcoredbg. Gaps: VB expressions in Watch (netcoredbg reads C#), automatic line continuation, a page for project imports |
 | M36 | F# | done (at checkpoints [m36a](checkpoints/m36a.md) and [m36b](checkpoints/m36b.md), ADR 0067 and 0068), 2026-10-15. M36a: FsAutoComplete (D10) and Fantomas installed with the user's `dotnet tool install` on the first F# file, trusted folders only; completion, Quick Info, diagnostics with FSharpLint, navigation, rename, fixes, inlay hints, CodeLens and formatting through the LSP bridge; the compile order in Solution Explorer (`items/move`, Move Up/Down, Add Above/Below, `.fsi` nesting), F# item templates and property pages. M36b: F# Interactive as `dotnet fsi` in a terminal (send a selection, line, file or project references; reset; run script), scripts with `#load` and `#r "nuget:"`, type providers, F# analyzers, Expecto in the Test Explorer, debugging F# tested. Gaps: F# tests from source, F# expressions in Watch, F# → C# references before a build, remote windows |
-| M50 | 0.7: fixes and polish from the 0.6 release | planned, 2026-10-24: the maintainer's list after the 0.6.0 release, decided that day (the release's open items, no "Visual Studio" in the current files, dock drop width, CPU, header icons, SEO, Back and Forward, Blazor parameters, sync with the active document, Output text, the Help menu) |
+| M50 | 0.7: fixes and polish from the 0.6 release | built, 2026-10-25 ([m50](checkpoints/m50.md)), with .NET 11 RC3; the 0.6 release's platform-only items moved to M51 (the maintainer's decision). Planned 2026-10-24: the maintainer's list after the 0.6.0 release, decided that day (the release's open items, no name of the classic IDE in the current files, dock drop width, CPU, header icons, SEO, Back and Forward, Blazor parameters, sync with the active document, Output text, the Help menu) |
 | M51 | 0.8: AI, feedback and OS integration | planned, 2026-10-24: external agents across a restart and their model, more AI (inline completions, debugging help, code actions, commit text), Report a Problem through a prefilled GitHub issue, opt-in OS integration on all three OSes |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
@@ -95,7 +95,7 @@ These add to the architecture principles of the original project brief, which li
 - **Every feature names its process.** Each milestone says where its code runs: shell, an existing host, a new supervised host, or the user's process. A new host starts lazily, never at startup, so the idle-memory budget (ADR 0002, ≤ 250 MB) holds. It is supervised by `SupervisedProcess` and follows the crash-loop policy.
 - **Plugin first, where latency allows.** As ADR 0003 says, a new feature is a built-in plugin unless it sits on a latency-critical path. When a feature needs an API that doesn't exist yet, it is added under `Codalus.Plugins.Proposed` first. Built-ins using proposed APIs is how the API gets proved before 1.0 (M22).
 - **The shell owns generic UI, providers own data.** Examples: the shell renders Test Explorer, and test controllers supply tests. The shell renders language features, and language services (Roslyn, LSP servers) supply data. This keeps large views virtualized and AOT-clean, and lets third parties plug in.
-- **Reuse before writing.** Prefer maintained MIT, Apache-2.0 or BSD components. When a VS feature is backed by something proprietary, say so, and either build an open replacement or record a known gap.
+- **Reuse before writing.** Prefer maintained MIT, Apache-2.0 or BSD components. When a classic IDE feature is backed by something proprietary, say so, and either build an open replacement or record a known gap.
 - **Every interactive surface gets a budget.** Each milestone adds harness scenarios, measures VS Code where relevant, and proposes absolute budgets at its checkpoint. Editor surfaces must be at least as good as VS Code (ADR 0002). Rider is no longer a reference (D28): where a milestone below says "compare with Rider", it sets an absolute target instead.
 - **Every protocol extension is documented** in `docs/protocol.md` or `docs/plugin-protocol.md` with the `codalus/` prefix. Plugin API changes are listed in the plugin changelog.
 
@@ -104,14 +104,14 @@ These add to the architecture principles of the original project brief, which li
 These come up repeatedly in post-MVP areas. They are **off limits** unless a later licence check shows otherwise:
 
 - **vsdbg** and the **C# Dev Kit** (named in the mission).
-- **Debugging and diagnostics:** Visual Studio's debugger engines, the Visual Studio profiler and diagnostics hub, IntelliTrace.
+- **Debugging and diagnostics:** the classic IDE's debugger engines, the classic IDE's profiler and diagnostics hub, IntelliTrace.
 - **Code coverage:** `Microsoft.CodeCoverage` and `Microsoft.Testing.Extensions.CodeCoverage`. Verify their licences. Treat them as excluded unless they are OSI-licensed.
-- **AI and collaboration:** IntelliCode, the GitHub Copilot language server and Copilot's Visual Studio integrations, Live Share.
-- **Testing:** Microsoft Fakes, IntelliTest (Pex), and the Visual Studio test adapters' proprietary extensions.
-- **Remote and cloud debugging:** the Visual Studio remote debugger (msvsmon) and the Snapshot Debugger.
-- **UI designers:** the .NET MAUI extension for VS Code and Visual Studio's XAML designer and XAML Hot Reload, and its Windows Forms designer.
-- **Windows desktop and .NET Framework:** Visual Studio's WCF Test Client and Service Configuration Editor, and Visual Studio's MSBuild and targets (Build Tools): only ever the user's own install, and only if its licence allows it (M43).
-- **Visual Studio packages:** most `Microsoft.VisualStudio.*` packages, which ship under Visual Studio licence terms. Check each one. Some, such as `Microsoft.VisualStudio.Threading`, are MIT.
+- **AI and collaboration:** IntelliCode, the GitHub Copilot language server and Copilot's integrations with the classic IDE, Live Share.
+- **Testing:** Microsoft Fakes, IntelliTest (Pex), and the classic IDE's test adapters' proprietary extensions.
+- **Remote and cloud debugging:** the classic IDE's remote debugger (msvsmon) and the Snapshot Debugger.
+- **UI designers:** the .NET MAUI extension for VS Code and the classic IDE's XAML designer and XAML Hot Reload, and its Windows Forms designer.
+- **Windows desktop and .NET Framework:** the classic IDE's WCF Test Client and Service Configuration Editor, and the classic IDE's MSBuild and targets (Build Tools): only ever the user's own install, and only if its licence allows it (M43).
+- **The classic IDE's packages:** most `Microsoft.VisualStudio.*` packages, which ship under the classic IDE's licence terms. Check each one. Some, such as `Microsoft.VisualStudio.Threading`, are MIT.
 - **Hosted services:** Dev Tunnels and other Microsoft-hosted services. Don't depend on them by default. If one is ever offered, it is an opt-in plugin.
 
 ## Foundational decisions to settle early
@@ -140,7 +140,7 @@ All seven are settled:
 |---|---|---|
 | 1. Daily driver | M8, M9, M10 | What a C# developer misses most on day one after the MVP: tests, packages, a terminal. |
 | 2. Language platform | M11 | Pluggable languages (LSP bridge, grammars) and editing for the non-C# files every .NET repository has. |
-| 3. Depth | M12, M29, M13, M14, M26 | Bringing the editor, Git, the debugger and the build and project tooling from "MVP" to "VS-class", and the look and feel from VS Code's to Visual Studio's (M29). |
+| 3. Depth | M12, M29, M13, M14, M26 | Bringing the editor, Git, the debugger and the build and project tooling from "MVP" to the classic IDE's class, and the look and feel from VS Code's to the classic IDE's (M29). |
 | 4. Platform and release | M30, M31, M32, M33 | The newest .NET (11, then each new release), automated nightly and stable releases with setup installers, self-update, and proof that .NET Core 2.0 to .NET 10 projects work. |
 | 5. Web, data and cloud-native | M15, M16, M27, M17 | ASP.NET Core, Blazor, Hot Reload, EF Core and databases, containers, Aspire, publishing. |
 | 6. Diagnostics | M18 | Profiling, counters, memory analysis, dumps, benchmarks. |
@@ -162,7 +162,7 @@ Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. 
   - Automated releases (M31) and self-update (M32) come before the repository goes public, so that the first public users get installers and updates.
   - The older-.NET validation (M33) builds on M30's hosts, which must start with any SDK.
 - Web development is the biggest .NET workload. It comes after depth work because Hot Reload and Blazor debugging build on M12 and M14. Data tooling (M27) sits with it, because EF Core and a database are part of most web apps.
-- AI assistance (M28) is a headline Visual Studio 2026 feature. D7 settles it as opt-in, with any provider. It goes after the plugin API freeze (M22), because it should be built on public provider APIs.
+- AI assistance (M28) is a headline feature of the classic IDE (2026). D7 settles it as opt-in, with any provider. It goes after the plugin API freeze (M22), because it should be built on public provider APIs.
 - .NET MAUI (M20) comes after everything except polish, VB and F#, by the maintainer's choice (D6). It builds on the XAML engine (M19), and the polish pass then covers its panels too.
 - Remote development comes late because it touches every host. F1 and F2 make sure it doesn't need a rewrite.
 - UI polish (M34) comes after every other milestone except VB and F#, so that one pass covers all the UI, MAUI's included. Until then, each milestone reviews its own panels against M34's checklist. The maintainer pulled M34a–e forward on 2026-10-12 and 2026-10-13; only M34's final pass stays last.
@@ -239,14 +239,14 @@ A dashed edge means "better with", not "blocked by".
   - Grouping by project, namespace, class, trait, outcome or duration.
   - A filter syntax: free text, `trait:`, `outcome:`, `project:`.
   - Run all, failed, selected or not-run tests. Repeat the last run. Cancel.
-  - Playlists, saved as JSON under `.codalus/`. VS `.playlist` files can be imported.
+  - Playlists, saved as JSON under `.codalus/`. The classic IDE's `.playlist` files can be imported.
 - **Results:**
   - outcome, duration, message, stack trace with clickable frames, stdout and stderr, attachments
   - the history of the last N runs per test
   - export to TRX and import TRX files (for example from CI), shown in the same views
   - snapshot-testing support: Codalus can be registered as the diff tool for Verify and similar libraries, through the `codalus diff` command line (see [Release, updates and the command line](#release-updates-and-the-command-line))
-- **Create Unit Tests:** a command on a method or type that generates a test stub in a chosen (or new) test project for the chosen framework, like Visual Studio's command.
-- **Remote test environments** (running tests in WSL, a container or over SSH, like Visual Studio's `testenvironments.json`) come with M21.
+- **Create Unit Tests:** a command on a method or type that generates a test stub in a chosen (or new) test project for the chosen framework, like the classic IDE's command.
+- **Remote test environments** (running tests in WSL, a container or over SSH, like the classic IDE's `testenvironments.json`) come with M21.
 - **Editor integration:** run, debug and status glyphs in the gutter. CodeLens entries ("Run | Debug | ✓ 12 ms") come once CodeLens lands in M12. Failed tests can be navigated to with F8-style "next failure" commands.
 - **Debugging tests:**
   - **VSTest:** the IDE launches the test host itself through the translation layer's custom-launcher API, under netcoredbg.
@@ -307,7 +307,7 @@ A dashed edge means "better with", not "blocked by".
 
 ### M9 — Packages and project management
 
-**Goal.** The NuGet Package Manager, project properties, and the solution-management dialogs VS users rely on. No more hand-editing XML for routine work.
+**Goal.** The NuGet Package Manager, project properties, and the solution-management dialogs the classic IDE's users rely on. No more hand-editing XML for routine work.
 
 **Depends on.** M2 (project system), M4 (build/restore). F3 is helpful but not required.
 
@@ -343,7 +343,7 @@ A dashed edge means "better with", not "blocked by".
   - `global.json` SDK selection, and status of installed SDKs and workloads.
 - **Pack:** a `dotnet pack` command with output navigation.
 - **Local .NET tools:** view and edit the `.config/dotnet-tools.json` manifest, install and update tools, and restore them. Global tools are listed too.
-- **Package Manager Console:** Visual Studio's PowerShell console isn't reproduced. Its main uses are covered elsewhere: package commands by this UI, EF Core commands by M27, and `dotnet` commands in the integrated terminal (M10).
+- **Package Manager Console:** the classic IDE's PowerShell console isn't reproduced. Its main uses are covered elsewhere: package commands by this UI, EF Core commands by M27, and `dotnet` commands in the integrated terminal (M10).
 
 Build-level and file-level project features (the Properties window, Show All Files, batch build, the binlog viewer, custom tools) are in M26.
 
@@ -473,14 +473,14 @@ Build-level and file-level project features (the Properties window, Show All Fil
     - any file mapped through the SchemaStore catalogue (cached, with an offline fallback)
   - **XML with XSD validation:** `.runsettings`, `nuget.config`, `.slnx`, `.resx`, `.xsd` and `.xml`.
   - **`.editorconfig`:** key and value completion from Roslyn's option metadata, plus hover documentation.
-  - **`.resx` editor:** a grid editor for string resources (name, value, comment), with an "open as XML" toggle. Image and file resources can be viewed and replaced. It also generates the strongly typed resource class, which Visual Studio does with its `ResXFileCodeGenerator` custom tool. Use the SDK's own strongly-typed resource generation where the project allows it, and the M26 custom-tool mechanism otherwise. A multi-language view shows the neutral and localized `.resx` files side by side, with missing translations highlighted. The WinForms resource designer is a non-goal.
+  - **`.resx` editor:** a grid editor for string resources (name, value, comment), with an "open as XML" toggle. Image and file resources can be viewed and replaced. It also generates the strongly typed resource class, which the classic IDE does with its `ResXFileCodeGenerator` custom tool. Use the SDK's own strongly-typed resource generation where the project allows it, and the M26 custom-tool mechanism otherwise. A multi-language view shows the neutral and localized `.resx` files side by side, with missing translations highlighted. The WinForms resource designer is a non-goal.
   - **YAML with schemas:** GitHub Actions and Azure Pipelines.
   - **Markdown** with a live preview.
 - **Language-agnostic features:**
   - word-based completion as a fallback
   - indentation folding, bracket matching
   - encoding and BOM detection, binary-file detection
-- **Other languages.** Visual Studio's other workloads (Python, Node.js, C++, PowerShell, Bicep and so on) aren't first-party goals. The bridge makes each of them a plugin over an existing open-source language server. Only the web languages (M16) and SQL (M27) are built in.
+- **Other languages.** the classic IDE's other workloads (Python, Node.js, C++, PowerShell, Bicep and so on) aren't first-party goals. The bridge makes each of them a plugin over an existing open-source language server. Only the web languages (M16) and SQL (M27) are built in.
 - **Samples:** a sample plugin that contributes a grammar plus an LSP server (for example PowerShell Editor Services, MIT) as an end-to-end proof, shipped under `samples/plugins/`.
 
 **Architecture.**
@@ -516,7 +516,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 ### M12 — Editor and code-navigation depth
 
-**Goal.** Close the gap between the MVP editor and Visual Studio or Rider for daily C# work. This milestone is large. **Plan it as M12a** (navigation and inline information) **and M12b** (editing, refactoring UI and analysis).
+**Goal.** Close the gap between the MVP editor and the classic IDE or Rider for daily C# work. This milestone is large. **Plan it as M12a** (navigation and inline information) **and M12b** (editing, refactoring UI and analysis).
 
 **Status.** M12a built ([m12a.md](checkpoints/m12a.md), [ADR 0017](adr/0017-navigation-and-inline-information.md)). Deviations: CodeLens shows at the end of the declaration's line (AvaloniaEdit has no variable line heights). Deferred, each with a `TODO(issue)` in the checkpoint: members and generated sources in Solution Explorer, Class View and the Object Browser, symbol servers, Git and test CodeLens, and the persistent Go To All index. M12b built ([m12b.md](checkpoints/m12b.md), [ADR 0018](adr/0018-editing-refactoring-ui-and-analysis.md)), with its own deferred list in the checkpoint.
 
@@ -529,7 +529,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - navigation history, if it wasn't finished in M3, plus go to the last edit location
   - **Code Definition window:** a tool window that follows the caret and shows the definition of the symbol under it
   - **Find All References depth:** grouping (project, definition, path), read and write classification, filters, and kept result sets
-  - **Solution Explorer members:** expand a file node to see its types and members, as Visual Studio does
+  - **Solution Explorer members:** expand a file node to see its types and members, as the classic IDE does
   - **Generated sources:** files produced by source generators are listed under each analyzer in Solution Explorer and open as read-only documents
   - **F1 help:** opens the API documentation page for the symbol under the caret (learn.microsoft.com for framework types, the package's project URL otherwise)
 - **Metadata navigation:**
@@ -543,13 +543,13 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - sticky scroll, structure guides, bracket-pair colourization, reference highlighting
   - an **inheritance margin**: gutter glyphs for implemented, implementing, overridden and overriding members, with navigation
   - **inline diagnostics**: messages shown at the end of the line, as an option
-  - **scroll-bar annotations** (Visual Studio's "map mode"): changes, errors and warnings, breakpoints, bookmarks, find results and the caret
+  - **scroll-bar annotations** (the classic IDE's "map mode"): changes, errors and warnings, breakpoints, bookmarks, find results and the caret
   - **embedded languages:** Roslyn's highlighting, completion and diagnostics for regular expressions, JSON and date-format strings inside string literals (`StringSyntax`)
   - a document health indicator (error and warning counts for the file, with navigation)
 
 **Scope, M12b (editing, refactoring UI and analysis).**
 - **Snippets:**
-  - our JSON format, and import of VS `.snippet` XML
+  - our JSON format, and import of the classic IDE's `.snippet` XML
   - Insert Snippet and Surround With
   - snippets as completion items
   - snippet contributions from plugins
@@ -565,7 +565,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - per-language text editor options for what `.editorconfig` doesn't cover: word wrap, whitespace display, column guides, line numbers, font ligatures, zoom per editor
 - **Safety:**
   - **AutoRecover / hot exit:** dirty buffers are saved to a backup location periodically, and restored after a crash or when the IDE closes with unsaved changes (if it wasn't done in M3)
-  - **local history:** a timeline of saved versions of each file, kept independently of Git, with diff and restore (a Rider feature that Visual Studio lacks, cheap given the M6 diff viewer)
+  - **local history:** a timeline of saved versions of each file, kept independently of Git, with diff and restore (a Rider feature that the classic IDE lacks, cheap given the M6 diff viewer)
 - **Tabs and windows:**
   - pinned tabs, vertical tabs, tab colouring by project or file type
   - "close all but this", "close all to the right"
@@ -597,7 +597,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - **Roslyn component authoring**, for people who write analyzers and source generators:
   - a **Syntax Visualizer** tool window: syntax tree, tokens, trivia and the `IOperation` tree for the caret position, plus semantic information (symbol, type, converted type)
   - templates for analyzer, code fix and source generator projects
-  - debugging a generator or analyzer by running the compiler under the debugger (Visual Studio's `DebugRoslynComponent` launch profile) is in M14
+  - debugging a generator or analyzer by running the compiler under the debugger (the classic IDE's `DebugRoslynComponent` launch profile) is in M14
 
 **Architecture.**
 - Mostly `codalus-lshost` (Roslyn) and the shell.
@@ -618,26 +618,26 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - Decompiling a type: ≤ 1 s.
 - First level of the call hierarchy on Solution50: compare with Rider.
 
-### M29 — Visual Studio look and feel
+### M29 — Classic IDE look and feel
 
-**Goal.** Make the shell look and work like Visual Studio rather than VS Code: a Visual Studio user should feel at home without relearning the layout, the toolbars, the colors or the keyboard. The maintainer asked for this on 2026-10-10. It goes right after M12b, because every later milestone adds UI that should be built in the new style.
+**Goal.** Make the shell look and work like the classic IDE rather than VS Code: a classic IDE user should feel at home without relearning the layout, the toolbars, the colors or the keyboard. The maintainer asked for this on 2026-10-10. It goes right after M12b, because every later milestone adds UI that should be built in the new style.
 
 **Depends on.** M1 (shell, themes, keybindings), M12 (the editor chrome it restyles).
 
 **Scope.**
-- **Themes:** Visual Studio's Blue, Dark and Light themes as the defaults (High Contrast stays), with Visual Studio's chrome colors: title bar, menus, toolbars, document well, tool window captions, status bar states (ready, building, debugging), and the editor's default C# colors.
-- **Title bar and search:** a custom title bar with the menu inline, the solution name, and the search box ("Search (Ctrl+Q)") for commands, settings, files and symbols, as Visual Studio's Feature Search.
+- **Themes:** the classic IDE's Blue, Dark and Light themes as the defaults (High Contrast stays), with the classic IDE's chrome colors: title bar, menus, toolbars, document well, tool window captions, status bar states (ready, building, debugging), and the editor's default C# colors.
+- **Title bar and search:** a custom title bar with the menu inline, the solution name, and the search box ("Search (Ctrl+Q)") for commands, settings, files and symbols, as the classic IDE's Feature Search.
 - **Standard toolbar:** back and forward; new, open, save and save all; undo and redo; solution configuration and platform; the startup project and the Start button (▶ with the launch profile) and Start Without Debugging; while debugging, the Debug toolbar (continue, break all, stop, restart, step). Customizable toolbars stay in M23.
-- **Document well:** Visual Studio's tab shapes and colors, the preview tab on the right, pinned tabs, the tab overflow drop-down, and colored tabs by project as an option.
-- **Tool windows:** captions with the window menu, auto-hide (pin) and close; auto-hidden windows as side tabs that slide out; Visual Studio's default layout (Solution Explorer and Properties on the right, Output and Error List at the bottom). Dock already supports these; the work is the styling and the defaults.
-- **Solution Explorer:** Visual Studio's node icons for solutions, projects and file types, its toolbar (home, sync with active document, show all files, collapse all, properties), and its search box.
-- **Keyboard:** the Visual Studio keyboard scheme as the default (F6 or Ctrl+Shift+B build, Ctrl+Q search, Ctrl+, Go To All, Ctrl+K Ctrl+C/U comments, F5/Ctrl+F5, Ctrl+Alt+L Solution Explorer, Ctrl+\ Ctrl+E Error List…), with VS Code's scheme as an option (settings → Keyboard).
-- **Options:** the settings UI as Visual Studio's Tools → Options tree (Environment, Text Editor → C#, Debugging, Projects and Solutions…), still backed by settings.json.
-- **Status bar:** Visual Studio's layout: ready/progress on the left, Ln/Col/Ch/INS and the Git branch and repository on the right, the notification bell.
-- **Fonts and density:** Segoe UI 9 pt (system UI fonts elsewhere) and Cascadia Mono 10 pt in the editor, with Visual Studio's spacing.
+- **Document well:** the classic IDE's tab shapes and colors, the preview tab on the right, pinned tabs, the tab overflow drop-down, and colored tabs by project as an option.
+- **Tool windows:** captions with the window menu, auto-hide (pin) and close; auto-hidden windows as side tabs that slide out; the classic IDE's default layout (Solution Explorer and Properties on the right, Output and Error List at the bottom). Dock already supports these; the work is the styling and the defaults.
+- **Solution Explorer:** the classic IDE's node icons for solutions, projects and file types, its toolbar (home, sync with active document, show all files, collapse all, properties), and its search box.
+- **Keyboard:** the classic IDE's keyboard scheme as the default (F6 or Ctrl+Shift+B build, Ctrl+Q search, Ctrl+, Go To All, Ctrl+K Ctrl+C/U comments, F5/Ctrl+F5, Ctrl+Alt+L Solution Explorer, Ctrl+\ Ctrl+E Error List…), with VS Code's scheme as an option (settings → Keyboard).
+- **Options:** the settings UI as the classic IDE's Tools → Options tree (Environment, Text Editor → C#, Debugging, Projects and Solutions…), still backed by settings.json.
+- **Status bar:** the classic IDE's layout: ready/progress on the left, Ln/Col/Ch/INS and the Git branch and repository on the right, the notification bell.
+- **Fonts and density:** Segoe UI 9 pt (system UI fonts elsewhere) and Cascadia Mono 10 pt in the editor, with the classic IDE's spacing.
 
 **Constraints.**
-- No Visual Studio branding or trade dress copied as is (product rule). Colors and layout follow Visual Studio's conventions, but icons are our own or come from libraries whose license allows it. The Visual Studio Image Library's license must be checked before any of its images are used, and recorded in THIRD-PARTY-NOTICES.
+- No the classic IDE's branding or trade dress copied as is (product rule). Colors and layout follow the classic IDE's conventions, but icons are our own or come from libraries whose license allows it. The classic IDE's Image Library's license must be checked before any of its images are used, and recorded in THIRD-PARTY-NOTICES.
 - Accessibility: the High Contrast theme and screen-reader names stay complete; the contrast of the new themes is checked against WCAG AA.
 - Native AOT and compiled bindings, as everywhere in the shell.
 
@@ -701,7 +701,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 ### M14 — Debugger depth
 
-**Goal.** Close the gaps between the M5 debugger and Visual Studio as far as netcoredbg allows, and fill the rest with our own components. **Start by re-reading the M5 known-gaps list.**
+**Goal.** Close the gaps between the M5 debugger and the classic IDE as far as netcoredbg allows, and fill the rest with our own components. **Start by re-reading the M5 known-gaps list.**
 
 **Split (ADR 0021).** **M14a** (done): what netcoredbg allows plus client-side features: per-type exception settings, the exception helper, Run to Cursor and Run to Click, function, temporary and dependent breakpoints with labels and import/export, QuickWatch, editing values, interactive data tips, string visualizers, PerfTips, the Threads and Modules windows, Reattach. **M14b** (done, ADR 0032): the companion host (`DebuggerDisplay`; type proxies and Make Object ID are gaps), the visualizer plugin API with grid and image visualizers, Parallel Stacks and Watch, dumps, pinned data tips; symbol settings are a gap. **M14c** (done, ADR 0039 and 0040): multiple startup projects as one compound session, programs in the integrated terminal (a startup hook holds them until netcoredbg attaches, so Detach All applies), attach over SSH, into Docker or Podman containers and into WSL through pipe transports with netcoredbg copied on first use, the WSL launch profile, Roslyn components, Just-In-Time debugging as per-user crash dumps, and the Hot Reload research (not possible under netcoredbg's DAP today). Anything netcoredbg can't do is either contributed upstream (MIT, Samsung), worked around in a companion host, or documented.
 
@@ -748,14 +748,14 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - multiple startup projects and compound launches
   - attach by name or PID with a filter, and re-attach to the last process
   - attach over SSH (pipe transport), into a Docker container (`docker exec` with netcoredbg mounted or copied in), and into WSL
-  - a **WSL launch profile**: run and debug a console or web project inside a WSL distribution from Windows, like Visual Studio's WSL launch profile
+  - a **WSL launch profile**: run and debug a console or web project inside a WSL distribution from Windows, like the classic IDE's WSL launch profile
   - **Roslyn components:** debug a source generator or analyzer by running the compiler on a target project under the debugger (the `DebugRoslynComponent` launch profile)
   - **Just-In-Time debugging:** optionally register Codalus as the OS just-in-time debugger, so a crashing .NET process can be attached to. It is off by default, and needs explicit user consent on each OS.
 - **Dumps:**
   - Open Windows minidumps and Linux or macOS core dumps with **ClrMD**: threads, managed stacks, the faulting exception, heap statistics and object inspection. This is a read-only "dump session" with the same windows.
   - "Create dump" for a running process, through DiagnosticsClient.
-- **Hot Reload while debugging:** research only in this milestone. The goal is to know whether runtime metadata updates (M15) can be applied while netcoredbg is attached. Record the result in an ADR. VS Edit and Continue parity is **not** promised.
-- **Not planned:** IntelliTrace and time-travel debugging (proprietary in Visual Studio, with no open-source .NET equivalent), and the Snapshot Debugger (an Azure service). They are listed as gaps.
+- **Hot Reload while debugging:** research only in this milestone. The goal is to know whether runtime metadata updates (M15) can be applied while netcoredbg is attached. Record the result in an ADR. Edit and Continue parity with the classic IDE is **not** promised.
+- **Not planned:** IntelliTrace and time-travel debugging (proprietary in the classic IDE, with no open-source .NET equivalent), and the Snapshot Debugger (an Azure service). They are listed as gaps.
 
 **Architecture.**
 - A new **debug companion host** (`codalus-debughost`) sits between the shell and netcoredbg, or next to it. It:
@@ -785,7 +785,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 ### M26 — Build and project-system depth
 
-**Goal.** The rest of Visual Studio's project and build features: per-file properties, build diagnostics, custom tools, templates, and folder workflows. After this, nothing in a .NET project needs Visual Studio or hand-editing.
+**Goal.** The rest of the classic IDE's project and build features: per-file properties, build diagnostics, custom tools, templates, and folder workflows. After this, nothing in a .NET project needs the classic IDE or hand-editing.
 
 **Depends on.** M2, M4, M9 (property-page machinery). M11 helps (MSBuild editing).
 
@@ -795,24 +795,24 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - **Properties window** (F4) for the selected Solution Explorer item:
   - for files: Build Action (`Compile`, `None`, `Content`, `EmbeddedResource`, `AdditionalFiles`, …), Copy to Output Directory, Custom Tool and its namespace, Link, and any item metadata
   - for folders, projects and the solution: a read-only summary with links to the property pages
-  - For SDK-style globs, edits write `Update` items, never duplicate `Include` items. Tests compare the result with what Visual Studio writes.
+  - For SDK-style globs, edits write `Update` items, never duplicate `Include` items. Tests compare the result with what the classic IDE writes.
 - **Show All Files,** and include or exclude from project. With globbing, exclusion writes a `Remove` item, or `None Remove` where that is the convention.
 - **Linked files** (add as link), and drag-and-drop between projects (copy or move, with the project files updated).
 - **Build depth:**
   - **Batch Build:** pick any set of project × configuration × platform and build, rebuild or clean them together.
   - **Build settings:** MSBuild verbosity for the Output window and the log, maximum parallel project builds, "build only startup projects and dependencies on Run", "on Run when projects are out of date" (always build, never build, prompt), and code analysis on build.
-  - **A fast up-to-date check** (Visual Studio's "FUTD"): the build host skips MSBuild for projects whose inputs haven't changed. It is built on design-time data (M2/M3), and verified against real builds in tests. MSBuild's own incrementality stays the source of truth: a wrong skip is a bug, not a trade-off.
+  - **A fast up-to-date check** (the classic IDE's "FUTD"): the build host skips MSBuild for projects whose inputs haven't changed. It is built on design-time data (M2/M3), and verified against real builds in tests. MSBuild's own incrementality stays the source of truth: a wrong skip is a bug, not a trade-off.
   - **Build timings:** a per-project and per-target timeline, the critical path of the solution build, and the slowest targets and tasks.
   - **Binary logs:** capture a `.binlog` for any build (a setting, or "build with log"), and view it in an integrated **structured log viewer**. Reuse MSBuild Structured Log Viewer's `StructuredLogger` library (MIT, already Avalonia-based upstream) in the build host, and render the tree, search and timeline in the shell.
-  - pre-build and post-build events in the property pages (M9), stored as MSBuild targets the same way Visual Studio stores them
+  - pre-build and post-build events in the property pages (M9), stored as MSBuild targets the same way the classic IDE stores them
 - **Custom tools and text templates:**
-  - **Custom tools** (Visual Studio's single-file generators): "Run Custom Tool" on a file, and running on save, from the item's `Generator` metadata. Built-in generators: T4 (`TextTemplatingFileGenerator`) and ResX (`ResXFileCodeGenerator`, public and internal). A plugin contribution point covers other generators.
+  - **Custom tools** (the classic IDE's single-file generators): "Run Custom Tool" on a file, and running on save, from the item's `Generator` metadata. Built-in generators: T4 (`TextTemplatingFileGenerator`) and ResX (`ResXFileCodeGenerator`, public and internal). A plugin contribution point covers other generators.
   - **T4 text templates** (`.tt`, `.ttinclude`): highlighting and basic completion for directives, design-time transformation through Mono.TextTemplating (MIT) in a supervised process (it runs template code, so workspace trust applies), and build-time transformation through its MSBuild integration.
 - **Templates:**
   - an **Add New Item** dialog with item templates (`dotnet new` item templates plus the built-in .NET set), search and a preview, filtered by project type and language
   - **Export Template:** turn a project or item into a `dotnet new` template (`.template.config/template.json`) and install it locally
   - a template management page: installed template packages, with install, update and uninstall
-- **Folder mode** (Visual Studio's "Open Folder"), for repositories without a solution:
+- **Folder mode** (the classic IDE's "Open Folder"), for repositories without a solution:
   - file tree, search, Git and the terminal work without one
   - discovered projects can be opened individually, or as a generated in-memory solution
   - per-folder build and launch configuration in `.codalus/` (the equivalent of `tasks.vs.json` and `launch.vs.json`)
@@ -1148,7 +1148,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - an editor (grammar, variables, environments in `http-client.env.json`)
   - a request runner, with the response shown in a tool window (headers, body formatted by content type, timing)
   - request history
-- **Scaffolding** (Visual Studio's "Add > New Scaffolded Item"):
+- **Scaffolding** (the classic IDE's "Add > New Scaffolded Item"):
   - controllers (empty, with read/write actions, API controllers with EF Core), Razor Pages, MVC views, minimal API endpoint groups
   - Blazor CRUD pages, and ASP.NET Core Identity pages
   - built on the open-source scaffolders (`dotnet scaffold` and `dotnet-aspnet-codegenerator`, MIT; the ADR picks one), with a dialog generated from each scaffolder's parameters
@@ -1238,7 +1238,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 ### M27 — Data and Entity Framework Core tooling
 
-**Goal.** Replace what Visual Studio's Server Explorer, SQL Server Object Explorer, SQL editor and EF Core integration give a .NET developer, for the databases .NET developers actually use.
+**Goal.** Replace what the classic IDE's Server Explorer, SQL Server Object Explorer, SQL editor and EF Core integration give a .NET developer, for the databases .NET developers actually use.
 
 **Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038, [checkpoint](checkpoints/m27b.md)): the database explorer in `codalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
 
@@ -1305,11 +1305,11 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - **Files:** Dockerfile and `compose.yaml` editing (grammar, schema, and optionally the Dockerfile language server under D3).
   - **Add Docker support:** generates a Dockerfile that matches the official .NET templates.
   - **Build and run:** build and run a container, and run compose.
-  - **Compose projects:** load Visual Studio's Docker Compose project files (`.dcproj`) as solution items, so solutions created in Visual Studio open without errors. Also run and debug the compose file directly, with no project file needed.
+  - **Compose projects:** load the classic IDE's Docker Compose project files (`.dcproj`) as solution items, so solutions created in the classic IDE open without errors. Also run and debug the compose file directly, with no project file needed.
   - **Debugging:** debug a project running in a container (netcoredbg made available in the container and attached through `docker exec`, using M14).
   - **Containers tool window:** containers, images, logs, environment, ports and files.
   - **Engines:** Docker and Podman, through their CLIs or the Engine API.
-  - "Fast mode" (mount the build output into a base image, as VS does) is a candidate.
+  - "Fast mode" (mount the build output into a base image, as the classic IDE does) is a candidate.
 - **.NET Aspire:**
   - Detect AppHost projects, and run the AppHost.
   - Show the **resource tree** (projects, containers and executables, with state, endpoints and logs) inside the IDE, and open the Aspire dashboard (MIT).
@@ -1333,13 +1333,13 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 ### M18 — Profiling and diagnostics tools
 
-**Goal.** Replace the Visual Studio Diagnostic Tools, the performance profiler and the memory analysis tools with open EventPipe-based equivalents. They work on all three OSes.
+**Goal.** Replace the classic IDE's Diagnostic Tools, the performance profiler and the memory analysis tools with open EventPipe-based equivalents. They work on all three OSes.
 
 **Depends on.** M5, M14 (the dump view is shared). F3 helps for rich views.
 
 **Scope.**
 - **Performance Profiler hub:**
-  - Like Visual Studio's Alt+F2 page: pick one or more tools, and a target (the startup project, a running process, or an executable with arguments).
+  - Like the classic IDE's Alt+F2 page: pick one or more tools, and a target (the startup project, a running process, or an executable with arguments).
   - Results are saved as session files under `.codalus/` that can be reopened and compared.
 - **Diagnostic Tools window** during debugging or a normal run:
   - CPU usage, GC heap and working set over time
@@ -1355,11 +1355,11 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - **Filtering:** by time range and thread
   - **Source:** hot-line attribution in the editor gutter
 - **Allocations:** allocation sampling events, shown as types and allocation stacks.
-- **.NET Async:** task and async-method timelines from the TPL event provider (start, await, completion), with the longest-running tasks and their stacks. This is Visual Studio's ".NET Async" tool.
+- **.NET Async:** task and async-method timelines from the TPL event provider (start, await, completion), with the longest-running tasks and their stacks. This is the classic IDE's ".NET Async" tool.
 - **Threads and contention:** lock contention events with the contending stacks, thread pool starvation and injection events, and a per-thread state timeline.
 - **Exceptions:** first-chance exceptions over time, grouped by type and throw site.
 - **File I/O:** read and write activity where the runtime or OS emits it. Windows ETW gives the most detail. Expect partial data on Linux and macOS, and document what each OS gives.
-- **Instrumentation** (exact call counts and times, which Visual Studio has as a separate tool): a candidate. It needs a CLR profiler (`ICorProfiler`) of our own, written as native code. Not in M18: it is reviewed with the other candidates after the last milestone (D30).
+- **Instrumentation** (exact call counts and times, which the classic IDE has as a separate tool): a candidate. It needs a CLR profiler (`ICorProfiler`) of our own, written as native code. Not in M18: it is reviewed with the other candidates after the last milestone (D30).
 - **Memory:**
   - GC heap snapshots (gcdump), with type statistics and paths to roots
   - **diffs between two snapshots**, for leak hunting
@@ -1420,7 +1420,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - Clicking in the preview selects the element in the XAML, and the reverse.
   - The preview needs a build of the project. Code-behind changes trigger an incremental rebuild.
 - **Templates:** the Avalonia templates (MIT) through `dotnet new`.
-- **Live Visual Tree and Live Property Explorer** for a running Avalonia app, as Visual Studio has for XAML apps:
+- **Live Visual Tree and Live Property Explorer** for a running Avalonia app, as the classic IDE has for XAML apps:
   - the element tree, with selection in the app shown as highlighted adorners
   - property values with their sources (local, style, template, inherited), editable live
   - go from an element to its XAML source line
@@ -1470,7 +1470,7 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
   - The client copies or downloads a self-contained server bundle for the remote RID, verifies its checksum, and caches it in `~/.codalus-server/<version>/`.
   - Updates happen with the client.
 - **Port forwarding:** for web apps (M15) and debug sessions, with automatic detection of listening ports.
-- **Remote test environments:** run and debug tests from a local solution in WSL, a container or an SSH target, without opening the whole workspace remotely (Visual Studio's `testenvironments.json`). This reuses the M8 controller with a remote test runner started by `codalus-server`.
+- **Remote test environments:** run and debug tests from a local solution in WSL, a container or an SSH target, without opening the whole workspace remotely (the classic IDE's `testenvironments.json`). This reuses the M8 controller with a remote test runner started by `codalus-server`.
 - **Plugin placement:** the manifest gets a field (for example `"runsOn": "ui" | "workspace"`) that says where a plugin runs.
 - **Resilience:** reconnect after a network drop, resynchronizing the open documents and sessions.
 - **Security:**
@@ -1521,11 +1521,11 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
 - **Distribution (D5, decided):**
   - **NuGet is the transport.** Plugins use a dedicated package type, are discovered through nuget.org search filtered by that type, and reuse NuGet's author and repository signing. Private feeds work too.
   - **The UI:** a plugin browser in the IDE, auto-update (reusing M32's download and verification code), enable and disable per workspace, and a "bisect plugins" troubleshooting command.
-- **IDE components** (the equivalent of Visual Studio Installer's workloads and components):
+- **IDE components** (the equivalent of the classic IDE's installer, its workloads and components):
   - One "Components" page lists everything Codalus downloads on demand: Node, FsAutoComplete, the web language servers, `vscode-js-debug`, the remote server bundles, grammars and schema caches.
   - For each component: version, size, licence, and update or remove.
   - **Offline layout:** an exported folder of components for air-gapped machines.
-- **Plugin performance attribution,** like Visual Studio's "Manage Extension Performance":
+- **Plugin performance attribution,** like the classic IDE's "Manage Extension Performance":
   - activation time, slow calls and memory, per plugin and per host
   - a notification when a plugin keeps slowing a feature, offering to disable it
 - **Trust:**
@@ -1540,13 +1540,13 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
 
 **Scope.**
 - **Profiles:** named sets of settings, key bindings, layout and enabled plugins. Switch profiles, export and import them.
-- **Keymap presets:** Visual Studio, VS Code, Rider/ReSharper, Emacs. **Importers:** VS Code `settings.json` and `keybindings.json`, and the relevant parts of VS `.vssettings`.
+- **Keymap presets:** the classic IDE, VS Code, Rider/ReSharper, Emacs. **Importers:** VS Code `settings.json` and `keybindings.json`, and the relevant parts of the classic IDE's `.vssettings`.
 - **Customization:**
   - **Fonts and Colors:** a UI for overriding the colours of individual syntax classifications, editor elements (selection, current line, find highlights) and UI elements, on top of the active theme
   - customize menus, toolbars and context menus: add, remove, reorder and create toolbars from any command
   - named window layouts (save, apply, switch per profile), full-screen mode, and a distraction-free editing mode
-- **Import and export settings,** as a file, choosing categories (Visual Studio's Import and Export Settings wizard).
-- **Managed settings for organizations:** an optional machine-wide policy file that locks settings, such as disabling network features or plugin installation (Visual Studio supports group policies). Not in M23: it is a candidate, reviewed after the last milestone (D30).
+- **Import and export settings,** as a file, choosing categories (the classic IDE's Import and Export Settings wizard).
+- **Managed settings for organizations:** an optional machine-wide policy file that locks settings, such as disabling network features or plugin installation (the classic IDE supports group policies). Not in M23: it is a candidate, reviewed after the last milestone (D30).
 - **Settings sync** with a **user-chosen backend**: a Git repository, a gist, or a synced folder. There is no Codalus-hosted service, and nothing syncs until the user sets it up.
 - **Localization:**
   - Move every UI string to resources (AOT-safe), with a pseudo-localization build and a test that catches hard-coded strings.
@@ -1557,7 +1557,7 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
 
 ### M28 — AI assistance
 
-**Status.** The maintainer decided yes on 2026-10-10 (D7), as the design below describes: off by default, with any provider. Visual Studio 2026 makes GitHub Copilot central:
+**Status.** The maintainer decided yes on 2026-10-10 (D7), as the design below describes: off by default, with any provider. The classic IDE (2026) makes GitHub Copilot central:
 - inline and next-edit suggestions, chat and agent mode
 - MCP servers
 - AI help in the debugger, the profiler, test generation, commit messages and pull request descriptions
@@ -1664,7 +1664,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 **Status.** Proposed on 2026-10-13, from the maintainer's question: how far could the Windows-specific technologies left out of scope be supported, on Windows and from the other OSes, through emulation, Mono or a Windows machine? Nothing here is scheduled. WinForms, WPF, WinUI, non-SDK-style projects and .NET Framework run and debug are non-goals ([Out of scope](#out-of-scope)), and moving them into scope is D31. M42 (WCF) uses nothing Windows-only, so it can be scheduled without D31. Sizes are in sub-milestones the size of M19a, estimated before any spike.
 
-**Why.** A large share of the .NET code in companies is WinForms, WPF and .NET Framework. The people who maintain it are among the users most likely to want an IDE other than Visual Studio, including on a Mac or a Linux machine.
+**Why.** A large share of the .NET code in companies is WinForms, WPF and .NET Framework. The people who maintain it are among the users most likely to want an IDE other than the classic IDE, including on a Mac or a Linux machine.
 
 **Three facts shape the plan.**
 1. **Building and editing don't need Windows.** WinForms and WPF projects on modern .NET (`net8.0-windows`) build on Linux and macOS with `EnableWindowsTargeting=true`, and SDK-style .NET Framework projects build there with `Microsoft.NETFramework.ReferenceAssemblies` (MIT). Roslyn doesn't care which OS it runs on. So the editor, IntelliSense, navigation, refactoring and builds work on every OS.
@@ -1703,7 +1703,7 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 
 **Constraints.**
 - WinForms and WPF run only on Windows. They are CoreCLR apps there, so netcoredbg debugs them, and startup hooks work.
-- Visual Studio's XAML designer and XAML Hot Reload are proprietary ([known traps](#known-proprietary-traps)).
+- The classic IDE's XAML designer and XAML Hot Reload are proprietary ([known traps](#known-proprietary-traps)).
 
 **Scope.**
 - **Projects:**
@@ -1741,16 +1741,16 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 
 **Split.** M41a: loading and writing `InitializeComponent`, the designer host, the surface's selection, moving, resizing, nudging, deleting, copy and paste, undo, the Toolbox, the Properties window and the Events view, opening with View Code and View Designer. M41b: snap lines, tab order mode, docking and anchoring visuals, the component tray, smart tags (designer actions), menu and tool strip editing, localizable forms (a `.resx` per culture), images into resources, data binding gaps, and the optional WPF design surface (decided at plan time).
 
-**Goal.** Design forms and user controls visually: a design surface, the Toolbox and the Properties window, with `InitializeComponent` written back as Visual Studio writes it.
+**Goal.** Design forms and user controls visually: a design surface, the Toolbox and the Properties window, with `InitializeComponent` written back as the classic IDE writes it.
 
 **Depends on.** M40a, and M26a's Properties window.
 
 **Constraints.**
-- Visual Studio's Windows Forms designer is proprietary. The parts it is built from are open: `DesignSurface`, the control designers, `UndoEngine` and the CodeDOM serializers are in dotnet/winforms (MIT). SharpDevelop 5's Windows Forms designer (MIT) was a whole designer built on them, and is the reference.
+- The classic IDE's Windows Forms designer is proprietary. The parts it is built from are open: `DesignSurface`, the control designers, `UndoEngine` and the CodeDOM serializers are in dotnet/winforms (MIT). SharpDevelop 5's Windows Forms designer (MIT) was a whole designer built on them, and is the reference.
 - The designer renders real controls, so it runs on Windows, or on the Windows target.
 
 **Scope.**
-- **Loading:** a Roslyn-based reader from `InitializeComponent` (and the fields in `.Designer.cs`) into CodeDOM. Code it can't read opens as code, with the reason, as Visual Studio does.
+- **Loading:** a Roslyn-based reader from `InitializeComponent` (and the fields in `.Designer.cs`) into CodeDOM. Code it can't read opens as code, with the reason, as the classic IDE does.
 - **Writing:** CodeDOM back to C# through our own generator, applied as text edits, so that undo, local history and source control see a normal diff. Everything outside `InitializeComponent` is kept.
 - **Surface:** selection, moving, resizing, snap lines, tab order, docking and anchoring, the component tray, smart tags (designer actions), menus and tool strips.
 - **Toolbox:** the framework's controls, plus the project's own and its references' controls (`ToolboxItem` attributes).
@@ -1766,8 +1766,8 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 **Size.** About 2–3, the largest milestone of the phase.
 
 **Risks.**
-- Round-tripping `InitializeComponent` that Visual Studio wrote, without noisy diffs.
-- Commercial control suites that rely on design-time licensing (`licenses.licx`) or on Visual Studio's own services.
+- Round-tripping `InitializeComponent` that the classic IDE wrote, without noisy diffs.
+- Commercial control suites that rely on design-time licensing (`licenses.licx`) or on the classic IDE's own services.
 
 ### M42 — WCF
 
@@ -1779,10 +1779,10 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 
 **Constraints.**
 - Nothing here is Windows-only: WCF's client libraries (`System.ServiceModel.*`, dotnet/wcf, MIT), `dotnet-svcutil` (MIT) and CoreWCF (MIT) run on .NET everywhere. So M42 doesn't wait for D31.
-- Visual Studio's WCF Test Client and Service Configuration Editor are proprietary.
+- The classic IDE's WCF Test Client and Service Configuration Editor are proprietary.
 
 **Scope.**
-- **Add Service Reference for WCF:** from a URL or a WSDL file, through `dotnet-svcutil` as a local or global tool (as M15c runs the code generator). Options: namespace, collection types, synchronous or asynchronous operations, reused types. Update and Remove; `ConnectedService.json` as Visual Studio writes it.
+- **Add Service Reference for WCF:** from a URL or a WSDL file, through `dotnet-svcutil` as a local or global tool (as M15c runs the code generator). Options: namespace, collection types, synchronous or asynchronous operations, reused types. Update and Remove; `ConnectedService.json` as the classic IDE writes it.
 - **CoreWCF services:** templates, and the service's metadata at run time.
 - **A test client of our own:** the service's operations from its metadata, requests built from the contract, responses shown. Duplex contracts and message security are gaps.
 - **Configuration:** the `system.serviceModel` schema for `app.config` and `web.config` in the markup host (useful with M43).
@@ -1801,7 +1801,7 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 
 **Constraints.**
 - **Debugging:** netcoredbg debugs only CoreCLR, and vsdbg is proprietary. The desktop CLR has the same ICorDebug API, but sessions start differently (`ICLRMetaHost`, `ICLRDebugging`), so the base is a desktop-CLR port of netcoredbg (MIT). A spike decides whether the port is viable before the milestone is committed.
-- **Visual Studio's targets:** old-style projects that import Visual Studio's own targets (`Microsoft.WebApplication.targets` and others under `MSBuild\Microsoft\VisualStudio`) build only with Visual Studio's MSBuild. It is proprietary: we could use only the user's own Build Tools install, and only if its licence allows a third-party IDE to drive it. That needs a check.
+- **The classic IDE's targets:** old-style projects that import the classic IDE's own targets (`Microsoft.WebApplication.targets` and others under `MSBuild\Microsoft\VisualStudio`) build only with the classic IDE's MSBuild. It is proprietary: we could use only the user's own Build Tools install, and only if its licence allows a third-party IDE to drive it. That needs a check.
 - **Runtimes:** .NET Framework runs on Windows. Mono runs much of the 4.x API on Linux and macOS, without WPF and with WinForms through libgdiplus.
 - **ASP.NET on System.Web** (Web Forms, MVC 5) needs IIS or IIS Express, and stays a non-goal.
 
@@ -1810,7 +1810,7 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
   - SDK-style `net4x` projects through the reference assemblies package, on every OS.
   - Non-SDK-style projects: evaluation and builds in the build host wherever the SDK's targets are enough; `packages.config` restore (`RestorePackagesConfig`); the Dependencies node from `<Reference>` and `HintPath`.
   - Convert to SDK-style: our own converter, in the spirit of `try-convert`, with a preview of the result.
-  - Projects that need Visual Studio's targets: on Windows, a .NET Framework build host on the user's Build Tools MSBuild, if the licence check allows it. Otherwise they open and say why they can't build.
+  - Projects that need the classic IDE's targets: on Windows, a .NET Framework build host on the user's Build Tools MSBuild, if the licence check allows it. Otherwise they open and say why they can't build.
 - **IntelliSense:** each framework's default C# version (7.3), its reference assemblies, and binding redirects in `app.config`.
 - **Run:** on Windows directly; on Linux and macOS with the user's `mono` (a launch profile) or on the Windows target.
 - **Debug:** the desktop-CLR adapter on Windows, and M20's Mono soft-debugger adapter for apps running on Mono.
@@ -2070,7 +2070,7 @@ The table and the steps below were written before the name was chosen; `<name>` 
 
 ### M45 — Theme families
 
-**Why.** On 2026-10-16 the maintainer asked for a look "close to Visual Studio style but original too". From the proposed directions they chose all four: Harbor, Graphite, Daylight and Ember. Each one is to become a real theme in Light, Dark and High contrast, and users choose between them. Today's themes (Blue, Light, Dark, High Contrast, M29) copy Visual Studio's palettes closely. The designs, with every color, are in [`design/shell-themes.md`](design/shell-themes.md). Its mockups (`design/shell-themes/*.dc.html`) open in a browser.
+**Why.** On 2026-10-16 the maintainer asked for a look "close to the classic IDE's style but original too". From the proposed directions they chose all four: Harbor, Graphite, Daylight and Ember. Each one is to become a real theme in Light, Dark and High contrast, and users choose between them. Today's themes (Blue, Light, Dark, High Contrast, M29) copy the classic IDE's palettes closely. The designs, with every color, are in [`design/shell-themes.md`](design/shell-themes.md). Its mockups (`design/shell-themes/*.dc.html`) open in a browser.
 
 **Depends on.**
 - M29: themes as tokens.
@@ -2159,7 +2159,7 @@ The table and the steps below were written before the name was chosen; `<name>` 
      - the four families as cards with a picture of each;
      - a mode picker: Light, Dark, High contrast, or Match system (the default);
      - a live preview of the setup window and of the IDE behind it.
-  2. **Keyboard:** the keyboard scheme: Visual Studio's (the default), VS Code's, ReSharper's or Emacs.
+  2. **Keyboard:** the keyboard scheme: the classic IDE's (the default), VS Code's, ReSharper's or Emacs.
   3. **Your settings:** import from VS Code or a `.vssettings` file (M23a), or turn on settings sync from a folder or a Git repository (M23b).
   4. **Tools:** M37's environment check. The .NET SDK and git are found or offered, with exactly what would run, and nothing installs without the user's yes.
 
@@ -2186,7 +2186,7 @@ The table and the steps below were written before the name was chosen; `<name>` 
 
 ### M47 — Code Search
 
-**Why.** On 2026-10-16 the maintainer compared our Go To All (`Ctrl+,`, a flat drop-down list under the title row's search: `QuickPickViewModel`, `ShellHost.Refactoring.cs`, the C# host's workspace symbols) with Visual Studio's Code Search and asked for the latter. Visual Studio's is a floating window with:
+**Why.** On 2026-10-16 the maintainer compared our Go To All (`Ctrl+,`, a flat drop-down list under the title row's search: `QuickPickViewModel`, `ShellHost.Refactoring.cs`, the C# host's workspace symbols) with the classic IDE's Code Search and asked for the latter. The classic IDE's is a floating window with:
 - two tabs, Code Search and Feature Search;
 - filter chips under the box, `files (f:)`, `types (t:)`, `members (m:)` and `text (x:)`, which also work typed as prefixes;
 - two-line results: the icon and the name with the match in bold, then where it is ("in `wpControlTypeConstants` (project `wPoseidon.Core`)", or a file's folder), with the file name on the right;
@@ -2201,7 +2201,7 @@ The table and the steps below were written before the name was chosen; `<name>` 
 - **Code Search:**
   - results from files (the solution's files, by name and path), types, members and symbols from every language service that offers workspace symbols (C#, VB, F#, XAML names, the LSP bridge), and text (Find in Files' engine, with a limit);
   - the chips and prefixes (`f:`, `t:`, `m:`, `x:`, plus `:` for a line in the current file) filter the kinds; camel-case and fuzzy matching with the matched characters in bold; results ranked by kind, match quality, recently opened files and the active project;
-  - each result: icon, name, container ("in Type (project P)"), file name on the right; grouped or interleaved like Visual Studio;
+  - each result: icon, name, container ("in Type (project P)"), file name on the right; grouped or interleaved like the classic IDE;
   - the preview: an editor on the result's file (the same editor and language features as a document), scrolled to and highlighting the match, editable with undo and saved like the document; Enter or a double click opens the document there and closes the window, Ctrl+Enter keeps it open;
   - the scope picker (entire solution, current project, current document, and "include external items" for metadata and decompiled sources);
   - "Incomplete results" while projects load or the index builds, then results that refresh.
@@ -2284,12 +2284,12 @@ They asked for:
    - macOS startup: the same A/B measured `startup_interactive_ms` at a median of 568 against 474 ms (+20%, p = 0.01), with 0.6.0 spread wider (348–1274 ms). Its gate passed (726.8 against a limit of 1132.8). Profile and fix.
    - CI: macOS `shell-1`'s test step takes 19–35 min of its 40 min limit, and timed out with no failure on a slow runner in the 0.6.0 release run (attempt 1). Rebalance the shell shards or raise the limit (a `.github/workflows` change: into `develop` while no release branch is open, or into both).
    - Delete the merged branches `release/0.5.0`, `release/0.6.0`, `claude/no-vs-ui-messages` and `validate-memory-06` (the maintainer; the session proxy refuses deletes).
-2. **No "Visual Studio" or "VS" in the repository's current files**, replaced by "the classic IDE" ("Classic IDE" where it starts a sentence or names the reference). Decided: **current files only**; git history, tags and releases stay as they are (a rewrite would change all 1477 commit hashes, re-point 53 tags with 7 stable releases, break every clone and 43 hashes the docs cite, and GitHub would still show the old commits through the pull requests). Kept, as the maintainer decided:
+2. **No name or abbreviation of the classic IDE in the repository's current files**, replaced by "the classic IDE" ("Classic IDE" where it starts a sentence or names the reference). Decided: **current files only**; git history, tags and releases stay as they are (a rewrite would change all 1477 commit hashes, re-point 53 tags with 7 stable releases, break every clone and 43 hashes the docs cite, and GitHub would still show the old commits through the pull requests). Kept, as the maintainer decided:
    - the `.sln` format's own text, "Microsoft Visual Studio Solution File, Format Version 12.00" and "# Visual Studio Version 17" (the samples' `.sln` files, `Codalus.Benchmarks.FixtureGen`);
    - NuGet package IDs `Microsoft.VisualStudio.*` (the test framework, `Microsoft.VisualStudio.SolutionPersistence`, scaffolding's code generation);
    - "VS Code", a different product (the benchmarks' reference app, the snippet format);
    - the legal notices (`THIRD-PARTY-NOTICES.md` names the reference IDEs measured).
-   On 2026-10-24 the count was 649 lines in 230 files (`src` 101, `docs` 77, tests 24, samples 18, benchmarks 3, the website's Features page 3 lines, `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`) and the word "VS" 146 times in `src`, the website and the user guide; none in UI strings (`en.json` has none since #50). Includes this roadmap's headings (M29's title, the parity matrix), the ADRs and checkpoints, the UI guidelines' "Visual Studio palette", and CLAUDE.md's rule, which then forbids the name anywhere outside the exceptions. A test in the style of `ProcessTreeTests`' source scan keeps it out, with the exceptions listed. This entry's own quotations of the name are rewritten then too.
+   On 2026-10-24 the count was 649 lines in 230 files (`src` 101, `docs` 77, tests 24, samples 18, benchmarks 3, the website's Features page 3 lines, `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`) and its two-letter abbreviation 146 times in `src`, the website and the user guide; none in UI strings (`en.json` has none since #50). Includes this roadmap's headings (M29's title, the parity matrix), the ADRs and checkpoints, the UI guidelines' name for the palette, and CLAUDE.md's rule, which then forbids the name anywhere outside the exceptions. A test in the style of `ProcessTreeTests`' source scan keeps it out, with the exceptions listed. This entry's own quotations of the name are rewritten then too.
 3. **A tool window dragged to the other side lands with zero width** (the maintainer's screenshots 1–3: Solution Explorer dragged from the right edge to the left edge's dock target became an invisible column; Toolbox docked there afterwards). Decided: it lands at **the width it had before the drag, or a quarter of the window if it never had one, never under a minimum (about 200 px)**. A test drags a tool window across and checks the width. `LayoutManager` gives new tool docks a proportion (`CreateToolDock(id, alignment, proportion)`); the drop path through Dock's own drag doesn't.
 4. **CPU use**, reported by another user on Linux and macOS, most likely during the first indexing and build of a solution. Profile a solution's first open on Linux and macOS (design-time builds, the symbol index, the language service's load, semantic tokens, file watching), fix what's hot, and add a CPU figure to `open-solution-50` in the benchmarks so it stays fixed.
 5. **The pin and X in tool window headers are much larger than the tab buttons** (screenshot 4, the classic IDE: the document tab's pin and X against Solution Explorer's header). Decided: **the same size as the document tab buttons**, with the dropdown arrow scaled with them, in every theme.
@@ -2310,7 +2310,7 @@ Every user-visible item updates the user guide and the website in the same chang
 
 **Exit criteria.** Every item above built or, with the maintainer's agreement, moved to a later milestone with a `TODO(issue)`; CI green on all three OSes; the 0.7.0 release run green.
 
-**Status.** Planned, 2026-10-24, for 0.7.0.
+**Status.** Built 2026-10-25 for 0.7.0 ([m50](checkpoints/m50.md)), with the move to .NET 11 RC3 the maintainer added that day. Of item 1, the CI shards were rebalanced and the Connect to *agent* view that 0.6.0 built at startup is made when it first opens; the rest of item 1 (the Windows command sweep's stalls, the popup-overlap and Watch-edit flakes, linux-arm64's `debug.compound`, profiling macOS's idle memory and startup) and item 4's profiling on macOS need those machines, and moved to M51 item 5 by the maintainer's decision of 2026-10-25. Item 4's CPU figures are in `open-solution-50` (`cpu_open_s`, `cpu_idle_percent`); item 6's Lighthouse check is `eng/lighthouse.sh`, run on every change by `pages.yml`.
 
 ---
 
@@ -2333,6 +2333,7 @@ Every user-visible item updates the user guide and the website in the same chang
    - folders: "Open with Codalus IDE" on a folder's right-click (Windows Explorer; a macOS Finder Services entry; Linux file managers' actions);
    - file types: `.sln`, `.slnx`, `.slnf` and the project files (`.csproj`, `.vbproj`, `.fsproj`) open in Codalus IDE (the Windows registry under the user's classes, macOS document types and UTIs in the app bundle, Linux MIME types in the `.desktop` file).
    Today only `eng/packaging/linux/codalus.desktop` declares types (`text/x-csharp`, `application/x-csproj`); there is no folder action and nothing on Windows or macOS.
+5. **Carried from M50** (the maintainer's decision of 2026-10-25: they need Windows and macOS machines, and no session on them was connected): M50 item 1's Windows command sweep stalls, the popup-overlap flake, the Watch-edit wait in `VariableWindowsTests`, linux-arm64's lost `debug.compound` stop, and macOS's idle memory and startup (profile against 0.5.0 on the same runner); M50 item 4's profiling of a solution's first open on macOS, with budgets for `cpu_open_s` and `cpu_idle_percent` once CI has measured them on each OS. TODO(issue) each, in [m50](checkpoints/m50.md#deferred).
 
 **Tests.** Each with a test: the agent connection across a restart, model and mode choices against the recorded agents, the AI features through the mock model servers in `tests/Shared`, the feedback dialog's attachments and URL, and the OS registration against a temporary registry hive, bundle and `.desktop` file (nothing registered on the machine itself, CLAUDE.md).
 
@@ -2361,7 +2362,7 @@ These two milestones are always last (see [Status](#status)).
   - code fixes and refactorings, formatting
 - **VB editor behaviour** (the "pretty listing" experience):
   - keyword casing, `End` construct generation (`If` → `End If`), automatic line continuation handling, and XML literal editing
-  - **Note:** Roslyn implements part of this in its VS-specific `EditorFeatures` layers. Reimplement it on our editor through on-type formatting hooks, and document which parts are ours.
+  - **Note:** Roslyn implements part of this in its `EditorFeatures` layers, specific to the classic IDE. Reimplement it on our editor through on-type formatting hooks, and document which parts are ours.
 - VB snippets, project templates (console, classlib, tests) and property pages (M9 pages with VB-specific options: `Option Strict`, `Explicit`, `Infer`, `Compare`, imports).
 - Test Explorer works for VB test projects (M8).
 - Debugging is known to work through portable PDBs.
@@ -2497,7 +2498,7 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
 
 ### Release, updates and the command line
 
-M7 delivers packages. Visual Studio parity also needs the following.
+M7 delivers packages. Parity with the classic IDE also needs the following.
 - **The release cycle and setup installers** are M31 (D17–D21):
   - nightly builds from `develop` and stable builds from `master`
   - the version comes from the `VERSION` file
@@ -2538,23 +2539,23 @@ The fixtures to add under `samples/` are named in each milestone. Rules:
 
 ---
 
-## Visual Studio parity matrix
+## Classic IDE parity matrix
 
-This table lists Visual Studio 2026's features by area, and says where each one is delivered. Visual Studio's own menus and tool windows were the checklist, so a feature missing here is a gap in this plan. Add it.
+This table lists the classic IDE's features (2026) by area, and says where each one is delivered. The classic IDE's own menus and tool windows were the checklist, so a feature missing here is a gap in this plan. Add it.
 
 The "Codalus" column uses these terms:
 - **M1–M7:** the MVP, per the original project brief.
 - **M8 and later:** the milestones in this document.
 - **Candidate:** unscheduled, see [candidates](#unscheduled-candidates).
 - **Gap:** wanted, but blocked, for the reason given.
-- **Trap:** the VS version is proprietary, see [traps](#known-proprietary-traps).
+- **Trap:** the classic IDE's version is proprietary, see [traps](#known-proprietary-traps).
 - **Non-goal:** excluded by the mission.
 
 "Verify at M7" marks MVP items that the original project brief implied but didn't name. If one is missing at the M7 checkpoint, it moves to the milestone named after it.
 
 ### Environment and shell
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Start window, recent solutions, clone or open | M1 (Welcome plugin), M38 (done: the start window); clone M6/M13 |
 | Docking, floating windows, layout persistence | M1; documents floating on other monitors M12; named layouts M23 |
@@ -2581,7 +2582,7 @@ The "Codalus" column uses these terms:
 
 ### Solutions and projects
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Open `.sln`, `.slnx` and SDK-style projects | M2 |
 | Solution folders, nested projects, Dependencies node, file nesting | M2 |
@@ -2611,14 +2612,14 @@ The "Codalus" column uses these terms:
 | Docker Compose projects (`.dcproj`) | M17a (done: loaded from their XML as a solution item, left out of builds; compose up, down and debug) |
 | SQL database projects (`.sqlproj`) | M27b (done: SDK-style, Microsoft.Build.Sql) |
 | Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10, and SDKs down to 2.1.200 in `global.json`: at checkpoint, ADR 0030) |
-| Non-SDK-style projects, .NET Framework-only scenarios | In scope since M43a (D31): they open and build on every OS and run on Windows; Visual Studio's own targets, ASP.NET on System.Web and the other gaps of [M43](#m43--net-framework) stay out |
+| Non-SDK-style projects, .NET Framework-only scenarios | In scope since M43a (D31): they open and build on every OS and run on Windows; the classic IDE's own targets, ASP.NET on System.Web and the other gaps of [M43](#m43--net-framework) stay out |
 | WinForms, WPF, UWP and WinUI project types and designers | Non-goal; WinForms and WPF proposed for M40 and M41, WinUI for M44 (D31); UWP stays a non-goal |
 | C++, Python and Node.js workloads | Not first-party: plugins over the M11 LSP bridge (C++/CLI is a non-goal) |
-| Visual Studio Installer Projects | Non-goal (Windows-only). WiX SDK projects build through MSBuild like any project. |
+| The classic IDE's Installer Projects | Non-goal (Windows-only). WiX SDK projects build through MSBuild like any project. |
 
 ### Build and run
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Build, Rebuild and Clean for the solution and for projects; cancel | M4 |
 | Structured build output, Error List navigation | M4 |
@@ -2636,11 +2637,11 @@ The "Codalus" column uses these terms:
 
 ### Editor
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Tabs, preview tab, split views, multi-caret, folding, minimap, find and replace | M3 |
 | Pinned and vertical tabs, tab colouring, Ctrl+Tab window switcher | M34d (done: pinned tabs, tabs colored by project); vertical tabs and the Ctrl+Tab switcher deferred at M12b (`TODO(issue)`) |
-| Semantic highlighting, completion, signature help, Quick Info | M3; Visual Studio's look and behavior (kind icons and filters, the description beside the selection, colorized signatures with the call site's types, Quick Info's fixes, commit characters, target type matches) in 0.5.0 ([ADR 0081](adr/0081-intellisense-popups.md)) |
+| Semantic highlighting, completion, signature help, Quick Info | M3; the classic IDE's look and behavior (kind icons and filters, the description beside the selection, colorized signatures with the call site's types, Quick Info's fixes, commit characters, target type matches) in 0.5.0 ([ADR 0081](adr/0081-intellisense-popups.md)) |
 | IntelliCode (AI-ranked completion, whole-line completion) | Trap; an open equivalent is M28 |
 | Code snippets, Surround With, Code Snippets Manager | M12 (done); the Code Snippets Manager deferred at M12b ([deferred](#deferred-work)) |
 | Code Cleanup profiles, format on save | M12 |
@@ -2652,7 +2653,7 @@ The "Codalus" column uses these terms:
 | Regex, JSON and date-format support inside strings | M12 |
 | Spell checker | M12 (deferred at M12b); en-US bundled, other languages on demand (D9) |
 | AutoRecover | M12 (verify at M3) |
-| Local history | M12 (beyond Visual Studio) |
+| Local history | M12 (beyond the classic IDE) |
 | Large files | M3 (budget 3) |
 | Encoding and line-ending control | M12 |
 | Markdown editing and preview | M11 |
@@ -2665,9 +2666,9 @@ The "Codalus" column uses these terms:
 
 ### Navigation and search
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
-| Go To All, file, type, member, symbol and line | M3; Visual Studio's Code Search window (chips, preview, Feature Search, the persistent index) M47 |
+| Go To All, file, type, member, symbol and line | M3; the classic IDE's Code Search window (chips, preview, Feature Search, the persistent index) M47 |
 | Go to Definition and Implementation, Find All References | M3; grouping, read/write and filters M12 |
 | Peek Definition, Go to Base and Derived | M12 |
 | Call Hierarchy, Type Hierarchy | M12 |
@@ -2681,7 +2682,7 @@ The "Codalus" column uses these terms:
 
 ### Code analysis and refactoring
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Live diagnostics, Roslyn analyzers, source generators | M3 |
 | Light bulb code fixes and refactorings with preview | M3 |
@@ -2696,7 +2697,7 @@ The "Codalus" column uses these terms:
 
 ### Languages
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | C# | M3 |
 | Visual Basic | M35 (done; load, build and run since M2) |
@@ -2714,7 +2715,7 @@ The "Codalus" column uses these terms:
 
 ### Debugging
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Launch and attach; line, conditional and hit-count breakpoints; tracepoints | M5 |
 | Stepping, Call Stack, Locals, Autos, Watch, debug console, data tips, threads | M5 |
@@ -2733,7 +2734,7 @@ The "Codalus" column uses these terms:
 | Just My Code, step filters | M14 (done) |
 | Source Link stepping, symbol settings | M12 (Source Link, done); symbol settings are a gap |
 | Attach over SSH, into containers and into WSL; WSL launch profile | M14c (done; Linux and macOS targets) |
-| Visual Studio remote debugger (msvsmon) | Trap (SSH attach replaces it) |
+| The classic IDE's remote debugger (msvsmon) | Trap (SSH attach replaces it) |
 | Dump files (open and create) | M14 (done) |
 | Just-In-Time debugger | M14c (done, opt-in: crash dumps opened in the dump view; a live system debugger needs administrator rights and is a gap) |
 | Hot Reload, Edit and Continue | Hot Reload M15; Hot Reload while debugging researched in M14c (ADR 0040): the runtime refuses updates under a debugger, and netcoredbg applies them only through its MI interpreter, so it is a gap for programs netcoredbg runs. While debugging, Hot Reload applies to Blazor WebAssembly components: standalone (0.5) and in a Blazor Web App (0.6, the server under `dotnet watch` with the debugger attached). Full Edit and Continue is a gap. |
@@ -2745,7 +2746,7 @@ The "Codalus" column uses these terms:
 
 ### Testing
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Test Explorer: discover, run, debug, group, filter, playlists | M8 (done) |
 | Code coverage | M8 (done: Coverlet, editor coloring, Coverage Results, Cobertura export; the HTML report is deferred) |
@@ -2754,12 +2755,12 @@ The "Codalus" column uses these terms:
 | Remote testing (`testenvironments.json`) | M21 |
 | Live Unit Testing | Candidate |
 | Microsoft Fakes, IntelliTest | Trap |
-| Load tests, web performance tests, Coded UI tests | Non-goal (removed from Visual Studio) |
+| Load tests, web performance tests, Coded UI tests | Non-goal (removed from the classic IDE) |
 | Benchmarks (BenchmarkDotNet) | M18 |
 
 ### Profiling and diagnostics
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Diagnostic Tools window while debugging | M18 |
 | Performance Profiler hub and sessions | M18 |
@@ -2772,7 +2773,7 @@ The "Codalus" column uses these terms:
 
 ### Packages and tools
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | NuGet Package Manager (Browse, Installed, Updates, Consolidate), CPM, sources, credentials | M9; nuget.org's verified-owner badge, and search honoring package source mapping, in 0.6 (#78, D39) |
 | Package Manager Console | Not planned: covered by M9, M27 and the M10 terminal |
@@ -2783,7 +2784,7 @@ The "Codalus" column uses these terms:
 
 ### Web and cloud
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | ASP.NET Core templates, run on Kestrel, launch browser, HTTPS dev certificates | M15 |
 | IIS and IIS Express | Non-goal |
@@ -2800,7 +2801,7 @@ The "Codalus" column uses these terms:
 
 ### Data
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Server Explorer, SQL Server Object Explorer | M27b (done: the Database Explorer, ADR 0037) |
 | SQL editor, results grid, execution plans | M27b (done: the query editor and Query Results; plans as trees, ADRs 0037 and 0038) |
@@ -2811,7 +2812,7 @@ The "Codalus" column uses these terms:
 
 ### UI frameworks and designers
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | WinForms, WPF, UWP and WinUI designers | WPF previewer done in M40b (Windows only, D31); WinForms designer done in M41 (Windows only), building while a form is open and the Toolbox's drag, double-click and Enter as in the classic IDE in 0.6, and its context menus, Lock Controls and Properties window (parts, type editors, Select Resource, collapsible categories; #67, #68) in 0.6; a WPF design surface deferred; UWP and WinUI designers stay non-goals |
 | XAML editing, previewer, Live Visual Tree and Live Property Explorer (Avalonia) | M19 |
@@ -2822,7 +2823,7 @@ The "Codalus" column uses these terms:
 
 ### Version control
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Changes, per-file and per-hunk staging, commit and amend, branches, fetch, pull, push | M6 |
 | Diff viewer, gutter change markers, blame | M6 (the diff document redesigned after the classic IDE's, D45, #86: 2026-10-22) |
@@ -2838,14 +2839,14 @@ The "Codalus" column uses these terms:
 
 ### Collaboration and AI
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | GitHub Copilot: completions, next-edit suggestions, chat, agent mode, MCP | M28, with an open design (D7): chat with any provider (M28a); inline and next edit suggestions (M28b); agent mode, an MCP client and an MCP server (M28c); external agents over ACP (M48), connected from templates with their sign-in tested first (0.6, #79, D43) |
 | Live Share | Trap; an open alternative is a candidate |
 
 ### Extensibility
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | Out-of-process extensions (VisualStudio.Extensibility) | M1 (plugin host v0); 1.0 in M22 |
 | Extension Manager, Marketplace | M22 |
@@ -2855,7 +2856,7 @@ The "Codalus" column uses these terms:
 
 ### Remote development
 
-| Visual Studio feature | Codalus |
+| Classic IDE feature | Codalus |
 |---|---|
 | WSL, SSH and container targets | M21 |
 | Dev Containers | M21 |
@@ -2928,7 +2929,7 @@ Items deferred with a `TODO(issue)` to a milestone that has since closed without
 
 ## Unscheduled candidates
 
-These are VS or Rider features, or common requests, that aren't scheduled. The maintainer reviews them after the last milestone and picks which get milestones (D30).
+These are the classic IDE or Rider features, or common requests, that aren't scheduled. The maintainer reviews them after the last milestone and picks which get milestones (D30).
 
 | Candidate | Notes |
 |---|---|
@@ -2937,9 +2938,9 @@ These are VS or Rider features, or common requests, that aren't scheduled. The m
 | Code maps and dependency diagrams, architecture validation, Class Designer | Project, namespace and type graphs; layer rules as analyzers; class diagrams (`.cd`) that can be viewed and edited. |
 | Native debugging | `lldb-dap` sessions for native dependencies, side by side with a managed session. True mixed mode needs netcoredbg changes. |
 | Instrumentation profiler | Exact call counts through our own `ICorProfiler`. From M18. |
-| Managed settings for organizations | A machine-wide policy file that locks settings (Visual Studio supports group policies). From M23. |
+| Managed settings for organizations | A machine-wide policy file that locks settings (the classic IDE supports group policies). From M23. |
 | Cloud tooling plugins | Azure, AWS and GCP: publish targets, Functions and Lambda projects, resource explorers. Their SDKs are MIT or Apache-2.0, but they are vendor services, so they are plugins, not core. |
-| Image editor | Pixel editing of icons and bitmaps, as Visual Studio has. |
+| Image editor | Pixel editing of icons and bitmaps, as the classic IDE has. |
 | Accessibility checker | Automated accessibility checks for running Avalonia apps, built on M19's diagnostics agent. |
 | Native AOT tooling | A trim and AOT warnings view, and a binary size analyzer (sizoscope, MIT). |
 | Kubernetes tooling | Manifests, cluster explorer, debugging in a pod. Builds on M17 and M21. |
@@ -2954,10 +2955,10 @@ These are VS or Rider features, or common requests, that aren't scheduled. The m
 ## Out of scope
 
 Restated from the original project brief, plus what follows from it for the areas above. D31 proposes moving WinForms, WPF, MAUI's Windows target and .NET Framework into scope ([Windows desktop](#proposed-phase-windows-desktop)); until it is decided, they stay here.
-- **Windows-only technologies:** WinForms, WPF, UWP and WinUI, including their designers, and therefore MAUI's Windows target (see M20). IIS and IIS Express. C++/CLI and COM. Visual Studio Installer Projects. DirectX graphics debugging.
-- **Retired Visual Studio features:** load and web performance tests, Coded UI tests, and the EF6 Entity Data Model designer (.NET Framework).
+- **Windows-only technologies:** WinForms, WPF, UWP and WinUI, including their designers, and therefore MAUI's Windows target (see M20). IIS and IIS Express. C++/CLI and COM. The classic IDE's Installer Projects. DirectX graphics debugging.
+- **Retired classic IDE features:** load and web performance tests, Coded UI tests, and the EF6 Entity Data Model designer (.NET Framework).
 - **Legacy projects:** non-SDK-style projects and .NET Framework-only run and debug scenarios.
-- **Visual Studio compatibility:** VSIX compatibility and Visual Studio's extension APIs.
+- **The classic IDE's compatibility:** VSIX compatibility and the classic IDE's extension APIs.
 - **Proprietary components:** everything in the [known traps](#known-proprietary-traps) list.
 - **Telemetry:** none on by default, in any feature or plugin we ship.
 
@@ -2973,7 +2974,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D4 | Workspace trust and restricted mode (F6) | M7 checkpoint | Yes, with the public release | decided (ADR 0004, built in M2): a trust prompt per folder, and restricted mode for untrusted folders, showing the structure only. Every later feature that runs workspace code checks trust (Security track). |
 | D5 | Plugin distribution channel | M22 | NuGet package type, with a plugin browser in the IDE | decided 2026-10-10: as recommended. |
 | D6 | MAUI go/no-go, and the scope without WinUI | Before M20 | Decide after M19 | decided 2026-10-10: go, for Android, iOS and Mac Catalyst. WinUI stays a non-goal. M20 moves to after M28 and before UI polish (M34). |
-| D7 | AI assistance (M28): whether, and in what form | Before M28 (any time) | Yes, because it is now central to Visual Studio. Only as opt-in, provider-agnostic plugins, with no telemetry. | decided 2026-10-10: yes, as recommended (the M28 design). |
+| D7 | AI assistance (M28): whether, and in what form | Before M28 (any time) | Yes, because it is now central to the classic IDE. Only as opt-in, provider-agnostic plugins, with no telemetry. | decided 2026-10-10: yes, as recommended (the M28 design). |
 | D8 | Hosting integrations (GitHub, GitLab, Azure DevOps) built in? | M13 | A built-in plugin, inactive until sign-in | decided 2026-10-10: built-in plugins for GitHub, Azure DevOps and GitLab, inactive until sign-in. Other hosts, such as Bitbucket, come as third-party plugins through the SCM and authentication APIs. |
 | D9 | Spell-check dictionaries and their licences | M12b | Only MIT/BSD-compatible dictionaries, or user-supplied ones | decided 2026-10-10: the en-US dictionary from SCOWL (permissive licence) is bundled. Other languages download on demand, each showing its licence first. |
 | D10 | F# host: FsAutoComplete or our own FCS host | M36 | FsAutoComplete through the LSP bridge | decided 2026-10-10: FsAutoComplete through the LSP bridge. |
@@ -3021,7 +3022,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-08: first draft, written during M1.
 - 2026-10-08: M1 reached its checkpoint (shell, plugin host v0, Welcome plugin, budgets and regression gates).
 - 2026-10-09: Visual Basic and F# moved after everything else, into a new Phase 9 (now M24 and M25). The former M14–M25 are renumbered M12–M23.
-- 2026-10-09: checked against Visual Studio 2026 and added the [parity matrix](#visual-studio-parity-matrix).
+- 2026-10-09: checked against the classic IDE (2026) and added the [parity matrix](#classic-ide-parity-matrix).
   - **New milestones:** M26 (build and project-system depth), M27 (data and EF Core tooling) and M28 (AI assistance, gated by D7).
   - **New track:** release, updates and the command line.
   - **New decisions:** D15 and D16.
@@ -3031,8 +3032,8 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-10: M10 built and at its checkpoint: the integrated terminal (our own VT engine, ConPTY and `posix_spawn` pseudo-terminals, shell integration, run in terminal; ADR 0014) and C# Interactive in a new supervised host, `codalus-replhost` (ADR 0015). The REPL host serves the input's completion itself instead of the language host. The proposed plugin API gained terminals (API 0.2.3). Deferred: screen-reader announcements, the debugger's console redirect, real-program VT recordings and a newer ConPTY on Windows (`TODO(issue)` in the checkpoint).
 - 2026-10-10: M11 built and at its checkpoint (ADR 0016): the language registry, TextMate grammars for about forty languages, language configurations (comments, auto-closing, folding, word completion), a generic LSP bridge with result normalization, and a new supervised `codalus-markuphost` for JSON (schemas), XML/MSBuild (evaluated values on hover), YAML and `.editorconfig`, plus a Markdown preview. Plugins can contribute languages, grammars and language servers without code (API 0.2.4). New budget scenario `markup-100k`. The XSD, `.resx` and YAML-completion work, and the remaining LSP features, are deferred (`TODO(issue)` in the checkpoint).
 - 2026-10-10: M12a built and at its checkpoint (ADR 0017): document symbols (Document Outline, navigation bar, sticky scroll), Peek Definition, Go to Base, call and type hierarchy, Find All References with read/write classification and kept result sets, a Code Definition window, F1 help, inlay hints, end-of-line CodeLens, an inheritance margin, indentation guides, bracket pair colors, an overview ruler, and library sources from embedded PDB sources or Source Link before decompiling. The standard LSP requests give plugin language servers the same UI. Deferred: Solution Explorer members, Class View and the Object Browser, symbol servers (`TODO(issue)` in the checkpoint).
-- 2026-10-10: added M29 (Visual Studio look and feel: themes, title bar and search, the standard toolbar, document well, tool window captions, Visual Studio's keyboard scheme as the default, an Options tree), at the maintainer's request. It goes after M12b and before M13.
-- 2026-10-10: M12b built and at its checkpoint (ADR 0018): snippets (VS Code's format, Visual Studio import, plugin contributions, API 0.2.5), editing commands (duplicate and move lines, Expand Selection over `textDocument/selectionRange`, doc comment templates, a clipboard ring, Paste JSON as Classes, per-editor zoom), Code Cleanup and format on save, refactorings with options through a generic `codalus/codeActionOptions` dialog, suppression and severity configuration, AutoRecover and local history, bookmarks, the Task List, Code Metrics, a Syntax Visualizer, Compare Files, Close All to the Right and an image viewer. Deferred: the Snippets Manager, the remaining dialog refactorings, the EditorConfig UI, Error List grouping, spell checking (D9), pinned and vertical tabs, the hex viewer and analyzer templates (`TODO(issue)` in the checkpoint).
+- 2026-10-10: added M29 (Classic IDE look and feel: themes, title bar and search, the standard toolbar, document well, tool window captions, the classic IDE's keyboard scheme as the default, an Options tree), at the maintainer's request. It goes after M12b and before M13.
+- 2026-10-10: M12b built and at its checkpoint (ADR 0018): snippets (VS Code's format, the classic IDE's imported, plugin contributions, API 0.2.5), editing commands (duplicate and move lines, Expand Selection over `textDocument/selectionRange`, doc comment templates, a clipboard ring, Paste JSON as Classes, per-editor zoom), Code Cleanup and format on save, refactorings with options through a generic `codalus/codeActionOptions` dialog, suppression and severity configuration, AutoRecover and local history, bookmarks, the Task List, Code Metrics, a Syntax Visualizer, Compare Files, Close All to the Right and an image viewer. Deferred: the Snippets Manager, the remaining dialog refactorings, the EditorConfig UI, Error List grouping, spell checking (D9), pinned and vertical tabs, the hex viewer and analyzer templates (`TODO(issue)` in the checkpoint).
 - 2026-10-10: M29 built and at its checkpoint (ADR 0019): the menu, a search box (Ctrl+Q) and the solution's name in the title row (the window's title bar on Windows), a standard toolbar (configuration, platform, startup project, Start; the debug commands while debugging), Blue, Light and Dark themes with Dock's tabs and captions mapped onto them, a status bar colored by state, the classic keyboard scheme by default with VS Code's as an option, the Solution Explorer on the right with a toolbar and search, an Options tree, and 9 pt UI text. Deferred: Blue's dark inactive tabs, pinned and colored tabs, inactive caption colors, file-type icons, customizable toolbars (M23) (`TODO(issue)` in the checkpoint).
 - 2026-10-10: M13a built and at its checkpoint (ADR 0020): a paged history graph with filters, file and line history, revision comparisons, a 3-way merge editor working from git's conflict markers, continue/skip/abort for merges, rebases, cherry-picks and reverts, interactive rebase without an editor, stash, cherry-pick, revert, reset, tags, remotes, per-line staging, clone, init, Add to .gitignore, commit templates, submodule updates, and `codalus merge`/`--wait` as git's merge tool and editor. M13b (hosting integration, askpass, worktrees, LFS) follows.
 - 2026-10-10: M14a built and at its checkpoint (ADR 0021): exception settings per type (conditions on netcoredbg's `all` filter), an exception helper with the inner-exception chain, Run to Cursor, Force Run to Cursor and Run to Click, function, temporary and dependent breakpoints, breakpoint labels, search, import and export, QuickWatch, editing values in Watch, QuickWatch and data tips (`setExpression`), data tips as trees, Text, JSON, XML and HTML visualizers, PerfTips, the Threads and Modules windows, and Reattach to Process. M14 is split into M14a, M14b (companion host, dumps) and M14c (remote and special sessions).
@@ -3094,7 +3095,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Hosting:** built-in GitHub, Azure DevOps and GitLab plugins on a proposed hosting API (plugin API 0.2.6), inactive until sign-in (device flow or a personal access token): pull requests (list, details, check out, create), review comments in the editor, CI status, work items and `#` completion, publishing.
   - **Git:** an askpass prompt behind the user's credential helper, worktrees, Git LFS awareness (pointer files, locks), solutions spanning several repositories.
   - **Open:** the project's OAuth apps (client ids) are to be registered; until then device sign-in needs a client id in settings, and a personal access token works.
-- 2026-10-11: M26 split into M26a (project system) and M26b (build depth). M26a built and at its checkpoint (ADR 0033): the Properties window (F4) with Build Action, Copy to Output Directory, Custom Tool and every item metadata, written as Visual Studio writes them under globbing (`items/*` in the build host, which evaluates each edit in memory); Show All Files with Include and Exclude From Project; Add Existing Item and links; moves between projects that carry a file's items; Add New Item (a built-in set and `dotnet new`'s item templates); Export Template and the template manager; folder mode (Open Folder, an in-memory solution of the loaded projects, `.codalus/tasks.json` and `launch.json`); External Tools with macros. Plugin API 0.2.8: `contributes.propertyProviders` and `contributes.externalToolMacros`.
+- 2026-10-11: M26 split into M26a (project system) and M26b (build depth). M26a built and at its checkpoint (ADR 0033): the Properties window (F4) with Build Action, Copy to Output Directory, Custom Tool and every item metadata, written as the classic IDE writes them under globbing (`items/*` in the build host, which evaluates each edit in memory); Show All Files with Include and Exclude From Project; Add Existing Item and links; moves between projects that carry a file's items; Add New Item (a built-in set and `dotnet new`'s item templates); Export Template and the template manager; folder mode (Open Folder, an in-memory solution of the loaded projects, `.codalus/tasks.json` and `launch.json`); External Tools with macros. Plugin API 0.2.8: `contributes.propertyProviders` and `contributes.externalToolMacros`.
 - 2026-10-11: M26b built and at its checkpoint (ADR 0034, 0035): build options with every build (verbosity, a log file, parallel projects, binary logs, code analysis on build) from settings, and what F5 does before running; the fast up-to-date check, which records each project's inputs and outputs after a build and skips MSBuild when none changed (verified against real MSBuild runs); Batch Build; Build Timings with the critical path and the slowest targets and tasks; a binary log viewer on MSBuild.StructuredLogger in the build host; the Build Events page (PreBuild/PostBuild targets); custom tools: the ResX generators, T4 templates in a new supervised host (`codalus-t4host`, Mono.TextTemplating) and plugins' generators (`contributes.customTools`, plugin API 0.2.8), run on demand and on save; the `t4` language.
 - 2026-10-11: M27a built and at its checkpoint (ADR 0036): EF Core through the user's own `dotnet ef`, run by the build host in trusted solutions (`ef/*`), and a model agent (`codalus-efagent`) on the app's runtime for the model view. The Entity Framework window lists the DbContexts (found by Roslyn with their provider and connection name, `codalus/ef/contexts`) and their migrations on a chosen connection (the app's configuration, `appsettings*.json` or user secrets); Update Database and reverts show their SQL before applying it; Add and Remove Migration, scripts (idempotent, without transactions), bundles, compiled models, reverse engineering (`dbcontext scaffold`) and installing dotnet-ef as a local tool. `samples/Data`. M27b (the database explorer, the query editor, the SQL language service, `.sqlproj`) follows.
 - 2026-10-11: M15c built and at its checkpoint (ADR 0041), which completes M15: Add New Scaffolded Item (API, MVC, Razor Pages, Blazor, minimal API and Identity scaffolders; empty items from the SDK's item templates, the Entity Framework and Identity ones through the user's `dotnet-aspnet-codegenerator` in the build host, `scaffold/*`, trusted solutions only; a form generated from each scaffolder's parameters, models and contexts offered from DbContext discovery, Install for the tool and its packages), and service references (`serviceReferences/*`: `OpenApiReference` items with NSwag and `Protobuf` items with `Grpc.Tools`, from a file or a URL, with Refresh, Save and Remove; a `.proto` grammar). Fixture `samples/Scaffolding`; smoke step `web.scaffolding`.
@@ -3178,27 +3179,27 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-16: the remote window test's run in a terminal checks the launch profile's lines on Windows, not the program's first line: the stand-in server's ConPTY repaints from the cursor's home, and on a busy runner its repaint landed one line up, over that line (the screen started at `args:`). TODO(issue): find whether a remote terminal's size change in flight (the view's resize reaches the server's ConPTY after its first frame) causes it, and size the server's terminal before it starts if so.
 - 2026-10-16: the smoke step `blazor.wasmDebug` starts debugging again once when the first session's page never stops: on the linux-arm64 installed app the dev server's debugging proxy stalled before reporting the page's .NET runtime (js-debug's log: no `Mono.runtimeReady`, none of the app's sources, the page ran), and no breakpoint bound for 10 minutes; the second session must stop. A page reload in the same session doesn't recover it (tried: the proxy reported the runtime after the reload but not the sources). TODO(issue): find why the proxy stalls (BrowserDebugHost on a loaded runner) and recover in the session itself.
 - 2026-10-16: CpuBound's batches count the primes below a million (0.1 to 0.2 s) instead of below 20,000 (0.7 ms on a Windows runner). On some Windows runners the sampler's interruption of a running thread comes late, and the thread stops at its next safe point, which in CpuBound was the GC poll after `Stopwatch`'s clock read at each batch's end: `Stopwatch.get_Elapsed` held 71% of the samples, `Primes.Count` 5%, and the profiler test and smoke step `profiler.cpu` failed (another runner of the same image showed nearly every sample in `Primes.IsPrime`). The poll was never in IsPrime's loop: folding `Thread.PollGC` into its caller (above) had moved those samples to `Stopwatch` rather than to the loop. With long batches a late stop still lands in the loop.
-- 2026-10-16: four theme families designed at the maintainer's request ("close to Visual Studio style but original too"): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with the mockups, previews and every color in [`design/shell-themes.md`](design/shell-themes.md). The maintainer wants all four as real themes. New milestones in Phase 11: M45 (theme families) and M46 (a first-run setup with the theme chooser; no milestone recorded a setup wizard: M23a's onboarding is the Start page's Get Started list). New decision D32 (names, default, today's themes, the setting). The parity matrix gains the first-launch row.
+- 2026-10-16: four theme families designed at the maintainer's request ("close to the classic IDE's style but original too"): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with the mockups, previews and every color in [`design/shell-themes.md`](design/shell-themes.md). The maintainer wants all four as real themes. New milestones in Phase 11: M45 (theme families) and M46 (a first-run setup with the theme chooser; no milestone recorded a setup wizard: M23a's onboarding is the Start page's Get Started list). New decision D32 (names, default, today's themes, the setting). The parity matrix gains the first-launch row.
 - 2026-10-16: D32 decided as recommended: the families are Harbor, Graphite, Daylight and Ember; new installs default to Harbor with Follow System; Blue, Light, Dark and High Contrast stay as the Classic family; `workbench.colorTheme` takes `<family>` or `<family>.<light|dark|highContrast>`, with today's values read as Classic. M45 no longer waits on a decision.
 - 2026-10-16: a tool window pane that the layout adds beside a container without a proportion (the default layout's center, before the dock panel first arranges it) keeps the documents' share: the left pane at 0.22 scaled the right pane to all of the rest (0.78) and gave the center 0.39 on top, and the panel normalized the 1.39 to a right pane twice the documents' width. On the macOS runner's 1024-pixel window the terminal under the documents was then 14 columns wide, and the smoke steps `fsharp.interactive` (`val squares: int list = [1; 4; 9]` wrapped) and `remote.session` (`Hello from Hel` / `lo`) failed in run 38916412546; whether the panel had arranged the center before the Start page opened varied between runs.
 - 2026-10-16: language detection matches file-name patterns without a regular expression, and when-clause `=~` and folding-marker patterns treat a match over its time budget as no match: their RegexMatchTimeoutException is a TimeoutException, thrown out of opening a file or evaluating a clause when a loaded machine paused the thread mid-match (100 and 50 ms budgets). The smoke test reported any TimeoutException as its 12-minute step limit; it now reports one from the step's own code with its stack. The installed-app smoke step `testing.run` on linux-x64 failed after 10.7 s with "didn't finish within 12 minutes" (run 38916412546, the runner at full CPU from packaging), its stack hidden that way; the file-name pattern match on opening `CalculatorTests.cs` (which never opened) is the only TimeoutException source found on that path.
 - 2026-10-16: the maintainer's decisions for the rest of the plan. D31 is decided: M40–M44 move into scope as Windows-only features (the other OSes later), M43 with its debugger. M30b moves forward onto the .NET 11 release candidate. The order is M30b, M42, M40, M41, M44, M43, then M34g, a polish pass over the new designers and previewers; each milestone ends with a nightly and a stable release. The unscheduled candidates (D30) stay for the maintainer's review after that.
 - 2026-10-16: M45 and M46 join the order after M43 and before M34g (the maintainer's choice), so the last polish pass covers the theme families and the first-run setup too: M30b, M42, M40, M41, M44, M43, M45, M46, M34g.
 - 2026-10-16: M30b at checkpoint ([m30b](checkpoints/m30b.md)), on the .NET 11 SDK's second release candidate: Codalus targets `net11.0` (the plugin API stays on `net10.0`), Roslyn 5.12.0-1.26504.105 (the RC2 SDK's compiler, from the public `dotnet-tools` feed until GA) brings C# 15 and the .NET 11 SDK's Razor generator, whose separate declaration documents the Razor mapping now covers. The hosts still roll forward (ADR 0025 amended), so the .NET 11 SDK is the prerequisite: Check Environment, the packages and the website say so. The SDK's optimized Native AOT publish dropped Avalonia's compiled XAML (`UseOptimizedPublish=false`). Validated on Linux; Windows and macOS by CI. Gaps: the GA swap, netcoredbg's missing frame modules on .NET 11 (exception module conditions), and the target framework matrix's run on 11.
-- 2026-10-16: M42 at its checkpoint ([m42](checkpoints/m42.md), ADR 0069), the first milestone of the [Windows desktop](#proposed-phase-windows-desktop) phase, which D31 doesn't gate. Add Service Reference for WCF runs the user's `dotnet-svcutil` (a local or global tool, installed with consent, trusted folders only) and keeps the reference as Visual Studio does, `Connected Services/<name>/Reference.cs` with a `ConnectedService.json` that `dotnet-svcutil --update` also reads; Update and Remove. New Project offers the CoreWCF templates, and the metadata of running CoreWCF services is found from their endpoints and listening addresses. The WCF Test Client is our own, in the workbench (AOT-clean: WSDL and XSD with `System.Xml.Linq`, SOAP over `HttpClient`), for BasicHttpBinding and WSHttpBinding without security. The markup host knows `system.serviceModel` in `app.config` and `web.config`. Fixture `samples/Wcf`; validated on Linux, with Windows and macOS left to CI's runners.
-- 2026-10-16: M47, Code Search, added at the maintainer's request after comparing Go To All with Visual Studio's Code Search window (filter chips, two-line results, an editable preview, Feature Search, an incomplete-results notice); it takes in Go To All's persistent index from the deferred work, and goes after M46 and before M34g. The order: M42, M40, M41, M44, M43, M45, M46, M47, M34g.
+- 2026-10-16: M42 at its checkpoint ([m42](checkpoints/m42.md), ADR 0069), the first milestone of the [Windows desktop](#proposed-phase-windows-desktop) phase, which D31 doesn't gate. Add Service Reference for WCF runs the user's `dotnet-svcutil` (a local or global tool, installed with consent, trusted folders only) and keeps the reference as the classic IDE does, `Connected Services/<name>/Reference.cs` with a `ConnectedService.json` that `dotnet-svcutil --update` also reads; Update and Remove. New Project offers the CoreWCF templates, and the metadata of running CoreWCF services is found from their endpoints and listening addresses. The WCF Test Client is our own, in the workbench (AOT-clean: WSDL and XSD with `System.Xml.Linq`, SOAP over `HttpClient`), for BasicHttpBinding and WSHttpBinding without security. The markup host knows `system.serviceModel` in `app.config` and `web.config`. Fixture `samples/Wcf`; validated on Linux, with Windows and macOS left to CI's runners.
+- 2026-10-16: M47, Code Search, added at the maintainer's request after comparing Go To All with the classic IDE's Code Search window (filter chips, two-line results, an editable preview, Feature Search, an incomplete-results notice); it takes in Go To All's persistent index from the deferred work, and goes after M46 and before M34g. The order: M42, M40, M41, M44, M43, M45, M46, M47, M34g.
 - 2026-10-16: two docking fixes from the maintainer's report on Windows. A tool window opened as a new group stacked above the bottom tool windows once the user had dragged them into a group of Dock's (to the window's edge, say): the layout found its bottom pane by id only, and Dock's groups have none (a floating window's group even copies the id of the group it came from). A tool window that isn't open now goes back to the group it was closed in, if that group is still there, or else joins the main window's group for its location: the pane with its id, or the group holding most of that location's tool windows. And a tool window dragged among the documents had its whole view in its tab: the document tabs' header template was typed to documents, so Avalonia looked further up for one and the view locator, which matches every dockable, built the view there too. The header templates and tab styles of both kinds of group are now typed to `IShellTab`, which documents and tool windows both are, in the main window and in floating ones (`ToolWindowDockingTests`).
 - 2026-10-16: the toolbar's Hot Reload split button is flat like the run buttons beside it (the maintainer's report: it and its arrow were a gray block). Fluent styles a split button's two parts itself, with its gray `SplitButtonBackground` at rest; `SplitButton.toolbar` restates every state on their presenters with the toolbar's tokens (transparent, the hover color and border under the pointer, pressed or with the menu open, a separator on hover, transparent when disabled), in every theme. The button has no checked state: the gray was its resting one (`ChromeTests`).
 - 2026-10-16: sticky scroll draws its pinned lines as the editor draws them (the maintainer's report: one plain text in the default color). Each pinned line takes the runs of its visual line, which the editor's own colorizers (the grammar, semantic tokens, bracket pairs) colored, with its indentation in the text column and its number in the line number margin, now that the sticky header is an adorner of the text area rather than the text view; hover highlights a line, and controls are rebuilt only when a line's runs change. A header far above the viewport is outside the ±60-line window of semantic tokens, so the controller asks for its tokens with a one-line range request and the colorizer keeps the pinned lines' tokens when the window moves (`LanguageTests`).
 - 2026-10-16: F7 as built ([ADR 0070](adr/0070-per-solution-state.md)), at the maintainer's request after opening a solution and finding no `.codalus` folder and their Solution Explorer expansion gone. Per-user, per-solution state now sits next to the solution in `.codalus/state/<solution file name>/`, in a folder that ignores itself in Git. It holds the session that sat in the user's `sessions/<hash>.json`, plus the active configuration and platform, Solution Explorer's expansion, the Error List's filters and the Test Explorer's grouping. Bookmarks are per solution too (the global file keeps those outside any solution), and the unloaded projects moved there from `.codalus/solution.json`. The old files are moved in on open, and a folder that can't be written falls back to the user's state folder.
 - 2026-10-16: M40a at checkpoint ([m40a](checkpoints/m40a.md), ADR 0071), alongside M42: WinForms and WPF projects load on every OS through `EnableWindowsTargeting` (the build host sets it off Windows), with WPF's `Page` and `ApplicationDefinition` items as additional files of the design-time build; run, debug, tests and Hot Reload are Windows only and say so elsewhere; the WPF and Windows Forms templates in New Project and Add New Item; WPF XAML on the M19a engine. Validated on Linux; Windows (run, debug, tests, the smoke step `windows.desktop`) and macOS by CI. M40b (the WPF previewer and the Live Visual Tree) follows.
-- 2026-10-16: Razor files get semantic tokens from the C# host (the maintainer's report, comparing Routes.razor with Visual Studio: components were the grammar's orange-red invalid tags, like HTML, namespaces teal, comments gray). The host classifies the C# the generator copied with Roslyn in the generated documents and maps it back, and scans the markup between those spans with the Razor language server's token types (`razorComponentElement`, `razorTransition`, `markupElement`…, appended to the legend); components are the tags the generated code renders (`OpenComponent<T>`, child content parameters), tag helpers follow the generator's scopes in document order. Every theme colors them as Visual Studio's do, and the semantic colorizer now runs after the TextMate grammar, which AvaloniaEdit had put last (so semantic tokens never won over a grammar). Line numbers show in Razor files as in C# files; the screenshot's missing numbers aren't reproduced by a default setup (ADR 0023 amended).
+- 2026-10-16: Razor files get semantic tokens from the C# host (the maintainer's report, comparing Routes.razor with the classic IDE: components were the grammar's orange-red invalid tags, like HTML, namespaces teal, comments gray). The host classifies the C# the generator copied with Roslyn in the generated documents and maps it back, and scans the markup between those spans with the Razor language server's token types (`razorComponentElement`, `razorTransition`, `markupElement`…, appended to the legend); components are the tags the generated code renders (`OpenComponent<T>`, child content parameters), tag helpers follow the generator's scopes in document order. Every theme colors them as the classic IDE's do, and the semantic colorizer now runs after the TextMate grammar, which AvaloniaEdit had put last (so semantic tokens never won over a grammar). Line numbers show in Razor files as in C# files; the screenshot's missing numbers aren't reproduced by a default setup (ADR 0023 amended).
 - 2026-10-16: M40b at checkpoint ([m40b](checkpoints/m40b.md), ADR 0072), so M40 is done (Windows only, D31). The WPF previewer is a designer host of our own (`src/Codalus.Previewer.Wpf`, `net8.0-windows`, built on every OS with `EnableWindowsTargeting`, shipped only in the Windows package in `wpfpreviewer/`) that speaks Avalonia's remote protocol, so `PreviewerSession`, `XamlPreviewViewModel` and the selection by logical paths serve both; `PreviewService` routes a file by its dialect (`.axaml` and Avalonia projects to Avalonia's host, WPF projects' `.xaml` to WPF's, MAUI's to a message). The same assembly is the WPF live agent, a startup hook speaking the Avalonia agent's protocol. Off Windows both say Windows only, before any build. Validated on Linux; the designer host, the live agent, the shell end to end and the smoke step `wpf.preview` run on CI's Windows runner.
-- 2026-10-16: M41a at checkpoint ([m41a](checkpoints/m41a.md), ADR 0073): the Windows Forms designer for common forms, Windows only (D31). The C# host reads `InitializeComponent` into a CodeDOM-like model (`codalus/winforms/read`; code the designer doesn't write opens as code with the reason and its line) and writes the designer's changes as the smallest edits, where and how Visual Studio's designer writes them, in the file's own style (`codalus/winforms/edit`; event handlers in the code file, renames through Roslyn); reading and writing again gives Visual Studio's files back byte for byte. A designer host of our own (`src/Codalus.WinForms.Designer`, `net8.0-windows`, Windows Forms' `DesignSurface`, JSON-RPC under `SupervisedProcess`, shipped only in the Windows package in `winformsdesigner/`) draws the form on the app's own Windows Forms and answers gestures with the code they change. Undo is the designer file's text undo (not `UndoEngine`). The Toolbox (`codalus/winforms/toolbox` for the project's own controls), the Properties window over the designer's selection with an Events view, View Code (`F7`) and View Designer (`Shift+F7`), a form icon in Solution Explorer. Off Windows, forms open as code. M41b next.
+- 2026-10-16: M41a at checkpoint ([m41a](checkpoints/m41a.md), ADR 0073): the Windows Forms designer for common forms, Windows only (D31). The C# host reads `InitializeComponent` into a CodeDOM-like model (`codalus/winforms/read`; code the designer doesn't write opens as code with the reason and its line) and writes the designer's changes as the smallest edits, where and how the classic IDE's designer writes them, in the file's own style (`codalus/winforms/edit`; event handlers in the code file, renames through Roslyn); reading and writing again gives the classic IDE's files back byte for byte. A designer host of our own (`src/Codalus.WinForms.Designer`, `net8.0-windows`, Windows Forms' `DesignSurface`, JSON-RPC under `SupervisedProcess`, shipped only in the Windows package in `winformsdesigner/`) draws the form on the app's own Windows Forms and answers gestures with the code they change. Undo is the designer file's text undo (not `UndoEngine`). The Toolbox (`codalus/winforms/toolbox` for the project's own controls), the Properties window over the designer's selection with an Events view, View Code (`F7`) and View Designer (`Shift+F7`), a form icon in Solution Explorer. Off Windows, forms open as code. M41b next.
 - 2026-10-16: M44 at checkpoint ([m44](checkpoints/m44.md), [ADR 0074](adr/0074-maui-on-windows-and-winui.md)), Windows only (D31), ahead of M41 at the maintainer's request. MAUI's Windows target runs on "Windows Machine" in the device picker and WinUI 3 apps build, run, debug and Hot Reload on Windows; packaged (MSIX) apps are registered from their build (`Add-AppxPackage -Register`, Developer Mode explained first), started through `IApplicationActivationManager` in the debug companion (`--activate-app`, keeping COM out of the AOT shell) and attached to with netcoredbg. WinUI projects load on every OS: off Windows the build host replaces WinUI's design-time XAML compiler pass (a Windows program) with an empty target through `CustomAfterDirectoryBuildTargets`, so WinUI XAML edits everywhere (`x:Bind` paths as errors, `x:Load`, `x:DefaultBindMode`, `ThemeResource`, `ms-appx:///` dictionaries, `WMC` errors). No WinUI template pack is offered (none reliable and MIT); WinUI's items are built into Add New Item. Validated on Linux; the Windows-only tests and the smoke step `maui.windows` run on CI's Windows runner.
 - 2026-10-17: the benchmark regression gate is fixed after 0.3.0 failed it on every OS ([the investigation](benchmarks/net11-release-gate.md), [ADR 0002, amendment 2026-10-17](adr/0002-performance-budgets.md#amendment-2026-10-17-accepted-values-and-runner-aware-comparisons)). The maintainer accepted the 0.3.0 sizes of the language, markup and plugin hosts (Visual Basic's Roslyn assemblies from M35, and 1.4 MB from .NET 11), which are now in `benchmarks/accepted.json`, the reviewed file of accepted values. The baseline takes runs whose benchmarks job passed. Latency and memory compare only with runs on the same runner CPU and fail only against 3 of them; with fewer, latency is normalized by VS Code's startup in the same run, and an increase is a warning. VS Code's own numbers never fail. Size stays strict. Each result records the L3 cache next to the CPU.
 - 2026-10-17: `file_highlight_ms`, which rose 25–60% from 0.2.1 to 0.3.0 on the same runner CPUs, is back ([the investigation](benchmarks/net11-release-gate.md#file_highlight_ms)). The editor restarted its first semantic tokens request at every redraw until tokens arrived, cancelling a classification the host needs about 1.5 s for in a 100k-line file; 0.3.0's CodeLens history lenses (`EditorInsights.UpdateGitLenses`) added full redraws when document symbols and CodeLens arrived, so the first colors waited for the language service's Ready status or later. A redraw now leaves a request whose window covers the visible lines alone, Ready lets the request in flight finish before asking again, a refresh asks for CodeLens, inlay hints and document symbols after the first tokens, and the history lenses redraw only when they changed. Locally (alternating builds, medians of 12–20 runs): develop 3328–3716 ms, fixed 2698–3063, 0.2.1 2600–3554. `EditorTests` counts the requests (one, against 19 before).
-- 2026-10-17: M43a at checkpoint ([m43a](checkpoints/m43a.md), [ADR 0075](adr/0075-net-framework-projects-and-builds.md)), Windows only (D31). .NET Framework projects open, restore and build on every OS: SDK-style `net4x` through the reference assemblies package the SDK adds, non-SDK-style ones through the same packages (the build host imports a targets file of its own and restores them, and `packages.config` packages, with the SDK's NuGet libraries; the SDK's NuGet has no `packages.config` restore). Projects on Visual Studio's own targets open and say why they can't build; the Build Tools licence check stays a gap. Convert to SDK-style is our own converter with a preview; running is on Windows only (the `.exe` on the desktop CLR), Mono a later decision; M43b brings the debugger and tests.
+- 2026-10-17: M43a at checkpoint ([m43a](checkpoints/m43a.md), [ADR 0075](adr/0075-net-framework-projects-and-builds.md)), Windows only (D31). .NET Framework projects open, restore and build on every OS: SDK-style `net4x` through the reference assemblies package the SDK adds, non-SDK-style ones through the same packages (the build host imports a targets file of its own and restores them, and `packages.config` packages, with the SDK's NuGet libraries; the SDK's NuGet has no `packages.config` restore). Projects on the classic IDE's own targets open and say why they can't build; the Build Tools licence check stays a gap. Convert to SDK-style is our own converter with a preview; running is on Windows only (the `.exe` on the desktop CLR), Mono a later decision; M43b brings the debugger and tests.
 - 2026-10-17: M43b at checkpoint ([m43b](checkpoints/m43b.md), [ADR 0076](adr/0076-debugging-the-desktop-clr.md)), so M43 is done (Windows only, D31). The spike chose a managed DAP adapter in the debug companion (`codalus-debughost --netfx-dap`) on the installed .NET Framework's ICorDebug, through ClrDebug (MIT), over a desktop-CLR port of netcoredbg: no native build or binary to ship, and everything above ICorDebug tested on every OS. F5, multiple startup projects, Attach to Process and Debug Test debug .NET Framework programs; tests run on VSTest's .NET Framework hosts, old-style test projects included. Gaps: 32-bit processes, Windows PDBs, CLR 2 (untested), coverage on .NET Framework, Mono.
 - 2026-10-17: M41b at checkpoint ([m41b](checkpoints/m41b.md), ADR 0073 amended), and M41 done: the Windows Forms designer's snap lines and Format menu, tab order mode, Dock and Anchor pickers and adorners, the component tray, extender properties, smart tags (run in the designer host, dialogs mapped to the IDE's editors), menus and tool strips edited in place, collection editors, localizable forms per culture (the `.resx` files edited as text by the C# host, held, saved and undone with the designer file), images into the form's or the project's resources, simple data binding, paste with event hookups within the same form. The designer host now answers each operation with the difference of the surface's state, so designers' side effects are written in full. The optional WPF design surface is deferred (a gap, to be proposed on its own); the Data Sources window and the component designer stay gaps. Validated on Linux; the Windows-only host tests and the smoke step `winforms.designerDepth` run on CI's Windows runner.
 - 2026-10-17: M45 at checkpoint ([m45](checkpoints/m45.md), [ADR 0077](adr/0077-theme-families.md)), taken up while M43 is in progress. The four theme families, each Light, Dark and High contrast, are Avalonia theme variants with every color of the design, inheriting Classic's variant of their kind so Fluent's controls follow; their shapes are tokens in the same dictionaries, applied by `ShellStyles.axaml`, so no view changed. `workbench.colorTheme` takes `<family>` or `<family>.<variant>`; Blue, Light, Dark, High Contrast and Follow System read as Classic and the file isn't rewritten; new installs get Harbor following the system. Options shows the families as cards with pictures and a mode, Color Theme lists every variant with a preview, and `themeFamily` joins the context keys. Twelve new tokens beyond the design's six (the status bar's states, the title bar's hover and chip, the search box's text, the Start button). Left for later: the design's structural differences (Daylight's rail and toolbar groups, Ember's title-bar run controls, Graphite's centered search box, tabs in tool window headers) and the gallery in all sixteen themes on CI (`CODALUS_GALLERY_THEMES=all` takes it locally).
@@ -3239,3 +3240,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-21: two of M34h's open control-set items built for 0.6 (task #78; [m34h](checkpoints/m34h.md#the-control-set), [design/controls.md](design/controls.md#classes)). A combo box's list draws the design's check beside the chosen row in a 16 px column kept on every row (`ComboBoxItem` gets a control theme of its own, since Fluent's template is one presenter); the editor's navigation bar and history boxes (`ComboBox.history`: Find and Replace's Find what and Replace with, whose lists are what was typed before) opt out on purpose, recorded in the design's differences, and the other editable ones (Look in, File types, Counters' process box) keep the check. Every tab strip gets the design's line under it, in a new token, `Shell.ViewTabs.Rule`, in all sixteen themes (the mockups' soft border, which wasn't a token: Classic's and Harbor's values from the mockups, the derived families' from their `Shell.Grid.Rule` and Harbor's High contrast), covered by the selected tab's underline: `TabControl` gets a control theme (Fluent 12.1.3's template with the strip in a border that draws the line, on top for a bottom strip), and the four `TabStrip`s used as tabs (Find Results' pages, HTTP Response, Find and Replace, Code Search) take a new `TabStrip.viewTabs` class in place of their own item styles, so Find and Replace's and Code Search's tabs now have the set's look (Body size, 28 px, the accent underline). The gallery shows an open list, a history, a `TabStrip.viewTabs` and a bottom strip, in a window tall enough for the whole page (1280 × 1650, which `ControlSetTests` checks). The website's Find in Files, Code Search, HTTP, profiler and EF Core pictures, which show these strips (EF Core's is the model document's Diagram and Debug View tabs), are refreshed from a Linux smoke run of the change (Classic Dark, 1280 × 800) with the steps before them that the earlier pictures had (the Error List's counts, the Test Explorer's run, the Blazor app's output), so only the strips changed.
 - 2026-10-22: Connect to *agent* (#79, D43, [ADR 0083](adr/0083-connecting-external-agents-from-templates.md), [checkpoint](checkpoints/connect-agents.md)). AI Chat's off and no-provider states offer Claude, Codex, Gemini CLI and GitHub Copilot, and More agents… lists pi, OpenCode and goose too; the dialog checks what the agent needs, installs it with the user's own package manager (Codalus's Node.js only where none can, D-node), signs it in (terminal sign-in is advertised now; Claude's subscription through Claude Code's own login), tests the connection on the dialog's unsaved consent and writes the entry (and `ai.enabled`) only when it passes. `secretEnv` keys live in SecretStorage under the shell's own id, which plugin hosts can no longer name; Disconnect undoes it all. The Options editor and "Update available" are deferred (phase 2).
 - 2026-10-24: M50 (0.7) and M51 (0.8) added from the maintainer's list after the 0.6.0 release, with the maintainer's decisions of that day and the facts checked in the code. They take the next free numbers: Visual Basic and F# (M35, M36) are done, and M37–M49 already came after them.
+- 2026-10-25: M50 built ([m50](checkpoints/m50.md)), with .NET 11 RC3 added by the maintainer. The 0.6 release's items that need Windows and macOS machines moved to M51 item 5, by the maintainer's decision of that day.

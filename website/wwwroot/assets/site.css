@@ -4,14 +4,14 @@
   font-family: "Schibsted Grotesk";
   src: url("fonts/schibsted-grotesk.woff2") format("woff2");
   font-weight: 400 900;
-  font-display: swap;
+  font-display: optional;
 }
 
 @font-face {
   font-family: "JetBrains Mono";
   src: url("fonts/jetbrains-mono.woff2") format("woff2");
   font-weight: 100 800;
-  font-display: swap;
+  font-display: optional;
 }
 
 :root {
@@ -164,6 +164,7 @@ p code, span code { font-size: 0.88em; color: #dcd5ea; }
 .facts dt { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
 .facts dd { margin: 4px 0 0; }
 .facts .facts-link { grid-column: 1 / -1; padding: 6px 16px; }
+.facts .facts-link dd { margin: 0; }
 .facts .facts-link a { display: inline-block; padding: 8px 0; font-size: 14px; }
 
 /* Screenshots */
@@ -171,6 +172,8 @@ p code, span code { font-size: 0.88em; color: #dcd5ea; }
 .shot {
   margin: 0; width: 100%; border: 1px solid var(--line-strong); border-radius: 14px; overflow: hidden; background: var(--surface);
 }
+/* A tab panel holds its figure (a figure can't be a tab panel, M50). */
+.shot > figure { margin: 0; }
 .shot img { display: block; width: 100%; height: auto; aspect-ratio: 1280 / 800; }
 .shot figcaption {
   padding: 18px 22px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;

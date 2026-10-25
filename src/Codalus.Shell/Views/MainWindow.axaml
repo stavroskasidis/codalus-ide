@@ -139,10 +139,9 @@
         <views:FindReplaceView x:Name="FindReplace" DataContext="{Binding FindReplace}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,36,28,0" />
       </Panel>
 
-      <!-- Connect to <agent> (D43): the in-window dialog frame at its widest, under the dialog layer (its confirmations go over it). -->
-      <Panel x:Name="ConnectAgentLayer" Background="{DynamicResource Shell.Dialog.Scrim}" IsVisible="{Binding ConnectAgent.IsOpen}" ZIndex="2">
-        <views:ConnectAgentView x:Name="ConnectAgentView" DataContext="{Binding ConnectAgent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-      </Panel>
+      <!-- Connect to <agent> (D43): the in-window dialog frame at its widest, under the dialog layer (its confirmations go over it).
+           Its view is made the first time it opens (MainWindow.axaml.cs, M50). -->
+      <Panel x:Name="ConnectAgentLayer" Background="{DynamicResource Shell.Dialog.Scrim}" IsVisible="{Binding ConnectAgent.IsOpen}" ZIndex="2" />
 
       <!-- The window behind an in-window dialog is dimmed by Shell.Dialog.Scrim (M34h). -->
       <Panel x:Name="DialogLayer" Background="{DynamicResource Shell.Dialog.Scrim}" IsVisible="{Binding Dialogs.IsOpen}" ZIndex="2">

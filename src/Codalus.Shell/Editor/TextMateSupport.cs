@@ -164,7 +164,7 @@ public sealed class TextMateSupport : IRegistryOptions
     /// <summary>
     /// The TextMate theme for the shell's theme, by its kind (<c>dark</c>, <c>light</c>, <c>highContrast</c>; a family's
     /// variant too). Dark+ draws plain text (embedded code, operators) in VS Code's #D4D4D4; it takes the editor's plain
-    /// text color instead, Visual Studio's #DCDCDC, as the C# around it does. In Classic, grammar-colored text also takes
+    /// text color instead, the classic IDE's #DCDCDC, as the C# around it does. In Classic, grammar-colored text also takes
     /// the classic IDE's control keywords, comments and strings (#83, D47), as the semantic colors do.
     /// </summary>
     public IRawTheme ThemeFor(string themeId)

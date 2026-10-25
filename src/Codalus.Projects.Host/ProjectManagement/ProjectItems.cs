@@ -733,7 +733,7 @@ internal sealed class ProjectItems : IDisposable
     private string Full(string value) =>
         System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(System.IO.Path.Combine(_directory, value.Replace('\\', System.IO.Path.DirectorySeparatorChar).Replace('/', System.IO.Path.DirectorySeparatorChar))));
 
-    /// <summary>The project-relative path as project files write it (with backslashes, as Visual Studio does).</summary>
+    /// <summary>The project-relative path as project files write it (with backslashes, as the classic IDE does).</summary>
     private string Relative(string path) => System.IO.Path.GetRelativePath(_directory, path).Replace('/', '\\');
 
     private static string Normalize(string path) => System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path));

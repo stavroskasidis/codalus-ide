@@ -38,6 +38,7 @@ public partial class PolishTests
         channel.AppendLine("\e[33mjust yellow\e[0m and \e[1;32mbold green\e[0m and \e[38;2;255;255;0mrgb yellow\e[0m");
         channel.Append("\e[3");
         channel.AppendLine("4msplit blue\e[0m");
+        channel.AppendLine("\e[34mdark blue\e[0m and \e[1;34mbold blue\e[0m");
 
         var view = new OutputView { DataContext = f.Shell.Output };
         f.Shell.Output.Selected = channel;
@@ -68,6 +69,14 @@ public partial class PolishTests
                 return (element.TextRunProperties.ForegroundBrush as ISolidColorBrush)?.Color;
             }
 
+            FontWeight WeightAt(int line, string text)
+            {
+                var documentLine = editor.Document.GetLineByNumber(line);
+                var column = editor.Document.GetText(documentLine).IndexOf(text, StringComparison.Ordinal);
+                var visual = editor.TextArea.TextView.GetOrConstructVisualLine(documentLine);
+                return visual.Elements.First(e => e.RelativeTextOffset <= column && column < e.RelativeTextOffset + e.DocumentLength).TextRunProperties.Typeface.Weight;
+            }
+
             void Expect(int line, string text, string? token)
             {
                 var color = ColorAt(line, text);
@@ -91,7 +100,13 @@ public partial class PolishTests
             Expect(6, "bold green", null);
             Expect(6, "rgb yellow", null);
             Expect(7, "split blue", null);
+            Expect(8, "dark blue", null);
+            Expect(8, "bold blue", null);
             Assert.NotEqual(ColorAt(1, "Build started"), ColorAt(6, "just yellow")); // the ANSI color shows
+
+            // Bold is the bright color at the regular weight (M50): the bold typeface was hard to read.
+            Assert.Equal(WeightAt(6, "just yellow"), WeightAt(6, "bold green"));
+            Assert.Equal(WeightAt(8, "dark blue"), WeightAt(8, "bold blue"));
         }
 
         Assert.True(problems.Count == 0, string.Join('\n', problems));
@@ -147,10 +162,11 @@ public partial class PolishTests
             return icons;
         }
 
-        // Solution Explorer (the maintainer's finding): Home blue, Sync green, Collapse All and Switch Views purple, Show All
-        // Files tan, Properties blue.
+        // Solution Explorer (the maintainer's finding): Home blue, Sync green, Track Active Item blue (M50), Collapse All and
+        // Switch Views purple, Show All Files tan, Properties blue.
         var explorer = Toolbar(new SolutionExplorerView { DataContext = f.Shell.Explorer });
-        Assert.True(explorer.Count == 6, string.Join(", ", explorer));
+        Assert.True(explorer.Count == 7, string.Join(", ", explorer));
+        Assert.Equal(Token("Shell.Icon.Blue", variant), explorer.Single(i => i.Name == "Track Active Item").Color);
         Assert.True(explorer.Select(i => i.Color).Distinct().Count() >= 4, string.Join(", ", explorer));
         Assert.Equal(Token("Shell.Icon.Blue", variant), explorer.Single(i => i.Name == "Home").Color);
         Assert.Equal(Token("Shell.Icon.Green", variant), explorer.Single(i => i.Name == "Sync with Active Document").Color);

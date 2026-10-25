@@ -18,8 +18,8 @@ Date: 2026-10-09. Decisions: [ADR 0010](../adr/0010-test-platform-integration.md
   - **Test Explorer** (Ctrl+E T): a virtualized tree grouped by project/namespace/class, project, outcome, trait or duration; the filter syntax (`outcome:`, `project:`, `trait:`, `-`, quotes); run all, selected, failed and not-run tests, repeat the last run, cancel; a summary line.
   - **Details**: message, expected and actual, stack trace with clickable frames, output and the last N results (`testing.historyLength`). The run's log and the files it produced (attachments, such as coverage reports) are in Output → Tests.
   - **Editor**: outcome glyphs in a test margin (click: Run, Debug, Run with Coverage, Show in Test Explorer); Run/Debug Tests at Cursor and Go to Next/Previous Failed Test; the same commands in the editor's new context menu (`editor/context`).
-  - **Test menu** and Visual Studio's chords: Ctrl+R A, Ctrl+R Ctrl+A, Ctrl+R T, Ctrl+R Ctrl+T, Ctrl+R L, Ctrl+R F. Open Recent moved from Ctrl+R to **Ctrl+K Ctrl+R**, because a single-key Ctrl+R shadowed the chords.
-  - **Playlists** as JSON in `.daedalus/playlists/` (paths relative to the solution), and import of Visual Studio `.playlist` files.
+  - **Test menu** and the classic IDE's chords: Ctrl+R A, Ctrl+R Ctrl+A, Ctrl+R T, Ctrl+R Ctrl+T, Ctrl+R L, Ctrl+R F. Open Recent moved from Ctrl+R to **Ctrl+K Ctrl+R**, because a single-key Ctrl+R shadowed the chords.
+  - **Playlists** as JSON in `.daedalus/playlists/` (paths relative to the solution), and import of the classic IDE's `.playlist` files.
   - **TRX** export and import; imported results appear on the matching tests.
   - **Create Unit Tests** (editor context menu, Test menu): a `<Class>Tests.cs` with a stub per public method in the chosen test project's framework, adding the project reference if needed.
   - **`daedalus diff <left> <right>`** shows a file comparison, in the running instance if there is one (single instance over a named pipe), so Daedalus can be Verify's diff tool.

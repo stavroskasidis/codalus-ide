@@ -315,7 +315,7 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// Applies a workspace edit: open documents change in the editor (undoable, left unsaved, like Visual Studio);
+    /// Applies a workspace edit: open documents change in the editor (undoable, left unsaved, like the classic IDE);
     /// other files are changed on disk with their encoding kept; files that don't exist are created.
     /// </summary>
     public async Task<bool> ApplyWorkspaceEditAsync(WorkspaceEdit edit, bool quiet = false)

@@ -384,7 +384,7 @@ public sealed class SweepFindingsTests
     [Fact]
     public void No_ui_string_says_Visual_Studio()
     {
-        // The product's own name only (UI rules): the WCF note said "as Visual Studio does".
+        // The product's own name only (UI rules): the WCF note named the classic IDE ("as ... does").
         var catalog = JsonNode.Parse(File.ReadAllText(Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "Localization", "en.json")))!.AsObject();
         Assert.Empty(catalog.Where(p => p.Value!.GetValue<string>().Contains("Visual Studio", StringComparison.OrdinalIgnoreCase)).Select(p => p.Key));
     }

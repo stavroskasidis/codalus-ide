@@ -1836,7 +1836,7 @@ public sealed class DebugService : IAsyncDisposable
     /// names one the adapter picked: netcoredbg names the thread it was asked to pause, the first it lists, by the
     /// lowest thread id, which on Windows can be a runtime thread without managed frames, whose stack is empty (or
     /// unreadable). The stop then shows the first thread with code of the program's own (frames with source), as
-    /// Visual Studio does after Break All, or else the first thread with any frames. An event that names no thread
+    /// the classic IDE does after Break All, or else the first thread with any frames. An event that names no thread
     /// shows one the same way.
     /// </summary>
     private async Task<(int ThreadId, StackFrame[] Frames)> StoppedThreadAsync(IDebugAdapter adapter, StoppedEvent stopped)

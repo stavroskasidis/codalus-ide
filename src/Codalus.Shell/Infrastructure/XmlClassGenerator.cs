@@ -7,7 +7,7 @@ namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
 /// Paste XML as Classes (deferred from M12b): C# classes for an XML document that <c>XmlSerializer</c> reads and writes,
-/// as Visual Studio generates them. Every element with attributes or child elements becomes a class: attributes become
+/// as the classic IDE generates them. Every element with attributes or child elements becomes a class: attributes become
 /// <c>[XmlAttribute]</c> properties, child elements <c>[XmlElement]</c> properties (a <c>List&lt;T&gt;</c> when one repeats
 /// in any instance), and the text of an element that also has attributes an <c>[XmlText]</c> <c>Value</c>. Values are
 /// typed from every occurrence: <c>bool</c>, <c>int</c>, <c>long</c>, <c>decimal</c>, <c>DateTime</c>, else <c>string</c>.

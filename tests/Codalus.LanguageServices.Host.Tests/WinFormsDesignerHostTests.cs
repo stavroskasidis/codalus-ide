@@ -86,7 +86,7 @@ public sealed class WinFormsHostBuild : ICollectionFixture<WinFormsHostFixture>;
 
 /// <summary>
 /// M41a (ADR 0073), Windows only: the Windows Forms designer's host on the fixture's own build output, through the same
-/// process and protocol as the IDE: a VS-written form loaded on Windows Forms' own DesignSurface and drawn, its
+/// process and protocol as the IDE: a form the classic IDE wrote, loaded on Windows Forms' own DesignSurface and drawn, its
 /// components and their bounds, a Toolbox create, a property set, a move, a resize, a reparent and a delete coming back
 /// as code that the C# host's writer turns into the expected minimal edits, the Properties window's descriptors and
 /// events, a localizable form from its compiled resources, and the app's own user control.
@@ -174,7 +174,7 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture)
         await using var _ = host;
         var root = render.Components[0];
 
-        // A button dropped on the form at (290, 300) of its client area: VS's initial properties (Text is its name).
+        // A button dropped on the form at (290, 300) of its client area: the classic IDE's initial properties (Text is its name).
         var created = await host.CreateAsync(new DesignerCreateParams("System.Windows.Forms.Button", "button1", null, root.ClientX + 290, root.ClientY + 300), Ct);
         Assert.Null(created.Error);
         var button = created.Created!;
@@ -187,7 +187,7 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture)
         Assert.Equal("75, 23", Property(button, "Size"));
         Assert.Equal("true", Property(button, "UseVisualStyleBackColor"));
 
-        // Visible and Enabled are ControlDesigner's shadows, at the control's defaults: not written (Visual Studio doesn't).
+        // Visible and Enabled are ControlDesigner's shadows, at the control's defaults: not written (the classic IDE doesn't).
         Assert.DoesNotContain(button.Properties, p => p.Name is "Visible" or "Enabled");
         Assert.Contains(created.Render.Components, c => c.Name == "button1" && c.Parent == "OrderForm");
         var withButton = Apply(source, [.. Edits(created)]);

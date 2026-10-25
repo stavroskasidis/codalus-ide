@@ -427,8 +427,8 @@ internal sealed partial class SolutionSession
     /// </summary>
     private string BuildEntryPoint()
     {
-        // Unloaded projects, compose projects (.dcproj, whose SDK only Visual Studio has: ADR 0042) and projects that
-        // import Visual Studio's own targets (M43a, ADR 0075) aren't built.
+        // Unloaded projects, compose projects (.dcproj, whose SDK only the classic IDE has: ADR 0042) and projects that
+        // import the classic IDE's own targets (M43a, ADR 0075) aren't built.
         if (IsSingleProject || !ProjectPaths.Any(p => IsUnloaded(p) || ComposeProject.Is(p) || CannotBuild(p)))
         {
             return Path;

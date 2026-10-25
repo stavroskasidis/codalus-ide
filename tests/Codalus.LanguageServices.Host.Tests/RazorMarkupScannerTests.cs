@@ -50,6 +50,16 @@ public sealed class RazorMarkupScannerTests
     }
 
     [Fact]
+    public void A_parameter_given_an_expression_is_a_component_attribute()
+    {
+        // The maintainer's screenshot (M50): <SourcesDemo Sources="@sources"> with the name mapped and the value C#.
+        var tokens = Scan("<SourcesDemo ⟦Sources⟧=\"@⟦sources⟧\" id=\"demo\" />", Components("SourcesDemo"));
+        Assert.Contains("Sources:razorComponentAttribute", tokens);
+        Assert.Contains("id:markupAttribute", tokens);
+        Assert.DoesNotContain(tokens, t => t.StartsWith("sources:", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Csharp_spans_are_left_to_roslyn()
     {
         // An expression's C#, a code block's (with its '<'), an attribute's value: no markup tokens inside.

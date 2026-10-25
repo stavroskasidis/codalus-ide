@@ -8,7 +8,7 @@ namespace Codalus.Shell.Tests;
 
 /// <summary>
 /// A Break All where no thread has managed frames (a program paused before its Main runs, as the packaged WinUI app
-/// attached to at its start can be): the Call Stack shows [External Code], as Visual Studio does, not an empty window.
+/// attached to at its start can be): the Call Stack shows [External Code], as the classic IDE does, not an empty window.
 /// The adapter is the scripted one (<c>Codalus.LspConformance.Server --dap</c>).
 /// </summary>
 public sealed class CallStackExternalCodeTests

@@ -6,7 +6,7 @@
 
 ## Context
 
-M28 asks for AI assistance with parity to what Visual Studio does with GitHub Copilot: chat, inline suggestions, AI actions on existing surfaces, agent mode and MCP. Copilot's integration and IntelliCode are proprietary (the roadmap's traps), so this is our own open design. D7 fixed the principles:
+M28 asks for AI assistance with parity to what the classic IDE does with GitHub Copilot: chat, inline suggestions, AI actions on existing surfaces, agent mode and MCP. Copilot's integration and IntelliCode are proprietary (the roadmap's traps), so this is our own open design. D7 fixed the principles:
 - off by default, with no telemetry;
 - the user picks a provider, and nothing is sent anywhere until then;
 - a visible indicator and a per-workspace switch;

@@ -21,7 +21,7 @@ Date: 2026-10-09. Decisions: [ADR 0011](../adr/0011-code-coverage.md). Continues
 - **HTML report** through ReportGenerator (optional in the roadmap): export Cobertura and run ReportGenerator yourself. `TODO(issue)`.
 - **Coverage in the Solution Explorer** (percentages on projects and files) and in the Test Explorer. `TODO(issue)`.
 - **Line tracking through edits**: edited documents fade rather than move their coloring. `TODO(issue)`.
-- **Accumulating coverage across runs** (Visual Studio can merge results): each run replaces the last. `TODO(issue)`.
+- **Accumulating coverage across runs** (the classic IDE can merge results): each run replaces the last. `TODO(issue)`.
 - The exported Cobertura file is rebuilt from the merged data, so each line belongs to the method that starts closest above it; the plugin's own per-project reports are listed as attachments in Output → Tests.
 - Coverage isn't collected for debug runs, or for .NET Framework projects.
 

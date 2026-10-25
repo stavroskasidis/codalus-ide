@@ -116,7 +116,7 @@ public sealed record DesignerComponentView(string Name, string Type, string? Par
 
     public bool Visible { get; init; } = true;
 
-    /// <summary>The event Visual Studio hooks on a double-click (<c>[DefaultEvent]</c>).</summary>
+    /// <summary>The event the classic IDE's hooks on a double-click (<c>[DefaultEvent]</c>).</summary>
     public string? DefaultEvent { get; init; }
 
     /// <summary>Not a component of the class: a sub-control the designer exposes (a SplitContainer's panel).</summary>
@@ -158,7 +158,7 @@ public sealed record DesignerComponentView(string Name, string Type, string? Par
 
     /// <summary>
     /// It shows in the component tray (M41b): a component that isn't a control (a timer, a tool tip), a control with no
-    /// parent (a context menu), and, as in Visual Studio, a menu, tool or status strip.
+    /// parent (a context menu), and, as in the classic IDE, a menu, tool or status strip.
     /// </summary>
     public bool InTray { get; init; }
 

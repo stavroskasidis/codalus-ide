@@ -501,7 +501,7 @@ public partial class PolishTests
     [AvaloniaFact]
     public async Task A_tab_has_a_pin_button_beside_its_thin_close_button()
     {
-        // As Visual Studio's tabs: the pin beside the close button pins the tab (to the left of its group), and the close
+        // As the classic IDE's tabs: the pin beside the close button pins the tab (to the left of its group), and the close
         // glyph is a thin X in a 16 px square.
         await using var f = ShellFixture.Create();
         var folder = Path.Combine(f.UserData, "tabs");

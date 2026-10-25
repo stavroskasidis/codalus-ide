@@ -10,8 +10,8 @@ namespace Codalus.LanguageServices.Host.WinForms;
 /// A form's <c>.resx</c> file as text (M41b, ADR 0073): its <c>data</c>, <c>metadata</c> and <c>assembly</c> elements
 /// found by a light scan, and edits that touch only the entries they change (a value replaced, an entry inserted or
 /// removed with its lines), so the rest of the file (its schema, comments, other resources) stays byte for byte, as the
-/// designer file does. New entries go where Visual Studio's designer orders them: with their component's (metadata
-/// first, then its properties by name, then Visual Studio's records of the control, <c>&gt;&gt;name.Name</c>,
+/// designer file does. New entries go where the classic IDE's designer orders them: with their component's (metadata
+/// first, then its properties by name, then the classic IDE's records of the control, <c>&gt;&gt;name.Name</c>,
 /// <c>Type</c>, <c>Parent</c>, <c>ZOrder</c>), a new component's before the next one by name, the form's
 /// (<c>$this</c>) last.
 /// </summary>

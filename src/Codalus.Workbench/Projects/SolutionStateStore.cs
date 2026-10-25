@@ -18,7 +18,7 @@ public readonly record struct SolutionStateKey(string Path, bool IsFolder)
 
 /// <summary>
 /// Per-solution, per-user state next to the solution (ADR 0070, roadmap F7): <c>&lt;solution folder&gt;/.codalus/state/&lt;solution
-/// file name&gt;/</c> (<c>folder/</c> in folder mode), git-ignored by its own <c>.gitignore</c>, like Visual Studio's <c>.vs</c>.
+/// file name&gt;/</c> (<c>folder/</c> in folder mode), git-ignored by its own <c>.gitignore</c>, like the classic IDE's <c>.vs</c>.
 /// <list type="bullet">
 /// <item>Writes are serialized on the caller's thread and written in the background, one after another, through a
 /// temporary file and a rename. <see cref="FlushAsync"/> waits for them.</item>

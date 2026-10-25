@@ -1046,7 +1046,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
     }
 
-    /// <summary>Visual Studio's name for a new component: its type's name, first letter lowercased, and the first free number (<c>button1</c>).</summary>
+    /// <summary>The classic IDE's name for a new component: its type's name, first letter lowercased, and the first free number (<c>button1</c>).</summary>
     public string NewName(string type)
     {
         var simple = type[(type.LastIndexOf('.') + 1)..];
@@ -1417,7 +1417,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         PropertiesChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>A double-click on a component: its default event's handler (<c>[DefaultEvent]</c>: a button's Click, a form's Load), as Visual Studio does.</summary>
+    /// <summary>A double-click on a component: its default event's handler (<c>[DefaultEvent]</c>: a button's Click, a form's Load), as the classic IDE does.</summary>
     public Task DefaultEventAsync(double x, double y)
     {
         if (HitTest(x, y) is not { } hit || hit.IsPart)
@@ -1567,7 +1567,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
     /// classic IDE: a selected container, a selected control's container, a split container's panel; else the form), a
     /// little lower and to the right, with their collections, extender properties and data bindings where what they name
     /// exists. Their event hookups come too when pasting into the form they were copied from (the handlers are its);
-    /// into another form they don't, as Visual Studio does (ADR 0073).
+    /// into another form they don't, as the classic IDE does (ADR 0073).
     /// </summary>
     public async Task PasteAsync()
     {
@@ -1916,7 +1916,7 @@ public sealed class ToolboxCategoryViewModel(string title, IReadOnlyList<Toolbox
 }
 
 /// <summary>
-/// The Toolbox (Ctrl+Alt+X, M41a): Windows Forms' common controls by Visual Studio's categories, and the project's own
+/// The Toolbox (Ctrl+Alt+X, M41a): Windows Forms' common controls by the classic IDE's categories, and the project's own
 /// controls and components (from the C# host). Selecting an item arms it: the next click or drag on the designer's
 /// surface creates it there (the Pointer, or creating it, disarms). Items can also be dragged onto the surface, and
 /// since 0.6 (#66) a double-click or Enter adds one at once into the selected container, as the classic IDE does.
@@ -1925,7 +1925,7 @@ public sealed class ToolboxViewModel : ObservableObject
 {
     public const string ToolWindowId = "toolbox";
 
-    /// <summary>The framework's items by category, as Visual Studio's Toolbox has them for Windows Forms on .NET.</summary>
+    /// <summary>The framework's items by category, as the classic IDE's Toolbox has them for Windows Forms on .NET.</summary>
     public static IReadOnlyList<(string Category, string[] Types)> Framework { get; } =
     [
         ("Common Controls", ["Button", "CheckBox", "CheckedListBox", "ComboBox", "DateTimePicker", "Label", "LinkLabel", "ListBox", "ListView", "MaskedTextBox", "MonthCalendar", "NotifyIcon", "NumericUpDown", "PictureBox", "ProgressBar", "RadioButton", "RichTextBox", "TextBox", "ToolTip", "TrackBar", "TreeView", "WebBrowser"]),

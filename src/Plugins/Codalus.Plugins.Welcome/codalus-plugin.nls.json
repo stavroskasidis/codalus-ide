@@ -8,7 +8,7 @@
   "command.refresh": "Refresh",
   "view.start": "Start",
   "setting.showOnStartup": "Show the Start page when Codalus IDE starts.",
-  "setting.onboarded": "No longer used: Get Started is the first-run setup since 0.3 (Help → Get Started opens it).",
+  "setting.onboarded": "No longer used: Get Started is the first-run setup since 0.3 (Help → Set Up Codalus IDE opens it).",
   "start.nextTip": "Next Tip",
   "start.openSolutionOrProject": "Open Solution or Project…",
   "start.showAllCommands": "Show All Commands",

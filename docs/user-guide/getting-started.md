@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **The .NET 11 SDK** (release candidate 2 or later until .NET 11 is released in November 2026). Codalus IDE runs its helper processes on .NET 11 or newer, and loads and builds solutions with the SDK's MSBuild, so an SDK must be installed for any solution you open. It must also match the version a `global.json` asks for.
+- **The .NET 11 SDK** (release candidate 3 or later until .NET 11 is released in November 2026). Codalus IDE runs its helper processes on .NET 11 or newer, and loads and builds solutions with the SDK's MSBuild, so an SDK must be installed for any solution you open. It must also match the version a `global.json` asks for.
   - Other SDKs work next to it: .NET 10's, and older ones pinned in `global.json` down to 2.1.200 (see [Older .NET versions](dotnet-versions.md)). On their own, without .NET 11 or newer, they can't start Codalus' helper processes.
   - Projects need the runtimes they target to run and debug, as with `dotnet run`: install .NET 10's runtime (or SDK) for `net10.0` projects.
 - **git** (2.30 or newer) on the `PATH`, for the Git features.
@@ -11,7 +11,7 @@
 The debugger (netcoredbg) is included in the packages.
 
 **Missing something?** The [first-run setup](#the-first-run-setup)'s Tools step checks for the .NET SDK and git. On later starts without them, Codalus IDE offers to install them. When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
-- **The .NET runtime Codalus IDE needs**: its helper processes (the plugin, build, language, debug and other hosts) ask for a .NET runtime (on a release candidate, that release candidate or a later version, such as `11.0.0-rc.2.26504.105`). Before it starts one, Codalus IDE checks that the runtime is installed in the .NET folder it uses, by .NET's own roll-forward rules. When it isn't, you get one notification, not one error per plugin: "Codalus IDE needs the .NET 11.0.0-rc.2.26504.105 runtime, which isn't installed (found: …)", with **Install .NET 11.0**. That installs the .NET 11 SDK, which brings the runtime, the same way as the SDK below, and then starts the plugins, language services and solution that couldn't start, without a restart. Check Environment lists it as **.NET runtime for Codalus IDE**.
+- **The .NET runtime Codalus IDE needs**: its helper processes (the plugin, build, language, debug and other hosts) ask for a .NET runtime (on a release candidate, that release candidate or a later version, such as `11.0.0-rc.3.26522.148`). Before it starts one, Codalus IDE checks that the runtime is installed in the .NET folder it uses, by .NET's own roll-forward rules. When it isn't, you get one notification, not one error per plugin: "Codalus IDE needs the .NET 11.0.0-rc.3.26522.148 runtime, which isn't installed (found: …)", with **Install .NET 11.0**. That installs the .NET 11 SDK, which brings the runtime, the same way as the SDK below, and then starts the plugins, language services and solution that couldn't start, without a restart. Check Environment lists it as **.NET runtime for Codalus IDE**.
 - **Which .NET folder**: with several (`/usr/local/share/dotnet` and `~/.dotnet` on a Mac, say), Codalus IDE uses the one on your `PATH` or in `DOTNET_ROOT` when it has the runtime, and otherwise a folder that has both an SDK and the runtime. A runtime installed on its own where .NET looks by default (a distribution's `dotnet-runtime-11.0`, Microsoft's runtime package) serves the helper processes as it is. After an install, the folder is chosen again.
 - **What's found**: Help → Check Environment lists every tool it uses, with its version, its path and what needs it: the .NET SDK, the .NET runtime Codalus IDE itself needs, git and Git LFS, Docker or Podman, and WSL on Windows.
 - **How it installs**:
@@ -72,7 +72,7 @@ The first time Codalus IDE starts for a user data folder, **Set up Codalus IDE**
 3. **Your settings**: import from VS Code (its settings and key bindings, found in its user folder), from a `.vssettings` file another IDE exported, or from a file exported with Tools → Export Settings ([Moving your settings](settings.md#moving-your-settings)); or turn on [Settings Sync](settings.md#settings-sync) with a folder or a Git repository. When the folder or repository already has settings, they replace this machine's, without asking.
 4. **Tools**: the .NET SDK and git, found or offered. **Install…** shows exactly what would run; nothing installs until you choose **Install** (or **Run in Terminal**, or **Open Page**). Help → Check Environment lists everything else.
 
-**Next** saves the step and moves on (`Alt+Right`); **Back** goes back (`Alt+Left`). **Done**, on the last step, opens the start window. **Skip setup** (or `Esc`, or closing the window) ends the setup without saving the step you're on, so a new install keeps the defaults: Classic following the system, and the Default keys. Either way the setup is recorded (`workbench.setupCompleted`) and doesn't show again; **Help → Set Up Codalus IDE** or **Help → Get Started** runs it again. The window works from the keyboard: `Tab` moves through a step, the arrow keys move between the cards and modes, and `Space` or `Enter` chooses.
+**Next** saves the step and moves on (`Alt+Right`); **Back** goes back (`Alt+Left`). **Done**, on the last step, opens the start window. **Skip setup** (or `Esc`, or closing the window) ends the setup without saving the step you're on, so a new install keeps the defaults: Classic following the system, and the Default keys. Either way the setup is recorded (`workbench.setupCompleted`) and doesn't show again; **Help → Set Up Codalus IDE** runs it again. The window works from the keyboard: `Tab` moves through a step, the arrow keys move between the cards and modes, and `Space` or `Enter` chooses.
 
 It doesn't show:
 - when the command line opens something: a solution, folder or file, `--remote`, `codalus diff`, `codalus merge` or `--wait`;
@@ -95,7 +95,7 @@ The setup doesn't ask about AI: it stays off until you turn it on ([AI assistanc
 
 File → Start Window brings it back. Environment → On Startup (`workbench.startup`) can open an empty window or the last solution instead.
 
-The Start page has the common actions, recent solutions and a tip that runs what it describes. (Get Started, the theme, keyboard scheme and imports that were at its top, is the first-run setup since 0.3: Help → Get Started opens it.)
+The Start page has the common actions, recent solutions and a tip that runs what it describes. (Get Started, the theme, keyboard scheme and imports that were at its top, is the first-run setup since 0.3: Help → Set Up Codalus IDE opens it.)
 
 ### Opening a solution
 

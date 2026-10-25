@@ -112,7 +112,7 @@ public sealed record DesignerResource
 
 /// <summary>
 /// A key of a form's <c>.resx</c> to set or remove (M41b): a localizable property (<c>okButton.Text</c>, <c>$this.Text</c>),
-/// an image (<c>pictureBox1.Image</c>), Visual Studio's records of a localizable form's controls (<c>&gt;&gt;okButton.Parent</c>),
+/// an image (<c>pictureBox1.Image</c>), the classic IDE's records of a localizable form's controls (<c>&gt;&gt;okButton.Parent</c>),
 /// or design-time metadata (<c>timer1.TrayLocation</c>, <c>$this.Localizable</c>). <see cref="Culture"/> is empty for
 /// the default resources (<c>Form1.resx</c>), else the file's culture (<c>fr</c>: <c>Form1.fr.resx</c>);
 /// <see cref="Resource"/> null removes the key.
@@ -126,7 +126,7 @@ public sealed record DesignerResourceEntry(string Key, DesignerResource? Resourc
 }
 
 /// <summary>
-/// The collections the designer edits (M41b): the property that holds them, how Visual Studio's serializer writes them,
+/// The collections the designer edits (M41b): the property that holds them, how the classic IDE's serializer writes them,
 /// and what can be added. <see cref="Kind"/> is <c>values</c> (strings and styles written inline), <c>components</c>
 /// (items that are components of the class, with sections of their own), <c>locals</c> (items created as locals:
 /// <c>ListViewItem listViewItem1 = new ListViewItem("…")</c>) or <c>images</c> (an <c>ImageList</c>'s, in the resources).
@@ -189,7 +189,7 @@ public static class DesignerResx
     }
 }
 
-/// <summary>The collections Visual Studio's designer has editors for, by the type that declares them (M41b).</summary>
+/// <summary>The collections the classic IDE's designer has editors for, by the type that declares them (M41b).</summary>
 public static class DesignerCollections
 {
     public const string Values = "values";
@@ -275,7 +275,7 @@ public static class DesignerStatementKinds
     /// <summary><c>resources.ApplyResources(target, "key")</c>: the key is <see cref="DesignerStatement.Value"/>.</summary>
     public const string ApplyResources = "applyResources";
 
-    /// <summary>Visual Studio's section comment (<c>// </c>, <c>// name</c>, <c>// </c>): <see cref="DesignerStatement.Target"/> is the name.</summary>
+    /// <summary>The classic IDE's section comment (<c>// </c>, <c>// name</c>, <c>// </c>): <see cref="DesignerStatement.Target"/> is the name.</summary>
     public const string Section = "section";
 }
 
@@ -338,9 +338,9 @@ public sealed record DesignerModel
     /// <summary>InitializeComponent uses a <c>ComponentResourceManager</c> named <c>resources</c> over the class's resources.</summary>
     public bool UsesResources { get; init; }
 
-    /// <summary>Statements say <c>this.</c> (Visual Studio for .NET Framework) rather than nothing (Visual Studio for .NET).</summary>
+    /// <summary>Statements say <c>this.</c> (the classic IDE for .NET Framework) rather than nothing (the classic IDE for .NET).</summary>
     public bool UsesThis { get; init; }
 
-    /// <summary>Types are written with their namespaces (<c>System.Windows.Forms.Button</c>), as Visual Studio for .NET Framework writes them.</summary>
+    /// <summary>Types are written with their namespaces (<c>System.Windows.Forms.Button</c>), as the classic IDE for .NET Framework writes them.</summary>
     public bool QualifiedNames { get; init; }
 }

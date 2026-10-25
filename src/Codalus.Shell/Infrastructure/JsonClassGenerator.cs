@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
-/// Paste JSON as Classes (M12b): C# classes for a JSON document, as Visual Studio generates them. Objects become
+/// Paste JSON as Classes (M12b): C# classes for a JSON document, as the classic IDE generates them. Objects become
 /// classes with a property per member (names in PascalCase, with <c>[JsonPropertyName]</c> where they differ), arrays
 /// become <c>List&lt;T&gt;</c> of the merged element type, numbers <c>int</c>/<c>long</c>/<c>double</c>, and nulls
 /// make the type nullable.

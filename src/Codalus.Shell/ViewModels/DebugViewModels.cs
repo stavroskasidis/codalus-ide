@@ -813,7 +813,7 @@ public sealed record FrameRow(StackFrame Frame, bool IsSelected, bool IsTop, boo
 
     /// <summary>
     /// The row a stopped thread without frames shows (a program paused before its Main runs, or in native code only),
-    /// as Visual Studio does: not a frame of the adapter's, so it selects nothing.
+    /// as the classic IDE does: not a frame of the adapter's, so it selects nothing.
     /// </summary>
     public static FrameRow ExternalCodeRow() => new(new StackFrame(0, ExternalCode, null, 0, 0), IsSelected: false, IsTop: true, IsExternalCode: true);
 

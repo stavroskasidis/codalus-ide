@@ -36,8 +36,8 @@ public enum SetupDecision
 /// window offers the appearance (the theme families, ADR 0077), the keyboard scheme, settings from elsewhere (VS Code,
 /// a <c>.vssettings</c> file, an export, settings sync) and M37's tools check. <see cref="SetupCompletedSetting"/>
 /// records that it ran. It doesn't show for automation, a command line that opens something, a synced profile, or a
-/// folder used before it existed (<see cref="SetupDecision"/>). Help → Set Up Codalus IDE and Help → Get Started run it
-/// again. AI stays off and isn't asked about (ADR 0062).
+/// folder used before it existed (<see cref="SetupDecision"/>). Help → Set Up Codalus IDE (and the Welcome plugin's Get
+/// Started command) run it again. AI stays off and isn't asked about (ADR 0062).
 /// </summary>
 public sealed partial class ShellHost
 {
@@ -121,7 +121,7 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Help → Set Up Codalus IDE and Help → Get Started: the setup again, over the running IDE.</summary>
+    /// <summary>Help → Set Up Codalus IDE and Get Started: the setup again, over the running IDE.</summary>
     public void ShowSetup() => ShowSetup(firstStart: false);
 
     /// <summary>

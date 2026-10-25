@@ -25,7 +25,7 @@ public static class SolutionStateLayout
 
     /// <summary>
     /// Creates the state folder of a solution, and, the first time, <c>.codalus/state/.gitignore</c> with <c>*</c> so
-    /// the state never shows in Git; on Windows the new <c>state</c> folder is hidden, as Visual Studio hides
+    /// the state never shows in Git; on Windows the new <c>state</c> folder is hidden, as the classic IDE hides
     /// <c>.vs</c> (<c>.codalus</c> itself stays visible: it also holds shared settings, tasks and launch files).
     /// Throws <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/> when the folder can't be written.
     /// </summary>

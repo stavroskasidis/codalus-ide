@@ -81,7 +81,7 @@ internal sealed class DesignerTypes
 
 /// <summary>
 /// Turns the model's values into objects (what running the statement would give) and objects back into values (what
-/// Visual Studio's CodeDOM serializers write: literals, enum members, <c>InstanceDescriptor</c>s' constructors and
+/// the classic IDE's CodeDOM serializers write: literals, enum members, <c>InstanceDescriptor</c>s' constructors and
 /// static members, colors by name or <c>FromArgb</c>, the class's components by name).
 /// </summary>
 internal sealed class DesignerValues(DesignerTypes types, Func<string, object?> component, Func<object, string?> nameOf, Func<string, object?> resource)
@@ -280,7 +280,7 @@ internal sealed class DesignerValues(DesignerTypes types, Func<string, object?> 
 
     // ------------------------------------------------------------------ objects → values
 
-    /// <summary>The code for <paramref name="value"/>, or null when code can't say it (an image: Visual Studio puts those in the resources).</summary>
+    /// <summary>The code for <paramref name="value"/>, or null when code can't say it (an image: the classic IDE puts those in the resources).</summary>
     public DesignerValue? Serialize(object? value)
     {
         switch (value)

@@ -36,4 +36,4 @@ The shell registers the language `axaml` ("Avalonia XAML", TextMate's XML gramma
 - XAML is as current as C#: nothing waits for a build, except the XAML compiler's own errors.
 - Resources defined in compiled themes (Fluent's) aren't offered or checked: they exist only as compiled XAML in assemblies. Unknown `StaticResource` keys are therefore not reported (`TODO(issue)`: read themes' keys from their `!AvaloniaResources`).
 - The diagnostics are a subset of the compiler's: a file can be clean in the editor and still fail to build; the build's errors then show in it.
-- Formatting re-indents but doesn't wrap or reorder attributes (`TODO(issue)`: settings for attribute wrapping, as VS's XAML formatter has).
+- Formatting re-indents but doesn't wrap or reorder attributes (`TODO(issue)`: settings for attribute wrapping, as the classic IDE's XAML formatter has).

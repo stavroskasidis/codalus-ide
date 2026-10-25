@@ -343,7 +343,7 @@ public sealed class ProjectConfigurationRowViewModel(ConfigurationManagerViewMod
 }
 
 /// <summary>
-/// Visual Studio's Configuration Manager: for a solution configuration and platform, which configuration and platform
+/// The classic IDE's Configuration Manager: for a solution configuration and platform, which configuration and platform
 /// of each project builds (and whether it builds); new and removed solution configurations and platforms.
 /// </summary>
 public sealed class ConfigurationManagerViewModel : ObservableObject, ILoadable
@@ -604,7 +604,7 @@ public sealed class ConfigurationManagerViewModel : ObservableObject, ILoadable
 
 // ------------------------------------------------------------------ Project Dependencies
 
-/// <summary>Visual Studio's Project Dependencies: which projects a project waits for, and the resulting build order.</summary>
+/// <summary>The classic IDE's Project Dependencies: which projects a project waits for, and the resulting build order.</summary>
 public sealed class ProjectDependenciesViewModel : ObservableObject, ILoadable
 {
     private readonly ProjectManagementService _management;

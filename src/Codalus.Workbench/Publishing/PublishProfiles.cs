@@ -12,7 +12,7 @@ public enum PublishTarget
 
 /// <summary>
 /// A publish profile (<c>Properties/PublishProfiles/*.pubxml</c>, M17c, ADR 0042): the MSBuild properties a publish
-/// takes, in the format Visual Studio and <c>dotnet publish -p:PublishProfile=…</c> read. Properties this model doesn't
+/// takes, in the format the classic IDE and <c>dotnet publish -p:PublishProfile=…</c> read. Properties this model doesn't
 /// know stay in the file as they are.
 /// </summary>
 public sealed class PublishProfile

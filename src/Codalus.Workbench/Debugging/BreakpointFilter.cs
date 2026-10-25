@@ -6,7 +6,7 @@ namespace Codalus.Workbench.Debugging;
 public sealed record BreakpointFilterContext(int ThreadId, string? ThreadName, int? ProcessId, string? ProcessName);
 
 /// <summary>
-/// A breakpoint filter (M14b), as in Visual Studio: <c>ThreadId = 5</c>, <c>ThreadName = "Worker"</c>,
+/// A breakpoint filter (M14b), as in the classic IDE: <c>ThreadId = 5</c>, <c>ThreadName = "Worker"</c>,
 /// <c>ProcessId = 1234</c> or <c>ProcessName = "app"</c>, with <c>=</c>/<c>==</c>/<c>!=</c>, combined with
 /// <c>&amp;</c>/<c>&amp;&amp;</c>, <c>|</c>/<c>||</c>, <c>!</c> and parentheses. netcoredbg has no filters, so the debugger
 /// stops and continues when the filter doesn't match.

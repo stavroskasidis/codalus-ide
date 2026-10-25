@@ -1,6 +1,8 @@
 # The Shell test classes CI runs in its second Shell shard (eng/ci-test.sh shell-2); every other class, new ones too,
 # runs in the first. Balanced by the classes' times (the xUnit runner's -xml report) so both take about as long:
 # rebalance when one shard gets clearly longer.
+# Rebalanced in M50 from a Linux run's class times (shell-1 1067 s, shell-2 665 s; Windows' shell-1 took 32 min to
+# shell-2's 14.5): Net11Tests and two of the Windows Forms designer classes moved here.
 CaretEditsTests
 CoverageTests
 CrashReporterTests
@@ -20,6 +22,7 @@ LiveAgentTests
 LiveTreeShellTests
 MarkdownRendererTests
 NavigationDepthTests
+Net11Tests
 NpmShellTests
 PackageManagerTests
 PolishTests
@@ -37,4 +40,6 @@ TextFilesTests
 UxPassTests
 VsSettingsImportTests
 WebTests
+WinFormsDesignerMenuShellTests
+WinFormsPropertiesShellTests
 XamlShellTests

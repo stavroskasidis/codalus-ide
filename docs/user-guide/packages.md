@@ -1,6 +1,6 @@
 # NuGet packages and .NET tools
 
-Codalus IDE manages NuGet packages the way Visual Studio's NuGet Package Manager does. It works in trusted solutions. Feeds are searched by the build host with the NuGet that ships in your .NET SDK, so it uses the same `NuGet.Config` files, credentials and caches as `dotnet restore`.
+Codalus IDE manages NuGet packages the way the classic IDE's NuGet Package Manager does. It works in trusted solutions. Feeds are searched by the build host with the NuGet that ships in your .NET SDK, so it uses the same `NuGet.Config` files, credentials and caches as `dotnet restore`.
 
 ## The NuGet Package Manager
 
@@ -77,4 +77,4 @@ Saving writes each change to the file that defines the source. New sources and m
 
 You can install (`id` or `id@version`), update, uninstall and restore tools, create a manifest, and open the manifest to edit it.
 
-Visual Studio's Package Manager Console is not reproduced: packages are managed here, Entity Framework commands come with the data tooling, and `dotnet` commands run in a terminal.
+The classic IDE's Package Manager Console is not reproduced: packages are managed here, Entity Framework commands come with the data tooling, and `dotnet` commands run in a terminal.

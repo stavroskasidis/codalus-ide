@@ -26,7 +26,7 @@ Choose the **Container (Dockerfile)** launch profile (the toolbar's profile box 
 
 Right-click a `compose.yaml` or `docker-compose.yml` (or a `.dcproj`) → **Compose Up** builds and starts its services (with `docker-compose.override.yml` when there is one), **Compose Down** stops and removes them, and **Debug Compose Service** starts them and attaches the debugger to the service you pick.
 
-Solutions made in Visual Studio with a Docker Compose project (`.dcproj`) open without errors: the compose project shows its files, and builds leave it out (its SDK ships only with Visual Studio). Its `DockerServiceName` is the service Debug Compose Service debugs.
+Solutions made in the classic IDE with a Docker Compose project (`.dcproj`) open without errors: the compose project shows its files, and builds leave it out (its SDK ships only with the classic IDE). Its `DockerServiceName` is the service Debug Compose Service debugs.
 
 Compose files are checked against the Compose Specification's schema as you type, with descriptions on hover. Dockerfiles are colored.
 

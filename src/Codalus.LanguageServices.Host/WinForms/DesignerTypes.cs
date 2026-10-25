@@ -74,7 +74,7 @@ internal sealed class SyntacticDesignerTypeResolver(string? fileNamespace) : IDe
         ["float"] = "System.Single", ["double"] = "System.Double", ["decimal"] = "System.Decimal",
     };
 
-    /// <summary>Common types by namespace (the Toolbox's, and the values Visual Studio writes).</summary>
+    /// <summary>Common types by namespace (the Toolbox's, and the values the classic IDE writes).</summary>
     private static readonly (string Namespace, string[] Types)[] s_known =
     [
         ("System.Windows.Forms",

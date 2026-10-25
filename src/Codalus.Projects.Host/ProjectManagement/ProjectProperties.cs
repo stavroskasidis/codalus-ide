@@ -137,7 +137,7 @@ internal static class ProjectProperties
     private readonly record struct Scope(bool All, string? Configuration);
 
     /// <summary>
-    /// The scope of a group condition: none (all configurations), <c>'$(Configuration)' == 'X'</c> or Visual Studio's
+    /// The scope of a group condition: none (all configurations), <c>'$(Configuration)' == 'X'</c> or the classic IDE's
     /// <c>'$(Configuration)|$(Platform)' == 'X|AnyCPU'</c>; null for any other condition.
     /// </summary>
     private static Scope? ScopeOf(string condition)

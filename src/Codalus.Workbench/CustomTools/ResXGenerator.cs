@@ -7,7 +7,7 @@ namespace Codalus.Workbench.CustomTools;
 
 /// <summary>
 /// The resources custom tools (ADR 0035): <c>ResXFileCodeGenerator</c> and <c>PublicResXFileCodeGenerator</c>. A
-/// <c>.resx</c> file's strongly typed class, in the shape <c>StronglyTypedResourceBuilder</c> gives it (Visual Studio's
+/// <c>.resx</c> file's strongly typed class, in the shape <c>StronglyTypedResourceBuilder</c> gives it (the classic IDE's
 /// generator): a <c>ResourceManager</c>, a <c>Culture</c>, and a property per resource (strings as <c>string</c>, other
 /// resources as their type through <c>GetObject</c>).
 /// </summary>

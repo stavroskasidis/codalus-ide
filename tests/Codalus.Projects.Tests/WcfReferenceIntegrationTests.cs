@@ -10,7 +10,7 @@ namespace Codalus.Projects.Tests;
 /// WCF references through the real build host (M42, ADR 0069) on a copy of samples/Wcf, with a stand-in for
 /// dotnet-svcutil (tests/Codalus.Svcutil.Fake, through <c>CODALUS_SVCUTIL</c>) that records its arguments and writes
 /// recorded output: nothing is downloaded. The fixture's own reference is listed; one is added from the fixture's WSDL
-/// file with every option, kept in Visual Studio's layout, updated, refused when it's wrong, and removed.
+/// file with every option, kept in the classic IDE's layout, updated, refused when it's wrong, and removed.
 /// </summary>
 public sealed class WcfReferenceIntegrationTests : IAsyncLifetime
 {
@@ -75,14 +75,14 @@ public sealed class WcfReferenceIntegrationTests : IAsyncLifetime
         Assert.True(status.ToolAvailable, status.Message);
         Assert.Equal(("8.0.0", "CODALUS_SVCUTIL"), (status.ToolVersion, status.ToolSource));
 
-        // The fixture's reference, as Visual Studio keeps it.
+        // The fixture's reference, as the classic IDE keeps it.
         var existing = Assert.Single(await service.ListAsync(Client, Timeout()));
         Assert.Equal(("CalculatorService", "CalculatorClient.Calculator", "System.Array", "System.Collections.Generic.Dictionary`2"), (existing.Name, existing.Namespace, existing.CollectionType, existing.DictionaryCollectionType));
         Assert.Equal(["http://localhost:5280/CalculatorService.svc?wsdl"], existing.Inputs);
         Assert.Equal((false, true, false, "net10.0"), (existing.Sync, existing.ReuseTypes, existing.Internal, existing.TargetFramework));
         Assert.EndsWith(Path.Combine("CalculatorService", "Reference.cs"), existing.Code, StringComparison.Ordinal);
 
-        // A new one from the WSDL file, with every option: the arguments svcutil gets, and Visual Studio's layout after.
+        // A new one from the WSDL file, with every option: the arguments svcutil gets, and the classic IDE's layout after.
         var wsdl = Path.Combine(Fixture, "contracts", "CalculatorService.wsdl");
         var added = await service.AddAsync(
             new WcfReferenceParams(Client, "Calculator2", wsdl, "Client.Calc", "System.Collections.Generic.List`1", "System.Collections.Generic.Dictionary`2", Sync: true, ReuseTypes: false, Internal: true),
