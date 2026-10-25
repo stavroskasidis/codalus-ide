@@ -167,7 +167,7 @@ public sealed class NetFrameworkTests : IDisposable
     /// <summary>
     /// A Windows Forms app with the rest of what old-style projects carry: strongly typed resources and settings (kept as
     /// updates), a form's designer and .resx (nested by convention), a package that another depends on, an x86
-    /// configuration, a wildcard version, ClickOnce's defaults, a test project's import of Visual Studio's targets
+    /// configuration, a wildcard version, ClickOnce's defaults, a test project's import of the classic IDE's targets
     /// where they exist, a folder with another project, a package's build import and its check target.
     /// </summary>
     [Fact]

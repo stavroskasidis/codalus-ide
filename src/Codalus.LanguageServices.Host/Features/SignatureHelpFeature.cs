@@ -150,7 +150,7 @@ internal static class SignatureHelpFeature
         return [.. symbols.OfType<IMethodSymbol>()
             .Where(m => model.IsAccessible(position, m) && !m.GetAttributes().Any(a => a.AttributeClass?.Name == "EditorBrowsableAttribute" && a.ConstructorArguments is [{ Value: 1 }]))
             // The members as the receiver sees them (a generic base class's methods with its type arguments substituted,
-            // as Visual Studio shows them), one per declaration.
+            // as the classic IDE shows them), one per declaration.
             .GroupBy(Definition, SymbolEqualityComparer.Default)
             .Select(g => g.First())
             .OrderBy(m => m.Parameters.Length)];

@@ -5,7 +5,7 @@ using Microsoft.Build.Evaluation;
 namespace Codalus.Projects.Host.ProjectManagement;
 
 /// <summary>
-/// Pre-build and post-build events (ADR 0034), stored the way Visual Studio stores them in SDK-style projects:
+/// Pre-build and post-build events (ADR 0034), stored the way the classic IDE stores them in SDK-style projects:
 /// <c>&lt;Target Name="PreBuild" BeforeTargets="PreBuildEvent"&gt;&lt;Exec Command="…" /&gt;&lt;/Target&gt;</c> and
 /// <c>&lt;Target Name="PostBuild" AfterTargets="PostBuildEvent"&gt;</c>, with <c>RunPostBuildEvent</c> as a property.
 /// </summary>

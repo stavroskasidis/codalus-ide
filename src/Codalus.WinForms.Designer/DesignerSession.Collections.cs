@@ -240,7 +240,7 @@ internal sealed partial class DesignerSession
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // Some item designers expect Visual Studio's own tool strip editing: the item works without it.
+                // Some item designers expect the classic IDE's own tool strip editing: the item works without it.
                 Console.Error.WriteLine($"{component.Site?.Name}'s designer didn't initialize it: {ex.Message}");
             }
 
@@ -356,7 +356,7 @@ internal sealed partial class DesignerSession
         _imageListVersions[imageList] = _imageListVersions.GetValueOrDefault(imageList) + 1;
     }
 
-    /// <summary>Visual Studio's name for a new component: its type's name, first letter lowercased, and the first free number.</summary>
+    /// <summary>The classic IDE's name for a new component: its type's name, first letter lowercased, and the first free number.</summary>
     private string NewComponentName(Type type, IContainer? container = null) => NewLocalName(char.ToLowerInvariant(type.Name[0]) + type.Name[1..], container);
 
     /// <summary>The first free name of a stem and a number (<c>listViewItem3</c>).</summary>
@@ -375,7 +375,7 @@ internal sealed partial class DesignerSession
 
     /// <summary>
     /// The design surface's names for what a designer creates itself (a tab control's Add Tab, a new tab control's two
-    /// pages, a strip's standard items): Visual Studio's (<c>tabPage3</c>). Without a name service the surface gives
+    /// pages, a strip's standard items): the classic IDE's (<c>tabPage3</c>). Without a name service the surface gives
     /// them an empty name, the root's in the captured state, so the difference never saw them come.
     /// </summary>
     private sealed class NameCreation(DesignerSession session) : INameCreationService

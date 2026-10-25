@@ -204,7 +204,7 @@ public sealed class EditorTheme
         "dark",
         new()
         {
-            // Visual Studio 2022's Dark: Roslyn's color scheme (ColorSchemes/VisualStudio2019.xml) over the plain text,
+            // The classic IDE's Dark: Roslyn's color scheme (ColorSchemes/VisualStudio2019.xml) over the plain text,
             // #DCDCDC, which namespaces, fields, properties, events, labels and punctuation keep. Control keywords,
             // comments (XML doc text, Razor's and markup's too) and strings are the classic IDE's, measured in the
             // maintainer's screenshots (#83, D47); before, they were #C586C0, #6A9955 (#608B4E for XML doc text) and #CE9178.
@@ -223,7 +223,7 @@ public sealed class EditorTheme
             ["operator"] = 0xFFD4D4D4, ["punctuation"] = 0xFFDCDCDC,
             ["preprocessor"] = 0xFF9B9B9B, ["excludedCode"] = 0xFF767676, ["label"] = 0xFFDCDCDC,
 
-            // Razor and its markup, as Visual Studio's Dark theme colors them.
+            // Razor and its markup, as the classic IDE's Dark theme colors them.
             ["razorTransition"] = 0xFFA699E6, ["razorDirective"] = 0xFFA699E6, ["razorDirectiveAttribute"] = 0xFFA699E6, ["razorDirectiveColon"] = 0xFFA699E6,
             ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFFC8C8C8,
             ["razorTagHelperElement"] = 0xFF4EC9B0, ["razorTagHelperAttribute"] = 0xFF9CDCFE,
@@ -239,7 +239,7 @@ public sealed class EditorTheme
         "light",
         new()
         {
-            // Visual Studio 2022's Light (and Blue): Roslyn's color scheme over the plain text, black. Control keywords
+            // The classic IDE's Light (and Blue): Roslyn's color scheme over the plain text, black. Control keywords
             // are the classic IDE's Light value (#83, D47; VS Code's Light+ #AF00DB before).
             ["namespace"] = 0xFF000000,
             ["class"] = 0xFF267F99, ["record"] = 0xFF267F99, ["type"] = 0xFF267F99, ["delegate"] = 0xFF267F99,
@@ -256,7 +256,7 @@ public sealed class EditorTheme
             ["operator"] = 0xFF000000, ["punctuation"] = 0xFF000000,
             ["preprocessor"] = 0xFF808080, ["excludedCode"] = 0xFF9E9E9E, ["label"] = 0xFF000000,
 
-            // Razor and its markup, as Visual Studio's Light (and Blue) theme colors them.
+            // Razor and its markup, as the classic IDE's Light (and Blue) theme colors them.
             ["razorTransition"] = 0xFF826EE6, ["razorDirective"] = 0xFF826EE6, ["razorDirectiveAttribute"] = 0xFF826EE6, ["razorDirectiveColon"] = 0xFF826EE6,
             ["razorComponentElement"] = 0xFF0B7F7F, ["razorComponentAttribute"] = 0xFF800080,
             ["razorTagHelperElement"] = 0xFF800080, ["razorTagHelperAttribute"] = 0xFF800080,

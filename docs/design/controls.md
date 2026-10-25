@@ -271,7 +271,7 @@ Where the build differs from the pictures: Avalonia's borders draw no dashes, so
 | In-window checklist dialog | "This window needs a total redesign. Looks bad in all aspects (height/buttons/spacing/title etc)" | `ChecklistDialog.dc.html`: header with icon, title, context and close; a bordered list with Select all and a count; move up and down as icon buttons; a footer with the buttons in the OS's order |
 | HTTP Response | "This window looks broken, needs love and redesign to make it prettier" | `HttpResponse.dc.html`: the status as a chip with the version, time and size; the request line with a link to its `.http` file; Body, Headers and Request as tabs, Pretty or Raw; history rows with method and status chips |
 | WCF Test Client | "This UI looks broken, needs redesign" | `WcfTestClient.dc.html`: one address bar, operations with their signatures, the request as a typed grid (required marks, enum combo box, list items with add and remove), Invoke as the only primary, the response tree with the fault as a chip |
-| Find Results | "This results window needs work. Compare this look with the VS look." | `FindResults.dc.html`: what was searched as a header line, results grouped by folder and file with match counts, line and column columns, colorized code with the match highlighted, an icon toolbar, the summary as a status line |
+| Find Results | "This results window needs work. Compare this look with the classic IDE's look." | `FindResults.dc.html`: what was searched as a header line, results grouped by folder and file with match counts, line and column columns, colorized code with the match highlighted, an icon toolbar, the summary as a status line |
 | AI Chat | "The chat itself needs to be better looking, its just plain text now" | `AiChat.dc.html`: your messages as bubbles with what was sent, the assistant's turns with an avatar, its tool steps, code blocks with a header (Copy, Insert at Cursor, Apply…), and a composer with context toggles and a send button |
 | Options | "Needs colour/icons maybe?" | `Options.dc.html`: the category tree with palette-colored icons, a page header, User or Workspace as a segmented control, modified settings marked with the accent and a chip, booleans as one check box |
 
@@ -279,7 +279,7 @@ As built (M34h, [checkpoint](../checkpoints/m34h.md#the-views-toolbars-and-optio
 
 As built (M34h): Find Results, the HTTP Response and the WCF Test Client follow their mockups; [the checkpoint](../checkpoints/m34h.md#the-control-sets-views-find-results-http-response-and-the-wcf-test-client) lists where they differ.
 
-Find Results follows Visual Studio's Find Results window (grouped by file, a header row per file with its count, line and column, the match highlighted, an icon toolbar), as the finding asks; nothing in the UI says "Visual Studio".
+Find Results follows the classic IDE's Find Results window (grouped by file, a header row per file with its count, line and column, the match highlighted, an icon toolbar), as the finding asks; nothing in the UI names the classic IDE.
 
 ## New Project
 

@@ -2272,7 +2272,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     /// <summary>
     /// .NET Framework in the shipped app (M43a, ADR 0075): samples/NetFramework opens, the old-style project gets its
-    /// packages.config package and reference assemblies, the project that needs Visual Studio's targets says why it
+    /// packages.config package and reference assemblies, the project that needs the classic IDE's targets says why it
     /// can't build (<c>netfx-projects.png</c>), and the SDK-style net48 console app builds. On Windows Start Without
     /// Debugging runs its .exe on the desktop CLR and its output comes back, and F5 debugs it there to a breakpoint (M43b,
     /// ADR 0076: <c>netfx-debugging.png</c>); elsewhere starting it says Windows only.

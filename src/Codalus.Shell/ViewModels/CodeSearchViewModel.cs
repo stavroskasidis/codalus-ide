@@ -220,7 +220,7 @@ public sealed record CodeSearchWindowState
 }
 
 /// <summary>
-/// Code Search (M47): Visual Studio's Code Search window in place of Go To All's list. Two tabs, Code Search and
+/// Code Search (M47): the classic IDE's Code Search window in place of Go To All's list. Two tabs, Code Search and
 /// Feature Search; the filter chips (and their prefixes); two-line results that arrive in batches (marked incomplete
 /// while projects load or the index builds); the scope; and a live, editable preview of the selected result that the
 /// shell provides. Searches are debounced and the outdated ones cancelled.
@@ -381,7 +381,7 @@ public sealed class CodeSearchViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Results grouped by kind under headers (else interleaved by rank, Visual Studio's default).</summary>
+    /// <summary>Results grouped by kind under headers (else interleaved by rank, the classic IDE's default).</summary>
     public bool Grouped
     {
         get => _grouped;

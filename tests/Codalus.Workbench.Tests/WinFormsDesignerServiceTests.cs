@@ -88,7 +88,7 @@ public sealed class WinFormsDesignerServiceTests
         Assert.True(service.HasDesigner(Sample("AboutForm.cs")));
         Assert.True(service.HasDesigner(Sample("UnreadableForm.cs"))); // the C# host says it can't be read
         Assert.True(service.HasDesigner(Sample("Controls", "CounterControl.cs")));
-        Assert.False(service.HasDesigner(Sample("OrderForm.Designer.cs"))); // the designer file opens as code, as in Visual Studio
+        Assert.False(service.HasDesigner(Sample("OrderForm.Designer.cs"))); // the designer file opens as code, as in the classic IDE
         Assert.False(service.HasDesigner(Sample("Program.cs")));
         Assert.False(service.HasDesigner(Sample("Counter.cs")));
         Assert.False(service.HasDesigner(Sample("Properties", "Resources.Designer.cs")));

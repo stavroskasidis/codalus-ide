@@ -98,7 +98,7 @@ Item and result updates are batched on the wire (`tests/*`, documented in `docs/
   - the last result per test, and a history of the last `testing.historyLength` runs
   - output and attachments
 - TRX files are exported and imported. Imported runs appear in the same views, matched to known tests by fully qualified name.
-- Playlists are JSON under `.daedalus/playlists/` next to the solution (F7). Visual Studio `.playlist` files can be imported.
+- Playlists are JSON under `.daedalus/playlists/` next to the solution (F7). The classic IDE's `.playlist` files can be imported.
 
 ## Consequences
 - **What the shell gains:** a generic, virtualized Test Explorer, a test margin and result details that any controller can fill. The plugin API gets its first proposed surface (tests, workspace, build and debug), proved by a built-in before API 1.0 (M22).

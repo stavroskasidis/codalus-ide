@@ -36,7 +36,7 @@ What netcoredbg (3.2.0-1092) does, probed over DAP for M14b:
 - **Pinned data tips:** the data tip's pin button pins the expression to its line. The tip floats right of the line over the editor, is evaluated again at each pause and frame change (red when changed, muted when the program isn't paused), keeps a comment, follows edits, and is saved with the solution's session. Clear All DataTips removes them.
 
 **Client-side conditions, as in M14a**
-- **Breakpoint filters:** Visual Studio's syntax (`ThreadId`, `ThreadName`, `ProcessId`, `ProcessName`, `MachineName`, with `=`, `!=`, `&`, `||`, `!` and parentheses). netcoredbg stops; the client continues when the filter doesn't match.
+- **Breakpoint filters:** the classic IDE's syntax (`ThreadId`, `ThreadName`, `ProcessId`, `ProcessName`, `MachineName`, with `=`, `!=`, `&`, `||`, `!` and parentheses). netcoredbg stops; the client continues when the filter doesn't match.
 - **Exception conditions by module:** an exception type in Exception Settings takes module names (wildcards; `!` excludes). When a thrown exception's top frame is in another module, the client continues.
 - **Step over properties and operators** becomes its own setting (`debug.stepOverPropertiesAndOperators`, netcoredbg's `enableStepFiltering`), separate from Just My Code.
 

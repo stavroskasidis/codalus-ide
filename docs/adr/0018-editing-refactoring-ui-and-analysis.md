@@ -8,22 +8,22 @@
 
 M12b is the second half of M12 (ADR 0017 covers M12a): editing, the refactorings that need a dialog, and analysis. The decisions to make:
 - the snippet format, and where snippets come from;
-- how a refactoring asks the user for options when Roslyn's "options services" are Visual Studio UI;
+- how a refactoring asks the user for options when Roslyn's "options services" are the classic IDE's UI;
 - what Code Cleanup is and how it runs;
 - how edits are kept safe: AutoRecover and local history;
 - how the Syntax Visualizer and Code Metrics get their data.
 
 ## Decisions
 
-**Snippets: VS Code's format, Visual Studio's imported**
+**Snippets: VS Code's format, the classic IDE's imported**
 - Snippets use VS Code's JSON (`{ "name": { "prefix", "body", "description" } }`) and TextMate snippet syntax (`$1`, `${1:default}`, `${1|a,b|}`, `$0`, `$TM_SELECTED_TEXT`). Plugins and users can reuse existing snippet files unchanged.
 - **Sources, later ones winning on the same name:** built in (`csharp.json`, embedded in the shell), plugins (`contributes.snippets`: `{ language, path }`, plugin API 0.2.5), and the user's (`<user data>/config/snippets/<language>.json`, opened by Configure User Snippets).
-- Visual Studio's `.snippet` XML is imported, not read in place: Import Snippets (.snippet)… (named "Import Visual Studio Snippets" until M29) converts literals and `$end$`/`$selected$` and merges them into the user's files, by language.
+- The classic IDE's `.snippet` XML is imported, not read in place: Import Snippets (.snippet)… (named after the classic IDE until M29) converts literals and `$end$`/`$selected$` and merges them into the user's files, by language.
 - The expansion uses AvaloniaEdit's snippet engine. Placeholders with the same number are linked; Tab moves between them.
 - Snippets show in completion (by prefix, even when the language server returns nothing) and in Insert Snippet (Ctrl+K Ctrl+X) and Surround With (Ctrl+K Ctrl+Shift+S, snippets that use the selection). The client announces `snippetSupport`, so server items with `insertTextFormat: 2` expand the same way.
 
 **Refactoring options over the protocol: `daedalus/codeActionOptions`**
-- Roslyn's dialog refactorings (Generate Constructor, Equals and GetHashCode, Overrides, Extract Interface, Change Signature) call into Visual Studio-only options services. Our host offers its own versions of these, built on Roslyn's syntax generator, with the same titles ending in `…`.
+- Roslyn's dialog refactorings (Generate Constructor, Equals and GetHashCode, Overrides, Extract Interface, Change Signature) call into options services only the classic IDE has. Our host offers its own versions of these, built on Roslyn's syntax generator, with the same titles ending in `…`.
 - **The flow:**
   1. `textDocument/codeAction` lists the action as usual.
   2. Before resolving, the client asks `daedalus/codeActionOptions`. A null result means "no options": resolve directly.
@@ -47,7 +47,7 @@ M12b is the second half of M12 (ADR 0017 covers M12a): editing, the refactorings
 
 **Syntax Visualizer and Code Metrics in the host**
 - `daedalus/syntaxTree` returns the document's syntax tree with tokens and trivia (structured trivia expanded), cut off after 5000 items away from the position, and the semantics of the innermost node at the position: symbol, type, converted type, conversion, constant value and the `IOperation` tree.
-- `daedalus/codeMetrics` computes Visual Studio's five metrics for one project or the whole solution: maintainability index, cyclomatic complexity, depth of inheritance, class coupling, and source and executable lines, per member, type, namespace and project. They're computed in the host from Roslyn's operations, following the formulas `roslyn-analyzers` documents. Taking a dependency on its internal implementation was not worth it.
+- `daedalus/codeMetrics` computes the classic IDE's five metrics for one project or the whole solution: maintainability index, cyclomatic complexity, depth of inheritance, class coupling, and source and executable lines, per member, type, namespace and project. They're computed in the host from Roslyn's operations, following the formulas `roslyn-analyzers` documents. Taking a dependency on its internal implementation was not worth it.
 
 **Editing commands from syntax**
 - Expand and Shrink Selection use `textDocument/selectionRange` (LSP), so other language servers can provide it.

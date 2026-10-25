@@ -211,8 +211,8 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
     /// <summary>
     /// A non-SDK-style project (M43a, ADR 0075): .NET Framework only, evaluated once. Its frameworks are its
     /// <c>TargetFrameworkVersion</c>'s moniker; its Dependencies are its <c>Reference</c> items (with their
-    /// <c>HintPath</c>), its <c>packages.config</c> packages and project references; a project that imports Visual
-    /// Studio's own targets loads with <see cref="ProjectInfo.CannotBuildReason"/>.
+    /// <c>HintPath</c>), its <c>packages.config</c> packages and project references; a project that imports the
+    /// classic IDE's own targets loads with <see cref="ProjectInfo.CannotBuildReason"/>.
     /// </summary>
     private EvaluatedProject EvaluateNonSdk(string path, string name, Project outer, Dictionary<string, string> global)
     {
@@ -244,7 +244,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             references.Add(new ReferenceInfo(ReferenceKinds.Package, package.Id, package.Version, folder, moniker, folder is not null && Directory.Exists(folder)));
         }
 
-        // Visual Studio's own targets (a web application's): the project opens, but doesn't build here.
+        // The classic IDE's own targets (a web application's): the project opens, but doesn't build here.
         var reason = NetFramework.VisualStudioTargetsReason(name, outer.Xml.Imports.Select(i =>
             (Path.GetFullPath(Path.Combine(directory, FixSeparators(outer.ExpandString(i.Project)))),
              (string?)(i.Condition.Length > 0 ? i.Condition : i.Parent is Microsoft.Build.Construction.ProjectImportGroupElement group ? group.Condition : null))));
@@ -254,7 +254,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             .Select(h => Path.GetFullPath(Path.Combine(directory, FixSeparators(h)))).ToList();
         var restore = new NetFrameworkRestore(packages, PackagesRepository, installed is null || used is not null ? moniker : null, GlobalPackagesFolder);
 
-        // A test project: IsTestProject (a test SDK's props from packages.config), or Visual Studio's test project type (M43b).
+        // A test project: IsTestProject (a test SDK's props from packages.config), or the classic IDE's test project type (M43b).
         var test = TestProperties.Of(outer);
         var isTest = test.IsTestProject || NetFramework.IsTestProjectType(outer.GetPropertyValue("ProjectTypeGuids"));
         var info = new ProjectInfo(

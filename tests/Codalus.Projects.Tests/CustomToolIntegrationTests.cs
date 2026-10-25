@@ -173,7 +173,7 @@ public sealed class CustomToolIntegrationTests : IAsyncLifetime
         Assert.False(refused.Succeeded);
         Assert.Contains("trusted", refused.Diagnostics[0].Message, StringComparison.Ordinal);
 
-        // A new generator on a new file: the project file gets Generator's partner metadata as Visual Studio writes it.
+        // A new generator on a new file: the project file gets Generator's partner metadata as the classic IDE writes it.
         var strings = Path.Combine(ItemsDir, "Strings.resx");
         File.WriteAllText(strings, "<root>\n  <data name=\"Hi\" xml:space=\"preserve\">\n    <value>Hi</value>\n  </data>\n</root>\n");
         await _solutions.ReevaluateAsync(ItemsProject, Timeout());

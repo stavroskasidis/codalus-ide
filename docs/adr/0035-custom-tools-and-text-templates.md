@@ -6,12 +6,12 @@
 
 ## Context
 
-Visual Studio's single-file generators ("custom tools") turn a file into another: `ResXFileCodeGenerator` makes a `.resx` file's strongly typed class, `TextTemplatingFileGenerator` runs a T4 template. A file names its generator in its `Generator` metadata (M26a's Properties window edits it), the output is recorded as `LastGenOutput`, and the output nests under the input (`DependentUpon`). The generators are Visual Studio's; T4 runs template code, so it is the user's code running.
+The classic IDE's single-file generators ("custom tools") turn a file into another: `ResXFileCodeGenerator` makes a `.resx` file's strongly typed class, `TextTemplatingFileGenerator` runs a T4 template. A file names its generator in its `Generator` metadata (M26a's Properties window edits it), the output is recorded as `LastGenOutput`, and the output nests under the input (`DependentUpon`). The generators are the classic IDE's; T4 runs template code, so it is the user's code running.
 
 ## Decisions
 
 **Generators by name, run on demand and on save**
-- **Run Custom Tool** (the Solution Explorer's context menu on a `.resx` or `.tt` file in a project, or the command on any file with a `Generator`) and saving such a file (`build.runCustomToolsOnSave`, on by default) run its generator (`CustomToolService` in the workbench). The output goes next to the input (`<name>.Designer.cs` for resources, the template's `output extension` for T4), and the project file gets what Visual Studio writes: `LastGenOutput` on the input, and `<Compile Update="X.Designer.cs"><DesignTime>True</DesignTime><AutoGen>True</AutoGen><DependentUpon>X.resx</DependentUpon></Compile>` for the output (M26a's `items/set`, which writes nothing a glob already gives). An unchanged output isn't rewritten.
+- **Run Custom Tool** (the Solution Explorer's context menu on a `.resx` or `.tt` file in a project, or the command on any file with a `Generator`) and saving such a file (`build.runCustomToolsOnSave`, on by default) run its generator (`CustomToolService` in the workbench). The output goes next to the input (`<name>.Designer.cs` for resources, the template's `output extension` for T4), and the project file gets what the classic IDE writes: `LastGenOutput` on the input, and `<Compile Update="X.Designer.cs"><DesignTime>True</DesignTime><AutoGen>True</AutoGen><DependentUpon>X.resx</DependentUpon></Compile>` for the output (M26a's `items/set`, which writes nothing a glob already gives). An unchanged output isn't rewritten.
 - Errors and warnings go to Output → Custom Tool with their file and line, and a failure shows a notification with the first error.
 - The namespace is the item's `CustomToolNamespace`, else the project's root namespace plus the folders.
 
@@ -26,6 +26,6 @@ Visual Studio's single-file generators ("custom tools") turn a file into another
 
 ## Consequences
 
-- Resources work without Visual Studio's generator; their output follows the shape of Visual Studio's, so existing projects keep their files.
+- Resources work without the classic IDE's generator; their output follows the shape of the classic IDE's, so existing projects keep their files.
 - A new supervised host, started only when a template runs.
 - `TODO(issue)`: custom tool errors in the Error List (they are in Output → Custom Tool); generators for Visual Basic and F# resources; `TextTemplatingFilePreprocessor` (runtime text templates); T4 debugging; the template's `hostspecific` services beyond `ResolvePath` and parameters.

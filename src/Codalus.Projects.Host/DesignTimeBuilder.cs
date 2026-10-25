@@ -30,8 +30,8 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
         public string? FrameworkLabel { get; init; }
 
         /// <summary>
-        /// Loads the project without the imports that are missing (M43a): a non-SDK-style project that imports Visual
-        /// Studio's own targets still gets IntelliSense, though it can't build. It builds in this process (see <see cref="InProcess"/>).
+        /// Loads the project without the imports that are missing (M43a): a non-SDK-style project that imports the
+        /// classic IDE's own targets still gets IntelliSense, though it can't build. It builds in this process (see <see cref="InProcess"/>).
         /// </summary>
         public bool IgnoreMissingImports { get; init; }
     }

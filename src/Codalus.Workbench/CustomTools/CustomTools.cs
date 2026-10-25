@@ -131,7 +131,7 @@ public sealed record CustomToolResult(string Input, string Generator, string? Ou
 public sealed record PluginCustomTool(string Name, string Command, string? Extension);
 
 /// <summary>
-/// Runs custom tools (single-file generators, ADR 0035) and keeps the project file as Visual Studio does: the input's
+/// Runs custom tools (single-file generators, ADR 0035) and keeps the project file as the classic IDE does: the input's
 /// <c>LastGenOutput</c>, and the output's <c>DesignTime</c>, <c>AutoGen</c> and <c>DependentUpon</c>.
 /// </summary>
 public sealed class CustomToolService(ProjectItemService items, TextTemplatingService templates)

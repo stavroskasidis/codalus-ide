@@ -1240,7 +1240,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     /// <summary>
     /// A starting point for new C# files: a class named after the file, in the namespace the project name and the
-    /// folder imply (as Visual Studio does). Other files start empty.
+    /// folder imply (as the classic IDE does). Other files start empty.
     /// </summary>
     private string? Template(string directory, string name)
     {

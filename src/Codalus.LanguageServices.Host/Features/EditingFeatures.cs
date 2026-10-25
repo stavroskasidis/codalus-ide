@@ -71,7 +71,7 @@ internal static class EditingFeatures
     }
 
     /// <summary>
-    /// The documentation comment for the member below a line that is just <c>///</c> (Visual Studio's template): summary,
+    /// The documentation comment for the member below a line that is just <c>///</c> (the classic IDE's template): summary,
     /// a <c>param</c> per parameter, <c>typeparam</c>s and <c>returns</c> for non-void methods. Null elsewhere.
     /// </summary>
     public static async Task<DocCommentTemplate?> TemplateAsync(Document document, Position position, CancellationToken cancellationToken)

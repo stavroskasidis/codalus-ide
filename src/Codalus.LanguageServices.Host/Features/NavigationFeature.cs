@@ -33,7 +33,7 @@ internal static class NavigationFeature
 
     /// <summary>
     /// Implementations of an interface or abstract member or type, overrides of a virtual member, or derived classes.
-    /// For a concrete, non-virtual symbol: its definition (as in Visual Studio).
+    /// For a concrete, non-virtual symbol: its definition (as in the classic IDE).
     /// </summary>
     public static async Task<Location[]> ImplementationAsync(Document document, int position, CancellationToken cancellationToken)
     {
@@ -127,7 +127,7 @@ internal static class NavigationFeature
         var symbol = await SymbolFinder.FindSymbolAtPositionAsync(document, position, cancellationToken).ConfigureAwait(false);
         if (symbol is null && position > 0)
         {
-            // The caret right after an identifier (VS behavior).
+            // The caret right after an identifier (the classic IDE behavior).
             symbol = await SymbolFinder.FindSymbolAtPositionAsync(document, position - 1, cancellationToken).ConfigureAwait(false);
         }
 

@@ -8,7 +8,7 @@ namespace Codalus.Shell;
 /// <summary>
 /// Plugin performance attribution (M22d): the Plugins window shows each plugin's activation time, its commands' calls
 /// and its host's memory; a plugin that is slow to activate in three sessions gets a notification offering to turn it
-/// off, as Visual Studio does for extensions that slow it down.
+/// off, as the classic IDE does for extensions that slow it down.
 /// </summary>
 public sealed partial class ShellHost
 {

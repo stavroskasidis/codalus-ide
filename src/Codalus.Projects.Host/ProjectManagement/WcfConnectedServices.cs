@@ -6,11 +6,11 @@ using Codalus.Projects.Protocol;
 namespace Codalus.Projects.Host.ProjectManagement;
 
 /// <summary>
-/// WCF service references as Visual Studio keeps them (ADR 0069): <c>Connected Services/&lt;name&gt;/Reference.cs</c>
+/// WCF service references as the classic IDE keeps them (ADR 0069): <c>Connected Services/&lt;name&gt;/Reference.cs</c>
 /// next to a <c>ConnectedService.json</c> whose <c>ExtendedData</c> holds <c>dotnet-svcutil</c>'s options (the keys of
-/// its <c>dotnet-svcutil.params.json</c>: <c>inputs</c> first, then the others in alphabetical order), with Visual Studio's
+/// its <c>dotnet-svcutil.params.json</c>: <c>inputs</c> first, then the others in alphabetical order), with the classic IDE's
 /// provider id and version. <c>dotnet-svcutil --update</c> reads that file as well as its own, so references move between
-/// Visual Studio, the command line and Codalus unchanged.
+/// the classic IDE, the command line and Codalus unchanged.
 /// </summary>
 internal static class WcfConnectedServices
 {
@@ -20,7 +20,7 @@ internal static class WcfConnectedServices
     public const string CodeFile = "Reference.cs";
     public const string ProviderId = "Microsoft.VisualStudio.ConnectedService.Wcf";
 
-    /// <summary>The version Visual Studio's WCF Web Service Reference provider writes.</summary>
+    /// <summary>The version the classic IDE's WCF Web Service Reference provider writes.</summary>
     public const string ProviderVersion = "15.0.40203.910";
 
     public const string DictionaryType = "System.Collections.Generic.Dictionary`2";
@@ -169,7 +169,7 @@ internal static class WcfConnectedServices
         node is JsonArray array ? [.. array.Select(n => n?.GetValue<string>()).OfType<string>()] : [];
 
     /// <summary>
-    /// Turns the <c>dotnet-svcutil.params.json</c> that a run wrote into Visual Studio's <c>ConnectedService.json</c>
+    /// Turns the <c>dotnet-svcutil.params.json</c> that a run wrote into the classic IDE's <c>ConnectedService.json</c>
     /// (the same options under <c>ExtendedData</c>) and deletes it. Returns the file written, or null when there was none.
     /// </summary>
     public static string? ConvertParams(string folder)
@@ -192,7 +192,7 @@ internal static class WcfConnectedServices
         return file;
     }
 
-    /// <summary>Writes Visual Studio's file around <paramref name="options"/>.</summary>
+    /// <summary>Writes the classic IDE's file around <paramref name="options"/>.</summary>
     public static void Write(string file, JsonObject options)
     {
         var root = new JsonObject
@@ -247,7 +247,7 @@ internal static class WcfConnectedServices
         }
     }
 
-    /// <summary><c>inputs</c> first, then the other keys in alphabetical order, as svcutil and Visual Studio write them.</summary>
+    /// <summary><c>inputs</c> first, then the other keys in alphabetical order, as svcutil and the classic IDE write them.</summary>
     internal static JsonObject Ordered(JsonObject options)
     {
         var ordered = new JsonObject();
@@ -276,7 +276,7 @@ internal static class WcfConnectedServices
     }
 
     /// <summary>
-    /// <c>dotnet-svcutil</c>'s arguments for a new reference: the input, the project, the folder and file Visual Studio
+    /// <c>dotnet-svcutil</c>'s arguments for a new reference: the input, the project, the folder and file the classic IDE
     /// uses, and the options; then <c>--noLogo</c>.
     /// </summary>
     public static List<string> AddArguments(WcfReferenceParams parameters, string project)

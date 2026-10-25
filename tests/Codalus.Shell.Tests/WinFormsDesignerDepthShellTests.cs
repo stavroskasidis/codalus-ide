@@ -151,7 +151,7 @@ public sealed class WinFormsDesignerDepthShellTests
         Assert.Null(designer.CollectionEditor);
         Assert.Contains("historyListBox.Items.AddRange(new object[] { \"Espresso\", \"Latte\" });", Code(designer), StringComparison.Ordinal);
 
-        // Paste within the form keeps the event hookups and the extender properties (Visual Studio does); the handler isn't shown.
+        // Paste within the form keeps the event hookups and the extender properties (the classic IDE does); the handler isn't shown.
         designer.SetSelection(["customerTextBox"], notify: true);
         designer.Copy();
         designer.SetSelection(["buttonPanel"], notify: true);
@@ -263,7 +263,7 @@ public sealed class WinFormsDesignerDepthShellTests
         await ShellFixture.PumpUntil(() => Code(designer).Contains("nameTextBox.DataBindings.Add(new Binding(\"Text\", itemBindingSource, \"Quantity\", true));", StringComparison.Ordinal));
         Assert.DoesNotContain("\"Name\", true", Code(designer), StringComparison.Ordinal);
 
-        // The tray: arranged, as Visual Studio records it, in the .resx's TrayLocation metadata.
+        // The tray: arranged, as the classic IDE records it, in the .resx's TrayLocation metadata.
         await designer.MoveTrayItemAsync("inventoryErrorProvider", "mainMenuStrip");
         var resx = designer.ResourceModels.Single().Text.Text;
         Assert.Contains("<metadata name=\"inventoryErrorProvider.TrayLocation\" type=\"System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a\">\n    <value>17, 17</value>", resx, StringComparison.Ordinal);

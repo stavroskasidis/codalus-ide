@@ -9,7 +9,7 @@ namespace Codalus.Shell;
 internal static partial class BuiltIns
 {
     /// <summary>
-    /// Visual Studio's Go To keys (Ctrl+1 then the kind's letter) for the chips; Ctrl+T, Ctrl+, (Go To All) and Ctrl+Q
+    /// The classic IDE's Go To keys (Ctrl+1 then the kind's letter) for the chips; Ctrl+T, Ctrl+, (Go To All) and Ctrl+Q
     /// (the search box) are in the default bindings.
     /// </summary>
     public const string CodeSearchKeybindings = """

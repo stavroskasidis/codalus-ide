@@ -12,7 +12,7 @@ Codalus IDE opens, edits and builds .NET Framework projects (`net48`, `net472` a
 | Start Without Debugging | ✓ | Windows only |
 | Debug (`F5`), Attach to Process | ✓ | Windows only |
 | Run and debug tests (xUnit 2, NUnit 3, MSTest v2) | ✓ | Windows only |
-| Projects that need Visual Studio's own targets (ASP.NET web applications) | open with IntelliSense, don't build | open with IntelliSense, don't build |
+| Projects that need the classic IDE's own targets (ASP.NET web applications) | open with IntelliSense, don't build | open with IntelliSense, don't build |
 
 ## Reference assemblies: nothing to install
 
@@ -36,9 +36,9 @@ A non-SDK-style project (`<Project ToolsVersion="15.0" xmlns="…">`, importing 
 
 **Building** uses the .NET SDK's MSBuild, which has `Microsoft.CSharp.targets` (and Visual Basic's) for these projects. Their output goes where the project says (`bin\Debug\`).
 
-### Projects that need Visual Studio's targets
+### Projects that need the classic IDE's targets
 
-Some project types import Visual Studio's own MSBuild targets, under `MSBuild\Microsoft\VisualStudio` (`$(VSToolsPath)`): ASP.NET web applications (`Microsoft.WebApplication.targets`), and others. Those targets come only with Visual Studio and its Build Tools, whose MSBuild is proprietary, so Codalus IDE doesn't build these projects. They open with IntelliSense; Solution Explorer marks them "(non-SDK-style, can't build here)" and says why under the project; a solution build leaves them out and says so in the Build output; building one alone fails with the reason. ASP.NET on System.Web (Web Forms, MVC 5) needs IIS or IIS Express to run, which is out of scope.
+Some project types import the classic IDE's own MSBuild targets, under `MSBuild\Microsoft\VisualStudio` (`$(VSToolsPath)`): ASP.NET web applications (`Microsoft.WebApplication.targets`), and others. Those targets come only with the classic IDE and its Build Tools, whose MSBuild is proprietary, so Codalus IDE doesn't build these projects. They open with IntelliSense; Solution Explorer marks them "(non-SDK-style, can't build here)" and says why under the project; a solution build leaves them out and says so in the Build output; building one alone fails with the reason. ASP.NET on System.Web (Web Forms, MVC 5) needs IIS or IIS Express to run, which is out of scope.
 
 ## Convert to SDK-style
 
@@ -49,7 +49,7 @@ Right-click a non-SDK-style project in Solution Explorer → **Convert to SDK-St
 - `AssemblyInfo.cs`'s attributes that the SDK generates (title, description, company, product, copyright, versions) become properties, and the file keeps only the rest (`ComVisible`, `Guid`), or goes;
 - configuration properties that differ from the SDK's defaults stay, in their configuration's group; targets and imports Codalus doesn't know stay as they were.
 
-After converting, the project restores its packages as package references. Projects that import Visual Studio's targets aren't converted (an SDK-style ASP.NET project needs an SDK of its own). The converter follows the approach of Microsoft's [try-convert](https://github.com/dotnet/try-convert) tool, with Codalus IDE's own code.
+After converting, the project restores its packages as package references. Projects that import the classic IDE's targets aren't converted (an SDK-style ASP.NET project needs an SDK of its own). The converter follows the approach of Microsoft's [try-convert](https://github.com/dotnet/try-convert) tool, with Codalus IDE's own code.
 
 ## Running on Windows
 
@@ -71,13 +71,13 @@ On Linux and macOS, Start, Start Without Debugging and the Performance Profiler 
 - **Attach to Process** lists .NET Framework processes with the .NET ones ("· .NET Framework"); attaching works the same, and Stop detaches.
 - **Multiple startup projects** debug .NET Framework apps with the others, in one session.
 
-The debugger reads **portable PDBs**. SDK-style projects build them; Codalus IDE builds old-style projects that ask for Windows PDBs (`<DebugType>full</DebugType>`, Visual Studio's old default) with portable ones too, unless the project sets `<CodalusKeepDebugType>true</CodalusKeepDebugType>`. An assembly with a Windows PDB (built elsewhere) shows that in the Modules window, and its code is debugged without source.
+The debugger reads **portable PDBs**. SDK-style projects build them; Codalus IDE builds old-style projects that ask for Windows PDBs (`<DebugType>full</DebugType>`, the classic IDE's old default) with portable ones too, unless the project sets `<CodalusKeepDebugType>true</CodalusKeepDebugType>`. An assembly with a Windows PDB (built elsewhere) shows that in the Modules window, and its code is debugged without source.
 
-The debugger is 64-bit, and debugs 64-bit processes: an app built for x86, or AnyCPU with `<Prefer32Bit>true</Prefer32Bit>` (old Visual Studio templates set it), says so instead of starting; set `Prefer32Bit` to `false` to debug it. Apps for .NET Framework 2.0 to 3.5 debug on the CLR 2 when .NET Framework 3.5 is installed (best effort: not tested by Codalus's CI).
+The debugger is 64-bit, and debugs 64-bit processes: an app built for x86, or AnyCPU with `<Prefer32Bit>true</Prefer32Bit>` (the classic IDE's old templates set it), says so instead of starting; set `Prefer32Bit` to `false` to debug it. Apps for .NET Framework 2.0 to 3.5 debug on the CLR 2 when .NET Framework 3.5 is installed (best effort: not tested by Codalus's CI).
 
 ## Tests
 
-`net4x` test projects (xUnit 2, NUnit 3 and MSTest v2 on `Microsoft.NET.Test.Sdk`) open and build everywhere. On Windows the Test Explorer discovers, runs and debugs them on VSTest's .NET Framework test hosts, like .NET tests (see [Testing](testing.md)); debugging a test stops at its breakpoints with the .NET Framework debugger. Old-style test projects (Visual Studio's Unit Test Project (.NET Framework), MSTest v2 with `packages.config`) are test projects by their project type (`ProjectTypeGuids`). On Linux and macOS the Test Explorer shows their tests from the source and says on the project that they run only on Windows. Code coverage isn't available for .NET Framework tests yet.
+`net4x` test projects (xUnit 2, NUnit 3 and MSTest v2 on `Microsoft.NET.Test.Sdk`) open and build everywhere. On Windows the Test Explorer discovers, runs and debugs them on VSTest's .NET Framework test hosts, like .NET tests (see [Testing](testing.md)); debugging a test stops at its breakpoints with the .NET Framework debugger. Old-style test projects (the classic IDE's Unit Test Project (.NET Framework), MSTest v2 with `packages.config`) are test projects by their project type (`ProjectTypeGuids`). On Linux and macOS the Test Explorer shows their tests from the source and says on the project that they run only on Windows. Code coverage isn't available for .NET Framework tests yet.
 
 ## New projects
 
@@ -86,7 +86,7 @@ File → New Project lists **.NET Framework Console App** and **.NET Framework C
 ## Not supported
 
 - Running and debugging on Mono; 32-bit processes under the debugger; mixed-mode (native) debugging, Edit and Continue and Set Next Statement for .NET Framework apps; code coverage of .NET Framework tests; Windows PDBs.
-- Building with Visual Studio's MSBuild or Build Tools; COM references (`ResolveComReference`), ClickOnce publishing, the Entity Framework 6 designer, Web Forms, C++/CLI and VSTO.
+- Building with the classic IDE's MSBuild or Build Tools; COM references (`ResolveComReference`), ClickOnce publishing, the Entity Framework 6 designer, Web Forms, C++/CLI and VSTO.
 
 - The Windows Forms designer and WPF's previewer with .NET Framework apps haven't been validated yet: their forms and XAML edit as code.
 

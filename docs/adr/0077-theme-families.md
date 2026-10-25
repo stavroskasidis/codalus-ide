@@ -7,7 +7,7 @@
 
 ## Context
 
-The maintainer asked for a look "close to Visual Studio style but original too" and chose all four directions of the design ([`design/shell-themes.md`](../design/shell-themes.md)): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with every color in the design's tables. D32 settled the rest: Harbor following the system for new installs, today's four themes kept as a Classic family so a saved setting keeps its look, and `workbench.colorTheme` taking `<family>` (follows the system) or `<family>.<light|dark|highContrast>`. The roadmap asked for an ADR, before code, on how a family's shapes become tokens and style classes so that views don't change. What had to be decided:
+The maintainer asked for a look "close to the classic IDE's style but original too" and chose all four directions of the design ([`design/shell-themes.md`](../design/shell-themes.md)): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with every color in the design's tables. D32 settled the rest: Harbor following the system for new installs, today's four themes kept as a Classic family so a saved setting keeps its look, and `workbench.colorTheme` taking `<family>` (follows the system) or `<family>.<light|dark|highContrast>`. The roadmap asked for an ADR, before code, on how a family's shapes become tokens and style classes so that views don't change. What had to be decided:
 - how twelve more themes sit next to Classic's four, with Fluent's controls, Dock's templates, the editor and the terminal following;
 - what the setting's values are, how today's are read, and what a new install gets;
 - how the families' layout differences (gutters, corners, tabs, captions, the status bar) are expressed without per-family views;

@@ -7,11 +7,11 @@
 ## Context
 
 M17 gets an app from the IDE to a deployable artefact or container. It is split (roadmap rule 5):
-- **M17a, containers:** Dockerfile and compose editing, Add Docker Support, running and debugging a project in a container, compose files and Visual Studio's compose projects (`.dcproj`), the Containers window, Docker and Podman.
+- **M17a, containers:** Dockerfile and compose editing, Add Docker Support, running and debugging a project in a container, compose files and the classic IDE's compose projects (`.dcproj`), the Containers window, Docker and Podman.
 - **M17b, Aspire:** ADR 0043.
 - **M17c, publishing:** publish profiles (`.pubxml`) with a UI; folder, framework-dependent or self-contained, single-file, trimmed, ReadyToRun and Native AOT publishing; container images through the SDK.
 
-The questions: how to talk to the container engine; how a project runs and is debugged in a container; what to do with `.dcproj` files, whose SDK (`Microsoft.Docker.Sdk`) ships only with Visual Studio; and where publishing runs.
+The questions: how to talk to the container engine; how a project runs and is debugged in a container; what to do with `.dcproj` files, whose SDK (`Microsoft.Docker.Sdk`) ships only with the classic IDE; and where publishing runs.
 
 ## Decisions
 
@@ -22,18 +22,18 @@ The questions: how to talk to the container engine; how a project runs and is de
 - Containers Daedalus Studio creates carry the label `dev.daedalus.project` (the project path), so the Containers window lists them first and tests find their own.
 
 **Run and debug: the "Container (Dockerfile)" launch profile, with fast mode**
-- `"commandName": "Docker"` (Visual Studio's) runs the project in a container; `httpPort`, `sslPort`, `publishAllPorts`, `launchUrl` with `{Scheme}://{ServiceHost}:{ServicePort}`, and `containerRunArguments` are read.
-- **Fast mode** (`containers.fastMode`, on by default, Visual Studio's Debug behavior): `build --target base` builds only the Dockerfile's `base` stage; the container idles (`tail -f /dev/null`) with the project's build output mounted at `/app`. Run starts `dotnet /app/App.dll` through `exec -i` (its output is the Run channel's); Debug copies the pinned Linux netcoredbg into the container (M14c's `RemoteDebuggers`, without asking: the container is ours) and launches the app under it through `exec -i` as a pipe transport, so breakpoints bind from the first line. A rebuild needs no image build. Debug builds are portable, so a Windows or macOS build runs in the Linux container.
+- `"commandName": "Docker"` (the classic IDE's) runs the project in a container; `httpPort`, `sslPort`, `publishAllPorts`, `launchUrl` with `{Scheme}://{ServiceHost}:{ServicePort}`, and `containerRunArguments` are read.
+- **Fast mode** (`containers.fastMode`, on by default, the classic IDE's Debug behavior): `build --target base` builds only the Dockerfile's `base` stage; the container idles (`tail -f /dev/null`) with the project's build output mounted at `/app`. Run starts `dotnet /app/App.dll` through `exec -i` (its output is the Run channel's); Debug copies the pinned Linux netcoredbg into the container (M14c's `RemoteDebuggers`, without asking: the container is ours) and launches the app under it through `exec -i` as a pipe transport, so breakpoints bind from the first line. A rebuild needs no image build. Debug builds are portable, so a Windows or macOS build runs in the Linux container.
 - **Regular mode** (fast mode off): the whole Dockerfile is built and the container runs its entry point; debugging attaches to its .NET process.
 - The container's ports are published on `127.0.0.1` (the profile's ports, else free ones), the profile's environment applies without its `applicationUrl`, and the container is removed when the program or the debug session ends.
 - HTTPS in containers (the development certificate mounted in) isn't done: `TODO(issue)`. Static web assets in fast mode: see the amendment below.
 
 **Add Docker Support: the .NET templates' files**
-- A multi-stage Dockerfile on `mcr.microsoft.com/dotnet/{aspnet|runtime}:<version>` and `sdk`, built from the solution's folder (the templates' context), restoring each project file first; `.dockerignore` there; and the "Container (Dockerfile)" profile. The fixture's Dockerfile is what it writes. No package reference is added (Visual Studio's `Microsoft.VisualStudio.Azure.Containers.Tools.Targets` is proprietary and not needed).
+- A multi-stage Dockerfile on `mcr.microsoft.com/dotnet/{aspnet|runtime}:<version>` and `sdk`, built from the solution's folder (the templates' context), restoring each project file first; `.dockerignore` there; and the "Container (Dockerfile)" profile. The fixture's Dockerfile is what it writes. No package reference is added (the classic IDE's `Microsoft.VisualStudio.Azure.Containers.Tools.Targets` is proprietary and not needed).
 
 **Compose: the engine's own `compose`, and `.dcproj` as a solution item**
 - Compose Up (`compose -f file [-f file.override] -p name up -d --build`), Down, and Debug Compose Service (up, then attach to the service's .NET process; the `.dcproj`'s `DockerServiceName` picks the service).
-- **`.dcproj`** is never evaluated: the build host reads its items from the XML (`ComposeProject`), it loads as a project without frameworks, gets no design-time build, and solution builds and restores use a solution filter without it (as for unloaded projects). Solutions created in Visual Studio open and build without errors.
+- **`.dcproj`** is never evaluated: the build host reads its items from the XML (`ComposeProject`), it loads as a project without frameworks, gets no design-time build, and solution builds and restores use a solution filter without it (as for unloaded projects). Solutions created in the classic IDE open and build without errors.
 - Compose files are validated with the Compose Specification's schema (Apache-2.0), bundled in the markup host; Dockerfiles keep TextMate's grammar. The Dockerfile language server (D3) isn't added: `TODO(issue)`.
 
 **The Containers window**
@@ -54,6 +54,6 @@ The questions: how to talk to the container engine; how a project runs and is de
 
 The 0.3.0 release run found that, built with the .NET 11 SDK, the fixture's web app no longer started in a fast-mode container: `DirectoryNotFoundException: …/Web/obj/Debug/net10.0/jsmodules/`. The SDK now gives every web project static web assets (the `dotnet watch` browser scripts in `obj`), so a Debug build's `Web.staticwebassets.runtime.json` names folders of this machine. ASP.NET Core reads that manifest in Development and fails to start when one of its folders is missing, as it is in the container. Before, only projects with static web assets of their own (`wwwroot`, Razor class libraries) hit this, which was the gap this ADR left open.
 
-- **Fast mode now mounts them**, as Visual Studio does. Each content root of the manifest outside the build output is mounted read-only at `/staticwebassets/<index>`; roots inside the output map to `/app/…`. `App.staticwebassets.runtime.container.json`, the manifest with the container's paths, is written beside the original in the mounted output, and `ASPNETCORE_STATICWEBASSETS` points the app at it, for Run and Debug alike.
+- **Fast mode now mounts them**, as the classic IDE does. Each content root of the manifest outside the build output is mounted read-only at `/staticwebassets/<index>`; roots inside the output map to `/app/…`. `App.staticwebassets.runtime.container.json`, the manifest with the container's paths, is written beside the original in the mounted output, and `ASPNETCORE_STATICWEBASSETS` points the app at it, for Run and Debug alike.
 - A root that doesn't exist on this machine isn't mounted, since the engine would create it; the app then fails in the container just as it would locally.
 - The fixture's app serves `wwwroot/hello.txt`. `ContainerRuntimeTests` and the smoke test's `containers.run` step request it.

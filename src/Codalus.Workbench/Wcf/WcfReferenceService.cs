@@ -5,16 +5,16 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Workbench.Wcf;
 
 /// <summary>
-/// WCF service references (M42, ADR 0069), Visual Studio's "WCF Web Service Reference": the build host runs the
+/// WCF service references (M42, ADR 0069), the classic IDE's "WCF Web Service Reference": the build host runs the
 /// user's <c>dotnet-svcutil</c> (trusted solutions only) and keeps the reference in
-/// <c>Connected Services/&lt;name&gt;/</c> with a <c>ConnectedService.json</c> as Visual Studio writes it. Its output goes
+/// <c>Connected Services/&lt;name&gt;/</c> with a <c>ConnectedService.json</c> as the classic IDE writes it. Its output goes
 /// to the Service References channel. UI-agnostic; events arrive on any thread.
 /// </summary>
 public sealed class WcfReferenceService
 {
     public const string OutputChannelId = "codalus.serviceReferences";
 
-    /// <summary>The collection types Visual Studio offers, the first its default.</summary>
+    /// <summary>The collection types the classic IDE offers, the first its default.</summary>
     public static readonly IReadOnlyList<string> CollectionTypes =
     [
         "System.Array",
@@ -25,7 +25,7 @@ public sealed class WcfReferenceService
         "System.Collections.ArrayList",
     ];
 
-    /// <summary>The dictionary types Visual Studio offers, the first its default.</summary>
+    /// <summary>The dictionary types the classic IDE offers, the first its default.</summary>
     public static readonly IReadOnlyList<string> DictionaryTypes =
     [
         "System.Collections.Generic.Dictionary`2",
@@ -88,7 +88,7 @@ public sealed class WcfReferenceService
         return result.References;
     }
 
-    /// <summary>Visual Studio's default name: <c>ServiceReference1</c>, or the next number free.</summary>
+    /// <summary>The classic IDE's default name: <c>ServiceReference1</c>, or the next number free.</summary>
     public static string DefaultName(IEnumerable<string> existing)
     {
         var taken = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);

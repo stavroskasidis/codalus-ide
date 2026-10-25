@@ -6,7 +6,7 @@ using Codalus.Shell.Theming;
 
 namespace Codalus.Shell.Tests;
 
-/// <summary>Razor files colored as Visual Studio colors them: the C# host's Razor tokens over the grammar, in every theme.</summary>
+/// <summary>Razor files colored as the classic IDE colors them: the C# host's Razor tokens over the grammar, in every theme.</summary>
 public sealed class RazorColorTests
 {
     /// <summary>The maintainer's Routes.razor, reduced.</summary>
@@ -99,7 +99,7 @@ public sealed class RazorColorTests
         Assert.True(numbers.IsEffectivelyVisible && numbers.Bounds.Width > 0, $"line numbers: visible {numbers.IsEffectivelyVisible}, width {numbers.Bounds.Width}");
         NavigationDepthTests.Screenshot(f, "razor-colors-dark");
 
-        // Light: Visual Studio's Light colors.
+        // Light: the classic IDE's Light colors.
         await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, "light", Workbench.Settings.SettingScope.User, CancellationToken.None);
         await ShellFixture.PumpUntil(() => ColorAt(editor, "<Router", 1) == Of(0xFF0B7F7F), seconds: 30);
         Assert.Equal(Of(0xFF800000), ColorAt(editor, "<p", 1));

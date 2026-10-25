@@ -71,7 +71,7 @@ public class NestingTests
     [Fact]
     public void A_projects_properties_and_wwwroot_come_first_and_underscores_before_letters()
     {
-        // As Visual Studio orders them: Properties and wwwroot, the other folders by name, then the files, with
+        // As the classic IDE orders them: Properties and wwwroot, the other folders by name, then the files, with
         // _Imports.razor before App.razor (an ordinal case-insensitive order upper-cases and puts it last).
         var dir = Path.Combine(Path.GetTempPath(), "client");
         var project = Path.Combine(dir, "Client.csproj");

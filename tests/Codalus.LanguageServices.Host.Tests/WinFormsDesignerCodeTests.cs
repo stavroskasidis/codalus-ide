@@ -6,10 +6,10 @@ using Microsoft.CodeAnalysis.Text;
 namespace Codalus.LanguageServices.Host.Tests;
 
 /// <summary>
-/// M41a (ADR 0073): the Windows Forms designer's reader and writer in the C# host, on designer files as Visual Studio
+/// M41a (ADR 0073): the Windows Forms designer's reader and writer in the C# host, on designer files as the classic IDE
 /// writes them (samples/WindowsDesktop/WinFormsApp: for .NET and, in AboutForm, for .NET Framework, localizable).
 /// Roslyn only, so it runs on every OS. Reading then writing every statement again gives the file back byte for byte;
-/// each change is the smallest edit, where Visual Studio's designer puts it; code the designer doesn't write fails with
+/// each change is the smallest edit, where the classic IDE's designer puts it; code the designer doesn't write fails with
 /// its line.
 /// </summary>
 public sealed class WinFormsDesignerCodeTests
@@ -171,7 +171,7 @@ public sealed class WinFormsDesignerCodeTests
         { "InventoryForm.Designer.cs", true },
     };
 
-    /// <summary>Every statement written again from the model is the file's own text: the generator writes Visual Studio's style (both of them).</summary>
+    /// <summary>Every statement written again from the model is the file's own text: the generator writes the classic IDE's style (both of them).</summary>
     [Theory]
     [MemberData(nameof(DesignerFiles))]
     public void Writing_every_statement_again_gives_the_file_back(string file, bool crlf)
@@ -821,7 +821,7 @@ public sealed class WinFormsDesignerCodeTests
         ], Diff(InventoryForm, grid));
         Assert.Contains("            // \n            // inStockColumn\n            // \n            inStockColumn.HeaderText = \"In stock\";\n            inStockColumn.Name = \"inStockColumn\";\n            // \n            // InventoryForm\n", grid, StringComparison.Ordinal);
 
-        // A list view's items are locals, declared before the components are created, as Visual Studio declares them.
+        // A list view's items are locals, declared before the components are created, as the classic IDE declares them.
         var listItems = Apply(InventoryForm,
             new DesignerEdit { Kind = DesignerEditKinds.AddLocal, Component = "listViewItem3", Value = DesignerValue.NewOf("System.Windows.Forms.ListViewItem", DesignerValue.String("Drill")) },
             Collection("itemsListView", "Items", "AddRange", "System.Windows.Forms.ListViewItem", DesignerValue.ReferenceTo("listViewItem1"), DesignerValue.ReferenceTo("listViewItem2"), DesignerValue.ReferenceTo("listViewItem3")));
@@ -974,7 +974,7 @@ public sealed class WinFormsDesignerCodeTests
         Assert.Equal(["de", "fr"], resources.Cultures);
 
         // A property that was in the code moves to the resources: ApplyResources first in the component's section,
-        // the assignment gone; its key in a new group before the form's ($this) entries, with Visual Studio's records.
+        // the assignment gone; its key in a new group before the form's ($this) entries, with the classic IDE's records.
         DesignerResource Point(string text) => new() { Type = "System.Drawing.Point, System.Drawing", Text = text, AssemblyAlias = "System.Drawing", AssemblyName = "System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" };
         (code, resources) = ApplyWithResources("AboutForm",
             new DesignerEdit { Kind = DesignerEditKinds.SetLocalized, Component = "versionLabel", Localized = true },

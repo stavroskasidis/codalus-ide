@@ -34,7 +34,7 @@ internal sealed class DesignerSource
 
     public required string NewLine { get; init; }
 
-    /// <summary>The empty lines of a section comment: <c>// </c> (Visual Studio's, with its space) or <c>//</c>.</summary>
+    /// <summary>The empty lines of a section comment: <c>// </c> (the classic IDE's, with its space) or <c>//</c>.</summary>
     public required string SectionRule { get; init; }
 
     /// <summary>The names of the class's components and locals (not the root).</summary>
@@ -48,11 +48,11 @@ internal sealed class DesignerReadException(string message, int? line) : Excepti
 }
 
 /// <summary>
-/// Reads InitializeComponent (M41a, ADR 0073) into a <see cref="DesignerModel"/>: the statements Visual Studio's
+/// Reads InitializeComponent (M41a, ADR 0073) into a <see cref="DesignerModel"/>: the statements the classic IDE's
 /// designer writes (creations, assignments, <c>Controls.Add</c> and other calls, layout calls, event hookups,
 /// <c>resources.ApplyResources</c> and <c>GetObject</c>, section comments), with values as expression trees. Anything
 /// else (control flow, lambdas, calls to the class's own methods, unknown names) can't be designed: the read fails with
-/// the reason and its line, and the file opens as code, as Visual Studio does.
+/// the reason and its line, and the file opens as code, as the classic IDE does.
 /// </summary>
 internal static class DesignerReader
 {
@@ -92,7 +92,7 @@ internal static class DesignerReader
             }
         }
 
-        // The names first: a statement can refer to a component created later (Visual Studio creates all of them first anyway).
+        // The names first: a statement can refer to a component created later (the classic IDE creates all of them first anyway).
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var statement in body.Statements)
         {
@@ -188,7 +188,7 @@ internal static class DesignerReader
     }
 
     /// <summary>
-    /// Visual Studio's section comments in a statement's leading trivia: three line comments, the middle one naming the
+    /// The classic IDE's section comments in a statement's leading trivia: three line comments, the middle one naming the
     /// component (<c>// </c>, <c>// button1</c>, <c>// </c>).
     /// </summary>
     private static IEnumerable<(string Name, TextSpan Lines)> Sections(SourceText text, StatementSyntax statement)
@@ -225,7 +225,7 @@ internal static class DesignerReader
     private static string NewLineOf(SourceText text) =>
         text.Lines.Count > 1 && text.Lines[0].EndIncludingLineBreak - text.Lines[0].End == 2 ? "\r\n" : "\n";
 
-    /// <summary>The rule lines of the file's section comments; Visual Studio's (<c>// </c>) for a file that has none.</summary>
+    /// <summary>The rule lines of the file's section comments; the classic IDE's (<c>// </c>) for a file that has none.</summary>
     private static string SectionRuleOf(SourceText text, List<SourceStatement> statements)
     {
         if (statements.FirstOrDefault(s => s.Statement.Kind == DesignerStatementKinds.Section) is { } section)
@@ -607,7 +607,7 @@ internal static class DesignerReader
             }
         }
 
-        /// <summary><c>A.X | A.Y</c> (and Visual Studio's nested, parenthesized form): flags of one enum.</summary>
+        /// <summary><c>A.X | A.Y</c> (and the classic IDE's nested, parenthesized form): flags of one enum.</summary>
         private DesignerValue Flags(BinaryExpressionSyntax or, string? castType)
         {
             var members = new List<string>();

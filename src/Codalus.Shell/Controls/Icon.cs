@@ -157,7 +157,7 @@ public sealed class Icon : Control
         var offset = new Point((Bounds.Width - size) / 2, (Bounds.Height - size) / 2);
         if (IconSet.GetFilled(kind) is { } filled)
         {
-            // Multicolor icons (file types) take the Visual Studio palette's nearest color in the current theme (folders its
+            // Multicolor icons (file types) take the classic IDE's palette's nearest color in the current theme (folders its
             // tan), except in High Contrast, where shape carries the meaning. The classic file icons' unfilled parts (pages,
             // outlines) are the theme's outline gray.
             var monochrome = Theming.ThemeService.IsHighContrast(ActualThemeVariant);

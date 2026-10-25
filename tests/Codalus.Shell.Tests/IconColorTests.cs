@@ -10,7 +10,7 @@ using Codalus.Shell.Theming;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// The maintainer's rule (2026-10-13): every icon is colored, in the Visual Studio palette. Commands, tool windows and
+/// The maintainer's rule (2026-10-13): every icon is colored, in the classic IDE's palette. Commands, tool windows and
 /// the icons views declare have a palette color; file icons' fills map to the palette by hue; the palette exists in
 /// every theme and High Contrast keeps it monochrome.
 /// </summary>
@@ -61,7 +61,7 @@ public partial class IconColorTests
     [InlineData(0xFFFF9800u, "Orange")]
     [InlineData(0xFF9C27B0u, "Purple")]
     [InlineData(0xFF795548u, "Folder")]
-    [InlineData(0xFF90A4AEu, null)] // a gray-blue page stays gray, as Visual Studio's pages
+    [InlineData(0xFF90A4AEu, null)] // a gray-blue page stays gray, as the classic IDE's pages
     public void File_icon_fills_take_the_nearest_palette_color(uint argb, string? family) => Assert.Equal(family, Icon.PaletteColor(argb));
 
     [AvaloniaFact]

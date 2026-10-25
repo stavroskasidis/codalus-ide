@@ -92,7 +92,7 @@ Settings → Testing:
 A playlist is a saved set of tests: pick it in the Test Explorer's playlist box to see and run only those.
 
 - **Create**: select tests, right-click → Add to Playlist… (or Test → New Playlist…).
-- **Import** a Visual Studio `.playlist` file with Test → Import Test Playlist (.playlist)….
+- **Import** a classic IDE `.playlist` file with Test → Import Test Playlist (.playlist)….
 - Playlists are saved as JSON in `.codalus/playlists/` next to the solution, with paths relative to it, so you can
   commit and share them. Add `.codalus/` to `.gitignore` if you don't want to.
 

@@ -16,7 +16,7 @@ namespace Codalus.Shell.ViewModels;
 public sealed record RunPostBuildOption(string Value, string Label);
 
 /// <summary>
-/// The Build Events page (ADR 0034): the pre-build and post-build command lines, kept as Visual Studio keeps them
+/// The Build Events page (ADR 0034): the pre-build and post-build command lines, kept as the classic IDE keeps them
 /// (<c>PreBuild</c>/<c>PostBuild</c> targets with an <c>Exec</c>), and when the post-build event runs.
 /// </summary>
 public sealed class BuildEventsViewModel : ObservableObject

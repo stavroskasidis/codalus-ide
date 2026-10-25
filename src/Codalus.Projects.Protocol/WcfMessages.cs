@@ -5,8 +5,8 @@ namespace Codalus.Projects.Protocol;
 /// <summary>
 /// WCF service references (M42, ADR 0069) on the build host connection. The host runs the user's own
 /// <c>dotnet-svcutil</c> (a local or global .NET tool) as a child process in the project's folder, trusted solutions only,
-/// one at a time, its process tree killed on cancel. A reference lives where Visual Studio puts it:
-/// <c>Connected Services/&lt;name&gt;/Reference.cs</c> next to a <c>ConnectedService.json</c> in Visual Studio's format,
+/// one at a time, its process tree killed on cancel. A reference lives where the classic IDE puts it:
+/// <c>Connected Services/&lt;name&gt;/Reference.cs</c> next to a <c>ConnectedService.json</c> in the classic IDE's format,
 /// which <c>dotnet-svcutil --update</c> also reads.
 /// </summary>
 public static class WcfReferenceMethods
@@ -55,7 +55,7 @@ public sealed record WcfReferencesParams(string Project);
 /// <summary>
 /// A reference's options, as <c>dotnet-svcutil</c> takes them. <see cref="Name"/> is the folder under
 /// <c>Connected Services</c>; <see cref="Input"/> a URL (<c>…?wsdl</c>, a MEX address) or a WSDL file. A null
-/// <see cref="Namespace"/> maps every target namespace to <see cref="Name"/> (Visual Studio's default).
+/// <see cref="Namespace"/> maps every target namespace to <see cref="Name"/> (the classic IDE's default).
 /// <see cref="CollectionType"/> and <see cref="DictionaryCollectionType"/>: full type names (<c>System.Array</c>,
 /// <c>System.Collections.Generic.List`1</c>, <c>System.Collections.Generic.Dictionary`2</c>). <see cref="Sync"/>: synchronous
 /// methods as well as task-based ones. <see cref="ReuseTypes"/>: reuse types from the project's references.

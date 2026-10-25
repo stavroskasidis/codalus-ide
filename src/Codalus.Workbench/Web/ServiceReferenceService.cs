@@ -22,7 +22,7 @@ public sealed record ServiceReferenceRequest(
     ServiceReferencePackage[]? Versions = null);
 
 /// <summary>
-/// Service references (ADR 0041), Visual Studio's Connected Services for OpenAPI and gRPC: the document lives in the
+/// Service references (ADR 0041), the classic IDE's Connected Services for OpenAPI and gRPC: the document lives in the
 /// project (copied or downloaded here), the build host writes the <c>OpenApiReference</c> or <c>Protobuf</c> item and
 /// adds the packages, and the client (or server base) is generated at build time. UI-agnostic.
 /// </summary>

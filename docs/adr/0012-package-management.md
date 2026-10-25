@@ -6,7 +6,7 @@
 
 ## Context
 
-M9 asks for Visual Studio's NuGet Package Manager: Browse, Installed, Updates and Consolidate, at project and solution level; package details with dependencies, licence, README, vulnerabilities and deprecation; licence acceptance; transitive packages with "why is this here"; Central Package Management (CPM); a package sources UI with source mapping; credential providers; offline mode. Edits must match what `dotnet add package` and `dotnet remove package` write.
+M9 asks for the classic IDE's NuGet Package Manager: Browse, Installed, Updates and Consolidate, at project and solution level; package details with dependencies, licence, README, vulnerabilities and deprecation; licence acceptance; transitive packages with "why is this here"; Central Package Management (CPM); a package sources UI with source mapping; credential providers; offline mode. Edits must match what `dotnet add package` and `dotnet remove package` write.
 
 Constraints:
 - The shell is Native AOT and must not do network or MSBuild work (ADR 0004). The build host already owns MSBuild, restore and project-file edits.

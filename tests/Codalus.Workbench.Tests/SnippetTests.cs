@@ -2,7 +2,7 @@ using Codalus.Workbench.Snippets;
 
 namespace Codalus.Workbench.Tests;
 
-/// <summary>M12b snippets: the TextMate syntax, VS Code and Visual Studio snippet files, and the registry's precedence.</summary>
+/// <summary>M12b snippets: the TextMate syntax, VS Code's and the classic IDE's snippet files, and the registry's precedence.</summary>
 public sealed class SnippetTests
 {
     [Fact]

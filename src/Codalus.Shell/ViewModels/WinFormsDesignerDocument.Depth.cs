@@ -16,7 +16,7 @@ namespace Codalus.Shell.ViewModels;
 /// </summary>
 public sealed partial class WinFormsDesignerDocument
 {
-    /// <summary>The languages a localizable form's Language offers besides its own cultures' (Visual Studio lists every culture; these are the common ones).</summary>
+    /// <summary>The languages a localizable form's Language offers besides its own cultures' (the classic IDE lists every culture; these are the common ones).</summary>
     public static IReadOnlyList<string> CommonCultures { get; } =
         ["ar", "cs", "da", "de", "el", "en", "en-GB", "en-US", "es", "fi", "fr", "fr-CA", "he", "hu", "it", "ja", "ko", "nl", "no", "pl", "pt", "pt-BR", "ru", "sv", "tr", "uk", "zh-Hans", "zh-Hant"];
 
@@ -113,7 +113,7 @@ public sealed partial class WinFormsDesignerDocument
     private static string DefaultLanguage => Localizer.Get("msg.winFormsDesigner.defaultLanguage", "(Default)");
 
     /// <summary>
-    /// Designs a localizable form in another language (Visual Studio's Language): the form loads again with that
+    /// Designs a localizable form in another language (the classic IDE's Language): the form loads again with that
     /// culture's resources, and its localizable properties are written to <c>Form.culture.resx</c> (only what differs).
     /// </summary>
     public async Task SetCultureAsync(string culture)
@@ -349,7 +349,7 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>The row the shell nests the data bindings under (#68, D41 question 6), in Data, as the classic IDE's.</summary>
     internal const string DataBindingsRow = "(DataBindings)";
 
-    /// <summary>Visual Studio's name of an extender property's row: <c>ToolTip on toolTip1</c>.</summary>
+    /// <summary>The classic IDE's name of an extender property's row: <c>ToolTip on toolTip1</c>.</summary>
     public static string ExtenderName(string property, string provider) => Localizer.Format("msg.winFormsDesigner.extender", "{0} on {1}", property, provider);
 
     /// <summary>The root's Language row of a localizable form (the designer's, not the code's).</summary>
@@ -373,7 +373,7 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>
     /// An image imported from a file for an image property: into the form's resources (read with <c>GetObject</c>, or
     /// with ApplyResources in a localizable form), or into the project's resources (<c>Resources/</c> and
-    /// <c>Properties/Resources.resx</c>, read as <c>Properties.Resources.Name</c>), as Visual Studio's Select Resource offers.
+    /// <c>Properties/Resources.resx</c>, read as <c>Properties.Resources.Name</c>), as the classic IDE's Select Resource offers.
     /// </summary>
     public async Task ImportImageAsync(string component, string property, string? path, bool toProject)
     {
@@ -424,7 +424,7 @@ public sealed partial class WinFormsDesignerDocument
                 await File.WriteAllBytesAsync(target, bytes).ConfigureAwait(true);
             }
 
-            // The project's resources: a file reference, as Visual Studio adds it; its strongly typed class generated again.
+            // The project's resources: a file reference, as the classic IDE adds it; its strongly typed class generated again.
             var text = await File.ReadAllTextAsync(resx).ConfigureAwait(true);
             var type = Path.GetExtension(target).Equals(".ico", StringComparison.OrdinalIgnoreCase)
                 ? "System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a"
@@ -483,7 +483,7 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>The tray drawn again (a rename starting or ending).</summary>
     public void RefreshTray() => UpdateTray();
 
-    /// <summary>A tray component double-clicked: its default event's handler (a timer's Tick), as Visual Studio does.</summary>
+    /// <summary>A tray component double-clicked: its default event's handler (a timer's Tick), as the classic IDE does.</summary>
     public Task DefaultEventOfAsync(string component) =>
         Find(component) is { } view ? HookEventAsync(component, view.DefaultEvent ?? "Disposed", handler: null) : Task.CompletedTask;
 
@@ -499,8 +499,8 @@ public sealed partial class WinFormsDesignerDocument
     }
 
     /// <summary>
-    /// Arranges the tray: its components in this order (Line Up Icons, or one dragged before another), recorded as Visual
-    /// Studio does, in the default resources' <c>TrayLocation</c> metadata.
+    /// Arranges the tray: its components in this order (Line Up Icons, or one dragged before another), recorded as the
+    /// classic IDE does, in the default resources' <c>TrayLocation</c> metadata.
     /// </summary>
     public Task ArrangeTrayAsync(IReadOnlyList<string> order)
     {
@@ -631,7 +631,7 @@ public sealed partial class WinFormsDesignerDocument
         return Apply(edits);
     }
 
-    /// <summary>The designer's grid, as Visual Studio's default (Align to Grid, Size to Grid, spacing steps).</summary>
+    /// <summary>The designer's grid, as the classic IDE's default (Align to Grid, Size to Grid, spacing steps).</summary>
     public const double GridSize = 8;
 
     /// <summary>Format → Make Same Size: the primary selection's width, height or both; or each sized to the grid.</summary>
@@ -743,7 +743,7 @@ public sealed partial class WinFormsDesignerDocument
         }
     }
 
-    /// <summary>A control's tab order label as Visual Studio shows it: its index, after its containers' (<c>2.1</c>).</summary>
+    /// <summary>A control's tab order label as the classic IDE shows it: its index, after its containers' (<c>2.1</c>).</summary>
     public string? TabOrderLabel(DesignerComponentView view)
     {
         if (view.TabIndex is not { } index || view == Root)
@@ -1119,7 +1119,7 @@ public sealed partial class WinFormsDesignerDocument
 
         if (!strip.Visible)
         {
-            // A context menu: shown at the top of the form when it (or one of its items) is selected, as Visual Studio does.
+            // A context menu: shown at the top of the form when it (or one of its items) is selected, as the classic IDE does.
             panels.Add(Panel(strip, new DesignerRect((Root?.ClientX ?? 0) + 4, (Root?.ClientY ?? 0) + 4, 0, 0), header: strip.Name));
         }
 
@@ -1175,8 +1175,8 @@ public sealed partial class WinFormsDesignerDocument
     }
 
     /// <summary>
-    /// Type Here: a new item at the end of a strip's or menu item's items: a menu item named from its text as Visual
-    /// Studio names it (<c>&amp;Open</c> is <c>openToolStripMenuItem</c>), a separator for "-", or an item of the type picked.
+    /// Type Here: a new item at the end of a strip's or menu item's items: a menu item named from its text as the
+    /// classic IDE names it (<c>&amp;Open</c> is <c>openToolStripMenuItem</c>), a separator for "-", or an item of the type picked.
     /// </summary>
     public async Task AddItemAsync(DesignerTypeHere typeHere, string? text, string? type = null)
     {
@@ -1197,7 +1197,7 @@ public sealed partial class WinFormsDesignerDocument
         }
     }
 
-    /// <summary>Visual Studio's name of a new item: its text's letters and digits, first one lowercased, then its type (<c>fileToolStripMenuItem</c>); without text, the type and a number.</summary>
+    /// <summary>The classic IDE's name of a new item: its text's letters and digits, first one lowercased, then its type (<c>fileToolStripMenuItem</c>); without text, the type and a number.</summary>
     public string ItemName(string type, string? text)
     {
         var typeName = type[(type.LastIndexOf('.') + 1)..];

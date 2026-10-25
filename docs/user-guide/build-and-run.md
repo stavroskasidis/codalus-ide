@@ -43,7 +43,7 @@ After each build, Codalus IDE records what every project was built from (its fil
 
 ### Build events
 
-The project properties' **Build Events** page edits the commands that run before and after the project builds, and when the post-build event runs (on a successful build, always, or when the build updates the output). They are stored the way Visual Studio stores them: `PreBuild` and `PostBuild` targets with an `Exec` command. MSBuild macros such as `$(TargetDir)` work in them.
+The project properties' **Build Events** page edits the commands that run before and after the project builds, and when the post-build event runs (on a successful build, always, or when the build updates the output). They are stored the way the classic IDE stores them: `PreBuild` and `PostBuild` targets with an `Exec` command. MSBuild macros such as `$(TargetDir)` work in them.
 
 ### Custom tools
 

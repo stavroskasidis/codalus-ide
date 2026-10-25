@@ -6,7 +6,7 @@
 
 ## Context
 
-M10 asks for a C# Interactive window like Visual Studio's:
+M10 asks for a C# Interactive window like the classic IDE's:
 - A REPL on Roslyn scripting, with its own editor input: highlighting, completion and signature help. The roadmap suggested serving these from `daedalus-lshost` as script documents.
 - A history.
 - `#r` and `#load`, with `#r "nuget:"` going through the M9 package machinery.
@@ -68,5 +68,5 @@ Constraints:
 - `TODO(issue)`:
   - `#r` of a project (`.csproj`);
   - script-file debugging;
-  - a WPF/WinForms dispatcher (Windows-only, like VS's `#reset` options);
+  - a WPF/WinForms dispatcher (Windows-only, like the classic IDE's `#reset` options);
   - showing rich values (tables, images) in the window.

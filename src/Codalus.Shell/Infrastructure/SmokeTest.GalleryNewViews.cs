@@ -476,7 +476,7 @@ internal sealed partial class SmokeTest
         shell.Dialogs.Cancel();
         await converting.ConfigureAwait(true);
 
-        // Building the project that needs Visual Studio's targets alone fails, saying why in the Error List.
+        // Building the project that needs the classic IDE's targets alone fails, saying why in the Error List.
         Check(!await shell.BuildAsync(Codalus.Projects.Protocol.BuildTargets.Build, web).ConfigureAwait(true), "LegacyWebApp's build fails here");
         await SoftWaitAsync(() => shell.ErrorList.Rows.Any(r => r.IsError && r.Project == "LegacyWebApp"), 30).ConfigureAwait(true);
         await GalleryThemesAsync(theme =>

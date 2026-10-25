@@ -11,7 +11,7 @@ namespace Codalus.Projects.Tests;
 /// .NET Framework projects (M43a, ADR 0075) in the real build host on a copy of samples/NetFramework, on every OS:
 /// SDK-style <c>net48</c> projects restore the reference assemblies package and build; the old-style project gets its
 /// <c>packages.config</c> package (from the fixture's local feed) and the reference assemblies from Codalus's own
-/// restore (both use the Developer Pack's instead where it's installed, as on CI's Windows runners), loads with C# 7.3 and builds with the SDK's MSBuild; the project that imports Visual Studio's web targets
+/// restore (both use the Developer Pack's instead where it's installed, as on CI's Windows runners), loads with C# 7.3 and builds with the SDK's MSBuild; the project that imports the classic IDE's web targets
 /// loads, says why it can't build and is left out of the solution's build; the converter's output builds. The reference
 /// assemblies and xUnit come from nuget.org, as the other restore tests' targeting packs do.
 /// </summary>
@@ -95,7 +95,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
 
     /// <summary>
     /// The Developer Pack's reference assemblies of <paramref name="moniker"/> where they're installed (a Windows machine
-    /// with Visual Studio or the targeting pack, as CI's runners), or null. The SDK and Codalus's targets then use them
+    /// with the classic IDE or the targeting pack, as CI's runners), or null. The SDK and Codalus's targets then use them
     /// instead of the reference assemblies package.
     /// </summary>
     private static string? InstalledReferenceAssemblies(string moniker)
@@ -239,7 +239,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
     [Fact]
     public void Old_style_projects_build_portable_pdbs_unless_they_keep_their_debug_type()
     {
-        // M43b: the desktop-CLR debugger reads portable PDBs; Visual Studio's old projects ask for Windows ones.
+        // M43b: the desktop-CLR debugger reads portable PDBs; the classic IDE's old projects ask for Windows ones.
         Assert.Contains("<DebugType>portable</DebugType>", NetFramework.ReferenceAssembliesTargetsText, StringComparison.Ordinal);
         Assert.Contains("'$(DebugType)' == 'full' or '$(DebugType)' == 'pdbonly'", NetFramework.ReferenceAssembliesTargetsText, StringComparison.Ordinal);
         Assert.Contains("'$(CodalusKeepDebugType)' != 'true'", NetFramework.ReferenceAssembliesTargetsText, StringComparison.Ordinal);
@@ -460,7 +460,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.Contains(inputs.Arguments, a => a.EndsWith("Greeting.cs", StringComparison.Ordinal));
         Assert.Contains(Project("Library"), inputs.ProjectReferences);
 
-        // The project that needs Visual Studio's targets: loaded, with the reason, and still IntelliSense.
+        // The project that needs the classic IDE's targets: loaded, with the reason, and still IntelliSense.
         var web = _solutions.Projects[Project("LegacyWebApp")];
         Assert.Equal(ProjectStates.Loaded, web.State);
         Assert.True(web.IsNonSdkStyle);

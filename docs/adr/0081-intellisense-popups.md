@@ -7,8 +7,8 @@
 
 ## Context
 
-The maintainer compared the editor's IntelliSense with Visual Studio 2022's, from screenshots of `builder.AddTab(`:
-- **Signature help** was a flat grey box with tiny filled arrows, the signature in plain text with the active parameter bold, and generic types unsubstituted (`wsLayoutBuilderBase<TModel, TLayoutBuilder>.AddTab(…)`). Visual Studio colors the signature like code, substitutes the call site's type arguments, and shows "˄ 1 of 2 ˅" chevrons.
+The maintainer compared the editor's IntelliSense with the classic IDE's, from screenshots of `builder.AddTab(`:
+- **Signature help** was a flat grey box with tiny filled arrows, the signature in plain text with the active parameter bold, and generic types unsubstituted (`wsLayoutBuilderBase<TModel, TLayoutBuilder>.AddTab(…)`). The classic IDE colors the signature like code, substitutes the call site's type arguments, and shows "˄ 1 of 2 ˅" chevrons.
 - **The completion list** opened on top of signature help. Its items had generic glyphs, and it had no filters and no description beside the selection.
 - **A third tooltip,** Quick Info with a diagnostic, opened over both.
 - **Quick Info** showed the signature in a code block that scrolled and cut it off. It printed "Returns: Returns:", and its diagnostics were plain lines with no actions.
@@ -36,11 +36,11 @@ What existed:
 - **Signature help** has chevrons with "n of m", the colorized signature with the active parameter bold, the summary, and the active parameter's documentation.
 - **Quick Info** has the kind's icon, the wrapped signature with its overload count, and the sections. Then its diagnostics, each code a link to its help, and Fix, Other Fixes and Add to Chat.
 - **Placement:** the editor places them against the caret's line, the list below and signature help above. At the screen's bottom edge the list goes above and signature help below; they flip only when alone. They are placed again when the editor scrolls or the window moves, and close when the line leaves the view, the window is deactivated or Escape is pressed. Quick Info doesn't open while either is open.
-- **Keys:** the editor's key handler gives the list its keys first, then signature help its Up and Down. The filters' shortcuts are key bindings (Alt and Visual Studio's letters) on the new `suggestWidgetVisible` context key, so they show in Keyboard Shortcuts and can be rebound. Emacs keeps its own Alt+F, Alt+V and Alt+X.
+- **Keys:** the editor's key handler gives the list its keys first, then signature help its Up and Down. The filters' shortcuts are key bindings (Alt and the classic IDE's letters) on the new `suggestWidgetVisible` context key, so they show in Keyboard Shortcuts and can be rebound. Emacs keeps its own Alt+F, Alt+V and Alt+X.
 - **Icons:** the kind icons are our own pixel drawings (`eng/icons/symbol-icons.py`), compiled at build time like every icon, each in its kind's palette color.
 - **The C# Interactive window** uses the same popups.
 
-**Commit characters**, as Visual Studio applies Roslyn's rules:
+**Commit characters**, as the classic IDE applies Roslyn's rules:
 - A typed commit character commits the selected item, then is typed, unless the edit already contains it. The characters are the item's `commitCharacters`, else the server's `allCommitCharacters`. The C# service computes an item's set from Roslyn's `CommitCharacterRules` (the first rule naming a character decides, as in Roslyn's commit manager) and sends it only when it differs from the defaults. In suggestion mode it sends none.
 - The editor resolves the item again with the character (`codalusCommitCharacter`), so Roslyn's `GetChangeAsync(…, commitCharacter)` can change the edit, and it says whether the edit already includes the character (`codalusIncludesCommitCharacter`).
 - **No commit on a soft selection** (drawn as an outline). Following Roslyn's hard-selection rules, the selection is soft:
@@ -49,7 +49,7 @@ What existed:
   - while only punctuation is typed.
   Picking an item with the arrows or the mouse makes it hard.
 - A character that continues the item's filter text filters instead of committing (Roslyn's filter characters).
-- **Space** commits, as in Visual Studio's default completion mode ("Automatic"; its other mode, "Tab-only", is the one that doesn't). The `editor.completion.commitOnSpace` setting turns Space off.
+- **Space** commits, as in the classic IDE's default completion mode ("Automatic"; its other mode, "Tab-only", is the one that doesn't). The `editor.completion.commitOnSpace` setting turns Space off.
 - **Enter** follows the item's `EnterKeyRule` (`codalusEnterKeyRule`): never in C#, and always in Visual Basic. These are Roslyn's defaults per language; `afterFullyTypedWord` applies only when the whole name was typed.
 - Enter and Tab still commit a soft selection.
 
@@ -70,7 +70,7 @@ What existed:
 
 ## Consequences
 
-- The popups look and behave like Visual Studio's, in every theme: code in the editor's own colors, and the chrome in theme tokens.
+- The popups look and behave like the classic IDE's, in every theme: code in the editor's own colors, and the chrome in theme tokens.
 - Other language servers get the same popups. Their signatures are plain text with the active parameter bold, and their LSP kinds map onto the icons.
 - Hover's Markdown and signature help's labels change for every client: type arguments are substituted, and headings appear once. The Visual Basic signature test now expects `List(Of Product)`.
 - AvaloniaEdit's completion window is still used by snippets' choices.

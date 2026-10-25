@@ -6,7 +6,7 @@
 
 ## Context
 
-M27 replaces what Visual Studio's EF Core integration, Server Explorer, SQL Server Object Explorer and SQL editor give a .NET developer. Following the roadmap's rule 5 it is split:
+M27 replaces what the classic IDE's EF Core integration, Server Explorer, SQL Server Object Explorer and SQL editor give a .NET developer. Following the roadmap's rule 5 it is split:
 - **M27a**, this ADR: EF Core. DbContext discovery, migrations (add, remove, list, apply, revert, script, bundle) with the SQL shown before it is applied, reverse engineering, a model view and compiled models.
 - **M27b** (ADRs 0037 and 0038): the database explorer in a new `daedalus-datahost`, the query editor, the SQL language service and SQL database projects.
 

@@ -6,7 +6,7 @@ namespace Codalus.Projects.Tests;
 
 /// <summary>
 /// Item edits (ADR 0033) through the real build host, on a copy of samples/ProjectSystem: the Properties window's Build
-/// Action and metadata as Visual Studio writes them under globbing, Include and Exclude, links, moves between projects,
+/// Action and metadata as the classic IDE writes them under globbing, Include and Exclude, links, moves between projects,
 /// Show All Files and item templates.
 /// </summary>
 public sealed class ItemsIntegrationTests : IAsyncLifetime
@@ -225,7 +225,7 @@ public sealed class ItemsIntegrationTests : IAsyncLifetime
         await _items.ExcludeAsync(App, [ignored], Timeout());
         Assert.Equal(original, Text(App));
 
-        // A folder: Remove items for each default glob, as Visual Studio writes them; Include takes them away.
+        // A folder: Remove items for each default glob, as the classic IDE writes them; Include takes them away.
         var forms = Path.Combine(AppDir, "Forms");
         await _items.ExcludeAsync(App, [forms], Timeout());
         foreach (var type in new[] { "Compile", "EmbeddedResource", "None" })
