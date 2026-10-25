@@ -696,6 +696,9 @@ public sealed partial class ShellHost : IEditorServices
     private (string Path, Position Position)? _historyCaret;
     private bool _movingInHistory;
 
+    /// <summary>A document just became active: its caret's first moves (opening at a definition) aren't steps.</summary>
+    private bool _historySettling;
+
     private void RememberLocation()
     {
         if (ActiveEditor is { Controller: { } controller } editor && !editor.Model.IsReadOnly)
@@ -733,9 +736,7 @@ public sealed partial class ShellHost : IEditorServices
     /// </summary>
     private void TrackHistory()
     {
-        var current = ActiveEditor is { Controller: { } controller } editor && !editor.Model.IsReadOnly
-            ? (editor.Model.Path, editor.Model.PositionAt(controller.Editor.CaretOffset))
-            : ((string Path, Position Position)?)null;
+        var current = HistoryCaret();
         if (_historyCaret is { } previous && current is { } now
             && (!SolutionPaths.Comparer.Equals(previous.Path, now.Path) || Math.Abs(previous.Position.Line - now.Position.Line) > HistoryLineJump))
         {
@@ -748,9 +749,46 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    private (string Path, Position Position)? HistoryCaret() => ActiveEditor is { Controller: { } controller } editor && !editor.Model.IsReadOnly
+        ? (editor.Model.Path, editor.Model.PositionAt(controller.Editor.CaretOffset))
+        : null;
+
+    /// <summary>
+    /// The active document changed: the step from the one before is taken now, and the new one's caret is read once the
+    /// opening has placed it (a definition's line is where it opened, not a jump within it).
+    /// </summary>
+    private void OnHistoryDocumentChanged()
+    {
+        if (_historySettling)
+        {
+            TrackDocumentStep();
+            return;
+        }
+
+        TrackDocumentStep();
+        _historySettling = true;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _historySettling = false;
+            if (HistoryCaret() is { } settled)
+            {
+                _historyCaret = settled;
+            }
+        }, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private void TrackDocumentStep()
+    {
+        if (_historyCaret is { } previous && HistoryCaret() is { } now && !SolutionPaths.Comparer.Equals(previous.Path, now.Path))
+        {
+            Remember(previous);
+            _historyCaret = now;
+        }
+    }
+
     private void OnHistoryCaretChanged(object? sender, EventArgs e)
     {
-        if (ActiveEditor?.Controller == sender)
+        if (ActiveEditor?.Controller == sender && !_historySettling)
         {
             TrackHistory();
         }
@@ -1111,7 +1149,7 @@ public sealed partial class ShellHost : IEditorServices
         Workbench.Context.Set("editorLanguageId", ActiveEditor?.Model.LanguageId);
         Workbench.Context.Set("editorExtension", ActiveEditor?.Model.Path is { } activePath ? Path.GetExtension(activePath).ToLowerInvariant() : null);
         FollowXamlEditor();
-        TrackHistory();
+        OnHistoryDocumentChanged();
         if (ActiveEditor is { Controller: { } controller } editor)
         {
             controller.CaretChanged -= OnCaretChanged;

@@ -204,6 +204,32 @@ public sealed class WebsiteTests : IDisposable
     }
 
     [Fact]
+    public async Task Every_page_has_its_own_preview_image_and_the_docs_their_breadcrumbs()
+    {
+        var options = Options();
+        var images = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in new[] { "", "features/", "download/", "docs/", "docs/debugging/", "docs/data/" })
+        {
+            var html = await Get(options, path);
+            var og = Regex.Match(html, "<meta property=\"og:image\" content=\"https://codalus.dev/(?<file>assets/screenshots/[^\"]+)\"");
+            Assert.True(og.Success, $"no og:image on /{path}");
+            Assert.True(File.Exists(Path.Combine(s_repoRoot, "website", "wwwroot", og.Groups["file"].Value)), $"/{path}'s preview {og.Groups["file"].Value} doesn't exist");
+            Assert.Contains($"<meta name=\"twitter:image\" content=\"https://codalus.dev/{og.Groups["file"].Value}\"", html, StringComparison.Ordinal);
+            Assert.Single(Regex.Matches(html, "property=\"og:image\""));
+            images.Add(og.Groups["file"].Value);
+        }
+
+        Assert.True(images.Count >= 4, string.Join(", ", images)); // not one image for every page
+
+        var debugging = await Get(options, "docs/debugging/");
+        var crumbs = Regex.Matches(debugging, "<script type=\"application/ld\\+json\">(?<json>.*?)</script>", RegexOptions.Singleline)
+            .Select(m => JsonElement.Parse(m.Groups["json"].Value)).Single(j => j.GetProperty("@type").GetString() == "BreadcrumbList");
+        Assert.Equal(
+            ["https://codalus.dev/", "https://codalus.dev/docs/", "https://codalus.dev/docs/debugging/"],
+            crumbs.GetProperty("itemListElement").EnumerateArray().Select(i => i.GetProperty("item").GetString()));
+    }
+
+    [Fact]
     public async Task The_sitemap_dates_each_page_by_its_sources_last_commit_with_the_whole_history_only()
     {
         var repo = FakeRepository("The guide.");

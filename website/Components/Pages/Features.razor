@@ -1,7 +1,7 @@
 @page "/features"
 @inject SiteOptions Site
 
-<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF, Windows Forms and WinUI 3, .NET Framework, Visual Basic, F#, WCF, profiling and more." />
+<PageMeta Image="intellisense.png" ImageAlt="IntelliSense in the C# editor of Codalus IDE" Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF, Windows Forms and WinUI 3, .NET Framework, Visual Basic, F#, WCF, profiling and more." />
 
 <div class="container">
     <section class="page-intro rise">
@@ -25,10 +25,11 @@
             }
         </div>
         <div class="tour-shots">
-            @foreach (var (shot, i) in s_shots.Select((s, i) => (s, i)))
+            @foreach (var shot in s_shots)
             {
                 <figure class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key">
-                    <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@shot.Alt" />
+                    @* Lazy, the first too (M50): it loads at once in view, and an eager one delayed the intro's paint on a slow connection. *@
+                    <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="lazy" alt="@shot.Alt" />
                     <figcaption><strong>@shot.Label</strong><span>@shot.Caption</span></figcaption>
                 </figure>
             }

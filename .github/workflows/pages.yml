@@ -153,6 +153,14 @@ jobs:
           base="${{ steps.pages.outputs.base_url }}"
           dotnet run --project website -c Release --no-launch-profile -- --export site --base-url "https://${base#*://}/" \
             --ref "${{ github.ref_name }}" --stable "${{ steps.releases.outputs.stable }}" --nightly "${{ steps.releases.outputs.nightly }}"
+      # Lighthouse 95+ on every page (M50): performance, accessibility, best practices and SEO, on its mobile defaults.
+      # A second export, served from a local port at its root, so the pages' links and assets resolve there.
+      - name: Lighthouse
+        shell: bash
+        run: |
+          dotnet run --project website -c Release --no-launch-profile --no-build -- --export "$RUNNER_TEMP/lighthouse-site" \
+            --base-url "http://127.0.0.1:8765/" --ref "${{ github.ref_name }}" --stable "${{ steps.releases.outputs.stable }}" --nightly "${{ steps.releases.outputs.nightly }}"
+          bash eng/lighthouse.sh "$RUNNER_TEMP/lighthouse-site"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

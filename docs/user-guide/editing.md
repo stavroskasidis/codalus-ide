@@ -83,7 +83,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 | Type Hierarchy | (Edit menu, palette) | Base and derived types, in the Hierarchy window. |
 | Go To All (Code Search) | `Ctrl+T`, `Ctrl+,` | Files, types, members and text, with a live preview ([Code Search](#code-search), below). Go To File, Type, Member and Text (`Ctrl+1` then `F`, `T`, `M` or `X`) open it on that filter. |
 | Find in Files, Replace in Files | `Ctrl+Shift+F`, `Ctrl+Shift+H` | The Find and Replace window, below. |
-| Navigate Back and Forward | `Ctrl+-`, `Ctrl+Shift+-` | |
+| Navigate Back and Forward | `Ctrl+-`, `Ctrl+Shift+-`, the mouse's back and forward buttons | The places you were, as in the classic IDE: where a jump (Go to Definition, a search result, a bookmark) started, the document you left for another, and where the caret was before a move of more than ten lines. The toolbar's arrows do the same. |
 | Go to Last Edit Location | `Ctrl+Shift+Backspace` | |
 | Next and Previous Problem | `F8`, `Shift+F8` | Errors and warnings in the document, with the message in the status bar. |
 | Help on Symbol | `F1`, `Shift+F1` | The API reference page of a framework symbol, or the package's site. |

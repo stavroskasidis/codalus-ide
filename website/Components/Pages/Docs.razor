@@ -6,7 +6,9 @@
 
 @if (_page is { } current)
 {
-    <PageMeta Title="@(current.Slug.Length == 0 ? "Documentation" : $"{current.Title} · Docs")" Description="@current.Description" />
+    <PageMeta Title="@(current.Slug.Length == 0 ? "Documentation" : $"{current.Title} · Docs")" Description="@current.Description"
+              Image="@ImageFor(current.Slug)" ImageAlt="@($"Codalus IDE: {(current.Slug.Length == 0 ? "the user guide" : current.Title)}")"
+              Breadcrumbs="@Crumbs(current)" />
 
     <div class="container-wide docs">
         <details class="docs-nav" open>
@@ -78,6 +80,28 @@
 
 @code {
     private GuidePage? _page;
+
+    /// <summary>Each guide page's preview for social sites (M50): the screenshot of what it describes, else the editor.</summary>
+    private static readonly Dictionary<string, string> s_images = new(StringComparer.Ordinal)
+    {
+        ["getting-started"] = "setup.png",
+        ["editing"] = "intellisense.png",
+        ["solutions"] = "new-project.png",
+        ["debugging"] = "debugging.png",
+        ["web"] = "blazor.png",
+        ["data"] = "ef-core.png",
+        ["ai"] = "ai-chat.png",
+        ["profiling"] = "profiler.png",
+        ["avalonia"] = "xaml-preview.png",
+        ["wcf"] = "wcf-test-client.png",
+        ["settings"] = "theme-classic.png",
+    };
+
+    private static string ImageFor(string slug) => s_images.GetValueOrDefault(slug, "editor-dark.png");
+
+    private static IReadOnlyList<(string Name, string Url)> Crumbs(GuidePage page) => page.Slug.Length == 0
+        ? [("Home", ""), ("Documentation", page.Url)]
+        : [("Home", ""), ("Documentation", "docs/"), (page.Title, page.Url)];
 
     [Parameter] public string? Slug { get; set; }
 

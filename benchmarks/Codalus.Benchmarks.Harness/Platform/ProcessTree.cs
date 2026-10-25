@@ -89,6 +89,26 @@ internal static class ProcessTree
         return new TreeMemory(ws, priv, count, rootWs, rootPriv);
     }
 
+    /// <summary>The CPU time each live process of the tree has used so far, by process id (start time included, as ids recycle).</summary>
+    public static IReadOnlyDictionary<(int Pid, DateTime Started), TimeSpan> CpuTimes(int rootPid)
+    {
+        var result = new Dictionary<(int, DateTime), TimeSpan>();
+        foreach (var pid in Descendants(rootPid))
+        {
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                result[(pid, process.StartTime)] = process.TotalProcessorTime;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+                // Exited between enumeration and sampling, or not ours to read.
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>Working set and private (unshared, committed) bytes. On Linux, PSS approximates private.</summary>
     private static (long WorkingSet, long Private) Sample(Process process)
     {

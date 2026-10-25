@@ -4,14 +4,14 @@
   font-family: "Schibsted Grotesk";
   src: url("fonts/schibsted-grotesk.woff2") format("woff2");
   font-weight: 400 900;
-  font-display: swap;
+  font-display: optional;
 }
 
 @font-face {
   font-family: "JetBrains Mono";
   src: url("fonts/jetbrains-mono.woff2") format("woff2");
   font-weight: 100 800;
-  font-display: swap;
+  font-display: optional;
 }
 
 :root {

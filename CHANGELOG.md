@@ -4,6 +4,17 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.7.0
 
+- **.NET 11 RC 3**: Codalus IDE is built on .NET 11's third release candidate, and its helper processes ask for that runtime (or a later one). With only RC 2 installed, the IDE says so once and offers **Install .NET 11.0**, and an update isn't downloaded until it's installed ([user guide](docs/user-guide/getting-started.md#prerequisites)).
+- **Navigate Backward and Forward work after ordinary navigation** ([user guide](docs/user-guide/editing.md#navigation)): they only went back through Go to Definition and the like, so after switching documents they did nothing. The document you left for another and the caret's place before a move of more than ten lines are steps too, as in the classic IDE, and **the mouse's back and forward buttons** run them anywhere in the window.
+- **Track Active Item** in Solution Explorer ([user guide](docs/user-guide/solutions.md#solution-explorer)): a toggle on its toolbar (`solutionExplorer.trackActiveItem`, off by default) selects the active document's file each time you switch documents.
+  - **Fixed:** Sync with Active Document didn't scroll to a file that was already selected but scrolled out of view, and could be slow in a large solution: it rebuilt the whole tree when nothing had to be expanded.
+- **Blazor component parameters in their own color** ([user guide](docs/user-guide/web.md#razor-and-blazor)): `Sources` in `<SourcesDemo Sources="@sources">` had an HTML attribute's color in every theme. Classic gives it the classic IDE's Razor Component Attribute color, bold; the other families their own color. HTML attributes are unchanged.
+- **Fixed:** a tool window dragged to the window's other side could land with no width at all, an invisible column. It now keeps the width it had, or takes a quarter of the window, never less than 200 pixels ([user guide](docs/user-guide/settings.md#the-window)).
+- **Fixed:** the pin and X in a tool window's header were much larger than a document tab's. They're the tab's size now, with the tab's thin X and pin, in every theme.
+- **Fixed:** the Output window's bold text was hard to read: bold shows in the bright color at the regular weight.
+- **Help → Get Started is gone**: it opened the same setup as **Help → Set Up Codalus IDE**, which stays.
+- **The website**: each page has its own preview image for social sites, the docs have breadcrumbs for search engines, and every page scores 95 or more in Lighthouse (checked on each change).
+
 - **Fixed:** on Windows, **Restart to update** could start the old version again and offer the same update ([user guide](docs/user-guide/troubleshooting.md#common-problems)). The IDE ran in its install folder, so the programs it started did too, and one that keeps running after the IDE exits held the folder the update replaces: adb's server, started when the IDE lists Android devices. The IDE now moves to your home folder when it starts in its own (a terminal opened without a solution starts there too). An earlier install still starts adb in its folder: run `adb kill-server` (or restart Windows), then **Restart to update**.
 - **Fixed:** a tool window that shows itself without taking the focus (Output when a build starts, Notifications, the Error List) took the active frame's accent from the document group you were working in, though the keyboard stayed in the editor.
 

@@ -64,6 +64,22 @@ public sealed partial class MainWindow : Window, IShellWindow
         ApplyPlacement(shell.InitialPlacement);
         MenuBuilder.Attach(this, MenuBar, shell);
         DockDropSizer.Attach(this, shell.Layout.Factory);
+
+        // Connect to <agent>'s view is made the first time it opens (M50): hidden, it still cost every start its controls
+        // (0.6.0 added it; macOS's idle memory and startup grew). IsOpen changes before the view model's Opened, which the
+        // view handles.
+        shell.ConnectAgent.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ViewModels.ConnectAgentViewModel.IsOpen) && shell.ConnectAgent.IsOpen && ConnectAgentLayer.Children.Count == 0)
+            {
+                ConnectAgentLayer.Children.Add(new ConnectAgentView
+                {
+                    DataContext = shell.ConnectAgent,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                });
+            }
+        };
         SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);

@@ -23,6 +23,7 @@ The tree shows the solution, its solution folders, projects, project folders and
 | Add files | **Add New Item** (`Ctrl+Shift+A`), **Add Existing Item** (`Shift+Alt+A`), or **Add Existing Item As Link**. |
 | See what a code file declares | Expand a C# or Visual Basic file: its types, and under each type its members, come from the language service and follow your edits. Click one to go to it. Turn this off with Solution Explorer → Show Members Under Files (`solutionExplorer.showMembers`). |
 | See files that aren't in the project | **Show All Files** on the Solution Explorer's toolbar: files on disk outside the project show dimmed. |
+| Find the active document's file | **Sync with Active Document** (the toolbar's link button, `Ctrl+[`, `S`) selects it and scrolls it into view. **Track Active Item**, the toggle beside it (`solutionExplorer.trackActiveItem`, off by default), does it each time you switch documents. |
 | Take a file out of the project, or put it back | **Exclude From Project** and **Include In Project** in the context menu. |
 | See and change a file's Build Action, Copy to Output Directory or Custom Tool | **Properties** (`F4`). |
 | Change the solution | Add Existing Project, New Solution Folder, Remove from Solution. |

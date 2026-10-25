@@ -27,6 +27,15 @@ public sealed class RazorColorTests
         """;
 
     /// <summary>The rendered color of the character at <paramref name="marker"/> plus <paramref name="delta"/>.</summary>
+    private static FontWeight? WeightAt(CodeEditorController editor, string marker)
+    {
+        var offset = editor.Model.Text.Text.IndexOf(marker, StringComparison.Ordinal);
+        var line = editor.Model.Text.GetLineByOffset(offset);
+        var visual = editor.Editor.TextArea.TextView.GetOrConstructVisualLine(line);
+        var column = offset - line.Offset;
+        return visual.Elements.FirstOrDefault(e => e.RelativeTextOffset <= column && column < e.RelativeTextOffset + Math.Max(1, e.DocumentLength))?.TextRunProperties.Typeface.Weight;
+    }
+
     private static Color? ColorAt(CodeEditorController editor, string marker, int delta = 0)
     {
         var text = editor.Model.Text.Text;
@@ -69,7 +78,9 @@ public sealed class RazorColorTests
         await ShellFixture.PumpUntil(() => ColorAt(editor, "<Router", 1) == Of(0xFF4EC9B0), seconds: 120);
         Assert.Equal(Of(0xFF4EC9B0), ColorAt(editor, "<Found", 1)); // a component, teal like a type
         Assert.Equal(Of(0xFF4EC9B0), ColorAt(editor, "</Router", 2));
-        Assert.Equal(Of(0xFF9CDCFE), ColorAt(editor, "AppAssembly")); // its parameter, light blue
+        Assert.Equal(Of(0xFFC8C8C8), ColorAt(editor, "AppAssembly")); // its parameter: the classic IDE's Razor Component Attribute, bold (M50)
+        Assert.Equal(FontWeight.Bold, WeightAt(editor, "AppAssembly"));
+        Assert.NotEqual(FontWeight.Bold, WeightAt(editor, "class="));
         Assert.Equal(Of(0xFF808080), ColorAt(editor, "<Router")); // delimiters gray
         Assert.Equal(Of(0xFF569CD6), ColorAt(editor, "<p", 1)); // an HTML element blue
         Assert.Equal(Of(0xFF9CDCFE), ColorAt(editor, "class=")); // its attribute
