@@ -27,11 +27,11 @@
         <div class="tour-shots">
             @foreach (var shot in s_shots)
             {
-                <figure class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key">
+                <div class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key"><figure>
                     @* Lazy, the first too (M50): it loads at once in view, and an eager one delayed the intro's paint on a slow connection. *@
                     <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="lazy" alt="@shot.Alt" />
                     <figcaption><strong>@shot.Label</strong><span>@shot.Caption</span></figcaption>
-                </figure>
+                </figure></div>
             }
         </div>
     </section>

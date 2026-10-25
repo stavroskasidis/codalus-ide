@@ -12,7 +12,35 @@ port="${LIGHTHOUSE_PORT:-8765}"
 out="$(mktemp -d)"
 cd "$(dirname "$0")/.."
 
-python3 -m http.server "$port" --bind 127.0.0.1 --directory "$site" > "$out/server.log" 2>&1 &
+# The folder served as GitHub Pages serves it: text compressed with gzip when the browser asks for it.
+cat > "$out/serve.py" <<'PY'
+import gzip, http.server, os, sys
+
+TEXT = (".html", ".css", ".js", ".json", ".svg", ".xml", ".txt")
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        path = self.translate_path(self.path)
+        if os.path.isdir(path) and self.path.split("?")[0].endswith("/"):
+            path = os.path.join(path, "index.html")
+        if not path.endswith(TEXT) or not os.path.isfile(path) or "gzip" not in self.headers.get("Accept-Encoding", ""):
+            return super().do_GET()
+        with open(path, "rb") as f:
+            body = gzip.compress(f.read())
+        self.send_response(200)
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Content-Encoding", "gzip")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+port, root = int(sys.argv[1]), sys.argv[2]
+http.server.ThreadingHTTPServer(("127.0.0.1", port), lambda *a: Handler(*a, directory=root)).serve_forever()
+PY
+python3 -I "$out/serve.py" "$port" "$site" > "$out/server.log" 2>&1 &
 server=$!
 trap 'kill "$server" 2>/dev/null || true' EXIT
 for _ in $(seq 1 50); do curl -fs -o /dev/null "http://127.0.0.1:$port/" && break; sleep 0.2; done

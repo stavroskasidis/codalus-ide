@@ -31,7 +31,7 @@
             <div><dt>macOS</dt><dd>15+ Apple silicon</dd></div>
             <div><dt>Linux</dt><dd>x64 and arm64</dd></div>
             <div><dt>Needs</dt><dd>.NET 11 SDK</dd></div>
-            <div class="facts-link"><a href="download/">Other downloads and package repositories</a></div>
+            <div class="facts-link"><dt class="visually-hidden">More</dt><dd><a href="download/">Other downloads and package repositories</a></dd></div>
         </dl>
     </section>
 
@@ -44,10 +44,10 @@
         </div>
         @foreach (var (shot, i) in s_shots.Select((s, i) => (s, i)))
         {
-            <figure class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key">
+            <div class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key"><figure>
                 <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@shot.Alt" />
                 <figcaption><strong>@shot.Label</strong><span>@shot.Caption</span></figcaption>
-            </figure>
+            </figure></div>
         }
     </section>
 
