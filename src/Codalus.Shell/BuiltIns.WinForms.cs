@@ -27,7 +27,7 @@ internal static partial class BuiltIns
 
     private const string InDesigner = "activeDocumentKind == winformsDesigner";
 
-    /// <summary>Visual Studio's keys: F7 View Code, Shift+F7 View Designer (in a form's code; the XAML Previewer keeps Shift+F7 in XAML), Ctrl+Alt+X the Toolbox.</summary>
+    /// <summary>The classic IDE's keys: F7 View Code, Shift+F7 View Designer (in a form's code; the XAML Previewer keeps Shift+F7 in XAML), Ctrl+Alt+X the Toolbox.</summary>
     public const string WinFormsKeybindings = """
         [
           { "key": "f7", "command": "winforms.viewCode", "when": "activeDocumentKind == winformsDesigner" },
@@ -156,7 +156,7 @@ internal static partial class BuiltIns
             new MenuItemRule(MenuLocations.MenuBar("view"), "winforms.tabOrder", shell) { Group = "0-code", Order = 2, When = WhenClause.Parse(InDesigner) },
         ]);
 
-        // The Format menu, as Visual Studio's designer has it (shown while a designer is the active document).
+        // The Format menu, as the classic IDE's designer has it (shown while a designer is the active document).
         menus.AddMenuBarMenu(new MenuBarMenu("format", "F_ormat", 62));
         var format = MenuLocations.MenuBar("format");
         var order = 0;

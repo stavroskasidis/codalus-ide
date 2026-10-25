@@ -9,13 +9,13 @@ namespace Codalus.Projects.Host;
 /// <item>SDK-style <c>net4x</c> projects need nothing: the SDK adds <c>Microsoft.NETFramework.ReferenceAssemblies</c>
 /// (MIT) to their restore wherever the targeting pack isn't installed, on every OS.</item>
 /// <item>Non-SDK-style ("old-style") projects import <c>Microsoft.CSharp.targets</c>, which the SDK's MSBuild has too,
-/// but look for the reference assemblies only where Visual Studio's targeting packs install them. The build host gives
+/// but look for the reference assemblies only where the classic IDE's targeting packs install them. The build host gives
 /// them the same reference assemblies package, restored into the global packages folder: a targets file imported
 /// through <c>CustomBeforeMicrosoftCommonTargets</c> (an environment variable, the lowest-priority property source, as
 /// <c>EnableWindowsTargeting</c>) points <c>TargetFrameworkRootPath</c> at it, as the package's own targets do for
 /// SDK-style projects, when the framework's reference assemblies aren't installed.</item>
-/// <item>Old-style projects that import Visual Studio's own targets (under <c>MSBuild\Microsoft\VisualStudio</c>) open
-/// but can't build: those targets come only with Visual Studio's MSBuild, which is proprietary.</item>
+/// <item>Old-style projects that import the classic IDE's own targets (under <c>MSBuild\Microsoft\VisualStudio</c>) open
+/// but can't build: those targets come only with the classic IDE's MSBuild, which is proprietary.</item>
 /// </list>
 /// </summary>
 internal static class NetFramework
@@ -58,7 +58,7 @@ internal static class NetFramework
             <Reference Include="mscorlib" Pack="false" IsImplicitlyDefined="true" Visible="false" />
           </ItemGroup>
           <!-- M43b (ADR 0076): portable PDBs, which Codalus IDE's .NET Framework debugger reads, instead of Windows PDBs
-               (full, pdbonly), Visual Studio's old default. CodalusKeepDebugType=true keeps the project's. -->
+               (full, pdbonly), the classic IDE's old default. CodalusKeepDebugType=true keeps the project's. -->
           <PropertyGroup Condition="'$(UsingMicrosoftNETSdk)' != 'true' and ('$(TargetFrameworkIdentifier)' == '' or '$(TargetFrameworkIdentifier)' == '.NETFramework') and '$(CodalusKeepDebugType)' != 'true' and ('$(DebugType)' == 'full' or '$(DebugType)' == 'pdbonly')">
             <DebugType>portable</DebugType>
           </PropertyGroup>
@@ -105,7 +105,7 @@ internal static class NetFramework
     /// <summary>Tells the targets file where the global packages folder is (the solution's NuGet settings decide).</summary>
     public static void SetPackageRoot(string folder) => Environment.SetEnvironmentVariable(PackageRootProperty, folder);
 
-    /// <summary>The project type GUID Visual Studio marks old-style test projects with (MSTest's "Test Project").</summary>
+    /// <summary>The project type GUID the classic IDE marks old-style test projects with (MSTest's "Test Project").</summary>
     public const string TestProjectTypeGuid = "{3AC096D0-A1C2-E12C-1390-A8335801FDAB}";
 
     /// <summary>Whether an old-style project's <c>ProjectTypeGuids</c> (<c>{guid};{guid}</c>) make it a test project (M43b).</summary>
@@ -211,12 +211,12 @@ internal static class NetFramework
     public static string PackageFolder(string repositoryPath, PackagesConfigEntry package) =>
         Path.Combine(repositoryPath, package.Id + "." + package.Version);
 
-    // ------------------------------------------------------------------ Visual Studio's targets
+    // ------------------------------------------------------------------ the classic IDE's targets
 
     /// <summary>
     /// Why an old-style project can't build here, from its imports, or null: an import (not <c>Condition="false"</c>)
     /// whose path, expanded, is under <c>Microsoft/VisualStudio</c> and doesn't exist (<c>$(VSToolsPath)</c>: web
-    /// application, Service Fabric, SQL and other Visual Studio project types).
+    /// application, Service Fabric, SQL and the classic IDE's other project types).
     /// </summary>
     public static string? VisualStudioTargetsReason(string projectName, IEnumerable<(string Expanded, string? Condition)> imports)
     {

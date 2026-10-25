@@ -28,7 +28,7 @@ public sealed class SyntaxItemViewModel : ObservableObject
 
     public string Span => $"[{Item.Range.Start.Line + 1}:{Item.Range.Start.Character + 1}–{Item.Range.End.Line + 1}:{Item.Range.End.Character + 1}]" + (Item.Truncated ? " …" : string.Empty);
 
-    /// <summary>Visual Studio's colors: nodes blue, tokens green, trivia maroon (theme tokens).</summary>
+    /// <summary>The classic IDE's colors: nodes blue, tokens green, trivia maroon (theme tokens).</summary>
     public string Category => Item.Category;
 
     public bool IsNode => Item.Category == "node";
@@ -348,7 +348,7 @@ public sealed class MetricsNodeViewModel : ObservableObject
 
     public string Maintainability => Item.MaintainabilityIndex.ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>Visual Studio's ratings: 20–100 good, 10–19 moderate, 0–9 low.</summary>
+    /// <summary>The classic IDE's ratings: 20–100 good, 10–19 moderate, 0–9 low.</summary>
     public string Rating => Item.MaintainabilityIndex >= 20 ? "good" : Item.MaintainabilityIndex >= 10 ? "moderate" : "low";
 
     public bool IsModerate => Rating == "moderate";

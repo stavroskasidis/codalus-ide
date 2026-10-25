@@ -17,7 +17,7 @@
     <!-- The tab's close button: a 16 px square, as the pin beside it (Dock's was 14). -->
     <x:Double x:Key="DockCloseButtonSize">16</x:Double>
     <!--
-      Its glyph, Visual Studio's thin X: Dock stretches the geometry over the button less a 2 px margin (12 px), so the
+      Its glyph, the classic IDE's thin X: Dock stretches the geometry over the button less a 2 px margin (12 px), so the
       geometry spans a 12-unit box (the two specks in its corners) with the X in its middle 8 units, about 1 px thick.
     -->
     <!--
@@ -87,7 +87,7 @@
           <controls:Icon Kind="{Binding TabIcon}" IsVisible="{Binding HasTabIcon}" Width="14" Height="14" VerticalAlignment="Center" />
           <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
           <!--
-            The pin, beside Dock's close button as in Visual Studio: always on a pinned tab (upright), and on the hovered or
+            The pin, beside Dock's close button as in the classic IDE: always on a pinned tab (upright), and on the hovered or
             selected tab (lying down) to pin it. Its space is kept, so the tab doesn't change width on hover.
           -->
           <Panel Width="16" Height="16" VerticalAlignment="Center" IsVisible="{Binding PinCommand, Converter={x:Static ObjectConverters.IsNotNull}}">
@@ -214,7 +214,7 @@
     <Setter Property="InactiveTabBrush" Value="{DynamicResource Shell.Tab.Selected.IndicatorBrush}" />
   </Style>
   <!--
-    The tab's pin and close buttons, as Visual Studio's: 16 px squares with a hover background, a thin 8 px glyph in the
+    The tab's pin and close buttons, as the classic IDE's: 16 px squares with a hover background, a thin 8 px glyph in the
     tab's text color (Dock's close glyph was a heavy one).
   -->
   <Style Selector="Button.tabPin">
@@ -1330,7 +1330,7 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Folder}" />
   </Style>
   <!--
-    Menus, one look (the maintainer's 0.5 review, as Visual Studio's; entries made by Controls/MenuEntry.cs): every entry
+    Menus, one look (the maintainer's 0.5 review, as the classic IDE's; entries made by Controls/MenuEntry.cs): every entry
     keeps the 16 px icon column, empty or not, so text starts at the same place in every menu and a menu without icons
     doesn't look different; a check or radio mark takes the icon's place. Rows are 24 px with or without an icon, the
     separators start where the text does, and a submenu's chevron is a small one. The menu bar's own titles have another

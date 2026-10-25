@@ -12,7 +12,7 @@ namespace Codalus.LanguageServices.Host.Features;
 /// <summary>
 /// Inlay hints for a range (M12): parameter names before literal, <c>null</c>, <c>default</c> and <c>new</c> arguments,
 /// and types after <c>var</c> declarations and before untyped lambda parameters, when the type isn't obvious from the
-/// right-hand side. Hints that would repeat what the code says are suppressed (as Visual Studio does).
+/// right-hand side. Hints that would repeat what the code says are suppressed (as the classic IDE does).
 /// </summary>
 internal static class InlayHintsFeature
 {

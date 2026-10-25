@@ -90,7 +90,7 @@ public sealed record TaskTiming(string Name, long Duration, int Count);
 public sealed record BuildEventsParams(string Project);
 
 /// <summary>
-/// Pre-build and post-build events, as Visual Studio stores them: <c>PreBuild</c> and <c>PostBuild</c> targets with an
+/// Pre-build and post-build events, as the classic IDE stores them: <c>PreBuild</c> and <c>PostBuild</c> targets with an
 /// <c>Exec</c>. <see cref="RunPostBuildEvent"/> is <c>Always</c>, <c>OnBuildSuccess</c> (default) or <c>OnOutputUpdated</c>.
 /// </summary>
 public sealed record BuildEventsResult(string Project, string PreBuild, string PostBuild, string RunPostBuildEvent);

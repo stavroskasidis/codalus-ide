@@ -6,7 +6,7 @@ namespace Codalus.Projects.Host;
 /// <summary>
 /// Non-SDK-style .NET Framework projects (M43a, ADR 0075): where their packages go, what Codalus restores for them
 /// beside <c>dotnet restore</c> (<c>packages.config</c> packages and the reference assemblies), and the projects that
-/// can't build here (Visual Studio's own targets), which solution builds and restores leave out.
+/// can't build here (the classic IDE's own targets), which solution builds and restores leave out.
 /// </summary>
 internal sealed partial class SolutionSession
 {
@@ -39,7 +39,7 @@ internal sealed partial class SolutionSession
         }
     }
 
-    /// <summary>Why a loaded project can't build here (Visual Studio's targets), or null.</summary>
+    /// <summary>Why a loaded project can't build here (the classic IDE's targets), or null.</summary>
     private string? CannotBuildReason(string project) =>
         _evaluated.TryGetValue(project, out var evaluated) ? evaluated.Info.CannotBuildReason : null;
 

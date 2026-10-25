@@ -332,7 +332,7 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>
     /// The glyph margins (breakpoints, bookmarks, run and test glyphs, the inheritance margin) left of the line numbers,
-    /// the change bar, coverage and folding right of them, as in Visual Studio: AvaloniaEdit puts its line numbers (and the
+    /// the change bar, coverage and folding right of them, as in the classic IDE: AvaloniaEdit puts its line numbers (and the
     /// line after them) first whenever they're turned on.
     /// </summary>
     private void OrderMargins()

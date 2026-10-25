@@ -16,7 +16,7 @@ namespace Codalus.WinForms.Designer;
 
 /// <summary>
 /// One form on Windows Forms' own design surface (M41a and M41b, ADR 0073). <see cref="Load"/> creates the root (an
-/// instance of the class's base type, as Visual Studio's designer does) and the components, and runs InitializeComponent's
+/// instance of the class's base type, as the classic IDE's designer does) and the components, and runs InitializeComponent's
 /// statements against them through the designers (so a designed control is in design mode). A change sets properties
 /// through their property descriptors (or runs a smart tag's action, edits a collection, moves a control in the
 /// z-order), and what it changed comes back as code: the surface's state as the code would say it (properties,
@@ -701,7 +701,7 @@ internal sealed partial class DesignerSession : IDisposable
         }
     }
 
-    /// <summary>The padding the snap lines keep inside a container: its Padding; a form's empty one is the designer's 9 (with a control's margin of 3, Visual Studio's 12).</summary>
+    /// <summary>The padding the snap lines keep inside a container: its Padding; a form's empty one is the designer's 9 (with a control's margin of 3, the classic IDE's 12).</summary>
     private int[] SnapPadding(Control control)
     {
         var padding = control.Padding;

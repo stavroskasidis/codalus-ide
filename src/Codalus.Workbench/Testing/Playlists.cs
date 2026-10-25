@@ -7,7 +7,7 @@ namespace Codalus.Workbench.Testing;
 /// <summary>A named set of test items (by key), saved per solution under <c>.codalus/playlists/</c> (ADR 0010, F7).</summary>
 public sealed record Playlist(string Name, IReadOnlyList<string> Tests);
 
-/// <summary>Reads and writes playlists, and imports Visual Studio <c>.playlist</c> files.</summary>
+/// <summary>Reads and writes playlists, and imports the classic IDE's <c>.playlist</c> files.</summary>
 public static class Playlists
 {
     /// <summary>Stands for the solution folder in saved keys, so playlists work in another clone.</summary>
@@ -76,7 +76,7 @@ public static class Playlists
         key.Replace(SolutionDirToken, Path.GetDirectoryName(solutionPath)!, StringComparison.Ordinal);
 
     /// <summary>
-    /// The tests a Visual Studio playlist selects: version 1.0 (<c>&lt;Add Test="Ns.Class.Method" /&gt;</c>) and 2.0
+    /// The tests a classic IDE playlist selects: version 1.0 (<c>&lt;Add Test="Ns.Class.Method" /&gt;</c>) and 2.0
     /// (rules on Project, Namespace, Class and TestWithNormalizedFullyQualifiedName). Returns the matching node keys.
     /// </summary>
     public static IReadOnlyList<string> ImportVisualStudio(XDocument document, IReadOnlyList<TestNode> roots)

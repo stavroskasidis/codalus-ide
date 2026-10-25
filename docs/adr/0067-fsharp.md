@@ -19,7 +19,7 @@ The research for M36a found the following:
   - its semantic token legend adds `member`, `module`, `cexpr` and others;
   - its references CodeLens runs `fsharp.showReferences` with three arguments;
   - it doesn't answer our `codalus/` requests.
-- **Compile order.** The order of `Compile` items in an `.fsproj` is the compile order. F# projects list their files explicitly (`EnableDefaultCompileItems` is false). Visual Studio shows them in that order, with Move Up, Move Down, Add Above and Add Below.
+- **Compile order.** The order of `Compile` items in an `.fsproj` is the compile order. F# projects list their files explicitly (`EnableDefaultCompileItems` is false). The classic IDE shows them in that order, with Move Up, Move Down, Add Above and Add Below.
 
 ## Options
 

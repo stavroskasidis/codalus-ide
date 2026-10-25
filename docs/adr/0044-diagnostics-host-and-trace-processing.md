@@ -6,7 +6,7 @@
 
 ## Context
 
-M18 replaces Visual Studio's Diagnostic Tools window, its performance profiler and its memory tools with open, EventPipe-based equivalents that work on Windows, Linux and macOS. M18a does the foundation: live counters and runtime events, CPU sampling, the Performance Profiler hub, the Diagnostic Tools and .NET Counters windows, and hot lines in the editor. M18b adds memory snapshots and diffs, .NET Async, threads and contention, exceptions, file I/O, the events viewer and exports, activity views and BenchmarkDotNet on the same host.
+M18 replaces the classic IDE's Diagnostic Tools window, its performance profiler and its memory tools with open, EventPipe-based equivalents that work on Windows, Linux and macOS. M18a does the foundation: live counters and runtime events, CPU sampling, the Performance Profiler hub, the Diagnostic Tools and .NET Counters windows, and hot lines in the editor. M18b adds memory snapshots and diffs, .NET Async, threads and contention, exceptions, file I/O, the events viewer and exports, activity views and BenchmarkDotNet on the same host.
 
 The constraints:
 - **The shell is Native AOT.** TraceEvent (the library that reads EventPipe streams and `.nettrace` files) is large, uses reflection and needs JIT; it can't live in the shell.
@@ -35,7 +35,7 @@ The constraints:
 - **CPU traces**: `Microsoft-DotNETCore-SampleProfiler` and the runtime's loader, JIT, ReadyToRun and IL-to-native-map events at the verbose level, with rundown at the end, streamed to a `.nettrace` file. Stopping triggers rundown; a process that exits first leaves a complete file (its methods were captured as they were compiled).
 - **Opening a trace** converts it with `TraceLog` to a temporary `.etlx`, builds the profile (functions, the call tree of functions, the address-level stacks, the samples; ADR 0045) and resolves source lines in the background.
 
-**Licences.** TraceEvent's package carries `KernelTraceControl.dll` (ETW kernel sessions, from the Windows Performance Toolkit) and `msdia140.dll` (Windows PDBs, from the Visual Studio DIA SDK), copied by its build props. Both are Microsoft redistributables under proprietary terms. The host references the package with `ExcludeAssets="build;buildTransitive"`, so neither is copied or shipped; EventPipe and portable PDBs don't need them. Recorded in `THIRD-PARTY-NOTICES.md`.
+**Licences.** TraceEvent's package carries `KernelTraceControl.dll` (ETW kernel sessions, from the Windows Performance Toolkit) and `msdia140.dll` (Windows PDBs, from the classic IDE's DIA SDK), copied by its build props. Both are Microsoft redistributables under proprietary terms. The host references the package with `ExcludeAssets="build;buildTransitive"`, so neither is copied or shipped; EventPipe and portable PDBs don't need them. Recorded in `THIRD-PARTY-NOTICES.md`.
 
 ## Consequences
 

@@ -6,7 +6,7 @@
 
 ## Context
 
-M27b gives Daedalus Studio what Visual Studio's Server Explorer, SQL Server Object Explorer and SQL editor do: connections to the databases .NET developers use (D15: SQL Server, PostgreSQL, SQLite and MySQL/MariaDB first), schema browsing, a table data editor, and a query editor with results, messages, timing, cancel, history and execution plans. M27a (ADR 0036) did EF Core.
+M27b gives Daedalus Studio what the classic IDE's Server Explorer, SQL Server Object Explorer and SQL editor do: connections to the databases .NET developers use (D15: SQL Server, PostgreSQL, SQLite and MySQL/MariaDB first), schema browsing, a table data editor, and a query editor with results, messages, timing, cancel, history and execution plans. M27a (ADR 0036) did EF Core.
 
 The constraints:
 - **Heavy work is out of process and supervised.** A hung query or a crashing native provider must never reach the shell. Every query can be cancelled.

@@ -6,7 +6,7 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Projects.Tests;
 
 /// <summary>
-/// Docker Compose projects (M17a, ADR 0042): samples/Containers has a <c>.dcproj</c> whose SDK only Visual Studio has.
+/// Docker Compose projects (M17a, ADR 0042): samples/Containers has a <c>.dcproj</c> whose SDK only the classic IDE has.
 /// It loads from its XML as a solution item with its compose files, gets no design-time build, and the solution's
 /// restore and build leave it out, so they succeed.
 /// </summary>

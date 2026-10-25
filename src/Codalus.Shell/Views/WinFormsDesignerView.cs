@@ -16,8 +16,8 @@ namespace Codalus.Shell.Views;
 /// <summary>
 /// The Windows Forms designer's view (M41a and M41b, ADR 0073): the designer host's frame of the form, and over it the
 /// surface's own adorners and gestures: selection (a click; Ctrl or Shift to add; a rubber band), moving (a drag, into
-/// another container when dropped in one) and resizing (the primary selection's eight grab handles) with Visual
-/// Studio's snap lines (Alt turns them off), the arrow keys (Shift to resize), Delete, Ctrl+C, Ctrl+X, Ctrl+V and
+/// another container when dropped in one) and resizing (the primary selection's eight grab handles) with the
+/// classic IDE's snap lines (Alt turns them off), the arrow keys (Shift to resize), Delete, Ctrl+C, Ctrl+X, Ctrl+V and
 /// Ctrl+D, Ctrl+A (Select All), Esc (the parent), Ctrl+Z and Ctrl+Y (the designer's undo), a double-click (the default
 /// event's handler), the Toolbox (a click or a drag with an item armed, or an item dragged in), tab order mode, smart
 /// tags, menus and tool strips edited in place (Type Here), the component tray, the collection editors, and the classic
@@ -1354,7 +1354,7 @@ public sealed class DesignerSurface : Control
         return new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
     }
 
-    /// <summary>Tab order mode: each control's tab index (after its containers', <c>2.1</c>) in a box at its top left, as Visual Studio shows them.</summary>
+    /// <summary>Tab order mode: each control's tab index (after its containers', <c>2.1</c>) in a box at its top left, as the classic IDE shows them.</summary>
     private void RenderTabOrder(DrawingContext context, IBrush accent)
     {
         var typeface = new Typeface(FontFamily.Default);

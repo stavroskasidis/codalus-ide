@@ -33,7 +33,7 @@ Codalus IDE watches the files: changes made outside the IDE (a `git pull`, anoth
 
 ## What a solution reopens with
 
-Like Visual Studio's `.vs` folder, Codalus IDE keeps your own state for a solution in `.codalus/state/` next to it. The folder has one subfolder per solution file (`App.slnx/`, `App.sln/`, and `folder/` for a folder opened without a solution), so several solutions in one folder each keep their own state:
+Like the classic IDE's `.vs` folder, Codalus IDE keeps your own state for a solution in `.codalus/state/` next to it. The folder has one subfolder per solution file (`App.slnx/`, `App.sln/`, and `folder/` for a folder opened without a solution), so several solutions in one folder each keep their own state:
 - `session.json`: the open documents (with their carets and pinned tabs) and the active one; breakpoints, exception settings, Watch expressions and pinned data tips; the startup project or projects, launch profiles, devices and the ASP.NET Core environment; the solution configuration and platform; the target framework chosen for multi-targeted projects; the Solution Explorer's expanded nodes (Collapse All clears them); the Error List's filters and the Test Explorer's grouping.
 - `bookmarks.json`: the solution's bookmarks.
 - `solution.json`: the unloaded projects.
@@ -50,7 +50,7 @@ Opening a solution writes nothing there, except to move in the state an earlier 
 
 As in the classic IDE, its toolbar has **Categorized** and **Alphabetical** (names with a parenthesis, such as **(Name)**, first), whose categories collapse with a click on their header, and **Property Pages**, which opens a project's properties, or the Configuration Manager for the solution (it is grayed for files and folders). The selected property's description is at the bottom: drag the line above it to resize it, or hide it with **Description** on a row's right-click menu, which also has **Reset**. A read-only value (a file's **Full Path**) can be selected and copied, and `Ctrl+C` (`⌘C` on macOS) copies the selected row's value. The keys are in [Keyboard](keyboard.md#the-properties-window); a form's components in the Windows Forms designer get the same grid, with editors ([Windows desktop apps](windows-desktop.md#properties-and-events)).
 
-Values set in the project file are in bold. Changes are written the way Visual Studio writes them under SDK globbing: a file the globs already include gets an `Update` item for its metadata (`<None Update="notes.txt"><CopyToOutputDirectory>…`); a new Build Action is `<None Remove="notes.txt" />` plus `<Content Include="notes.txt" />`; choosing the value the project would have anyway removes the project's own setting. Plugins can add rows.
+Values set in the project file are in bold. Changes are written the way the classic IDE writes them under SDK globbing: a file the globs already include gets an `Update` item for its metadata (`<None Update="notes.txt"><CopyToOutputDirectory>…`); a new Build Action is `<None Remove="notes.txt" />` plus `<Content Include="notes.txt" />`; choosing the value the project would have anyway removes the project's own setting. Plugins can add rows.
 
 ## Show All Files, Include and Exclude
 

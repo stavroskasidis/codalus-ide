@@ -29,10 +29,10 @@ Date: 2026-10-09. Decisions: [ADR 0012](../adr/0012-package-management.md). Firs
 
 ## Not done, and deviations
 - **Package icons** are not shown (an initial letter instead): loading icons means network access from the shell, and the roadmap keeps all of it in the build host. `TODO(issue)`: fetch icons through the host and cache them.
-- **Licence acceptance for dependencies** that require it (Visual Studio lists them too): only the package being installed is checked. `TODO(issue)`.
+- **Licence acceptance for dependencies** that require it (the classic IDE lists them too): only the package being installed is checked. `TODO(issue)`.
 - **Interactive credential prompts** (device-code sign-in) inside the IDE: providers run non-interactively; `dotnet restore --interactive` in a terminal signs in. `TODO(issue)`, with M13's sign-in surface.
 - **Search of plain-HTTP feeds**: the SDK's NuGet (7.x) skips their search endpoint even with `allowInsecureConnections` (`dotnet package search` behaves the same); metadata and restore work.
-- **Preview of changes** before install/uninstall (Visual Studio's preview dialog) is not shown; uninstall asks for confirmation.
+- **Preview of changes** before install/uninstall (the classic IDE's preview dialog) is not shown; uninstall asks for confirmation.
 - **Rider comparison** for the proposed budgets was not taken. `TODO(issue)`.
 - `Directory.Packages.props` edits keep the file's final line break, which `dotnet add package` drops; everything else matches the CLI.
 

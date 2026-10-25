@@ -11,7 +11,7 @@ namespace Codalus.Workbench.Containers;
 /// <summary>
 /// How a project runs in a container (M17a, ADR 0042), from its "Container (Dockerfile)" launch profile.
 /// <list type="bullet">
-/// <item><b>Fast mode</b> (Debug builds, as Visual Studio's): the Dockerfile's <c>base</c> stage is built, and a
+/// <item><b>Fast mode</b> (Debug builds, as the classic IDE's): the Dockerfile's <c>base</c> stage is built, and a
 /// container of it idles (<c>tail -f /dev/null</c>) with the build output mounted at <c>/app</c>; the app starts in
 /// it through <c>exec</c>, or under netcoredbg copied there for debugging. A rebuild needs no image build. The app's
 /// static web assets (its <c>wwwroot</c>, Razor class libraries', the SDK's) are mounted too, with a manifest of their

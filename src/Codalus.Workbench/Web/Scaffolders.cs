@@ -72,7 +72,7 @@ public sealed record Scaffolder(
 public sealed record ScaffoldPlan(Scaffolder Scaffolder, string Command, IReadOnlyList<string> Arguments, string? Name, string? Folder);
 
 /// <summary>
-/// The scaffolders (ADR 0041), Visual Studio's "Add New Scaffolded Item" set: empty items through the SDK's item
+/// The scaffolders (ADR 0041), the classic IDE's "Add New Scaffolded Item" set: empty items through the SDK's item
 /// templates, the Entity Framework ones (controllers, views, Razor Pages, Blazor CRUD, minimal APIs) and Identity through
 /// <c>dotnet-aspnet-codegenerator</c>. The dialog is generated from each one's <see cref="Scaffolder.Parameters"/>.
 /// </summary>
@@ -255,7 +255,7 @@ public static class Scaffolders
         var name = ValueOf("name") is { Length: > 0 } given ? given : null;
         if (name is null && scaffolder.Command == "controller" && Value(values, "model") is { Length: > 0 } model)
         {
-            // The controller generator needs a name: Visual Studio's default, the model in the plural.
+            // The controller generator needs a name: the classic IDE's default, the model in the plural.
             name = Plural(model.Split('.')[^1]) + "Controller";
             values = new Dictionary<string, string?>(values) { ["name"] = name };
         }

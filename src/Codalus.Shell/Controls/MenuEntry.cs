@@ -12,7 +12,7 @@ namespace Codalus.Shell.Controls;
 /// same way: the icon in its palette color, the title, and the shortcut on the right, muted. In XAML a view gives an
 /// entry its icon with <c>controls:MenuEntry.Icon="compare"</c>; in code it makes the entry with <see cref="Create"/>.
 /// ShellStyles.axaml keeps the 16 px icon column on every entry, so text lines up whether an entry has an icon or not,
-/// 24 px rows, and separators that start where the text does, as Visual Studio's menus do.
+/// 24 px rows, and separators that start where the text does, as the classic IDE's menus do.
 /// </summary>
 public static class MenuEntry
 {

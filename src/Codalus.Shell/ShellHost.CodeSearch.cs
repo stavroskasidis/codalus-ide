@@ -13,7 +13,7 @@ using SettingScope = Codalus.Workbench.Settings.SettingScope;
 namespace Codalus.Shell;
 
 /// <summary>
-/// Code Search (M47, ADR 0078): Visual Studio's Code Search window in place of Go To All's list. Results come from the
+/// Code Search (M47, ADR 0078): the classic IDE's Code Search window in place of Go To All's list. Results come from the
 /// solution's files, the persistent index of the language host's declarations (read from the solution's state before
 /// the host loads, refreshed when it is ready and after edits), the workspace symbols of every running language
 /// service, the referenced assemblies' types ("include external items") and Find in Files' engine. The preview is a

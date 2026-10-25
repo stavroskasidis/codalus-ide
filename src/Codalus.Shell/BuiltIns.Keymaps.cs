@@ -6,7 +6,7 @@ namespace Codalus.Shell;
 /// </summary>
 internal static partial class BuiltIns
 {
-    /// <summary>ReSharper's shortcuts (its Visual Studio scheme) and Emacs's editing and <c>Ctrl+X</c> keys.</summary>
+    /// <summary>ReSharper's shortcuts (its classic IDE scheme) and Emacs's editing and <c>Ctrl+X</c> keys.</summary>
     public const string SchemeKeybindings = """
         [
           { "key": "ctrl+shift+r", "command": "editor.action.quickFix", "when": "editorTextFocus && keyboardScheme == resharper" },

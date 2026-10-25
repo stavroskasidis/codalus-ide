@@ -311,7 +311,7 @@ public class EditingDepthTests
         f.Press(Key.Enter);
         await ShellFixture.PumpUntil(() => text.Text.Contains("Console.WriteLine();", StringComparison.Ordinal));
 
-        // Visual Studio snippets import into the user's snippets.
+        // The classic IDE's snippets import into the user's snippets.
         f.Shell.ImportSnippets(SnippetRegistry.ParseVisualStudio("""
             <CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
               <CodeSnippet Format="1.0.0">

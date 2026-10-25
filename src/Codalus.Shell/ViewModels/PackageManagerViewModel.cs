@@ -61,7 +61,7 @@ public enum PackageTab
 }
 
 /// <summary>
-/// Visual Studio's NuGet Package Manager (ADR 0012): Browse, Installed, Updates and (for the solution) Consolidate, with
+/// The classic IDE's NuGet Package Manager (ADR 0012): Browse, Installed, Updates and (for the solution) Consolidate, with
 /// a details pane to install, update or uninstall a version. Feeds are queried through the build host; installed data
 /// comes from the project evaluations and assets files.
 /// </summary>

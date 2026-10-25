@@ -9,7 +9,7 @@ namespace Codalus.Projects.Host.Packages;
 
 /// <summary>
 /// What <c>dotnet restore</c> doesn't restore for non-SDK-style projects (M43a, ADR 0075): <c>packages.config</c>
-/// packages (NuGet's packages.config restore is in Visual Studio's and nuget.exe's NuGet only, not the SDK's) and the
+/// packages (NuGet's packages.config restore is in the classic IDE's and nuget.exe's NuGet only, not the SDK's) and the
 /// .NET Framework reference assemblies packages. Both come through the SDK's own NuGet client libraries, from the
 /// solution's sources with its package source mapping and credentials, as NuGet itself would install them.
 /// </summary>

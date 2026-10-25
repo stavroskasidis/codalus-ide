@@ -6,7 +6,7 @@
 
 ## Context
 
-The shell has to be light and responsive, run natively on Windows, macOS and Linux, host a VS-class editor, and expose rich Roslyn-driven features (refactoring previews, designers, debugger visualizers). Heavy services run out of process over JSON-RPC (the project brief, architecture principles 1–6). The mission required the stack to be chosen **by measurement**, comparing two prototypes:
+The shell has to be light and responsive, run natively on Windows, macOS and Linux, host an editor of the classic IDE's class, and expose rich Roslyn-driven features (refactoring previews, designers, debugger visualizers). Heavy services run out of process over JSON-RPC (the project brief, architecture principles 1–6). The mission required the stack to be chosen **by measurement**, comparing two prototypes:
 
 - **A: Avalonia 12** with AvaloniaEdit and Dock, shell published with **Native AOT** (`spikes/avalonia`).
 - **B: a Rust shell on Zed's GPUI** (through GPUI Kit's dock, tree and editor components) (`spikes/gpui`).
@@ -33,16 +33,16 @@ Windows, reference hardware (i5-13600KF, RTX 4060, 165 Hz display), 2026-10-08. 
 
 | Metric | A: Avalonia (AOT) | B: GPUI | Notes |
 |---|---|---|---|
-| Cold start → ready, empty window (black-box) | **346** / 404 ms | 373 / 400 ms | VS Code 1517 ms, VS 921 ms on the same probe |
+| Cold start → ready, empty window (black-box) | **346** / 404 ms | 373 / 400 ms | VS Code 1517 ms, the classic IDE 921 ms on the same probe |
 | Cold start → `interactive` (in-app) | **262** / 266 ms | 288 / 311 ms | |
 | Idle memory, empty window (process tree, private) | 194 MB | **185** MB | Shell alone: 96 vs 87 MB. The rest is the language host. |
 | 100k-line file → ready (black-box) | **1396** ms | 1570 ms | Semantic highlight at 1304 vs 1495 ms (host-bound) |
 | Memory with the 100k file open | 390 MB | **382** MB | Shell alone: 227 vs 220 MB |
-| **Typing, keystroke → displayed frame** (black-box, 600 keys) | 13.6 / 24.9 ms (max 31.7) | **11.3 / 18.8** ms (max 19.4) | VS Code 13.2 / 20.0, VS 17.0 / 201 |
+| **Typing, keystroke → displayed frame** (black-box, 600 keys) | 13.6 / 24.9 ms (max 31.7) | **11.3 / 18.8** ms (max 19.4) | VS Code 13.2 / 20.0, the classic IDE 17.0 / 201 |
 | Typing, input → rendered (in-app) | 6.4 / 18.0 ms | **3.2 / 5.6** ms | The clearest difference between the stacks |
 | Self-driven typing, mid-file (in-app, 900 keys) | 7.2 / 19.5 ms | **5.5 / 8.7** ms | |
-| **Scrolling, PageDown → displayed frame** (black-box, 450 presses) | 11.8 / 22.7 ms | 12.2 / **18.7** ms | VS Code 10.9 / 25.4, VS 25.2 / 53.4 |
-| Responses > 50 ms while scrolling | 0 | 0 | VS: 2–3 per run |
+| **Scrolling, PageDown → displayed frame** (black-box, 450 presses) | 11.8 / 22.7 ms | 12.2 / **18.7** ms | VS Code 10.9 / 25.4, the classic IDE 25.2 / 53.4 |
+| Responses > 50 ms while scrolling | 0 | 0 | The classic IDE: 2–3 per run |
 | Self-driven scroll at 230 lines/s, frame time | 6.0 / 7.0 ms (max 8.3) | 6.1 / 7.0 ms (max 8.1) | Both locked to 165 Hz; no frame > 50 ms |
 | Go-to-line jump → rendered | 4.2 / 13.7 ms | 6.4 / 8.4 ms | |
 | Shell size on disk (zipped) | 45.5 MB (18.7 MB) | **27.5 MB (8.8 MB)** | Plus the shared host: 60.9 MB (needs the .NET runtime) |

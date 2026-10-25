@@ -30,7 +30,7 @@ public sealed record SnippetRowViewModel(Snippet Snippet)
 /// <summary>
 /// Tools → Code Snippets Manager (deferred from M12b): every language's snippets, built in, from plugins and yours (yours
 /// replace others of the same name), with their prefixes and bodies; open your snippet file for the language, import
-/// Visual Studio <c>.snippet</c> files, copy a snippet to yours to change it, and remove one of yours.
+/// the classic IDE's <c>.snippet</c> files, copy a snippet to yours to change it, and remove one of yours.
 /// </summary>
 public sealed class SnippetsManagerViewModel : ObservableObject, ILoadable
 {

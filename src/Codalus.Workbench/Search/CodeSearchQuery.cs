@@ -34,7 +34,7 @@ public enum CodeSearchKind
 
 /// <summary>
 /// A parsed Code Search query: the filter (from a prefix, else the chip), the text to match, and for <c>:</c> a line
-/// (and column) of the active document. Prefixes are Visual Studio's: <c>f:</c> files, <c>t:</c> types, <c>m:</c>
+/// (and column) of the active document. Prefixes are the classic IDE's: <c>f:</c> files, <c>t:</c> types, <c>m:</c>
 /// members, <c>x:</c> text, <c>:</c> a line (<c>:42</c>, <c>:42:7</c> or <c>:42,7</c>).
 /// </summary>
 public sealed record CodeSearchQuery(CodeSearchFilter Filter, string Text)

@@ -5,7 +5,7 @@ using Microsoft.Build.Evaluation;
 namespace Codalus.Projects.Host.ProjectManagement;
 
 /// <summary>
-/// Service references (ADR 0041) as the items <c>dotnet-openapi</c> and Visual Studio's Connected Services write:
+/// Service references (ADR 0041) as the items <c>dotnet-openapi</c> and the classic IDE's Connected Services write:
 /// <c>&lt;OpenApiReference Include="OpenAPIs\weather.json" CodeGenerator="NSwagCSharp" Namespace="…" ClassName="…" /&gt;</c>
 /// and <c>&lt;Protobuf Include="Protos\greet.proto" GrpcServices="Client" /&gt;</c>, with <c>SourceUrl</c> when the
 /// document was downloaded. The code is generated at build time by the packages <see cref="PackagesFor"/> lists.
@@ -156,7 +156,7 @@ internal static class ServiceReferences
     }
 
     /// <summary>
-    /// Code generators are build-time dependencies: <c>PrivateAssets="all"</c>, as the templates and Visual Studio write
+    /// Code generators are build-time dependencies: <c>PrivateAssets="all"</c>, as the templates and the classic IDE write
     /// them, so they don't flow to the projects that reference this one.
     /// </summary>
     public static bool MarkPrivate(string projectPath, string id)

@@ -2,7 +2,7 @@ using System.Web;
 
 namespace LegacyWebApp
 {
-    /// <summary>An ASP.NET (System.Web) handler: the project needs Visual Studio's web application targets to build.</summary>
+    /// <summary>An ASP.NET (System.Web) handler: the project needs the classic IDE's web application targets to build.</summary>
     public class HelloHandler : IHttpHandler
     {
         public bool IsReusable => true;

@@ -3,7 +3,7 @@
                     xmlns:theming="using:Codalus.Shell.Theming">
   <!--
     Theme tokens. Views use these keys (DynamicResource) instead of literal colors, so the themes switch at runtime.
-    - Classic (M29, ADR 0019): Blue, Light and Dark follow Visual Studio's themes; High Contrast follows the Windows
+    - Classic (M29, ADR 0019): Blue, Light and Dark follow the classic IDE's themes; High Contrast follows the Windows
       "high contrast black" conventions: pure black surfaces, white text, cyan accents, orange focus and selection
       outlines.
     - The theme families (M45, ADR 0077): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with
@@ -72,7 +72,7 @@
       <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#DADADA" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E5EBF1" />
-      <!-- Icons in the Visual Studio palette (the maintainer's rule: every icon is colored), at least 3:1 against menus, toolbars and panels; command families are palette colors. -->
+      <!-- Icons in the classic IDE's palette (the maintainer's rule: every icon is colored), at least 3:1 against menus, toolbars and panels; command families are palette colors. -->
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Icon.Green" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Red" Color="#A1260D" />
@@ -320,7 +320,7 @@
       <SolidColorBrush x:Key="Shell.Diff.Filler" Color="#333333" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3E3E42" />
-      <!-- Icons in the Visual Studio palette (every icon is colored); command families are palette colors. -->
+      <!-- Icons in the classic IDE's palette (every icon is colored); command families are palette colors. -->
       <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Icon.Green" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Red" Color="#F48771" />

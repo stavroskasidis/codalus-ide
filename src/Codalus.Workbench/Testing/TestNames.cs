@@ -1,7 +1,7 @@
 namespace Codalus.Workbench.Testing;
 
 /// <summary>
-/// Fully qualified names of test items, for matching tests from files (TRX results, Visual Studio playlists) to the
+/// Fully qualified names of test items, for matching tests from files (TRX results, the classic IDE's playlists) to the
 /// tree. A .NET controller's tree is project › namespace › class › method (› framework) (› case); the name is
 /// <c>Namespace.Class.Method</c>, and cases also match by display name.
 /// </summary>

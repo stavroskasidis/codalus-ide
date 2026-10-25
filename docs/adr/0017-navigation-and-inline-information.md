@@ -6,7 +6,7 @@
 
 ## Context
 
-M12 closes the gap between the MVP editor and Visual Studio or Rider for daily C# work. It is split as the roadmap says:
+M12 closes the gap between the MVP editor and the classic IDE or Rider for daily C# work. It is split as the roadmap says:
 - **M12a:** navigation and inline information.
 - **M12b:** editing, refactoring UI and analysis.
 
@@ -39,7 +39,7 @@ This ADR covers M12a. The decisions to make:
 - One cached list per editor (`EditorInsights.Symbols`, refreshed 400 ms after edits) feeds the Document Outline, the navigation bar and sticky scroll.
 
 **CodeLens at the end of the line**
-- AvaloniaEdit's lines have one height, so CodeLens can't sit above the declaration as in Visual Studio. It shows at the end of the declaration's line, as Rider's "code vision at the end of the line" does: `2 references | 3 implementations`.
+- AvaloniaEdit's lines have one height, so CodeLens can't sit above the declaration as in the classic IDE. It shows at the end of the declaration's line, as Rider's "code vision at the end of the line" does: `2 references | 3 implementations`.
 - Clicking a count runs Find All References or Go to Implementation.
 - Lenses are listed (syntax) per document version. Only those in view are resolved, which means counting with `SymbolFinder`. The previous counts stay until new ones arrive.
 
@@ -78,7 +78,7 @@ This ADR covers M12a. The decisions to make:
 
 - Plugin language servers get the outline, navigation bar, sticky scroll, hierarchies, inlay hints and CodeLens when they implement the LSP requests.
 - Find All References results are richer for C# only. Other servers' results stay plain locations.
-- CodeLens placement differs from Visual Studio. A line-above presentation needs variable line heights in AvaloniaEdit (`TODO(issue)`).
+- CodeLens placement differs from the classic IDE. A line-above presentation needs variable line heights in AvaloniaEdit (`TODO(issue)`).
 - `TODO(issue)`, not in M12a:
   - **Solution Explorer:** members under files; generated sources under analyzers.
   - **Browsers:** Class View and the Object Browser.

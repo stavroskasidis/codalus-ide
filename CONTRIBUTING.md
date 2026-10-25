@@ -7,7 +7,7 @@ Thanks for your interest in Codalus IDE. The MVP (milestones M0–M7) is done, a
 - **License.** Contributions are accepted under the MIT license. You certify that you have the right to submit them (the [Developer Certificate of Origin](https://developercertificate.org/)); sign off your commits with `git commit -s`.
   - `TODO(issue)`: the maintainer's own commits on `develop` don't carry a sign-off yet, and no check enforces it on pull requests. To decide: sign them off too (and add a DCO check), or keep the rule for outside contributions only.
 - **Dependencies.** Every new dependency must use an OSI-approved license compatible with MIT. Check the license before adding a package, and record it in `THIRD-PARTY-NOTICES.md` in the same change. If a license is ambiguous, ask in the issue before opening a pull request.
-- **No Microsoft-proprietary components.** That rules out vsdbg, the C# Dev Kit, and Visual Studio branding or logos in the product. Windows-only UI technologies (WinForms, WPF, WinUI) are out of scope.
+- **No Microsoft-proprietary components.** That rules out vsdbg, the C# Dev Kit, and the classic IDE's branding or logos in the product. Windows-only UI technologies (WinForms, WPF, WinUI) are out of scope.
 - **No telemetry that is on by default.** Crash reports stay on the user's machine and are opt-in.
 - **Performance budgets are enforced** (`benchmarks/budgets.json`, ADR 0002). A change that regresses a budget needs a justification in its description.
 - **Conduct.** Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md). Report security problems privately, as described in [SECURITY.md](SECURITY.md).

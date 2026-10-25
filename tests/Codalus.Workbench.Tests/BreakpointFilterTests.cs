@@ -2,7 +2,7 @@ using Codalus.Workbench.Debugging;
 
 namespace Codalus.Workbench.Tests;
 
-/// <summary>Breakpoint filters (M14b): Visual Studio's syntax over threads and processes.</summary>
+/// <summary>Breakpoint filters (M14b): the classic IDE's syntax over threads and processes.</summary>
 public sealed class BreakpointFilterTests
 {
     private static readonly BreakpointFilterContext Worker = new(12, "Worker", 4321, "app");

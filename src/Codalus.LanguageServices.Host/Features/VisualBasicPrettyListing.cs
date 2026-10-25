@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis.VisualBasic.Syntax;
 namespace Codalus.LanguageServices.Host.Features;
 
 /// <summary>
-/// Visual Basic's editor behaviour (M35, ADR 0066), the "pretty listing" Roslyn implements only in Visual Studio's
+/// Visual Basic's editor behaviour (M35, ADR 0066), the "pretty listing" Roslyn implements only in the classic IDE's
 /// editor layers. It's ours, served as on-type formatting:
 /// <list type="bullet">
 /// <item>Enter after a block's first line (<c>If … Then</c>, <c>For Each …</c>, <c>Sub …</c>, <c>Class …</c>…) whose

@@ -8,7 +8,7 @@ using Location = Codalus.LanguageServices.Protocol.Location;
 namespace Codalus.LanguageServices.Host.Features;
 
 /// <summary>
-/// Code Metrics (M12b), computed the way Visual Studio and <c>roslyn-analyzers</c>' metrics do:
+/// Code Metrics (M12b), computed the way the classic IDE and <c>roslyn-analyzers</c>' metrics do:
 /// <list type="bullet">
 /// <item>cyclomatic complexity: 1 per member plus 1 per branch (conditions, loops, case labels, switch arms, catch
 /// clauses, <c>&amp;&amp;</c>, <c>||</c>, <c>??</c> and <c>?.</c>);</item>

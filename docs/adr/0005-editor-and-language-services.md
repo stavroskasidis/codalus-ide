@@ -49,5 +49,5 @@ What exists:
 - MSBuild runs in exactly one process, and Roslyn sees what the real build sees, including analyzers, generators and target-computed options.
 - Language features arrive after evaluation, restore and the design-time build. ADR 0002's budget 4 says "with language services ready in the background"; M3a records `language_ready_ms` on the 50-project fixture as an informational metric before a budget is set.
 - Positions are converted between offsets and UTF-16 line/character in the shell; AvaloniaEdit's line tree makes it cheap, and it is unit-tested.
-- Some VS features rely on internal Roslyn services (inline rename's conflict UI, metadata-as-source, signature help). We implement our own where needed; each one is a maintenance cost when Roslyn changes.
+- Some of the classic IDE's features rely on internal Roslyn services (inline rename's conflict UI, metadata-as-source, signature help). We implement our own where needed; each one is a maintenance cost when Roslyn changes.
 - A third helper process runs while C# is being edited. Memory with a solution open is measured in M3a.

@@ -6,7 +6,7 @@
 
 ## Context
 
-Up to M12 the shell looked like VS Code: an activity-style left column, a colored status bar, a command palette as the way in, VS Code's keys. The maintainer wants it closer to Visual Studio, so that a Visual Studio user feels at home. The product rule still applies: no Visual Studio branding in the product, so nothing in the UI, the setting values or the theme names says "Visual Studio". The decisions to make:
+Up to M12 the shell looked like VS Code: an activity-style left column, a colored status bar, a command palette as the way in, VS Code's keys. The maintainer wants it closer to the classic IDE, so that a classic IDE user feels at home. The product rule still applies: no classic IDE branding in the product, so nothing in the UI, the setting values or the theme names names the classic IDE. The decisions to make:
 - where the menu, the search box and the solution's name go;
 - what the toolbar holds and how it stays in step with the solution, the startup project and the debugger;
 - how themes, the document well and the status bar's states are colored;
@@ -27,7 +27,7 @@ Up to M12 the shell looked like VS Code: an activity-style left column, a colore
 - The configuration, the startup project and its profile left the status bar for the toolbar. The status bar shows a running program only while it runs, as a stop button.
 
 **Themes as tokens**
-- Blue (new), Light and Dark follow Visual Studio 2022's palettes. Blue is a theme variant that inherits Light, so the Fluent controls and the editor, grammar and terminal colors use Light's.
+- Blue (new), Light and Dark follow the classic IDE's palettes. Blue is a theme variant that inherits Light, so the Fluent controls and the editor, grammar and terminal colors use Light's.
 - New tokens: the title bar, toolbar, search box, tabs and active tool window caption. Dock's own brushes (active tab, tab strip, surfaces, active caption) are mapped onto them in each theme.
 - Dock uses its foreground brushes in more places than their names say: the inactive-tab and selected-tool-tab foregrounds also color other tabs. Only the active-tab brushes are overridden; Blue's dark inactive tabs aren't reproduced.
 - **The status bar's state:** purple without a solution, the accent color with one, orange while debugging. The message area says "Ready" when there is nothing else to say.
@@ -44,11 +44,11 @@ Up to M12 the shell looked like VS Code: an activity-style left column, a colore
 
 ## Consequences
 
-- A Visual Studio user finds the menu, toolbar, search, keys, layout and colors where they expect them. VS Code users can switch the keyboard scheme back.
+- A classic IDE user finds the menu, toolbar, search, keys, layout and colors where they expect them. VS Code users can switch the keyboard scheme back.
 - Tests and the smoke test (step `shell.chrome`, with a screenshot per theme) cover the toolbar's state, the status bar's states, the search box, the schemes, the Options tree and the Blue theme.
 - `TODO(issue)`, not in M29:
   - **Tabs:** Blue's dark inactive tabs (needs Dock's tab template, not just its brushes); pinned tabs; tab colors by project; the preview tab on the right.
   - **Tool windows:** inactive caption colors per theme; auto-hidden windows as side tabs are Dock's as they were.
   - **Solution Explorer:** file-type icons from an image library with a compatible license; Show All Files.
   - **Customization:** customizable toolbars (M23).
-  - **Accessibility:** a contrast audit of Blue against WCAG AA with a tool, beyond picking Visual Studio's colors.
+  - **Accessibility:** a contrast audit of Blue against WCAG AA with a tool, beyond picking the classic IDE's colors.
