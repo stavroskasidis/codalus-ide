@@ -228,6 +228,58 @@ public sealed partial class ShellHost
         await PreviewAndApplyAsync(Localizer.Format("msg.ai.fixTitle", "Fix {0} with AI?", diagnostic.Code ?? diagnostic.Message), edit).ConfigureAwait(true);
     }
 
+    /// <summary>The Error List's Fix with AI (M51): opens the row's file at the diagnostic, then fixes it as Fix with AI does.</summary>
+    public async Task FixErrorWithAiAsync(ErrorListRow row)
+    {
+        if (row.Path.Length == 0)
+        {
+            ShowMessage(Localizer.Get("msg.ai.noFileToFix", "This error isn't in a file, so there's nothing to fix in place: Explain with AI asks about it."));
+            return;
+        }
+
+        // The editor's view (and its caret at the error) comes after the document opens.
+        if (await OpenFileAsync(row.Path, preview: false, row.Position).ConfigureAwait(true) is { } document)
+        {
+            await document.ControllerAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(true);
+        }
+
+        await FixDiagnosticWithAiAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Ask AI About the Value (Locals, Autos, Watch, QuickWatch and data tips, M51): the value with its type and expression,
+    /// the code around the current statement, and the call stack, in AI Chat.
+    /// </summary>
+    public async Task AskAiAboutValueAsync(VariableNode node)
+    {
+        if (!await EnsureAiAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
+        var value = new StringBuilder().Append(node.EvaluateName ?? node.Name);
+        if (node.Type is { Length: > 0 } type)
+        {
+            value.Append(" (").Append(type).Append(')');
+        }
+
+        value.Append(" = ").Append(node.Value);
+        var items = new List<AiContextItem> { new(AiContextKind.Debugger, Localizer.Format("msg.ai.value", "the value of {0}", node.EvaluateName ?? node.Name), value.ToString()) };
+        var top = Debugger.SelectedFrame ?? (Debugger.Frames.Count > 0 ? Debugger.Frames[0] : null);
+        if (top is { Source.Path: { } path } frame && File.Exists(path))
+        {
+            items.Add(await LinesAroundAsync(path, frame.Line).ConfigureAwait(true));
+        }
+
+        if (Debugger.Frames.Count > 0)
+        {
+            var stack = string.Join('\n', Debugger.Frames.Take(30).Select(f => f.Source?.Path is { } p ? $"{f.Name} ({Path.GetFileName(p)}:{f.Line.ToString(CultureInfo.InvariantCulture)})" : f.Name));
+            items.Add(new AiContextItem(AiContextKind.Debugger, Localizer.Get("msg.ai.callStack", "the call stack"), stack));
+        }
+
+        await AiChat.AskAsync(AiActions.ExplainValueQuestion, items).ConfigureAwait(true);
+    }
+
     /// <summary>Generate Tests with AI: tests for the selection (or the current file) in AI Chat, with the solution's test framework.</summary>
     public async Task GenerateTestsWithAiAsync()
     {

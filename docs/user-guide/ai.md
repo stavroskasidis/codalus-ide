@@ -62,7 +62,10 @@ Where AI can help with something the IDE already shows, there's an action for it
 - **Create Pull Request: Write with AI** writes the title and description from the branch's commits and diff.
 - **The exception helper: Ask AI.** When the debugger stops on an exception, Ask AI asks AI Chat why it was thrown, with the exception, its stack, the call stack and the code around the current statement.
 - **Test Explorer: Ask AI Why It Fails** (on a failed test's context menu, or **Tools > AI**) asks AI Chat with the test's message, expected and actual values, stack, output and test file.
+- **The debugger's values: Ask AI About the Value** (the menu of a value in Locals, Autos, Watch, QuickWatch and data tips) asks AI Chat whether the value is what the code expects there, with the value, its type and expression, the code around the current statement and the call stack.
 - **The editor: AI > Fix with AI** fixes the error or warning at the caret: the lines around it go to the model, and the fix shows in a preview before it is applied.
+- **Quick actions (`Ctrl+.`)**: after the language's fixes and refactorings come **Fix with AI** and **Explain with AI** for the first error or warning on the line, and **Generate Tests with AI**, marked *AI*.
+- **The Error List**: a row's menu has **Fix with AI** (it opens the file at the error and fixes it as above) and **Explain with AI** (AI Chat explains it, with the lines around it), beside **Go To** and **Copy**.
 - **The editor: AI > Generate Tests with AI** asks AI Chat for tests of the selection (or the current file) with the solution's test framework (xUnit, NUnit, MSTest or TUnit); Apply on the answer's code block creates the test file.
 - **A CPU profiling report: Summarize with AI** asks AI Chat where the time goes, with the report's summary and its top 40 functions.
 

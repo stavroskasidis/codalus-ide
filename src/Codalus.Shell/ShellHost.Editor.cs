@@ -106,7 +106,12 @@ public sealed partial class ShellHost : IEditorServices
             ApplyEditHandler = edit => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ApplyWorkspaceEditAsync(edit)),
         };
         Languages.DocumentChanged += (_, path) => Ui.Post(() => Explorer.OnFileChanged(path)); // members under files
-        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position), Workbench.Settings);
+        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position), Workbench.Settings)
+        {
+            FixWithAi = FixErrorWithAiAsync,
+            ExplainWithAi = row => AskAiAboutDiagnosticAsync(row.Path, row.Position.Line + 1, row.Code, row.Description),
+            CanUseAi = () => Ai.IsEnabled,
+        };
     }
 
     /// <summary>

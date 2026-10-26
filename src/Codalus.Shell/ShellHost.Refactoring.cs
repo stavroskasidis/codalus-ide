@@ -127,6 +127,29 @@ public sealed partial class ShellHost
     // ------------------------------------------------------------------ the lightbulb
 
     /// <summary>Ctrl+.: the code fixes and refactorings at the caret (or selection), previewed before applying.</summary>
+    /// <summary>
+    /// The AI items after the language's code actions (M51), while AI assistance is on: Fix with AI and Explain with AI for
+    /// the first diagnostic on the line, and Generate Tests with AI. Each runs through AiService when chosen.
+    /// </summary>
+    internal List<QuickPickItem> AiCodeActions(string path, IReadOnlyList<Diagnostic> diagnostics)
+    {
+        var items = new List<QuickPickItem>();
+        if (!Ai.IsEnabled)
+        {
+            return items;
+        }
+
+        var detail = Localizer.Get("msg.ai.codeActionDetail", "AI");
+        if (diagnostics.OrderBy(d => d.Severity).FirstOrDefault() is { } first)
+        {
+            items.Add(new QuickPickItem(Localizer.Get("msg.ai.fixWithAi", "Fix with AI")) { Detail = detail, Tag = (Func<Task>)FixDiagnosticWithAiAsync });
+            items.Add(new QuickPickItem(Localizer.Get("msg.ai.explainWithAi", "Explain with AI")) { Detail = detail, Tag = (Func<Task>)(() => AskAiAboutDiagnosticAsync(path, first.Range.Start.Line + 1, first.Code, first.Message)) });
+        }
+
+        items.Add(new QuickPickItem(Localizer.Get("msg.ai.generateTestsWithAi", "Generate Tests with AI")) { Detail = detail, Tag = (Func<Task>)GenerateTestsWithAiAsync });
+        return items;
+    }
+
     public async Task ShowCodeActionsAsync()
     {
         if (ActiveLanguageEditor() is not var (editor, controller, client) || editor.Model.IsReadOnly)
@@ -158,7 +181,8 @@ public sealed partial class ShellHost
         }
 
         StatusBar.ClearMessage();
-        if (actions.Count == 0)
+        var ai = AiCodeActions(model.Path, diagnostics);
+        if (actions.Count == 0 && ai.Count == 0)
         {
             ShowMessage("No code actions here.");
             return;
@@ -168,8 +192,16 @@ public sealed partial class ShellHost
             .OrderBy(a => a.Action.Kind == CodeActionKind.QuickFix ? 0 : 1)
             .ThenBy(a => a.Action.IsPreferred == true ? 0 : 1)
             .Select(a => new QuickPickItem(a.Action.Title) { Detail = a.Action.Kind == CodeActionKind.QuickFix ? "Fix" : "Refactoring", Tag = a })
+            .Concat(ai)
             .ToList();
-        if (await Palette.ShowAsync(items, "Quick actions and refactorings").ConfigureAwait(true) is not { Tag: (CodeAction picked, LanguageServices.Client.LanguageHostClient owner) })
+        var chosen = await Palette.ShowAsync(items, "Quick actions and refactorings").ConfigureAwait(true);
+        if (chosen?.Tag is Func<Task> aiAction)
+        {
+            await aiAction().ConfigureAwait(true);
+            return;
+        }
+
+        if (chosen is not { Tag: (CodeAction picked, LanguageServices.Client.LanguageHostClient owner) })
         {
             return;
         }

@@ -84,6 +84,15 @@ public sealed class ErrorListViewModel : ObservableObject
     private int _warnings;
     private int _messages;
 
+    /// <summary>Fix with AI for a row (M51): opens it, then fixes the diagnostic at the caret through the preview.</summary>
+    public Func<ErrorListRow, Task>? FixWithAi { get; set; }
+
+    /// <summary>Explain with AI for a row (M51): asks AI Chat about it with the code around it.</summary>
+    public Func<ErrorListRow, Task>? ExplainWithAi { get; set; }
+
+    /// <summary>Whether AI assistance is on, so the AI items show in a row's menu.</summary>
+    public Func<bool> CanUseAi { get; set; } = () => false;
+
     public ErrorListViewModel(DiagnosticsStore store, BuildService builds, SolutionService solutions, Func<string?> activePath, Func<string, Position, Task> open, SettingsService? settings = null)
     {
         _store = store;
@@ -438,6 +447,10 @@ public sealed class ErrorListViewModel : ObservableObject
             path.Length > folder.Length && path.StartsWith(folder, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)
             && path[folder.Length] is '/' or '\\';
     }
+
+    /// <summary>A row as text for the clipboard: code, description, project, file and line, tab-separated.</summary>
+    public static string CopyText(ErrorListRow row) =>
+        string.Join('\t', row.Code, row.Description, row.Project, row.File, row.Line.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     public Task OpenAsync(ErrorListRow row) => row.Path.Length == 0 ? Task.CompletedTask : _open(row.Path, row.Position);
 
