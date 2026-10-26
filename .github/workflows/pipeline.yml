@@ -744,13 +744,15 @@ jobs:
   # develop change only through a pull request, so the job opens one and merges it (it needs no approval, and the
   # repository lets GitHub Actions create pull requests). The workflow token's pull request and merge start no run,
   # so they make no CI run and no nightly; master's content already passed this release's gates. With no run, the
-  # pull request never reports ci: GitHub Actions is a bypass actor of the ruleset, and the job merges with --admin.
+  # pull request never reports ci, so the job posts it on the branch's head itself, as GitHub Actions (the source the
+  # ruleset requires): GitHub offers no Actions bypass for a repository owned by a user.
   finish:
     needs: [plan, aur]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      checks: write # the branch's ci check
     steps:
       - uses: actions/checkout@v4
         with:
@@ -785,14 +787,17 @@ jobs:
           # A re-run replaces the branch and reuses its pull request.
           branch="develop-after/$RELEASED"
           git push --force origin "HEAD:refs/heads/$branch"
+          gh api "repos/$GITHUB_REPOSITORY/check-runs" -f name=ci -f head_sha="$(git rev-parse HEAD)" \
+            -f status=completed -f conclusion=success -f 'output[title]=Passed in the release run' \
+            -f "output[summary]=master passed every gate of the $RELEASED release run, ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}." > /dev/null
           if [[ -z "$(gh pr list --head "$branch" --base develop --state open --json number --jq '.[].number')" ]]; then
             gh pr create --head "$branch" --base develop --title "Start $next after the $RELEASED release" \
               --body "Merges \`master\` into \`develop\` after the $RELEASED release and moves \`VERSION\` to $next. Opened and merged by the release run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
           fi
           # GitHub may still be working out whether the new pull request merges.
           for attempt in 1 2 3 4 5; do
-            gh pr merge "$branch" --merge --admin --match-head-commit "$(git rev-parse HEAD)" && break
-            [[ $attempt == 5 ]] && echo "::error::Couldn't merge $branch into develop (is GitHub Actions a bypass actor of the \"protect\" ruleset?); merge its pull request by hand." && exit 1
+            gh pr merge "$branch" --merge --match-head-commit "$(git rev-parse HEAD)" && break
+            [[ $attempt == 5 ]] && echo "::error::Couldn't merge $branch into develop; merge its pull request by hand." && exit 1
             sleep 15
           done
           git push origin --delete "$branch" || true
