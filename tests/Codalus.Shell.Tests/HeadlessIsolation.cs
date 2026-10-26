@@ -27,9 +27,15 @@ internal static class HeadlessIsolation
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_registry")]
     private static extern ref Dictionary<Type, Func<object?>> Registry(AvaloniaLocator locator);
 
+    /// <summary>The headless test set up before this one: the likely one to have left the work running (one line in 40 CI runs).</summary>
+    private static string? s_previous;
+
     /// <summary>Empties the root locator, from the scope the headless session made for the test it sets up.</summary>
     public static void ClearRootLocator()
     {
+        var current = Xunit.TestContext.Current.Test?.TestDisplayName;
+        var previous = s_previous;
+        s_previous = current;
         var root = (AvaloniaLocator)Current(null);
         while (Parent(root) is AvaloniaLocator parent)
         {
@@ -39,7 +45,7 @@ internal static class HeadlessIsolation
         var registry = Registry(root);
         if (registry.Count > 0)
         {
-            Console.WriteLine($"Headless isolation: the root locator held {string.Join(", ", registry.Keys.Select(t => t.Name))}, bound by work an earlier test left running; cleared.");
+            Console.WriteLine($"Headless isolation: the root locator held {string.Join(", ", registry.Keys.Select(t => t.Name))}, bound by work an earlier test left running (the headless test before this one: {previous ?? "none"}; this one: {current ?? "unknown"}); cleared.");
             registry.Clear();
         }
     }

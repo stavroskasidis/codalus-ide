@@ -2,6 +2,12 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.8.0
+
+- **External agents keep their place, and you choose their model** ([user guide](docs/user-guide/ai.md#what-you-see)): after connecting an agent and restarting, AI Chat showed the Connect buttons again, as if nothing were connected. It now opens with the agent you chose last (`ai.chat.agent`). When an agent offers choices for its session over the Agent Client Protocol (its model, its modes, its effort or thinking level, or choices of its own), each has a picker in AI Chat's toolbar; a pick goes to the agent at once and is kept for its next sessions.
+- **More AI where you already work** ([user guide](docs/user-guide/ai.md#ai-actions)), each only when you choose it and only while AI is on: **Fix with AI**, **Explain with AI** and **Generate Tests with AI** at the end of the quick actions (`Ctrl+.`); a menu on the Error List's rows with **Go To**, **Copy**, **Fix with AI** and **Explain with AI**; and **Ask AI About the Value** on a value in Locals, Autos, Watch, QuickWatch and data tips while debugging.
+- **Help → Report a Problem and Suggest a Feature** ([user guide](docs/user-guide/troubleshooting.md#reporting-a-problem-or-suggesting-a-feature)): a dialog shows exactly what a new GitHub issue would carry (the version, the OS, the .NET runtime and SDK and, for a problem, the IDE's recent log with secrets and your home folder taken out), then opens the issue in your browser, filled in, for you to read and submit. Codalus sends nothing itself; a log too long for the link is saved to a file to attach.
+
 ## 0.7.0
 
 - **.NET 11 RC 3**: Codalus IDE is built on .NET 11's third release candidate, and its helper processes ask for that runtime (or a later one). With only RC 2 installed, the IDE says so once and offers **Install .NET 11.0**, and an update isn't downloaded until it's installed ([user guide](docs/user-guide/getting-started.md#prerequisites)).
