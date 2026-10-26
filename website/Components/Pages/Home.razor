@@ -35,20 +35,43 @@
         </dl>
     </section>
 
-    <section class="viewer rise rise-5" aria-label="Screenshots" data-tabs>
-        <div class="tabs tabs-bar" role="tablist" aria-label="Screenshots" hidden>
-            @foreach (var shot in s_shots)
-            {
-                <button class="tab" type="button" role="tab" id="tab-@shot.Key" aria-controls="shot-@shot.Key" data-key="@shot.Key">@shot.Label</button>
-            }
+    <section class="spotlight rise rise-5" aria-labelledby="app-models">
+        <div class="section-head">
+            <p class="eyebrow">Built for what you build</p>
+            <h2 class="heading" id="app-models">One IDE for every .NET app model.</h2>
         </div>
-        @foreach (var (shot, i) in s_shots.Select((s, i) => (s, i)))
-        {
-            <div class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key" hidden="@(i != 0)"><figure>
-                <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@shot.Alt" />
-                <figcaption><strong>@shot.Label</strong><span>@shot.Caption</span></figcaption>
-            </figure></div>
-        }
+        <div class="viewer tour" data-tabs>
+            <div class="tabs tabs-rail" role="tablist" aria-label="App models" aria-orientation="vertical" hidden>
+                @foreach (var model in s_models)
+                {
+                    <button class="tab" type="button" role="tab" id="tab-@model.Key" aria-controls="model-@model.Key" data-key="@model.Key"><span>@model.Label</span><span class="tab-ext">@model.Ext</span></button>
+                }
+            </div>
+            <div class="tour-shots">
+                @foreach (var (model, i) in s_models.Select((m, i) => (m, i)))
+                {
+                    <div class="shot model" role="tabpanel" id="model-@model.Key" aria-labelledby="tab-@model.Key" hidden="@(i != 0)">
+                        <figure><img src="assets/screenshots/@model.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@model.Alt" /></figure>
+                        <div class="model-text">
+                            <div class="model-what">
+                                <h3>@model.Label</h3>
+                                <ul>
+                                    @foreach (var point in model.Points)
+                                    {
+                                        <li>@point</li>
+                                    }
+                                </ul>
+                            </div>
+                            <div class="model-where">
+                                <p class="model-where-label">Where it runs</p>
+                                <p>@model.Where</p>
+                                <a class="link-arrow" href="@model.Guide">@model.Label in the guide <Icon Name="arrow" Size="16" /></a>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
     </section>
 
     <section class="section" aria-labelledby="everything">
@@ -140,7 +163,7 @@
 </div>
 
 @code {
-    private sealed record Shot(string Key, string Label, string File, string Alt, string Caption);
+    private sealed record Model(string Key, string Label, string Ext, string File, string Alt, string[] Points, string Where, string Guide);
 
     /// <summary>
     /// The offered release's recommended file for each OS: site.js points the Download buttons at the visitor's, so a
@@ -164,19 +187,77 @@
         ("pluginhost", "your plugins"),
     ];
 
-    private static readonly Shot[] s_shots =
+    /// <summary>
+    /// The app models the spotlight shows, each with its picture from the smoke test (website/screenshots.txt). The
+    /// first is what visitors see first: the editor.
+    /// </summary>
+    private static readonly Model[] s_models =
     [
-        new("editor", "Editor", "editor-dark.png",
-            "Codalus IDE with a C# solution open: the Start page, the editor with inlay hints, Find Results and the Solution Explorer",
-            "The Start page, inlay hints, Find Results and the Solution Explorer."),
-        new("debugging", "Debugging", "debugging.png",
-            "Paused at a breakpoint: the current line highlighted with a PerfTip, and the Exception Settings window open",
-            "Paused at a breakpoint, with a PerfTip and the Exception Settings window."),
-        new("intellisense", "IntelliSense", "intellisense.png",
-            "Typing a call in the editor: the completion list below the line with an icon per kind, the selected method's description beside it and the kind filters under it, and parameter info above the line",
-            "Completion with an icon per kind and kind filters, and parameter info above the line."),
-        new("profiling", "Profiler", "profiler.png",
-            "A CPU profiling report: the sample timeline above a flame graph of the program's hot methods",
-            "CPU traces with flame graphs, through EventPipe."),
+        new("console", "Console apps and libraries", ".csproj", "editor-dark.png",
+            "The editor with inlay hints, Find Results for references to Greet, and the Solution Explorer",
+            ["C# on Roslyn: semantic highlighting, completion, live diagnostics and refactorings with previews",
+             "Multi-targeting, .NET Standard libraries, NuGet, and every .NET from .NET Core 2.0 to .NET 11",
+             "Build, run, debug and test from one window, with the Test Explorer and coverage"],
+            "Windows, macOS and Linux.", "docs/editing/"),
+        new("blazor", "Blazor", ".razor", "blazor.png",
+            "Debugging a Razor component, paused inside Counter.razor, with the Test Explorer and the Debug Console",
+            ["C# inside .razor files: completion, diagnostics, Go to Definition and rename",
+             "The server and its WebAssembly page debugged as one session, in the browser",
+             "Hot Reload through dotnet watch"],
+            "Windows, macOS and Linux.", "docs/web/#razor-and-blazor"),
+        new("aspnet", "ASP.NET Core", ".http", "web-http.png",
+            "A .http file with run buttons, the HTTP Response window and the Endpoints Explorer",
+            ["An Endpoints Explorer, and .http files with the response's status, headers and history",
+             "Scaffolding, and OpenAPI and gRPC service references",
+             "The HTTPS development certificate and user secrets"],
+            "Windows, macOS and Linux.", "docs/web/"),
+        new("maui", ".NET MAUI", "mobile", "maui.png",
+            "A .NET MAUI page's XAML in the editor, the device picker on the toolbar, and the Devices window with the Android toolchain",
+            ["A device picker on the toolbar, and a Devices window that starts emulators and boots simulators",
+             "Debugging on Android, iOS simulators and Mac Catalyst with our own Mono debugger",
+             "MAUI XAML with compiled binding paths from x:DataType"],
+            "Android on every desktop; iOS simulators, iPhones and Mac Catalyst on macOS; the Windows target on Windows.", "docs/maui/"),
+        new("wpf", "WPF", ".xaml", "wpf.png",
+            "A WPF window's XAML in the editor, with the XAML Previewer drawing it beside the code",
+            ["XAML completion for controls, properties, markup extensions, styles and resources",
+             "A previewer that draws your XAML on your app's own WPF as you type",
+             "The Live Visual Tree and Live Property Explorer for running apps"],
+            "Run, debug and preview on Windows; open, edit and build on macOS and Linux.", "docs/windows-desktop/#the-wpf-xaml-previewer"),
+        new("winforms", "Windows Forms", "Designer", "winforms.png",
+            "The Windows Forms designer with an order form, the Toolbox on the left and the Properties window on the right",
+            ["A designer on your app's own Windows Forms, with snap lines, smart tags and the Format menu",
+             "The Toolbox with your own controls, and the Properties window with its Events view",
+             "InitializeComponent written as the smallest edit, so a diff shows only what changed"],
+            "Design, run and debug on Windows; open, edit and build on macOS and Linux.", "docs/windows-desktop/#the-windows-forms-designer"),
+        new("winui", "WinUI 3", "x:Bind", "winui.png",
+            "A WinUI 3 page's XAML in the editor, with x:Bind bindings, and the build's output below",
+            ["x:Bind paths checked against the page's class",
+             "Packaged (MSIX) apps registered, started by Windows and attached to",
+             "Hot Reload, and WinUI's compiler errors in their files"],
+            "Build, run and debug on Windows; open and edit everywhere.", "docs/windows-desktop/#winui-3"),
+        new("avalonia", "Avalonia", ".axaml", "xaml-preview.png",
+            "An Avalonia .axaml file in the editor with the XAML Previewer rendering it beside the code",
+            ["Completion and binding paths in .axaml files",
+             "A live XAML Previewer beside the code that follows every edit",
+             "The Live Visual Tree and Live Property Explorer"],
+            "Windows, macOS and Linux, the previewer included.", "docs/avalonia/"),
+        new("aspire", "Aspire and containers", "AppHost", "aspire.png",
+            "An Aspire AppHost's code in the editor, and the Aspire window below it: the api and frontend projects running, the Redis cache, and the api's console output",
+            ["Debug an AppHost with all its projects, and see its resources and their output",
+             "Run and debug in a container with docker or podman, and Add Docker Support",
+             "Compose up, down and debug, and publish profiles with container images"],
+            "Windows, macOS and Linux, with your docker or podman.", "docs/containers/#net-aspire"),
+        new("wcf", "WCF", "CoreWCF", "wcf-test-client.png",
+            "The WCF Test Client with a CoreWCF service's operations, the request form of Greet and its response as a tree",
+            ["Add Service Reference with your dotnet-svcutil",
+             "CoreWCF services from CoreWCF's templates",
+             "A WCF Test Client: a typed form per operation, the SOAP envelope, the response as a tree"],
+            "Windows, macOS and Linux.", "docs/wcf/"),
+        new("netfx", ".NET Framework", "net48", "netfx.png",
+            "A .NET Framework console app paused at a breakpoint on Windows, with the solution's old-style projects in the Solution Explorer",
+            ["Old-style projects and packages.config, built with the .NET SDK's MSBuild and no targeting pack",
+             "Convert to SDK-Style after a preview of every change",
+             "Our own .NET Framework debugger, with Just My Code and Attach to Process"],
+            "Run, debug and test on Windows; open, restore and build on macOS and Linux.", "docs/net-framework/"),
     ];
 }

@@ -10,6 +10,11 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Open folders and solutions from your file manager** ([user guide](docs/user-guide/settings.md#system-integration)), on Windows, macOS and Linux, off until you choose it: **Tools → Options → Environment → System Integration** (or the first-run setup) adds **Open with Codalus IDE** to a folder's right-click menu (Explorer, a Finder Quick Action, GNOME Files, Dolphin, Nemo and Thunar), and makes `.sln`, `.slnx`, `.slnf` and project files open in Codalus IDE. Turning it off removes exactly what it added. A folder or solution opened this way, or with `codalus <path>`, goes to the running window when that window has nothing open.
 - **Fixed:** opening a solution with a `global.json` ran every tool's version check (git, Docker, Podman) just to compare the .NET SDK, seconds of CPU at each open; now only `dotnet` runs.
 - **Fixed:** with git 2.51, **Update Branch** on a branch that had diverged from its remote compared it with a stale remote-tracking branch.
+- **Fixed:** on Linux without the DejaVu fonts (WSL's Ubuntu, newer Fedora), the code editor used a proportional font: its font list now ends with Noto Sans Mono, Ubuntu Mono, Liberation Mono and Noto Mono before `monospace`. Menu rows stay 24 pixels with a taller system font.
+- **Fixed:** saving a file on Linux or macOS made it lose its permissions: an executable script stopped being executable, and git showed a mode change. Saves keep the file's mode.
+- **Fixed:** in the Output window, bold and bright colors looked like the plain ones in light themes (Harbor Light's bold green): they now need more contrast than the plain colors, so they stand out.
+- **Fixed:** a solution pinned to a .NET SDK 2.1 didn't build in the IDE (the build host used an MSBuild 16 call that SDK 2.1's MSBuild hasn't), and the message about an SDK the IDE can't use named a preview SDK without its preview part.
+- **The website**: the home page shows each kind of .NET app Codalus IDE builds (console apps and libraries, Blazor, ASP.NET Core, .NET MAUI, WPF, Windows Forms, WinUI 3, Avalonia, Aspire, WCF and .NET Framework), each with its screenshot, what you get and where it runs, in place of the general screenshots, which stay on the Features page.
 
 ## 0.7.1
 

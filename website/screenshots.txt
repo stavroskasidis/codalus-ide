@@ -1,0 +1,32 @@
+# The website's screenshots (website/wwwroot/assets/screenshots), each a picture the smoke test saves (SmokeTest's
+# Screenshot calls) on one CI runner. eng/update-screenshots.sh copies them from a run's smoke-test-<OS> artifacts;
+# WebsiteTests checks that every picture on the site is listed here and every source is one the smoke test saves.
+#
+# <picture on the site>   <runner: Linux, Windows or macOS>   <the smoke test's picture>
+agent-connect.png         Linux     agent-connect.png
+ai-chat-agent.png         Linux     ai-chat-agent.png
+ai-chat.png               Linux     ai-chat.png
+aspire.png                Linux     smoke-test-aspire.png
+blazor.png                Linux     smoke-test-blazor-compound-debug.png
+code-search.png           Linux     smoke-test-code-search.png
+debugging.png             Linux     smoke-test-debug-depth.png
+editor-dark.png           Linux     smoke-test-theme-dark.png
+ef-core.png               Linux     smoke-test-ef-model.png
+find-in-files.png         Linux     smoke-test-find-results.png
+intellisense.png          Linux     smoke-test-intellisense.png
+maui.png                  Linux     maui-devices.png
+netfx.png                 Windows   netfx-debugging.png
+new-project.png           Linux     new-project.png
+profiler.png              Linux     smoke-test-profiler.png
+setup.png                 Linux     setup-appearance.png
+theme-classic.png         Linux     smoke-test-theme-light.png
+theme-daylight.png        Linux     smoke-test-theme-daylight.light.png
+theme-ember.png           Linux     smoke-test-theme-ember.dark.png
+theme-graphite.png        Linux     smoke-test-theme-graphite.dark.png
+theme-harbor.png          Linux     smoke-test-theme-harbor.light.png
+wcf-test-client.png       Linux     smoke-test-wcf-test-client.png
+web-http.png              Linux     smoke-test-web-http.png
+winforms.png              Windows   winforms-designer.png
+winui.png                 Windows   winui-xaml.png
+wpf.png                   Windows   wpf-previewer.png
+xaml-preview.png          Linux     smoke-test-xaml-preview.png

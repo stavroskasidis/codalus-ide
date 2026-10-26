@@ -192,6 +192,22 @@ p code, span code { font-size: 0.88em; color: #dcd5ea; }
 .tour { display: flex; flex-wrap: wrap; box-shadow: none; background: var(--bg-raised); }
 .tour-shots { flex: 999 1 640px; min-width: 0; }
 
+/* Home: the app models, a rail beside each one's picture, what it gets and where it runs */
+.spotlight { margin-top: clamp(64px, 8vw, 104px); display: flex; flex-direction: column; gap: 32px; }
+.spotlight .viewer { margin-top: 0; box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55); }
+.spotlight .tabs-rail { flex-basis: 260px; }
+.spotlight .tabs-rail .tab { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.tab-ext { font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--text-faint); white-space: nowrap; }
+/* A picture from a smaller screen (website/screenshots.txt) keeps its proportions in the 1280x800 frame. */
+.model img { object-fit: contain; background: var(--bg-sunk); }
+.model-text { display: flex; flex-wrap: wrap; gap: 20px 40px; padding: 24px 26px 26px; border-top: 1px solid var(--line); }
+.model-what { flex: 2 1 360px; display: flex; flex-direction: column; gap: 10px; }
+.model-what h3 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; }
+.model-what ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--text-body); font-size: 16px; }
+.model-where { flex: 1 1 220px; display: flex; flex-direction: column; gap: 8px; }
+.model-where p { margin: 0; font-size: 15px; color: var(--text-soft); }
+.model-where .model-where-label { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
+
 /* Tabs: a hidden tablist that site.js shows, each tab selecting one tabpanel */
 
 .tabs[hidden] { display: none; }
@@ -491,6 +507,9 @@ p code, span code { font-size: 0.88em; color: #dcd5ea; }
   .docs-nav summary { display: flex; }
   .docs-nav[open] summary { margin-bottom: 20px; }
   .tabs-rail { border-right: 0; border-bottom: 1px solid var(--line); }
+  /* The app models two to a row, their file types left out, so the picture isn't a screen away. */
+  .spotlight .tabs-rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .spotlight .tab-ext { display: none; }
 }
 
 /* Motion: content rises in as a page loads and as it scrolls into view, cards lift under the pointer, a new tab's panel
