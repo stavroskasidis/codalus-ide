@@ -17,7 +17,7 @@
     <!-- The tab's close button: a 16 px square, as the pin beside it (Dock's was 14). -->
     <x:Double x:Key="DockCloseButtonSize">16</x:Double>
     <!--
-      Its glyph, Visual Studio's thin X: Dock stretches the geometry over the button less a 2 px margin (12 px), so the
+      Its glyph, the classic IDE's thin X: Dock stretches the geometry over the button less a 2 px margin (12 px), so the
       geometry spans a 12-unit box (the two specks in its corners) with the X in its middle 8 units, about 1 px thick.
     -->
     <!--
@@ -53,6 +53,18 @@
       </Setter>
     </ControlTheme>
     <StreamGeometry x:Key="DockIconCloseGeometry">M0,0 L0.01,0 L0,0.01 Z M12,12 L11.99,12 L12,11.99 Z M2.75,2 L6,5.25 L9.25,2 L10,2.75 L6.75,6 L10,9.25 L9.25,10 L6,6.75 L2.75,10 L2,9.25 L5.25,6 L2,2.75 Z</StreamGeometry>
+    <!--
+      The tool window header's buttons (M50, the maintainer's screenshot 4): the document tab's 16 px squares, with its
+      12 px glyph area, its thin X and its pin (Fluent's pin_16_regular, as the tab's, upright while docked and lying down
+      while auto-hidden, in a 16-unit box so it draws at the tab's 0.75 scale). Dock's were 18 x 28 with a 12 x 19 pin.
+      The menu's arrow keeps Dock's geometry and margin, so it scales with them.
+    -->
+    <x:Double x:Key="DockChromeButtonWidth">16</x:Double>
+    <x:Double x:Key="DockChromeButtonHeight">16</x:Double>
+    <Thickness x:Key="DockChromeButtonPadding">2</Thickness>
+    <StreamGeometry x:Key="DockToolIconCloseGeometry">M0,0 L0.01,0 L0,0.01 Z M12,12 L11.99,12 L12,11.99 Z M2.75,2 L6,5.25 L9.25,2 L10,2.75 L6.75,6 L10,9.25 L9.25,10 L6,6.75 L2.75,10 L2,9.25 L5.25,6 L2,2.75 Z</StreamGeometry>
+    <StreamGeometry x:Key="DockIconPinGeometry">M0,0 L0.01,0 L0,0.01 Z M16,16 L15.99,16 L16,15.99 Z M5.53,2.62 A1.5,1.5 -45 0 0 4.09,4.56 L5.34,8.66 L4.03,11.31 A0.5,0.5 -45 0 0 4.46,12.03 L7.5,12.04 L7.51,15.78 L8,16 L8.49,15.78 L8.5,12.04 L11.54,12.03 A0.5,0.5 -45 0 0 11.97,11.31 L10.66,8.66 L11.9,4.56 A1.5,1.5 -45 0 0 10.46,2.63 Z M5.05,4.26 A0.5,0.5 -45 0 1 5.53,3.61 L10.47,3.62 A0.5,0.5 -45 0 1 10.95,4.27 L9.63,8.56 A0.5,0.5 -45 0 0 9.68,8.93 L10.72,11.03 L5.28,11.03 L6.32,8.93 A0.5,0.5 -45 0 0 6.36,8.57 Z</StreamGeometry>
+    <StreamGeometry x:Key="DockIconPinnedGeometry">M0,0 L0.01,0 L0,0.01 Z M16,16 L15.99,16 L16,15.99 Z M13.38,5.53 A1.5,1.5 45 0 0 11.44,4.09 L7.34,5.34 L4.69,4.03 A0.5,0.5 45 0 0 3.97,4.46 L3.96,7.5 L0.22,7.51 L0,8 L0.22,8.49 L3.96,8.5 L3.97,11.54 A0.5,0.5 45 0 0 4.69,11.97 L7.34,10.66 L11.44,11.9 A1.5,1.5 45 0 0 13.37,10.46 Z M11.74,5.05 A0.5,0.5 45 0 1 12.39,5.53 L12.38,10.47 A0.5,0.5 45 0 1 11.73,10.95 L7.44,9.63 A0.5,0.5 45 0 0 7.07,9.68 L4.97,10.72 L4.97,5.28 L7.07,6.32 A0.5,0.5 45 0 0 7.43,6.36 Z</StreamGeometry>
   </Styles.Resources>
 
   <Style Selector="Window">
@@ -75,7 +87,7 @@
           <controls:Icon Kind="{Binding TabIcon}" IsVisible="{Binding HasTabIcon}" Width="14" Height="14" VerticalAlignment="Center" />
           <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
           <!--
-            The pin, beside Dock's close button as in Visual Studio: always on a pinned tab (upright), and on the hovered or
+            The pin, beside Dock's close button as in the classic IDE: always on a pinned tab (upright), and on the hovered or
             selected tab (lying down) to pin it. Its space is kept, so the tab doesn't change width on hover.
           -->
           <Panel Width="16" Height="16" VerticalAlignment="Center" IsVisible="{Binding PinCommand, Converter={x:Static ObjectConverters.IsNotNull}}">
@@ -202,7 +214,7 @@
     <Setter Property="InactiveTabBrush" Value="{DynamicResource Shell.Tab.Selected.IndicatorBrush}" />
   </Style>
   <!--
-    The tab's pin and close buttons, as Visual Studio's: 16 px squares with a hover background, a thin 8 px glyph in the
+    The tab's pin and close buttons, as the classic IDE's: 16 px squares with a hover background, a thin 8 px glyph in the
     tab's text color (Dock's close glyph was a heavy one).
   -->
   <Style Selector="Button.tabPin">
@@ -1318,7 +1330,7 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Folder}" />
   </Style>
   <!--
-    Menus, one look (the maintainer's 0.5 review, as Visual Studio's; entries made by Controls/MenuEntry.cs): every entry
+    Menus, one look (the maintainer's 0.5 review, as the classic IDE's; entries made by Controls/MenuEntry.cs): every entry
     keeps the 16 px icon column, empty or not, so text starts at the same place in every menu and a menu without icons
     doesn't look different; a check or radio mark takes the icon's place. Rows are 24 px with or without an icon, the
     separators start where the text does, and a submenu's chevron is a small one. The menu bar's own titles have another

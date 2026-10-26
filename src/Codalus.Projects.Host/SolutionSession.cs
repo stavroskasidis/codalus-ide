@@ -775,7 +775,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         return await ExclusiveBuildAsync(
             async token =>
             {
-                // Non-SDK-style projects (M43a): one that needs Visual Studio's targets doesn't build; the others get their
+                // Non-SDK-style projects (M43a): one that needs the classic IDE's targets doesn't build; the others get their
                 // packages.config packages and reference assemblies, which dotnet restore doesn't restore.
                 if (!await ReportProjectsThatCannotBuildAsync(blockedProject, events).ConfigureAwait(false))
                 {
@@ -1049,7 +1049,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         }
         else if (path is null && !IsFolder && ProjectPaths.Any(p => ComposeProject.Is(p) || CannotBuild(p)))
         {
-            path = BuildEntryPoint(); // without the compose projects and those that need Visual Studio's targets, which dotnet restore can't load
+            path = BuildEntryPoint(); // without the compose projects and those that need the classic IDE's targets, which dotnet restore can't load
         }
 
         var building = _building;

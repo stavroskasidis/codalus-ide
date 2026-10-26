@@ -272,7 +272,7 @@ public static class ItemTemplates
 
     /// <summary>
     /// The namespace of a new file: the root namespace, then the folders from the project to the file, each made a valid
-    /// identifier (as Visual Studio does).
+    /// identifier (as the classic IDE does).
     /// </summary>
     public static string NamespaceFor(string rootNamespace, string projectDirectory, string folder)
     {

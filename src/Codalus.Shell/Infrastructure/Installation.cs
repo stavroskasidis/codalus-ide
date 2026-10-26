@@ -35,6 +35,33 @@ internal static partial class Installation
             .OnAfterUpdateFastCallback(_ => AddCommand())
             .OnBeforeUninstallFastCallback(_ => RemoveCommand());
 
+    // ------------------------------------------------------------------ the working folder
+
+    /// <summary>
+    /// Moves the working folder out of the app's own folders, to the user's home. Velopack's updater, the Start menu and
+    /// Explorer start the IDE in its install folder (<c>current\</c>), and every program it starts inherits it. One that
+    /// outlives the IDE keeps it open (adb's server holds the folder it was started in), and on Windows the updater then
+    /// can't move <c>current\</c> aside: "Restart to update" started the old version again.
+    /// </summary>
+    public static void LeaveAppFolder()
+    {
+        string[] app = InstallRoot() is { } root ? [root, AppContext.BaseDirectory] : [AppContext.BaseDirectory];
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (WorkingFolderOutside(Environment.CurrentDirectory, app, home, ignoreCase: !OperatingSystem.IsLinux()) is { } folder && Directory.Exists(folder))
+        {
+            Environment.CurrentDirectory = folder;
+        }
+    }
+
+    /// <summary><paramref name="home"/> when <paramref name="current"/> is in one of the <paramref name="app"/> folders (and home isn't), else null.</summary>
+    internal static string? WorkingFolderOutside(string current, IReadOnlyList<string> app, string home, bool ignoreCase) =>
+        home.Length > 0 && app.Any(folder => IsWithin(current, folder, ignoreCase)) && !app.Any(folder => IsWithin(home, folder, ignoreCase)) ? home : null;
+
+    private static bool IsWithin(string path, string folder, bool ignoreCase) =>
+        (Normalized(path) + "/").StartsWith(Normalized(folder) + "/", ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private static string Normalized(string path) => path.Replace('\\', '/').TrimEnd('/');
+
     // ------------------------------------------------------------------ macOS: updates staged on the bundle's volume
 
     /// <summary>

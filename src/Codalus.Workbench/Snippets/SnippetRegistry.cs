@@ -116,7 +116,7 @@ public sealed class SnippetRegistry
     }
 
     /// <summary>
-    /// Converts a Visual Studio <c>.snippet</c> file (the CodeSnippets XML schema) to snippets: declared literals become
+    /// Converts a classic IDE <c>.snippet</c> file (the CodeSnippets XML schema) to snippets: declared literals become
     /// placeholders (<c>$name$</c> → <c>${1:default}</c>, repeated ones as mirrors), <c>$end$</c> becomes <c>$0</c> and
     /// <c>$selected$</c> the selection.
     /// </summary>

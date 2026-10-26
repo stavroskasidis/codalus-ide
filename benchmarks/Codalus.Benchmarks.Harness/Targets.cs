@@ -175,7 +175,7 @@ internal static class TargetCatalog
             static (title, className) => className == "SunAwtFrame" && !title.Contains("Start Failed", StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Newest Visual Studio, in an isolated experimental instance (/rootsuffix) so user settings are untouched.</summary>
+    /// <summary>Newest the classic IDE, in an isolated experimental instance (/rootsuffix) so user settings are untouched.</summary>
     private static Target VisualStudio()
     {
         var exe = string.Empty;

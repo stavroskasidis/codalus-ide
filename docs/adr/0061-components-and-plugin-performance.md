@@ -6,7 +6,7 @@
 
 ## Context
 
-M22 asks for the equivalent of Visual Studio Installer's components: one page listing everything Codalus IDE downloads on demand, with version, size, licence, and update or remove, plus an offline layout for air-gapped machines. It also asks for plugin performance attribution like Visual Studio's "Manage Extension Performance". The on-demand components so far:
+M22 asks for the equivalent of the components in the classic IDE's installer: one page listing everything Codalus IDE downloads on demand, with version, size, licence, and update or remove, plus an offline layout for air-gapped machines. It also asks for plugin performance attribution like the classic IDE's "Manage Extension Performance". The on-demand components so far:
 - Node.js;
 - the web language servers;
 - vscode-js-debug;

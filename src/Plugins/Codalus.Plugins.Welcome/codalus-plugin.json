@@ -17,8 +17,7 @@
     ],
     "menus": {
       "menuBar/help": [
-        { "command": "welcome.show", "group": "navigation", "order": 1 },
-        { "command": "welcome.showOnboarding", "group": "navigation", "order": 2 }
+        { "command": "welcome.show", "group": "navigation", "order": 1 }
       ],
       "toolWindow/title": [
         { "command": "welcome.refresh", "when": "view == welcome.view" },

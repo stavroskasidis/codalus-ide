@@ -30,7 +30,7 @@ internal sealed class OptionsCodeAction(string title, CodeActionOptions options,
 }
 
 /// <summary>
-/// The refactorings Visual Studio shows a dialog for, which Roslyn implements behind internal options services:
+/// The refactorings the classic IDE shows a dialog for, which Roslyn implements behind internal options services:
 /// Generate Constructor, Generate Equals and GetHashCode, Generate Overrides, Extract Interface and Change Signature.
 /// </summary>
 internal static class OptionsRefactorings

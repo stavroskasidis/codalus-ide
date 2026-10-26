@@ -22,21 +22,28 @@ public sealed class EditorTheme
         "editorWarning.foreground", "editorInfo.foreground", "editorHint.foreground", "editor.findMatchHighlightBackground",
     ];
 
+    /// <summary>Classic's bold token types: a Blazor component's parameters, as the classic IDE draws them (M50).</summary>
+    private static readonly string[] s_classicBold = ["razorComponentAttribute"];
+
     private readonly IBrush?[] _tokens;
+    private readonly bool[] _bold;
     private readonly Dictionary<string, uint> _tokenColors;
     private readonly Dictionary<string, uint> _elementColors;
+    private readonly IReadOnlyCollection<string> _boldTypes;
 
     private EditorTheme(string id, Dictionary<string, uint> tokens, uint selection, uint currentLine, uint highlightRead, uint highlightWrite, uint bracket, uint error, uint warning, uint info, uint hint, uint findMatch)
-        : this(id, tokens, Elements.Zip([selection, currentLine, highlightRead, highlightWrite, bracket, error, warning, info, hint, findMatch]).ToDictionary(e => e.First, e => e.Second, StringComparer.Ordinal))
+        : this(id, tokens, Elements.Zip([selection, currentLine, highlightRead, highlightWrite, bracket, error, warning, info, hint, findMatch]).ToDictionary(e => e.First, e => e.Second, StringComparer.Ordinal), s_classicBold)
     {
     }
 
-    private EditorTheme(string id, Dictionary<string, uint> tokens, Dictionary<string, uint> elements)
+    private EditorTheme(string id, Dictionary<string, uint> tokens, Dictionary<string, uint> elements, IReadOnlyCollection<string> bold)
     {
         Id = id;
         _tokenColors = tokens;
         _elementColors = elements;
+        _boldTypes = bold;
         _tokens = [.. TokenTypes.All.Select(name => tokens.TryGetValue(name, out var argb) ? new ImmutableSolidColorBrush(argb) : (IBrush?)null)];
+        _bold = [.. TokenTypes.All.Select(bold.Contains)];
         IBrush Brush(int index) => new ImmutableSolidColorBrush(elements[Elements[index]]);
         Selection = Brush(0);
         CurrentLine = Brush(1);
@@ -79,7 +86,7 @@ public sealed class EditorTheme
             elementColors[name] = argb;
         }
 
-        return new EditorTheme(Id, tokenColors, elementColors);
+        return new EditorTheme(Id, tokenColors, elementColors, _boldTypes);
     }
 
     public string Id { get; }
@@ -105,6 +112,9 @@ public sealed class EditorTheme
     public IBrush FindMatch { get; }
 
     public IBrush? Token(int type) => (uint)type < (uint)_tokens.Length ? _tokens[type] : null;
+
+    /// <summary>Whether the theme draws a token type bold (Classic's component parameters).</summary>
+    public bool IsBold(int type) => (uint)type < (uint)_bold.Length && _bold[type];
 
     /// <summary>
     /// The editor colors of a resolved theme: Classic's Light (Blue too), Dark and High Contrast, or a theme family's
@@ -177,7 +187,7 @@ public sealed class EditorTheme
         Set(colors.Type, "class", "record", "type", "delegate", "struct", "recordStruct", "enum", "interface", "typeParameter", "razorComponentElement", "razorTagHelperElement");
         Set(colors.Method, "method", "extensionMethod", "function");
         Set(colors.String, "string", "stringVerbatim", "markupAttributeQuote", "markupAttributeValue");
-        Set(colors.Number, "number");
+        Set(colors.Number, "number", "razorComponentAttribute"); // a component's parameters in their own color, not an HTML attribute's (M50)
         Set(colors.Comment, "comment", "xmlDocComment", "xmlDocText", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation");
 
         // Control keywords keep the color the families shipped with (Classic's before D47 matched it to the classic IDE).
@@ -187,14 +197,14 @@ public sealed class EditorTheme
         }
 
         var elements = new Dictionary<string, uint>(baseTheme._elementColors, StringComparer.Ordinal) { ["editor.lineHighlightBackground"] = colors.CurrentLine };
-        return new EditorTheme(id, tokens, elements);
+        return new EditorTheme(id, tokens, elements, []);
     }
 
     public static EditorTheme Dark { get; } = new(
         "dark",
         new()
         {
-            // Visual Studio 2022's Dark: Roslyn's color scheme (ColorSchemes/VisualStudio2019.xml) over the plain text,
+            // The classic IDE's Dark: Roslyn's color scheme (ColorSchemes/VisualStudio2019.xml) over the plain text,
             // #DCDCDC, which namespaces, fields, properties, events, labels and punctuation keep. Control keywords,
             // comments (XML doc text, Razor's and markup's too) and strings are the classic IDE's, measured in the
             // maintainer's screenshots (#83, D47); before, they were #C586C0, #6A9955 (#608B4E for XML doc text) and #CE9178.
@@ -213,9 +223,9 @@ public sealed class EditorTheme
             ["operator"] = 0xFFD4D4D4, ["punctuation"] = 0xFFDCDCDC,
             ["preprocessor"] = 0xFF9B9B9B, ["excludedCode"] = 0xFF767676, ["label"] = 0xFFDCDCDC,
 
-            // Razor and its markup, as Visual Studio's Dark theme colors them.
+            // Razor and its markup, as the classic IDE's Dark theme colors them.
             ["razorTransition"] = 0xFFA699E6, ["razorDirective"] = 0xFFA699E6, ["razorDirectiveAttribute"] = 0xFFA699E6, ["razorDirectiveColon"] = 0xFFA699E6,
-            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFF9CDCFE,
+            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFFC8C8C8,
             ["razorTagHelperElement"] = 0xFF4EC9B0, ["razorTagHelperAttribute"] = 0xFF9CDCFE,
             ["razorComment"] = 0xFF57A64A, ["razorCommentTransition"] = 0xFF57A64A, ["razorCommentStar"] = 0xFF57A64A,
             ["markupTagDelimiter"] = 0xFF808080, ["markupElement"] = 0xFF569CD6, ["markupAttribute"] = 0xFF9CDCFE,
@@ -229,7 +239,7 @@ public sealed class EditorTheme
         "light",
         new()
         {
-            // Visual Studio 2022's Light (and Blue): Roslyn's color scheme over the plain text, black. Control keywords
+            // The classic IDE's Light (and Blue): Roslyn's color scheme over the plain text, black. Control keywords
             // are the classic IDE's Light value (#83, D47; VS Code's Light+ #AF00DB before).
             ["namespace"] = 0xFF000000,
             ["class"] = 0xFF267F99, ["record"] = 0xFF267F99, ["type"] = 0xFF267F99, ["delegate"] = 0xFF267F99,
@@ -246,9 +256,9 @@ public sealed class EditorTheme
             ["operator"] = 0xFF000000, ["punctuation"] = 0xFF000000,
             ["preprocessor"] = 0xFF808080, ["excludedCode"] = 0xFF9E9E9E, ["label"] = 0xFF000000,
 
-            // Razor and its markup, as Visual Studio's Light (and Blue) theme colors them.
+            // Razor and its markup, as the classic IDE's Light (and Blue) theme colors them.
             ["razorTransition"] = 0xFF826EE6, ["razorDirective"] = 0xFF826EE6, ["razorDirectiveAttribute"] = 0xFF826EE6, ["razorDirectiveColon"] = 0xFF826EE6,
-            ["razorComponentElement"] = 0xFF0B7F7F, ["razorComponentAttribute"] = 0xFFFF0000,
+            ["razorComponentElement"] = 0xFF0B7F7F, ["razorComponentAttribute"] = 0xFF800080,
             ["razorTagHelperElement"] = 0xFF800080, ["razorTagHelperAttribute"] = 0xFF800080,
             ["razorComment"] = 0xFF008000, ["razorCommentTransition"] = 0xFF008000, ["razorCommentStar"] = 0xFF008000,
             ["markupTagDelimiter"] = 0xFF0000FF, ["markupElement"] = 0xFF800000, ["markupAttribute"] = 0xFFFF0000,
@@ -279,7 +289,7 @@ public sealed class EditorTheme
 
             // Razor and its markup.
             ["razorTransition"] = 0xFFFFFF00, ["razorDirective"] = 0xFFFFFF00, ["razorDirectiveAttribute"] = 0xFFFFFF00, ["razorDirectiveColon"] = 0xFFFFFF00,
-            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFF9CDCFE,
+            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFFFFFFFF,
             ["razorTagHelperElement"] = 0xFF4EC9B0, ["razorTagHelperAttribute"] = 0xFF9CDCFE,
             ["razorComment"] = 0xFF7CA668, ["razorCommentTransition"] = 0xFF7CA668, ["razorCommentStar"] = 0xFF7CA668,
             ["markupTagDelimiter"] = 0xFFFFFFFF, ["markupElement"] = 0xFF569CD6, ["markupAttribute"] = 0xFF9CDCFE,

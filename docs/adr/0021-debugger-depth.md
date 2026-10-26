@@ -28,7 +28,7 @@ What netcoredbg 3.2.0-1092 does, probed over DAP:
 
 **Execution features built from breakpoints**
 - **Run to Cursor** adds a hidden breakpoint at the target line (sent with the file's breakpoints) and continues. Any stop removes it. **Force Run to Cursor** also continues past every other breakpoint until it reaches the target. With no session, Run to Cursor starts debugging with a temporary breakpoint on the line.
-- **Run to Click** is Ctrl+click on a line in the breakpoint margin while the program is paused. (Visual Studio shows a glyph next to the line on hover; the margin keeps one click target per line.)
+- **Run to Click** is Ctrl+click on a line in the breakpoint margin while the program is paused. (the classic IDE shows a glyph next to the line on hover; the margin keeps one click target per line.)
 - **Temporary breakpoints** are removed after their first stop. **Dependent breakpoints** stay inactive until the breakpoint they depend on is hit in the session. Both are handled in the client, like hit counts.
 - **Function breakpoints** use netcoredbg's `setFunctionBreakpoints`.
 - Breakpoints get labels. The Breakpoints window filters by label or text, and imports or exports breakpoints as JSON.
@@ -51,7 +51,7 @@ What netcoredbg 3.2.0-1092 does, probed over DAP:
 
 ## Consequences
 
-- Run to Cursor, temporary and dependent breakpoints cost a stop in the debuggee when they are hit, as hit counts already do. They are invisible to the user, but they make timing-sensitive code behave differently than without the debugger, as Visual Studio's own breakpoints do.
+- Run to Cursor, temporary and dependent breakpoints cost a stop in the debuggee when they are hit, as hit counts already do. They are invisible to the user, but they make timing-sensitive code behave differently than without the debugger, as the classic IDE's own breakpoints do.
 - Known gaps unless netcoredbg gains them: Set Next Statement, Step Into Specific, the Memory, Disassembly and Registers windows, and data breakpoints. They stay listed in the user guide.
 - `DebuggerDisplay` waits for M14b's companion host, which can evaluate the attribute's expressions. `TODO(issue)`.
 - Revisit the client-side breakpoint features if netcoredbg adds hit counts or temporary breakpoints.

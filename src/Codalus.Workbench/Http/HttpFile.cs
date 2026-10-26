@@ -20,7 +20,7 @@ public sealed record HttpRequestBlock(
     public IReadOnlyList<KeyValuePair<string, string>> Variables { get; init; } = [];
 }
 
-/// <summary>A parsed <c>.http</c> file: the format of Visual Studio's and VS Code's REST clients (M15a).</summary>
+/// <summary>A parsed <c>.http</c> file: the format of the classic IDE's and VS Code's REST clients (M15a).</summary>
 public sealed record HttpFileDocument(IReadOnlyList<HttpRequestBlock> Requests, IReadOnlyList<KeyValuePair<string, string>> Variables)
 {
     /// <summary>The request whose block contains <paramref name="line"/>, or null.</summary>

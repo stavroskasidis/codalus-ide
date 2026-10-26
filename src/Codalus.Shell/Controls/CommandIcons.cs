@@ -24,7 +24,7 @@ public static class CommandIcons
     public const string Test = "test";
     public const string Navigate = "navigate";
 
-    // The Visual Studio palette's colors (Shell.Icon.Blue…): every icon is colored (the maintainer's rule), so each kind
+    // The colors of the classic IDE's palette (Shell.Icon.Blue…): every icon is colored (the maintainer's rule), so each kind
     // has one; command families above are colors of this palette too.
     public const string Blue = "blue";
     public const string Green = "green";

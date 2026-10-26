@@ -11,7 +11,7 @@ namespace Codalus.Shell.Editor;
 
 /// <summary>
 /// The send glyphs of a <c>.http</c> file (M15a): a green triangle on each request line; clicking it sends the request
-/// (Visual Studio shows a "Send request" CodeLens there). Empty in other documents.
+/// (the classic IDE shows a "Send request" CodeLens there). Empty in other documents.
 /// </summary>
 public sealed class HttpRequestMargin : AbstractMargin
 {

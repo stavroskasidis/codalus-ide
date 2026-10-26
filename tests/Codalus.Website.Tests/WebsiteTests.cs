@@ -18,7 +18,16 @@ public sealed class WebsiteTests : IDisposable
 
     private readonly string _temp = Directory.CreateTempSubdirectory("codalus-website-").FullName;
 
-    public void Dispose() => Directory.Delete(_temp, recursive: true);
+    public void Dispose()
+    {
+        // git's objects are read-only, which Windows won't delete.
+        foreach (var file in Directory.EnumerateFiles(_temp, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+
+        Directory.Delete(_temp, recursive: true);
+    }
 
     [Fact]
     public async Task The_site_exports_every_page_with_every_link_and_anchor_resolved()
@@ -192,6 +201,32 @@ public sealed class WebsiteTests : IDisposable
 
         Assert.DoesNotContain("application/ld+json", await Get(options, "features/"), StringComparison.Ordinal);
         Assert.DoesNotContain("softwareVersion", await Get(Options(), ""), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Every_page_has_its_own_preview_image_and_the_docs_their_breadcrumbs()
+    {
+        var options = Options();
+        var images = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in new[] { "", "features/", "download/", "docs/", "docs/debugging/", "docs/data/" })
+        {
+            var html = await Get(options, path);
+            var og = Regex.Match(html, "<meta property=\"og:image\" content=\"https://codalus.dev/(?<file>assets/screenshots/[^\"]+)\"");
+            Assert.True(og.Success, $"no og:image on /{path}");
+            Assert.True(File.Exists(Path.Combine(s_repoRoot, "website", "wwwroot", og.Groups["file"].Value)), $"/{path}'s preview {og.Groups["file"].Value} doesn't exist");
+            Assert.Contains($"<meta name=\"twitter:image\" content=\"https://codalus.dev/{og.Groups["file"].Value}\"", html, StringComparison.Ordinal);
+            Assert.Single(Regex.Matches(html, "property=\"og:image\""));
+            images.Add(og.Groups["file"].Value);
+        }
+
+        Assert.True(images.Count >= 4, string.Join(", ", images)); // not one image for every page
+
+        var debugging = await Get(options, "docs/debugging/");
+        var crumbs = Regex.Matches(debugging, "<script type=\"application/ld\\+json\">(?<json>.*?)</script>", RegexOptions.Singleline)
+            .Select(m => JsonElement.Parse(m.Groups["json"].Value)).Single(j => j.GetProperty("@type").GetString() == "BreadcrumbList");
+        Assert.Equal(
+            ["https://codalus.dev/", "https://codalus.dev/docs/", "https://codalus.dev/docs/debugging/"],
+            crumbs.GetProperty("itemListElement").EnumerateArray().Select(i => i.GetProperty("item").GetString()));
     }
 
     [Fact]

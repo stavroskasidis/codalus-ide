@@ -210,7 +210,7 @@ Patterns the views use (M34h):
 
 ### Menus
 
-One look for every menu, context menu and drop-down's menu (the maintainer's 0.5 review, as Visual Studio's): 24 px rows, the 16 px icon column kept on every entry so text starts at the same place in every menu (a check or radio mark takes the icon's place), the shortcut on the right in muted text, separators that start under the text, and a small chevron on a submenu (ShellStyles.axaml).
+One look for every menu, context menu and drop-down's menu (the maintainer's 0.5 review, as the classic IDE's): 24 px rows, the 16 px icon column kept on every entry so text starts at the same place in every menu (a check or radio mark takes the icon's place), the shortcut on the right in muted text, separators that start under the text, and a small chevron on a submenu (ShellStyles.axaml).
 
 - An entry of the command registry (`menus` in a manifest, `MenuItemRule`) gets its icon from `CommandIcons` and its shortcut from the key bindings (`MenuBuilder`).
 - A view's own entry has an icon too: in XAML `<MenuItem Header="{l:T …}" controls:MenuEntry.Icon="compare" …/>`, or `controls:MenuEntry.CommandIcon="git.merge"` for the icon the menus give a command; in code `MenuEntry.Create(title, icon, command, keys: "Delete", click: …)`, `MenuEntry.Submenu` and `MenuEntry.Caption` for a muted line naming the entries under it. A check or radio entry is a `MenuItem` with its `ToggleType` and no icon.
@@ -282,9 +282,9 @@ Sizes and shapes:
 
 ## Icons
 
-**The rule (the maintainer's, 2026-10-13): every icon is colored, in the Visual Studio palette.** The palette is the
-`Shell.Icon.Blue`, `Green`, `Red`, `Orange`, `Purple`, `Yellow` and `Folder` tokens in `Theming/Tokens.axaml`: Visual
-Studio's image colors per theme (light `#00539C`, `#388A34`, `#A1260D`, `#B26B12`, `#652D90`, `#8A6400`, `#8A6320`;
+**The rule (the maintainer's, 2026-10-13): every icon is colored, in the classic IDE's palette.** The palette is the
+`Shell.Icon.Blue`, `Green`, `Red`, `Orange`, `Purple`, `Yellow` and `Folder` tokens in `Theming/Tokens.axaml`: the
+classic IDE's image colors per theme (light `#00539C`, `#388A34`, `#A1260D`, `#B26B12`, `#652D90`, `#8A6400`, `#8A6320`;
 dark `#75BEFF`, `#89D185`, `#F48771`, `#E8AB53`, `#B180D7`, `#FFCC00`, `#DCB67A`), each at least 3:1 against menus,
 toolbars and panels. Command families are palette colors (run and tests green, stop red, save and navigation blue,
 open folder tan, build purple, Git orange). Every icon kind has its color in `CommandIcons` (`s_kindColors`: blue for
@@ -292,7 +292,7 @@ windows, navigation and general actions, green for new, add and run, red for clo
 warnings, locks and databases, orange for Git and history, purple for build and extensions, tan for folders); an
 `Icon` that nothing else colors takes its kind's color, so a new kind must be added there (`IconColorTests` fails
 otherwise, and `PolishTests` for a kind a view binds at run time). File, folder and project icons take the palette color nearest each of their fills by hue, folders tan;
-gray fills (outlines, pages) stay gray, as Visual Studio's do. Only chrome glyphs (chevrons, carets) stay in the text
+gray fills (outlines, pages) stay gray, as the classic IDE's do. Only chrome glyphs (chevrons, carets) stay in the text
 color, and High Contrast draws every icon in the foreground.
 
 - **Commands and tool windows:** Fluent UI System Icons (Microsoft, MIT), 16 px regular. Add the file name to `src/Codalus.Shell/Icons/fluent-icons.txt`, run `eng/get-fluent-icons.sh`, commit the SVG, and map our name to it in `IconSet` (`Controls/Icon.cs`). A few small glyphs (chevrons, zoom, fit) are 16×16 stroke drawings in the same file.

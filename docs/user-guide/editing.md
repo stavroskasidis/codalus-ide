@@ -83,7 +83,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 | Type Hierarchy | (Edit menu, palette) | Base and derived types, in the Hierarchy window. |
 | Go To All (Code Search) | `Ctrl+T`, `Ctrl+,` | Files, types, members and text, with a live preview ([Code Search](#code-search), below). Go To File, Type, Member and Text (`Ctrl+1` then `F`, `T`, `M` or `X`) open it on that filter. |
 | Find in Files, Replace in Files | `Ctrl+Shift+F`, `Ctrl+Shift+H` | The Find and Replace window, below. |
-| Navigate Back and Forward | `Ctrl+-`, `Ctrl+Shift+-` | |
+| Navigate Back and Forward | `Ctrl+-`, `Ctrl+Shift+-`, the mouse's back and forward buttons | The places you were, as in the classic IDE: where a jump (Go to Definition, a search result, a bookmark) started, the document you left for another, and where the caret was before a move of more than ten lines. The toolbar's arrows do the same. |
 | Go to Last Edit Location | `Ctrl+Shift+Backspace` | |
 | Next and Previous Problem | `F8`, `Shift+F8` | Errors and warnings in the document, with the message in the status bar. |
 | Help on Symbol | `F1`, `Shift+F1` | The API reference page of a framework symbol, or the package's site. |
@@ -97,7 +97,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 
 ## Code Search
 
-`Ctrl+T` or `Ctrl+,` (Edit → Go To → Go To All) opens **Code Search**, a window over the editor under the title row. It works like Visual Studio's:
+`Ctrl+T` or `Ctrl+,` (Edit → Go To → Go To All) opens **Code Search**, a window over the editor under the title row. It works like the classic IDE's:
 
 - **What it finds**: the solution's files by name (or by path when you type a `/`), its types and members, the symbols of every other language service that offers them (F#, XAML names through the C# service, the LSP languages), and lines of text (Find in Files' engine, for three characters or more; the setting **Code Search → Text Results** sets how many, `0` turns them off). Typing `PSF` finds `ProcessShippingFee`: the capitals of camel-case names, word starts, then any characters in order. The matched characters are bold.
 - **Filters**: the chips under the box, **all**, **files (f:)**, **types (t:)**, **members (m:)** and **text (x:)**, or the same prefixes typed first (`t:Order`). `Alt` and the chip's letter picks one. `:42` (or `:42:7`) goes to a line of the current document.
@@ -167,7 +167,7 @@ Language services from plugins provide the outline, navigation bar, sticky scrol
 - **Surround With** (`Ctrl+K Ctrl+S`, or `Ctrl+K Ctrl+Shift+S` in either keyboard scheme) wraps the selection (`if`, `try`, `#region`, `using`…).
 - **Configure User Snippets** opens your snippets for the current language, in VS Code's JSON format. Yours replace built-in snippets with the same name.
 - **Tools → Code Snippets Manager…** (`Ctrl+K Ctrl+B`) lists every language's snippets, built in, from plugins and yours, with their prefixes and bodies. **Copy to Your Snippets** makes a snippet yours to change, **Remove** deletes one of yours, and **Open Your Snippets** and **Import .snippet Files…** are there too.
-- **Import Snippets (.snippet)…** converts Visual Studio `.snippet` files into your snippets.
+- **Import Snippets (.snippet)…** converts the classic IDE's `.snippet` files into your snippets.
 - Plugins can contribute snippets ([plugins.md](../plugins.md#snippets)).
 
 ## Refactorings that ask first

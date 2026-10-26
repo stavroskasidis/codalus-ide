@@ -2,6 +2,10 @@
 
 Codalus IDE: a .NET IDE built on Avalonia, shipped as a Native AOT shell that supervises out-of-process hosts. Milestone notes are in `docs/checkpoints/`, the plan in `docs/roadmap.md`, and every design decision in `docs/adr/`. Read the ADR and checkpoint of an area before changing it; this file holds only the rules and where to look.
 
+## Before building
+
+- When asked for a new feature, a significant change, a refactor or a design decision and the request leaves real choices open (behavior, scope, protocol or plugin-API shape, UX, edge cases), use skill `grill-me` (`.claude/skills/grill-me/`) before writing code or a plan: one multiple-choice question at a time, answering from the code, ADRs and checkpoints yourself where they settle it. Skip it for small, clear changes; always use it when the user says "grill me" or asks to stress-test a plan.
+
 ## Build, test, run
 
 ```bash
@@ -23,7 +27,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 |---|---|
 | Shell (UI, views, `ShellHost.<Feature>.cs`) | `src/Codalus.Shell` |
 | Services behind the UI | `src/Codalus.Workbench/<Area>/` |
-| Hosts (build, C# language, markup, debug, plugin, data, diagnostics, T4, REPL, remote server) | `src/Codalus.*.Host`, `src/Codalus.Remote.Server` |
+| Hosts (build, C# language, markup, debug, plugin, data, diagnostics, T4, REPL, remote server, WPF previewer, WinForms designer) | `src/Codalus.*.Host`, `src/Codalus.Remote.Server`, `src/Codalus.Previewer.Wpf`, `src/Codalus.WinForms.Designer` |
 | Wire protocols | `docs/*-protocol.md`, `docs/protocol.md` (LSP plus `codalus/` extensions) |
 | Plugin API and built-in plugins | `src/Codalus.Plugins.Abstractions`, `src/Plugins/`, `docs/plugins.md` |
 | Fixtures | `samples/` (standalone; they don't inherit the repo's build settings) |
@@ -56,15 +60,15 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 
 ## UI rules
 
-- The product is "Codalus IDE" ("Codalus" short, CLI `codalus`). Never use "Visual Studio" in UI strings, setting values or theme names. ("Daedalus Studio" is the pre-0.2.0 name, kept only in old ADRs and checkpoints.)
-- Every icon is colored in the Visual Studio palette (`docs/ui-guidelines.md`): new icon kinds get a color in `CommandIcons.s_kindColors`. Icons are compiled at build time from committed SVGs (`eng/get-*-icons.sh`, `eng/icons/`); never parse SVG at runtime.
+- The product is "Codalus IDE" ("Codalus" short, CLI `codalus`). Never write the classic IDE's product name, or its two-letter abbreviation, anywhere in the repository's current files (UI strings, setting values, theme names, code, comments, docs, the website): write "the classic IDE" ("Classic IDE" in a heading or a name). `ProductNameTests` (`tests/Codalus.Workbench.Tests`) checks every tracked file and lists the exceptions: the `.sln` format's own text, `THIRD-PARTY-NOTICES.md`, and functional strings (install paths, other tools' theme names); `Microsoft.VisualStudio.*` package IDs and VS Code are other names. ("Daedalus Studio" is the pre-0.2.0 name, kept only in old ADRs and checkpoints.)
+- Every icon is colored in the classic IDE's palette (`docs/ui-guidelines.md`): new icon kinds get a color in `CommandIcons.s_kindColors`. Icons are compiled at build time from committed SVGs (`eng/get-*-icons.sh`, `eng/icons/`); never parse SVG at runtime.
 - UI text is localized (`docs/translating.md`); views use `{l:T key}`.
 
 ## Website
 
 `website/` is a static-SSR Blazor app exported to GitHub Pages (`--export <dir>` fails on broken links). Links are relative to the site, never rooted; in-page links carry their path (`docs/git/#stash`); page links end with `/`.
 
-**Keep the website up to date** in the same change as anything users can see: Features page (and Home for headlines), the user guide page, fresh screenshots from the smoke test (`website/wwwroot/assets/screenshots/`), and the Download page. Run `tests/Codalus.Website.Tests` and the export before pushing. Only `master` deploys.
+**Keep the website up to date** in the same change as anything users can see: Features page (and Home for headlines), the user guide page, fresh screenshots from the smoke test (`website/wwwroot/assets/screenshots/`), and the Download page. Run `tests/Codalus.Website.Tests` and the export before pushing; `eng/lighthouse.sh <export>` (also run by `pages.yml`) needs 95+ in every Lighthouse category on every page. Only `master` deploys.
 
 ## CI and releases
 

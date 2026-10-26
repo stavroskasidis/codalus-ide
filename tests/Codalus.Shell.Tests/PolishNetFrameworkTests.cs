@@ -12,7 +12,7 @@ namespace Codalus.Shell.Tests;
 /// <summary>
 /// M34g on M43 (.NET Framework, ADR 0075 and 0076): the .NET Framework project UI (Solution Explorer's old-style and
 /// can't-build projects with the reason), Convert to SDK-Style's preview, the Error List entries of a project that needs
-/// Visual Studio's targets, Check Environment's .NET Framework rows, the desktop-CLR debugger's pieces (its stack frames,
+/// the classic IDE's targets, Check Environment's .NET Framework rows, the desktop-CLR debugger's pieces (its stack frames,
 /// labels and frames without user code, its modules' symbol status) and Attach to Process's picker of .NET Framework
 /// processes, each in its states at its minimum size in all sixteen themes, with the same checks as the other M34g views.
 /// New Project's .NET Framework rows and their framework labels are the wizard's since 0.6.0 (ADR 0082), checked with
@@ -74,8 +74,8 @@ public partial class PolishTests
             }
         }
 
-        // Solution Explorer at 280 px: the old-style project selected ("(non-SDK-style)"), the project that needs Visual
-        // Studio's targets with its reason as its first child, the reason selected, then the project selected.
+        // Solution Explorer at 280 px: the old-style project selected ("(non-SDK-style)"), the project that needs the
+        // classic IDE's targets with its reason as its first child, the reason selected, then the project selected.
         var explorer = f.Shell.Explorer;
         await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Id == "p:" + legacy && r.Detail is not null), seconds: 60);
         var explorerTool = f.Shell.Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false)!;

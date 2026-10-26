@@ -82,7 +82,7 @@ public static class SolutionTree
     private static readonly StringComparer s_names = StringComparer.OrdinalIgnoreCase;
 
     /// <summary>
-    /// The order of names in the tree, as Visual Studio's: case-insensitive with letters compared in lower case, so
+    /// The order of names in the tree, as the classic IDE's: case-insensitive with letters compared in lower case, so
     /// punctuation such as <c>_</c> comes before them (<c>_Imports.razor</c> before <c>App.razor</c>; an ordinal
     /// case-insensitive comparison upper-cases, which puts it after).
     /// </summary>
@@ -114,7 +114,7 @@ public static class SolutionTree
         public override int GetHashCode(string obj) => obj.GetHashCode(StringComparison.Ordinal);
     }
 
-    /// <summary>A project's folders that Visual Studio lists before the others, in this order.</summary>
+    /// <summary>A project's folders that the classic IDE lists before the others, in this order.</summary>
     private static readonly string[] s_projectFoldersFirst = ["Properties", "My Project", "wwwroot"];
 
     public static ExplorerNode Build(
@@ -272,7 +272,7 @@ public static class SolutionTree
 
         var dependencies = Dependencies(entry.Path, info, inputs);
 
-        // A non-SDK-style project (M43a) says so; one that needs Visual Studio's targets says why it doesn't build.
+        // A non-SDK-style project (M43a) says so; one that needs the classic IDE's targets says why it doesn't build.
         ExplorerNode[] cannotBuild = info.CannotBuildReason is { } reason
             ? [new ExplorerNode(node.Id + "|cannotBuild", ExplorerNodeKind.Message, reason) { Icon = "warning", IsWarning = true, ProjectPath = entry.Path }]
             : [];
@@ -432,7 +432,7 @@ public static class SolutionTree
     }
 
     /// <summary>
-    /// The sibling a file nests under, or null. <c>DependentUpon</c> wins; then the rules Visual Studio applies by
+    /// The sibling a file nests under, or null. <c>DependentUpon</c> wins; then the rules the classic IDE applies by
     /// default: an added extension (<c>View.xaml.cs</c> → <c>View.xaml</c>) and a path segment
     /// (<c>appsettings.Development.json</c> → <c>appsettings.json</c>, <c>Form.Designer.cs</c> → <c>Form.cs</c>).
     /// </summary>

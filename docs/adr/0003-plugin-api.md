@@ -22,7 +22,7 @@ Constraints:
 
 | Option | Verdict |
 |---|---|
-| In-process plugins (VS / MEF style) | Rejected. One faulty plugin takes the IDE down, and an AOT shell can't load arbitrary assemblies anyway. |
+| In-process plugins (the classic IDE / MEF style) | Rejected. One faulty plugin takes the IDE down, and an AOT shell can't load arbitrary assemblies anyway. |
 | One process per plugin | Strongest isolation, but each .NET host costs about 40–60 MB private, so 5 plugins would exceed the memory budget. Offered as an opt-in. |
 | **Shared plugin host processes, grouped by trust level, with an opt-in dedicated host** | **Chosen.** |
 | Plugin UI as arbitrary Avalonia controls rendered remotely | Rejected for v0. It needs a remote-UI protocol, which is complex, brittle across versions and hard to make accessible. Revisited in a later ADR, along with webviews (Avalonia 12 ships an open-source WebView). |
@@ -128,7 +128,7 @@ public interface IPluginContext
 - **Proposed APIs** live in `DaedalusStudio.Plugins.Abstractions.Proposed`. A plugin must set `"enableProposedApi": true` to use them, and they are only available in development builds (`--enable-proposed-api`).
 
 ### Trust and installation (v0)
-- Plugins are **trusted code**, as in VS and VS Code: there is no sandbox inside the host process. Out-of-process isolation protects the UI's stability, not the user's security.
+- Plugins are **trusted code**, as in the classic IDE and VS Code: there is no sandbox inside the host process. Out-of-process isolation protects the UI's stability, not the user's security.
 - Plugins are loaded from:
   - built-ins next to the shell (`plugins/`)
   - the user plugin directory (`<data>/plugins/<id>/`)

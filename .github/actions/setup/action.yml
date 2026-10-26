@@ -38,13 +38,13 @@ runs:
     - if: inputs.extra-sdks != 'true'
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 11.0.100-rc.2.26504.105
+        dotnet-version: 11.0.100-rc.3.26522.148
     - if: inputs.extra-sdks == 'true'
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: |
           10.0.x
-          11.0.100-rc.2.26504.105
+          11.0.100-rc.3.26522.148
     - if: inputs.nuget-cache == 'true'
       id: restore-nuget
       uses: actions/cache/restore@v4

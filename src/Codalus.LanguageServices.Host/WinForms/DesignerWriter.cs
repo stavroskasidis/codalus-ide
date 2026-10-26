@@ -8,7 +8,7 @@ namespace Codalus.LanguageServices.Host.WinForms;
 
 /// <summary>
 /// Applies the designer's changes to a designer file's text (M41a, ADR 0073) as the smallest edits that make the code
-/// say the new thing, placed where Visual Studio's designer puts them: a property's assignment in its component's
+/// say the new thing, placed where the classic IDE's designer puts them: a property's assignment in its component's
 /// section in alphabetical order (events after the properties), a new component's field after the last one, its
 /// creation after the last creation, its section before the next component's (the root's last), and its
 /// <c>Controls.Add</c> first in its parent's (new controls go to the front). Nothing else in the file moves, so an
@@ -20,7 +20,7 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
 {
     private const string EventKeyPrefix = "￿";
 
-    /// <summary>An <c>ImageList</c>'s <c>Images.SetKeyName</c> calls: after its properties, before its events, as Visual Studio writes them.</summary>
+    /// <summary>An <c>ImageList</c>'s <c>Images.SetKeyName</c> calls: after its properties, before its events, as the classic IDE writes them.</summary>
     private const string LastKeyPrefix = "￾";
 
     /// <summary>Applies <paramref name="edits"/> in order and returns the new text.</summary>
@@ -177,7 +177,7 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
         statement is { Kind: DesignerStatementKinds.Call, Member: { } member, Arguments: [{ Kind: DesignerValueKinds.Reference }, ..] } && member.StartsWith("Set", StringComparison.Ordinal)
         && !member.Contains('.', StringComparison.Ordinal) && statement.Arguments[0].Value != statement.Target;
 
-    /// <summary>Where a statement sorts in its section: by property (Visual Studio sorts them by name), events after them.</summary>
+    /// <summary>Where a statement sorts in its section: by property (the classic IDE sorts them by name), events after them.</summary>
     private static string Key(DesignerStatement statement) => statement.Kind switch
     {
         DesignerStatementKinds.ApplyResources => string.Empty,
@@ -423,7 +423,7 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
 
     /// <summary>
     /// Adds <c>target.Begin()</c> before the root's <c>SuspendLayout()</c> (or after the creations) and
-    /// <c>target.End()</c> before the root's <c>ResumeLayout(false)</c> (or at the end), as Visual Studio orders them.
+    /// <c>target.End()</c> before the root's <c>ResumeLayout(false)</c> (or at the end), as the classic IDE orders them.
     /// </summary>
     private static void AddLayoutPair(DesignerSource source, List<TextChange> changes, string target, string begin, string end, bool perform)
     {
@@ -782,7 +782,7 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
         {
             InsertCode(source, changes, edit.Component, Key(statements[0]), code);
 
-            // A tool strip's first items: its layout calls, as Visual Studio writes them (a context menu's without PerformLayout).
+            // A tool strip's first items: its layout calls, as the classic IDE writes them (a context menu's without PerformLayout).
             var type = source.Model.Components.FirstOrDefault(c => c.Name == edit.Component)?.Type ?? string.Empty;
             if (property == "Items" && (type.EndsWith("Strip", StringComparison.Ordinal) || type.EndsWith(".BindingNavigator", StringComparison.Ordinal))
                 && !source.Statements.Any(s => s.Statement is { Kind: DesignerStatementKinds.Layout, Member: "SuspendLayout" } layout && layout.Target == edit.Component))
@@ -792,7 +792,7 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
         }
     }
 
-    /// <summary><c>Type name = value;</c> with the locals before the components are created (after <c>components</c> and <c>resources</c>), as Visual Studio declares a <c>ListViewItem</c>.</summary>
+    /// <summary><c>Type name = value;</c> with the locals before the components are created (after <c>components</c> and <c>resources</c>), as the classic IDE declares a <c>ListViewItem</c>.</summary>
     private static void AddLocal(DesignerSource source, List<TextChange> changes, DesignerEdit edit)
     {
         var value = edit.Value ?? throw new ArgumentException("addLocal needs a value.", nameof(edit));

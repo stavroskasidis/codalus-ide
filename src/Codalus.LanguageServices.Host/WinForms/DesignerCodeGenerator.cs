@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace Codalus.LanguageServices.Host.WinForms;
 
 /// <summary>
-/// Writes designer statements and values as C# (M41a, ADR 0073), in the style of the file: Visual Studio for .NET
+/// Writes designer statements and values as C# (M41a, ADR 0073), in the style of the file: the classic IDE for .NET
 /// (no <c>this.</c>, types shortened through the file's usings and namespace, <c>A.X | A.Y</c>, method groups) or for
 /// .NET Framework (<c>this.</c>, full type names, CodeDOM's parenthesized casts, <c>new System.EventHandler(this.M)</c>).
 /// </summary>

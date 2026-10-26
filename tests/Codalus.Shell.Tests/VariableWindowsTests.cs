@@ -131,7 +131,10 @@ public sealed class VariableWindowsTests
         await ShellFixture.PumpUntil(() => watch.Editor.Box is { IsFocused: true });
         watch.Editor.Box!.Text = "7";
         s.F.Press(Key.Enter);
-        await ShellFixture.PumpUntil(() => list.Rows[0].Node.Value == "7");
+        await ShellFixture.PumpUntil(() => list.Rows[0].Node.Value == "7", describe: () =>
+            $"value {list.Rows[0].Node.Value}, same node {ReferenceEquals(list.Rows[0].Node, watch.Item.Node)}, editing {watch.Editor.IsEditing}, error {watch.Editor.Error}, " +
+            $"box focused {watch.Editor.Box?.IsFocused}, box text {watch.Editor.Box?.Text}, focus on {TopLevel.GetTopLevel(list)?.FocusManager?.GetFocusedElement()}, " +
+            $"debugger {s.F.Shell.Debugger.State}, row attached {watch.IsAttachedToVisualTree()}");
         Assert.Equal("7", (await s.F.Shell.Debugger.EvaluateAsync("app.Count", "watch", TestContext.Current.CancellationToken)).Result);
 
         // Delete removes a watch.

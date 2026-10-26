@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Controls;
@@ -136,6 +137,44 @@ public class ChromeTests
         await f.Shell.OpenFileAsync(program);
         await f.RunAsync("explorer.syncWithActiveDocument");
         await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == program);
+
+        // Synced again with the row already selected but scrolled away, it comes back into view at once (M50): the
+        // list scrolled only when its selection changed.
+        var revealed = new List<string>();
+        explorer.RevealRequested += (_, row) => revealed.Add(row.Node.Path ?? row.Id);
+        var list = f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().Single().GetVisualDescendants().OfType<ListBox>().First();
+        f.Window.Height = 360;
+        ShellFixture.Pump();
+        var scroller = list.GetVisualDescendants().OfType<ScrollViewer>().First();
+        bool InView(ExplorerRowViewModel row) => list.ContainerFromItem(row) is Control { IsEffectivelyVisible: true } c
+            && c.TranslatePoint(default, scroller) is { } at && at.Y >= -1 && at.Y + c.Bounds.Height <= scroller.Viewport.Height + 1;
+        if (scroller.Extent.Height > scroller.Viewport.Height + 40)
+        {
+            scroller.Offset = scroller.Offset.WithY(explorer.Rows.IndexOf(explorer.Selected!) < explorer.Rows.Count / 2 ? scroller.Extent.Height : 0);
+            ShellFixture.Pump();
+            Assert.False(InView(explorer.Selected!), "Program.cs is still in view");
+        }
+
+        await f.RunAsync("explorer.syncWithActiveDocument");
+        ShellFixture.Pump();
+        Assert.Equal([program], revealed);
+        Assert.True(InView(explorer.Selected!), "Sync with Active Document left Program.cs out of view");
+        f.Window.Height = 800;
+
+        // Track Active Item (M50): off by default; on, the explorer follows the active document.
+        var greeter = Path.Combine(Path.GetDirectoryName(solution)!, "src", "Core", "Greeter.cs");
+        Assert.False(explorer.TrackActiveItem);
+        await f.Shell.OpenFileAsync(greeter);
+        ShellFixture.Pump();
+        Assert.Equal(program, explorer.Selected?.Node.Path);
+        var toggle = f.Window.GetVisualDescendants().OfType<ToggleButton>().Single(b => AutomationProperties.GetName(b) == "Track Active Item");
+        toggle.IsChecked = true;
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetBoolean(SolutionExplorerViewModel.TrackActiveItemSetting, false));
+        await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == greeter); // turning it on syncs
+        await f.Shell.OpenFileAsync(program);
+        await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == program);
+        await f.Shell.Workbench.Settings.SetAsync(SolutionExplorerViewModel.TrackActiveItemSetting, false, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => toggle.IsChecked == false);
 
         // Home collapses back to the projects.
         explorer.Home();

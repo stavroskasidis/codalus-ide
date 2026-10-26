@@ -9,10 +9,17 @@
     <meta property="og:title" content="@FullTitle" />
     <meta property="og:description" content="@Description" />
     <meta property="og:url" content="@Canonical" />
+    <meta property="og:image" content="@ImageUrl" />
+    <meta property="og:image:alt" content="@ImageAlt" />
+    <meta name="twitter:image" content="@ImageUrl" />
     <link rel="canonical" href="@Canonical" />
     @if (Software)
     {
         @((MarkupString)$"<script type=\"application/ld+json\">{SoftwareJson()}</script>")
+    }
+    @if (Breadcrumbs is { Count: > 0 })
+    {
+        @((MarkupString)$"<script type=\"application/ld+json\">{BreadcrumbJson()}</script>")
     }
 </HeadContent>
 
@@ -26,6 +33,17 @@
 
     /// <summary>Describe the product to search engines too: schema.org's <c>SoftwareApplication</c> as JSON-LD.</summary>
     [Parameter] public bool Software { get; set; }
+
+    /// <summary>The page's preview image for social sites: a file in <c>assets/screenshots/</c> (M50).</summary>
+    [Parameter] public string Image { get; set; } = "editor-dark.png";
+
+    /// <summary>What the preview image shows, for readers that don't load it.</summary>
+    [Parameter] public string ImageAlt { get; set; } = "Codalus IDE's C# editor in a dark theme";
+
+    /// <summary>The page's place in the site, from the top (name and site-relative address): schema.org's <c>BreadcrumbList</c>.</summary>
+    [Parameter] public IReadOnlyList<(string Name, string Url)>? Breadcrumbs { get; set; }
+
+    private string ImageUrl => $"{Site.BaseUrl}assets/screenshots/{Image}";
 
     private string FullTitle => Exact ? Title : $"{Title} · Codalus IDE";
 
@@ -58,5 +76,22 @@
         }
 
         return app.ToJsonString();
+    }
+
+    private string BreadcrumbJson()
+    {
+        var items = new JsonArray();
+        for (var i = 0; i < Breadcrumbs!.Count; i++)
+        {
+            items.Add(new JsonObject
+            {
+                ["@type"] = "ListItem",
+                ["position"] = i + 1,
+                ["name"] = Breadcrumbs[i].Name,
+                ["item"] = Site.BaseUrl + Breadcrumbs[i].Url,
+            });
+        }
+
+        return new JsonObject { ["@context"] = "https://schema.org", ["@type"] = "BreadcrumbList", ["itemListElement"] = items }.ToJsonString();
     }
 }

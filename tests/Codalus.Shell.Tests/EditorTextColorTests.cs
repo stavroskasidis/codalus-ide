@@ -7,9 +7,9 @@ using Codalus.Shell.Theming;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// The editor's plain text as bright as Visual Studio 2022's (the maintainer's report: namespaces, identifiers,
-/// punctuation and Razor's markup text were gray next to Visual Studio's Dark theme). Each classification's rendered
-/// color is read from the editor's visual lines and compared with Visual Studio's value; all differences are reported
+/// The editor's plain text as bright as the classic IDE's (the maintainer's report: namespaces, identifiers,
+/// punctuation and Razor's markup text were gray next to the classic IDE's Dark theme). Each classification's rendered
+/// color is read from the editor's visual lines and compared with the classic IDE's value; all differences are reported
 /// at once.
 /// </summary>
 public sealed class EditorTextColorTests
@@ -69,7 +69,7 @@ public sealed class EditorTextColorTests
         return (brush ?? editor.Editor.Foreground) is ISolidColorBrush solid ? Color.FromArgb((byte)(solid.Color.A * solid.Opacity), solid.Color.R, solid.Color.G, solid.Color.B) : null;
     }
 
-    /// <summary>Every probe whose color differs from Visual Studio's, as one message (empty when all match).</summary>
+    /// <summary>Every probe whose color differs from the classic IDE's, as one message (empty when all match).</summary>
     private static string Differences(CodeEditorController editor, IEnumerable<(string Name, string Marker, int Delta, uint Expected)> probes) =>
         string.Join(Environment.NewLine, probes
             .Select(p => (p.Name, Expected: Color.FromUInt32(p.Expected), Actual: ColorAt(editor, p.Marker, p.Delta)))
@@ -88,7 +88,7 @@ public sealed class EditorTextColorTests
         var editor = document!.Controller!;
         await ShellFixture.PumpUntil(() => editor.Colorizer.HasTokens && ColorAt(editor, "serviceProvider,") == Color.FromUInt32(0xFF9CDCFE), seconds: 120);
 
-        // Visual Studio 2022's Dark theme: Roslyn's color scheme (ColorSchemes/VisualStudio2019.xml) over the editor's
+        // The classic IDE's Dark theme: Roslyn's color scheme (ColorSchemes/VisualStudio2019.xml) over the editor's
         // plain text, #DCDCDC; namespaces, fields, properties and unresolved names have no color of their own.
         Assert.Equal(Color.FromUInt32(0xFFDCDCDC), ((ISolidColorBrush)editor.Editor.Foreground!).Color);
         var differences = Differences(editor,
@@ -118,7 +118,7 @@ public sealed class EditorTextColorTests
         NavigationDepthTests.Screenshot(f, "editor-text-csharp-dark");
         Assert.True(differences.Length == 0, differences);
 
-        // Classic Light (and Blue, which shares its editor colors): Visual Studio's Light, on black plain text.
+        // Classic Light (and Blue, which shares its editor colors): the classic IDE's Light, on black plain text.
         await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, "light", Workbench.Settings.SettingScope.User, CancellationToken.None);
         await ShellFixture.PumpUntil(() => ColorAt(editor, "serviceProvider,") != Color.FromUInt32(0xFF9CDCFE), seconds: 30);
         Assert.Equal(Color.FromUInt32(0xFF000000), ((ISolidColorBrush)editor.Editor.Foreground!).Color);

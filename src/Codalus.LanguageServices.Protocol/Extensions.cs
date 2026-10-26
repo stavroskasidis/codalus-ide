@@ -365,7 +365,7 @@ public sealed record SyntaxTreeResult(SyntaxNodeItem Root, SyntaxSemantics? Sema
 public sealed record CodeMetricsParams(TextDocumentIdentifier? TextDocument);
 
 /// <summary>
-/// The metrics of a project, namespace, type or member (<see cref="Kind"/>), as Visual Studio's Code Metrics reports them:
+/// The metrics of a project, namespace, type or member (<see cref="Kind"/>), as the classic IDE's Code Metrics reports them:
 /// the maintainability index (0–100), the cyclomatic complexity, the depth of inheritance, the class coupling, and the
 /// lines of source and executable code.
 /// </summary>
@@ -450,7 +450,7 @@ public sealed record DesignerFileText(string Path, string Text);
 /// <summary>
 /// The designer files of a class (<see cref="CodeFile"/> and <see cref="DesignerFile"/>) and, when InitializeComponent
 /// can be read, its <see cref="Model"/>. Otherwise <see cref="Problem"/> says why, at <see cref="ProblemLine"/>
-/// (zero-based) of the designer file when it's a statement: the file opens as code, as Visual Studio does.
+/// (zero-based) of the designer file when it's a statement: the file opens as code, as the classic IDE does.
 /// <see cref="IsDesignable"/> is false when the class isn't a form, a user control or another control.
 /// </summary>
 public sealed record WinFormsReadResult(string? CodeFile, string? DesignerFile, bool IsDesignable, DesignerModel? Model, string? Problem, int? ProblemLine)
@@ -502,12 +502,12 @@ public static class DesignerEditKinds
     /// <summary>Hooks <see cref="DesignerEdit.Event"/> to <see cref="DesignerEdit.Handler"/>, generating the handler in the code file when it doesn't exist.</summary>
     public const string AddEvent = "addEvent";
 
-    /// <summary>Unhooks <see cref="DesignerEdit.Event"/> (the handler method stays, as in Visual Studio).</summary>
+    /// <summary>Unhooks <see cref="DesignerEdit.Event"/> (the handler method stays, as in the classic IDE).</summary>
     public const string RemoveEvent = "removeEvent";
 
     /// <summary>
     /// Moves a control's <c>Controls.Add</c> to <see cref="DesignerEdit.Index"/> among its parent's (M41b): the z-order,
-    /// front first, and a tab page's position, as Visual Studio writes them. The statement's text moves as it is.
+    /// front first, and a tab page's position, as the classic IDE writes them. The statement's text moves as it is.
     /// </summary>
     public const string SetChildIndex = "setChildIndex";
 
@@ -576,7 +576,7 @@ public sealed record DesignerEdit
 
     public int? Index { get; init; }
 
-    /// <summary>The new component's properties in the order they are written (the writer sorts them as Visual Studio does).</summary>
+    /// <summary>The new component's properties in the order they are written (the writer sorts them as the classic IDE does).</summary>
     public DesignerPropertyValue[]? Properties { get; init; }
 
     /// <summary>The new component implements <c>ISupportInitialize</c> (BeginInit and EndInit around the statements).</summary>

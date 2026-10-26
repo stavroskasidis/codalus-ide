@@ -11,7 +11,7 @@ using RoslynDiagnostic = Microsoft.CodeAnalysis.Diagnostic;
 namespace Codalus.LanguageServices.Host.Features;
 
 /// <summary>
-/// Code Cleanup (M12b, Visual Studio's Ctrl+K Ctrl+E): for each diagnostic id of the profile, the code fix applied to
+/// Code Cleanup (M12b, the classic IDE's Ctrl+K Ctrl+E): for each diagnostic id of the profile, the code fix applied to
 /// the whole document (its Fix All provider, or one fix at a time), then sorted usings and Format Document. The fixes
 /// follow the project's .editorconfig preferences, because the IDE analyzers report what to change.
 /// </summary>

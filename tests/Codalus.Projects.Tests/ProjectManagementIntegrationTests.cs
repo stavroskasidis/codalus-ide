@@ -157,7 +157,7 @@ public sealed class ProjectManagementIntegrationTests : IAsyncLifetime
         var nullable = (await _management.GetPropertiesAsync(App, ["Nullable"], null, Timeout())).Properties.Single();
         Assert.Equal(("enable", PropertyOrigins.Import), (nullable.Value, nullable.Origin));
 
-        // Visual Studio's 'Configuration|Platform' groups count as that configuration's scope.
+        // The classic IDE's 'Configuration|Platform' groups count as that configuration's scope.
         File.WriteAllText(Core, Text(Core).Replace("</Project>", "  <PropertyGroup Condition=\" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' \">\n    <DebugType>none</DebugType>\n  </PropertyGroup>\n</Project>", StringComparison.Ordinal));
         Assert.True(await _management.SetPropertyAsync(Core, "DebugType", "portable", "Release", Timeout()));
         Assert.Contains("<DebugType>portable</DebugType>", File.ReadAllText(Core), StringComparison.Ordinal);

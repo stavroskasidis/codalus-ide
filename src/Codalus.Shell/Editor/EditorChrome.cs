@@ -542,7 +542,7 @@ public sealed class StickyScroll : Border
 }
 
 /// <summary>
-/// The overview ruler beside the scroll bar (Visual Studio's map mode, M12a): errors, warnings, Git changes,
+/// The overview ruler beside the scroll bar (the classic IDE's map mode, M12a): errors, warnings, Git changes,
 /// breakpoints, find results and the caret, positioned by line over the whole document, with the document's health at
 /// the top (click: next problem). Clicking elsewhere scrolls there.
 /// </summary>

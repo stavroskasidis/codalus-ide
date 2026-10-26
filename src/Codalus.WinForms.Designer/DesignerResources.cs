@@ -98,7 +98,7 @@ internal sealed class TextResourceManager : ComponentResourceManager
     }
 }
 
-/// <summary>Values as a <c>.resx</c> file stores them, written by Windows Forms' own resource writer with Visual Studio's type names.</summary>
+/// <summary>Values as a <c>.resx</c> file stores them, written by Windows Forms' own resource writer with the classic IDE's type names.</summary>
 internal static class ResourceValues
 {
     private const string DrawingIdentity = "System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a";
@@ -106,7 +106,7 @@ internal static class ResourceValues
     private const string CoreIdentity = "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
 
     /// <summary>
-    /// A type's name as Visual Studio's designer writes it in a <c>.resx</c>: the .NET Framework names of the framework's
+    /// A type's name as the classic IDE's designer writes it in a <c>.resx</c>: the .NET Framework names of the framework's
     /// assemblies (<c>System.Drawing.Point, System.Drawing, Version=4.0.0.0, …</c>), else the assembly's own.
     /// </summary>
     public static string TypeName(Type? type)

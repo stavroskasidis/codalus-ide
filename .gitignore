@@ -13,6 +13,9 @@ TestResults/
 .vscode/*
 !.vscode/extensions.json
 
+# npm: packages are restored from the committed lockfiles, never committed
+node_modules/
+
 # Benchmarks: third-party tools are downloaded, never committed
 benchmarks/tools/
 benchmarks/.work/

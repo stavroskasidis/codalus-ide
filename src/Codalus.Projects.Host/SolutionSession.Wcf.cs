@@ -10,7 +10,7 @@ namespace Codalus.Projects.Host;
 /// <summary>
 /// WCF service references (M42, ADR 0069): the user's own <c>dotnet-svcutil</c>, a local or global .NET tool, run as a
 /// child process in the project's folder, only in trusted solutions (it builds the project to reuse its types). The
-/// reference is written where and how Visual Studio writes it (<see cref="WcfConnectedServices"/>).
+/// reference is written where and how the classic IDE writes it (<see cref="WcfConnectedServices"/>).
 /// </summary>
 internal sealed partial class SolutionSession
 {
@@ -147,7 +147,7 @@ internal sealed partial class SolutionSession
 
     /// <summary>
     /// Runs svcutil for a new reference (<paramref name="addArguments"/>) or an update (its options written into the
-    /// reference's file first, then <c>--update</c>), then keeps Visual Studio's layout: svcutil's own options file becomes
+    /// reference's file first, then <c>--update</c>), then keeps the classic IDE's layout: svcutil's own options file becomes
     /// <c>ConnectedService.json</c>. A project file svcutil changed (the System.ServiceModel packages) is evaluated and restored.
     /// </summary>
     private async Task<WcfReferenceRunResult> RunReferenceAsync(string project, string folder, List<string>? addArguments, WcfReferenceParams parameters, bool isUpdate, CancellationToken cancellationToken)
@@ -187,7 +187,7 @@ internal sealed partial class SolutionSession
                 throw new InvalidOperationException($"dotnet-svcutil failed: {SvcutilFailure(output)}");
             }
 
-            // svcutil writes its own options file; a reference made here keeps Visual Studio's layout.
+            // svcutil writes its own options file; a reference made here keeps the classic IDE's layout.
             if (System.IO.Path.GetDirectoryName(folder) is { } parent && System.IO.Path.GetFileName(parent) == WcfConnectedServices.ServicesFolder)
             {
                 WcfConnectedServices.ConvertParams(folder);

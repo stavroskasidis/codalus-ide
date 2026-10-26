@@ -1,7 +1,7 @@
 namespace WinFormsApp
 {
     /// <summary>
-    /// A form as Visual Studio's designer writes it (the Windows Forms designer's fixture, M41a): common controls, nested
+    /// A form as the classic IDE's designer writes it (the Windows Forms designer's fixture, M41a): common controls, nested
     /// containers, events, an image from the form's resources and the app's user control.
     /// </summary>
     public partial class OrderForm : Form

@@ -10,13 +10,15 @@
     <meta name="theme-color" content="#0e0b17" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Codalus IDE" />
-    <meta property="og:image" content="@(Site.BaseUrl)assets/screenshots/editor-dark.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
     <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="assets/icon-256.png" />
     <link rel="preload" href="assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="assets/site.css" />
+    @* The screenshot viewers start on their first panel (M50: the others' images loaded before the page painted); without
+       script, which shows the tabs, every panel shows. *@
+    <noscript><style>[data-tabs] [role="tabpanel"][hidden] { display: block; }</style></noscript>
     <script src="assets/site.js" defer></script>
     <HeadOutlet />
 </head>

@@ -18,7 +18,7 @@ namespace Codalus.Interactive.Host;
 /// </summary>
 internal sealed class ReplSession
 {
-    /// <summary>What a new state imports, as the Visual Studio-style C# Interactive window does.</summary>
+    /// <summary>What a new state imports, as the classic IDE's C# Interactive window does.</summary>
     public static readonly string[] DefaultUsings =
         ["System", "System.IO", "System.Collections.Generic", "System.Linq", "System.Text", "System.Threading.Tasks"];
 

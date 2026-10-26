@@ -28,6 +28,25 @@ public sealed partial class MainWindow : Window, IShellWindow
     private PixelPoint _normalPosition;
     private Size _normalSize;
 
+    /// <summary>
+    /// The mouse's back and forward buttons (XButton1 and XButton2) are Navigate Backward and Forward anywhere in the
+    /// window (M50), as in the classic IDE: nothing handled them before.
+    /// </summary>
+    private void OnMouseNavigation(object? sender, PointerPressedEventArgs e)
+    {
+        var command = e.GetCurrentPoint(this).Properties.PointerUpdateKind switch
+        {
+            PointerUpdateKind.XButton1Pressed => "workbench.navigateBack",
+            PointerUpdateKind.XButton2Pressed => "workbench.navigateForward",
+            _ => null,
+        };
+        if (command is not null && _shell is { } shell)
+        {
+            shell.Run(command);
+            e.Handled = true;
+        }
+    }
+
     /// <summary>For the XAML runtime loader and designer; the shell attaches through the other constructor.</summary>
     public MainWindow() => InitializeComponent();
 
@@ -44,10 +63,28 @@ public sealed partial class MainWindow : Window, IShellWindow
         DataContext = shell;
         ApplyPlacement(shell.InitialPlacement);
         MenuBuilder.Attach(this, MenuBar, shell);
+        DockDropSizer.Attach(this, shell.Layout.Factory);
+
+        // Connect to <agent>'s view is made the first time it opens (M50): hidden, it still cost every start its controls
+        // (0.6.0 added it; macOS's idle memory and startup grew). IsOpen changes before the view model's Opened, which the
+        // view handles.
+        shell.ConnectAgent.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ViewModels.ConnectAgentViewModel.IsOpen) && shell.ConnectAgent.IsOpen && ConnectAgentLayer.Children.Count == 0)
+            {
+                ConnectAgentLayer.Children.Add(new ConnectAgentView
+                {
+                    DataContext = shell.ConnectAgent,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                });
+            }
+        };
         SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
+        AddHandler(PointerPressedEvent, OnMouseNavigation, RoutingStrategies.Tunnel, handledEventsToo: true);
         SwitcherLayer.PointerPressed += (_, e) =>
         {
             if (e.Source == SwitcherLayer)

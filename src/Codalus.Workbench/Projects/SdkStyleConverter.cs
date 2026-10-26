@@ -10,7 +10,7 @@ public sealed record SdkConversion(string ProjectPath, string ProjectText, IRead
 /// <summary>A file a conversion rewrites (<c>AssemblyInfo.cs</c> without the attributes the SDK now generates).</summary>
 public sealed record SdkConversionFile(string Path, string Text);
 
-/// <summary>Why a project can't be converted (already SDK-style, Visual Studio's web targets, not .NET Framework).</summary>
+/// <summary>Why a project can't be converted (already SDK-style, the classic IDE's web targets, not .NET Framework).</summary>
 public sealed class SdkConversionException(string message) : Exception(message);
 
 /// <summary>
@@ -39,13 +39,13 @@ public static partial class SdkStyleConverter
 
     private static readonly HashSet<string> s_wpfReferences = new(StringComparer.OrdinalIgnoreCase) { "PresentationCore", "PresentationFramework", "WindowsBase", "System.Xaml" };
 
-    /// <summary>Properties that say nothing in an SDK-style project (identity for Visual Studio, ClickOnce defaults, the SDK's own defaults).</summary>
+    /// <summary>Properties that say nothing in an SDK-style project (identity for the classic IDE, ClickOnce defaults, the SDK's own defaults).</summary>
     private static readonly HashSet<string> s_droppedProperties = new(StringComparer.OrdinalIgnoreCase)
     {
         "ProjectGuid", "ProjectTypeGuids", "FileAlignment", "AppDesignerFolder", "SchemaVersion", "ProductVersion", "NuGetPackageImportStamp",
         "TargetFrameworkVersion", "TargetFrameworkProfile", "TargetFrameworkIdentifier", "OldToolsVersion", "UpgradeBackupLocation", "FileUpgradeFlags",
         "SccProjectName", "SccLocalPath", "SccAuxPath", "SccProvider", "ProjectTypeGuid",
-        "VisualStudioVersion", "VSToolsPath", "ReferencePath", "IsCodedUITest", "TestProjectType", // Visual Studio's test project targets
+        "VisualStudioVersion", "VSToolsPath", "ReferencePath", "IsCodedUITest", "TestProjectType", // the classic IDE's test project targets
     };
 
     private static readonly HashSet<string> s_clickOnceProperties = new(StringComparer.OrdinalIgnoreCase)

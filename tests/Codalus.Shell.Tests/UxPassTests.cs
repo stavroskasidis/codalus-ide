@@ -101,7 +101,7 @@ public class UxPassTests
         Assert.Contains(menus.GetItems(BuiltIns.EditFindMenu), i => i.Command == "workbench.action.findInFiles");
         Assert.Equal(mac ? "⌘Z" : "Ctrl+Z", edit.Single(i => i.Command == "edit.undo").KeyLabel);
 
-        // No "Visual Studio" in any menu title.
+        // No menu title names the classic IDE.
         Assert.DoesNotContain(menus.Rules, r => r.Title?.Contains("Visual Studio", StringComparison.OrdinalIgnoreCase) == true);
     }
 

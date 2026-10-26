@@ -239,7 +239,7 @@ internal sealed partial class DesignerSession
     /// a component's property that brings no rule of its own. <c>ControlDesigner</c> shadows <c>Visible</c> and
     /// <c>Enabled</c> (the control on the surface stays visible and enabled) with a property of its own that has neither
     /// a <c>DefaultValue</c> nor a <c>ShouldSerialize</c> method, so its descriptor says "serialize" whatever the value;
-    /// Visual Studio writes them only when they differ from the control's own default (<c>Enabled = false</c>, never
+    /// the classic IDE writes them only when they differ from the control's own default (<c>Enabled = false</c>, never
     /// <c>= true</c>; none of the fixture's controls has either line). Such a shadow is compared with the default the
     /// component's own property has: its <c>DefaultValue</c>, or a new instance's value when that isn't serialized.
     /// </summary>
@@ -354,7 +354,7 @@ internal sealed partial class DesignerSession
         }
     }
 
-    /// <summary><c>new Binding("Text", bindingSource1, "Name", true)</c>, as Visual Studio writes a data binding (with its update mode when it isn't the default).</summary>
+    /// <summary><c>new Binding("Text", bindingSource1, "Name", true)</c>, as the classic IDE writes a data binding (with its update mode when it isn't the default).</summary>
     private DesignerValue? BindingValue(Binding binding)
     {
         if (binding.DataSource is not { } source || NameOf(source) is not { } sourceName)
@@ -666,7 +666,7 @@ internal sealed partial class DesignerSession
         };
     }
 
-    /// <summary>One of Visual Studio's records of a localizable form's control (<c>&gt;&gt;okButton.Parent</c>), in the default resources.</summary>
+    /// <summary>One of the classic IDE's records of a localizable form's control (<c>&gt;&gt;okButton.Parent</c>), in the default resources.</summary>
     private static DesignerResourceEntry Record(string component, string record, string value) =>
         new($">>{(component.Length == 0 ? "$this" : component)}.{record}", ResourceValues.Text(value));
 
@@ -675,8 +675,8 @@ internal sealed partial class DesignerSession
     // ------------------------------------------------------------------ Localizable (M41b)
 
     /// <summary>
-    /// The form's Localizable property, as Visual Studio sets it: on, every localizable value moves from the code to the
-    /// default resources (each component's section starting with ApplyResources, Visual Studio's records of its controls,
+    /// The form's Localizable property, as the classic IDE sets it: on, every localizable value moves from the code to the
+    /// default resources (each component's section starting with ApplyResources, the classic IDE's records of its controls,
     /// <c>$this.Localizable</c>); off, they move back to the code (images stay in the resources, read with GetObject).
     /// </summary>
     private DesignerChangeResult SetLocalizable(SurfaceState state, bool localizable)

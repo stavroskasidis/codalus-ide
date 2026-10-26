@@ -5,7 +5,7 @@ using Codalus.Plugins.Protocol;
 namespace Codalus.Workbench.Testing;
 
 /// <summary>
-/// Visual Studio test results files (<c>.trx</c>, the TeamTest 2010 schema that <c>dotnet test --logger trx</c> and CI
+/// The classic IDE's test results files (<c>.trx</c>, the TeamTest 2010 schema that <c>dotnet test --logger trx</c> and CI
 /// systems write): export the results the Test Explorer shows, and import results to show them on the matching tests.
 /// </summary>
 public static class Trx

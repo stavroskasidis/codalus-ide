@@ -43,7 +43,7 @@ After each build, Codalus IDE records what every project was built from (its fil
 
 ### Build events
 
-The project properties' **Build Events** page edits the commands that run before and after the project builds, and when the post-build event runs (on a successful build, always, or when the build updates the output). They are stored the way Visual Studio stores them: `PreBuild` and `PostBuild` targets with an `Exec` command. MSBuild macros such as `$(TargetDir)` work in them.
+The project properties' **Build Events** page edits the commands that run before and after the project builds, and when the post-build event runs (on a successful build, always, or when the build updates the output). They are stored the way the classic IDE stores them: `PreBuild` and `PostBuild` targets with an `Exec` command. MSBuild macros such as `$(TargetDir)` work in them.
 
 ### Custom tools
 
@@ -75,6 +75,6 @@ A `.resx` file opens in the **resource editor**, a table of its resources:
   - environment variables
   - `applicationUrl`
   - `launchBrowser`, which opens the app's URL once it is listening
-- **Output**: the program's output appears in View → Output → Run: *project*. What it writes to standard error shows in red, and its ANSI colors (a logger's levels, a test runner's results) show as colors, made readable on the theme's background, instead of escape codes. It has no console input there (reads see end of input). On Windows, the setting **Run Console Apps in an External Console** gives console apps a window of their own instead.
+- **Output**: the program's output appears in View → Output → Run: *project*. What it writes to standard error shows in red, and its ANSI colors (a logger's levels, a test runner's results) show as colors, made readable on the theme's background, instead of escape codes. Bold text shows in the bright color at the regular weight. It has no console input there (reads see end of input). On Windows, the setting **Run Console Apps in an External Console** gives console apps a window of their own instead.
 - **Stop**: Debug → Stop Running Programs (`Shift+F5`), or the status bar item. This ends the program and the processes it started.
 - **The runtime**: a program runs on the runtimes of the SDK the solution builds with, as with `dotnet run`: its apphost gets that SDK's folder in `DOTNET_ROOT` unless you set it. On Apple silicon, .NET 5 and earlier run as x64 programs on the x64 runtime; on Linux, .NET Core 2.x and 3.x get the system's ICU. The output says when Codalus changed something, and [Older .NET versions](dotnet-versions.md) says why.

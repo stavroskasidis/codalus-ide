@@ -7,7 +7,7 @@ namespace Codalus.Workbench.Updates;
 /// The .NET runtime a release's hosts need, as its signed update feed says (M49, ADR 0080). <c>eng/package.sh</c> adds
 /// it to the release's entries in <c>releases.&lt;channel&gt;.json</c> before the feed is signed, from the hosts'
 /// <c>runtimeconfig.json</c> files:
-/// <code>"CodalusFrameworks": [ { "Name": "Microsoft.NETCore.App", "Version": "11.0.0-rc.2.26504.105", "RollForward": "Major" } ]</code>
+/// <code>"CodalusFrameworks": [ { "Name": "Microsoft.NETCore.App", "Version": "11.0.0-rc.3.26522.148", "RollForward": "Major" } ]</code>
 /// The IDE compares it with what's installed before it downloads the release, so an update can't leave it unable to
 /// start its hosts. Velopack ignores the extra property. A feed without it (releases before M49) asks for nothing.
 /// </summary>

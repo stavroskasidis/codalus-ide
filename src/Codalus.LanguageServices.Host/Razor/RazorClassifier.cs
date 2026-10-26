@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Codalus.LanguageServices.Host.Razor;
 
 /// <summary>
-/// Semantic tokens for a Razor file (ADR 0023), with Razor's own token types as Visual Studio colors them: the C# the
+/// Semantic tokens for a Razor file (ADR 0023), with Razor's own token types as the classic IDE colors them: the C# the
 /// generator copied is classified by Roslyn in the generated documents and mapped back; the markup around it is scanned
 /// here (<see cref="RazorMarkupScanner"/>). Which tags are components (or tag helpers in <c>.cshtml</c>) comes from the
 /// generated code (<see cref="RazorBoundTags"/>), so it matches what the build compiles.

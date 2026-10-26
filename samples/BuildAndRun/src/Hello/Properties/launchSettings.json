@@ -1,5 +1,5 @@
 {
-  // Comments are allowed, as in Visual Studio's and dotnet run's reader.
+  // Comments are allowed, as in the classic IDE's and dotnet run's reader.
   "profiles": {
     "Hello": {
       "commandName": "Project",

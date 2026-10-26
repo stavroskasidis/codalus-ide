@@ -10,7 +10,7 @@ namespace Codalus.Shell;
 
 /// <summary>
 /// The Windows Forms designer (M41a, ADR 0073): a form's or user control's code file opens in the designer on Windows
-/// (View Code with F7, View Designer with Shift+F7, as Visual Studio); the Toolbox; the Properties window over the
+/// (View Code with F7, View Designer with Shift+F7, as the classic IDE); the Toolbox; the Properties window over the
 /// designer's selection. Off Windows the designer is Windows only (D31): the form opens as code, and View Designer says so.
 /// </summary>
 public sealed partial class ShellHost
@@ -235,7 +235,7 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Code the designer can't read: the designer closes and the code opens (at the statement, when there is one), with the reason, as Visual Studio does.</summary>
+    /// <summary>Code the designer can't read: the designer closes and the code opens (at the statement, when there is one), with the reason, as the classic IDE does.</summary>
     internal async Task OpenWinFormsAsCodeAsync(WinFormsDesignerDocument document, string problem, (string Path, int Line)? at)
     {
         Layout.CloseDocument(document);

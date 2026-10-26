@@ -179,7 +179,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
     }
 
     /// <summary>
-    /// Adds an assembly reference as Visual Studio writes it (<c>Reference</c> named after the assembly, with a relative
+    /// Adds an assembly reference as the classic IDE writes it (<c>Reference</c> named after the assembly, with a relative
     /// <c>HintPath</c>) or an <c>Analyzer</c> item. Returns false when the project already has it.
     /// </summary>
     public bool AddFileReference(string projectPath, string kind, string file)

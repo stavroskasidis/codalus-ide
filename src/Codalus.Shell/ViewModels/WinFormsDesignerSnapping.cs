@@ -14,14 +14,14 @@ public sealed record DesignerSnapLine(double X1, double Y1, double X2, double Y2
 public sealed record DesignerSnap(DesignerRect Bounds, IReadOnlyList<DesignerSnapLine> Lines);
 
 /// <summary>
-/// Visual Studio's snap lines (M41b, ADR 0073), in the shell, over the bounds the designer host reported: a moved or
+/// The classic IDE's snap lines (M41b, ADR 0073), in the shell, over the bounds the designer host reported: a moved or
 /// resized control's edges snap to its siblings' edges (left to left, right to right, top to top, bottom to bottom),
 /// its text baseline to theirs, its margin to theirs (the 3 pixels each side of a control: 6 between two) and to its
 /// container's padding (a form's 9 with the control's 3: 12 from the form's edge), when within 8 pixels.
 /// </summary>
 public static class DesignerSnapping
 {
-    /// <summary>How near a line must be to snap (Visual Studio's).</summary>
+    /// <summary>How near a line must be to snap (the classic IDE's).</summary>
     public const double Distance = 8;
 
     private static readonly int[] s_margin = [3, 3, 3, 3];
@@ -158,7 +158,7 @@ public static class DesignerSnapping
         return best;
     }
 
-    /// <summary>The lines that hold at the snapped bounds (every candidate exactly met), as Visual Studio draws them.</summary>
+    /// <summary>The lines that hold at the snapped bounds (every candidate exactly met), as the classic IDE draws them.</summary>
     private static List<DesignerSnapLine> Lines(DesignerRect r, DesignerRect client, int[] padding, List<Candidate> xs, List<Candidate> ys, double? baseline)
     {
         var lines = new List<DesignerSnapLine>();

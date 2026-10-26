@@ -6,7 +6,7 @@
 
 ## Context
 
-M18a ([ADR 0044](0044-diagnostics-host-and-trace-processing.md), [ADR 0045](0045-profiler-views.md)) built `daedalus-diaghost`, CPU sampling with its views, counters and the Diagnostic Tools window. M18b adds the rest of Visual Studio's profiler and memory tools: allocations, memory snapshots and their diffs, full-dump inspection, .NET Async, threads and contention, exceptions, file I/O, an events viewer with exports, activity views, comparing sessions, and BenchmarkDotNet. The constraints don't change: the shell is Native AOT, traces stay in the host and are answered a page at a time, every dependency is OSI-licensed, and nothing native or proprietary ships.
+M18a ([ADR 0044](0044-diagnostics-host-and-trace-processing.md), [ADR 0045](0045-profiler-views.md)) built `daedalus-diaghost`, CPU sampling with its views, counters and the Diagnostic Tools window. M18b adds the rest of the classic IDE's profiler and memory tools: allocations, memory snapshots and their diffs, full-dump inspection, .NET Async, threads and contention, exceptions, file I/O, an events viewer with exports, activity views, comparing sessions, and BenchmarkDotNet. The constraints don't change: the shell is Native AOT, traces stay in the host and are answered a page at a time, every dependency is OSI-licensed, and nothing native or proprietary ships.
 
 ## Options and decisions
 

@@ -8,7 +8,7 @@
 
 M21a (ADR 0050, 0051) gave remote windows over SSH and in WSL: `daedalus-server` copied to the target and started through the target's shell, with files, processes, terminals, ports and the hosts on the far side. Containers are the third place developers work:
 - **A running container**: the one the app runs in, a database's, a service's.
-- **A dev container**: a container described by the repository (`.devcontainer/devcontainer.json`), so that everyone builds in the same environment. VS Code and Visual Studio open these.
+- **A dev container**: a container described by the repository (`.devcontainer/devcontainer.json`), so that everyone builds in the same environment. VS Code and the classic IDE open these.
 
 The Dev Containers specification has a reference CLI (`@devcontainers/cli`, Node.js). It implements everything: features (OCI artifacts that install tools at build time), Docker Compose, every lifecycle hook, image metadata merging.
 

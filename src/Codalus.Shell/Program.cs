@@ -19,6 +19,12 @@ internal static partial class Program
         Infrastructure.Installation.Run();
 
         var options = ShellOptions.Parse(args);
+        if (options.Remote is null && options.Path is { } path)
+        {
+            options = options with { Path = Path.GetFullPath(path) }; // `codalus .`, before the working folder moves
+        }
+
+        Infrastructure.Installation.LeaveAppFolder();
         if (options.ShowVersion || options.ShowHelp)
         {
             AttachToParentConsole();
