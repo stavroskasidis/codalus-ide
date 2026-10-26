@@ -614,6 +614,8 @@ public static class CommandIcons
         ["welcome.chooseKeyboardScheme"] = new("keyboard"),
         ["workbench.showLogs"] = new("document-text"),
         ["help.about"] = new("info"),
+        ["help.reportProblem"] = new("issue"),
+        ["help.suggestFeature"] = new("lightbulb"),
         ["update.check"] = new("update"),
         ["update.whatsNew"] = new("sparkle"),
 

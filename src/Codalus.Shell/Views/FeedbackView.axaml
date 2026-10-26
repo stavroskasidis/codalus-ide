@@ -1,0 +1,125 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.FeedbackView"
+             x:DataType="vm:FeedbackViewModel">
+  <!--
+    Report a Problem and Suggest a Feature (M51): the in-window dialog frame at its widest (720 px). The header names the
+    kind and where the issue goes; the body has the issue's title, its description and steps (or proposal), and a
+    read-only preview of exactly what is attached; the footer says nothing is sent from here, with the buttons in the
+    OS's order.
+  -->
+  <UserControl.Styles>
+    <Style Selector="Border.iconTile">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Foreground}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Warning}" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <!-- What's attached: the editor's font on its background, scrolling. -->
+    <Style Selector="Border.preview">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+    </Style>
+    <Style Selector="Border.preview SelectableTextBlock">
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Editor.Foreground}" />
+      <Setter Property="Margin" Value="8,6" />
+    </Style>
+    <Style Selector="Border.notice">
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Status.Info}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Status.Info.Foreground}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.Status.Info.Foreground}" />
+      <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+    </Style>
+    <Style Selector="Border.notice controls|Icon">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Status.Info.Foreground}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border x:Name="Frame" Classes="overlay" CornerRadius="{DynamicResource Shell.CornerRadius.Dialog}" Padding="0" ClipToBounds="True"
+          KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{Binding Title}">
+    <DockPanel>
+      <!-- Header: the kind's icon on its tile, the title (14 px), where the issue goes, and a close button (Esc). -->
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="20,16,12,4">
+        <Border Classes="iconTile" Margin="0,0,10,0" VerticalAlignment="Top">
+          <controls:Icon Kind="{Binding Icon}" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+          <TextBlock x:Name="TitleText" Classes="subheading" Text="{Binding Title}" TextWrapping="Wrap" />
+          <TextBlock Classes="muted small" Text="{Binding Context}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Context}" />
+        </StackPanel>
+        <Button x:Name="CloseButton" Grid.Column="2" Classes="subtle icon compact" VerticalAlignment="Top" Margin="8,0,0,0" IsTabStop="False"
+                Command="{Binding CancelCommand}" ToolTip.Tip="{l:T dialog.closeTip}" AutomationProperties.Name="{l:T dialog.close}">
+          <controls:Icon Kind="close" Width="16" Height="16" Foreground="{DynamicResource Shell.Foreground}" />
+        </Button>
+      </Grid>
+
+      <!-- Footer: nothing leaves the IDE; the buttons in the OS's order. -->
+      <Border DockPanel.Dock="Bottom" Classes="dialogFooter">
+        <DockPanel>
+          <ItemsControl x:Name="FooterButtons" DockPanel.Dock="Right" ItemsSource="{Binding Buttons}" Margin="12,0,0,0">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="8" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:FeedbackButton">
+                <Button Classes="dialog" Classes.accent="{Binding IsPrimary}" Content="{Binding Label}" Command="{Binding Command}" AutomationProperties.Name="{Binding Label}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Classes="muted small" Text="{l:T feedback.nothingIsSentFromCodalusYou}" TextWrapping="Wrap" MaxWidth="360" VerticalAlignment="Center" />
+        </DockPanel>
+      </Border>
+
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" MaxHeight="640">
+        <StackPanel Margin="20,10,20,16" Spacing="6">
+          <TextBlock Classes="section" Text="{l:T feedback.title}" />
+          <TextBox x:Name="TitleBox" Text="{Binding IssueTitle}" PlaceholderText="{l:T feedback.aShortSummary}" AutomationProperties.Name="{l:T feedback.issueTitle}" />
+
+          <TextBlock Classes="section" Text="{Binding DescriptionLabel}" Margin="0,8,0,0" />
+          <TextBox x:Name="DescriptionBox" Text="{Binding Description}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="84" MaxHeight="180"
+                   PlaceholderText="{Binding DescriptionHint}" AutomationProperties.Name="{Binding DescriptionLabel}" />
+
+          <TextBlock Classes="section" Text="{Binding DetailsLabel}" Margin="0,8,0,0" />
+          <TextBox x:Name="DetailsBox" Text="{Binding Details}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" MaxHeight="160"
+                   PlaceholderText="{Binding DetailsHint}" AutomationProperties.Name="{Binding DetailsLabel}" />
+
+          <!-- What's attached, exactly as it goes into the issue (redacted). -->
+          <TextBlock Classes="section" Text="{l:T feedback.whatSAttached}" Margin="0,10,0,0" />
+          <CheckBox x:Name="IncludeLogs" IsChecked="{Binding IncludeLogs}" IsVisible="{Binding CanIncludeLogs}" AutomationProperties.Name="{Binding IncludeLogsLabel}">
+            <TextBlock Text="{Binding IncludeLogsLabel}" TextWrapping="Wrap" />
+          </CheckBox>
+          <Border Classes="preview" MaxHeight="200">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="{l:T feedback.whatSAttached}">
+              <SelectableTextBlock x:Name="PreviewText" Text="{Binding Preview}" />
+            </ScrollViewer>
+          </Border>
+          <Border Classes="notice" IsVisible="{Binding HasNote}" Margin="0,4,0,0">
+            <DockPanel>
+              <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,0,8,0" VerticalAlignment="Top" />
+              <TextBlock x:Name="NoteText" Text="{Binding Note}" TextWrapping="Wrap" />
+            </DockPanel>
+          </Border>
+          <TextBlock Classes="muted small" Text="{l:T feedback.securityProblemReportItPrivately}" TextWrapping="Wrap" IsVisible="{Binding IsProblem}" Margin="0,4,0,0" />
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Border>
+</UserControl>
