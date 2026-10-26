@@ -31,7 +31,10 @@ public static partial class ProcessTree
     /// minutes while ReportCrash holds a crashed process (anywhere on the machine): the caller's thread with it, and on
     /// CI every test that ended a process tree, until HangDump ended the run. As in .NET's walk, each process is stopped
     /// before its children are listed, so none starts another meanwhile, and the stopped ones are then ended. A process
-    /// that can't be stopped (it ended, or isn't ours) is left with its children, and this process never ends itself.
+    /// stopped in the middle of a fork shows its child only once the fork is done, so the stopped ones are listed again
+    /// every 10 ms until no new child shows for one look (five on macOS, about 50 ms, where a fork can take longer to
+    /// finish), at most 50 times. A process that can't be stopped (it ended, or isn't ours) is left with its children,
+    /// and this process never ends itself.
     /// </summary>
     /// <exception cref="InvalidOperationException">No process is associated with <paramref name="process"/>.</exception>
     public static void Kill(Process process)
@@ -53,9 +56,12 @@ public static partial class ProcessTree
             Stop(process.Id, stopped);
 
             // A process stopped in the middle of a fork has a child the listing missed: it shows once the fork is done.
-            // Look again, after a moment, until a look finds no one new (a child it missed kept the host's standard
-            // output open, so its end went unnoticed: HostRuntimeTests on macOS). .NET's walk, slower, never missed one.
-            for (var round = 0; round < 10; round++)
+            // Look again every 10 ms until enough looks in a row find no one new (a child it missed kept the host's
+            // standard output open, so its end went unnoticed: HostRuntimeTests on macOS). .NET's walk, slower, never
+            // missed one. On macOS the fork can take longer than one look to finish on a busy machine (ProcessTreeTests,
+            // CI run 40322617496), so it takes five quiet looks there; Linux restarts a fork a signal interrupts, so one.
+            var quietNeeded = OperatingSystem.IsMacOS() ? 5 : 1;
+            for (int round = 0, quiet = 0; round < 50 && quiet < quietNeeded; round++)
             {
                 var count = stopped.Count;
                 Thread.Sleep(10);
@@ -67,10 +73,7 @@ public static partial class ProcessTree
                     }
                 }
 
-                if (stopped.Count == count)
-                {
-                    break;
-                }
+                quiet = stopped.Count == count ? quiet + 1 : 0;
             }
         }
         finally
