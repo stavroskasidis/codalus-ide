@@ -47,7 +47,7 @@
         <DockPanel>
           <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{Binding Selected.Name}" TextTrimming="CharacterEllipsis" />
           <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="0,2,0,6" Text="{Binding Selected.Source}" />
-          <TextBox IsReadOnly="True" AcceptsReturn="True" Text="{Binding Body}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+          <TextBox IsReadOnly="True" AcceptsReturn="True" Text="{Binding Body}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12"
                    AutomationProperties.Name="{l:T snippetsManager.body}" />
         </DockPanel>
       </Border>

@@ -177,14 +177,69 @@ public sealed class AcpSessionModeState
     public IReadOnlyList<AcpSessionMode>? AvailableModes { get; init; }
 }
 
+/// <summary>
+/// A session config option (the protocol's session config options): a select the client offers, such as the model, the
+/// mode or the thought level (effort). <see cref="Options"/> is a list of values, or of groups of values, kept as JSON
+/// (<see cref="AcpSessionChoices"/> flattens it).
+/// </summary>
+public sealed class AcpSessionConfigOption
+{
+    public string Id { get; init; } = "";
+
+    public string Name { get; init; } = "";
+
+    public string? Description { get; init; }
+
+    /// <summary><c>mode</c>, <c>model</c>, <c>thought_level</c>, or another (a name starting with <c>_</c> is the agent's own).</summary>
+    public string? Category { get; init; }
+
+    /// <summary><c>select</c> (the only kind Codalus offers; others are left as the agent set them).</summary>
+    public string Type { get; init; } = "select";
+
+    public JsonElement? CurrentValue { get; init; }
+
+    public JsonElement? Options { get; init; }
+}
+
+/// <summary>A model the agent offers (the protocol's unstable <c>models</c> of <c>session/new</c>, before config options).</summary>
+public sealed class AcpModelInfo
+{
+    public string ModelId { get; init; } = "";
+
+    public string Name { get; init; } = "";
+
+    public string? Description { get; init; }
+}
+
+public sealed class AcpSessionModelState
+{
+    public string CurrentModelId { get; init; } = "";
+
+    public IReadOnlyList<AcpModelInfo>? AvailableModels { get; init; }
+}
+
 public sealed class AcpNewSessionResponse
 {
     public string SessionId { get; init; } = "";
 
     public AcpSessionModeState? Modes { get; init; }
+
+    public AcpSessionModelState? Models { get; init; }
+
+    public IReadOnlyList<AcpSessionConfigOption>? ConfigOptions { get; init; }
 }
 
 public sealed record AcpSetModeRequest(string SessionId, string ModeId);
+
+public sealed record AcpSetModelRequest(string SessionId, string ModelId);
+
+public sealed record AcpSetConfigOptionRequest(string SessionId, string ConfigId, string Value);
+
+/// <summary>The answer to <c>session/set_config_option</c>, and the <c>config_option_update</c> session update: every option as it is now.</summary>
+public sealed class AcpConfigOptionsUpdate
+{
+    public IReadOnlyList<AcpSessionConfigOption>? ConfigOptions { get; init; }
+}
 
 // ------------------------------------------------------------------ prompt turns
 
@@ -435,6 +490,8 @@ public static class AcpMethods
     public const string SessionPrompt = "session/prompt";
     public const string SessionCancel = "session/cancel";
     public const string SessionSetMode = "session/set_mode";
+    public const string SessionSetModel = "session/set_model";
+    public const string SessionSetConfigOption = "session/set_config_option";
     public const string SessionUpdate = "session/update";
     public const string SessionRequestPermission = "session/request_permission";
     public const string ReadTextFile = "fs/read_text_file";
@@ -460,6 +517,10 @@ public static class AcpMethods
 [JsonSerializable(typeof(AcpNewSessionRequest))]
 [JsonSerializable(typeof(AcpNewSessionResponse))]
 [JsonSerializable(typeof(AcpSetModeRequest))]
+[JsonSerializable(typeof(AcpSetModelRequest))]
+[JsonSerializable(typeof(AcpSetConfigOptionRequest))]
+[JsonSerializable(typeof(AcpConfigOptionsUpdate))]
+[JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(AcpPromptRequest))]
 [JsonSerializable(typeof(AcpPromptResponse))]
 [JsonSerializable(typeof(AcpCancelNotification))]

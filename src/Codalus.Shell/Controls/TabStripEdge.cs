@@ -92,7 +92,7 @@ public sealed class TabStripEdge : Control
         {
             _strip.SelectionChanged += OnStripChanged;
             _strip.PropertyChanged += OnStripPropertyChanged;
-            _strip.LayoutUpdated += OnStripChanged;
+            _strip.LayoutUpdated += OnStripLayoutUpdated;
         }
     }
 
@@ -102,7 +102,7 @@ public sealed class TabStripEdge : Control
         {
             _strip.SelectionChanged -= OnStripChanged;
             _strip.PropertyChanged -= OnStripPropertyChanged;
-            _strip.LayoutUpdated -= OnStripChanged;
+            _strip.LayoutUpdated -= OnStripLayoutUpdated;
             _strip = null;
         }
 
@@ -110,6 +110,21 @@ public sealed class TabStripEdge : Control
     }
 
     private void OnStripChanged(object? sender, EventArgs e) => InvalidateVisual();
+
+    /// <summary>The gap and size drawn last, so a layout pass elsewhere in the window doesn't repaint the edge.</summary>
+    private ((double Left, double Right)? Gap, Size Size) _drawn;
+
+    /// <summary>
+    /// LayoutUpdated comes after every layout pass of the window, typing's included (M51: the Mac's startup profile):
+    /// the edge repaints only when the selected tab's gap or its own size moved.
+    /// </summary>
+    private void OnStripLayoutUpdated(object? sender, EventArgs e)
+    {
+        if ((Gap(), Bounds.Size) != _drawn)
+        {
+            InvalidateVisual();
+        }
+    }
 
     private void OnStripPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
@@ -122,6 +137,7 @@ public sealed class TabStripEdge : Control
     public override void Render(DrawingContext context)
     {
         var bounds = Bounds;
+        _drawn = (Gap(), bounds.Size);
         if (bounds.Height <= 0 || FrameBrush is not { } frame)
         {
             return;

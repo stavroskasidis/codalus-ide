@@ -15,6 +15,34 @@ namespace Codalus.Projects.Host;
 /// </summary>
 internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreSlim gate) : IDisposable
 {
+    private const ProjectLoadSettings IgnoringImports = ProjectLoadSettings.IgnoreMissingImports | ProjectLoadSettings.IgnoreInvalidImports | ProjectLoadSettings.IgnoreEmptyImports;
+
+    /// <summary>
+    /// Whether the loaded MSBuild has <c>ProjectInstance.FromFile(string, ProjectOptions)</c> (MSBuild 16 on). The 2.1
+    /// SDKs' MSBuild 15.9 hasn't: a method that calls it fails to compile there, whichever branch runs (M51, found on
+    /// WSL), so each way of loading is a method of its own.
+    /// </summary>
+    private static readonly bool s_hasProjectOptions = typeof(ProjectInstance).Assembly.GetName().Version is { Major: >= 16 };
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static ProjectInstance LoadWithOptions(string path, Dictionary<string, string> global, ProjectCollection collection) =>
+        ProjectInstance.FromFile(path, new Microsoft.Build.Definition.ProjectOptions { GlobalProperties = global, ProjectCollection = collection, LoadSettings = IgnoringImports });
+
+    /// <summary>MSBuild 15's way: the project evaluated with the same settings, then its instance (the project is unloaded).</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static ProjectInstance LoadWithProject(string path, Dictionary<string, string> global, ProjectCollection collection)
+    {
+        var project = new Project(path, global, null, collection, IgnoringImports);
+        try
+        {
+            return project.CreateProjectInstance();
+        }
+        finally
+        {
+            collection.UnloadProject(project);
+        }
+    }
+
     private static readonly string[] s_targets = ["Compile", "CoreCompile"];
 
     private readonly BuildManager _manager = new("codalus-designtime");
@@ -175,12 +203,7 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
                 ProjectInstance instance;
                 using (StringCacheGate.Enter())
                 {
-                    instance = ProjectInstance.FromFile(request.Path, new Microsoft.Build.Definition.ProjectOptions
-                    {
-                        GlobalProperties = global,
-                        ProjectCollection = collection,
-                        LoadSettings = ProjectLoadSettings.IgnoreMissingImports | ProjectLoadSettings.IgnoreInvalidImports | ProjectLoadSettings.IgnoreEmptyImports,
-                    });
+                    instance = s_hasProjectOptions ? LoadWithOptions(request.Path, global, collection) : LoadWithProject(request.Path, global, collection);
                 }
 
                 data = new BuildRequestData(instance, s_targets, InProcess(request.Path), BuildRequestDataFlags.ProvideProjectStateAfterBuild);

@@ -254,10 +254,15 @@ public sealed class OutputPresenter
 
             if (!_ansi.TryGetValue(style, out var brush))
             {
+                var bright = !style.IsRgb && ((style.Attributes & OutputAttributes.Bold) != 0 || style.Foreground is >= 8 and < 16);
                 var color = style.IsRgb
                     ? Color.FromRgb((byte)(style.Foreground >> 16), (byte)(style.Foreground >> 8), (byte)style.Foreground)
                     : _palette!.PaletteColor((style.Attributes & OutputAttributes.Bold) != 0 && style.Foreground < 8 ? style.Foreground + 8 : style.Foreground);
-                brush = new ImmutableSolidColorBrush(Readable(color, _background, _minimumContrast));
+
+                // Bold and bright colors stand out more than the plain ones (M51): where both fell short of the theme's
+                // contrast (green and bright green on Harbor Light), the plain one and the bright one were raised to the
+                // same edge and looked alike.
+                brush = new ImmutableSolidColorBrush(Readable(color, _background, bright ? _minimumContrast * BrightContrast : _minimumContrast));
                 _ansi[style] = brush;
             }
 
@@ -380,6 +385,9 @@ public sealed class OutputPresenter
     /// <paramref name="ratio"/> against <paramref name="background"/> (VS Code's minimum contrast for terminal colors):
     /// a process's yellow stays yellow, readable in every theme.
     /// </summary>
+    /// <summary>How much more contrast bold and bright ANSI colors need than plain ones.</summary>
+    internal const double BrightContrast = 1.4;
+
     internal static Color Readable(Color color, Color background, double ratio)
     {
         if (Contrast(color, background) >= ratio)

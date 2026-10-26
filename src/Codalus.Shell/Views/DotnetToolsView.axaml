@@ -26,7 +26,7 @@
       <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsBusy}" />
     </StackPanel>
     <TextBox DockPanel.Dock="Bottom" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="160" Text="{Binding Output}" IsVisible="{Binding HasOutput}"
-             FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T dotnetTools.dotnetToolOutput}" />
+             FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T dotnetTools.dotnetToolOutput}" />
     <Grid RowDefinitions="Auto,*">
       <Grid ColumnDefinitions="*,120,*,80" Margin="8,2">
         <TextBlock Classes="muted" Text="{l:T dotnetTools.packageId}" />

@@ -28,6 +28,12 @@ public sealed record AcpAgentConfig(string Command, IReadOnlyList<string> Args, 
     /// <summary><c>node</c>: <c>builtIn</c> when Codalus's own Node.js runs it (D-node, ADR 0083); null for the user's.</summary>
     public string? Node { get; init; }
 
+    /// <summary>
+    /// <c>choices</c>: the values the user picked in AI Chat for the agent's model, mode, effort and other choices, by the
+    /// choice's id (M51), applied to each new session. Not part of <see cref="SameAs"/>: a pick doesn't restart the agent.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Choices { get; init; } = s_none;
+
     /// <summary>The <see cref="SecretEnv"/> values, read when the session starts; never in settings, the log or a message.</summary>
     public IReadOnlyDictionary<string, string> SecretValues { get; init; } = s_none;
 
@@ -398,6 +404,14 @@ public sealed class AcpClient : IAsyncDisposable
 
     public Task SetModeAsync(string sessionId, string modeId, CancellationToken cancellationToken) =>
         InvokeAsync(AcpMethods.SessionSetMode, new AcpSetModeRequest(sessionId, modeId), AcpJsonContext.Default.AcpSetModeRequest, AcpJsonContext.Default.AcpEmpty, cancellationToken);
+
+    /// <summary><c>session/set_model</c>: the protocol's unstable model choice, for agents that offer <c>models</c> instead of config options.</summary>
+    public Task SetModelAsync(string sessionId, string modelId, CancellationToken cancellationToken) =>
+        InvokeAsync(AcpMethods.SessionSetModel, new AcpSetModelRequest(sessionId, modelId), AcpJsonContext.Default.AcpSetModelRequest, AcpJsonContext.Default.AcpEmpty, cancellationToken);
+
+    /// <summary><c>session/set_config_option</c>: the agent answers with every option as it is now (a choice can change others).</summary>
+    public Task<AcpConfigOptionsUpdate?> SetConfigOptionAsync(string sessionId, string configId, string value, CancellationToken cancellationToken) =>
+        InvokeAsync(AcpMethods.SessionSetConfigOption, new AcpSetConfigOptionRequest(sessionId, configId, value), AcpJsonContext.Default.AcpSetConfigOptionRequest, AcpJsonContext.Default.AcpConfigOptionsUpdate, cancellationToken);
 
     /// <summary><c>session/cancel</c>: the agent stops the turn and answers its <c>session/prompt</c> with <c>cancelled</c>.</summary>
     public async Task CancelAsync(string sessionId)

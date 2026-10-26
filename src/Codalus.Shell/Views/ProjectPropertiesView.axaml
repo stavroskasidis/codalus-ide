@@ -96,10 +96,10 @@
             <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
             <TextBlock FontWeight="SemiBold" Text="{l:T projectProperties.preBuildEventCommandLine}" Margin="0,6,0,0" />
             <TextBox x:Name="PreBuildBox" Text="{Binding PreBuild}" AcceptsReturn="True" MinHeight="80" TextWrapping="NoWrap"
-                     FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" AutomationProperties.Name="{l:T projectProperties.preBuildEventCommandLine}" />
+                     FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" AutomationProperties.Name="{l:T projectProperties.preBuildEventCommandLine}" />
             <TextBlock FontWeight="SemiBold" Text="{l:T projectProperties.postBuildEventCommandLine}" Margin="0,6,0,0" />
             <TextBox Text="{Binding PostBuild}" AcceptsReturn="True" MinHeight="80" TextWrapping="NoWrap"
-                     FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" AutomationProperties.Name="{l:T projectProperties.postBuildEventCommandLine}" />
+                     FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" AutomationProperties.Name="{l:T projectProperties.postBuildEventCommandLine}" />
             <TextBlock Text="{l:T projectProperties.runThePostBuildEvent}" Margin="0,6,0,0" />
             <ComboBox MinWidth="320" ItemsSource="{x:Static vm:BuildEventsViewModel.RunOptions}" SelectedItem="{Binding RunPostBuildEvent}" AutomationProperties.Name="{l:T projectProperties.runThePostBuildEvent}">
               <ComboBox.ItemTemplate>

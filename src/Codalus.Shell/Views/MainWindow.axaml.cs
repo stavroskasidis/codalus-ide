@@ -80,6 +80,18 @@ public sealed partial class MainWindow : Window, IShellWindow
                 });
             }
         };
+        shell.Feedback.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ViewModels.FeedbackViewModel.IsOpen) && shell.Feedback.IsOpen && FeedbackLayer.Children.Count == 0)
+            {
+                FeedbackLayer.Children.Add(new FeedbackView
+                {
+                    DataContext = shell.Feedback,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                });
+            }
+        };
         SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);

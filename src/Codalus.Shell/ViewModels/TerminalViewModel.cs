@@ -79,7 +79,7 @@ public static class TerminalViewConverters
 /// <summary>How terminals look (settings and theme), shared by every terminal control.</summary>
 public sealed class TerminalAppearance : ObservableObject
 {
-    private FontFamily _fontFamily = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace");
+    private FontFamily _fontFamily = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace");
     private double _fontSize = 13;
     private TerminalTheme _palette = TerminalTheme.For("dark");
     private bool _copyOnSelect;

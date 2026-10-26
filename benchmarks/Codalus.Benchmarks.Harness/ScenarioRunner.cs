@@ -378,10 +378,12 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
         // CPU (M50): the tree's CPU seconds until the solution is ready, and its CPU use, as a share of one core, over the
         // 10 s after, when an open solution should be idle.
         var opened = cpu.Total;
+        var openedBy = cpu.ByProcess;
         result.Add(prefix + "cpu_open_s", opened.TotalSeconds);
         var idleFrom = System.Diagnostics.Stopwatch.GetTimestamp();
         await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
         result.Add(prefix + "cpu_idle_percent", (cpu.Total - opened).TotalSeconds / System.Diagnostics.Stopwatch.GetElapsedTime(idleFrom).TotalSeconds * 100);
+        result.Notes.Add($"Run {run}{(prefix.Length > 0 ? ", warm" : string.Empty)}: CPU until ready by process: {cpu.Since(new Dictionary<string, TimeSpan>(), 6)}; in the 10 s after: {cpu.Since(openedBy)}");
         var memory = ProcessTree.Memory(session.Process.Id);
         result.Add(prefix + "memory_solution_private_mb", memory.PrivateBytes / 1048576.0);
         Log($"  {target.Name} open-solution-50 run {run}{(prefix.Length > 0 ? " (warm)" : string.Empty)}: loaded {Last(result, prefix + "solution_loaded_ms")} / design-time {Last(result, prefix + "designtime_done_ms")} / language {Last(result, prefix + "language_ready_ms")} ms, CPU {Last(result, prefix + "cpu_open_s")} s, idle {Last(result, prefix + "cpu_idle_percent")} %");

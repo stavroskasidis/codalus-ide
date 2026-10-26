@@ -34,12 +34,18 @@ public sealed class AcpShellTests
         : (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Select(d => Path.Combine(d, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")).First(File.Exists);
 
-    private static async Task<(AiChatView View, string Log)> SetUpAsync(ShellFixture f)
+    private static async Task<(AiChatView View, string Log)> SetUpAsync(ShellFixture f, string? choices = null)
     {
         var log = Path.Combine(f.UserData, "agent-log.jsonl");
         var settings = f.Shell.Workbench.Settings;
         await settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None);
-        var agents = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["stand-in"] = new { command = "dotnet", args = new[] { StandInAgent }, env = new Dictionary<string, string> { ["ACP_FAKE_LOG"] = log } } });
+        var env = new Dictionary<string, string> { ["ACP_FAKE_LOG"] = log };
+        if (choices is not null)
+        {
+            env["ACP_FAKE_CHOICES"] = choices;
+        }
+
+        var agents = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["stand-in"] = new { command = "dotnet", args = new[] { StandInAgent }, env } });
         await settings.SetAsync(AcpAgents.AgentsSetting, agents, SettingScope.User, CancellationToken.None);
         f.Shell.McpExecutable = (Dotnet, ShellDll);
         await f.RunAsync("ai.chat.show");
@@ -250,6 +256,78 @@ public sealed class AcpShellTests
     }
 
     /// <summary>Opens More agents… from the agent picker's menu, as a click does, and waits for the list (D43).</summary>
+    [AvaloniaFact]
+    public async Task After_a_restart_the_chat_opens_with_the_agent_chosen_last_and_its_model_mode_and_effort_pickers()
+    {
+        var copy = Path.Combine(Path.GetTempPath(), "codalus-acp-restart-" + Guid.NewGuid().ToString("N") + ".json");
+        var oldUserData = "";
+        try
+        {
+            await using (var f = ShellFixture.Create())
+            {
+                var (view, _) = await SetUpAsync(f, "config");
+                var chat = f.Shell.AiChat;
+                var folder = f.CopySample("BuildAndRun");
+                f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+                await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+                await ShellFixture.PumpUntil(() => chat.AgentChoices.Count == 2);
+                chat.SelectedAgentIndex = 1;
+                await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetLayerValue(AcpAgents.ChatAgentSetting, SettingScope.User)?.GetString() == "stand-in");
+
+                // The pickers show once the agent's session exists: model, mode and effort, in the IDE's words.
+                Assert.Empty(chat.AgentChoicePickers);
+                await AskAsync(f, "hello");
+                await ShellFixture.PumpUntil(() => chat.AgentChoicePickers.Count == 3);
+                Assert.Equal([("Model", "Sonnet"), ("Mode", "Ask"), ("Effort", "Medium")], chat.AgentChoicePickers.Select(c => (c.Name, c.CurrentName)));
+                await ShellFixture.PumpUntil(() => (view = ChatView(f)).ChoicePickers.Count == 3 && view.ChoicePickers.All(p => p.IsEffectivelyVisible), 30, () => $"{view.ChoicePickers.Count} picker(s), visible [{string.Join(", ", view.ChoicePickers.Select(p => p.IsVisible + "/" + p.IsEffectivelyVisible + "/" + p.Bounds))}], view visible {view.IsEffectivelyVisible}");
+                Assert.Equal(["Model: Sonnet", "Mode: Ask", "Effort: Medium"], view.ChoicePickers.Select(p => AutomationProperties.GetName(p)));
+
+                // A pick from the model's menu goes to the agent and is kept in the agent's entry.
+                var menu = (MenuFlyout)view.ChoicePickers[0].Flyout!;
+                menu.ShowAt(view.ChoicePickers[0]);
+                await ShellFixture.PumpUntil(() => menu.Items.Count == 2);
+                Assert.Equal(["Sonnet", "Opus"], menu.Items.OfType<MenuItem>().Select(i => i.Header as string));
+                menu.Items.OfType<MenuItem>().Last().RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                menu.Hide();
+                await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)?.GetProperty("stand-in").TryGetProperty("choices", out _) == true);
+                Assert.Equal(("Opus", "High"), (chat.AgentChoicePickers[0].CurrentName, chat.AgentChoicePickers[2].CurrentName));
+                Assert.Equal("opus", f.Shell.Workbench.Settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.GetProperty("stand-in").GetProperty("choices").GetProperty("model").GetString());
+
+                File.Copy(f.Shell.Workbench.Settings.UserFile, copy);
+                oldUserData = f.UserData;
+            }
+
+            // The IDE opens again with the same settings: the chat has the agent, not the Connect buttons.
+            var userData = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-shell-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(userData, "config"));
+            // The stand-in's log moves with the user data (the first one's is deleted with it).
+            File.WriteAllText(Path.Combine(userData, "config", "settings.json"), File.ReadAllText(copy).Replace(JsonEncodedText.Encode(oldUserData).ToString(), JsonEncodedText.Encode(userData).ToString(), StringComparison.Ordinal));
+            await using (var f = ShellFixture.Create(userData))
+            {
+                Assert.Equal("stand-in", f.Shell.Workbench.Settings.GetLayerValue(AcpAgents.ChatAgentSetting, SettingScope.User)?.GetString());
+                await f.RunAsync("ai.chat.show");
+                var chat = f.Shell.AiChat;
+                await ShellFixture.PumpUntil(() => chat.IsExternal, 30, () => $"agent {chat.SelectedAgentLabel}, choices [{string.Join(", ", chat.AgentChoices)}]");
+                Assert.Equal("stand-in", chat.SelectedAgent);
+                Assert.False(chat.ShowConnectRow);
+                Assert.False(chat.ShowProviderState);
+                Assert.True(chat.ShowExternalReadyState);
+
+                // Its next session starts with the model kept.
+                var folder = f.CopySample("BuildAndRun");
+                f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+                await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+                await AskAsync(f, "hello");
+                await ShellFixture.PumpUntil(() => chat.AgentChoicePickers.Count == 3);
+                Assert.Equal("Opus", chat.AgentChoicePickers[0].CurrentName);
+            }
+        }
+        finally
+        {
+            File.Delete(copy);
+        }
+    }
+
     private static async Task OpenMoreAgentsAsync(ShellFixture f)
     {
         var picker = Visible<DropDownButton>(ChatView(f), "AgentPicker");

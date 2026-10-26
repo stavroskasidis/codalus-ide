@@ -538,10 +538,10 @@ public sealed partial class ShellHost
             return;
         }
 
-        var tools = await EnvironmentCheck.CheckAsync(folder, CancellationToken.None).ConfigureAwait(true);
-        if (tools.FirstOrDefault(t => t is { Id: "dotnet", State: ToolState.Mismatch }) is { } sdk)
+        // The SDK alone (M51): the whole check ran git, Docker and Podman too at every open, seconds of CPU for nothing.
+        if (await EnvironmentCheck.CheckDotnetAsync(folder, CancellationToken.None).ConfigureAwait(true) is { State: ToolState.Mismatch } sdk)
         {
-            Tools = tools;
+            Tools = await EnvironmentCheck.CheckAsync(folder, CancellationToken.None).ConfigureAwait(true);
             ToolsChanged?.Invoke(this, EventArgs.Empty);
             await OfferInstallAsync(sdk).ConfigureAwait(true);
         }

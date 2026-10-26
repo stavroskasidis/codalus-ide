@@ -140,7 +140,7 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:DetailLine">
                     <Border Classes="line" Classes.header="{Binding IsHeader}">
-                      <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" Classes.header="{Binding IsHeader}" />
+                      <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" Classes.header="{Binding IsHeader}" />
                     </Border>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -167,7 +167,7 @@
                       <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Label}" Margin="0,0,8,0" />
                       <controls:Icon DockPanel.Dock="Left" Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center" />
                       <TextBlock DockPanel.Dock="Right" Classes="muted small" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" Margin="8,0,0,0" />
-                      <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+                      <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12"
                                  TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
                     </DockPanel>
                   </DataTemplate>
@@ -201,7 +201,7 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:DetailLine">
                   <Border Classes="line" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}">
-                    <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+                    <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12"
                                Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" />
                   </Border>
                 </DataTemplate>

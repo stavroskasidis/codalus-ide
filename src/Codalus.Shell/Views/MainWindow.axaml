@@ -143,6 +143,9 @@
            Its view is made the first time it opens (MainWindow.axaml.cs, M50). -->
       <Panel x:Name="ConnectAgentLayer" Background="{DynamicResource Shell.Dialog.Scrim}" IsVisible="{Binding ConnectAgent.IsOpen}" ZIndex="2" />
 
+      <!-- Report a Problem and Suggest a Feature (M51): made the first time it opens, as Connect to <agent>. -->
+      <Panel x:Name="FeedbackLayer" Background="{DynamicResource Shell.Dialog.Scrim}" IsVisible="{Binding Feedback.IsOpen}" ZIndex="2" />
+
       <!-- The window behind an in-window dialog is dimmed by Shell.Dialog.Scrim (M34h). -->
       <Panel x:Name="DialogLayer" Background="{DynamicResource Shell.Dialog.Scrim}" IsVisible="{Binding Dialogs.IsOpen}" ZIndex="2">
         <views:DialogView DataContext="{Binding Dialogs}" HorizontalAlignment="Center" VerticalAlignment="Center" />

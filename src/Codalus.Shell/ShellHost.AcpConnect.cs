@@ -17,11 +17,14 @@ namespace Codalus.Shell;
 /// </summary>
 public sealed partial class ShellHost
 {
-    /// <summary>The connector behind the Connect dialog.</summary>
-    public AcpAgentConnector AgentConnector { get; private set; } = null!;
+    private AcpAgentConnector? _agentConnector;
+    private ConnectAgentViewModel? _connectAgent;
 
-    /// <summary>The Connect dialog (one, opened per agent).</summary>
-    public ConnectAgentViewModel ConnectAgent { get; private set; } = null!;
+    /// <summary>The connector behind the Connect dialog, made when first used (M51: nothing of Connect is built at startup).</summary>
+    public AcpAgentConnector AgentConnector => _agentConnector ??= new AcpAgentConnector(Workbench.Settings, Ai, ExternalAgents) { CodalusNode = Node };
+
+    /// <summary>The Connect dialog (one, opened per agent), made when first opened.</summary>
+    public ConnectAgentViewModel ConnectAgent => _connectAgent ??= new ConnectAgentViewModel(new ShellConnectHost(this));
 
     /// <summary>Whether this IDE runs in an SSH session, or without a browser: Claude offers its remote sign-in then (tests set it).</summary>
     public bool IsRemoteSession { get; set; } = s_remoteSessionVariables.Any(v => Environment.GetEnvironmentVariable(v) is { Length: > 0 });
@@ -33,8 +36,6 @@ public sealed partial class ShellHost
     {
         ExternalAgents.Secrets = new AcpAgentSecrets(Secrets);
         ExternalAgents.BuiltInNodeFolder = () => Node.IsInstalled ? Path.GetDirectoryName(Node.NodePath) : null;
-        AgentConnector = new AcpAgentConnector(Workbench.Settings, Ai, ExternalAgents) { CodalusNode = Node };
-        ConnectAgent = new ConnectAgentViewModel(new ShellConnectHost(this));
         UpdateAgentsContext();
         Workbench.Settings.Changed += (_, e) =>
         {

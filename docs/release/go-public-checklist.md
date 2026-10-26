@@ -20,13 +20,12 @@ The history audit (section 6) found no secrets. A few tracked files are working 
 ## 2. Repository settings (after flipping to public)
 
 - [ ] **Branch protection** (rulesets) for `develop` (the default branch) and `master`:
-  - require a pull request
-  - require the CI checks `dotnet (ubuntu-latest)`, `dotnet (windows-latest)` and `dotnet (macos-latest)`
-  - require branches to be up to date
+  - require a pull request, with 0 approvals (the maintainer, and a coding assistant working as them, can't approve their own pull requests)
+  - require the status check `ci` (`pipeline.yml`'s one job that sums up gate, test and smoke; a docs-only pull request reports it too), without requiring branches to be up to date (each update would test again for about 45 minutes)
   - block force pushes and deletion
-  - `master` only takes merges from `develop` and hotfixes, so don't require linear history there
-  - admins may bypass, if you want to keep committing directly at first
-  - **let the release workflow move `develop`**: after a stable release `pipeline.yml`'s `finish` job merges `master` back and bumps `VERSION` through a pull request it opens and merges itself, so turn on Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests". The workflow token's pull request starts no CI run, so a required check on `develop` blocks that merge: keep `develop`'s checks optional, or merge the release's pull request by hand
+  - don't require linear history: releases and the merge back into `develop` are merge commits
+  - bypass: the repository admin, **for pull requests only**, so nobody pushes to `develop` or `master` directly (GitHub offers no GitHub Actions bypass for a repository owned by a user)
+  - **let the release workflow move `develop`**: after a stable release `pipeline.yml`'s `finish` job merges `master` back and bumps `VERSION` through a pull request it opens and merges itself, so turn on Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests". The workflow token's pull request starts no CI run, so the job posts its `ci` check run itself (as GitHub Actions, the source the ruleset requires; it needs `checks: write`) and then merges it
 - [ ] **GitHub Pages**: Settings → Pages → Source: **GitHub Actions**. `linux-repos.yml` then deploys the apt and dnf repositories after each release (it is skipped while the repository is private, because Pages needs a public repository on the free plan).
 - [ ] **Private vulnerability reporting**: Settings → Code security → enable. `SECURITY.md` and the issue templates link to it.
 - [ ] **Dependabot alerts and security updates**: on. Consider Dependabot version updates for NuGet and GitHub Actions.

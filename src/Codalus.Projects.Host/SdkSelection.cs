@@ -10,9 +10,9 @@ internal static class SdkSelection
         sdk.Major < runtime.Major || (sdk.Major == runtime.Major && sdk.Minor <= runtime.Minor);
 
     /// <summary>Why the SDK the solution asks for isn't used, and what is used instead (null: nothing).</summary>
-    public static string Unloadable(Version requested, Version? used, Version runtime) =>
+    public static string Unloadable(Version requested, string? used, Version runtime) =>
         $"The solution's folder resolves to the .NET SDK {requested.ToString(3)}, which needs .NET {requested.Major}.{requested.Minor} or later. "
-        + $"The build host runs on .NET {runtime.ToString(3)}" + (used is null ? "." : $", so it uses the .NET SDK {used.ToString(3)} instead.")
+        + $"The build host runs on .NET {runtime.ToString(3)}" + (used is null ? "." : $", so it uses the .NET SDK {used} instead.")
         + $" Install the .NET {requested.Major}.{requested.Minor} runtime, or pin an SDK in global.json.";
 
     /// <summary>
@@ -26,16 +26,16 @@ internal static class SdkSelection
     public static bool AboveFloor(Version sdk) => sdk >= Floor;
 
     /// <summary>Why an SDK below <see cref="Floor"/> isn't used, and what is used instead.</summary>
-    public static string BelowFloor(string requested, string? globalJson, Version? used) =>
+    public static string BelowFloor(string requested, string? globalJson, string? used) =>
         $"The solution's folder resolves to the .NET SDK {requested}{(globalJson is null ? string.Empty : $" ({globalJson})")}. "
         + $"Codalus IDE opens solutions with the .NET SDK {Floor.ToString(3)} or later: the MSBuild of older SDKs doesn't build in its build host"
-        + (used is null ? "." : $", so it uses the .NET SDK {used.ToString(3)} instead, which also builds older target frameworks.")
+        + (used is null ? "." : $", so it uses the .NET SDK {used} instead, which also builds older target frameworks.")
         + $" To build with the .NET SDK {requested}, use the command line, or pin the .NET SDK {Floor.ToString(3)} or later in global.json.";
 
     /// <summary>What happens when <c>global.json</c> asks for an SDK that isn't installed: <c>dotnet</c> fails there.</summary>
-    public static string NotInstalled(GlobalJsonSdk globalJson, Version used) =>
+    public static string NotInstalled(GlobalJsonSdk globalJson, string used) =>
         $"{globalJson.Path} asks for the .NET SDK {globalJson.Version} (rollForward: {globalJson.RollForward}), and no installed SDK matches: "
-        + $"`dotnet build` fails in that folder. The build host uses the .NET SDK {used.ToString(3)} instead. "
+        + $"`dotnet build` fails in that folder. The build host uses the .NET SDK {used} instead. "
         + $"Install the .NET SDK {globalJson.Version}, or change global.json.";
 }
 

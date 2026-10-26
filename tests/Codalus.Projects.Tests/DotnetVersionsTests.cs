@@ -129,7 +129,7 @@ public sealed class DotnetVersionsTests : IAsyncLifetime
         Assert.True(SdkSelection.CanLoad(new Version(8, 0, 425), new Version(10, 0, 12)));
         Assert.False(SdkSelection.CanLoad(new Version(11, 0, 100), new Version(10, 0, 12)));
 
-        var warning = SdkSelection.Unloadable(new Version(11, 0, 100), new Version(10, 0, 401), new Version(10, 0, 12));
+        var warning = SdkSelection.Unloadable(new Version(11, 0, 100), "10.0.401", new Version(10, 0, 12));
         Assert.Contains("SDK 11.0.100", warning, StringComparison.Ordinal);
         Assert.Contains("uses the .NET SDK 10.0.401 instead", warning, StringComparison.Ordinal);
         Assert.Contains("Install the .NET 11.0 runtime", warning, StringComparison.Ordinal);
@@ -144,10 +144,10 @@ public sealed class DotnetVersionsTests : IAsyncLifetime
         Assert.False(SdkSelection.AboveFloor(new Version(2, 0, 3)));
         Assert.False(SdkSelection.AboveFloor(new Version(1, 1, 14)));
 
-        var below = SdkSelection.BelowFloor("2.0.3", "/src/global.json", new Version(10, 0, 401));
+        var below = SdkSelection.BelowFloor("2.0.3", "/src/global.json", "11.0.100-rc.3.26522.148");
         Assert.Contains("resolves to the .NET SDK 2.0.3 (/src/global.json)", below, StringComparison.Ordinal);
         Assert.Contains("with the .NET SDK 2.1.200 or later", below, StringComparison.Ordinal);
-        Assert.Contains("uses the .NET SDK 10.0.401 instead", below, StringComparison.Ordinal);
+        Assert.Contains("uses the .NET SDK 11.0.100-rc.3.26522.148 instead", below, StringComparison.Ordinal); // a preview SDK by its whole name
     }
 
     [Theory]
@@ -182,7 +182,7 @@ public sealed class DotnetVersionsTests : IAsyncLifetime
         var found = GlobalJsonSdk.Find(folder)!;
         Assert.Equal(("6.0.400", "latestPatch", true), (found.Version, found.RollForward, found.AllowPrerelease));
         Assert.Equal(Path.Combine(_root, "a", "global.json"), found.Path);
-        Assert.Contains("asks for the .NET SDK 6.0.400 (rollForward: latestPatch), and no installed SDK matches", SdkSelection.NotInstalled(found, new Version(10, 0, 401)), StringComparison.Ordinal);
+        Assert.Contains("asks for the .NET SDK 6.0.400 (rollForward: latestPatch), and no installed SDK matches", SdkSelection.NotInstalled(found, "10.0.401"), StringComparison.Ordinal);
     }
 
     private static List<string> ListSdks()

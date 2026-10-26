@@ -109,8 +109,9 @@ commit, and `v<VERSION>` is published only if all of them pass. Otherwise nothin
 ## 6. After the release
 
 The release run's last job merges `master` into `develop` through a pull request of its own (`develop-after/X.Y.Z`,
-merged by the run): it brings in the release branch's fixes and keeps `develop`'s `VERSION` (already past the release
-since step 3). If anything else conflicts, it stops with an error; merge `master` into `develop` in a pull request
+merged by the run; the workflow token's pull request starts no run, so the job posts its `ci` check itself, since `master`
+passed the release run's gates): it brings in the release branch's fixes and keeps
+`develop`'s `VERSION` (already past the release since step 3). If anything else conflicts, it stops with an error; merge `master` into `develop` in a pull request
 (a branch off `develop` that merges `master`, the conflicts resolved). Then delete `release/X.Y.Z`.
 
 ## Hotfixes

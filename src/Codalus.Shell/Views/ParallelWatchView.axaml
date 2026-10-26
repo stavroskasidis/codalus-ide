@@ -28,7 +28,7 @@
           <Grid ColumnDefinitions="160,240,*">
             <TextBlock Text="{Binding Thread}" TextTrimming="CharacterEllipsis" />
             <TextBlock Grid.Column="1" Text="{Binding Frame}" Classes="muted" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="2" Text="{Binding Value}" TextTrimming="CharacterEllipsis" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+            <TextBlock Grid.Column="2" Text="{Binding Value}" TextTrimming="CharacterEllipsis" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>

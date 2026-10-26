@@ -17,11 +17,11 @@
       <TreeView.ItemTemplate>
         <TreeDataTemplate x:DataType="vm:SyntaxItemViewModel" ItemsSource="{Binding Children}">
           <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
-            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12"
                        Foreground="{DynamicResource Shell.Accent}" IsVisible="{Binding IsNode}" />
-            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12"
                        Foreground="{DynamicResource Shell.Diff.Added}" IsVisible="{Binding IsToken}" />
-            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12"
                        Foreground="{DynamicResource Shell.Warning.Foreground}" IsVisible="{Binding IsTrivia}" />
             <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Span}" VerticalAlignment="Center" />
           </StackPanel>
@@ -36,7 +36,7 @@
           <DataTemplate x:DataType="vm:PropertyRow">
             <Grid ColumnDefinitions="120,*">
               <TextBlock Classes="muted" Text="{Binding Name}" />
-              <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" />
+              <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" />
             </Grid>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
@@ -55,7 +55,7 @@
             <TreeDataTemplate x:DataType="vm:OperationItemViewModel" ItemsSource="{Binding Children}">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Syntax}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Syntax}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
               </StackPanel>
             </TreeDataTemplate>
           </TreeView.ItemTemplate>

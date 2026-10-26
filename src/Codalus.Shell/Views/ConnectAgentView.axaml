@@ -50,7 +50,7 @@
       <Setter Property="Padding" Value="8,5" />
     </Style>
     <Style Selector="Border.command SelectableTextBlock">
-      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
       <Setter Property="FontSize" Value="11.5" />
       <Setter Property="Foreground" Value="{DynamicResource Shell.Editor.Foreground}" />
       <Setter Property="TextWrapping" Value="Wrap" />
@@ -219,7 +219,7 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
             <StackPanel Spacing="6" Margin="32,0,0,0" IsVisible="{Binding ShowKey}">
-              <TextBox x:Name="KeyBox" Text="{Binding ApiKey}" PasswordChar="•" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace"
+              <TextBox x:Name="KeyBox" Text="{Binding ApiKey}" PasswordChar="•" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace"
                        AutomationProperties.Name="{Binding KeyName}" PlaceholderText="{Binding KeyName}">
                 <TextBox.InnerLeftContent>
                   <controls:Icon Kind="key" Margin="8,0,0,0" VerticalAlignment="Center" />

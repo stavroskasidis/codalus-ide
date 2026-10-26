@@ -34,7 +34,7 @@
             <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" ToolTip.Tip="{Binding Key}" TextTrimming="CharacterEllipsis" />
             <Border Grid.Column="2" Width="18" Height="14" Background="{Binding Swatch}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" VerticalAlignment="Center" />
             <TextBox Grid.Column="3" Classes="cell" Text="{Binding Hex, UpdateSourceTrigger=LostFocus}" VerticalAlignment="Center"
-                     AutomationProperties.Name="{Binding Title}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+                     AutomationProperties.Name="{Binding Title}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
             <Button Grid.Column="4" Classes="link" Content="{l:T fontsAndColors.reset}" Command="{Binding ResetCommand}" IsVisible="{Binding IsCustom}" Margin="6,0,0,0" />
             <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error.Foreground}" />
           </Grid>

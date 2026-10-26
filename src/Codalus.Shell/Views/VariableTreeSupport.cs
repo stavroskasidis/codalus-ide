@@ -21,6 +21,11 @@ public static class VariableActions
     public static Func<VariableNode, string, Task>? VisualizeWithPlugin { get; set; }
 
     public static Func<string, Task>? CopyText { get; set; }
+
+    /// <summary>Ask AI About the Value (M51), offered while AI assistance is on (<see cref="CanAskAi"/>).</summary>
+    public static Func<VariableNode, Task>? AskAi { get; set; }
+
+    public static Func<bool>? CanAskAi { get; set; }
 }
 
 /// <summary>The menu and visualizers of a value in the data tip and the variable windows.</summary>
@@ -52,7 +57,7 @@ internal static class VariableTreeSupport
 
     /// <summary>
     /// A value's menu: Edit Value (with <paramref name="edit"/>, for a value that can change), copying, Add Watch,
-    /// QuickWatch, Pin to Source (with <paramref name="pin"/>) and the visualizers.
+    /// QuickWatch, Pin to Source (with <paramref name="pin"/>), the visualizers, and Ask AI About the Value while AI is on.
     /// </summary>
     public static List<Control> MenuItems(VariableNode node, Action? edit, Action? pin = null)
     {
@@ -80,6 +85,12 @@ internal static class VariableTreeSupport
         {
             items.Add(new Separator());
             items.Add(Controls.MenuEntry.Submenu("View", "window", visualizers.Select(v => Item(v.Title, null, v.Open))));
+        }
+
+        if (!node.IsPlaceholder && VariableActions.CanAskAi?.Invoke() == true)
+        {
+            items.Add(new Separator());
+            items.Add(Item("Ask AI About the Value", "sparkle", () => _ = VariableActions.AskAi?.Invoke(node)));
         }
 
         return items;

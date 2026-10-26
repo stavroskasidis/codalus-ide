@@ -16,6 +16,8 @@ name: Pipeline
 # A run stops at its first failed job, which cancels the rest (ADR 0028, 2026-10-20). A release/X.Y.Z → master pull request
 # skips test and smoke when develop's own run passed on its head (gate). A release is cut from develop as release/X.Y.Z and
 # merged into master by pull request, so develop stays open meanwhile (ADR 0028, 2026-10-21; docs/release/releasing.md).
+# A pull request passes when its one ci job does, the check the branch ruleset requires (ADR 0028, 2026-10-26); a docs-only
+# pull request skips test and smoke (gate).
 # Manual dispatch runs the branch's pipeline as a dry run by default (everything built and tested, nothing published).
 # The target framework matrix (M33) is compat.yml, by hand.
 on:
@@ -24,12 +26,11 @@ on:
     paths-ignore:
       - "docs/**"
       - "**/*.md"
+  # Every pull request runs, a docs-only one too: the branch ruleset requires its ci check, which a run that never started
+  # would leave waiting forever. A docs-only pull request skips test and smoke instead (gate).
   pull_request:
     # A fix a release needs goes into its release/X.Y.Z branch by pull request, and is tested like any other.
     branches: [develop, master, "release/**"]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -116,6 +117,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v${{ steps.plan.outputs.version }}" -f sha="$GITHUB_SHA" > /dev/null
 
+  # A pull request that changes only docs/** and *.md files skips test and smoke: pushes of those start no run at all
+  # (paths-ignore), but a pull request runs so that it reports ci.
   # A release/X.Y.Z → master pull request (a release) whose head already passed develop's own run, on a commit that has
   # all of master, skips test and smoke: the release run on master runs them again before anything is published (the
   # maintainer's decision, 2026-10-20: the same tree tested twice held up every release by about 50 minutes). A release
@@ -126,8 +129,21 @@ jobs:
       contents: read
       actions: read
     outputs:
-      skip: ${{ steps.check.outputs.skip }}
+      skip: ${{ steps.docs.outputs.skip || steps.check.outputs.skip }}
     steps:
+      - id: docs
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # A listing that fails tests everything.
+          files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')" || exit 0
+          if [[ -n "$files" ]] && ! grep -qvE '^docs/|\.md$' <<< "$files"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Only docs/** and *.md files change: test and smoke are skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
       # A release branch's VERSION is the X.Y.Z of its name (it is what master publishes), and its workflow files are
       # develop's: the release's tag is created by the workflow token, which GitHub lets tag only a commit whose workflow
       # files match the default branch's (M31b), so a workflow change goes into both (docs/release/releasing.md).
@@ -309,6 +325,25 @@ jobs:
         run: |
           echo "::error::smoke (${{ matrix.os }}) failed: the run's other jobs are cancelled."
           gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" || true
+
+  # The one check a pull request needs (the "protect" ruleset requires it on develop and master): the gate and every test
+  # and smoke job passed, or the gate skipped them (a docs-only pull request, a release whose head passed develop's run).
+  # It runs in a cancelled run too, and fails there: a run stops at its first failure by cancelling itself.
+  ci:
+    needs: [gate, test, smoke]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        env:
+          RESULTS: ${{ needs.gate.result }} ${{ needs.test.result }} ${{ needs.smoke.result }}
+        run: |
+          echo "gate, test, smoke: $RESULTS"
+          for result in $RESULTS; do
+            if [[ "$result" != success && "$result" != skipped ]]; then
+              echo "::error::CI didn't pass (gate, test, smoke: $RESULTS)." && exit 1
+            fi
+          done
 
   # The installers on every platform (eng/package.sh), installed the way users would and the installed app
   # smoke-tested (eng/smoke-test.sh --packages), then uploaded for publish.
@@ -708,13 +743,16 @@ jobs:
   # out; develop keeps its VERSION, already moved on when the release branch was cut. The "protect" ruleset lets
   # develop change only through a pull request, so the job opens one and merges it (it needs no approval, and the
   # repository lets GitHub Actions create pull requests). The workflow token's pull request and merge start no run,
-  # so they make no CI run and no nightly; master's content already passed this release's gates.
+  # so they make no CI run and no nightly; master's content already passed this release's gates. With no run, the
+  # pull request never reports ci, so the job posts it on the branch's head itself, as GitHub Actions (the source the
+  # ruleset requires): GitHub offers no Actions bypass for a repository owned by a user.
   finish:
     needs: [plan, aur]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      checks: write # the branch's ci check
     steps:
       - uses: actions/checkout@v4
         with:
@@ -749,6 +787,9 @@ jobs:
           # A re-run replaces the branch and reuses its pull request.
           branch="develop-after/$RELEASED"
           git push --force origin "HEAD:refs/heads/$branch"
+          gh api "repos/$GITHUB_REPOSITORY/check-runs" -f name=ci -f head_sha="$(git rev-parse HEAD)" \
+            -f status=completed -f conclusion=success -f 'output[title]=Passed in the release run' \
+            -f "output[summary]=master passed every gate of the $RELEASED release run, ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}." > /dev/null
           if [[ -z "$(gh pr list --head "$branch" --base develop --state open --json number --jq '.[].number')" ]]; then
             gh pr create --head "$branch" --base develop --title "Start $next after the $RELEASED release" \
               --body "Merges \`master\` into \`develop\` after the $RELEASED release and moves \`VERSION\` to $next. Opened and merged by the release run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."

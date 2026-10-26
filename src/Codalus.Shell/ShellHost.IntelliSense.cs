@@ -131,18 +131,33 @@ public sealed partial class ShellHost
             return;
         }
 
-        var path = editor.Model.Path;
-        var line = diagnostic.Range.Start.Line + 1;
-        var where = Path.GetFileName(path) + ":" + line.ToString(CultureInfo.InvariantCulture);
+        await AskAboutDiagnosticAsync(editor.Model.Path, diagnostic.Range.Start.Line + 1, diagnostic.Code, diagnostic.Message).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Explain with AI (the Error List's and code actions', M51): asks AI Chat about the diagnostic at <paramref name="line"/>
+    /// (1-based) of <paramref name="path"/>, with the code around it (through AiService).
+    /// </summary>
+    public async Task AskAiAboutDiagnosticAsync(string path, int line, string? code, string message)
+    {
+        if (await EnsureAiAsync().ConfigureAwait(true))
+        {
+            await AskAboutDiagnosticAsync(path, line, code, message).ConfigureAwait(true);
+        }
+    }
+
+    private async Task AskAboutDiagnosticAsync(string path, int line, string? code, string message)
+    {
+        var where = (path.Length > 0 ? Path.GetFileName(path) + ":" : string.Empty) + line.ToString(CultureInfo.InvariantCulture);
         var items = new List<AiContextItem>
         {
-            new(AiContextKind.Diagnostics, Localizer.Get("msg.ai.diagnostic", "the error"), (diagnostic.Code is { Length: > 0 } code ? code + ": " : string.Empty) + diagnostic.Message + " (" + where + ")")
+            new(AiContextKind.Diagnostics, Localizer.Get("msg.ai.diagnostic", "the error"), (code is { Length: > 0 } ? code + ": " : string.Empty) + message + " (" + where + ")")
             {
-                Path = path,
+                Path = path.Length > 0 ? path : null,
                 StartLine = line,
             },
         };
-        if (OpenTextOf(path) is not null || File.Exists(path))
+        if (path.Length > 0 && (OpenTextOf(path) is not null || File.Exists(path)))
         {
             items.Add(await LinesAroundAsync(path, line).ConfigureAwait(true));
         }

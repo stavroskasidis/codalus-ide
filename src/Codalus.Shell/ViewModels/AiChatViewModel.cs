@@ -80,6 +80,12 @@ public sealed record AiConnectAgent(string Id, string Name)
     public string AccessibleName => Localizer.Format("msg.acp.connectTo", "Connect to {0}…", Name);
 }
 
+/// <summary>A picker of an external agent's choice (M51): its name, the current value's name, the values, and the current one's place.</summary>
+public sealed record AiAgentChoiceItem(string Id, string Name, string CurrentName, IReadOnlyList<string> ValueNames, int SelectedIndex)
+{
+    public string AccessibleName => Name + ": " + CurrentName;
+}
+
 /// <summary>An action of the agent menu after its choices (Connect to Claude…, More agents…, Manage Agents…).</summary>
 public sealed record AiAgentMenuAction(string Label, string Icon, Func<Task> Run);
 
@@ -122,6 +128,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private bool _agent;
     private readonly HashSet<AiChatTurn> _known = [];
     private int _agentIndex;
+    private bool _picked;
     private List<string> _agentNames;
     private IReadOnlyList<AiCommandSuggestion> _suggestions = [];
 
@@ -129,6 +136,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     {
         _host = host;
         _agentNames = [.. host.ExternalAgents.Configured.Keys.Order(StringComparer.OrdinalIgnoreCase)];
+        _agentIndex = SavedAgentIndex(_agentNames);
         host.ExternalAgents.Changed += (_, _) => Ui.Post(RefreshAgentState);
         Chat = new AiChat(host.Ai);
         Chat.TurnChanged += (_, turn) => Ui.Post(() =>
@@ -311,10 +319,18 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
             NewChat();
             _agentIndex = value;
+            _picked = true;
             OnPropertyChanged();
             RefreshAgentState();
+
+            // Remembered across a restart (M51): AI Chat opens with the agent chosen last.
+            _ = _host.ExternalAgents.SaveChatAgentAsync(SelectedAgent, CancellationToken.None);
         }
     }
+
+    /// <summary>The picker's place of the agent chosen last (<c>ai.chat.agent</c>), or 0 (Built-in) when it's gone.</summary>
+    private int SavedAgentIndex(List<string> names) =>
+        _host.ExternalAgents.ChatAgent is { } saved && names.IndexOf(saved) is var at and >= 0 ? at + 1 : 0;
 
     /// <summary>The external agent chosen, or null for the built-in assistant.</summary>
     public string? SelectedAgent => _agentIndex > 0 && _agentIndex <= _agentNames.Count ? _agentNames[_agentIndex - 1] : null;
@@ -323,9 +339,6 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
 
     /// <summary>The picker's label: the chosen agent, or Built-in.</summary>
     public string SelectedAgentLabel => AgentChoices[Math.Clamp(_agentIndex, 0, _agentNames.Count)];
-
-    /// <summary>The mode picker's label: the agent's current mode.</summary>
-    public string SelectedModeLabel => Session is { } session && session.Modes.FirstOrDefault(m => m.Id == session.CurrentModeId) is { } mode ? mode.Name : string.Empty;
 
     /// <summary>The picker shows while AI is on: Built-in, the agents, then Connect, More agents… and Manage Agents… (D43).</summary>
     public bool HasAgents => IsOn;
@@ -341,36 +354,56 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     /// <summary>The running agent's session, when it is the chosen one.</summary>
     private AcpAgentSession? Session => _host.ExternalAgents.Current is { } session && session.Name == SelectedAgent ? session : null;
 
-    /// <summary>The agent's modes (empty when it has none, or hasn't started).</summary>
-    public IReadOnlyList<string> ModeNames => Session?.Modes.Select(m => m.Name).ToList() ?? [];
+    /// <summary>
+    /// The agent's choices, one picker each (M51): its model, mode, effort and other selects, as it offers them over ACP
+    /// (empty when it offers none, or hasn't started). A pick is sent to the agent and kept for its next sessions.
+    /// </summary>
+    public IReadOnlyList<AiAgentChoiceItem> AgentChoicePickers => IsExternal && Session is { } session
+        ? [.. session.Choices.Select(c => new AiAgentChoiceItem(c.Id, ChoiceName(c), c.CurrentName, [.. c.Values.Select(v => v.Name)], c.Values.ToList().FindIndex(v => v.Value == c.CurrentValue)))]
+        : [];
 
-    public bool HasModes => IsExternal && ModeNames.Count > 0;
+    public bool HasAgentChoices => AgentChoicePickers.Count > 0;
 
-    public int SelectedModeIndex
+    /// <summary>A picker's name: the known categories in the IDE's words, the others as the agent names them.</summary>
+    private static string ChoiceName(AcpSessionChoice choice) => choice.Category switch
     {
-        get => Session is { } session ? session.Modes.ToList().FindIndex(m => m.Id == session.CurrentModeId) : -1;
-        set
+        AcpSessionChoices.ModelCategory => Localizer.Get("msg.acp.choice.model", "Model"),
+        AcpSessionChoices.ModeCategory => Localizer.Get("msg.acp.choice.mode", "Mode"),
+        AcpSessionChoices.ThoughtLevelCategory => Localizer.Get("msg.acp.choice.effort", "Effort"),
+        _ => choice.Name,
+    };
+
+    /// <summary>Picks the value at <paramref name="index"/> of the choice <paramref name="id"/>: sent to the agent, then kept in its entry.</summary>
+    public async Task ChooseAsync(string id, int index)
+    {
+        if (Session is not { } session || session.Choices.FirstOrDefault(c => c.Id == id) is not { } choice || index < 0 || index >= choice.Values.Count)
         {
-            if (Session is { } session && value >= 0 && value < session.Modes.Count && session.Modes[value].Id != session.CurrentModeId)
+            return;
+        }
+
+        var value = choice.Values[index].Value;
+        if (value != choice.CurrentValue)
+        {
+            try
             {
-                _ = SetModeAsync(session, session.Modes[value].Id);
+                await session.SetChoiceAsync(id, value, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (AcpException)
+            {
+                // The agent refused: the picker shows its current value again, and nothing is kept.
+                OnChoicesChanged();
+                return;
             }
         }
+
+        await _host.ExternalAgents.SaveChoiceAsync(session.Name, id, value, CancellationToken.None).ConfigureAwait(true);
+        OnChoicesChanged();
     }
 
-    private async Task SetModeAsync(AcpAgentSession session, string modeId)
+    private void OnChoicesChanged()
     {
-        try
-        {
-            await session.SetModeAsync(modeId, CancellationToken.None).ConfigureAwait(true);
-        }
-        catch (AcpException)
-        {
-            // The agent refused: the picker shows its current mode again.
-        }
-
-        OnPropertyChanged(nameof(SelectedModeIndex));
-        OnPropertyChanged(nameof(SelectedModeLabel));
+        OnPropertyChanged(nameof(AgentChoicePickers));
+        OnPropertyChanged(nameof(HasAgentChoices));
     }
 
     /// <summary>The agent's slash commands matching what's typed after <c>/</c>.</summary>
@@ -473,7 +506,8 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         var names = _host.ExternalAgents.Configured.Keys.Order(StringComparer.OrdinalIgnoreCase).ToList();
         if (!names.SequenceEqual(_agentNames, StringComparer.Ordinal))
         {
-            var selected = SelectedAgent;
+            // Until the user picks, the agent chosen last is restored when its entry arrives (the settings load after the window).
+            var selected = SelectedAgent ?? (_picked ? null : _host.ExternalAgents.ChatAgent);
             var at = selected is null ? -1 : names.IndexOf(selected);
             if (selected is not null && at < 0)
             {
@@ -494,10 +528,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShowBuiltInControls));
         OnPropertyChanged(nameof(AgentBlockedMessage));
         OnPropertyChanged(nameof(IsAgentBlocked));
-        OnPropertyChanged(nameof(ModeNames));
-        OnPropertyChanged(nameof(HasModes));
-        OnPropertyChanged(nameof(SelectedModeIndex));
-        OnPropertyChanged(nameof(SelectedModeLabel));
+        OnChoicesChanged();
         OnPropertyChanged(nameof(CanSend));
         OnStatesChanged();
         UpdateSuggestions();

@@ -76,6 +76,12 @@ public sealed partial class EnvironmentCheckTests : IDisposable
         var sdk = (await check.CheckAsync(solution, TestContext.Current.CancellationToken)).Single(t => t.Id == "dotnet");
         Assert.Equal((ToolState.Mismatch, "9.0.100"), (sdk.State, sdk.WantedVersion));
         Assert.Contains("dotnet --version in app", calls);
+
+        // What a solution's open checks: the SDK alone, without running git, Docker or Podman.
+        calls.Clear();
+        var alone = await check.CheckDotnetAsync(solution, TestContext.Current.CancellationToken);
+        Assert.Equal((ToolState.Mismatch, "9.0.100"), (alone.State, alone.WantedVersion));
+        Assert.All(calls, c => Assert.StartsWith("dotnet ", c, StringComparison.Ordinal));
         Assert.Contains("--version 9.0.100", InstallPlans.For(sdk, PlatformKind.Linux, _dir, false, "fedora")!.Command, StringComparison.Ordinal);
         Assert.Contains("Microsoft.DotNet.SDK.9 ", InstallPlans.For(sdk, PlatformKind.Windows, _dir, true, null)!.Command, StringComparison.Ordinal);
     }

@@ -1059,7 +1059,8 @@ public class IntelliSensePopupTests
         Assert.NotNull(document);
         await ShellFixture.PumpUntil(() => document.Controller is not null);
         var editor = document.Controller!;
-        editor.Model.Text.Insert(editor.Model.Text.TextLength, Builders);
+        // Blank lines after, so the call's line can scroll up from the view's bottom (below).
+        editor.Model.Text.Insert(editor.Model.Text.TextLength, Builders + new string('\n', 60));
         void CaretAt(string marker, int delta)
         {
             editor.Editor.CaretOffset = editor.Model.Text.Text.IndexOf(marker, StringComparison.Ordinal) + delta;
@@ -1092,7 +1093,13 @@ public class IntelliSensePopupTests
         Assert.Equal("2 of 2", signature.PositionText); // AddTab(string) is first: overloads by their parameter count
         Assert.Equal("id: Id - incremental", DescriptionView.TextOf(signature.ParameterBlock));
 
-        // The completion list opens below the line while signature help moves above it; Up and Down go to the list.
+        // The completion list opens below the line while signature help moves above it; Up and Down go to the list. The
+        // line goes near the view's top first: with a taller font (WSL's Noto Mono) it sat near the bottom, where the list
+        // rightly opens above.
+        var textView = editor.Editor.TextArea.TextView;
+        var scroller = editor.Editor.GetVisualDescendants().OfType<ScrollViewer>().First();
+        scroller.Offset = new Vector(scroller.Offset.X, Math.Max(0, textView.GetVisualTopByDocumentLine(editor.Editor.TextArea.Caret.Line) - 4 * textView.DefaultLineHeight));
+        ShellFixture.Pump();
         editor.ShowCompletion();
         await ShellFixture.PumpUntil(() => editor.CompletionWindow is { IsOpen: true } w && w.CompletionList.CurrentList.Count > 0, seconds: 120);
         Assert.Equal(PopupSide.Below, editor.CompletionWindow!.Side);

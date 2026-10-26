@@ -103,7 +103,7 @@
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
       <TabControl Grid.Column="2" Padding="0" SelectedIndex="{Binding Tab}">
         <TabItem Header="{l:T containers.logs}">
-          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="{l:T containers.containerLogs}" />
+          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,Noto Sans Mono,Ubuntu Mono,Liberation Mono,Noto Mono,monospace" AutomationProperties.Name="{l:T containers.containerLogs}" />
         </TabItem>
         <TabItem Header="{l:T containers.environment}">
           <ListBox ItemsSource="{Binding Environment}" Background="Transparent" AutomationProperties.Name="{l:T containers.environmentVariables}">

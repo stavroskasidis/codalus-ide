@@ -74,6 +74,12 @@
         <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
       </CheckBox>
     </DataTemplate>
+    <!-- System Integration (M51): changes the OS, not settings.json; undetermined when it's partly there or another copy's. -->
+    <DataTemplate DataType="vm:OsIntegrationSettingViewModel">
+      <CheckBox IsChecked="{Binding IsOn}" IsEnabled="{Binding CanToggle}" AutomationProperties.Name="{Binding Heading}">
+        <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+      </CheckBox>
+    </DataTemplate>
     <DataTemplate DataType="vm:EnumSettingViewModel">
       <StackPanel Spacing="4" HorizontalAlignment="Left">
         <ComboBox MinWidth="260" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Heading}">
@@ -255,8 +261,9 @@
                       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" MaxWidth="640" HorizontalAlignment="Left" />
                       <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="{l:T settings.thisSettingCanOnlyBeChanged}" IsVisible="{Binding IsUserOnlyHere}" />
                       <ContentControl Content="{Binding}" Margin="0,4,0,0" IsVisible="{Binding !IsBool}" />
+                      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" IsVisible="{Binding HasStatus}" MaxWidth="640" HorizontalAlignment="Left" />
                       <TextBlock Classes="error" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
-                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" Text="{Binding Key}" />
+                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,Noto Sans Mono,Ubuntu Mono,Liberation Mono,Noto Mono,monospace" Text="{Binding Key}" IsVisible="{Binding IsSetting}" />
                     </StackPanel>
                   </StackPanel>
                 </Border>
