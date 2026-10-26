@@ -362,7 +362,8 @@ public sealed class ProjectTemplateCatalogSdkTests : IDisposable
         Directory.CreateDirectory(_hive);
         var cli = new TemplateService(hive: _hive, workingDirectory: _hive);
 
-        // A fixed day: the SDKs here may carry .NET 8 and 9 members, whose support ends on 2026-11-10.
+        // A fixed day: the SDKs here may carry .NET 8 and 9 members, whose support ends on 2026-11-10 (and an older SDK
+        // installed beside them, .NET 6 or 7 ones, out of support).
         var catalog = new ProjectTemplateCatalog(cli, today: () => new DateOnly(2026, 10, 21));
         var rows = await catalog.LoadAsync(TestContext.Current.CancellationToken);
         Assert.True(catalog.Source == "cache", $"Read from {catalog.Source}: {catalog.LoadError}");
@@ -372,7 +373,7 @@ public sealed class ProjectTemplateCatalogSdkTests : IDisposable
         {
             var row = Assert.Single(rows, r => r.ShortName == shortName && r.Language == "C#");
             Assert.NotEmpty(row.Frameworks);
-            Assert.All(row.Frameworks.Where(f => !f.Moniker.StartsWith("netstandard", StringComparison.Ordinal)), f => Assert.True(f.Label.EndsWith("Support)", StringComparison.Ordinal) || f.Label.EndsWith("(Preview)", StringComparison.Ordinal), f.Label));
+            Assert.All(row.Frameworks.Where(f => !f.Moniker.StartsWith("netstandard", StringComparison.Ordinal)), f => Assert.True(f.Label.EndsWith(" Term Support)", StringComparison.Ordinal) || f.Label.EndsWith("(Out of support)", StringComparison.Ordinal) || f.Label.EndsWith("(Preview)", StringComparison.Ordinal), f.Label));
             Assert.NotNull(row.DefaultFramework());
         }
 
