@@ -89,6 +89,12 @@ internal sealed class ShellFixture : IAsyncDisposable
             SkipSetup = !firstRun, // the setup (M46) shows only in its own tests
             BuiltInPluginsDir = builtInPlugins ?? PluginBin("Codalus.Plugins.Welcome"),
         });
+
+        // System Integration (M51) never registers anything on the machine itself: the XDG layout under the user data
+        // folder, with no tools to run, on every OS.
+        Shell.OsIntegration = new Codalus.Workbench.Setup.LinuxOsIntegration(
+            Codalus.Workbench.Setup.OsLauncher.Current(userData), Path.Combine(userData, "os", "data"), Path.Combine(userData, "os", "config"),
+            (_, _, _, _) => Task.FromResult((0, string.Empty)), _ => null);
         Window = new MainWindow(Shell);
         Window.Show();
         Pump();

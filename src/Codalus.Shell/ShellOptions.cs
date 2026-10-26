@@ -23,7 +23,7 @@ public sealed record ShellOptions
           --debug-plugin-host <file>  Run the --plugin-dir plugins in a plugin host that writes its process id to <file> and waits for a debugger.
           --dev                   Development mode: shows developer commands.
           --open <file>           Open a file in the editor.
-          --new-window            Open a file in a new window, not in the running one.
+          --new-window            Open in a new window, not in the running one.
           --skip-setup            Don't show the first-run setup (for automation; CODALUS_SKIP_SETUP=1 does the same).
           --list-plugins          Print the installed plugins and exit (--show-versions: with their versions).
           --install-plugin <id[@version] | file.nupkg>
@@ -289,6 +289,12 @@ public sealed record ShellOptions
     /// </summary>
     private static ShellOptions OpenPath(ShellOptions options, string argument)
     {
+        // Explorer passes a drive's root as "C:\" (%V), which Windows' quoting rules read back as C:".
+        if (OperatingSystem.IsWindows() && argument.Length > 1 && argument.EndsWith('"'))
+        {
+            argument = argument[..^1] + "\\";
+        }
+
         if (options.Remote is not null || Directory.Exists(argument) || !File.Exists(argument) && LocationOf(argument) is null)
         {
             return options with { Path = argument };

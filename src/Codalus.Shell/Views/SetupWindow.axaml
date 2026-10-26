@@ -276,33 +276,53 @@
           </StackPanel>
           <Button DockPanel.Dock="Bottom" Classes="link" HorizontalAlignment="Left" Margin="0,8,0,0" Content="{l:T setupWindow.everythingElseCheckEnvironment}" Command="{Binding OpenCheckEnvironmentCommand}" />
           <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl ItemsSource="{Binding Tools}" AutomationProperties.Name="{l:T setupWindow.tools}" MaxWidth="720" HorizontalAlignment="Left">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:SetupToolRowViewModel">
-                  <Border Classes="section" AutomationProperties.Name="{Binding Title}">
-                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
-                      <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Top" Margin="0,2,10,0" />
-                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
-                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding State}" />
-                      </StackPanel>
-                      <Button Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Content="{Binding InstallTitle}" Command="{Binding InstallCommand}"
-                              IsVisible="{Binding CanInstall}" ToolTip.Tip="{Binding Confirmation}" />
-                      <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted small" Text="{Binding NeededFor}" TextWrapping="Wrap" Margin="0,4,0,0" />
-                      <TextBlock Grid.Row="2" Grid.Column="1" Classes="muted small" Text="{Binding Details}" IsVisible="{Binding HasDetails}" TextWrapping="Wrap" Margin="0,2,0,0" />
-                      <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Spacing="8" Margin="0,10,0,0" IsVisible="{Binding IsConfirming}">
-                        <TextBlock Text="{Binding Confirmation}" TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                          <Button Classes="accent" Content="{Binding ConfirmTitle}" Command="{Binding ConfirmCommand}" />
-                          <Button Content="{l:T setupWindow.cancel}" Command="{Binding CancelCommand}" />
+            <StackPanel>
+              <ItemsControl ItemsSource="{Binding Tools}" AutomationProperties.Name="{l:T setupWindow.tools}" MaxWidth="720" HorizontalAlignment="Left">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SetupToolRowViewModel">
+                    <Border Classes="section" AutomationProperties.Name="{Binding Title}">
+                      <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+                        <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Top" Margin="0,2,10,0" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding State}" />
                         </StackPanel>
+                        <Button Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Content="{Binding InstallTitle}" Command="{Binding InstallCommand}"
+                                IsVisible="{Binding CanInstall}" ToolTip.Tip="{Binding Confirmation}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted small" Text="{Binding NeededFor}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Classes="muted small" Text="{Binding Details}" IsVisible="{Binding HasDetails}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                        <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Spacing="8" Margin="0,10,0,0" IsVisible="{Binding IsConfirming}">
+                          <TextBlock Text="{Binding Confirmation}" TextWrapping="Wrap" />
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Classes="accent" Content="{Binding ConfirmTitle}" Command="{Binding ConfirmCommand}" />
+                            <Button Content="{l:T setupWindow.cancel}" Command="{Binding CancelCommand}" />
+                          </StackPanel>
+                        </StackPanel>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Classes="muted" Text="{l:T setupWindow.installing}" IsVisible="{Binding IsInstalling}" Margin="0,10,0,0" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <!-- System Integration (M51, ADR 0084): off until chosen; leaving the step registers what's checked. -->
+              <TextBlock Text="{l:T setupWindow.yourSystem}" FontWeight="SemiBold" Margin="0,18,0,4" />
+              <TextBlock Classes="muted" Text="{l:T setupWindow.yourSystemLead}" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left" Margin="0,0,0,8" />
+              <ItemsControl ItemsSource="{Binding Integrations}" AutomationProperties.Name="{l:T setupWindow.systemIntegration}" MaxWidth="720" HorizontalAlignment="Left">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SetupIntegrationChoice">
+                    <Border Classes="section">
+                      <StackPanel Spacing="4">
+                        <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
+                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        </CheckBox>
+                        <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" Margin="26,0,0,0" />
+                        <TextBlock Classes="muted small" Text="{Binding Note}" IsVisible="{Binding HasNote}" TextWrapping="Wrap" Margin="26,0,0,0" />
                       </StackPanel>
-                      <TextBlock Grid.Row="3" Grid.Column="1" Classes="muted" Text="{l:T setupWindow.installing}" IsVisible="{Binding IsInstalling}" Margin="0,10,0,0" />
-                    </Grid>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
           </ScrollViewer>
         </DockPanel>
       </Panel>

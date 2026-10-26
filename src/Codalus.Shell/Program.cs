@@ -107,6 +107,18 @@ internal static partial class Program
             }
         }
 
+        // codalus <folder or solution> (also Explorer's, the Finder's and the file managers' Open with…, M51): the running
+        // window of this user-data folder takes it when it has nothing open; otherwise this process opens a new window.
+        if (options.Path is { } openPath && options.Remote is null && !options.NewWindow && options.Bench is null && options.ExitOn is null
+            && options.Screenshot is null && options.SmokeTest is null && options.Diff is null && options.Merge is null && options.WaitFile is null)
+        {
+            var paths = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
+            if (Infrastructure.SingleInstance.Send(Infrastructure.SingleInstance.PipeName(paths.State), new Infrastructure.InstanceRequest("openPath", [openPath], Wait: true)) == true)
+            {
+                return 0;
+            }
+        }
+
         // codalus merge and --wait: the running shell does the work and answers when it's done (git waits for us).
         if (options.Merge is { } merge || options.WaitFile is not null)
         {
