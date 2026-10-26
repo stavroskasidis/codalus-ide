@@ -330,6 +330,35 @@ public sealed class AcpShellTests
         }
     }
 
+    /// <summary>
+    /// The items an open menu shows: in its popup and laid out. Its Items alone aren't enough: items added in the menu's
+    /// Opening event were there, but never in the popup, which showed as an empty strip (0.8.0's release candidate).
+    /// </summary>
+    private static List<string?> Shown(MenuFlyout menu)
+    {
+        ShellFixture.Pump();
+        return [.. menu.Items.OfType<MenuItem>().Where(i => i.IsAttachedToVisualTree() && i.Bounds.Width > 0 && i.Bounds.Height > 0).Select(i => i.Header as string)];
+    }
+
+    /// <summary>
+    /// Clicks a picker until its menu opens: headless input, with popups in windows of their own, sometimes delivers the
+    /// release without the press (the button loses its capture), and the click is lost; the user's click isn't.
+    /// </summary>
+    private static async Task OpenAsync(Window window, DropDownButton picker, MenuFlyout menu)
+    {
+        for (var attempt = 0; attempt < 3 && !menu.IsOpen; attempt++)
+        {
+            Click(window, picker);
+            try
+            {
+                await ShellFixture.PumpUntil(() => menu.IsOpen, 3);
+            }
+            catch (Exception) when (attempt < 2)
+            {
+            }
+        }
+    }
+
     /// <summary>Clicks a control as the user does: the pointer down and up at its middle.</summary>
     private static void Click(Window window, Control control)
     {
@@ -365,10 +394,9 @@ public sealed class AcpShellTests
         // leave its picker in place; once it closes, the next picker's menu opens.
         using var popups = TestAppBuilder.PopupsInWindowsOfTheirOwn();
         var model = view.ChoicePickers[0];
-        Click(window, model);
         var modelMenu = (MenuFlyout)model.Flyout!;
-        await ShellFixture.PumpUntil(() => modelMenu.IsOpen, 10);
-        Assert.Equal(["Sonnet", "Opus"], modelMenu.Items.OfType<MenuItem>().Select(i => i.Header as string));
+        await OpenAsync(window, model, modelMenu);
+        Assert.Equal(["Sonnet", "Opus"], Shown(modelMenu));
         chat.Refresh();
         ShellFixture.Pump();
         Assert.Same(model, view.ChoicePickers[0]);
@@ -377,10 +405,9 @@ public sealed class AcpShellTests
         await ShellFixture.PumpUntil(() => !modelMenu.IsOpen);
 
         var effort = view.ChoicePickers[2];
-        Click(window, effort);
         var effortMenu = (MenuFlyout)effort.Flyout!;
-        await ShellFixture.PumpUntil(() => effortMenu.IsOpen, 10);
-        Assert.Equal(["Low", "Medium", "High"], effortMenu.Items.OfType<MenuItem>().Select(i => i.Header as string));
+        await OpenAsync(window, effort, effortMenu);
+        Assert.Equal(["Low", "Medium", "High"], Shown(effortMenu));
         effortMenu.Items.OfType<MenuItem>().Single(i => (i.Header as string) == "High").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         effortMenu.Hide();
         await ShellFixture.PumpUntil(() => chat.AgentChoicePickers[2].CurrentName == "High");
@@ -388,9 +415,9 @@ public sealed class AcpShellTests
 
         // And the agent picker goes back to the built-in assistant.
         var agentPicker = Visible<DropDownButton>(view, "AgentPicker");
-        Click(window, agentPicker);
         var agentMenu = (MenuFlyout)agentPicker.Flyout!;
-        await ShellFixture.PumpUntil(() => agentMenu.IsOpen);
+        await OpenAsync(window, agentPicker, agentMenu);
+        Assert.Contains("Built-in", Shown(agentMenu));
         agentMenu.Items.OfType<MenuItem>().Single(i => (i.Header as string) == "Built-in").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         agentMenu.Hide();
         await ShellFixture.PumpUntil(() => !chat.IsExternal && view.ChoicePickers.Count == 0);

@@ -186,7 +186,8 @@ public sealed partial class PathBoxTests
             window.KeyPress(Key.Down, RawInputModifiers.Alt, PhysicalKey.ArrowDown, null);
             ShellFixture.Pump();
             Assert.True(box.RecentMenu.IsOpen);
-            var items = box.RecentMenu.Items.OfType<MenuItem>().ToList();
+            // In the open menu, laid out: items added as a menu opened never reached it (0.8.0's release candidate).
+            var items = box.RecentMenu.Items.OfType<MenuItem>().Where(i => i.IsAttachedToVisualTree() && i.Bounds.Width > 0).ToList();
             Assert.Equal(["/work/one", "/work/two_folder"], items.Select(AutomationProperties.GetName));
             Assert.Equal("/work/two_folder", Assert.IsType<TextBlock>(items[1].Header).Text);
             Assert.Equal("folder", Assert.IsType<Icon>(items[1].Icon).Kind);

@@ -91,10 +91,8 @@ public sealed partial class AiChatView : UserControl, IPaneView
     /// built as it opens so it shows the choices of now, then groups of actions, each after a separator (D43: Connect to
     /// each one-click agent not connected yet; More agents… and Manage Agents…).
     /// </summary>
-    private static MenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose, Func<IReadOnlyList<IReadOnlyList<AiAgentMenuAction>>>? actions = null)
-    {
-        var flyout = new MenuFlyout();
-        flyout.Opening += (_, _) =>
+    private static FilledMenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose, Func<IReadOnlyList<IReadOnlyList<AiAgentMenuAction>>>? actions = null) =>
+        new FilledMenuFlyout(flyout =>
         {
             flyout.Items.Clear();
             var current = selected();
@@ -127,9 +125,8 @@ public sealed partial class AiChatView : UserControl, IPaneView
             {
                 flyout.Items.Add(new MenuItem { Header = Codalus.Workbench.Localization.Localizer.Get("aiChat.nothingToChoose", "Nothing to choose now"), IsEnabled = false });
             }
-        };
-        return flyout;
-    }
+        });
+
 
     /// <summary>A one-click agent's button in the off state: Connect to it (D43).</summary>
     private void OnConnectClick(object? sender, RoutedEventArgs e)
