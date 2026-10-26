@@ -1116,13 +1116,16 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 await _events.FilesChangedAsync(new FilesChangedParams([.. outputs.Directories.Concat(outputs.MSBuildFiles.Select(f => System.IO.Path.GetDirectoryName(f)!)).Distinct(s_pathComparer)])).ConfigureAwait(false);
             }
 
-            // As the watcher would: also a project whose folder got an assets file (a multi-targeted project knows its
-            // assets file only from the imports its first restore writes) or that imports a file the restore rewrote.
+            // Also a project that knew no assets file and has one now (a multi-targeted project learns its assets file
+            // only from the imports its first restore writes; Linux's watcher can miss files in a new obj folder), and
+            // one whose folder got an assets file or that imports a file the restore rewrote, as the watcher would.
             var imports = outputs.MSBuildFiles.ToHashSet(s_pathComparer);
+            bool Restored(string project) => _evaluated.TryGetValue(project, out var e)
+                && (e.Imports.Any(imports.Contains)
+                    || (e.AssetsFile is null && e.IntermediateDirectory is { } obj && File.Exists(System.IO.Path.Combine(obj, "project.assets.json"))));
             await EvaluateAsync(
-                [.. ProjectPaths.Where(p => AssetsChangedSinceEvaluation(p) || netFrameworkChanged.Contains(p, s_pathComparer)
-                                            || outputs.Directories.Any(d => ProjectFileEditor.IsSameOrUnder(d, System.IO.Path.GetDirectoryName(p)!))
-                                            || (_evaluated.TryGetValue(p, out var e) && e.Imports.Any(imports.Contains)))],
+                [.. ProjectPaths.Where(p => AssetsChangedSinceEvaluation(p) || netFrameworkChanged.Contains(p, s_pathComparer) || Restored(p)
+                                            || outputs.Directories.Any(d => ProjectFileEditor.IsSameOrUnder(d, System.IO.Path.GetDirectoryName(p)!)))],
                 _lifetime.Token,
                 DesignTimeMode.IfAssetsChanged,
                 reloadFiles: imports).ConfigureAwait(false);
