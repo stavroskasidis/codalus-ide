@@ -177,7 +177,9 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         shard: [shell-1, shell-2, others]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 50
+    # macOS runners are the slowest and vary most: a Shell shard that takes 16 to 24 minutes on one ran past 40 on a slow
+    # one (0.6.0's release run; develop's run 40241261003, M50), so macOS gets 20 minutes more.
+    timeout-minutes: ${{ matrix.os == 'macos-latest' && 70 || 50 }}
     steps:
       - uses: actions/checkout@v4
       # The display is for tests that run real windowed apps (the Live Visual Tree's Avalonia app).
@@ -205,7 +207,7 @@ jobs:
         shell: bash
         # A hang is reported and ended by 15 minutes (eng/ci-test.sh): this is the last resort, leaving the job time for
         # the steps below.
-        timeout-minutes: 40
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 40 }}
         run: bash eng/ci-test.sh ${{ matrix.shard }}
       - name: Processes the tests left running
         # What the tests left behind is listed: a leak to fix.
