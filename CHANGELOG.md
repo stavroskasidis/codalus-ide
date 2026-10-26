@@ -2,7 +2,7 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
-## 0.8.0
+## 0.7.1
 
 - **Blazor component parameters in the component's color** ([user guide](docs/user-guide/web.md#razor-and-blazor)): 0.7.0 gave `Number` in `<NumpadItem Number="@index">` a color of its own (light gray in Classic Dark, purple in Light); it now takes the component tag's color, as in the classic IDE, still bold in Classic.
 
