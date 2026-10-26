@@ -1,7 +1,8 @@
 name: Setup
 description: >-
   The .NET SDK of global.json, and what a job asks for: the extra SDKs, the NuGet cache, the debugger, the macOS
-  developer tools access and a display on Linux. Every workflow's jobs set up through it, so each pin lives here once.
+  developer tools access and a display (Xvfb on Linux, a 1920x1080 screen on Windows). Every workflow's jobs set up
+  through it, so each pin lives here once.
 inputs:
   extra-sdks:
     description: >-
@@ -20,7 +21,7 @@ inputs:
     description: macOS developer tools access, for dumps (createdump) and attaching (netcoredbg)
     default: "false"
   display:
-    description: An X server on Linux (Xvfb on :99, DISPLAY set for the job's later steps)
+    description: An X server on Linux (Xvfb on :99, DISPLAY set for the job's later steps), a 1920x1080 screen on Windows
     default: "false"
 outputs:
   nuget-cache-key:
@@ -88,3 +89,56 @@ runs:
         for _ in $(seq 50); do [ -S /tmp/.X11-unix/X99 ] && break; sleep 0.2; done
         [ -S /tmp/.X11-unix/X99 ] || { cat "$RUNNER_TEMP/xvfb.log"; echo "::error::Xvfb didn't start"; exit 1; }
         echo "DISPLAY=:99" >> "$GITHUB_ENV"
+    - name: Display (1920x1080 on Windows)
+      # The runner's screen is 1024x768, which shrinks the smoke test's 1280x800 window, and the website's pictures from
+      # it (website/screenshots.txt), to 1028x780. Xvfb's size, through ChangeDisplaySettings; when the driver refuses, a
+      # warning (the smoke test says its window's size too), not a failed job.
+      if: inputs.display == 'true' && runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Add-Type -TypeDefinition @'
+        using System.Runtime.InteropServices;
+        public static class CodalusDisplay
+        {
+            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+            private struct DevMode
+            {
+                [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
+                public short SpecVersion, DriverVersion, Size, DriverExtra;
+                public int Fields, PositionX, PositionY, DisplayOrientation, DisplayFixedOutput;
+                public short Color, Duplex, YResolution, TTOption, Collate;
+                [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string FormName;
+                public short LogPixels;
+                public int BitsPerPel, PelsWidth, PelsHeight, DisplayFlags, DisplayFrequency;
+                public int IcmMethod, IcmIntent, MediaType, DitherType, Reserved1, Reserved2, PanningWidth, PanningHeight;
+            }
+
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+            private static extern bool EnumDisplaySettings(string device, int mode, ref DevMode devMode);
+
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+            private static extern int ChangeDisplaySettings(ref DevMode devMode, int flags);
+
+            // DISP_CHANGE_SUCCESSFUL (0), or the error; -100 when the current mode can't be read.
+            public static int Set(int width, int height)
+            {
+                var mode = new DevMode { Size = (short)Marshal.SizeOf<DevMode>() };
+                if (!EnumDisplaySettings(null, -1, ref mode)) // ENUM_CURRENT_SETTINGS
+                {
+                    return -100;
+                }
+
+                mode.PelsWidth = width;
+                mode.PelsHeight = height;
+                mode.Fields = 0x80000 | 0x100000; // DM_PELSWIDTH | DM_PELSHEIGHT
+                return ChangeDisplaySettings(ref mode, 0);
+            }
+        }
+        '@
+        $result = [CodalusDisplay]::Set(1920, 1080)
+        Add-Type -AssemblyName System.Windows.Forms
+        $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        Write-Output "ChangeDisplaySettings: $result; the screen: $($screen.Width)x$($screen.Height)"
+        if ($screen.Width -lt 1920 -or $screen.Height -lt 1080) {
+          Write-Output "::warning::The screen stayed $($screen.Width)x$($screen.Height) (ChangeDisplaySettings: $result): the smoke test's pictures are smaller than the website's 1280x800."
+        }

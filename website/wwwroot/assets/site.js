@@ -33,7 +33,9 @@
         if (root.dataset.tabsHash !== undefined) history.replaceState(null, "", location.pathname + location.search + "#" + tab.dataset.key);
       });
       tab.addEventListener("keydown", (e) => {
-        const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+        const step = list.getAttribute("aria-orientation") === "vertical"
+          ? { ArrowDown: 1, ArrowUp: -1 }[e.key]
+          : { ArrowRight: 1, ArrowLeft: -1 }[e.key];
         if (step) { e.preventDefault(); select((i + step + tabs.length) % tabs.length, true); }
         else if (e.key === "Home") { e.preventDefault(); select(0, true); }
         else if (e.key === "End") { e.preventDefault(); select(tabs.length - 1, true); }

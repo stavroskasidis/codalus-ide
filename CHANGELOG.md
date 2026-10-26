@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.8.0
+
+- **The website**: the home page shows each kind of .NET app Codalus IDE builds (console apps and libraries, Blazor, ASP.NET Core, .NET MAUI, WPF, Windows Forms, WinUI 3, Avalonia, Aspire, WCF and .NET Framework), each with its screenshot, what you get and where it runs, in place of the general screenshots, which stay on the Features page.
+
 ## 0.7.1
 
 - **Blazor component parameters in the component's color** ([user guide](docs/user-guide/web.md#razor-and-blazor)): 0.7.0 gave `Number` in `<NumpadItem Number="@index">` a color of its own (light gray in Classic Dark, purple in Light); it now takes the component tag's color, as in the classic IDE, still bold in Classic.
