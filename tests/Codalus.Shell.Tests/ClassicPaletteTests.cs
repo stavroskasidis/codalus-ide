@@ -67,15 +67,17 @@ public sealed class ClassicPaletteTests
 
     /// <summary>
     /// M50 (the maintainer's screenshot 5): a Blazor component's parameter (<c>Sources</c> on
-    /// <c>&lt;SourcesDemo Sources="@sources"&gt;</c>) had the HTML attribute's color in every theme. Classic gives it the
-    /// classic IDE's Razor Component Attribute color, bold; the families their own color; HTML attributes are unchanged.
+    /// <c>&lt;SourcesDemo Sources="@sources"&gt;</c>) had the HTML attribute's color in every theme. After 0.7.0 the
+    /// maintainer's screenshots settled it: the component tag's color in every theme, as the classic IDE draws it, bold in
+    /// Classic; HTML attributes are unchanged.
     /// </summary>
     [Fact]
-    public void Component_parameters_have_their_own_color_in_every_theme_and_classic_draws_them_bold()
+    public void Component_parameters_have_the_component_tags_color_in_every_theme_and_classic_draws_them_bold()
     {
         var parameter = Array.IndexOf(Codalus.LanguageServices.Protocol.TokenTypes.All, "razorComponentAttribute");
         var attribute = Array.IndexOf(Codalus.LanguageServices.Protocol.TokenTypes.All, "markupAttribute");
-        Assert.Equal(0xFF800080u, EditorTheme.Light.TokenColor("razorComponentAttribute"));
+        Assert.Equal(0xFF0B7F7Fu, EditorTheme.Light.TokenColor("razorComponentAttribute"));
+        Assert.Equal(0xFF4EC9B0u, EditorTheme.Dark.TokenColor("razorComponentAttribute"));
         Assert.Equal(0xFFFF0000u, EditorTheme.Light.TokenColor("markupAttribute"));
         Assert.Equal(0xFF9CDCFEu, EditorTheme.Dark.TokenColor("markupAttribute"));
         foreach (var theme in new[] { EditorTheme.Light, EditorTheme.Dark, EditorTheme.HighContrast })
@@ -88,6 +90,7 @@ public sealed class ClassicPaletteTests
         {
             var theme = EditorTheme.For(id);
             Assert.NotEqual(theme.TokenColor("markupAttribute"), theme.TokenColor("razorComponentAttribute"));
+            Assert.Equal(theme.TokenColor("razorComponentElement"), theme.TokenColor("razorComponentAttribute"));
             Assert.True(theme.IsBold(parameter) == id is "light" or "dark" or "highContrast", id);
         }
 

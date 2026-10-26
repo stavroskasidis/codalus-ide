@@ -1,6 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Templates;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
 using Codalus.Shell.Docking;
 using Codalus.Shell.Editor;
@@ -49,18 +52,33 @@ public sealed class ViewLocator : IDataTemplate
         _ => null,
     };
 
-    /// <summary>Editor views are kept by their document: rebuilding them on every tab switch would lose state.</summary>
+    /// <summary>
+    /// Editor views are kept by their document: rebuilding them on every tab switch would lose state. A host another
+    /// presenter still holds is moved, never rebuilt, unless that presenter shows it: then the asker gets a slot that takes
+    /// the host once it leaves. Docking a tool window beside the documents asks twice from the new layout while the old one
+    /// still shows the editor, and closing the shown view for them left every open document blank (0.7.0's validation).
+    /// </summary>
     private static Control EditorHost(CodeEditorDocument document)
     {
-        if (document.Host is { Parent: null } host)
+        if (document.Host is not { } host)
+        {
+            document.View = new CodeEditorView(document, document.Services, document.Font);
+            document.Host = new PaneHost(document, document.View);
+            return document.Host;
+        }
+
+        if (host.Parent is null)
         {
             return host;
         }
 
-        document.View?.Close();
-        document.View = new CodeEditorView(document, document.Services, document.Font);
-        document.Host = new PaneHost(document, document.View);
-        return document.Host;
+        if (EditorSlot.IsShown(host))
+        {
+            return new EditorSlot(document);
+        }
+
+        EditorSlot.Detach(host);
+        return host;
     }
 
     public bool Match(object? data) => data is ToolWindowDockable or ShellDocument;
@@ -155,3 +173,82 @@ public sealed class ViewLocator : IDataTemplate
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },
     };
 }
+
+/// <summary>
+/// Where an editor goes when its host is still shown by another presenter (<see cref="ViewLocator"/>): empty until the
+/// host leaves that presenter, then the host, moved with its state, if this slot is shown by then.
+/// </summary>
+internal sealed class EditorSlot(CodeEditorDocument document) : Decorator
+{
+    private Control? _watched;
+
+    internal static bool IsShown(Control control) => TopLevel.GetTopLevel(control) is not null && control.IsEffectivelyVisible;
+
+    /// <summary>Takes <paramref name="host"/> out of the presenter or slot that holds it.</summary>
+    internal static void Detach(Control host)
+    {
+        switch (host.Parent ?? host.GetVisualParent() as Control)
+        {
+            case Decorator decorator when decorator.Child == host:
+                decorator.Child = null;
+                break;
+            case ContentControl control when ReferenceEquals(control.Content, host):
+                control.Content = null;
+                break;
+            default:
+                if (host.GetVisualParent() is ContentPresenter presenter)
+                {
+                    presenter.SetCurrentValue(ContentPresenter.ContentProperty, null);
+                }
+
+                break;
+        }
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        Watch();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        Unwatch();
+    }
+
+    private void Watch()
+    {
+        Unwatch();
+        if (document.Host is { } host && host != Child)
+        {
+            _watched = host;
+            host.DetachedFromVisualTree += OnHostLeft;
+            Dispatcher.UIThread.Post(TryTake, DispatcherPriority.Loaded);
+        }
+    }
+
+    private void Unwatch()
+    {
+        if (_watched is { } host)
+        {
+            host.DetachedFromVisualTree -= OnHostLeft;
+            _watched = null;
+        }
+    }
+
+    private void OnHostLeft(object? sender, VisualTreeAttachmentEventArgs e) => Dispatcher.UIThread.Post(TryTake, DispatcherPriority.Loaded);
+
+    private void TryTake()
+    {
+        if (document.Host is not { } host || host == Child || !IsShown(this) || IsShown(host))
+        {
+            return;
+        }
+
+        Unwatch();
+        Detach(host);
+        Child = host;
+    }
+}
+

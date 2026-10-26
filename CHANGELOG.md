@@ -2,6 +2,12 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.7.1
+
+- **Blazor component parameters in the component's color** ([user guide](docs/user-guide/web.md#razor-and-blazor)): 0.7.0 gave `Number` in `<NumpadItem Number="@index">` a color of its own (light gray in Classic Dark, purple in Light); it now takes the component tag's color, as in the classic IDE, still bold in Classic.
+- **Fixed:** docking a tool window beside the documents (Solution Explorer dropped to their left, say) left the documents already open blank, through tab switches, until **Window → Reset Layout**. They keep their editors now.
+- **Fixed:** dragging a tool window by its header could show "IToolDock" in the drag's tooltip, Dock's internal name for a tool window group. It shows the tool window's title.
+
 ## 0.7.0
 
 - **.NET 11 RC 3**: Codalus IDE is built on .NET 11's third release candidate, and its helper processes ask for that runtime (or a later one). With only RC 2 installed, the IDE says so once and offers **Install .NET 11.0**, and an update isn't downloaded until it's installed ([user guide](docs/user-guide/getting-started.md#prerequisites)).
