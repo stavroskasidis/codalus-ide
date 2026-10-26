@@ -72,6 +72,7 @@ public sealed record SettingCategoryViewModel(string Name, int Count, bool IsAll
         "plugins" => "extensions",
         "remote" => "window-remote",
         "settings sync" => "sync",
+        "system integration" => "link",
         "web" => "globe",
         "windows forms" => "control-generic",
         _ => "gear",
@@ -104,10 +105,13 @@ public sealed class SettingsViewModel : ObservableObject
     private string? _diagnostics;
 
     private bool _workspaceScope;
+    private readonly ShellHost? _shell;
 
-    public SettingsViewModel(SettingsService settings, Action openJson)
+    /// <param name="shell">With a shell, Options also has System Integration's toggles (M51), which change the OS, not settings.json.</param>
+    public SettingsViewModel(SettingsService settings, Action openJson, ShellHost? shell = null)
     {
         _settings = settings;
+        _shell = shell;
         settings.WorkspaceChanged += (_, _) => Ui.Post(() =>
         {
             if (!HasWorkspace)
@@ -244,7 +248,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     private void OnSettingsChanged(SettingsChangedEventArgs e)
     {
-        var known = _all.Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
+        var known = _all.Where(i => i.IsSetting).Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
         if (!_settings.Descriptors.Select(d => d.Key).ToHashSet(StringComparer.Ordinal).SetEquals(known))
         {
             Rebuild();
@@ -271,6 +275,12 @@ public sealed class SettingsViewModel : ObservableObject
         foreach (var descriptor in _settings.Descriptors)
         {
             _all.Add(SettingItemViewModel.Create(descriptor, _settings, () => Scope));
+        }
+
+        if (_shell is { } shell)
+        {
+            _all.Add(new OsIntegrationSettingViewModel(shell, Workbench.Setup.OsIntegrationFeature.Folders, _settings, () => Scope));
+            _all.Add(new OsIntegrationSettingViewModel(shell, Workbench.Setup.OsIntegrationFeature.FileTypes, _settings, () => Scope));
         }
 
         var selected = _selectedCategory?.Name;
@@ -305,7 +315,7 @@ public sealed class SettingsViewModel : ObservableObject
         string Prefix() => name.Split('.')[0];
         return name switch
         {
-            "appearance" or "keyboard" or "view" or "notifications" or "privacy" or "output" or "files" or "welcome" or "general" or "updates" => "Environment",
+            "appearance" or "keyboard" or "view" or "notifications" or "privacy" or "output" or "files" or "welcome" or "general" or "updates" or "system integration" => "Environment",
             "text editor" or "navigation" or "code cleanup" or "task list" or "language services" or "json" => "Text Editor",
             "projects" or "build and run" or "nuget" => "Projects and Solutions",
             "debugging" or "debug" => "Debugging",
@@ -392,6 +402,14 @@ public abstract class SettingItemViewModel : ObservableObject
     public string? Description => Descriptor.Description;
 
     public bool HasDescription => !string.IsNullOrEmpty(Descriptor.Description);
+
+    /// <summary>False for an item of Options that isn't a setting in settings.json (System Integration, M51): no key is shown.</summary>
+    public virtual bool IsSetting => true;
+
+    /// <summary>A line under the description saying how the item stands, or null.</summary>
+    public virtual string? Status => null;
+
+    public bool HasStatus => !string.IsNullOrEmpty(Status);
 
     public string Heading => $"{Category}: {Title}";
 

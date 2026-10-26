@@ -1066,6 +1066,7 @@ public sealed partial class ShellHost : IHostingActions
 
         var start = new ProcessStartInfo(program) { UseShellExecute = false };
         start.ArgumentList.Add(folder);
+        start.ArgumentList.Add("--new-window"); // not this window, even when it has nothing open (M51)
         if (Options.UserDataDir is { } userData)
         {
             start.ArgumentList.Add("--user-data-dir");

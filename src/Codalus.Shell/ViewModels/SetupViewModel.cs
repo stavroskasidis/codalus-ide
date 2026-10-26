@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using Codalus.Platform;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.Theming;
 using Codalus.Workbench.Localization;
@@ -223,10 +224,68 @@ public sealed class SetupToolRowViewModel : ObservableObject
 }
 
 /// <summary>
+/// One of System Integration's choices on the Tools step (M51, ADR 0084): off until chosen; what's registered already shows
+/// checked when the setup runs again. Leaving the step applies a change the user made, and nothing else.
+/// </summary>
+public sealed class SetupIntegrationChoice : ObservableObject
+{
+    private bool _isChecked;
+    private bool _initial;
+    private OsIntegrationStatus _status = new(OsIntegrationState.NotRegistered);
+
+    public SetupIntegrationChoice(OsIntegrationFeature feature, PlatformKind platform)
+    {
+        Feature = feature;
+        Title = OsIntegrationText.Title(feature);
+        Description = OsIntegrationText.Description(feature, platform);
+    }
+
+    public OsIntegrationFeature Feature { get; }
+
+    public string Title { get; }
+
+    public string Description { get; }
+
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set => SetField(ref _isChecked, value);
+    }
+
+    /// <summary>Whether it can be offered here (macOS file types need the app bundle).</summary>
+    public bool IsAvailable => _status.State != OsIntegrationState.Unavailable;
+
+    /// <summary>Why not, or how it stands when it's partly there or another copy's.</summary>
+    public string? Note => _status.State switch
+    {
+        OsIntegrationState.Unavailable => _status.Detail,
+        OsIntegrationState.Partial or OsIntegrationState.OtherCopy => Localizer.Get("msg.firstRun.integrationPartial", "Partly registered, or for another copy of Codalus IDE: check it to register it all for this copy. Tools → Options → Environment → System Integration removes it."),
+        _ => null,
+    };
+
+    public bool HasNote => !string.IsNullOrEmpty(Note);
+
+    /// <summary>The user changed it since it was shown.</summary>
+    public bool IsChanged => _isChecked != _initial;
+
+    /// <summary>Shows how it stands now: checked when it's registered.</summary>
+    internal void Show(OsIntegrationStatus status)
+    {
+        _status = status;
+        _initial = status.State == OsIntegrationState.Registered;
+        IsChecked = _initial;
+        OnPropertyChanged(nameof(IsAvailable));
+        OnPropertyChanged(nameof(Note));
+        OnPropertyChanged(nameof(HasNote));
+    }
+}
+
+/// <summary>
 /// The first-run setup (M46): Appearance (the theme families as cards, Classic first (D36), and a mode; the setup window
 /// and the IDE behind it repaint as the user chooses, through <see cref="ThemeService.Preview"/>), Keyboard (the scheme),
 /// Your settings (import from VS Code, a <c>.vssettings</c> file or an export, or settings sync from a folder or a Git
-/// repository) and Tools (M37's check; nothing installs without a yes). Leaving a step with Next or Back saves its choice;
+/// repository) and Tools (M37's check; nothing installs without a yes; and M51's System Integration, off unless checked).
+/// Leaving a step with Next or Back saves its choice;
 /// Skip setup keeps what was saved (for a new user data folder, the defaults: Classic following the system, the default
 /// keys).
 /// Done and Skip setup record <see cref="ShellHost.SetupCompletedSetting"/>. AI isn't asked about (ADR 0062).
@@ -289,6 +348,11 @@ public sealed class SetupViewModel : ObservableObject
         OpenCheckEnvironmentCommand = new RelayCommand(shell.OpenCheckEnvironment);
         _vsCodeFolder = VsCodeImport.UserFolder(shell.Workbench.Platform, Environment.GetEnvironmentVariable);
         shell.ToolsChanged += OnToolsChanged;
+        Integrations =
+        [
+            new(OsIntegrationFeature.Folders, shell.Workbench.Platform),
+            new(OsIntegrationFeature.FileTypes, shell.Workbench.Platform),
+        ];
         Steps[0].IsCurrent = true;
         Enter(SetupStep.Appearance);
     }
@@ -645,6 +709,34 @@ public sealed class SetupViewModel : ObservableObject
         }
     }
 
+    // ------------------------------------------------------------------ system integration
+
+    /// <summary>"Open with Codalus IDE" on folders and the file types (M51): off unless chosen.</summary>
+    public IReadOnlyList<SetupIntegrationChoice> Integrations { get; }
+
+    private void ShowIntegrations()
+    {
+        foreach (var choice in Integrations)
+        {
+            choice.Show(_shell.OsIntegration.GetStatus(choice.Feature));
+        }
+    }
+
+    /// <summary>Registers or removes what the user changed on the step; a failure is told and the setup goes on.</summary>
+    private async Task SaveIntegrationsAsync()
+    {
+        foreach (var choice in Integrations.Where(c => c.IsChanged && c.IsAvailable))
+        {
+            var (status, error) = await _shell.SetOsIntegrationAsync(choice.Feature, choice.IsChecked).ConfigureAwait(true);
+            if (error is not null)
+            {
+                _shell.Workbench.Notifications.Error(error);
+            }
+
+            choice.Show(status);
+        }
+    }
+
     // ------------------------------------------------------------------ steps
 
     public async Task NextAsync()
@@ -714,6 +806,7 @@ public sealed class SetupViewModel : ObservableObject
                 break;
             case SetupStep.Tools:
                 VisitedTools = true;
+                ShowIntegrations();
                 FillTools();
                 if (Tools.Count == 0)
                 {
@@ -748,6 +841,9 @@ public sealed class SetupViewModel : ObservableObject
                     await settings.SetAsync(BuiltIns.KeyboardSchemeSetting, _scheme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
                 }
 
+                break;
+            case SetupStep.Tools:
+                await SaveIntegrationsAsync().ConfigureAwait(true);
                 break;
         }
     }
