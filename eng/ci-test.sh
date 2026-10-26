@@ -35,14 +35,24 @@ command -v cygpath > /dev/null && MSBUILDDEBUGPATH="$(cygpath -w "$msbuild_debug
 export MSBUILDDEBUGPATH
 started_at="$(date '+%Y-%m-%d %H:%M:%S')"
 touch "$results/.started"
+# Each sample also goes to the log as one line (the free memory, the swap in use, the number of processes and the
+# largest three), so it shows as the shard runs: a runner that is lost (macOS shell-2, runs 40241261003 and 40255384457,
+# M51) uploads neither the results folder nor its log, and only the live log was there to read.
 sampler=
 if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
   (
     while :; do
       {
-        echo "$(date -u +%H:%M:%S) free=$(sysctl -n kern.memorystatus_level)% swap: $(sysctl -n vm.swapusage)"
-        ps -axo rss=,pid=,ppid=,args= | sort -nr | head -6 | cut -c1-200
-      } >> "$results/memory.txt" 2>/dev/null || true
+        now="$(date -u +%H:%M:%S)"
+        free="$(sysctl -n kern.memorystatus_level)"
+        swap="$(sysctl -n vm.swapusage)"
+        top="$(ps -axo rss=,pid=,ppid=,args= | sort -nr)"
+        echo "$now free=$free% swap: $swap" >> "$results/memory.txt"
+        echo "$top" | head -6 | cut -c1-200 >> "$results/memory.txt"
+        used="$(echo "$swap" | awk '{ for (i = 1; i < NF; i++) if ($i == "used") print $(i + 2) }')"
+        largest="$(echo "$top" | head -3 | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); printf " %dM %s", $1 / 1024, n }')"
+        echo "[memory] $now free=$free% swap=$used processes=$(echo "$top" | wc -l | tr -d ' ') largest:$largest"
+      } 2>/dev/null || true
       sleep 15
     done
   ) &
@@ -107,7 +117,8 @@ case "$shard" in
     [[ "$shard" == shell-1 ]] && flag=--filter-not-class
     filters=()
     for class in "${second[@]}"; do filters+=("$flag" "Codalus.Shell.Tests.$class"); done
-    dotnet test --project tests/Codalus.Shell.Tests "${common[@]}" "${filters[@]}"
+    # Every test is listed as it ends, so a shard that stalls shows how far it got next to the memory lines above.
+    dotnet test --project tests/Codalus.Shell.Tests --output detailed "${common[@]}" "${filters[@]}"
     ;;
   others)
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The

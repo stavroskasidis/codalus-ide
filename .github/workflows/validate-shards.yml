@@ -1,0 +1,62 @@
+name: Validate macOS Shell shards
+
+# Temporary (the validate branch only): the macOS Shell shards several times over, their memory recorded.
+on:
+  push:
+    branches: [validate]
+    paths-ignore: [".github/workflows/validate-times.yml"]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  test:
+    name: test (macos-latest, ${{ matrix.shard }}, ${{ matrix.rep }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { shard: shell-2, rep: 1 }
+          - { shard: shell-2, rep: 2 }
+          - { shard: shell-2, rep: 3 }
+          - { shard: shell-1, rep: 1 }
+          - { shard: shell-1, rep: 2 }
+    runs-on: macos-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - id: setup
+        uses: ./.github/actions/setup
+        with:
+          extra-sdks: true
+          nuget-cache: true
+          netcoredbg: true
+          devtools: true
+          display: true
+      - run: dotnet restore Codalus.slnx
+      - run: dotnet build Codalus.slnx -c Release --no-restore
+      - run: dotnet tool install -g dotnet-stack || true
+      - name: Test (${{ matrix.shard }})
+        shell: bash
+        timeout-minutes: 60
+        run: bash eng/ci-test.sh ${{ matrix.shard }}
+      - name: Processes the tests left running
+        if: always()
+        shell: bash
+        run: |
+          ps -eo pid,ppid,etime,pcpu,rss,args | sort -k4 -nr | head -25 | cut -c1-240 || true
+          df -h / /tmp | uniq
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: memory-${{ matrix.shard }}-${{ matrix.rep }}
+          path: |
+            artifacts/test-results/*/memory.txt
+            artifacts/test-results/*/kernel-memory.txt
+          retention-days: 7
+          if-no-files-found: ignore
