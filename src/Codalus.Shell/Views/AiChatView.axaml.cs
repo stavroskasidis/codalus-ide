@@ -123,7 +123,9 @@ public sealed partial class AiChatView : UserControl, IPaneView
             // Never an empty menu: it would open as nothing at all.
             if (flyout.Items.Count == 0)
             {
-                flyout.Items.Add(new MenuItem { Header = Codalus.Workbench.Localization.Localizer.Get("aiChat.nothingToChoose", "Nothing to choose now"), IsEnabled = false });
+                var none = MenuEntry.Create(Codalus.Workbench.Localization.Localizer.Get("aiChat.nothingToChoose", "Nothing to choose now"), null);
+                none.IsEnabled = false;
+                flyout.Items.Add(none);
             }
         });
 
