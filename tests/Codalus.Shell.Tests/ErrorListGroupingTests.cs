@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Codalus.LanguageServices.Protocol;
+using Codalus.Projects.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Settings;
@@ -40,6 +41,57 @@ public sealed class ErrorListGroupingTests
         Assert.Equal($"Program.cs — {Path.Combine("src", "App")}", files[0].Title);
         Assert.Equal("(no file)", files[^1].Title);
         Assert.All(ErrorListViewModel.Groups(rows, "project"), g => Assert.StartsWith("project:", g.Key, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Project_names_come_from_one_index_and_match_ProjectOf()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "codalus-errorlist-projects");
+        ProjectInfo Project(string folder, string name, params string[] items) => new(
+            Path.Combine(root, folder, name + ".csproj"), name, ProjectStates.Loaded, null, ["net10.0"], "Library",
+            [.. items.Select(i => new ProjectItemInfo("Compile", Path.Combine(root, i), null, null))], [], [], Restored: true);
+        ProjectInfo[] projects =
+        [
+            Project("App", "App", Path.Combine("App", "Program.cs"), Path.Combine("Shared", "Linked.cs")),
+            Project("Lib", "Lib", Path.Combine("Lib", "Shapes.cs"), Path.Combine("Shared", "Linked.cs")),
+            Project(Path.Combine("App", "Tests"), "App.Tests"),
+        ];
+
+        var names = ErrorListViewModel.ProjectNames(projects);
+        foreach (var file in new[] { "App/Program.cs", "Shared/Linked.cs", "Lib/Shapes.cs", "App/Tests/Unlisted.cs", "App/Unlisted.cs", "Elsewhere/Other.cs" })
+        {
+            var path = Path.Combine(root, file.Replace('/', Path.DirectorySeparatorChar));
+            Assert.Equal(ErrorListViewModel.ProjectOf(projects, path)?.Name ?? string.Empty, names(path));
+            Assert.Equal(names(path), names(path)); // the second answer from the cache
+        }
+
+        Assert.Equal("App", names(Path.Combine(root, "Shared", "Linked.cs"))); // the first project that lists it
+        Assert.Equal("App.Tests", names(Path.Combine(root, "App", "Tests", "Unlisted.cs"))); // the deepest folder
+        Assert.Equal(string.Empty, names(Path.Combine(root, "Elsewhere", "Other.cs")));
+    }
+
+    [AvaloniaFact]
+    public async Task Hundreds_of_thousands_of_diagnostics_fill_the_list_in_one_change()
+    {
+        // A solution whose packages didn't restore (a company feed off its VPN): every file has errors. The rows were
+        // built on the UI thread and added one at a time, which froze the window for minutes.
+        await using var f = ShellFixture.Create();
+        var root = Path.Combine(Path.GetTempPath(), "codalus-errorlist-" + Guid.NewGuid().ToString("N"));
+        Diagnostic[] items = [.. Enumerable.Range(0, 100).Select(line => new Diagnostic(
+            new Range(new Position(line, 0), new Position(line, 4)), DiagnosticSeverity.Error, "CS0246", "csharp", "The type or namespace name 'Telerik' could not be found"))];
+        var list = f.Shell.ErrorList;
+        var changes = 0;
+        list.Items.CollectionChanged += (_, _) => changes++;
+
+        for (var file = 0; file < 2000; file++)
+        {
+            f.Shell.Languages.Diagnostics.Set(Path.Combine(root, $"File{file}.cs"), "csharp", null, items);
+        }
+
+        await ShellFixture.PumpUntil(() => list.Rows.Count == 200_000, seconds: 60);
+        Assert.Equal(200_000, list.Items.Count);
+        Assert.Equal("200000 Errors", list.ErrorsLabel);
+        Assert.InRange(changes, 1, 5); // a reset per refresh, not a change per row
     }
 
     [AvaloniaFact]

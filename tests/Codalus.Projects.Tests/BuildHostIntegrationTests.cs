@@ -387,6 +387,55 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         Assert.False(Project(bad).Restored);
     }
 
+    [Fact]
+    public async Task An_unreachable_package_source_fails_the_restore_once_and_says_so()
+    {
+        // As a company feed does off its VPN: each project restored on its own waited for the feed in turn, minutes
+        // each, and every one it restored was evaluated and built again (the C# analysis restarting each time).
+        var folder = Path.Combine(_root, "Offline");
+        foreach (var name in new[] { "One", "Two" })
+        {
+            Directory.CreateDirectory(Path.Combine(folder, name));
+            File.WriteAllText(Path.Combine(folder, name, name + ".csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                  <ItemGroup><PackageReference Include="Codalus.Tests.OnlyOnTheCompanyFeed" Version="1.0.0" /></ItemGroup>
+                </Project>
+                """);
+        }
+
+        // Nothing listens on port 9 (discard): the connection is refused at once.
+        File.WriteAllText(Path.Combine(folder, "NuGet.Config"), """
+            <configuration>
+              <packageSources><clear /><add key="company" value="http://127.0.0.1:9/v3/index.json" allowInsecureConnections="true" /></packageSources>
+            </configuration>
+            """);
+        var slnx = Path.Combine(folder, "Offline.slnx");
+        File.WriteAllText(slnx, """<Solution><Project Path="One/One.csproj" /><Project Path="Two/Two.csproj" /></Solution>""");
+        var states = new List<string>();
+        _service.RestoreStateChanged += (_, e) =>
+        {
+            lock (states)
+            {
+                states.Add(e.Message is null ? e.State : $"{e.State}: {e.Message}");
+            }
+        };
+        var runs = 0;
+        _service.RestoreOutput += (_, line) =>
+        {
+            if (line.Contains("Determining projects to restore", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref runs);
+            }
+        };
+
+        await _service.OpenAsync(slnx, trusted: true, restore: true, Timeout());
+
+        await WaitUntilAsync(() => { lock (states) { return states.Any(s => s.StartsWith("failed", StringComparison.Ordinal)); } }, TimeSpan.FromMinutes(4));
+        Assert.Contains(states, s => s.Contains("a package source couldn't be reached (NU1301)", StringComparison.Ordinal));
+        Assert.Equal(1, Volatile.Read(ref runs)); // the solution's restore only, no project on its own
+    }
+
     // ------------------------------------------------------------------ design-time builds
 
     [Fact]
