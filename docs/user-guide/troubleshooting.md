@@ -52,4 +52,26 @@ Crash reports are **off by default** and **never leave your computer**. To turn 
 - **Where it goes**: a text file in the `crashes` folder under the logs folder. Unexpected errors the IDE recovered from, and helper processes that died, are saved there too.
 - **After a crash**: the next start tells you a report was saved. Help → Open Crash Reports Folder shows them.
 
-To report a problem, open an issue and attach the report after reading it.
+To report a problem, use **Help → Report a Problem…** (below) and attach the report after reading it.
+
+## Reporting a problem or suggesting a feature
+
+**Help → Report a Problem…** and **Help → Suggest a Feature…** (also in the command palette) open a new issue on [the project's GitHub repository](https://github.com/stavroskasidis/codalus-ide/issues), filled in from a dialog. The IDE sends nothing itself: **Open in Browser** opens the issue's form in your browser, where you review it, sign in to GitHub and submit it, or close the tab.
+
+The dialog asks for:
+
+- a **title** and a description (**What happened** for a problem, **The problem** for a feature);
+- **Steps to reproduce** for a problem, or a **Proposal** for a feature.
+
+Under them, **What's attached** shows exactly what goes into the issue besides your text:
+
+| Report | Attaches |
+|---|---|
+| A problem | The version of Codalus IDE, the OS and its architecture, the .NET runtime, the .NET SDK (`dotnet --version` in the solution's folder) and, unless you clear **Include the last 200 lines of the IDE's log**, the end of the Codalus IDE log (Help → Show Logs). |
+| A feature | Only the version and the OS. |
+
+The log is **redacted** first: secrets the IDE recognizes (tokens, private keys, the values of password, secret, token and key settings and connection-string parts) become `[redacted]`, and your home folder becomes `~`. Redaction works by patterns, so read the preview before you open the issue.
+
+A link can carry about 8,000 characters. When the log doesn't fit, **Open in Browser** saves it to `feedback/codalus-log-<date>-<time>.txt` in the logs folder (above), shows the file in your file manager, and leaves a line in the issue's logs field asking you to attach it: drag the file onto the field. A description too long for the link is cut, with a note; **Copy** puts the whole report on the clipboard as Markdown, to paste instead.
+
+A crash report isn't attached automatically: if one was saved, attach it from Help → Open Crash Reports Folder after reading it. A security problem goes through private reporting instead, as [SECURITY.md](../../SECURITY.md) describes.

@@ -1395,6 +1395,13 @@ internal sealed partial class SmokeTest
             shell.Dialogs.Cancel();
         }
 
+        // Report a Problem and Suggest a Feature (M51) only open their dialog: the browser opens on its button, never pressed here.
+        if (shell.Feedback.IsOpen)
+        {
+            Note($"dialog: {shell.Feedback.Title}");
+            shell.Feedback.Cancel();
+        }
+
         if (shell.Palette.IsOpen)
         {
             Note("picker");
