@@ -61,11 +61,11 @@ if (instance is null)
 
 // A global.json that asks for an SDK that isn't installed: dotnet fails there, and the locator offers the newest SDK
 // (or throws, above).
-var sdkWarning = globalJson is not null && (unresolved is not null || !globalJson.Accepts(SdkName(instances[0]))) ? SdkSelection.NotInstalled(globalJson, instance.Version)
-    : unresolved is not null ? $"{unresolved} The build host uses the .NET SDK {instance.Version.ToString(3)} instead."
+var sdkWarning = globalJson is not null && (unresolved is not null || !globalJson.Accepts(SdkName(instances[0]))) ? SdkSelection.NotInstalled(globalJson, SdkName(instance))
+    : unresolved is not null ? $"{unresolved} The build host uses the .NET SDK {SdkName(instance)} instead."
     : instance == instances[0] ? null
-    : !SdkSelection.AboveFloor(instances[0].Version) ? SdkSelection.BelowFloor(SdkName(instances[0]), globalJson?.Path, instance.Version)
-    : SdkSelection.Unloadable(instances[0].Version, instance.Version, Environment.Version);
+    : !SdkSelection.AboveFloor(instances[0].Version) ? SdkSelection.BelowFloor(SdkName(instances[0]), globalJson?.Path, SdkName(instance))
+    : SdkSelection.Unloadable(instances[0].Version, SdkName(instance), Environment.Version);
 if (sdkWarning is not null)
 {
     await Console.Error.WriteLineAsync(sdkWarning).ConfigureAwait(false);
