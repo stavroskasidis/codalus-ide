@@ -22,7 +22,10 @@ public sealed class EditorTheme
         "editorWarning.foreground", "editorInfo.foreground", "editorHint.foreground", "editor.findMatchHighlightBackground",
     ];
 
-    /// <summary>Classic's bold token types: a Blazor component's parameters, as the classic IDE draws them (M50).</summary>
+    /// <summary>
+    /// Classic's bold token types: a Blazor component's parameters, as the classic IDE draws them (M50), in the component
+    /// tag's color (the maintainer's screenshots after 0.7.0).
+    /// </summary>
     private static readonly string[] s_classicBold = ["razorComponentAttribute"];
 
     private readonly IBrush?[] _tokens;
@@ -184,10 +187,10 @@ public sealed class EditorTheme
         }
 
         Set(colors.Keyword, "keyword", "modifier", "markupElement");
-        Set(colors.Type, "class", "record", "type", "delegate", "struct", "recordStruct", "enum", "interface", "typeParameter", "razorComponentElement", "razorTagHelperElement");
+        Set(colors.Type, "class", "record", "type", "delegate", "struct", "recordStruct", "enum", "interface", "typeParameter", "razorComponentElement", "razorComponentAttribute", "razorTagHelperElement");
         Set(colors.Method, "method", "extensionMethod", "function");
         Set(colors.String, "string", "stringVerbatim", "markupAttributeQuote", "markupAttributeValue");
-        Set(colors.Number, "number", "razorComponentAttribute"); // a component's parameters in their own color, not an HTML attribute's (M50)
+        Set(colors.Number, "number");
         Set(colors.Comment, "comment", "xmlDocComment", "xmlDocText", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation");
 
         // Control keywords keep the color the families shipped with (Classic's before D47 matched it to the classic IDE).
@@ -225,7 +228,7 @@ public sealed class EditorTheme
 
             // Razor and its markup, as the classic IDE's Dark theme colors them.
             ["razorTransition"] = 0xFFA699E6, ["razorDirective"] = 0xFFA699E6, ["razorDirectiveAttribute"] = 0xFFA699E6, ["razorDirectiveColon"] = 0xFFA699E6,
-            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFFC8C8C8,
+            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFF4EC9B0,
             ["razorTagHelperElement"] = 0xFF4EC9B0, ["razorTagHelperAttribute"] = 0xFF9CDCFE,
             ["razorComment"] = 0xFF57A64A, ["razorCommentTransition"] = 0xFF57A64A, ["razorCommentStar"] = 0xFF57A64A,
             ["markupTagDelimiter"] = 0xFF808080, ["markupElement"] = 0xFF569CD6, ["markupAttribute"] = 0xFF9CDCFE,
@@ -258,7 +261,7 @@ public sealed class EditorTheme
 
             // Razor and its markup, as the classic IDE's Light (and Blue) theme colors them.
             ["razorTransition"] = 0xFF826EE6, ["razorDirective"] = 0xFF826EE6, ["razorDirectiveAttribute"] = 0xFF826EE6, ["razorDirectiveColon"] = 0xFF826EE6,
-            ["razorComponentElement"] = 0xFF0B7F7F, ["razorComponentAttribute"] = 0xFF800080,
+            ["razorComponentElement"] = 0xFF0B7F7F, ["razorComponentAttribute"] = 0xFF0B7F7F,
             ["razorTagHelperElement"] = 0xFF800080, ["razorTagHelperAttribute"] = 0xFF800080,
             ["razorComment"] = 0xFF008000, ["razorCommentTransition"] = 0xFF008000, ["razorCommentStar"] = 0xFF008000,
             ["markupTagDelimiter"] = 0xFF0000FF, ["markupElement"] = 0xFF800000, ["markupAttribute"] = 0xFFFF0000,
@@ -289,7 +292,7 @@ public sealed class EditorTheme
 
             // Razor and its markup.
             ["razorTransition"] = 0xFFFFFF00, ["razorDirective"] = 0xFFFFFF00, ["razorDirectiveAttribute"] = 0xFFFFFF00, ["razorDirectiveColon"] = 0xFFFFFF00,
-            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFFFFFFFF,
+            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFF4EC9B0,
             ["razorTagHelperElement"] = 0xFF4EC9B0, ["razorTagHelperAttribute"] = 0xFF9CDCFE,
             ["razorComment"] = 0xFF7CA668, ["razorCommentTransition"] = 0xFF7CA668, ["razorCommentStar"] = 0xFF7CA668,
             ["markupTagDelimiter"] = 0xFFFFFFFF, ["markupElement"] = 0xFF569CD6, ["markupAttribute"] = 0xFF9CDCFE,

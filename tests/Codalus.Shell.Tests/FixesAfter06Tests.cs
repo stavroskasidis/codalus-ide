@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using AvaloniaEdit;
 using Codalus.Shell.Editor;
 using Codalus.Shell.Theming;
 using Dock.Avalonia.Controls;
@@ -152,5 +153,47 @@ public class FixesAfter06Tests
             var left = f.Window.GetVisualDescendants().OfType<ToolChromeControl>().Where(c => c.IsEffectivelyVisible).Min(c => c.TranslatePoint(default, f.Window)!.Value.X);
             Assert.Equal(left, Chrome().TranslatePoint(default, f.Window)!.Value.X, 1); // the window's left edge: the leftmost
         }
+    }
+
+    /// <summary>
+    /// 0.7.0's validation on Windows: docking a tool window beside the documents left every document already open blank,
+    /// across tab switches, until Reset Layout. The new layout asked for each editor's view while the old one still showed
+    /// it, and the view was closed for them. The editor stays, the same one, through the drop and a tab switch after it.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Docking_beside_the_documents_keeps_the_open_editors()
+    {
+        await using var f = ShellFixture.Create();
+        var layout = f.Shell.Layout;
+        await ShellFixture.PumpUntil(() => layout.OpenToolWindows.Any(t => t.Id == "welcome.view"));
+        var first = Path.Combine(f.UserData, "First.txt");
+        var second = Path.Combine(f.UserData, "Second.txt");
+        await File.WriteAllTextAsync(first, string.Join('\n', Enumerable.Range(1, 30).Select(i => $"first {i}")));
+        await File.WriteAllTextAsync(second, "second");
+        var document = await f.Shell.OpenFileAsync(first, preview: false);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null);
+        var controller = document!.Controller!;
+        bool Shown(CodeEditorController c) => TopLevel.GetTopLevel(c.Editor) == f.Window && c.Editor.IsEffectivelyVisible
+            && c.Editor.Bounds.Width > 100 && c.Editor.TextArea.TextView.VisualLines.Count > 0;
+        await ShellFixture.PumpUntil(() => Shown(controller));
+
+        static IDockable? Find(IDockable d, string id) => d.Id == id ? d : (d as IDock)?.VisibleDockables?.Select(c => Find(c, id)).FirstOrDefault(x => x is not null);
+        var tool = layout.OpenToolWindows.First(t => t.Id == "solutionExplorer");
+        Assert.True(new DockManager(new DockService()).ValidateDockable(tool, (IDock)Find(layout.Root, "Documents")!, DragAction.Move, DockOperation.Left, true));
+        await ShellFixture.PumpUntil(() => Shown(controller), seconds: 10, describe: () => $"the editor: attached {TopLevel.GetTopLevel(controller.Editor) is not null}, visible {controller.Editor.IsEffectivelyVisible}, {controller.Editor.Bounds}");
+        Assert.Same(controller, document.Controller);
+        Assert.Single(f.Window.GetVisualDescendants().OfType<TextEditor>(), e => e.IsEffectivelyVisible && TopLevel.GetTopLevel(e) == f.Window && e.Document == controller.Editor.Document);
+
+        // Dock named the group it made for Solution Explorer "IToolDock", which a drag of its header showed in the
+        // drag's tooltip: the group takes its tab's title.
+        Assert.IsAssignableFrom<Dock.Model.Controls.IToolDock>(tool.Owner);
+        Assert.Equal(tool.Title, tool.Owner!.Title);
+
+        // A tab switch and back: the same editor again.
+        var other = await f.Shell.OpenFileAsync(second, preview: false);
+        await ShellFixture.PumpUntil(() => other?.Controller is { } c && Shown(c));
+        await f.Shell.OpenFileAsync(first, preview: false);
+        await ShellFixture.PumpUntil(() => document.Controller is { } c && Shown(c), seconds: 10);
+        Assert.Same(controller, document.Controller);
     }
 }
