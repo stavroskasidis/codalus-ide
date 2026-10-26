@@ -76,6 +76,12 @@ public sealed class AcpAgents : IAsyncDisposable
 {
     public const string AgentsSetting = "ai.agents";
 
+    /// <summary>Who answers in AI Chat, remembered across a restart (M51): an agent of <c>ai.agents</c>, or empty for the built-in assistant.</summary>
+    public const string ChatAgentSetting = "ai.chat.agent";
+
+    /// <summary>The member of an agent's entry that keeps the user's picks of its choices (M51).</summary>
+    public const string ChoicesMember = "choices";
+
     /// <summary>The label every external agent's chat shows (ADR 0079).</summary>
     public const string Label = "External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for.";
 
@@ -150,6 +156,13 @@ public sealed class AcpAgents : IAsyncDisposable
         }
     }
 
+    /// <summary>The agent AI Chat answers with (<see cref="ChatAgentSetting"/>, the user's settings), or null for the built-in assistant.</summary>
+    public string? ChatAgent => _settings.GetLayerValue(ChatAgentSetting, SettingScope.User) is { ValueKind: JsonValueKind.String } value && value.GetString() is { Length: > 0 } name ? name : null;
+
+    /// <summary>Remembers the agent AI Chat answers with (null: the built-in assistant) in the user's settings.</summary>
+    public Task SaveChatAgentAsync(string? name, CancellationToken cancellationToken) =>
+        ChatAgent == name ? Task.CompletedTask : _settings.SetAsync(ChatAgentSetting, name ?? string.Empty, SettingScope.User, cancellationToken);
+
     /// <summary>The configured agents, read from the user's settings only.</summary>
     public IReadOnlyDictionary<string, AcpAgentConfig> Configured => Parse(_settings.GetLayerValue(AgentsSetting, SettingScope.User));
 
@@ -211,6 +224,9 @@ public sealed class AcpAgents : IAsyncDisposable
                 UnsetEnv = unsetEnv,
                 Template = entry.TryGetProperty("template", out var template) && template.ValueKind == JsonValueKind.String ? template.GetString() : null,
                 Node = entry.TryGetProperty("node", out var node) && node.ValueKind == JsonValueKind.String ? node.GetString() : null,
+                Choices = entry.TryGetProperty(ChoicesMember, out var choices) && choices.ValueKind == JsonValueKind.Object
+                    ? choices.EnumerateObject().Where(c => c.Value.ValueKind == JsonValueKind.String).ToDictionary(c => c.Name, c => c.Value.GetString()!, StringComparer.Ordinal)
+                    : new Dictionary<string, string>(StringComparer.Ordinal),
             };
         }
 
@@ -287,6 +303,7 @@ public sealed class AcpAgents : IAsyncDisposable
             try
             {
                 await session.StartAsync(cancellationToken).ConfigureAwait(false);
+                await session.ApplyChoicesAsync(config.Choices, cancellationToken).ConfigureAwait(false);
             }
             catch
             {
@@ -310,6 +327,35 @@ public sealed class AcpAgents : IAsyncDisposable
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Keeps the user's pick of a choice in the agent's entry (<c>ai.agents.&lt;name&gt;.choices.&lt;id&gt;</c>, the user's settings,
+    /// the entry's other members kept), so the next session starts with it (M51). Nothing when the entry is gone.
+    /// </summary>
+    public async Task SaveChoiceAsync(string name, string id, string value, CancellationToken cancellationToken)
+    {
+        if (_settings.GetLayerValue(AgentsSetting, SettingScope.User) is not { ValueKind: JsonValueKind.Object } all
+            || !all.TryGetProperty(name, out var entry) || entry.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var updated = System.Text.Json.Nodes.JsonNode.Parse(entry.GetRawText())!.AsObject();
+        if (updated[ChoicesMember] is not System.Text.Json.Nodes.JsonObject choices)
+        {
+            choices = [];
+            updated[ChoicesMember] = choices;
+        }
+
+        if (choices[id]?.GetValueKind() == JsonValueKind.String && choices[id]!.GetValue<string>() == value)
+        {
+            return;
+        }
+
+        choices[id] = value;
+        using var document = JsonDocument.Parse(updated.ToJsonString());
+        await _settings.SetMemberAsync(AgentsSetting, name, document.RootElement.Clone(), SettingScope.User, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

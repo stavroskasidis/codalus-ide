@@ -38,6 +38,8 @@ src_files -z --cached --others --exclude-standard | rsync -a --delete-missing-ar
   find . -mindepth 1 -type d -empty -not -path './.git/*' -not -path '*/bin/*' -not -path '*/obj/*' -not -path './.work/*' \
     -not -path './artifacts/*' -delete)
 [ -d "$dst/.git" ] || git -C "$dst" init -q   # some tests expect to run inside a git work tree
+# ...whose index lists the synced files: ProductNameTests scans `git ls-files`, which an empty index leaves empty.
+git -C "$dst" add -A > /dev/null 2>&1 || true
 
 # A Chromium browser for the browser tests, and with --smoke a display (WSLg's, or a local Xvfb when it isn't
 # running), without root: eng/wsl-display.sh.

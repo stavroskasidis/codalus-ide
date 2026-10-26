@@ -272,7 +272,9 @@ public sealed class GitShellTests
         Assert.StartsWith("// a new first line", view.RightText, StringComparison.Ordinal);
         Assert.StartsWith("\n", view.LeftText, StringComparison.Ordinal); // a filler row on the old side
         Assert.True(await view.ApplyToChangeAsync(DiffAction.Stage));
-        await ShellFixture.PumpUntil(() => f.Shell.GitChanges.Staged.Any(r => r.Name == "Greeter.cs") && !f.Shell.GitChanges.Changes.Any(r => r.Name == "Greeter.cs"));
+        await ShellFixture.PumpUntil(
+            () => f.Shell.GitChanges.Staged.Any(r => r.Name == "Greeter.cs") && !f.Shell.GitChanges.Changes.Any(r => r.Name == "Greeter.cs"),
+            describe: () => $"staged [{string.Join(", ", f.Shell.GitChanges.Staged.Select(r => r.Name))}], changes [{string.Join(", ", f.Shell.GitChanges.Changes.Select(r => r.Name))}], git status [{string.Join(", ", f.Shell.Git.Status?.Files.Select(x => x.RelativePath + ":" + x.Index + x.WorkTree) ?? [])}], diff cached: {Git(folder, "diff", "--cached", "--stat").Trim()}, unstaged: {Git(folder, "diff").Replace("\n", " / ", StringComparison.Ordinal)}");
 
         // Commit from the Changes view.
         f.Shell.GitChanges.Message = "Add a comment";

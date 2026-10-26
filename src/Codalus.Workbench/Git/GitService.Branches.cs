@@ -102,9 +102,12 @@ public sealed partial class GitService
                         : Result(GitBranchUpdateOutcome.Updated, after, behind: await CountAsync(root, before + ".." + after, cancellationToken).ConfigureAwait(false));
                 }
 
-                // Exit 1 is git refusing a non-fast-forward; FETCH_HEAD has what it fetched all the same.
+                // Exit 1 is git refusing a non-fast-forward; FETCH_HEAD has what it fetched all the same. Git 2.51 no longer
+                // moves the remote-tracking branch when the update is refused, so fetch the branch alone again: the
+                // remote's own refspec moves it (and FETCH_HEAD is the same commit).
                 if (code == 1)
                 {
+                    await RunAsync(root, ["fetch", remote, remoteRef], cancellationToken, check: false).ConfigureAwait(false);
                     var (ahead, behind) = await LeftRightAsync(root, "refs/heads/" + name, "FETCH_HEAD", cancellationToken).ConfigureAwait(false);
                     if (ahead > 0)
                     {

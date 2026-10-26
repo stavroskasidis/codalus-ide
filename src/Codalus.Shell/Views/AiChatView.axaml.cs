@@ -24,6 +24,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
     private readonly HashSet<AiChatTurn> _dirty = [];
     private readonly DispatcherTimer _render;
     private readonly AiChatFollower _follow;
+    private readonly List<DropDownButton> _choicePickers = [];
     private AiChatViewModel? _vm;
 
     public AiChatView()
@@ -40,7 +41,6 @@ public sealed partial class AiChatView : UserControl, IPaneView
             i => { if (_vm is { } vm) { vm.SelectedAgentIndex = i; } },
             () => _vm?.AgentMenuActions ?? []);
         MoreAgents.Click += (_, _) => _ = _vm?.MoreAgentsAsync();
-        ModePicker.Flyout = Choices(() => _vm?.ModeNames ?? [], () => _vm?.SelectedModeIndex ?? -1, i => { if (_vm is { } vm) { vm.SelectedModeIndex = i; } });
         CommandList.SelectionChanged += (_, _) =>
         {
             if (CommandList.SelectedItem is AiCommandSuggestion suggestion)
@@ -87,7 +87,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
     }
 
     /// <summary>
-    /// A picker's menu (M48: who answers, and the agent's mode): one radio item per choice, the current one checked,
+    /// A picker's menu (M48: who answers; M51: the agent's choices): one radio item per choice, the current one checked,
     /// built as it opens so it shows the choices of now, then groups of actions, each after a separator (D43: Connect to
     /// each one-click agent not connected yet; More agents… and Manage Agents…).
     /// </summary>
@@ -161,20 +161,66 @@ public sealed partial class AiChatView : UserControl, IPaneView
             _vm.TurnChanged -= OnTurnChanged;
             _vm.Cleared -= OnCleared;
             _vm.Turns.CollectionChanged -= OnTurnsChanged;
+            _vm.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
         _vm = vm;
         _dirty.Clear();
+        BuildChoicePickers();
         if (vm is null)
         {
             return;
         }
 
+        vm.PropertyChanged += OnViewModelPropertyChanged;
         vm.TurnChanged += OnTurnChanged;
         vm.Cleared += OnCleared;
         vm.Turns.CollectionChanged += OnTurnsChanged;
         vm.UpdateContextPreview();
         _follow.Reset();
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AiChatViewModel.AgentChoicePickers))
+        {
+            BuildChoicePickers();
+        }
+    }
+
+    /// <summary>The pickers of the agent's choices (tests).</summary>
+    internal IReadOnlyList<DropDownButton> ChoicePickers => _choicePickers;
+
+    /// <summary>
+    /// One picker per choice of the external agent (M51), after the agent picker: its current value's name, and a menu of
+    /// its values with the current one checked. Rebuilt when the choices change.
+    /// </summary>
+    private void BuildChoicePickers()
+    {
+        foreach (var old in _choicePickers)
+        {
+            Toolbar.Children.Remove(old);
+        }
+
+        _choicePickers.Clear();
+        var at = Toolbar.Children.IndexOf(AgentPicker) + 1;
+        foreach (var choice in _vm?.AgentChoicePickers ?? [])
+        {
+            var id = choice.Id;
+            var picker = new DropDownButton
+            {
+                Content = new TextBlock { Text = choice.CurrentName, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis, MaxWidth = 140, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center },
+                Flyout = Choices(
+                    () => _vm?.AgentChoicePickers.FirstOrDefault(c => c.Id == id)?.ValueNames ?? [],
+                    () => _vm?.AgentChoicePickers.FirstOrDefault(c => c.Id == id)?.SelectedIndex ?? -1,
+                    i => _ = _vm?.ChooseAsync(id, i)),
+            };
+            picker.Classes.Add("toolbar");
+            ToolTip.SetTip(picker, choice.AccessibleName);
+            Avalonia.Automation.AutomationProperties.SetName(picker, choice.AccessibleName);
+            Toolbar.Children.Insert(at++, picker);
+            _choicePickers.Add(picker);
+        }
     }
 
     /// <summary>

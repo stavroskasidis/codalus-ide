@@ -25,7 +25,7 @@
       </DockPanel>
     </StackPanel>
     <TextBox DockPanel.Dock="Bottom" Height="110" Margin="0,8,0,0" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" Text="{Binding Output}"
-             FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T templateManager.dotnetNewOutput}" />
+             FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T templateManager.dotnetNewOutput}" />
     <Grid ColumnDefinitions="*,*">
       <ListBox ItemsSource="{Binding Packages}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T templateManager.installedTemplatePackages}">
         <ListBox.ItemTemplate>

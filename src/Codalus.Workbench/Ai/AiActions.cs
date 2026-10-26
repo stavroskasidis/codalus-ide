@@ -35,6 +35,9 @@ public static partial class AiActions
     /// <summary>Asked in AI Chat about the debugger's exception, with the exception and the frame's code.</summary>
     public const string ExplainExceptionQuestion = "Why was this exception thrown, and how do I fix it?";
 
+    /// <summary>Asked in AI Chat about a value at a debugger stop (Locals, Autos, Watch, data tips), with the value, the frame's code and the stack.</summary>
+    public const string ExplainValueQuestion = "Is this value what the code expects at this point? If it isn't, why, and how do I fix it?";
+
     /// <summary>Asked in AI Chat about a diagnostic (Quick Info's Add to Chat), with the diagnostic and the code around it.</summary>
     public const string ExplainDiagnosticQuestion = "What does this error mean, and how do I fix it?";
 

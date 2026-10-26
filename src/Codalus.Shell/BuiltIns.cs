@@ -166,7 +166,7 @@ internal static partial class BuiltIns
                 Maximum = 120,
                 Scope = SettingScope.User,
             },
-            SettingDescriptor.Create("editor.fontFamily", "\"Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace\"", SettingType.String, shell) with
+            SettingDescriptor.Create("editor.fontFamily", "\"Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace\"", SettingType.String, shell) with
             {
                 Title = "Font Family",
                 Category = "Text Editor",
@@ -266,6 +266,8 @@ internal static partial class BuiltIns
         Add("remote.reopenInContainer", "Reopen in Container", "Dev Containers", Ui(() => shell.ReopenInContainerAsync()));
         Add("help.checkEnvironment", "Check Environment", "Help", Ui(shell.OpenCheckEnvironment));
         Add("help.setUp", "Set Up Codalus IDE", "Help", Ui(() => shell.ShowSetup()));
+        Add("help.reportProblem", "Report a Problem…", "Help", Ui(shell.ReportProblemAsync));
+        Add("help.suggestFeature", "Suggest a Feature…", "Help", Ui(shell.SuggestFeatureAsync));
         Add("workbench.showStartWindow", "Start Window", "File", Ui(shell.ShowStartWindow));
         Add("settingsSync.turnOn", "Settings Sync: Turn On…", "Preferences", Ui(() => shell.TurnOnSettingsSyncAsync()));
         Add("settingsSync.syncNow", "Settings Sync: Sync Now", "Preferences", Ui(() => shell.SyncSettingsAsync()));

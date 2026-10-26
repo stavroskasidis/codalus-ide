@@ -259,7 +259,7 @@
 
             <StackPanel Spacing="2" IsVisible="{Binding HasWhy}">
               <TextBlock FontWeight="SemiBold" Text="{l:T packageManager.whyIsThisPackageHere}" />
-              <TextBlock FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" TextWrapping="Wrap" Text="{Binding Why}" />
+              <TextBlock FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" TextWrapping="Wrap" Text="{Binding Why}" />
             </StackPanel>
 
             <TextBlock FontWeight="SemiBold" Text="{l:T packageManager.description}" />

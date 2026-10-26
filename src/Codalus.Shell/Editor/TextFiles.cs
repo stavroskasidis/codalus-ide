@@ -123,6 +123,7 @@ public static class TextFiles
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = Path.Combine(Path.GetDirectoryName(path)!, "." + Path.GetFileName(path) + "." + Environment.ProcessId + ".tmp");
         await File.WriteAllBytesAsync(temp, Encode(text, format), cancellationToken).ConfigureAwait(false);
+        Workbench.FileSystem.FileSystems.KeepUnixMode(temp, path);
         File.Move(temp, path, overwrite: true);
     }
 

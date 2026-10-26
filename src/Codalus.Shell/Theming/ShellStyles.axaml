@@ -1336,6 +1336,13 @@
     separators start where the text does, and a submenu's chevron is a small one. The menu bar's own titles have another
     template, which these don't reach.
   -->
+  <!--
+    A menu's rows are 24 px whatever the UI font: a font with a taller line box (Noto Sans, where Linux has no DejaVu Sans)
+    made them 25. The menu bar's titles aren't in a menu, so they keep their own height.
+  -->
+  <Style Selector="ContextMenu MenuItem, MenuFlyoutPresenter MenuItem, MenuItem MenuItem">
+    <Setter Property="Height" Value="24" />
+  </Style>
   <!-- The pseudo-classes make these style triggers, which win over the values Fluent's template sets. -->
   <Style Selector="MenuItem:not(:toggle) /template/ ContentControl#PART_IconPresenter">
     <Setter Property="IsVisible" Value="True" />

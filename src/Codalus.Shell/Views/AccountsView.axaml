@@ -40,7 +40,7 @@
                 <Border IsVisible="{Binding HasCode}" Background="{DynamicResource Shell.Hover}" CornerRadius="3" Padding="12,8">
                   <StackPanel Spacing="6">
                     <TextBlock Text="{l:T accounts.enterThisCodeInYourBrowser}" TextWrapping="Wrap" />
-                    <SelectableTextBlock Text="{Binding UserCode}" FontSize="24" FontWeight="SemiBold" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" AutomationProperties.Name="{l:T accounts.deviceCode}" />
+                    <SelectableTextBlock Text="{Binding UserCode}" FontSize="24" FontWeight="SemiBold" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" AutomationProperties.Name="{l:T accounts.deviceCode}" />
                     <TextBlock Text="{Binding VerificationUri}" Classes="muted" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                       <Button Classes="accent" Content="{l:T accounts.copyCodeAndOpenBrowser}" Command="{Binding CopyAndOpenCommand}" />

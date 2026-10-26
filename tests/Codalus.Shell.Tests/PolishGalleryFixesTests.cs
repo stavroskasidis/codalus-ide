@@ -39,6 +39,7 @@ public partial class PolishTests
         channel.Append("\e[3");
         channel.AppendLine("4msplit blue\e[0m");
         channel.AppendLine("\e[34mdark blue\e[0m and \e[1;34mbold blue\e[0m");
+        channel.AppendLine("\e[32mplain green\e[0m and \e[1;32mbolder green\e[0m");
 
         var view = new OutputView { DataContext = f.Shell.Output };
         f.Shell.Output.Selected = channel;
@@ -107,6 +108,16 @@ public partial class PolishTests
             // Bold is the bright color at the regular weight (M50): the bold typeface was hard to read.
             Assert.Equal(WeightAt(6, "just yellow"), WeightAt(6, "bold green"));
             Assert.Equal(WeightAt(8, "dark blue"), WeightAt(8, "bold blue"));
+
+            // ...and stands out from the plain color in every theme (M51: Harbor Light's bold green looked like its green).
+            Expect(9, "plain green", null);
+            Expect(9, "bolder green", null);
+            // (High Contrast's palette has one green for both.)
+            if (!ThemeService.IsHighContrast(variant) && ColorAt(9, "plain green") is { } plain && ColorAt(9, "bolder green") is { } bold
+                && Math.Abs(PolishTests.Contrast(bold, background) - PolishTests.Contrast(plain, background)) < 1)
+            {
+                problems.Add($"{name}: bold green {bold} ({PolishTests.Contrast(bold, background):0.00}:1) hardly stands out from green {plain} ({PolishTests.Contrast(plain, background):0.00}:1)");
+            }
         }
 
         Assert.True(problems.Count == 0, string.Join('\n', problems));

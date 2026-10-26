@@ -90,6 +90,18 @@ Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme**
 - **Between machines** (Tools → Export Settings, Import Settings): one JSON file with your settings, keyboard shortcuts and saved window layouts.
   - Importing asks which of the three to take. Settings this version doesn't know are skipped and logged, shortcuts replace yours, and layouts are added.
 
+## System integration
+
+Tools → Options → Environment → **System Integration** has two choices, both **off until you turn them on**, and each removable: turning one off removes exactly what it added, and leaves anything else (another app's entries, your own scripts) alone. The first-run setup offers them too, on its Tools step. They change your operating system's settings, for you alone (no administrator rights), not `settings.json`: the check boxes show what's actually registered, read back each time, so they can't disagree with the system.
+
+| | **Open Folders from the File Manager** | **Open Solutions and Project Files** (`.sln`, `.slnx`, `.slnf`, `.csproj`, `.vbproj`, `.fsproj`) |
+|---|---|---|
+| Windows | **Open with Codalus IDE** on a folder's right-click and on a folder's empty space in File Explorer (with the app's icon; on Windows 11 under **Show more options**). | Codalus IDE is registered as an app for each type, under your user's classes. Windows doesn't let an app make itself the default, so the first time you open one Windows may ask which app to use: choose Codalus IDE (and **Always**). It's also in **Open with**. |
+| macOS | An **Open with Codalus IDE** Quick Action on a folder's right-click in the Finder (under **Quick Actions**, or **Services**). | Codalus IDE becomes each type's default app. Turning it off gives each type back to the app that opened it before (or another app that opens it). The installed app only: a copy that doesn't run from `Codalus IDE.app` shows why it can't. |
+| Linux | **Open with Codalus IDE** in Dolphin's and Nemo's right-click menus, under **Scripts** in GNOME Files, and in Thunar's custom actions (when Thunar has been run). | The types are registered for you (`~/.local/share/mime`), with a desktop entry that opens them, and Codalus IDE becomes their default application (`xdg-mime`, or `~/.config/mimeapps.list`). A default you choose later for one of them stays yours. |
+
+What it starts is this copy of Codalus IDE (the installed app, the AppImage file, or a development build), with your `--user-data-dir` if you started it with one. The folder or solution opens in a running window that has nothing open; otherwise in a new window. When a check box is neither on nor off, the entries are partly there (one was removed by hand, or a file manager was installed since) or start another copy of Codalus IDE: clicking it removes them, and clicking again registers them all for this copy.
+
 ## Window layouts
 
 - **Save and apply** (Window → Save Window Layout, Apply Window Layout, Delete Window Layout): name the current arrangement of tool windows and bring it back later. Default is the layout Codalus IDE starts with. Layouts are kept in the state folder's `layouts.json`.

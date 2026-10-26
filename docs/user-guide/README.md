@@ -14,7 +14,7 @@ Codalus IDE is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linu
 10. [Git](git.md)
 11. [Terminal and C# Interactive](terminal.md)
 12. [The window, settings, themes and keyboard shortcuts](settings.md)
-13. [Troubleshooting, logs and crash reports](troubleshooting.md)
+13. [Troubleshooting, logs and crash reports, and reporting a problem or suggesting a feature](troubleshooting.md)
 14. [Older .NET versions: .NET Core 2.0 to .NET 10, and older SDKs in global.json](dotnet-versions.md)
 15. [Containers, Aspire and publishing](containers.md)
 16. [Profiling and diagnostics: the Performance Profiler, Diagnostic Tools and .NET Counters](profiling.md)

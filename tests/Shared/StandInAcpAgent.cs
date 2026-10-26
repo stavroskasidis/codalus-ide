@@ -34,6 +34,13 @@ namespace Codalus.Tests;
 /// <item><c>logout</c> deletes the marker and pushes <c>none</c>.</item>
 /// </list>
 /// </para>
+/// <para>
+/// Session choices (M51): <c>ACP_FAKE_CHOICES=config</c> answers <c>session/new</c> with config options (a model
+/// <c>sonnet</c>/<c>opus</c> in groups, a mode <c>ask</c>/<c>code</c> and an effort <c>low</c>/<c>medium</c>/<c>high</c>) and serves
+/// <c>session/set_config_option</c> (choosing <c>opus</c> makes the effort <c>high</c>; <c>ACP_FAKE_REFUSE_CHOICE=value</c>
+/// refuses that value); <c>ACP_FAKE_CHOICES=models</c> answers with the older <c>models</c> beside the modes and serves
+/// <c>session/set_model</c>.
+/// </para>
 /// The prompt's last line picks the script:
 /// <list type="bullet">
 /// <item><c>hello</c>: a thought, two message chunks and a plan.</item>
@@ -51,6 +58,42 @@ namespace Codalus.Tests;
 public static class StandInAcpAgent
 {
     private static readonly JsonSerializerOptions s_line = new() { WriteIndented = false };
+
+    private static string _model = "sonnet";
+    private static string _mode = "ask";
+    private static string _effort = "medium";
+
+    /// <summary>The config options as they are now: the model in groups, the mode, and the effort.</summary>
+    private static JsonArray ConfigOptions() => new(
+        new JsonObject
+        {
+            ["id"] = "model",
+            ["name"] = "Model",
+            ["category"] = "model",
+            ["type"] = "select",
+            ["currentValue"] = _model,
+            ["options"] = new JsonArray(
+                new JsonObject { ["group"] = "fast", ["name"] = "Fast", ["options"] = new JsonArray(new JsonObject { ["value"] = "sonnet", ["name"] = "Sonnet" }) },
+                new JsonObject { ["group"] = "large", ["name"] = "Large", ["options"] = new JsonArray(new JsonObject { ["value"] = "opus", ["name"] = "Opus", ["description"] = "The largest" }) }),
+        },
+        new JsonObject
+        {
+            ["id"] = "mode",
+            ["name"] = "Session Mode",
+            ["category"] = "mode",
+            ["type"] = "select",
+            ["currentValue"] = _mode,
+            ["options"] = new JsonArray(new JsonObject { ["value"] = "ask", ["name"] = "Ask" }, new JsonObject { ["value"] = "code", ["name"] = "Code" }),
+        },
+        new JsonObject
+        {
+            ["id"] = "effort",
+            ["name"] = "Thinking",
+            ["category"] = "thought_level",
+            ["type"] = "select",
+            ["currentValue"] = _effort,
+            ["options"] = new JsonArray(new JsonObject { ["value"] = "low", ["name"] = "Low" }, new JsonObject { ["value"] = "medium", ["name"] = "Medium" }, new JsonObject { ["value"] = "high", ["name"] = "High" }),
+        });
 
     public static async Task<int> RunAsync(Stream input, Stream output)
     {
@@ -302,7 +345,7 @@ public static class StandInAcpAgent
                         await PermissionAsync("perm_probe").ConfigureAwait(false);
                     }
 
-                    await RespondAsync(id, new JsonObject
+                    var created = new JsonObject
                     {
                         ["sessionId"] = _sessionId,
                         ["modes"] = new JsonObject
@@ -310,7 +353,22 @@ public static class StandInAcpAgent
                             ["currentModeId"] = "ask",
                             ["availableModes"] = new JsonArray(new JsonObject { ["id"] = "ask", ["name"] = "Ask" }, new JsonObject { ["id"] = "code", ["name"] = "Code" }),
                         },
-                    }).ConfigureAwait(false);
+                    };
+                    switch (Environment.GetEnvironmentVariable("ACP_FAKE_CHOICES"))
+                    {
+                        case "config":
+                            created["configOptions"] = ConfigOptions();
+                            break;
+                        case "models":
+                            created["models"] = new JsonObject
+                            {
+                                ["currentModelId"] = _model,
+                                ["availableModels"] = new JsonArray(new JsonObject { ["modelId"] = "sonnet", ["name"] = "Sonnet" }, new JsonObject { ["modelId"] = "opus", ["name"] = "Opus", ["description"] = "The largest" }),
+                            };
+                            break;
+                    }
+
+                    await RespondAsync(id, created).ConfigureAwait(false);
                     await UpdateAsync(new JsonObject
                     {
                         ["sessionUpdate"] = "available_commands_update",
@@ -321,6 +379,38 @@ public static class StandInAcpAgent
                     break;
                 case "session/set_mode":
                     await RespondAsync(id, new JsonObject()).ConfigureAwait(false);
+                    break;
+                case "session/set_model":
+                    _model = parameters["modelId"]?.GetValue<string>() ?? _model;
+                    await RespondAsync(id, new JsonObject()).ConfigureAwait(false);
+                    break;
+                case "session/set_config_option":
+                    var configValue = parameters["value"]?.GetValue<string>() ?? "";
+                    if (configValue == Environment.GetEnvironmentVariable("ACP_FAKE_REFUSE_CHOICE"))
+                    {
+                        await ErrorAsync(id, -32602, "That value isn't available").ConfigureAwait(false);
+                        break;
+                    }
+
+                    switch (parameters["configId"]?.GetValue<string>())
+                    {
+                        case "model":
+                            _model = configValue;
+                            if (configValue == "opus")
+                            {
+                                _effort = "high";
+                            }
+
+                            break;
+                        case "mode":
+                            _mode = configValue;
+                            break;
+                        case "effort":
+                            _effort = configValue;
+                            break;
+                    }
+
+                    await RespondAsync(id, new JsonObject { ["configOptions"] = ConfigOptions() }).ConfigureAwait(false);
                     break;
                 case "session/cancel":
                     _cancelled.TrySetResult();

@@ -23,7 +23,7 @@
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.mono">
-      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
     </Style>
     <!-- The form's grid: 24 px fields in 32 px rows. -->
     <Style Selector="ItemsControl#FieldList TextBox">
@@ -185,7 +185,7 @@
                           <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                         </DockPanel>
                         <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ToolTip}">
-                          <Run Classes="muted" Text="{Binding Type}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+                          <Run Classes="muted" Text="{Binding Type}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
                           <Run Classes="required" Text="{Binding IsRequired, Converter={x:Static vm:WcfStyles.RequiredMark}}" FontWeight="Bold" />
                         </TextBlock>
                         <TextBox Grid.Column="2" Text="{Binding Value}" IsVisible="{Binding IsText}" IsEnabled="{Binding !IsNil}" PlaceholderText="{Binding Placeholder}" AutomationProperties.Name="{Binding ValueName}" />
@@ -247,7 +247,7 @@
                   <TreeView x:Name="ResponseTreeView" ItemsSource="{Binding ResponseTree}" IsVisible="{Binding IsResponseTree}" Background="Transparent" AutomationProperties.Name="{l:T wcfTestClient.responseTree}">
                     <TreeView.ItemTemplate>
                       <TreeDataTemplate x:DataType="wcf:XmlTreeNode" ItemsSource="{Binding Children}">
-                        <controls:XmlNodeText NodeName="{Binding Name}" NodeValue="{Binding Value}" IsPlain="{Binding $parent[TreeViewItem].IsSelected}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+                        <controls:XmlNodeText NodeName="{Binding Name}" NodeValue="{Binding Value}" IsPlain="{Binding $parent[TreeViewItem].IsSelected}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12"
                                               VerticalAlignment="Center" ToolTip.Tip="{Binding Label}" />
                       </TreeDataTemplate>
                     </TreeView.ItemTemplate>

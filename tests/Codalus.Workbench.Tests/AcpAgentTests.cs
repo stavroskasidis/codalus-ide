@@ -190,6 +190,98 @@ public sealed class AcpAgentTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Config_options_offer_the_model_mode_and_effort_and_a_pick_is_kept_for_the_next_session()
+    {
+        await ConfigureAsync("ACP_FAKE_CHOICES=config");
+        await AskAsync("hello");
+        var session = _agents.Current!;
+
+        // Model, mode, effort, in that order; the model's groups flattened; the config option's mode wins over the older modes.
+        Assert.Equal(["model", "mode", "effort"], session.Choices.Select(c => c.Id));
+        Assert.All(session.Choices, c => Assert.Equal(AcpChoiceKind.ConfigOption, c.Kind));
+        var model = session.Choices[0];
+        Assert.Equal(["sonnet", "opus"], model.Values.Select(v => v.Value));
+        Assert.Equal("Sonnet", model.CurrentName);
+        Assert.Equal("The largest", model.Values[1].Description);
+        Assert.Equal(("thought_level", "medium"), (session.Choices[2].Category, session.Choices[2].CurrentValue));
+
+        // A pick goes to the agent, whose answer (every option as it is now) replaces them: opus raised the effort.
+        await session.SetChoiceAsync("model", "opus", Ct);
+        var set = Received("session/set_config_option").Single().GetProperty("params");
+        Assert.Equal(("model", "opus"), (set.GetProperty("configId").GetString(), set.GetProperty("value").GetString()));
+        Assert.Equal(("opus", "high"), (session.Choices[0].CurrentValue, session.Choices[2].CurrentValue));
+
+        // Kept in the agent's entry, and applied to the next session; a pick doesn't restart the running one.
+        await _agents.SaveChoiceAsync("stand-in", "model", "opus", Ct);
+        await _agents.SaveChoiceAsync("stand-in", "effort", "low", Ct);
+        Assert.Equal(new Dictionary<string, string> { ["model"] = "opus", ["effort"] = "low" }, _agents.Configured["stand-in"].Choices);
+        await AskAsync("hello again");
+        Assert.Same(session, _agents.Current);
+
+        await _agents.StopAsync();
+        File.Delete(_log);
+        await AskAsync("hello");
+        var next = _agents.Current!;
+        Assert.NotSame(session, next);
+        Assert.Equal(
+            [("model", "opus"), ("effort", "low")],
+            Received("session/set_config_option").Select(m => m.GetProperty("params")).Select(p => (p.GetProperty("configId").GetString()!, p.GetProperty("value").GetString()!)));
+        Assert.Equal(("opus", "low"), (next.Choices[0].CurrentValue, next.Choices[2].CurrentValue));
+    }
+
+    [Fact]
+    public async Task A_refused_choice_throws_and_a_saved_value_the_agent_refuses_or_no_longer_offers_is_left()
+    {
+        await ConfigureAsync("ACP_FAKE_CHOICES=config;ACP_FAKE_REFUSE_CHOICE=code");
+        await AskAsync("hello");
+        var session = _agents.Current!;
+        await Assert.ThrowsAsync<AcpException>(() => session.SetChoiceAsync("mode", "code", Ct));
+        Assert.Equal("ask", session.Choices.Single(c => c.Id == "mode").CurrentValue);
+
+        await _agents.SaveChoiceAsync("stand-in", "mode", "code", Ct);
+        await _agents.SaveChoiceAsync("stand-in", "model", "gone", Ct);
+        await _agents.StopAsync();
+        File.Delete(_log);
+        var turn = await AskAsync("hello");
+        Assert.Null(turn.Error);
+        Assert.Equal("code", Received("session/set_config_option").Single().GetProperty("params").GetProperty("value").GetString());
+        Assert.Contains("the saved mode code was refused", AiLog, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_older_models_and_modes_are_choices_set_with_their_own_methods()
+    {
+        await ConfigureAsync("ACP_FAKE_CHOICES=models");
+        await AskAsync("hello");
+        var session = _agents.Current!;
+        Assert.Equal([("model", AcpChoiceKind.Model), ("mode", AcpChoiceKind.Mode)], session.Choices.Select(c => (c.Id, c.Kind)));
+
+        await session.SetChoiceAsync("model", "opus", Ct);
+        Assert.Equal("opus", Received("session/set_model").Single().GetProperty("params").GetProperty("modelId").GetString());
+        Assert.Equal("Opus", session.Choices[0].CurrentName);
+
+        await session.SetChoiceAsync("mode", "code", Ct);
+        Assert.Equal("code", Received("session/set_mode").Single().GetProperty("params").GetProperty("modeId").GetString());
+        Assert.Equal(("code", "code"), (session.CurrentModeId, session.Choices[1].CurrentValue));
+    }
+
+    [Fact]
+    public async Task AI_Chat_s_agent_is_kept_in_the_user_settings_and_reconnecting_keeps_the_choices()
+    {
+        await ConfigureAsync();
+        Assert.Null(_agents.ChatAgent);
+        await _agents.SaveChatAgentAsync("stand-in", Ct);
+        Assert.Equal("stand-in", _agents.ChatAgent);
+        Assert.Equal("stand-in", _workbench.Settings.GetLayerValue(AcpAgents.ChatAgentSetting, SettingScope.User)!.Value.GetString());
+        await _agents.SaveChatAgentAsync(null, Ct);
+        Assert.Null(_agents.ChatAgent);
+
+        // A choice saved for an agent that isn't configured writes nothing.
+        await _agents.SaveChoiceAsync("missing", "model", "opus", Ct);
+        Assert.False(_workbench.Settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.TryGetProperty("missing", out _));
+    }
+
+    [Fact]
     public async Task Reading_stays_in_the_workspace_away_from_excluded_files_and_is_redacted()
     {
         await ConfigureAsync();

@@ -37,7 +37,7 @@
       <Button Classes="accent" HorizontalAlignment="Left" Margin="0,6,0,0" Content="{l:T exportTemplate.exportAndInstall}" Command="{Binding ExportCommand}" />
       <TextBlock TextWrapping="Wrap" Text="{Binding Status}" />
       <TextBox Height="100" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" Text="{Binding Output}"
-               FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T exportTemplate.dotnetNewOutput}" />
+               FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T exportTemplate.dotnetNewOutput}" />
     </StackPanel>
   </ScrollViewer>
 </UserControl>

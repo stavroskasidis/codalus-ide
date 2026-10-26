@@ -311,6 +311,12 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         return tools;
     }
 
+    /// <summary>
+    /// The .NET SDK alone, against <paramref name="solutionFolder"/>'s <c>global.json</c>: what a solution's open checks,
+    /// without running every other tool's <c>--version</c> (Podman's starts its machine's client and takes seconds of CPU).
+    /// </summary>
+    public Task<ToolStatus> CheckDotnetAsync(string? solutionFolder, CancellationToken cancellationToken) => DotnetAsync(solutionFolder, cancellationToken);
+
     private static ToolStatus Status(string id, string title, bool required, Probe probe, string neededFor) =>
         new(id, title, required, probe.State, neededFor) { Version = probe.Version, Path = probe.Path };
 

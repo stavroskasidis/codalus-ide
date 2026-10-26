@@ -56,7 +56,8 @@ install() {
     [ -n "$kind" ] && args+=(-Runtime "$kind")
     [ -n "$architecture" ] && args+=(-Architecture "$architecture")
     [ -n "$skip" ] && args+=(-SkipNonVersionedFiles)
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$work/dotnet-install.ps1")" "${args[@]}"
+    # System32 first: dotnet-install.ps1 runs `tar`, and Git Bash's GNU tar (earlier on its PATH) reads C: as a remote host.
+    PATH="$(cygpath -u "${SYSTEMROOT:-C:\\Windows}")/System32:$PATH" powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$work/dotnet-install.ps1")" "${args[@]}"
   else
     [ -f "$work/dotnet-install.sh" ] || curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
     bash "$work/dotnet-install.sh" --install-dir "$root" --no-path "$@"

@@ -81,6 +81,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
         Theme.Changed += (_, _) => UseFamilyDefaults();
         UseFamilyDefaults();
+        ListenForOpenedFiles(app);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
         {
             var log = Workbench.Log.GetText();
@@ -427,9 +428,17 @@ public sealed partial class ShellHost : IAsyncDisposable
         {
             try
             {
-                Window?.BringToFront();
+                if (request.Command != "openPath")
+                {
+                    Window?.BringToFront();
+                }
+
                 switch (request)
                 {
+                    case { Command: "openPath", Arguments: [var openPath] }:
+                        // A folder or solution from the OS or a terminal: here when nothing is open (it comes to the front then).
+                        done.TrySetResult(TakeOpenPath(openPath));
+                        break;
                     case { Command: "diff", Arguments: [var left, var right] }:
                         await OpenFileDiffAsync(left, right).ConfigureAwait(true);
                         done.TrySetResult(true);
@@ -719,7 +728,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public void OpenSettings() =>
         Layout.OpenDocument(Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId)
-            ?? new SettingsDocument(new SettingsViewModel(Workbench.Settings, () => Run("workbench.openSettingsJson"))));
+            ?? new SettingsDocument(new SettingsViewModel(Workbench.Settings, () => Run("workbench.openSettingsJson"), this)));
 
     public void OpenKeyboardShortcuts()
     {

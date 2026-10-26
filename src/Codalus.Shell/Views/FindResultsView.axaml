@@ -58,7 +58,7 @@
     </Style>
     <Style Selector="TextBlock.findNumber">
       <Setter Property="TextAlignment" Value="Right" />
-      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="Margin" Value="0,0,8,0" />
     </Style>
@@ -166,7 +166,7 @@
                 </Grid>
                 <!-- A match: the line in the editor's colors, the match highlighted. -->
                 <controls:CodeLine Source="{Binding Code}" Highlights="{Binding Highlights}" Path="{Binding Path}" IsVisible="{Binding !IsHeader}"
-                                   FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Code}" />
+                                   FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Code}" />
               </DockPanel>
               <TextBlock Grid.Column="1" Classes="muted" Text="{Binding FileName}" IsVisible="{Binding !IsHeader}" Margin="8,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
               <TextBlock Grid.Column="2" Classes="muted findNumber" Text="{Binding LineLabel}" IsVisible="{Binding !IsHeader}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />

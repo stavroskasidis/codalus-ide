@@ -30,7 +30,7 @@
           <StackPanel Spacing="4">
             <StackPanel Orientation="Horizontal" Spacing="8">
               <ComboBox ItemsSource="{x:Static vm:RebaseStepRow.Actions}" SelectedItem="{Binding Action}" MinWidth="100" AutomationProperties.Name="{l:T interactiveRebase.action}" />
-              <TextBlock Text="{Binding ShortHash}" Classes="muted" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+              <TextBlock Text="{Binding ShortHash}" Classes="muted" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
               <TextBlock Text="{Binding Subject}" VerticalAlignment="Center" />
             </StackPanel>
             <TextBox Text="{Binding Message}" IsVisible="{Binding IsReword}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40" Margin="108,0,0,0"

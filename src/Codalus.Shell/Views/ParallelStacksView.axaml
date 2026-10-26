@@ -24,7 +24,7 @@
               <ItemsControl ItemsSource="{Binding Frames}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="x:String">
-                    <TextBlock Text="{Binding}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" TextTrimming="CharacterEllipsis" />
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>

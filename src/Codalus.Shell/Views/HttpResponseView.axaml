@@ -16,7 +16,7 @@
       <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
     </Style>
     <Style Selector="Border.chip.mono > TextBlock">
-      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
     </Style>
     <Style Selector="TextBlock.meta">
       <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
@@ -91,7 +91,7 @@
           <Button DockPanel.Dock="Right" Classes="link" Content="{Binding Source}" Command="{Binding OpenRequestCommand}" IsVisible="{Binding HasSource}" VerticalAlignment="Center"
                   ToolTip.Tip="{l:T httpResponse.openTheRequestInItsHttp}" />
           <TextBlock DockPanel.Dock="Right" Classes="muted small" Text="{l:T httpResponse.from}" IsVisible="{Binding HasSource}" VerticalAlignment="Center" Margin="8,0,4,0" />
-          <TextBlock Text="{Binding Url}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Url}" />
+          <TextBlock Text="{Binding Url}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Url}" />
         </DockPanel>
       </StackPanel>
       <!-- Body, Headers and Request (the tabs inside a view, TabStrip.viewTabs); the body's view switch on the right. The
@@ -130,7 +130,7 @@
               <DataTemplate x:DataType="vm:HttpHeaderRow">
                 <Grid ColumnDefinitions="200,*" MinHeight="22">
                   <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" Margin="0,0,12,0" />
-                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -190,7 +190,7 @@
               <Border Grid.RowSpan="2" Classes="chip square mono" Classes.info="{Binding IsMethodOther}" Classes.success="{Binding IsMethodCreate}" Classes.error="{Binding IsMethodDelete}">
                 <TextBlock Text="{Binding Method}" />
               </Border>
-              <TextBlock Grid.Column="1" Text="{Binding Path}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" VerticalAlignment="Center" Margin="8,0" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="1" Text="{Binding Path}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" VerticalAlignment="Center" Margin="8,0" TextTrimming="CharacterEllipsis" />
               <Border Grid.Column="2" Classes="chip" Classes.success="{Binding IsStatusSuccess}" Classes.warning="{Binding IsStatusRedirect}" Classes.error="{Binding IsStatusError}" Classes.info="{Binding IsStatusInfo}">
                 <TextBlock Text="{Binding StatusText}" />
               </Border>
