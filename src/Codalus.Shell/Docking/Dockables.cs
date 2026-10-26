@@ -12,6 +12,34 @@ public sealed class ShellDockFactory : Factory
         HideToolsOnClose = false;
         HideDocumentsOnClose = false;
     }
+
+    /// <summary>
+    /// A group takes its active tab's title. Dock names the groups it makes by their interface ("IToolDock"), and a drag
+    /// of a tool window's header, which drags its group, showed that name in the drag's tooltip (0.7.0's validation).
+    /// </summary>
+    public override void InitActiveDockable(Dock.Model.Core.IDockable? dockable, Dock.Model.Core.IDock owner)
+    {
+        TitleFromActive(owner, dockable);
+        base.InitActiveDockable(dockable, owner);
+    }
+
+    /// <summary>A group Dock makes gets its tab before it has a factory: it takes the tab's title when it joins the layout.</summary>
+    public override void InitDockable(Dock.Model.Core.IDockable dockable, Dock.Model.Core.IDockable? owner)
+    {
+        base.InitDockable(dockable, owner);
+        if (dockable is Dock.Model.Core.IDock dock)
+        {
+            TitleFromActive(dock, dock.ActiveDockable);
+        }
+    }
+
+    private static void TitleFromActive(Dock.Model.Core.IDock dock, Dock.Model.Core.IDockable? active)
+    {
+        if (active is not null && dock is Dock.Model.Controls.IToolDock or Dock.Model.Controls.IDocumentDock)
+        {
+            dock.Title = active.Title;
+        }
+    }
 }
 
 /// <summary>

@@ -55,9 +55,12 @@ public sealed class ProductNameTests
     public void No_current_file_names_the_classic_IDE()
     {
         var root = Metadata("CodalusRepoRoot");
+        var files = TrackedFiles(root);
+        Assert.SkipWhen(files is null && Environment.GetEnvironmentVariable("CI") != "true",
+            $"{root} isn't a git checkout with its files tracked (eng/wsl-test.sh's mirror, a source archive): the scan lists them with git.");
         var mentions = new List<string>();
         var used = new HashSet<int>();
-        foreach (var file in TrackedFiles(root))
+        foreach (var file in files ?? throw new InvalidOperationException($"git lists no files in {root}"))
         {
             var path = Path.Combine(root, file.Replace('/', Path.DirectorySeparatorChar));
             if (s_excludedFiles.Contains(file) || !File.Exists(path))
@@ -119,7 +122,8 @@ public sealed class ProductNameTests
     public void The_scan_finds_the_name_wrapped_over_two_lines(string first, string second, bool named) =>
         Assert.Equal(named, s_wrappedStart.IsMatch(first) && s_wrappedEnd.IsMatch(second));
 
-    private static string[] TrackedFiles(string root)
+    /// <summary>The files git tracks, or null outside a checkout or in one that tracks none.</summary>
+    private static string[]? TrackedFiles(string root)
     {
         var start = new ProcessStartInfo("git") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         foreach (var argument in new[] { "-c", "core.quotepath=off", "ls-files", "-z" })
@@ -128,10 +132,10 @@ public sealed class ProductNameTests
         }
 
         using var git = Process.Start(start)!;
-        var error = git.StandardError.ReadToEndAsync();
+        _ = git.StandardError.ReadToEndAsync(); // drained, so git never blocks on it
         var output = git.StandardOutput.ReadToEnd();
         git.WaitForExit();
-        Assert.True(git.ExitCode == 0, $"git ls-files failed in {root}: {error.Result}");
-        return output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        var files = output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        return git.ExitCode == 0 && files.Length > 0 ? files : null;
     }
 }
