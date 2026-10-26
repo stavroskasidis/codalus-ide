@@ -5,7 +5,7 @@
 # shell-2's 14.5): Net11Tests and two of the Windows Forms designer classes moved here.
 # Rebalanced in M51 from the tests' times on each OS (shell-1 against shell-2: Linux 899 s to 614, Windows 1655 to 835,
 # macOS 1534 to 856), to 769 to 745, 1213 to 1277 and 1203 to 1187, with classes that take longer on Windows and macOS
-# than on Linux. Memory (macOS's memory.txt, the runner has 7 GB) was not what set them apart: shell-1 kept 32% of it
+# than on Linux. Memory (macOS's memory.txt, the runner has 7 GB) was not what set them apart: shell-1 kept 29% of it
 # free at its lowest (the Blazor WebAssembly tests' browser), shell-2 43%, and the Blazor classes stay in shell-1.
 CaretEditsTests
 CompoundDebugTests
