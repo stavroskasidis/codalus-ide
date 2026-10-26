@@ -84,10 +84,7 @@
                       ToolTip.Tip="{l:T aiChat.whoAnswersTheBuiltIn}" AutomationProperties.Name="{l:T aiChat.agentPicker}">
         <TextBlock Text="{Binding SelectedAgentLabel}" TextTrimming="CharacterEllipsis" MaxWidth="160" VerticalAlignment="Center" />
       </DropDownButton>
-      <DropDownButton x:Name="ModePicker" Classes="toolbar" IsVisible="{Binding HasModes}"
-                      ToolTip.Tip="{l:T aiChat.theAgentSMode}" AutomationProperties.Name="{l:T aiChat.theAgentSMode}">
-        <TextBlock Text="{Binding SelectedModeLabel}" TextTrimming="CharacterEllipsis" MaxWidth="120" VerticalAlignment="Center" />
-      </DropDownButton>
+      <!-- The agent's choices (M51: its model, mode, effort…), one picker each, inserted here by the code-behind. -->
       <Border Classes="toolbarSpacer" />
       <ToggleSwitch x:Name="AgentSwitch" IsChecked="{Binding IsAgent}" IsVisible="{Binding ShowBuiltInControls}" Content="{l:T aiChat.agent}" Margin="4,0"
                     ToolTip.Tip="{l:T aiChat.agentModeTheAiMayRead}" AutomationProperties.Name="{l:T aiChat.agentMode}" />

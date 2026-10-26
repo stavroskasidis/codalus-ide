@@ -822,7 +822,7 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
             await secrets.StoreAsync(template.Id, option.EnvVar!, request.ApiKey ?? throw new AcpException("Type the key first."), cancellationToken).ConfigureAwait(false);
         }
 
-        var entry = AcpAgentCatalog.Entry(template.Agent.Command, template.Agent.Args, secretEnv, option.UnsetEnv, template.Tag, request.UseCodalusNode ? "builtIn" : null);
+        var entry = KeepChoices(AcpAgentCatalog.Entry(template.Agent.Command, template.Agent.Args, secretEnv, option.UnsetEnv, template.Tag, request.UseCodalusNode ? "builtIn" : null), template.Id);
         try
         {
             await settings.SetMemberAsync(AcpAgents.AgentsSetting, template.Id, entry, SettingScope.User, cancellationToken).ConfigureAwait(false);
@@ -849,6 +849,22 @@ public sealed partial class AcpAgentConnector(SettingsService settings, AiServic
             await settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, cancellationToken).ConfigureAwait(false);
             Log(template.Id, "wrote ai.enabled to the user settings");
         }
+    }
+
+    /// <summary>The new entry with the old one's picks of the agent's choices (M51): connecting again keeps the model and mode chosen.</summary>
+    private JsonElement KeepChoices(JsonElement entry, string id)
+    {
+        if (settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User) is not { ValueKind: JsonValueKind.Object } all
+            || !all.TryGetProperty(id, out var old) || old.ValueKind != JsonValueKind.Object
+            || !old.TryGetProperty(AcpAgents.ChoicesMember, out var choices) || choices.ValueKind != JsonValueKind.Object)
+        {
+            return entry;
+        }
+
+        var updated = System.Text.Json.Nodes.JsonNode.Parse(entry.GetRawText())!.AsObject();
+        updated[AcpAgents.ChoicesMember] = System.Text.Json.Nodes.JsonNode.Parse(choices.GetRawText());
+        using var document = JsonDocument.Parse(updated.ToJsonString());
+        return document.RootElement.Clone();
     }
 
     /// <summary>

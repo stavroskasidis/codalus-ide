@@ -36,6 +36,9 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     private IReadOnlyList<AcpAvailableCommand> _commands = [];
     private IReadOnlyList<AcpSessionMode> _modes = [];
     private string? _modeId;
+    private IReadOnlyList<AcpSessionConfigOption>? _configOptions;
+    private AcpSessionModelState? _models;
+    private IReadOnlyList<AcpSessionChoice> _choices = [];
     private int _prompts;
     private int _disposed;
 
@@ -120,7 +123,22 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
     public string? CurrentModeId => Volatile.Read(ref _modeId);
 
-    /// <summary>The commands, the modes or whether it is alive changed (any thread).</summary>
+    /// <summary>
+    /// The choices the agent offers for the session (M51): its model, mode, effort and other selects, from its config
+    /// options or, without them, its modes and models; empty when it offers none.
+    /// </summary>
+    public IReadOnlyList<AcpSessionChoice> Choices
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _choices;
+            }
+        }
+    }
+
+    /// <summary>The commands, the modes, the choices or whether it is alive changed (any thread).</summary>
     public event EventHandler? StateChanged;
 
     // ------------------------------------------------------------------ lifetime
@@ -183,10 +201,13 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         lock (_gate)
         {
             _modes = created.Modes?.AvailableModes ?? [];
+            _configOptions = created.ConfigOptions;
+            _models = created.Models;
         }
 
         _modeId = created.Modes?.CurrentModeId;
-        _ai.LogAgent(Name, string.Create(CultureInfo.InvariantCulture, $"session/new → {_sessionId} (cwd {WorkspaceRoot}, {McpServers.Count} MCP server(s))"));
+        UpdateChoices();
+        _ai.LogAgent(Name, string.Create(CultureInfo.InvariantCulture, $"session/new → {_sessionId} (cwd {WorkspaceRoot}, {McpServers.Count} MCP server(s), {Choices.Count} choice(s))"));
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -468,7 +489,81 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         _ai.LogAgent(Name, "session/set_mode " + modeId);
         await client.SetModeAsync(sessionId, modeId, cancellationToken).ConfigureAwait(false);
         Volatile.Write(ref _modeId, modeId);
+        UpdateChoices();
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Sets a choice (<see cref="Choices"/>) to <paramref name="value"/>, the way the agent offered it: a config option,
+    /// the mode or the model. Throws <see cref="AcpException"/> when the agent refuses.
+    /// </summary>
+    public async Task SetChoiceAsync(string id, string value, CancellationToken cancellationToken)
+    {
+        if (_client is not { } client || _sessionId is not { } sessionId || Choices.FirstOrDefault(c => c.Id == id) is not { } choice)
+        {
+            return;
+        }
+
+        switch (choice.Kind)
+        {
+            case AcpChoiceKind.Mode:
+                await SetModeAsync(value, cancellationToken).ConfigureAwait(false);
+                return;
+            case AcpChoiceKind.Model:
+                _ai.LogAgent(Name, "session/set_model " + value);
+                await client.SetModelAsync(sessionId, value, cancellationToken).ConfigureAwait(false);
+                lock (_gate)
+                {
+                    _models = new AcpSessionModelState { CurrentModelId = value, AvailableModels = _models?.AvailableModels };
+                }
+
+                break;
+            default:
+                _ai.LogAgent(Name, $"session/set_config_option {id} {value}");
+                var answer = await client.SetConfigOptionAsync(sessionId, id, value, cancellationToken).ConfigureAwait(false);
+                lock (_gate)
+                {
+                    _configOptions = answer?.ConfigOptions is { } options
+                        ? options
+                        : [.. (_configOptions ?? []).Select(o => o.Id == id ? new AcpSessionConfigOption { Id = o.Id, Name = o.Name, Description = o.Description, Category = o.Category, Type = o.Type, CurrentValue = JsonSerializer.SerializeToElement(value, AcpJsonContext.Default.String), Options = o.Options } : o)];
+                }
+
+                break;
+        }
+
+        UpdateChoices();
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Applies the choices saved for the agent (<c>ai.agents.&lt;name&gt;.choices</c>) after <c>session/new</c>: each one the
+    /// agent offers, with a value it lists, that isn't already current. One it refuses is logged and left.
+    /// </summary>
+    public async Task ApplyChoicesAsync(IReadOnlyDictionary<string, string> saved, CancellationToken cancellationToken)
+    {
+        foreach (var (id, value) in saved)
+        {
+            if (Choices.FirstOrDefault(c => c.Id == id) is { } choice && choice.CurrentValue != value && choice.Values.Any(v => v.Value == value))
+            {
+                try
+                {
+                    await SetChoiceAsync(id, value, cancellationToken).ConfigureAwait(false);
+                }
+                catch (AcpException ex)
+                {
+                    _ai.LogAgent(Name, $"the saved {id} {value} was refused: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    private void UpdateChoices()
+    {
+        lock (_gate)
+        {
+            var modes = _modes.Count > 0 ? new AcpSessionModeState { CurrentModeId = Volatile.Read(ref _modeId) ?? "", AvailableModes = _modes } : null;
+            _choices = AcpSessionChoices.From(_configOptions, modes, _models);
+        }
     }
 
     private AiChatTurn? CurrentTurn()
@@ -561,10 +656,24 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
                 return Task.CompletedTask;
             case "current_mode_update":
                 Volatile.Write(ref _modeId, update.Deserialize(json.AcpCurrentModeUpdate)?.CurrentModeId);
+                UpdateChoices();
                 StateChanged?.Invoke(this, EventArgs.Empty);
                 return Task.CompletedTask;
+            case "config_option_update":
+                if (update.Deserialize(json.AcpConfigOptionsUpdate)?.ConfigOptions is { } options)
+                {
+                    lock (_gate)
+                    {
+                        _configOptions = options;
+                    }
+
+                    UpdateChoices();
+                    StateChanged?.Invoke(this, EventArgs.Empty);
+                }
+
+                return Task.CompletedTask;
             default:
-                // user_message_chunk (a replay), usage, session info and config options: nothing to show.
+                // user_message_chunk (a replay), usage and session info: nothing to show.
                 return Task.CompletedTask;
         }
 

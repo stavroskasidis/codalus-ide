@@ -187,7 +187,8 @@ While an external agent is chosen, the label shows above the question box, and t
 
 - **The answer** is under the agent's name, with an **External agent** chip, and streams in as Markdown; the agent's **thinking** is folded under **Thinking**; its **plan** is a checklist above the steps.
 - **Steps** are the agent's tool calls, shown like the built-in agent's: an icon for how it stands and one for its kind, its title, and the files it works on as links that open the file at the line (only files in the workspace open). A step's details (the changes it reports, read-only, and a command's output, open while it runs) are under its chevron.
-- **Modes**: when the agent has modes (for example Ask and Code), a second picker in the toolbar switches them.
+- **Model, mode and effort**: when the agent offers choices for its session over ACP (its model, its modes such as Ask and Code, its effort or thinking level, or others of its own), each one has a picker in the toolbar after the agent picker, showing its current value. They show once the agent has started (after your first question). A pick goes to the agent at once and is kept in its entry (`ai.agents.<agent>.choices`), so its next sessions start with it; a value the agent refuses, or no longer offers, is left as the agent has it. Agents that offer none show no pickers.
+- **Across a restart**: AI Chat opens with the agent you chose last (`ai.chat.agent`), not the built-in assistant.
 - **Commands**: typing `/` offers the agent's slash commands; `Tab` or a click puts one in the box.
 - **Stop** asks the agent to stop (`session/cancel`), answers its open questions as cancelled, closes an open approval and stops its commands. **New Chat** stops the agent's process; each chat runs one process, which also stops when the folder closes and when the IDE exits.
 - If the agent crashes, the turn shows its last lines of output, and your next question starts it again.
@@ -247,7 +248,8 @@ AI assistance has one gate that every request goes through:
 | `ai.agent.commandTimeoutSeconds` | `120` | How long an allowed command may run |
 | `ai.mcp.servers` | `{}` | MCP servers whose tools agent mode may use (user settings only) |
 | `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE (external agents' own pipes don't need it) |
-| `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env", "secretEnv", "unsetEnv" } }` (user settings only; **AI: Connect to an Agent…** writes it) |
+| `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env", "secretEnv", "unsetEnv", "choices" } }` (user settings only; **AI: Connect to an Agent…** writes it, AI Chat's pickers write `choices`) |
+| `ai.chat.agent` | `""` | Who answers in AI Chat: empty for the built-in assistant, or an agent of `ai.agents` (the picker writes it) |
 | `ai.openai.endpoint` | `https://api.openai.com/v1` | The OpenAI-compatible server |
 | `ai.ollama.endpoint` | `http://localhost:11434/v1` | Ollama's address |
 | `ai.anthropic.endpoint` | `https://api.anthropic.com` | Anthropic's API, or a gateway |

@@ -115,6 +115,14 @@ public static class AiSettings
             Scope = SettingScope.User,
             Order = 24,
         },
+        SettingDescriptor.Create(Acp.AcpAgents.ChatAgentSetting, "\"\"", SettingType.String, source) with
+        {
+            Title = "AI Chat Agent",
+            Category = "AI",
+            Description = "Who answers in AI Chat: empty for the built-in assistant, or the name of an agent of External Agents (ai.agents). AI Chat's picker writes it, so the chat opens with the agent you chose last.",
+            Scope = SettingScope.User,
+            Order = 25,
+        },
         SettingDescriptor.Create("ai.mcpServer.enabled", "false", SettingType.Boolean, source) with
         {
             Title = "MCP Server",
