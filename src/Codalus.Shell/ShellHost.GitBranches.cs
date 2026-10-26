@@ -26,7 +26,13 @@ public sealed partial class ShellHost
     /// </summary>
     internal IContextKeyReader GitBranchScope(GitBranchDetails branch)
     {
-        var status = Git.Status;
+        if (GitBranches.IsCommon(branch))
+        {
+            return CommonBranchScope(branch);
+        }
+
+        var git = GitBranches.IsAllRepositories ? GitBranches.RepositoryOf(branch) : Repo;
+        var status = git.Status;
         var current = !branch.IsRemote && (branch.IsCurrent && status?.Branch is not null || branch.IsRebasingHere);
         var menuContext = new MenuContext();
         menuContext.Set("gitBranchKind", branch.IsRemote ? "remote" : "local");
@@ -35,7 +41,10 @@ public sealed partial class ShellHost
         menuContext.Set("gitBranchInOtherWorktree", branch.WorktreePath is not null);
         menuContext.Set("gitBranchHasLocal", GitBranches.LocalTwin(branch) is not null);
         menuContext.Set("gitBranchUpdateBlocked", current && status?.Operation is "merge" or "rebase");
-        menuContext.Set("gitHasRemote", GitBranches.HasRemote);
+        menuContext.Set("gitHasRemote", GitBranches.HasRemoteFor(branch));
+        menuContext.Set("gitBranchIsCommon", false);
+        menuContext.Set("gitBranchRepository", git.Root);
+        menuContext.Set("gitOperation", status?.Operation);
         menuContext.Set("gitHeadDetached", status is { Branch: null });
         menuContext.Set("gitHeadUnborn", status is { Branch: not null, Head: null });
         return Workbench.Context.With(menuContext.Keys);
@@ -48,6 +57,8 @@ public sealed partial class ShellHost
     internal Avalonia.Controls.ContextMenu? GitBranchMenu(GitBranchDetails branch)
     {
         var scope = GitBranchScope(branch);
+        var common = GitBranches.IsCommon(branch);
+        var git = GitBranches.RepositoryOf(branch);
         JsonElement[] args = [JsonSerializer.SerializeToElement(branch.FullRef, Docking.ShellJsonContext.Default.String)];
         return MenuBuilder.Context(this, MenuLocations.GitChangesBranch, new MenuBuilder.MenuShape(c => new RelayCommand(() =>
         {
@@ -56,7 +67,7 @@ public sealed partial class ShellHost
                 GitBranches.IsOpen = false;
             }
 
-            _ = RunAsync(c, args, scope);
+            _ = common ? RunOnCommonBranchAsync(c, branch) : InRepositoryAsync(git, () => RunAsync(c, args, scope));
         }))
         {
             Scope = scope,
@@ -76,7 +87,12 @@ public sealed partial class ShellHost
     /// </summary>
     private string? GitBranchTitle(string command, GitBranchDetails branch)
     {
-        var current = Git.Status?.Branch;
+        if (GitBranches.IsCommon(branch))
+        {
+            return CommonBranchTitle(command, branch);
+        }
+
+        var current = (GitBranches.IsAllRepositories ? GitBranches.RepositoryOf(branch) : Repo).Status?.Branch;
         var name = branch.Name;
         switch (command)
         {
@@ -118,7 +134,7 @@ public sealed partial class ShellHost
     /// <summary>The branch a ref names (a full ref, or a local branch's name), from git; null when there's none.</summary>
     private async Task<GitBranchDetails?> FindBranchAsync(string reference)
     {
-        var branches = await Git.BranchDetailsAsync().ConfigureAwait(true);
+        var branches = await Repo.BranchDetailsAsync().ConfigureAwait(true);
         return branches.FirstOrDefault(b => b.FullRef == reference)
             ?? branches.FirstOrDefault(b => !b.IsRemote && b.Name == reference)
             ?? branches.FirstOrDefault(b => b.IsRemote && b.Name == reference);
@@ -150,7 +166,7 @@ public sealed partial class ShellHost
         }
 
         GitBranches.IsOpen = false;
-        await Git.SwitchAsync(new GitBranch(target.Name, target.IsRemote, IsCurrent: false, target.Upstream, target.Commit)).ConfigureAwait(true);
+        await Repo.SwitchAsync(new GitBranch(target.Name, target.IsRemote, IsCurrent: false, target.Upstream, target.Commit)).ConfigureAwait(true);
     });
 
     /// <summary>Where a branch is checked out: the drop-down's banner with Open in New Window when it's open (B13), else a notification.</summary>
@@ -171,8 +187,23 @@ public sealed partial class ShellHost
     }
 
     /// <summary>git.switchBranch: the ref given (a branch's menu, the drop-down), else the Switch Branch quick pick.</summary>
-    public Task SwitchBranchCommandAsync(IReadOnlyList<JsonElement> args) =>
-        RefArgument(args) is { } reference ? CheckoutBranchAsync(reference) : SwitchBranchAsync();
+    public Task SwitchBranchCommandAsync(IReadOnlyList<JsonElement> args)
+    {
+        if (RefArgument(args) is { } reference)
+        {
+            return CheckoutBranchAsync(reference);
+        }
+
+        // With all repositories shown (ADR 0085), Git Changes' drop-down: Common branches and each repository's.
+        if (GitChanges.IsAllRepositories && _repository.Value is null)
+        {
+            Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId, focus: true);
+            GitBranches.IsOpen = true;
+            return Task.CompletedTask;
+        }
+
+        return SwitchBranchAsync();
+    }
 
     /// <summary>
     /// New Local Branch From… (P4, P5, question 17): the name, what it's based on, and Check out the new branch, checked as
@@ -182,10 +213,10 @@ public sealed partial class ShellHost
     /// </summary>
     public Task NewBranchFromAsync(string? reference, string? name = null) => GitActionAsync(async () =>
     {
-        var status = Git.Status;
+        var status = Repo.Status;
         var basedOn = reference is null ? status?.Branch ?? "HEAD" : ShortRefName(reference);
         var startPoint = reference ?? "HEAD";
-        var branches = await Git.BranchDetailsAsync().ConfigureAwait(true);
+        var branches = await Repo.BranchDetailsAsync().ConfigureAwait(true);
         var locals = branches.Where(b => !b.IsRemote).Select(b => b.Name).ToList();
         var operation = status?.Operation;
         var create = Localizer.Get("msg.gitBranches.create", "Create");
@@ -208,7 +239,7 @@ public sealed partial class ShellHost
         }).ConfigureAwait(true);
         if (result is { Button: var button, Input: { } input } && button == create)
         {
-            await Git.CreateBranchAtAsync(input.Trim(), startPoint, switchTo: operation is null && result.Checked.Contains("checkout")).ConfigureAwait(true);
+            await Repo.CreateBranchAtAsync(input.Trim(), startPoint, switchTo: operation is null && result.Checked.Contains("checkout")).ConfigureAwait(true);
             GitBranches.IsOpen = false;
         }
     });
@@ -237,10 +268,10 @@ public sealed partial class ShellHost
         var name = ShortRefName(reference);
         try
         {
-            await Git.MergeAsync(name).ConfigureAwait(true);
+            await Repo.MergeAsync(name).ConfigureAwait(true);
             StatusBar.ShowMessage(Localizer.Format("msg.git.merged", "Merged {0}.", name), TimeSpan.FromSeconds(5));
         }
-        catch (GitException) when (Git.Status is { IsMerging: true })
+        catch (GitException) when (Repo.Status is { IsMerging: true })
         {
             Workbench.Notifications.Warning(Localizer.Format("msg.git.mergingProducedConflictsResolveThemIn", "Merging {0} produced conflicts. Resolve them in the Git Changes window, stage the files and commit, or abort the merge.", name));
             Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
@@ -250,13 +281,13 @@ public sealed partial class ShellHost
     /// <summary>Rebase 'y' onto 'x' (a branch's menu); conflicts stop it.</summary>
     public Task RebaseBranchCommandAsync(IReadOnlyList<JsonElement> args) => RefArgument(args) is not { } reference ? RebaseAsync() : GitActionAsync(async () =>
     {
-        await StopOnConflictAsync(() => Git.RebaseAsync(ShortRefName(reference)), Localizer.Get("msg.gitBranches.theRebase", "The rebase")).ConfigureAwait(true);
+        await StopOnConflictAsync(() => Repo.RebaseAsync(ShortRefName(reference)), Localizer.Get("msg.gitBranches.theRebase", "The rebase")).ConfigureAwait(true);
         await RefreshHistoryAsync().ConfigureAwait(true);
     });
 
     /// <summary>Push (a branch's menu): that branch, checked out or not; with no ref the current one.</summary>
     public Task PushCommandAsync(IReadOnlyList<JsonElement> args) =>
-        RefArgument(args) is { } reference ? GitActionAsync(() => Git.PushBranchAsync(reference), Localizer.Get("msg.git.pushing", "Pushing…")) : PushAsync();
+        RefArgument(args) is { } reference ? GitActionAsync(() => Repo.PushBranchAsync(reference), Localizer.Get("msg.git.pushing", "Pushing…")) : PushAsync();
 
     /// <summary>
     /// Rename… (P6, F2): the current name to edit, git's rules and the other branches' names as the error under the box;
@@ -264,13 +295,13 @@ public sealed partial class ShellHost
     /// </summary>
     public Task RenameBranchCommandAsync(IReadOnlyList<JsonElement> args) => GitActionAsync(async () =>
     {
-        var name = RefArgument(args) is { } reference ? ShortRefName(reference) : Git.Status?.Branch;
+        var name = RefArgument(args) is { } reference ? ShortRefName(reference) : Repo.Status?.Branch;
         if (name is null)
         {
             return;
         }
 
-        var locals = (await Git.BranchDetailsAsync().ConfigureAwait(true)).Where(b => !b.IsRemote).Select(b => b.Name).ToList();
+        var locals = (await Repo.BranchDetailsAsync().ConfigureAwait(true)).Where(b => !b.IsRemote).Select(b => b.Name).ToList();
         var rename = Localizer.Get("msg.gitBranches.rename", "Rename");
         var result = await Dialogs.ShowAsync(new DialogRequest(
             Localizer.Get("msg.gitBranches.renameBranch", "Rename Branch"),
@@ -285,7 +316,7 @@ public sealed partial class ShellHost
         if (result is { Input: { } input } && result.Button == rename)
         {
             GitBranches.IsOpen = false;
-            await Git.RenameBranchAsync(name, input.Trim()).ConfigureAwait(true);
+            await Repo.RenameBranchAsync(name, input.Trim()).ConfigureAwait(true);
         }
     });
 
@@ -306,7 +337,7 @@ public sealed partial class ShellHost
         }
         else
         {
-            var candidates = (await Git.BranchDetailsAsync().ConfigureAwait(true)).Where(b => b is { IsRemote: false, IsCurrent: false, WorktreePath: null }).OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            var candidates = (await Repo.BranchDetailsAsync().ConfigureAwait(true)).Where(b => b is { IsRemote: false, IsCurrent: false, WorktreePath: null }).OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
             if (candidates.Count == 0)
             {
                 StatusBar.ShowMessage(Localizer.Get("msg.gitBranches.noBranchToDelete", "No other local branch to delete."), TimeSpan.FromSeconds(5));
@@ -342,7 +373,7 @@ public sealed partial class ShellHost
             if (confirm.Button == delete)
             {
                 GitBranches.IsOpen = false;
-                await Git.DeleteRemoteBranchAsync(remote, branch.ShortName).ConfigureAwait(true);
+                await Repo.DeleteRemoteBranchAsync(remote, branch.ShortName).ConfigureAwait(true);
             }
 
             return;
@@ -352,7 +383,7 @@ public sealed partial class ShellHost
         DialogOption? option = null;
         if (hasUpstream)
         {
-            var onlyThere = await Git.UpstreamOnlyCommitsAsync(branch.Name).ConfigureAwait(true);
+            var onlyThere = await Repo.UpstreamOnlyCommitsAsync(branch.Name).ConfigureAwait(true);
             option = new DialogOption("upstream", Localizer.Format("msg.gitBranches.alsoDeleteUpstream", "Also delete {0} on the server", branch.Upstream!), false)
             {
                 Note = onlyThere.Count == 0
@@ -379,7 +410,7 @@ public sealed partial class ShellHost
         }
 
         var withUpstream = first.Checked.Contains("upstream");
-        var check = await Git.IsFullyMergedAsync(branch.Name, withUpstream).ConfigureAwait(true);
+        var check = await Repo.IsFullyMergedAsync(branch.Name, withUpstream).ConfigureAwait(true);
         if (!check.Merged)
         {
             var lost = check.Commits.Count + check.UpstreamOnly.Count;
@@ -413,11 +444,11 @@ public sealed partial class ShellHost
         }
 
         GitBranches.IsOpen = false;
-        await Git.DeleteBranchAsync(branch.Name, force: !check.Merged || withUpstream).ConfigureAwait(true);
+        await Repo.DeleteBranchAsync(branch.Name, force: !check.Merged || withUpstream).ConfigureAwait(true);
         if (withUpstream && branch.UpstreamRef is { } upstreamRef && upstreamRef.StartsWith("refs/remotes/", StringComparison.Ordinal))
         {
-            var (remote, remoteBranch) = SplitUpstream(branch.Upstream!, (await Git.RemotesAsync().ConfigureAwait(true)).Select(r => r.Name).ToList());
-            await Git.DeleteRemoteBranchAsync(remote, remoteBranch).ConfigureAwait(true);
+            var (remote, remoteBranch) = SplitUpstream(branch.Upstream!, (await Repo.RemotesAsync().ConfigureAwait(true)).Select(r => r.Name).ToList());
+            await Repo.DeleteRemoteBranchAsync(remote, remoteBranch).ConfigureAwait(true);
         }
 
         StatusBar.ShowMessage(Localizer.Format("msg.gitBranches.deletedBranch", "Deleted {0}.", branch.Name), TimeSpan.FromSeconds(5));
@@ -454,8 +485,8 @@ public sealed partial class ShellHost
         var reference = RefArgument(args);
         if (reference is null)
         {
-            var branches = (await Git.BranchDetailsAsync().ConfigureAwait(true)).Where(b => !(b.IsCurrent && !b.IsRemote)).OrderBy(b => b.IsRemote).ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
-            if (await Palette.ShowAsync([.. branches.Select(b => new QuickPickItem(b.Name) { Tag = b.FullRef, Detail = b.IsRemote ? "remote" : null })], Localizer.Format("msg.gitBranches.compareWhichBranch", "Compare {0} with", Git.Status?.Branch ?? "HEAD")).ConfigureAwait(true) is not { Tag: string picked })
+            var branches = (await Repo.BranchDetailsAsync().ConfigureAwait(true)).Where(b => !(b.IsCurrent && !b.IsRemote)).OrderBy(b => b.IsRemote).ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            if (await Palette.ShowAsync([.. branches.Select(b => new QuickPickItem(b.Name) { Tag = b.FullRef, Detail = b.IsRemote ? "remote" : null })], Localizer.Format("msg.gitBranches.compareWhichBranch", "Compare {0} with", Repo.Status?.Branch ?? "HEAD")).ConfigureAwait(true) is not { Tag: string picked })
             {
                 return;
             }
@@ -469,20 +500,21 @@ public sealed partial class ShellHost
     /// <summary>Opens (or brings back) the Compare document from the current branch to <paramref name="reference"/>.</summary>
     public async Task<GitCompareDocument?> OpenBranchCompareAsync(string reference)
     {
-        if (Git.Root is null)
+        var git = Repo;
+        if (git.Root is null)
         {
             return null;
         }
 
-        var from = Git.Status?.Branch is { } current ? "refs/heads/" + current : "HEAD";
-        var fromName = Git.Status?.Branch ?? "HEAD";
-        var id = GitCompareDocument.IdFor(from, reference);
+        var from = git.Status?.Branch is { } current ? "refs/heads/" + current : "HEAD";
+        var fromName = git.Status?.Branch ?? "HEAD";
+        var id = GitCompareDocument.IdFor(from, reference) + (git == Git ? string.Empty : "@" + git.Root);
         if (Layout.FindDocument<GitCompareDocument>(id) is not { } document)
         {
-            var viewModel = new GitCompareViewModel(Git, from, fromName, reference, ShortRefName(reference))
+            var viewModel = new GitCompareViewModel(git, from, fromName, reference, ShortRefName(reference))
             {
-                OpenFile = (file) => OpenCompareFileAsync(from, fromName, reference, ShortRefName(reference), file),
-                ShowHistory = () => HistoryCommandAsync([JsonSerializer.SerializeToElement(reference, Docking.ShellJsonContext.Default.String)]),
+                OpenFile = (file) => InRepositoryAsync(git, () => OpenCompareFileAsync(from, fromName, reference, ShortRefName(reference), file)),
+                ShowHistory = () => InRepositoryAsync(git, () => HistoryCommandAsync([JsonSerializer.SerializeToElement(reference, Docking.ShellJsonContext.Default.String)])),
             };
             document = new GitCompareDocument(viewModel, id);
         }
@@ -493,19 +525,23 @@ public sealed partial class ShellHost
     }
 
     /// <summary>A file of the Compare document: the current branch's version on the left, the other's on the right (question 9).</summary>
-    private Task OpenCompareFileAsync(string from, string fromName, string to, string toName, GitChangedFile file) => GitActionAsync(() =>
-        OpenRevisionDiffAsync(
-            file.Path,
-            $"{from}→{to}:{file.Path}",
-            $"{Path.GetFileName(file.OldPath ?? file.Path)} ({fromName})",
-            async () => await Git.ShowAsync(file.OldPath ?? file.Path, from).ConfigureAwait(true) ?? string.Empty,
-            $"{Path.GetFileName(file.Path)} ({toName})",
-            async () => await Git.ShowAsync(file.Path, to).ConfigureAwait(true) ?? string.Empty));
+    private Task OpenCompareFileAsync(string from, string fromName, string to, string toName, GitChangedFile file)
+    {
+        var git = Repo;
+        return GitActionAsync(() =>
+            OpenRevisionDiffAsync(
+                file.Path,
+                $"{from}→{to}:{file.Path}",
+                $"{Path.GetFileName(file.OldPath ?? file.Path)} ({fromName})",
+                async () => await git.ShowAsync(file.OldPath ?? file.Path, from).ConfigureAwait(true) ?? string.Empty,
+                $"{Path.GetFileName(file.Path)} ({toName})",
+                async () => await git.ShowAsync(file.Path, to).ConfigureAwait(true) ?? string.Empty));
+    }
 
     /// <summary>Copy Branch Name: the branch's name (a remote one with its remote); with no ref the current branch's.</summary>
     public async Task CopyBranchNameCommandAsync(IReadOnlyList<JsonElement> args)
     {
-        var name = RefArgument(args) is { } reference ? ShortRefName(reference) : Git.Status?.Branch;
+        var name = RefArgument(args) is { } reference ? ShortRefName(reference) : Repo.Status?.Branch;
         if (name is not null)
         {
             await CopyTextAsync(name).ConfigureAwait(true);

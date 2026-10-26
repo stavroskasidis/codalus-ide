@@ -722,6 +722,9 @@ public static class IconSet
         ["issue"] = Circle(8, 8, 6.25) + Circle(8, 8, 1.5),
         ["worktree"] = "M8,14.5 V8 M8,8 C8,6 5.5,6 4,4.5 M8,8 C8,6 10.5,6 12,4.5 " + Circle(4, 3.5, 1.5) + Circle(12, 3.5, 1.5) + Circle(8, 14, 0.75),
         ["account"] = Circle(8, 5.5, 3) + "M2.5,14.5 C2.5,11.5 5,9.5 8,9.5 C11,9.5 13.5,11.5 13.5,14.5",
+        // All Repositories (ADR 0085): a repository, as a book with its spine; several, stacked.
+        ["repository"] = "M4.5,1.5 H12.5 V11.5 H4.5 C3.4,11.5 2.75,12.15 2.75,13 C2.75,13.85 3.4,14.5 4.5,14.5 H12.5 M2.75,13 V3.25 C2.75,2.25 3.4,1.5 4.5,1.5 M6,4.5 H10 M12.5,11.5 V14.5",
+        ["repositories"] = "M6.5,1.5 H14 V9.5 H6.5 C5.6,9.5 5,10.1 5,10.85 M5,10.85 V3 C5,2.15 5.6,1.5 6.5,1.5 M2,5 V13 C2,13.9 2.6,14.5 3.5,14.5 H11 V12 M8,4.25 H11.5",
         ["sync"] = "M13,8 A5,5 0 0 1 3.76,10.65 M3,8 A5,5 0 0 1 12.24,5.35 M12.5,2.5 V5.5 H9.5 M3.5,13.5 V10.5 H6.5",
 
         // Data and Entity Framework (M27).

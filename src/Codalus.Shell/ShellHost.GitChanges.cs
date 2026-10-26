@@ -19,7 +19,8 @@ public sealed partial class ShellHost
 {
     /// <summary>
     /// The context <c>gitChanges/context</c>'s when-clauses read for a node: the global context with its kind (<c>file</c>,
-    /// <c>folder</c>, <c>repository</c>), its section, whether every file under it is untracked, and whether its path exists.
+    /// <c>folder</c>, <c>repository</c>), its section, whether every file under it is untracked, whether its path exists,
+    /// and its repository's folder (ADR 0085: one of several while all are shown, <c>gitAllRepositories</c>).
     /// </summary>
     internal IContextKeyReader GitChangeScope(string path, string section, string kind)
     {
@@ -27,6 +28,7 @@ public sealed partial class ShellHost
         var menuContext = new MenuContext();
         menuContext.Set("gitChangeKind", kind);
         menuContext.Set("gitChangeSection", section);
+        menuContext.Set("gitChangeRepository", Git.ServiceFor(path).Root);
         menuContext.Set("gitChangeAllUntracked", rows.Count > 0 && rows.All(r => r.Status.IsUntracked) && kind != "repository");
         menuContext.Set("gitChangeExists", File.Exists(path) || Directory.Exists(path));
         return Workbench.Context.With(menuContext.Keys);
@@ -49,7 +51,8 @@ public sealed partial class ShellHost
     {
         var scope = GitChangeScope(path, section, kind);
         var args = GitChangesViewModel.ArgumentsFor(path, section, shown).ToArray();
-        return MenuBuilder.Context(this, MenuLocations.GitChangesContext, new MenuBuilder.MenuShape(c => new RelayCommand(() => _ = RunAsync(c, args, scope)))
+        var git = Git.ServiceFor(path);
+        return MenuBuilder.Context(this, MenuLocations.GitChangesContext, new MenuBuilder.MenuShape(c => new RelayCommand(() => _ = InRepositoryAsync(git, () => RunAsync(c, args, scope))))
         {
             Scope = scope,
             KeyFor = item => item.RuleKeyLabel,
@@ -69,10 +72,11 @@ public sealed partial class ShellHost
             return RunAsync(command, args);
         }
 
+        var git = Git.ServiceFor(path);
         var kind = File.Exists(path) || GitChanges.SectionRows(section).Any(r => Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(r.Status.Path, path)) ? "file"
-            : Git.Root is { } root && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(Path.TrimEndingDirectorySeparator(root), Path.TrimEndingDirectorySeparator(path)) ? "repository"
+            : git.Root is { } root && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(Path.TrimEndingDirectorySeparator(root), Path.TrimEndingDirectorySeparator(path)) ? "repository"
             : "folder";
-        return RunAsync(command, args, GitChangeScope(path, section, kind));
+        return InRepositoryAsync(git, () => RunAsync(command, args, GitChangeScope(path, section, kind)));
     }
 
     /// <summary>A <c>gitChanges/context</c> command's arguments: the path, the section and the files shown (null: the whole folder).</summary>
@@ -111,7 +115,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        await Git.StageAsync([.. files.Select(f => f.Status.Path)]).ConfigureAwait(true);
+        await Git.ServiceFor(path).StageAsync([.. files.Select(f => f.Status.Path)]).ConfigureAwait(true);
     });
 
     /// <summary>Unstage on a node of Staged Changes.</summary>
@@ -122,7 +126,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        await Git.UnstageAsync([.. files.Select(f => f.Status.Path)]).ConfigureAwait(true);
+        await Git.ServiceFor(path).UnstageAsync([.. files.Select(f => f.Status.Path)]).ConfigureAwait(true);
     });
 
     /// <summary>
@@ -186,7 +190,7 @@ public sealed partial class ShellHost
         }).ConfigureAwait(true);
         if (choice.Button == discard)
         {
-            await Git.DiscardAsync([.. files.Select(f => f.Status.Path)]).ConfigureAwait(true);
+            await Git.ServiceFor(path).DiscardAsync([.. files.Select(f => f.Status.Path)]).ConfigureAwait(true);
         }
     });
 
@@ -238,7 +242,7 @@ public sealed partial class ShellHost
                 var paths = files.Where(f => includeUntracked || !f.Status.IsUntracked).Select(f => f.Status.Path).ToList();
                 if (paths.Count > 0)
                 {
-                    await Git.StashAsync(answer.Input?.Trim(), includeUntracked, paths).ConfigureAwait(true);
+                    await Git.ServiceFor(path).StashAsync(answer.Input?.Trim(), includeUntracked, paths).ConfigureAwait(true);
                     StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.changesStashed", "Changes stashed."), TimeSpan.FromSeconds(4));
                 }
             }
@@ -269,7 +273,7 @@ public sealed partial class ShellHost
             "conflicts" => Localizer.Get("msg.gitChanges.mergeConflicts", "Merge Conflicts"),
             _ => Localizer.Get("msg.gitChanges.changes", "Changes"),
         };
-        var context = $"{Git.Root} · {name}";
+        var context = $"{Repo.Root} · {name}";
         return GitChanges.IsFiltered
             ? context + " · " + Localizer.Format("msg.gitChanges.filteredBy", "filtered by “{0}”", GitChanges.FilterText.Trim())
             : context;
@@ -278,7 +282,7 @@ public sealed partial class ShellHost
     /// <summary>A node's name in a title: the repository's folder, a folder's path from it, or a file's name.</summary>
     private string ChangeDisplayName(string path)
     {
-        if (Git.Root is not { } root || File.Exists(path))
+        if (Repo.Root is not { } root || File.Exists(path))
         {
             return Path.GetFileName(path);
         }
@@ -315,14 +319,15 @@ public sealed partial class ShellHost
             return ShowHistoryAsync(new GitLogQuery { Revision = target }, Localizer.Format("msg.gitChanges.historyOf", "History: {0}", name));
         }
 
-        return Git.Root is { } root && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(Path.TrimEndingDirectorySeparator(root), Path.TrimEndingDirectorySeparator(target))
-            ? ShowHistoryAsync()
+        var git = Git.ServiceFor(target);
+        return git.Root is { } root && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(Path.TrimEndingDirectorySeparator(root), Path.TrimEndingDirectorySeparator(target))
+            ? ShowHistoryAsync(repository: git)
             : ShowHistoryAsync(new GitLogQuery { Path = target }, Localizer.Format("msg.gitChanges.historyOf", "History: {0}", Path.GetFileName(Path.TrimEndingDirectorySeparator(target))));
     }
 
     /// <summary>Add to .gitignore: the node's path (a folder of untracked files, T5), else the Solution Explorer's selection.</summary>
     public Task AddToGitignoreCommandAsync(IReadOnlyList<JsonElement> args) =>
-        ChangeArguments(args).Path is { } path ? GitActionAsync(() => Git.IgnoreAsync(path)) : AddToGitignoreAsync();
+        ChangeArguments(args).Path is { } path ? GitActionAsync(() => Git.ServiceFor(path).IgnoreAsync(path)) : AddToGitignoreAsync();
 
     /// <summary>Reveal in File Explorer, Finder or File Manager: the path given, else the Solution Explorer's selection.</summary>
     public void RevealCommand(IReadOnlyList<JsonElement> args)

@@ -125,6 +125,22 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
 
     /// <summary>The Test Explorer's grouping (a <c>TestGrouping</c> name).</summary>
     public string? TestGrouping { get; init; }
+
+    /// <summary>The solution's repositories the user added or left out, and the one Git Changes shows (ADR 0085).</summary>
+    public SessionGitRepositories? GitRepositories { get; init; }
+}
+
+/// <summary>
+/// A solution's repositories as the user changed them (ADR 0085): <see cref="Added"/> ones with no project in it,
+/// <see cref="Removed"/> ones it found, and the one Git Changes shows (<see cref="Shown"/>; null: all of them).
+/// </summary>
+public sealed record SessionGitRepositories
+{
+    public IReadOnlyList<string>? Added { get; init; }
+
+    public IReadOnlyList<string>? Removed { get; init; }
+
+    public string? Shown { get; init; }
 }
 
 /// <summary>The Error List's filters, kept with the solution: what it shows and from which source (0: build and IntelliSense, 1: build, 2: IntelliSense).</summary>

@@ -34,6 +34,12 @@ public sealed class GitFileRow(GitFileStatus status, bool staged, GitLfsStatus? 
     /// <summary>The list view's Path column: the repository's folder name and the file's folder (<c>repo\src\Data</c>).</summary>
     public string Location { get; init; } = string.Empty;
 
+    /// <summary>The repository's folder: one of several while Git Changes shows them all (ADR 0085).</summary>
+    public string Repository { get; init; } = string.Empty;
+
+    /// <summary>Its repository's place in the solution's order, which the sections keep (all repositories, ADR 0085).</summary>
+    public int RepositoryOrder { get; init; }
+
     /// <summary>Deleted (in the index or the working tree): there's no file to open.</summary>
     public bool IsDeleted => (Staged ? Status.Index : Status.WorkTree) == 'D';
 
@@ -156,10 +162,29 @@ public sealed class GitChangeNode(string key, string text, GitFileRow? row, bool
             : Localizer.Format("msg.gitChanges.folderAccessibleName", "{0}, folder, {1} changed files", Text, TotalFiles));
 }
 
-/// <summary>A repository of the solution (several repositories, M13b).</summary>
-public sealed record GitRepositoryChoice(string Path)
+/// <summary>
+/// A choice of the repository picker (several repositories, M13b): a repository of the solution, or (ADR 0085) All
+/// Repositories, whose <see cref="Count"/> is how many there are.
+/// </summary>
+public sealed record GitRepositoryChoice(string Path, bool IsAll = false, int Count = 0)
 {
-    public string Name => System.IO.Path.GetFileName(Path.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
+    public static GitRepositoryChoice All(int count) => new(string.Empty, IsAll: true, count);
+
+    public string Name => IsAll
+        ? Localizer.Format("msg.gitChanges.allRepositoriesCount", "All Repositories ({0})", Count)
+        : System.IO.Path.GetFileName(Path.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
+
+    /// <summary>The repository's folder, shown after its name; none for All Repositories.</summary>
+    public string Detail => IsAll ? string.Empty : Path;
+
+    public string Icon => IsAll ? "repositories" : "repository";
+
+    /// <summary>The user added it to the solution's repositories, or it was found and can be left out (not the solution's own).</summary>
+    public bool CanRemove { get; init; }
+
+    public bool IsSelected { get; init; }
+
+    public double CheckOpacity => IsSelected ? 1 : 0;
 
     public override string ToString() => Name;
 }
@@ -191,8 +216,12 @@ public sealed partial class GitChangesViewModel : ObservableObject
         _openDiff = openDiff;
         _run = run;
         git.StatusChanged += (_, _) => Ui.Post(Refresh);
+        git.SiblingStatusChanged += (_, _) => Ui.Post(Refresh);
         Refresh();
     }
+
+    /// <summary>The repositories the window shows: every one of the solution's in All Repositories (ADR 0085), else the open one.</summary>
+    public IReadOnlyList<GitService> Services => _isAllRepositories ? _git.AllServices : [_git];
 
     public ObservableCollection<GitFileRow> Staged { get; } = [];
 
@@ -317,19 +346,27 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     public Task OpenFileAsync(GitFileRow row) => OpenFile is { } open && !row.IsDeleted ? open(row.Status.Path) : Task.CompletedTask;
 
-    public Task StageAsync(GitChangeNode node) => _git.StageAsync([.. node.Rows.Select(r => r.Status.Path)]);
+    public Task StageAsync(GitChangeNode node) => EachRepositoryAsync(node.Rows, (git, paths) => git.StageAsync(paths));
 
-    public Task UnstageAsync(GitChangeNode node) => _git.UnstageAsync([.. node.Rows.Select(r => r.Status.Path)]);
+    public Task UnstageAsync(GitChangeNode node) => EachRepositoryAsync(node.Rows, (git, paths) => git.UnstageAsync(paths));
+
+    /// <summary>Runs <paramref name="action"/> on the rows' files in each one's repository (one, unless all are shown).</summary>
+    private async Task EachRepositoryAsync(IEnumerable<GitFileRow> rows, Func<GitService, IReadOnlyList<string>, Task> action)
+    {
+        foreach (var (git, paths) in _git.GroupByRepository(rows.Select(r => r.Status.Path)))
+        {
+            await action(git, paths).ConfigureAwait(true);
+        }
+    }
 
     private bool Matches(GitFileRow row) =>
         _filterText.Length == 0 || row.Status.RelativePath.Contains(_filterText.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private void RebuildViews()
     {
-        var root = _git.Root ?? string.Empty;
-        Fill(StagedTree, BuildTree(root, Staged.Where(Matches), "staged", staged: true, _collapsed, OnExpandedChanged, Staged));
-        Fill(ChangesTree, BuildTree(root, Changes.Where(Matches), "changes", staged: false, _collapsed, OnExpandedChanged, Changes));
-        Fill(ConflictsTree, BuildTree(root, Conflicts.Where(Matches), "conflicts", staged: false, _collapsed, OnExpandedChanged, Conflicts));
+        Fill(StagedTree, Forest(Staged, "staged", staged: true));
+        Fill(ChangesTree, Forest(Changes, "changes", staged: false));
+        Fill(ConflictsTree, Forest(Conflicts, "conflicts", staged: false));
         Fill(StagedItems, Sorted(Staged.Where(Matches)));
         Fill(ChangesItems, Sorted(Changes.Where(Matches)));
         Fill(ConflictsItems, Sorted(Conflicts.Where(Matches)));
@@ -338,6 +375,12 @@ public sealed partial class GitChangesViewModel : ObservableObject
             OnPropertyChanged(name);
         }
     }
+
+    /// <summary>A section's tree: one repository node, or with all repositories shown one per repository with changes, in order.</summary>
+    private IEnumerable<GitChangeNode> Forest(IReadOnlyList<GitFileRow> rows, string section, bool staged) => !_isAllRepositories
+        ? BuildTree(_git.Root ?? string.Empty, rows.Where(Matches), section, staged, _collapsed, OnExpandedChanged, rows)
+        : rows.GroupBy(r => r.Repository, StringComparer.Ordinal).SelectMany(g =>
+            BuildTree(g.Key, g.Where(Matches), section, staged, _collapsed, OnExpandedChanged, [.. g], key: section + ":" + g.Key, text: g.First().Location.Split(System.IO.Path.DirectorySeparatorChar)[0]));
 
     /// <summary>A filter is hiding files (the menu's folder actions then act on the files shown, question 2).</summary>
     public bool IsFiltered => _filterText.Trim().Length > 0;
@@ -442,9 +485,10 @@ public sealed partial class GitChangesViewModel : ObservableObject
     /// <summary>
     /// The tree of <paramref name="rows"/>: one repository node (none without rows), folders first then files, each by
     /// name; a folder with nothing but one folder in it is shown with it (<c>src\Data</c>). Keys in
-    /// <paramref name="collapsed"/> start collapsed.
+    /// <paramref name="collapsed"/> start collapsed; the repository node's is <paramref name="key"/> (<c>changes:</c> by
+    /// default; with all repositories shown, one per repository), its text <paramref name="text"/> (the folder by default).
     /// </summary>
-    public static IReadOnlyList<GitChangeNode> BuildTree(string root, IEnumerable<GitFileRow> rows, string section, bool staged, IReadOnlySet<string> collapsed, Action<GitChangeNode, bool>? expandedChanged = null, IReadOnlyList<GitFileRow>? all = null)
+    public static IReadOnlyList<GitChangeNode> BuildTree(string root, IEnumerable<GitFileRow> rows, string section, bool staged, IReadOnlySet<string> collapsed, Action<GitChangeNode, bool>? expandedChanged = null, IReadOnlyList<GitFileRow>? all = null, string? key = null, string? text = null)
     {
         var top = new TreeFolder();
         foreach (var row in rows)
@@ -469,9 +513,9 @@ public sealed partial class GitChangesViewModel : ObservableObject
             return [];
         }
 
-        var key = section + ":";
+        key ??= section + ":";
         var rootPath = root.Replace('/', System.IO.Path.DirectorySeparatorChar);
-        var repository = new GitChangeNode(key, rootPath, null, isRepository: true, staged, !collapsed.Contains(key), expandedChanged) { FullPath = rootPath, Section = section };
+        var repository = new GitChangeNode(key, text ?? rootPath, null, isRepository: true, staged, !collapsed.Contains(key), expandedChanged) { FullPath = rootPath, Section = section };
         Add(repository, top, key, string.Empty);
         var everything = (all ?? []).Select(r => r.Status.RelativePath.Replace('\\', '/')).ToList();
         Count(repository);
@@ -541,10 +585,32 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     public bool HasNoRepository => !HasRepository;
 
-    /// <summary>The current branch, or the commit HEAD is detached at.</summary>
-    public string BranchName => _git.Status is not { } status
+    /// <summary>
+    /// The current branch, or the commit HEAD is detached at. With all repositories shown, their branch when they're all on
+    /// the same one, else "3 branches".
+    /// </summary>
+    public string BranchName
+    {
+        get
+        {
+            if (!_isAllRepositories)
+            {
+                return BranchOf(_git.Status);
+            }
+
+            var branches = Services.Select(s => BranchOf(s.Status)).Distinct(StringComparer.Ordinal).ToList();
+            return branches.Count == 1 ? branches[0] : Localizer.Format("msg.gitChanges.branchCount", "{0} branches", branches.Count);
+        }
+    }
+
+    private static string BranchOf(GitStatus? status) => status is null
         ? string.Empty
         : status.Branch ?? Localizer.Format("msg.gitChanges.detachedAt", "(detached at {0})", status.Head?[..Math.Min(7, status.Head.Length)]);
+
+    /// <summary>The branch button's tooltip: the branch, or each repository's ("WPylon: develop") with all shown.</summary>
+    public string BranchTooltip => _isAllRepositories
+        ? string.Join(Environment.NewLine, Services.Select(s => $"{s.Name}: {BranchOf(s.Status)}"))
+        : BranchName;
 
     /// <summary>The branch button's accessible name (B20): "Branch: main".</summary>
     public string BranchAccessibleName => Localizer.Format("msg.gitChanges.branchAccessibleName", "Branch: {0}", BranchName);
@@ -577,18 +643,25 @@ public sealed partial class GitChangesViewModel : ObservableObject
     /// <summary>The repository has no commits yet (B16).</summary>
     public bool IsUnborn => _git.Status is { Branch: not null, Head: null };
 
-    /// <summary>Publish branch: a branch with no upstream in a repository with a remote (question 19).</summary>
-    public bool ShowPublishBranch => IsNotPublished && _hasRemote && !IsDetached && !IsUnborn;
+    /// <summary>Publish branch: a branch with no upstream in a repository with a remote (question 19); one repository's only.</summary>
+    public bool ShowPublishBranch => !_isAllRepositories && IsNotPublished && _hasRemote && !IsDetached && !IsUnborn;
 
-    /// <summary>Publish to a Git Host…: a repository with no remote (B18), not detached and with commits.</summary>
-    public bool ShowPublishToHost => HasRepository && !_hasRemote && !IsDetached && !IsUnborn;
+    /// <summary>Publish to a Git Host…: a repository with no remote (B18), not detached and with commits; one repository's only.</summary>
+    public bool ShowPublishToHost => !_isAllRepositories && HasRepository && !_hasRemote && !IsDetached && !IsUnborn;
 
-    /// <summary>"2 / 1": the commits to push (outgoing) and to pull (incoming).</summary>
-    public string OutgoingIncomingText => _git.Status is { } status
-        ? string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{status.Ahead} / {status.Behind}")
-        : string.Empty;
+    /// <summary>"2 / 1": the commits to push (outgoing) and to pull (incoming); with all repositories shown, theirs added up.</summary>
+    public string OutgoingIncomingText => _isAllRepositories
+        ? string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{Services.Sum(s => s.Status?.Ahead ?? 0)} / {Services.Sum(s => s.Status?.Behind ?? 0)}")
+        : _git.Status is { } status
+            ? string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{status.Ahead} / {status.Behind}")
+            : string.Empty;
 
-    public string OutgoingIncomingTooltip => _git.Status switch
+    /// <summary>What the counts mean: one repository's, or with all shown a line for each ("WPylon: 1 outgoing / 0 incoming (tracking origin/develop)").</summary>
+    public string OutgoingIncomingTooltip => _isAllRepositories
+        ? string.Join(Environment.NewLine, Services.Select(s => s.Name + ": " + TrackingOf(s.Status)))
+        : TrackingOf(_git.Status);
+
+    private string TrackingOf(GitStatus? gitStatus) => gitStatus switch
     {
         { Upstream: { } upstream } status => Localizer.Format("msg.gitChanges.outgoingIncoming", "{0} outgoing / {1} incoming (tracking {2})", status.Ahead, status.Behind, upstream),
         { Branch: null } status => Localizer.Format("msg.gitChanges.headIsDetached", "HEAD is detached at {0}: there is no branch to push or pull.", status.Head?[..Math.Min(7, status.Head.Length)]),
@@ -600,6 +673,23 @@ public sealed partial class GitChangesViewModel : ObservableObject
     public bool IsMerging => _git.Status?.IsMerging ?? false;
 
     private string? _operation;
+    private GitService? _operationRepository;
+
+    /// <summary>
+    /// The repository whose operation the banner shows, set by the shell with <see cref="Operation"/>: with all
+    /// repositories shown, the first one that has one (its Continue, Skip and Abort act there); else the open one.
+    /// </summary>
+    public GitService? OperationRepository
+    {
+        get => _operationRepository;
+        set
+        {
+            if (SetField(ref _operationRepository, value))
+            {
+                OnPropertyChanged(nameof(OperationText));
+            }
+        }
+    }
 
     /// <summary>The merge, rebase, cherry-pick or revert in progress (M13); the banner offers Continue, Skip and Abort.</summary>
     public string? Operation
@@ -620,7 +710,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     public bool CanSkip => _operation is "rebase" or "cherry-pick" or "revert";
 
-    public string OperationText => _operation switch
+    public string OperationText => (_isAllRepositories && _operationRepository is { } repository ? repository.Name + ": " : string.Empty) + _operation switch
     {
         "merge" => "A merge is in progress.",
         "rebase" => "A rebase is in progress.",
@@ -640,21 +730,33 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     public string ChangesHeader => Changes.Count > 0 ? Header(Localizer.Get("msg.gitChanges.changes", "Changes"), Changes.Count(Matches), Changes.Count) : Localizer.Get("msg.gitChanges.changes", "Changes");
 
-    /// <summary>The commit button commits the staged changes when there are some, otherwise every change.</summary>
+    /// <summary>
+    /// The commit button commits the staged changes when there are some, otherwise every change; with all repositories
+    /// shown, in each repository that has some (Commit All Repos).
+    /// </summary>
     public string CommitText => HasStaged
         ? Localizer.Get("msg.gitChanges.commitStaged", "Commit Staged")
-        : Localizer.Get("msg.gitChanges.commitAll", "Commit All");
+        : _isAllRepositories
+            ? Localizer.Get("msg.gitChanges.commitAllRepos", "Commit All Repos")
+            : Localizer.Get("msg.gitChanges.commitAll", "Commit All");
 
     public string CommitAndPushText => HasStaged
         ? Localizer.Get("msg.gitChanges.commitStagedAndPush", "Commit Staged and Push")
-        : Localizer.Get("msg.gitChanges.commitAllAndPush", "Commit All and Push");
+        : _isAllRepositories
+            ? Localizer.Get("msg.gitChanges.commitAllReposAndPush", "Commit All Repos and Push")
+            : Localizer.Get("msg.gitChanges.commitAllAndPush", "Commit All and Push");
 
     public string CommitAndSyncText => HasStaged
         ? Localizer.Get("msg.gitChanges.commitStagedAndSync", "Commit Staged and Sync")
-        : Localizer.Get("msg.gitChanges.commitAllAndSync", "Commit All and Sync");
+        : _isAllRepositories
+            ? Localizer.Get("msg.gitChanges.commitAllReposAndSync", "Commit All Repos and Sync")
+            : Localizer.Get("msg.gitChanges.commitAllAndSync", "Commit All and Sync");
 
     /// <summary>A message is required, and something to commit (or the last commit to amend).</summary>
     public bool CanCommit => !string.IsNullOrWhiteSpace(_message) && (HasStaged || HasChanges || Amend);
+
+    /// <summary>Amend is one repository's: hidden while all are shown.</summary>
+    public bool CanAmend => !_isAllRepositories;
 
     public string ConflictsHeader => Header(Localizer.Get("msg.gitChanges.mergeConflicts", "Merge Conflicts"), Conflicts.Count(Matches), Conflicts.Count);
 
@@ -731,12 +833,13 @@ public sealed partial class GitChangesViewModel : ObservableObject
     public async Task LoadStashesAsync()
     {
         var version = ++_stashVersion;
-        IReadOnlyList<GitStash> stashes = [];
-        if (_git.Root is not null)
+        var stashes = new List<GitStash>();
+        var all = _isAllRepositories;
+        foreach (var git in Services.Where(s => s.Root is not null))
         {
             try
             {
-                stashes = await _git.StashesAsync().ConfigureAwait(true);
+                stashes.AddRange((await git.StashesAsync().ConfigureAwait(true)).Select(s => all ? s with { Repository = git.Root } : s));
             }
             catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
             {
@@ -760,10 +863,16 @@ public sealed partial class GitChangesViewModel : ObservableObject
         OnPropertyChanged(nameof(StashesHeader));
     }
 
-    public Task ApplyStashAsync(GitStash stash, bool pop) => _git.ApplyStashAsync(stash, pop);
+    public Task ApplyStashAsync(GitStash stash, bool pop) => StashRepository(stash).ApplyStashAsync(stash, pop);
 
-    /// <summary>Drops a stash, after the shell asks.</summary>
-    public Task DropStashAsync(GitStash stash) => _run("git.dropStash:" + stash.Name);
+    /// <summary>Drops a stash, after the shell asks (in its repository, with all shown: <see cref="DropStash"/>).</summary>
+    public Task DropStashAsync(GitStash stash) => DropStash is { } drop ? drop(stash) : _run("git.dropStash:" + stash.Name);
+
+    /// <summary>Drops a stash of a repository after asking, set by the shell.</summary>
+    public Func<GitStash, Task>? DropStash { get; set; }
+
+    /// <summary>The repository a stash is in.</summary>
+    public GitService StashRepository(GitStash stash) => stash.Repository is { } root ? _git.ServiceAt(root) ?? _git : _git;
 
     /// <summary>Amend the last commit: fills in its message (and restores the draft when unchecked).</summary>
     public bool Amend
@@ -801,6 +910,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
     // ------------------------------------------------------------------ M13b: repositories, CI status, pull request, LFS, completion
 
     private GitLfsStatus _lfs = GitLfsStatus.None;
+    private bool _isAllRepositories;
     private bool _updatingRepositories;
     private GitRepositoryChoice? _selectedRepository;
     private string? _ciState;
@@ -819,44 +929,128 @@ public sealed partial class GitChangesViewModel : ObservableObject
         }
     }
 
-    /// <summary>The solution's repositories, when it spans several.</summary>
+    /// <summary>
+    /// The repository picker's choices when the solution spans several repositories: All Repositories (ADR 0085), then
+    /// each repository; none with one.
+    /// </summary>
     public ObservableCollection<GitRepositoryChoice> Repositories { get; } = [];
+
+    /// <summary>The choices the picker's filter box shows.</summary>
+    public ObservableCollection<GitRepositoryChoice> ShownRepositories { get; } = [];
 
     public bool HasSeveralRepositories => Repositories.Count > 1;
 
+    /// <summary>Every repository of the solution is shown (All Repositories, ADR 0085), not only the open one.</summary>
+    public bool IsAllRepositories => _isAllRepositories;
+
+    /// <summary>The picker's button: "2 Repositories" with all shown, else the open repository's name.</summary>
+    public string RepositoryButtonText => _isAllRepositories
+        ? Localizer.Format("msg.gitChanges.repositoriesCount", "{0} Repositories", Repositories.Count(r => !r.IsAll))
+        : _selectedRepository?.Name ?? _git.Name;
+
     /// <summary>Opens another of the solution's repositories (set by the shell).</summary>
     public Func<string, Task>? SwitchRepository { get; set; }
+
+    /// <summary>Shows all the solution's repositories (set by the shell).</summary>
+    public Func<Task>? ShowAllRepositories { get; set; }
+
+    /// <summary>Add Repository… (the picker's footer), set by the shell.</summary>
+    public Func<Task>? AddRepository { get; set; }
+
+    /// <summary>Leaves a repository out of the solution's repositories (a choice's Remove), set by the shell.</summary>
+    public Func<string, Task>? RemoveRepository { get; set; }
 
     public GitRepositoryChoice? SelectedRepository
     {
         get => _selectedRepository;
         set
         {
-            if (SetField(ref _selectedRepository, value) && !_updatingRepositories && value is not null && SwitchRepository is { } switchTo)
+            if (!SetField(ref _selectedRepository, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(RepositoryButtonText));
+            if (_updatingRepositories || value is null)
+            {
+                return;
+            }
+
+            if (value.IsAll)
+            {
+                _ = ShowAllRepositories?.Invoke();
+            }
+            else if (SwitchRepository is { } switchTo)
             {
                 _ = switchTo(value.Path);
             }
         }
     }
 
-    public void SetRepositories(IReadOnlyList<string> roots, string? active)
+    private string _repositoryFilter = string.Empty;
+
+    /// <summary>The picker's filter box: shows the repositories whose name or folder contains it.</summary>
+    public string RepositoryFilter
+    {
+        get => _repositoryFilter;
+        set
+        {
+            if (SetField(ref _repositoryFilter, value ?? string.Empty))
+            {
+                FilterRepositories();
+            }
+        }
+    }
+
+    private void FilterRepositories()
+    {
+        var filter = _repositoryFilter.Trim();
+        Fill(ShownRepositories, Repositories.Where(r => filter.Length == 0 || (!r.IsAll && (r.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || r.Path.Contains(filter, StringComparison.OrdinalIgnoreCase)))));
+    }
+
+    /// <summary>
+    /// The solution's repositories (its own first), <paramref name="active"/> the open one, and whether all are shown
+    /// (<paramref name="all"/>, ADR 0085); <paramref name="removable"/> are the ones the picker can leave out.
+    /// </summary>
+    public void SetRepositories(IReadOnlyList<string> roots, string? active, bool all = false, IReadOnlyCollection<string>? removable = null)
     {
         _updatingRepositories = true;
         try
         {
+            var several = roots.Count > 1;
+            _isAllRepositories = all && several;
             Repositories.Clear();
-            foreach (var root in roots)
+            if (several)
             {
-                Repositories.Add(new GitRepositoryChoice(root));
+                Repositories.Add(GitRepositoryChoice.All(roots.Count) with { IsSelected = _isAllRepositories });
+                foreach (var root in roots)
+                {
+                    var isActive = !_isAllRepositories && active is not null && Workbench.Projects.SolutionService.PathComparer.Equals(root, active);
+                    Repositories.Add(new GitRepositoryChoice(root)
+                    {
+                        CanRemove = removable?.Contains(root, Workbench.Projects.SolutionService.PathComparer) == true,
+                        IsSelected = isActive,
+                    });
+                }
             }
 
-            SelectedRepository = Repositories.FirstOrDefault(r => active is not null && Workbench.Projects.SolutionService.PathComparer.Equals(r.Path, active));
+            SelectedRepository = Repositories.FirstOrDefault(r => r.IsSelected);
+            FilterRepositories();
             OnPropertyChanged(nameof(HasSeveralRepositories));
+            OnPropertyChanged(nameof(IsAllRepositories));
+            OnPropertyChanged(nameof(RepositoryButtonText));
+            OnPropertyChanged(nameof(CanAmend));
+            if (!CanAmend && _amend)
+            {
+                Amend = false;
+            }
         }
         finally
         {
             _updatingRepositories = false;
         }
+
+        Refresh();
     }
 
     /// <summary>The branch's CI status: <c>success</c>, <c>failure</c>, <c>pending</c>, or null when unknown.</summary>
@@ -951,15 +1145,14 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     public void Refresh()
     {
-        var status = _git.Status;
-        var repository = _git.Root is { } root ? System.IO.Path.GetFileName(root.TrimEnd('/', '\\')) : string.Empty;
-        Replace(Staged, status?.Staged.Select(f => Row(f, staged: true)));
-        Replace(Changes, status?.Unstaged.Select(f => Row(f, staged: false)));
-        Replace(Conflicts, status?.Conflicts.Select(f => Row(f, staged: false)));
+        var services = Services.Select((git, order) => (git, order)).Where(s => s.git.Status is not null).ToList();
+        Replace(Staged, services.SelectMany(s => s.git.Status!.Staged.Select(f => Row(s.git, s.order, f, staged: true))));
+        Replace(Changes, services.SelectMany(s => s.git.Status!.Unstaged.Select(f => Row(s.git, s.order, f, staged: false))));
+        Replace(Conflicts, services.SelectMany(s => s.git.Status!.Conflicts.Select(f => Row(s.git, s.order, f, staged: false))));
         RebuildViews();
         foreach (var name in new[]
         {
-            nameof(HasRepository), nameof(HasNoRepository), nameof(BranchName), nameof(BranchAccessibleName), nameof(IsPublished), nameof(IsNotPublished), nameof(OutgoingIncomingText),
+            nameof(HasRepository), nameof(HasNoRepository), nameof(BranchName), nameof(BranchTooltip), nameof(BranchAccessibleName), nameof(IsPublished), nameof(IsNotPublished), nameof(OutgoingIncomingText),
             nameof(IsDetached), nameof(IsUnborn), nameof(ShowPublishBranch), nameof(ShowPublishToHost),
             nameof(OutgoingIncomingTooltip), nameof(IsMerging), nameof(HasStaged), nameof(HasChanges), nameof(HasConflicts), nameof(StagedHeader),
             nameof(ChangesHeader), nameof(ConflictsHeader), nameof(OperationText), nameof(CommitText), nameof(CommitAndPushText), nameof(CommitAndSyncText),
@@ -971,29 +1164,35 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
         _ = LoadStashesAsync();
 
-        GitFileRow Row(GitFileStatus file, bool staged)
+        GitFileRow Row(GitService git, int order, GitFileStatus file, bool staged)
         {
+            var repository = git.Name;
             var folder = System.IO.Path.GetDirectoryName(file.RelativePath.Replace('\\', '/'))?.Replace('/', System.IO.Path.DirectorySeparatorChar) ?? string.Empty;
-            return new GitFileRow(file, staged, _lfs) { Location = folder.Length > 0 ? repository + System.IO.Path.DirectorySeparatorChar + folder : repository };
+            return new GitFileRow(file, staged, _lfs)
+            {
+                Location = folder.Length > 0 ? repository + System.IO.Path.DirectorySeparatorChar + folder : repository,
+                Repository = git.Root ?? string.Empty,
+                RepositoryOrder = order,
+            };
         }
     }
 
     private static void Replace(ObservableCollection<GitFileRow> target, IEnumerable<GitFileRow>? rows)
     {
         target.Clear();
-        foreach (var row in (rows ?? []).OrderBy(r => r.Status.RelativePath, StringComparer.OrdinalIgnoreCase))
+        foreach (var row in (rows ?? []).OrderBy(r => r.RepositoryOrder).ThenBy(r => r.Status.RelativePath, StringComparer.OrdinalIgnoreCase))
         {
             target.Add(row);
         }
     }
 
-    public Task StageAsync(GitFileRow row) => _git.StageAsync([row.Status.Path]);
+    public Task StageAsync(GitFileRow row) => EachRepositoryAsync([row], (git, paths) => git.StageAsync(paths));
 
-    public Task UnstageAsync(GitFileRow row) => _git.UnstageAsync([row.Status.Path]);
+    public Task UnstageAsync(GitFileRow row) => EachRepositoryAsync([row], (git, paths) => git.UnstageAsync(paths));
 
-    public Task StageAllAsync() => Changes.Count == 0 ? Task.CompletedTask : _git.StageAsync([.. Changes.Select(r => r.Status.Path)]);
+    public Task StageAllAsync() => Changes.Count == 0 ? Task.CompletedTask : EachRepositoryAsync(Changes, (git, paths) => git.StageAsync(paths));
 
-    public Task UnstageAllAsync() => Staged.Count == 0 ? Task.CompletedTask : _git.UnstageAsync([.. Staged.Select(r => r.Status.Path)]);
+    public Task UnstageAllAsync() => Staged.Count == 0 ? Task.CompletedTask : EachRepositoryAsync(Staged, (git, paths) => git.UnstageAsync(paths));
 
     public Task OpenDiffAsync(GitFileRow row) => _openDiff(row.Status.Path, row.Staged);
 
@@ -1008,17 +1207,59 @@ public sealed partial class GitChangesViewModel : ObservableObject
             throw new GitException("Enter a commit message.", -1);
         }
 
-        if (all && Changes.Any(r => r.Status.IsUntracked))
+        if (_isAllRepositories)
         {
-            await StageAllAsync().ConfigureAwait(true);
+            await CommitAllRepositoriesAsync(all).ConfigureAwait(true);
+        }
+        else
+        {
+            if (all && Changes.Any(r => r.Status.IsUntracked))
+            {
+                await StageAllAsync().ConfigureAwait(true);
+            }
+
+            await _git.CommitAsync(Message, Amend, all).ConfigureAwait(true);
         }
 
-        await _git.CommitAsync(Message, Amend, all).ConfigureAwait(true);
         _messageBeforeAmend = null;
         _amend = false;
         OnPropertyChanged(nameof(Amend));
         Message = string.Empty;
     }
+
+    /// <summary>
+    /// Commit All Repos (ADR 0085): the same message in each repository that has something to commit (its staged changes,
+    /// or with <paramref name="all"/> every change), carrying on past a repository that fails. When one fails, the message
+    /// stays and the exception lists each failure; the others' commits stay.
+    /// </summary>
+    private async Task CommitAllRepositoriesAsync(bool all)
+    {
+        var message = Message;
+        var targets = Services.Where(s => s.Status is { } status && (all ? status.Files.Any(f => !f.IsConflict) : status.Staged.Any())).ToList();
+        if (targets.Count == 0)
+        {
+            throw new GitException(Localizer.Get("msg.gitChanges.nothingToCommit", "There is nothing to commit."), -1);
+        }
+
+        var failures = await GitService.ForEachAsync(targets, async git =>
+        {
+            if (all && git.Status?.Unstaged.Where(f => f.IsUntracked).Select(f => f.Path).ToList() is { Count: > 0 })
+            {
+                await git.StageAsync([.. git.Status!.Unstaged.Select(f => f.Path)]).ConfigureAwait(false);
+            }
+
+            await git.CommitAsync(message, amend: false, all).ConfigureAwait(false);
+        }).ConfigureAwait(true);
+        if (failures.Count > 0)
+        {
+            throw new GitException(FailureSummary(failures, targets.Count), -1);
+        }
+    }
+
+    /// <summary>"1 of 2 repositories failed:" and a line for each ("WPylon: git's message").</summary>
+    public static string FailureSummary(IReadOnlyList<GitRepositoryFailure> failures, int total) =>
+        Localizer.Format("msg.gitChanges.repositoriesFailed", "{0} of {1} repositories failed:", failures.Count, total)
+        + Environment.NewLine + string.Join(Environment.NewLine, failures);
 
     /// <summary>Commits (staged changes when there are some, otherwise all), then pushes, or with <paramref name="sync"/> pulls and pushes.</summary>
     public async Task CommitAndPushAsync(bool sync)

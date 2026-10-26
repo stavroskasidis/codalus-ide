@@ -24,7 +24,14 @@ public sealed partial class GitService
     public IReadOnlyList<string> Repositories
     {
         get => _repositories;
-        set => _repositories = value;
+        set
+        {
+            _repositories = value;
+            foreach (var sibling in Siblings)
+            {
+                sibling.Repositories = value;
+            }
+        }
     }
 
     /// <summary>

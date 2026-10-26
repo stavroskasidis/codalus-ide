@@ -885,6 +885,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // #23, D38: the Git Changes window's menus from their registered locations, and the branch drop-down.
         await StepAsync("git.changesMenus", "D38", "Git Changes: a folder's menu from gitChanges/context, the branch drop-down and a branch's menu over it", GitChangesMenusStepAsync, "projects.open").ConfigureAwait(true);
 
+        // ADR 0085: the solution's repository and another, shown together.
+        await StepAsync("git.allRepositories", "ADR 0085", "All Repositories: a second repository joins, Git Changes shows both, Common branches, Commit All Repos", AllRepositoriesStepAsync, "projects.open").ConfigureAwait(true);
+
         await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
 
         await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);

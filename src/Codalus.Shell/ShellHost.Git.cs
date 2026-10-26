@@ -29,18 +29,29 @@ public sealed partial class ShellHost
         Git = new GitService(watch: Options.WatchFiles);
         Git.Log += (_, line) => GitLog.AppendLine(line);
         Git.StatusChanged += (_, _) => Ui.Post(UpdateGitStatus);
+        Git.SiblingStatusChanged += (_, _) => Ui.Post(UpdateGitStatus);
         Git.StatusChanged += (_, _) => Ui.Post(ReloadGitDiffs);
         Git.IndexChanged += (_, _) => Ui.Post(ReloadGitDiffs);
         GitChanges = new GitChangesViewModel(Git, (path, staged) => OpenDiffAsync(path, staged), command => RunGitCommandAsync(command));
         GitChanges.OpenFile = path => OpenFileAsync(path);
         GitChanges.RunWithArguments = RunOnGitChangeAsync;
+        GitChanges.SwitchRepository = SwitchRepositoryAsync;
+        GitChanges.ShowAllRepositories = ShowAllRepositoriesAsync;
+        GitChanges.AddRepository = () => AddRepositoryAsync();
+        GitChanges.RemoveRepository = RemoveRepositoryAsync;
+        GitChanges.DropStash = stash => InRepositoryAsync(GitChanges.StashRepository(stash), () => DropStashAsync(stash.Name));
         GitBranches = new GitBranchPickerViewModel(Git)
         {
-            Checkout = branch => CheckoutBranchAsync(branch.FullRef),
-            NewBranch = name => NewBranchFromAsync(null, name),
+            AllRepositories = () => GitChanges.IsAllRepositories ? GitChanges.Services : null,
+            Checkout = branch => GitBranches.IsCommon(branch)
+                ? CheckoutCommonBranchAsync(branch.Name)
+                : InRepositoryAsync(GitBranches.RepositoryOf(branch), () => CheckoutBranchAsync(branch.FullRef)),
+            NewBranch = name => GitBranches.IsAllRepositories ? NewBranchInAllRepositoriesAsync(name) : NewBranchFromAsync(null, name),
             MenuFor = GitBranchMenu,
             RunOnBranch = (command, branch) => GitBranchMenuItems(branch).Any(i => i.Command == command)
-                ? RunAsync(command, [System.Text.Json.JsonSerializer.SerializeToElement(branch.FullRef, Docking.ShellJsonContext.Default.String)], GitBranchScope(branch))
+                ? GitBranches.IsCommon(branch)
+                    ? RunOnCommonBranchAsync(command, branch)
+                    : InRepositoryAsync(GitBranches.RepositoryOf(branch), () => RunAsync(command, [System.Text.Json.JsonSerializer.SerializeToElement(branch.FullRef, Docking.ShellJsonContext.Default.String)], GitBranchScope(branch)))
                 : Task.CompletedTask,
         };
         GitChanges.Branches = GitBranches;
@@ -93,7 +104,13 @@ public sealed partial class ShellHost
         if (command.StartsWith("git.discard:", StringComparison.Ordinal))
         {
             var path = command["git.discard:".Length..];
-            return DiscardChangesAsync(GitChangesViewModel.ArgumentsFor(path, "changes", [path]));
+            return InRepositoryAsync(Git.ServiceFor(path), () => DiscardChangesAsync(GitChangesViewModel.ArgumentsFor(path, "changes", [path])));
+        }
+
+        // The operation banner's Continue, Skip and Abort act in its repository (with all repositories shown, ADR 0085).
+        if (command is "git.continue" or "git.skip" or "git.abort")
+        {
+            return InRepositoryAsync(GitChanges.OperationRepository, () => RunAsync(command, []));
         }
 
         if (command.StartsWith("git.mergeEditor:", StringComparison.Ordinal))
@@ -136,6 +153,12 @@ public sealed partial class ShellHost
         if (Git.Status is not { } status)
         {
             Workbench.StatusBar.Remove(BranchStatusItem);
+            return;
+        }
+
+        if (GitChanges.IsAllRepositories)
+        {
+            UpdateAllRepositoriesStatus();
             return;
         }
 
@@ -203,7 +226,7 @@ public sealed partial class ShellHost
             return open;
         }
 
-        var document = NewDiffDocument(new DiffViewModel(Git, path, staged));
+        var document = NewDiffDocument(new DiffViewModel(Git.ServiceFor(path), path, staged));
         try
         {
             await document.ViewModel.LoadAsync().ConfigureAwait(true);
@@ -230,7 +253,8 @@ public sealed partial class ShellHost
     public async Task<bool> DiscardAsync(string path, bool unsavedEditsLost = false)
     {
         var name = Path.GetFileName(path);
-        var untracked = Git.Status?.Files.Any(f => f.IsUntracked && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, path)) == true;
+        var git = Git.ServiceFor(path);
+        var untracked = git.Status?.Files.Any(f => f.IsUntracked && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, path)) == true;
         var choice = await Dialogs.ShowAsync(new DialogRequest(
             $"Discard changes to {name}?",
             untracked ? $"{name} is not tracked by git: it will be deleted." : $"The changes to {name} that are not staged will be lost.",
@@ -255,7 +279,7 @@ public sealed partial class ShellHost
                 return;
             }
 
-            await Git.DiscardAsync([path]).ConfigureAwait(true);
+            await git.DiscardAsync([path]).ConfigureAwait(true);
             if (model is not null && File.Exists(path))
             {
                 await model.ReloadAsync(CancellationToken.None).ConfigureAwait(true);
@@ -272,7 +296,7 @@ public sealed partial class ShellHost
         ActiveEditor?.Model.Path is { } path ? GitActionAsync(async () =>
         {
             await SaveActiveDocumentAsync().ConfigureAwait(true);
-            await Git.StageAsync([path]).ConfigureAwait(true);
+            await Git.ServiceFor(path).StageAsync([path]).ConfigureAwait(true);
         }) : Task.CompletedTask;
 
     // ------------------------------------------------------------------ branches and remotes
@@ -495,14 +519,15 @@ public sealed partial class ShellHost
         ? Localizer.Get("msg.git.oneCommit", "1 commit")
         : Localizer.Format("msg.git.commitCount", "{0} commits", count);
 
-    public Task FetchAsync() => GitActionAsync(() => Git.FetchAsync(), "Fetching…");
+    /// <summary>Fetch: in the open repository, or with all repositories shown in each (ADR 0085).</summary>
+    public Task FetchAsync() => GitChanges.IsAllRepositories ? FetchAllAsync() : GitActionAsync(() => Git.FetchAsync(), "Fetching…");
 
-    public Task PullAsync() => GitActionAsync(() => Git.PullAsync(), "Pulling…");
+    public Task PullAsync() => GitChanges.IsAllRepositories ? PullAllAsync() : GitActionAsync(() => Git.PullAsync(), "Pulling…");
 
-    public Task PushAsync() => GitActionAsync(() => Git.PushAsync(), "Pushing…");
+    public Task PushAsync() => GitChanges.IsAllRepositories ? PushAllAsync() : GitActionAsync(() => Git.PushAsync(), "Pushing…");
 
     /// <summary>Pulls, then pushes the branch's own commits.</summary>
-    public Task SyncAsync() => GitActionAsync(async () =>
+    public Task SyncAsync() => GitChanges.IsAllRepositories ? SyncAllAsync() : GitActionAsync(async () =>
     {
         if (Git.Status?.Upstream is not null)
         {
