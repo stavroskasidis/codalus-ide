@@ -166,7 +166,7 @@ internal static partial class BuiltIns
                 Maximum = 120,
                 Scope = SettingScope.User,
             },
-            SettingDescriptor.Create("editor.fontFamily", "\"Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace\"", SettingType.String, shell) with
+            SettingDescriptor.Create("editor.fontFamily", "\"Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace\"", SettingType.String, shell) with
             {
                 Title = "Font Family",
                 Category = "Text Editor",

@@ -22,7 +22,7 @@ namespace Codalus.Shell.ViewModels;
 /// </summary>
 public sealed class ThemePicture
 {
-    private static readonly FontFamily s_codeFont = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace");
+    private static readonly FontFamily s_codeFont = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace");
 
     public ThemePicture(ThemeVariant variant)
     {

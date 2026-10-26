@@ -32,7 +32,7 @@
       <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
     </Style>
     <Style Selector="Border.preview SelectableTextBlock">
-      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
       <Setter Property="FontSize" Value="11.5" />
       <Setter Property="Foreground" Value="{DynamicResource Shell.Editor.Foreground}" />
       <Setter Property="Margin" Value="8,6" />

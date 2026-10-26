@@ -37,7 +37,7 @@
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
       <TabControl Grid.Column="2" Padding="0">
         <TabItem Header="{l:T aspire.console}">
-          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="{l:T aspire.theResourceSConsoleOutput}" />
+          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,Noto Sans Mono,Ubuntu Mono,Liberation Mono,Noto Mono,monospace" AutomationProperties.Name="{l:T aspire.theResourceSConsoleOutput}" />
         </TabItem>
         <TabItem Header="{l:T aspire.environment}">
           <ListBox ItemsSource="{Binding Environment}" Background="Transparent" AutomationProperties.Name="{l:T aspire.environmentVariables}">

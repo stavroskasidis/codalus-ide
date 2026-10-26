@@ -98,7 +98,8 @@ public sealed class PackageVerifiedBadgeTests
         var column = longId.GetVisualAncestors().OfType<StackPanel>().First();
         Assert.True(longBadge.IsEffectivelyVisible);
         Assert.True(longId.TextLayout.TextLines[0].HasCollapsed, "the long ID trims");
-        Assert.True(BoundsIn(longBadge, column).Right <= column.Bounds.Width + 0.5, "the badge stays in the name column");
+        // Layout rounding can widen the trimmed ID by up to a pixel (WSL's Noto Sans: 319.4 laid out as 320).
+        Assert.True(BoundsIn(longBadge, column).Right <= column.Bounds.Width + 1, $"the badge stays in the name column: badge {BoundsIn(longBadge, column)}, ID {BoundsIn(longId, column)} (desired {longId.DesiredSize}), column {column.Bounds}");
         window.Close();
     }
 

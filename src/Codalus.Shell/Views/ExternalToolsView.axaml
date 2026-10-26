@@ -54,7 +54,7 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="tools:ToolMacro">
               <StackPanel>
-                <SelectableTextBlock FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" Text="{Binding Name, StringFormat='$({0})'}" />
+                <SelectableTextBlock FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" Text="{Binding Name, StringFormat='$({0})'}" />
                 <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{Binding Description}" />
               </StackPanel>
             </DataTemplate>

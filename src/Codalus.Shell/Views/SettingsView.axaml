@@ -263,7 +263,7 @@
                       <ContentControl Content="{Binding}" Margin="0,4,0,0" IsVisible="{Binding !IsBool}" />
                       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" IsVisible="{Binding HasStatus}" MaxWidth="640" HorizontalAlignment="Left" />
                       <TextBlock Classes="error" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
-                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" Text="{Binding Key}" IsVisible="{Binding IsSetting}" />
+                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,Noto Sans Mono,Ubuntu Mono,Liberation Mono,Noto Mono,monospace" Text="{Binding Key}" IsVisible="{Binding IsSetting}" />
                     </StackPanel>
                   </StackPanel>
                 </Border>

@@ -91,6 +91,28 @@ public static class FileSystems
     /// <summary>True when a remote file system serves <paramref name="path"/>.</summary>
     public static bool IsRemote(string path) => For(path).IsRemote;
 
+    /// <summary>
+    /// Gives a temporary file the Unix permissions of the file it is about to replace (an executable script stays
+    /// executable, and git sees no mode change): a write through a temporary file and a rename made it 644 (M51, found on
+    /// WSL, where files copied from Windows are 755). Nothing on Windows, or when the target doesn't exist yet.
+    /// </summary>
+    public static void KeepUnixMode(string temporary, string target)
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists(target))
+        {
+            return;
+        }
+
+        try
+        {
+            File.SetUnixFileMode(temporary, File.GetUnixFileMode(target));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A file system without Unix permissions: the rename keeps whatever it has.
+        }
+    }
+
     public static bool IsUnder(string path, string root) =>
         path.StartsWith(root, s_comparison) && (path.Length == root.Length || path[root.Length] is '/' or '\\' || root.EndsWith('/') || root.EndsWith('\\'));
 
@@ -148,6 +170,7 @@ public sealed class LocalFileSystem : IFileSystemProvider
         Directory.CreateDirectory(folder);
         var temporary = Path.Combine(folder, "." + Path.GetFileName(path) + "." + Environment.ProcessId + ".tmp");
         await File.WriteAllBytesAsync(temporary, content, cancellationToken).ConfigureAwait(false);
+        FileSystems.KeepUnixMode(temporary, path);
         File.Move(temporary, path, overwrite: true);
     }
 

@@ -18,7 +18,7 @@ namespace Codalus.Shell.Controls;
 /// </summary>
 public static partial class MarkdownRenderer
 {
-    private static readonly FontFamily s_monospace = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace");
+    private static readonly FontFamily s_monospace = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace");
 
     /// <summary>The code font of inline code and of code outside an editor.</summary>
     public static FontFamily Monospace => s_monospace;

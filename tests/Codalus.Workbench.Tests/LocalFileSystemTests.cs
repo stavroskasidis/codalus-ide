@@ -22,4 +22,26 @@ public sealed class LocalFileSystemTests : IDisposable
         var bytes = await FileSystems.Local.ReadAllBytesAsync(path, TestContext.Current.CancellationToken);
         Assert.Equal("class Greeter { }", System.Text.Encoding.UTF8.GetString(bytes));
     }
+
+    [Fact]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public async Task A_write_keeps_the_files_unix_permissions()
+    {
+        // Written through a temporary file and a rename: the file kept the temporary's 644, so an executable script lost
+        // its x bit and git saw a mode change after a save (M51, on WSL, where files copied from Windows are 755).
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows has no Unix permissions.");
+        var path = Path.Combine(_folder, "build.sh");
+        await File.WriteAllTextAsync(path, "echo one\n", TestContext.Current.CancellationToken);
+        const UnixFileMode Executable = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+        File.SetUnixFileMode(path, Executable);
+
+        await FileSystems.Local.WriteAllBytesAsync(path, "echo two\n"u8.ToArray(), TestContext.Current.CancellationToken);
+        Assert.Equal(Executable, File.GetUnixFileMode(path));
+        Assert.Equal("echo two\n", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+
+        // A new file gets the default.
+        var fresh = Path.Combine(_folder, "new.txt");
+        await FileSystems.Local.WriteAllBytesAsync(fresh, "x"u8.ToArray(), TestContext.Current.CancellationToken);
+        Assert.False(File.GetUnixFileMode(fresh).HasFlag(UnixFileMode.UserExecute));
+    }
 }

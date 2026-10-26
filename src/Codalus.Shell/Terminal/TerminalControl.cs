@@ -32,7 +32,7 @@ public sealed class TerminalControl : Control
     private readonly DispatcherTimer _resizeTimer;
     private TerminalSession? _session;
     private TerminalTheme _theme = TerminalTheme.For("dark");
-    private FontFamily _fontFamily = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace");
+    private FontFamily _fontFamily = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace");
     private double _fontSize = 13;
     private Typeface _typeface;
     private double _cellWidth = 8;
