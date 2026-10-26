@@ -44,6 +44,7 @@
   "aiChat.errors": "Errors",
   "aiChat.externalAgentUsesItsOwn": "External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for.",
   "aiChat.moreAgents": "More agents…",
+  "aiChat.nothingToChoose": "Nothing to choose now",
   "aiChat.openFiles": "Open files",
   "aiChat.orConnectACodingAgent": "Or connect a coding agent that brings its own provider",
   "aiChat.question": "Question",
