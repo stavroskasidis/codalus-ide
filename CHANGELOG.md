@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.8.0
+
+- **Blazor component parameters in the component's color** ([user guide](docs/user-guide/web.md#razor-and-blazor)): 0.7.0 gave `Number` in `<NumpadItem Number="@index">` a color of its own (light gray in Classic Dark, purple in Light); it now takes the component tag's color, as in the classic IDE, still bold in Classic.
+
 ## 0.7.0
 
 - **.NET 11 RC 3**: Codalus IDE is built on .NET 11's third release candidate, and its helper processes ask for that runtime (or a later one). With only RC 2 installed, the IDE says so once and offers **Install .NET 11.0**, and an update isn't downloaded until it's installed ([user guide](docs/user-guide/getting-started.md#prerequisites)).

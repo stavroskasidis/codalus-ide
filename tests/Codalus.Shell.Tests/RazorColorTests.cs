@@ -78,7 +78,7 @@ public sealed class RazorColorTests
         await ShellFixture.PumpUntil(() => ColorAt(editor, "<Router", 1) == Of(0xFF4EC9B0), seconds: 120);
         Assert.Equal(Of(0xFF4EC9B0), ColorAt(editor, "<Found", 1)); // a component, teal like a type
         Assert.Equal(Of(0xFF4EC9B0), ColorAt(editor, "</Router", 2));
-        Assert.Equal(Of(0xFFC8C8C8), ColorAt(editor, "AppAssembly")); // its parameter: the classic IDE's Razor Component Attribute, bold (M50)
+        Assert.Equal(Of(0xFF4EC9B0), ColorAt(editor, "AppAssembly")); // its parameter: the component's teal, bold (M50, after 0.7.0)
         Assert.Equal(FontWeight.Bold, WeightAt(editor, "AppAssembly"));
         Assert.NotEqual(FontWeight.Bold, WeightAt(editor, "class="));
         Assert.Equal(Of(0xFF808080), ColorAt(editor, "<Router")); // delimiters gray
