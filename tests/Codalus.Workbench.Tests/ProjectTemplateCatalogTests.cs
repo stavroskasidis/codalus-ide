@@ -372,7 +372,7 @@ public sealed class ProjectTemplateCatalogSdkTests : IDisposable
         {
             var row = Assert.Single(rows, r => r.ShortName == shortName && r.Language == "C#");
             Assert.NotEmpty(row.Frameworks);
-            Assert.All(row.Frameworks.Where(f => !f.Moniker.StartsWith("netstandard", StringComparison.Ordinal)), f => Assert.True(f.Label.EndsWith("Support)", StringComparison.Ordinal) || f.Label.EndsWith("(Preview)", StringComparison.Ordinal), f.Label));
+            Assert.All(row.Frameworks.Where(f => !f.Moniker.StartsWith("netstandard", StringComparison.Ordinal)), f => Assert.True(f.Label.EndsWith("Support)", StringComparison.Ordinal) || f.Label.EndsWith("(Out of support)", StringComparison.Ordinal) || f.Label.EndsWith("(Preview)", StringComparison.Ordinal), f.Label));
             Assert.NotNull(row.DefaultFramework());
         }
 
