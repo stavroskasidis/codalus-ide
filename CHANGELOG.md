@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.8.0
+
+- **The website**: the home page shows each kind of .NET app Codalus IDE builds (console apps and libraries, Blazor, ASP.NET Core, .NET MAUI, WPF, Windows Forms, WinUI 3, Avalonia, Aspire, WCF and .NET Framework), each with its screenshot, what you get and where it runs, in place of the general screenshots, which stay on the Features page.
+
 ## 0.7.0
 
 - **.NET 11 RC 3**: Codalus IDE is built on .NET 11's third release candidate, and its helper processes ask for that runtime (or a later one). With only RC 2 installed, the IDE says so once and offers **Install .NET 11.0**, and an update isn't downloaded until it's installed ([user guide](docs/user-guide/getting-started.md#prerequisites)).

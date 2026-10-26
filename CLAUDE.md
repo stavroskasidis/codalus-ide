@@ -68,7 +68,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 
 `website/` is a static-SSR Blazor app exported to GitHub Pages (`--export <dir>` fails on broken links). Links are relative to the site, never rooted; in-page links carry their path (`docs/git/#stash`); page links end with `/`.
 
-**Keep the website up to date** in the same change as anything users can see: Features page (and Home for headlines), the user guide page, fresh screenshots from the smoke test (`website/wwwroot/assets/screenshots/`), and the Download page. Run `tests/Codalus.Website.Tests` and the export before pushing; `eng/lighthouse.sh <export>` (also run by `pages.yml`) needs 95+ in every Lighthouse category on every page. Only `master` deploys.
+**Keep the website up to date** in the same change as anything users can see: Features page (and Home for headlines), the user guide page, fresh screenshots from the smoke test (`website/wwwroot/assets/screenshots/`, each listed in `website/screenshots.txt` with the smoke picture it comes from; `eng/update-screenshots.sh <run id> [picture…]` copies them from a CI run), and the Download page. Run `tests/Codalus.Website.Tests` and the export before pushing; `eng/lighthouse.sh <export>` (also run by `pages.yml`) needs 95+ in every Lighthouse category on every page. Only `master` deploys.
 
 ## CI and releases
 

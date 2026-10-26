@@ -157,6 +157,15 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             }
 
             Check(shell.Workbench.Keybindings.GetBinding("workbench.showCommandPalette") is not null, "a key binding for the command palette");
+
+            // The website's pictures are 1280x800 (website/screenshots.txt). A smaller screen shrinks the window, and every
+            // picture with it (the Windows runner's 1024x768 before pipeline.yml set 1920x1080): said, not failed.
+            if (window.Bounds.Size != new Size(1280, 800))
+            {
+                var prefix = Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true" ? "::warning::" : "warning: ";
+                Console.Out.WriteLine($"{prefix}The smoke test's window is {window.Bounds.Width}x{window.Bounds.Height}, not the website's 1280x800: its pictures are that size too.");
+            }
+
             return Task.CompletedTask;
         }).ConfigureAwait(true);
 
@@ -2131,6 +2140,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(answer.StartsWith("Frontend: Sunny, from the api", StringComparison.Ordinal), "the frontend answers through the api: " + answer);
             window.Selected = window.Resources.Single(r => r.Name == "api");
             await WaitAsync(() => window.Logs.Contains("Now listening on", StringComparison.Ordinal), "the api's console output is shown", 60).ConfigureAwait(true);
+            // The website's picture (aspire.png): the AppHost's code above its resources, not an earlier step's document.
+            await OpenAsync(Path.Combine(target, "Aspire", "AppHost", "AppHost.cs")).ConfigureAwait(true);
             shell.ShowAspire();
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-aspire.png");

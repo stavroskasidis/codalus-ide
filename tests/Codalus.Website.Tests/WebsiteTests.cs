@@ -230,6 +230,50 @@ public sealed class WebsiteTests : IDisposable
     }
 
     [Fact]
+    public async Task The_home_page_shows_each_app_model_with_its_picture()
+    {
+        var html = await Get(Options(), "");
+
+        var tabs = Regex.Matches(html, "role=\"tab\" id=\"tab-(?<key>[a-z]+)\" aria-controls=\"model-\\k<key>\"").Select(m => m.Groups["key"].Value).ToList();
+        Assert.Equal(["console", "blazor", "aspnet", "maui", "wpf", "winforms", "winui", "avalonia", "aspire", "wcf", "netfx"], tabs);
+        foreach (var key in tabs)
+        {
+            var panel = Regex.Match(html, $"<div class=\"shot model\" role=\"tabpanel\" id=\"model-{key}\"[^>]*>\\s*<figure><img src=\"(?<file>assets/screenshots/[^\"]+)\"");
+            Assert.True(panel.Success, $"no panel with a picture for {key}");
+            Assert.True(File.Exists(Path.Combine(s_repoRoot, "website", "wwwroot", panel.Groups["file"].Value)), $"{key}'s {panel.Groups["file"].Value} doesn't exist");
+        }
+
+        // The first panel shows as the page loads, the others hidden until site.js selects one.
+        Assert.Single(Regex.Matches(html, "role=\"tabpanel\" id=\"model-[a-z]+\" aria-labelledby=\"tab-[a-z]+\">"));
+    }
+
+    [Fact]
+    public void Every_screenshot_on_the_site_is_a_picture_the_smoke_test_saves()
+    {
+        // website/screenshots.txt: <picture on the site> <runner> <the smoke test's picture> (eng/update-screenshots.sh).
+        var entries = File.ReadLines(Path.Combine(s_repoRoot, "website", "screenshots.txt"))
+            .Where(line => line.Trim().Length > 0 && !line.StartsWith('#'))
+            .Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .ToList();
+        Assert.All(entries, e => Assert.True(e.Length == 3 && e[1] is "Linux" or "Windows" or "macOS", string.Join(' ', e)));
+
+        var onSite = Directory.GetFiles(Path.Combine(s_repoRoot, "website", "wwwroot", "assets", "screenshots"))
+            .Select(Path.GetFileName).Order(StringComparer.Ordinal);
+        Assert.Equal(onSite, entries.Select(e => e[0]).Order(StringComparer.Ordinal));
+
+        // The names in SmokeTest's Screenshot calls, an interpolation's holes matching anything; not a failed step's
+        // picture (smoke-test-{id}.png), which would match every name.
+        var source = string.Concat(Directory.GetFiles(Path.Combine(s_repoRoot, "src", "Codalus.Shell", "Infrastructure"), "SmokeTest*.cs").Select(File.ReadAllText));
+        var saved = Regex.Matches(source, @"Screenshot\(\$?""(?<name>[^""]+\.png)""")
+            .Select(m => m.Groups["name"].Value)
+            .Where(name => name != "smoke-test-{id}.png")
+            .Select(name => new Regex("^" + Regex.Replace(Regex.Escape(name), @"\\\{[^}]*\}", ".+") + "$"))
+            .ToList();
+        Assert.True(saved.Count > 50, $"only {saved.Count} Screenshot calls found");
+        Assert.All(entries, e => Assert.True(saved.Any(r => r.IsMatch(e[2])), $"{e[0]}: the smoke test saves no {e[2]}"));
+    }
+
+    [Fact]
     public async Task The_sitemap_dates_each_page_by_its_sources_last_commit_with_the_whole_history_only()
     {
         var repo = FakeRepository("The guide.");
@@ -280,6 +324,22 @@ public sealed class WebsiteTests : IDisposable
         Directory.CreateDirectory(guide);
         File.WriteAllText(Path.Combine(guide, "README.md"), "# User guide\n\nThe guide.\n\n" + readmeBody + "\n");
         File.WriteAllText(Path.Combine(guide, "getting-started.md"), "# Installing and first start\n\n## Prerequisites\n\n## First start\n");
+        // The guide's pages and headings the Home page's app models link to.
+        foreach (var (page, body) in new[]
+        {
+            ("editing.md", "# Editing and navigating code\n"),
+            ("web.md", "# Web development\n\n## Razor and Blazor\n"),
+            ("maui.md", "# .NET MAUI\n"),
+            ("windows-desktop.md", "# WPF, Windows Forms and WinUI 3\n\n## The WPF XAML Previewer\n\n## The Windows Forms designer\n\n## WinUI 3\n"),
+            ("avalonia.md", "# Avalonia\n"),
+            ("containers.md", "# Containers, Aspire and publishing\n\n## .NET Aspire\n"),
+            ("wcf.md", "# WCF\n"),
+            ("net-framework.md", "# .NET Framework\n"),
+        })
+        {
+            File.WriteAllText(Path.Combine(guide, page), body);
+        }
+
         return repo;
     }
 
