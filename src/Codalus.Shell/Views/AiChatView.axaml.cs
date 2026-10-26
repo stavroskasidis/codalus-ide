@@ -91,10 +91,8 @@ public sealed partial class AiChatView : UserControl, IPaneView
     /// built as it opens so it shows the choices of now, then groups of actions, each after a separator (D43: Connect to
     /// each one-click agent not connected yet; More agents… and Manage Agents…).
     /// </summary>
-    private static MenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose, Func<IReadOnlyList<IReadOnlyList<AiAgentMenuAction>>>? actions = null)
-    {
-        var flyout = new MenuFlyout();
-        flyout.Opening += (_, _) =>
+    private static FilledMenuFlyout Choices(Func<IReadOnlyList<string>> items, Func<int> selected, Action<int> choose, Func<IReadOnlyList<IReadOnlyList<AiAgentMenuAction>>>? actions = null) =>
+        new FilledMenuFlyout(flyout =>
         {
             flyout.Items.Clear();
             var current = selected();
@@ -121,9 +119,16 @@ public sealed partial class AiChatView : UserControl, IPaneView
                     flyout.Items.Add(MenuEntry.Create(action.Label, action.Icon, click: () => _ = action.Run()));
                 }
             }
-        };
-        return flyout;
-    }
+
+            // Never an empty menu: it would open as nothing at all.
+            if (flyout.Items.Count == 0)
+            {
+                var none = MenuEntry.Create(Codalus.Workbench.Localization.Localizer.Get("aiChat.nothingToChoose", "Nothing to choose now"), null);
+                none.IsEnabled = false;
+                flyout.Items.Add(none);
+            }
+        });
+
 
     /// <summary>A one-click agent's button in the off state: Connect to it (D43).</summary>
     private void OnConnectClick(object? sender, RoutedEventArgs e)
@@ -177,6 +182,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
         vm.Cleared += OnCleared;
         vm.Turns.CollectionChanged += OnTurnsChanged;
         vm.UpdateContextPreview();
+        vm.EnsureAgentStarted();
         _follow.Reset();
     }
 
@@ -186,6 +192,11 @@ public sealed partial class AiChatView : UserControl, IPaneView
         {
             BuildChoicePickers();
         }
+        else if (e.PropertyName is nameof(AiChatViewModel.SelectedAgent) or nameof(AiChatViewModel.IsAgentBlocked))
+        {
+            // The chat shows an agent it may run: start it, so its choices show before the first question.
+            _vm?.EnsureAgentStarted();
+        }
     }
 
     /// <summary>The pickers of the agent's choices (tests).</summary>
@@ -193,33 +204,59 @@ public sealed partial class AiChatView : UserControl, IPaneView
 
     /// <summary>
     /// One picker per choice of the external agent (M51), after the agent picker: its current value's name, and a menu of
-    /// its values with the current one checked. Rebuilt when the choices change.
+    /// its values with the current one checked. The agent's updates come often (each one refreshes the chat), so pickers
+    /// are updated in place, and made again only when the agent's set of choices changes and none of their menus is open:
+    /// a picker removed while its menu was open left the menu open on nothing, and its light dismiss swallowed the next
+    /// clicks on every picker (0.8.0's release candidate).
     /// </summary>
     private void BuildChoicePickers()
     {
-        foreach (var old in _choicePickers)
+        var choices = _vm?.AgentChoicePickers ?? [];
+        if (!choices.Select(c => c.Id).SequenceEqual(_choicePickers.Select(p => (string)p.Tag!), StringComparer.Ordinal))
         {
-            Toolbar.Children.Remove(old);
-        }
-
-        _choicePickers.Clear();
-        var at = Toolbar.Children.IndexOf(AgentPicker) + 1;
-        foreach (var choice in _vm?.AgentChoicePickers ?? [])
-        {
-            var id = choice.Id;
-            var picker = new DropDownButton
+            if (_choicePickers.Any(p => p.Flyout is { IsOpen: true }))
             {
-                Content = new TextBlock { Text = choice.CurrentName, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis, MaxWidth = 140, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center },
-                Flyout = Choices(
+                return; // again when the menu closes
+            }
+
+            foreach (var old in _choicePickers)
+            {
+                Toolbar.Children.Remove(old);
+            }
+
+            _choicePickers.Clear();
+            var at = Toolbar.Children.IndexOf(AgentPicker) + 1;
+            foreach (var choice in choices)
+            {
+                var id = choice.Id;
+                var flyout = Choices(
                     () => _vm?.AgentChoicePickers.FirstOrDefault(c => c.Id == id)?.ValueNames ?? [],
                     () => _vm?.AgentChoicePickers.FirstOrDefault(c => c.Id == id)?.SelectedIndex ?? -1,
-                    i => _ = _vm?.ChooseAsync(id, i)),
-            };
-            picker.Classes.Add("toolbar");
-            ToolTip.SetTip(picker, choice.AccessibleName);
-            Avalonia.Automation.AutomationProperties.SetName(picker, choice.AccessibleName);
-            Toolbar.Children.Insert(at++, picker);
-            _choicePickers.Add(picker);
+                    i => _ = _vm?.ChooseAsync(id, i));
+                flyout.Closed += (_, _) => BuildChoicePickers();
+                var picker = new DropDownButton
+                {
+                    Tag = id,
+                    Content = new TextBlock { TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis, MaxWidth = 140, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center },
+                    Flyout = flyout,
+                };
+                picker.Classes.Add("toolbar");
+                Toolbar.Children.Insert(at++, picker);
+                _choicePickers.Add(picker);
+            }
+        }
+
+        // The current values, in place.
+        for (var i = 0; i < choices.Count; i++)
+        {
+            var picker = _choicePickers[i];
+            if (picker.Content is TextBlock label && label.Text != choices[i].CurrentName)
+            {
+                label.Text = choices[i].CurrentName;
+            }
+
+            ToolTip.SetTip(picker, choices[i].AccessibleName);
+            Avalonia.Automation.AutomationProperties.SetName(picker, choices[i].AccessibleName);
         }
     }
 

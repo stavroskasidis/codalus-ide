@@ -39,6 +39,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     private IReadOnlyList<AcpSessionConfigOption>? _configOptions;
     private AcpSessionModelState? _models;
     private IReadOnlyList<AcpSessionChoice> _choices = [];
+    private bool _signIn = true;
     private int _prompts;
     private int _disposed;
 
@@ -146,9 +147,13 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     /// <summary>How long a restarted agent that reports who is signed in has to say it after a terminal sign-in (its own check takes up to 5 s).</summary>
     public static TimeSpan AuthStatusWait { get; set; } = TimeSpan.FromSeconds(8);
 
-    /// <summary>Starts the agent's process, initializes, and creates the session (signing in first when the agent asks).</summary>
-    public async Task StartAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Starts the agent's process, initializes, and creates the session (signing in first when the agent asks, unless
+    /// <paramref name="signIn"/> is false: then an agent that needs it throws <see cref="AcpAuthRequiredException"/>).
+    /// </summary>
+    public async Task StartAsync(CancellationToken cancellationToken, bool signIn = true)
     {
+        _signIn = signIn;
         _ai.LogAgent(Name, $"starting {Config.Command} in {WorkspaceRoot}");
         Directory.CreateDirectory(ProcessDirectory);
         await StartClientAsync(cancellationToken).ConfigureAwait(false);
@@ -180,7 +185,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         {
             return await _client!.NewSessionAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (AcpAuthRequiredException ex)
+        catch (AcpAuthRequiredException ex) when (_signIn)
         {
             _ai.LogAgent(Name, "session/new → sign-in needed");
             await SignInAsync(ex.Methods, cancellationToken).ConfigureAwait(false);
