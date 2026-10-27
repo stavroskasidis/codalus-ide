@@ -76,6 +76,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 - A release is atomic: tests, smoke, packages, update and (stable) benchmarks and site gate the release's commit; any failure publishes nothing and removes the tag.
 - Benchmark numbers that decide something (a gate's verdict, `accepted.json` and its evidence, `budgets.json`) come from CI, both versions on the same runner in alternating rounds: never from a local machine, yours or a remote session's (`benchmarks/README.md`).
 - `VERSION` holds the next version; rules in `eng/Codalus.Release`. Packaging is `eng/package.sh` (Velopack); self-update is ADR 0029.
+- **A failed CI run is a bug report, not something to re-run.** Before any re-run, use skill `ci-failure` (`.claude/skills/ci-failure/`): `eng/ci-failures.sh <run id>` lists what failed in every attempt and `--recent` whether it failed before; find the root cause and fix it (in the product when users can hit it), or add the diagnostic that will find it; record it in `docs/ci-flakes.md`. Never retry, skip or quarantine a test, or raise a blanket timeout, to get green.
 - Editing workflows: shared setup goes in `.github/actions/setup`. Never put a name MSBuild knows (`VERSION`, `Configuration`, `Platform`, `OutputPath`…) in a workflow's or job's `env`. Run `actionlint` on `.github/`, and read every job's result after the run.
 
 ## Platform validation
