@@ -249,6 +249,23 @@ internal sealed class ShellFixture : IAsyncDisposable
     }
 
     /// <summary>
+    /// The file's text, or empty while another thread or process is writing it, for a condition that polls a file the
+    /// shell or a host writes: on Windows a read during the write is a sharing violation, not old text (the build host
+    /// saving App.csproj after a rename, jobs 121374349900 and 122158754205).
+    /// </summary>
+    public static string ReadText(string path)
+    {
+        try
+        {
+            return File.ReadAllText(path);
+        }
+        catch (IOException)
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
     /// Waits until <paramref name="id"/> is enabled. A command run right after a state change can find the keys its
     /// enablement reads not set yet: they follow the state a posted job later (a solution's <c>solutionTrusted</c>, a
     /// repository's <c>gitRepository</c>, the focus), and the command was refused (PR #76's View History). On a timeout,
