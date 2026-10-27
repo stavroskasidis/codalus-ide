@@ -64,7 +64,7 @@ public sealed class PathBox : Decorator
     private readonly TextBox _box = new();
     private readonly Button _browse = new() { Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
     private readonly Button _recent = new() { IsTabStop = false, Padding = new Thickness(4, 0), Margin = new Thickness(0, 0, 2, 0), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch };
-    private readonly MenuFlyout _recentMenu = new() { Placement = PlacementMode.BottomEdgeAlignedLeft };
+    private readonly MenuFlyout _recentMenu;
 
     public PathBox()
     {
@@ -77,7 +77,7 @@ public sealed class PathBox : Decorator
         ToolTip.SetTip(_recent, Localizer.Get("msg.pathBox.recentTip", "Recent locations (Alt+Down)"));
         AutomationProperties.SetName(_recent, recent);
         _recent.Click += (_, _) => OpenRecent();
-        _recentMenu.Opening += (_, _) => FillRecent();
+        _recentMenu = new FilledMenuFlyout(_ => FillRecent()) { Placement = PlacementMode.BottomEdgeAlignedLeft };
         _box.AddHandler(KeyDownEvent, OnBoxKeyDown, RoutingStrategies.Tunnel);
         _browse.Classes.Add("icon");
         ButtonIcon.SetKind(_browse, "folder-open");

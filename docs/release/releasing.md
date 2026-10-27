@@ -82,7 +82,8 @@ into both: one merged into `develop` is cherry-picked into the release branch by
 release needs goes into `develop` too. The release pull request's `gate` job fails until they match.
 
 A release that fails only a benchmark gate the maintainer accepts gets its `benchmarks/accepted.json` entry the same
-way, through the release branch.
+way, through the release branch. The evidence is a same-runner A/B on CI (both versions on one runner, alternating
+rounds; `benchmarks/README.md`), never numbers from a developer's machine.
 
 ## 5. Merge the release
 

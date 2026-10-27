@@ -1,3 +1,6 @@
+using Avalonia.Input;
+using Avalonia.Headless;
+using Avalonia;
 using System.Text.Json;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -274,10 +277,9 @@ public sealed class AcpShellTests
                 chat.SelectedAgentIndex = 1;
                 await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetLayerValue(AcpAgents.ChatAgentSetting, SettingScope.User)?.GetString() == "stand-in");
 
-                // The pickers show once the agent's session exists: model, mode and effort, in the IDE's words.
-                Assert.Empty(chat.AgentChoicePickers);
-                await AskAsync(f, "hello");
-                await ShellFixture.PumpUntil(() => chat.AgentChoicePickers.Count == 3);
+                // The pickers show once the agent's session exists (it starts when the chat shows it): model, mode and effort,
+                // in the IDE's words.
+                await ShellFixture.PumpUntil(() => chat.AgentChoicePickers.Count == 3, 60);
                 Assert.Equal([("Model", "Sonnet"), ("Mode", "Ask"), ("Effort", "Medium")], chat.AgentChoicePickers.Select(c => (c.Name, c.CurrentName)));
                 await ShellFixture.PumpUntil(() => (view = ChatView(f)).ChoicePickers.Count == 3 && view.ChoicePickers.All(p => p.IsEffectivelyVisible), 30, () => $"{view.ChoicePickers.Count} picker(s), visible [{string.Join(", ", view.ChoicePickers.Select(p => p.IsVisible + "/" + p.IsEffectivelyVisible + "/" + p.Bounds))}], view visible {view.IsEffectivelyVisible}");
                 Assert.Equal(["Model: Sonnet", "Mode: Ask", "Effort: Medium"], view.ChoicePickers.Select(p => AutomationProperties.GetName(p)));
@@ -326,6 +328,99 @@ public sealed class AcpShellTests
         {
             File.Delete(copy);
         }
+    }
+
+    /// <summary>
+    /// The items an open menu shows: in its popup and laid out. Its Items alone aren't enough: items added in the menu's
+    /// Opening event were there, but never in the popup, which showed as an empty strip (0.8.0's release candidate).
+    /// </summary>
+    private static List<string?> Shown(MenuFlyout menu)
+    {
+        ShellFixture.Pump();
+        return [.. menu.Items.OfType<MenuItem>().Where(i => i.IsAttachedToVisualTree() && i.Bounds.Width > 0 && i.Bounds.Height > 0).Select(i => i.Header as string)];
+    }
+
+    /// <summary>
+    /// Clicks a picker until its menu opens: headless input, with popups in windows of their own, sometimes delivers the
+    /// release without the press (the button loses its capture), and the click is lost; the user's click isn't.
+    /// </summary>
+    private static async Task OpenAsync(Window window, DropDownButton picker, MenuFlyout menu)
+    {
+        for (var attempt = 0; attempt < 3 && !menu.IsOpen; attempt++)
+        {
+            Click(window, picker);
+            try
+            {
+                await ShellFixture.PumpUntil(() => menu.IsOpen, 3);
+            }
+            catch (Exception) when (attempt < 2)
+            {
+            }
+        }
+    }
+
+    /// <summary>Clicks a control as the user does: the pointer down and up at its middle.</summary>
+    private static void Click(Window window, Control control)
+    {
+        var center = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(center, MouseButton.Left);
+        window.MouseUp(center, MouseButton.Left);
+        ShellFixture.Pump();
+    }
+
+    [AvaloniaFact]
+    public async Task The_agents_pickers_show_before_the_first_question_and_their_menus_open_while_it_updates()
+    {
+        // The bug of 0.8.0's release candidate, with Claude: the pickers came only with the first answer, and then none of
+        // the toolbar's menus opened (not even the agent picker's, to go back to Built-in).
+        await using var f = ShellFixture.Create();
+        await SetUpAsync(f, "config");
+        var chat = f.Shell.AiChat;
+        var folder = f.CopySample("BuildAndRun");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+        await ShellFixture.PumpUntil(() => chat.AgentChoices.Count == 2);
+        chat.SelectedAgentIndex = 1;
+
+        // The chat shows the agent, so it starts: its choices show with no question asked.
+        Window window = f.Window;
+        window.Width = 3000; // the chat wide enough for every picker in its toolbar
+        AiChatView view = null!;
+        await ShellFixture.PumpUntil(() => (view = ChatView(f)).ChoicePickers.Count == 3 && view.ChoicePickers.All(p => p.Bounds.Right <= view.Bounds.Width && p.IsEffectivelyVisible), 60,
+            () => $"{chat.AgentChoicePickers.Count} choice(s), chat {view.Bounds}, pickers {string.Join(", ", view.ChoicePickers.Select(p => p.Bounds.ToString()))}");
+        Assert.Empty(chat.Chat.Turns);
+
+        // Menus open in windows of their own, as in the app. With one open, the agent's updates (each refreshes the chat)
+        // leave its picker in place; once it closes, the next picker's menu opens.
+        using var popups = TestAppBuilder.PopupsInWindowsOfTheirOwn();
+        var model = view.ChoicePickers[0];
+        var modelMenu = (MenuFlyout)model.Flyout!;
+        await OpenAsync(window, model, modelMenu);
+        Assert.Equal(["Sonnet", "Opus"], Shown(modelMenu));
+        chat.Refresh();
+        ShellFixture.Pump();
+        Assert.Same(model, view.ChoicePickers[0]);
+        Assert.True(modelMenu.IsOpen);
+        Click(window, model); // a click on its picker closes it
+        await ShellFixture.PumpUntil(() => !modelMenu.IsOpen);
+
+        var effort = view.ChoicePickers[2];
+        var effortMenu = (MenuFlyout)effort.Flyout!;
+        await OpenAsync(window, effort, effortMenu);
+        Assert.Equal(["Low", "Medium", "High"], Shown(effortMenu));
+        effortMenu.Items.OfType<MenuItem>().Single(i => (i.Header as string) == "High").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        effortMenu.Hide();
+        await ShellFixture.PumpUntil(() => chat.AgentChoicePickers[2].CurrentName == "High");
+        await ShellFixture.PumpUntil(() => ((TextBlock)view.ChoicePickers[2].Content!).Text == "High");
+
+        // And the agent picker goes back to the built-in assistant.
+        var agentPicker = Visible<DropDownButton>(view, "AgentPicker");
+        var agentMenu = (MenuFlyout)agentPicker.Flyout!;
+        await OpenAsync(window, agentPicker, agentMenu);
+        Assert.Contains("Built-in", Shown(agentMenu));
+        agentMenu.Items.OfType<MenuItem>().Single(i => (i.Header as string) == "Built-in").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        agentMenu.Hide();
+        await ShellFixture.PumpUntil(() => !chat.IsExternal && view.ChoicePickers.Count == 0);
     }
 
     private static async Task OpenMoreAgentsAsync(ShellFixture f)

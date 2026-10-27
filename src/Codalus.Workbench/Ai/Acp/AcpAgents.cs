@@ -269,7 +269,7 @@ public sealed class AcpAgents : IAsyncDisposable
     /// The session of <paramref name="name"/>: the running one when it is that agent's, alive and in this workspace; else
     /// the running one is stopped and a new one starts. Throws <see cref="AcpException"/> with why it can't.
     /// </summary>
-    public async Task<AcpAgentSession> GetOrStartAsync(string name, IAcpHost host, CancellationToken cancellationToken)
+    public async Task<AcpAgentSession> GetOrStartAsync(string name, IAcpHost host, CancellationToken cancellationToken, bool signIn = true)
     {
         if (WhyNot() is { } reason)
         {
@@ -302,7 +302,7 @@ public sealed class AcpAgents : IAsyncDisposable
             session.StateChanged += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
             try
             {
-                await session.StartAsync(cancellationToken).ConfigureAwait(false);
+                await session.StartAsync(cancellationToken, signIn).ConfigureAwait(false);
                 await session.ApplyChoicesAsync(config.Choices, cancellationToken).ConfigureAwait(false);
             }
             catch
