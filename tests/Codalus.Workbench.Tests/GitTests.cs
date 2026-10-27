@@ -88,6 +88,28 @@ public sealed class GitServiceTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// A working-tree diff of a file whose timestamps changed but not its content leaves the index alone: git diff
+    /// would refresh it under index.lock even with GIT_OPTIONAL_LOCKS=0, and a diff document reloading on a status change
+    /// then held the lock while Stage Active File ran (the Windows command sweep, run 39937763661).
+    /// </summary>
+    [Fact]
+    public async Task A_working_tree_diff_never_writes_the_index()
+    {
+        File.SetLastWriteTimeUtc(File1, DateTime.UtcNow.AddHours(-1));
+        var index = Path.Combine(Repo, ".git", "index");
+        var before = await File.ReadAllBytesAsync(index, Ct);
+        var written = File.GetLastWriteTimeUtc(index);
+
+        Assert.Null(await _git.DiffAsync(File1, staged: false, Ct));
+        Assert.Equal(before, await File.ReadAllBytesAsync(index, Ct));
+        Assert.Equal(written, File.GetLastWriteTimeUtc(index));
+
+        await File.AppendAllTextAsync(File1, "thirteen\n", Ct);
+        Assert.Equal("thirteen", Assert.Single((await _git.DiffAsync(File1, staged: false, Ct))!.Hunks).Lines.Single(l => l.Kind == '+').Text);
+        Assert.Equal(before, await File.ReadAllBytesAsync(index, Ct));
+    }
+
     [Fact]
     public void Only_an_existing_lock_file_is_a_busy_lock()
     {
