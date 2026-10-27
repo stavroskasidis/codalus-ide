@@ -31,6 +31,7 @@ Help → Show Logs opens the Codalus IDE channel. Crash reports are saved in the
 | A helper process stops at start, with an error that quotes what it wrote | It exited while starting (a missing file, a bad setting, a runtime the check didn't catch): the error has its exit code and the first lines it wrote to standard error (for a helper that crashes later, the exception it reports, from its `Unhandled exception.` line), and its Output channel has all of them. It isn't started again, because it would stop the same way: fix the cause, then reopen the solution or restart Codalus IDE. |
 | Projects stay in "Restricted mode" | The folder isn't trusted. Click the status bar item to trust it. |
 | Packages show as unresolved | Restore failed: see Output → Restore. |
+| Restore fails with "a package source couldn't be reached (NU1301)", and the Error List fills with errors | A feed in the solution's `NuGet.Config` didn't answer, often a company feed when its VPN is off. Projects that need its packages can't compile, so every file that uses them shows errors. Connect, then run **Restore Packages** (command palette, category Solution). |
 | No IntelliSense in a project | Its design-time build failed (Output → Build Host). It is often a missing restore or SDK. |
 | "The debugger (netcoredbg) was not found" | A source build: run `eng/get-netcoredbg.sh`. Packages include it. |
 | Git features missing | Install git and make sure it is on the `PATH` (or set `CODALUS_GIT`). |
