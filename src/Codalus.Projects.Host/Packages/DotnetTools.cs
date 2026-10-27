@@ -135,6 +135,9 @@ internal static class DotnetProcess
     /// <summary>The system's ICU major version on Linux (<c>libicuuc.so.74</c> → 74), found once.</summary>
     private static readonly Lazy<int?> s_icu = new(SystemIcuMajor);
 
+    /// <summary>The children <see cref="Start"/> started that are still running.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Process, byte> s_running = new();
+
     public static ProcessStartInfo StartInfo(string dotnet, string workingDirectory, IEnumerable<string> args)
     {
         var psi = new ProcessStartInfo(dotnet)
@@ -214,12 +217,47 @@ internal static class DotnetProcess
     public static Process? Start(ProcessStartInfo psi)
     {
         var process = Process.Start(psi);
-        if (process is not null && psi.RedirectStandardInput)
+        if (process is null)
+        {
+            return null;
+        }
+
+        s_running[process] = 0;
+        process.EnableRaisingEvents = true;
+        process.Exited += (_, _) => s_running.TryRemove(process, out _);
+        if (process.HasExited)
+        {
+            s_running.TryRemove(process, out _);
+        }
+
+        if (psi.RedirectStandardInput)
         {
             process.StandardInput.Close();
         }
 
         return process;
+    }
+
+    /// <summary>
+    /// Ends every child still running, and what each started, as the host exits. The host doesn't wait for the requests
+    /// they serve: the shell asks for some without a cancellation (the Entity Framework window's <c>dbcontext info</c>),
+    /// and a <c>dotnet ef</c> left behind outlived the host, adopted by launchd on macOS for hours.
+    /// </summary>
+    public static void KillAll()
+    {
+        foreach (var process in s_running.Keys)
+        {
+            try
+            {
+                ProcessTree.Kill(process);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException)
+            {
+                // Already gone.
+            }
+
+            s_running.TryRemove(process, out _);
+        }
     }
 
     /// <summary>
