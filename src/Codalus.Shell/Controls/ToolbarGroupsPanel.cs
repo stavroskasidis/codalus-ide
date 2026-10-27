@@ -49,14 +49,14 @@ public sealed class ToolbarGroupsPanel : Panel
     {
         while (_overflows.Count <= group)
         {
-            var overflow = new Button { Content = new Icon { Kind = "more" }, IsVisible = false, Flyout = new MenuFlyout { Placement = Avalonia.Controls.PlacementMode.BottomEdgeAlignedLeft } };
+            var index = _overflows.Count;
+            var overflow = new Button { Content = new Icon { Kind = "more" }, IsVisible = false };
+            overflow.Flyout = new FilledMenuFlyout(flyout => Fill(flyout, overflow, index)) { Placement = Avalonia.Controls.PlacementMode.BottomEdgeAlignedLeft };
             overflow.Classes.Add("toolbar");
             overflow.Classes.Add("overflow");
             var name = Localizer.Get("msg.toolbarGroupsPanel.moreCommands", "More commands");
             ToolTip.SetTip(overflow, name);
             AutomationProperties.SetName(overflow, name);
-            var index = _overflows.Count;
-            ((MenuFlyout)overflow.Flyout).Opening += (_, _) => Fill((MenuFlyout)overflow.Flyout!, overflow, index);
             _overflows.Add(overflow);
 
             // Not one of Children: the toolbar rebuilds those (Tools → Customize), and these stay.
