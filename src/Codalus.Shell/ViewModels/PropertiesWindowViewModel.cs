@@ -137,6 +137,13 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         grid.SelectedItem = grid.Items.Contains(row) ? row : grid.SelectedItem;
         if (result.Button == ok)
         {
+            // With the typed text: a refresh while the dialog was open (the designer's, a selection's) put the value
+            // back in the text box (the check the Windows packages' smoke run 40375629247 failed).
+            if (e.Text is { } typed)
+            {
+                row.ShowRejectedText(typed);
+            }
+
             grid.RequestEdit(row);
         }
         else

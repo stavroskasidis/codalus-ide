@@ -2932,7 +2932,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Screenshot("winforms-properties-invalid.png");
         shell.Dialogs.Accept();
         await WaitAsync(() => !shell.Dialogs.IsOpen, "OK closes the dialog", 10).ConfigureAwait(true);
-        Check(grid.Find("Location.X") is { Text: "abc" } typed && typed.Value == oldX && grid.SelectedRow?.Path == "Location.X", "OK goes back to the cell with the typed text");
+        // The dialog closes at once; going back to the cell is the answer's continuation, a moment later (the Windows
+        // packages' run 40375629247 checked before it, and its message didn't say which part was off).
+        await WaitAsync(() => grid.Find("Location.X") is { Text: "abc" } typed && typed.Value == oldX && grid.SelectedRow?.Path == "Location.X",
+            () => $"OK goes back to the cell with the typed text (Location.X: text '{grid.Find("Location.X")?.Text}', value '{grid.Find("Location.X")?.Value}', was '{oldX}'; selected: {grid.SelectedRow?.Path ?? "none"}; {properties.Title})", 10).ConfigureAwait(true);
         grid.Find("Location.X")!.Text = "-x";
         await WaitAsync(() => shell.Dialogs.IsOpen, "the invalid value opens the dialog again", 30).ConfigureAwait(true);
         shell.Dialogs.Cancel();
