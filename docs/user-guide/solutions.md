@@ -84,7 +84,7 @@ Values set in the project file are in bold. Changes are written the way the clas
 
 ## Restore
 
-Packages are restored in the background when a trusted solution opens (setting **Projects → Restore on Open**). Project → Restore Packages restores again; the output is in View → Output → Restore. To add, update and remove packages, see [NuGet packages and .NET tools](packages.md).
+Packages are restored in the background when a trusted solution opens (setting **Projects → Restore on Open**). Project → Restore Packages restores again; the output is in View → Output → Restore. Opening skips the restore when every project's packages are up to date since its last restore; Output → Build Host says why it restored otherwise. When a project's packages can't be read (a project of another repository whose `global.json` pins another .NET SDK, restored there with that SDK), the design-time build fails, and Codalus restores once more with the solution's SDK and builds the project again. To add, update and remove packages, see [NuGet packages and .NET tools](packages.md).
 
 ## Project properties
 
