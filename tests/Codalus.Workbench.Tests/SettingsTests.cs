@@ -23,6 +23,35 @@ public sealed class SettingsServiceTests : IDisposable
         SettingDescriptor.Create("telemetry.enabled", "false", SettingType.Boolean, ContributionSource.Shell) with { Scope = SettingScope.User },
     ];
 
+    /// <summary>
+    /// A reload that read the file before a write and applied what it read after the write's own reload put the old value
+    /// back, and no change of the file followed to correct it: the watcher's reload of an earlier change did that, and
+    /// a theme card's choice never reached the setting (ThemeFamilyTests on Linux CI, run 40589567181).
+    /// </summary>
+    [Fact]
+    public async Task A_reload_that_read_the_file_before_a_write_doesnt_undo_it()
+    {
+        using var settings = new SettingsService(UserFile);
+        settings.Register(Schema());
+        string[] values = ["light", "dark", "highContrast", "system"];
+        for (var i = 0; i < 200; i++)
+        {
+            var value = values[i % values.Length];
+            using var stop = new CancellationTokenSource();
+            var reloading = Task.Run(() =>
+            {
+                while (!stop.IsCancellationRequested)
+                {
+                    settings.Reload();
+                }
+            }, TestContext.Current.CancellationToken);
+            await settings.SetAsync("workbench.colorTheme", JsonSerializer.SerializeToElement(value), SettingScope.User, TestContext.Current.CancellationToken);
+            stop.Cancel();
+            await reloading;
+            Assert.Equal(value, settings.GetString("workbench.colorTheme"));
+        }
+    }
+
     [Fact]
     public void Layers_defaults_user_and_workspace()
     {
