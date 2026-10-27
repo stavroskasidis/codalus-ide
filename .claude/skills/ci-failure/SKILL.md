@@ -45,8 +45,10 @@ test to pass, and what else could run in between on a slow or loaded runner. The
 - Attaching to, or talking to, a process before it is ready (a runtime still starting, a test host not connected).
 - A failed or aborted result cached as a valid one, so every later step sees nothing.
 - A timeout reported as a cancellation, so the real error is never shown.
-- Two git processes writing the index at once (`index.lock: File exists`).
+- A read that writes after all: `git diff` refreshes the index under `index.lock` even with `GIT_OPTIONAL_LOCKS=0`, so a write next to it failed (`index.lock: File exists`).
 - A process tree ended with .NET's own walk, which blocks for minutes on macOS (`ProcessTree.Kill` instead).
+- A cancellation and an answer racing: the answer that lands first wins unless the code checks the cancellation again.
+- A file polled while the IDE writes it: on Windows the read throws (a sharing violation) instead of returning old text.
 
 Reproduce it when you can: run the test in a loop, under CPU load, or force the interleaving (start the second load
 before awaiting the first, delay the process, fire the event early). A fix is proven by a test that fails without it.
