@@ -18,6 +18,8 @@ internal sealed class ProjectWatcher(Func<ProjectWatcher.Changes, Task> onChange
     private HashSet<string> _imports = new(s_pathComparer);
     private string _solution = string.Empty;
     private Pending _pending = new();
+    private Pending _held = new();
+    private int _holding;
     private Timer? _timer;
 
     public sealed record Changes(bool SolutionFileChanged, IReadOnlyList<string> MSBuildFiles, IReadOnlyList<string> Directories);
@@ -45,7 +47,7 @@ internal sealed class ProjectWatcher(Func<ProjectWatcher.Changes, Task> onChange
             var roots = new List<string> { workspace };
             foreach (var directory in projects.Select(p => Path.GetDirectoryName(p)!))
             {
-                if (!roots.Any(r => ProjectFileEditor.IsSameOrUnder(directory, r)))
+                if (!roots.Any(r => IsSameOrUnder(directory, r)))
                 {
                     roots.Add(directory);
                 }
@@ -98,12 +100,70 @@ internal sealed class ProjectWatcher(Func<ProjectWatcher.Changes, Task> onChange
         }
     }
 
+    /// <summary>
+    /// Keeps NuGet's restore outputs (assets files and the imports it generates) back while the IDE's own restore runs,
+    /// until <see cref="TakeRestoreOutputs"/> or <see cref="ResumeRestoreOutputs"/>. A restore writes them project by
+    /// project, for minutes when a package source is unreachable, and each one reported on its own evaluated and built
+    /// its projects again, restarting the language service's analysis every time.
+    /// </summary>
+    public void HoldRestoreOutputs()
+    {
+        lock (_gate)
+        {
+            _holding++;
+        }
+    }
+
+    /// <summary>Ends a <see cref="HoldRestoreOutputs"/>: what it kept back, for the restore to evaluate once.</summary>
+    public Changes TakeRestoreOutputs()
+    {
+        lock (_gate)
+        {
+            if (_holding == 0 || --_holding > 0)
+            {
+                return new Changes(false, [], []);
+            }
+
+            var held = _held;
+            _held = new Pending();
+            return new Changes(false, [.. held.MSBuildFiles], [.. held.Directories]);
+        }
+    }
+
+    /// <summary>Ends a <see cref="HoldRestoreOutputs"/>, reporting what it kept back as any other change.</summary>
+    public void ResumeRestoreOutputs()
+    {
+        var held = TakeRestoreOutputs();
+        lock (_gate)
+        {
+            _pending.MSBuildFiles.UnionWith(held.MSBuildFiles);
+            _pending.Directories.UnionWith(held.Directories);
+            if (!_pending.IsEmpty)
+            {
+                _timer ??= new Timer(_ => Flush());
+                _timer.Change(s_debounce, Timeout.InfiniteTimeSpan);
+            }
+        }
+    }
+
     private void OnEvent(string path, bool structural)
     {
         lock (_gate)
         {
             if (_suppressed.TryGetValue(path, out var until) && DateTime.UtcNow < until)
             {
+                return;
+            }
+
+            if (_holding > 0 && IsNuGetImport(path))
+            {
+                _held.MSBuildFiles.Add(path);
+                return;
+            }
+
+            if (_holding > 0 && IsRestoreOutput(path))
+            {
+                _held.Directories.Add(Path.GetDirectoryName(Path.GetDirectoryName(path)!)!);
                 return;
             }
 
@@ -166,6 +226,18 @@ internal sealed class ProjectWatcher(Func<ProjectWatcher.Changes, Task> onChange
 
     private static bool IsRestoreOutput(string path) =>
         Path.GetFileName(path).Equals("project.assets.json", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>An import NuGet generates in <c>obj</c> (<c>App.csproj.nuget.g.props</c> and <c>.targets</c>).</summary>
+    private static bool IsNuGetImport(string path) =>
+        path.EndsWith(".nuget.g.props", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".nuget.g.targets", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>As <c>ProjectFileEditor.IsSameOrUnder</c>, here so the watcher has no MSBuild types (it is tested on its own).</summary>
+    private static bool IsSameOrUnder(string path, string root)
+    {
+        var trimmed = root.TrimEnd(Path.DirectorySeparatorChar);
+        var comparison = s_pathComparer == StringComparer.OrdinalIgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return path.Equals(trimmed, comparison) || path.StartsWith(trimmed + Path.DirectorySeparatorChar, comparison);
+    }
 
     private static bool IsBuildOutput(string path)
     {
