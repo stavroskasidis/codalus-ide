@@ -1843,6 +1843,7 @@ internal sealed partial class SmokeTest
         private long _maxTicks;
         private TimeSpan _maxGcPause;
         private string? _maxJob;
+        private int _probes;
 
         public SweepStallMonitor()
         {
@@ -1889,10 +1890,23 @@ internal sealed partial class SmokeTest
             }
         }
 
+        /// <summary>The probes the UI thread answered since the last <see cref="Reset"/>: none means the monitor saw nothing, not a quick UI thread.</summary>
+        public int Probes
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _probes;
+                }
+            }
+        }
+
         public void Reset()
         {
             lock (_gate)
             {
+                _probes = 0;
                 _maxTicks = 0;
                 _maxGcPause = TimeSpan.Zero;
                 _maxJob = null;
@@ -1942,6 +1956,7 @@ internal sealed partial class SmokeTest
                 var gcPause = GC.GetTotalPauseDuration() - gcBefore;
                 lock (_gate)
                 {
+                    _probes++;
                     if (ticks > _maxTicks)
                     {
                         _maxTicks = ticks;
