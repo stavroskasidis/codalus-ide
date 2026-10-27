@@ -184,6 +184,7 @@
       <Thickness x:Key="Shell.Row.Margin">3,0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">4</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0,0,0,3</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0,3,0,0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="#646464" />
       <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">4,4,0,0</CornerRadius>
@@ -432,6 +433,7 @@
       <Thickness x:Key="Shell.Row.Margin">3,0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">4</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0,0,0,3</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0,3,0,0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="#A6A6A6" />
       <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">4,4,0,0</CornerRadius>
@@ -626,6 +628,7 @@
       <Thickness x:Key="Shell.Row.Margin">3,0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">4</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0,0,0,3</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0,3,0,0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="#4D5A73" />
       <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">4,4,0,0</CornerRadius>
@@ -920,6 +923,7 @@
       <Thickness x:Key="Shell.Row.Margin">3,0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">4</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0,0,0,3</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0,3,0,0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="#FFFFFF" />
       <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
       <CornerRadius x:Key="DockDocumentTabItemCornerRadius">4,4,0,0</CornerRadius>
@@ -1155,6 +1159,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66000000" />
@@ -1427,6 +1432,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
@@ -1699,6 +1705,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
@@ -1996,6 +2003,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66000000" />
@@ -2273,6 +2281,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
@@ -2550,6 +2559,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
@@ -2842,6 +2852,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66000000" />
@@ -3114,6 +3125,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
@@ -3386,6 +3398,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
@@ -3678,6 +3691,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66000000" />
@@ -3950,6 +3964,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
@@ -4222,6 +4237,7 @@
       <Thickness x:Key="Shell.Row.Margin">0</Thickness>
       <CornerRadius x:Key="Shell.Row.CornerRadius">0</CornerRadius>
       <Thickness x:Key="Shell.AutoHide.BarThickness">0</Thickness>
+      <Thickness x:Key="Shell.AutoHide.BarThickness.Right">0</Thickness>
       <SolidColorBrush x:Key="Shell.AutoHide.Bar" Color="Transparent" />
       <CornerRadius x:Key="ControlCornerRadius">3</CornerRadius>
       <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#66FFFFFF" />
@@ -4375,6 +4391,8 @@
   <x:Double x:Key="Shell.Size.Icon">16</x:Double>
   <x:Double x:Key="Shell.Size.IconSmall">12</x:Double>
   <x:Double x:Key="Shell.Size.Row">22</x:Double>
+  <!-- Hierarchy trees (Solution Explorer, Test Explorer and the other tree tool windows) breathe a little more: 24 px, as the classic IDE (0.9). -->
+  <x:Double x:Key="Shell.Size.TreeRow">24</x:Double>
   <x:Double x:Key="Shell.Size.ToolWindowMinWidth">280</x:Double>
   <x:Double x:Key="Shell.FontSize.Body">12</x:Double>
   <x:Double x:Key="Shell.FontSize.Small">11</x:Double>

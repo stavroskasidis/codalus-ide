@@ -40,6 +40,7 @@ public partial class PolishTests
         channel.AppendLine("4msplit blue\e[0m");
         channel.AppendLine("\e[34mdark blue\e[0m and \e[1;34mbold blue\e[0m");
         channel.AppendLine("\e[32mplain green\e[0m and \e[1;32mbolder green\e[0m");
+        channel.AppendLine("You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy");
 
         var view = new OutputView { DataContext = f.Shell.Output };
         f.Shell.Output.Selected = channel;
@@ -112,6 +113,9 @@ public partial class PolishTests
             // ...and stands out from the plain color in every theme (M51: Harbor Light's bold green looked like its green).
             Expect(9, "plain green", null);
             Expect(9, "bolder green", null);
+
+            // Links are the theme's link color, readable on a dark editor too (0.9: AvaloniaEdit's blue wasn't).
+            Expect(10, "https://aka.ms", "Shell.Link");
             // (High Contrast's palette has one green for both.)
             if (!ThemeService.IsHighContrast(variant) && ColorAt(9, "plain green") is { } plain && ColorAt(9, "bolder green") is { } bold
                 && Math.Abs(PolishTests.Contrast(bold, background) - PolishTests.Contrast(plain, background)) < 1)

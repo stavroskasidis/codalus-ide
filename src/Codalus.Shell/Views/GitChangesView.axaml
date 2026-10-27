@@ -59,7 +59,7 @@
     </Style>
     <Style Selector="TreeView.changeTree TreeViewItem" x:DataType="vm:GitChangeNode">
       <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
     </Style>
     <Style Selector="Button.columnHeader">
       <Setter Property="Background" Value="Transparent" />
