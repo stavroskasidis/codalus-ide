@@ -21,9 +21,11 @@ internal sealed partial class SolutionSession
     /// packages folder, and its assets file (or Codalus's last restore) is newer than the project file and every
     /// import outside its <c>obj</c> folder (where <c>Directory.Packages.props</c>, <c>Directory.Build.props</c> and
     /// the SDK's files are). NuGet's own no-op check compares a hash of the restore inputs; this one is stricter.
+    /// <paramref name="reason"/> says why a restore is needed.
     /// </summary>
-    internal int? PackagesUpToDate()
+    internal int? PackagesUpToDate(out string? reason)
     {
+        reason = null;
         var stamps = new Dictionary<string, DateTime>(s_pathComparer);
         DateTime Stamp(string file)
         {
@@ -41,7 +43,8 @@ internal sealed partial class SolutionSession
         {
             if (_evaluated.TryGetValue(path, out var legacy) && legacy.NetFrameworkRestore is { IsComplete: false } && legacy.Info.CannotBuildReason is null)
             {
-                return null; // a non-SDK-style project lacks its packages.config packages or reference assemblies (M43a)
+                reason = $"{System.IO.Path.GetFileName(path)} lacks its packages.config packages or reference assemblies";
+                return null; // a non-SDK-style project (M43a)
             }
 
             if (!_evaluated.TryGetValue(path, out var project) || project.Info.State != ProjectStates.Loaded || project.AssetsFile is not { } assets)
@@ -61,13 +64,20 @@ internal sealed partial class SolutionSession
                 || project.Imports.Any(i => !ProjectFileEditor.IsSameOrUnder(i, obj) && Stamp(i) > restored)
                 || !NuGetCacheSucceeded(System.IO.Path.Combine(obj, "project.nuget.cache"), packageFiles))
             {
+                reason = $"{System.IO.Path.GetFileName(path)} may have changed since its last restore";
                 return null;
             }
 
             count++;
         }
 
-        return packageFiles.All(File.Exists) ? count : null;
+        if (packageFiles.FirstOrDefault(f => !File.Exists(f)) is { } missing)
+        {
+            reason = $"a package file is missing: {missing}";
+            return null;
+        }
+
+        return count;
     }
 
     private static bool NuGetCacheSucceeded(string cache, HashSet<string> packageFiles)

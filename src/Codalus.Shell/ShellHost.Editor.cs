@@ -78,11 +78,33 @@ public sealed partial class ShellHost : IEditorServices
 
     DiagnosticsStore IEditorServices.Diagnostics => Languages.Diagnostics;
 
+    /// <summary>The number of projects from which the C# host runs with the server garbage collector (<see cref="WithServerGc"/>).</summary>
+    internal const int ServerGcProjects = 20;
+
+    /// <summary>
+    /// The C# host's launch for a solution of <paramref name="projects"/> projects (0.9). A large solution's host runs with
+    /// the server garbage collector: its background pass compiles and binds on many threads at once, which waited on the
+    /// workstation collector's single-threaded collections (measured locally: a 94-project solution's first pass took
+    /// 92 s, 51 s with the server collector, at the same peak of about 6 GB). A small solution keeps the workstation
+    /// collector, which keeps less memory when idle (250 MB against 395 for 50 small projects). The host keeps the
+    /// collector it started with: a file opened before the solution starts it on the workstation one.
+    /// </summary>
+    internal static Rpc.ProcessLaunchInfo? WithServerGc(Rpc.ProcessLaunchInfo? launch, int projects) =>
+        launch is null || projects < ServerGcProjects
+            ? launch
+            : launch with
+            {
+                Environment = new Dictionary<string, string>(launch.Environment ?? new Dictionary<string, string>(), StringComparer.Ordinal)
+                {
+                    ["DOTNET_gcServer"] = "1",
+                },
+            };
+
     private void InitializeEditor()
     {
         EditorOptions = new EditorOptions(Workbench.Settings);
         var registry = Workbench.LanguageServers;
-        registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve)
+        registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", () => WithServerGc(HostLaunchInfo.Resolve(), Solutions.Solution?.Projects.Length ?? 0))
         {
             // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023), and so
             // does Avalonia XAML, on the same projects' type information (ADR 0047).
