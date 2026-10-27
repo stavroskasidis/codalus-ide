@@ -31,6 +31,8 @@ public sealed class SettingsService : IDisposable
     private static readonly JsonDocumentOptions s_jsonc = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
     private readonly Lock _gate = new();
+    private long _reloadsStarted;
+    private long _reloadApplied;
     private readonly Dictionary<string, SettingDescriptor> _descriptors = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly bool _watch;
@@ -505,14 +507,30 @@ public sealed class SettingsService : IDisposable
 
     // ------------------------------------------------------------------ loading
 
-    /// <summary>Re-reads both files and raises <see cref="Changed"/> for keys whose effective value changed.</summary>
+    /// <summary>
+    /// Re-reads both files and raises <see cref="Changed"/> for keys whose effective value changed. A reload that started
+    /// before another one applied what it read keeps what that one applied: it may have read the files before a write that
+    /// the later one saw, and the watcher's reload of an earlier change put a setting's old value back after the write's
+    /// own reload that way, with no change of the file to follow (a theme card's choice never reached the setting:
+    /// ThemeFamilyTests on Linux CI, run 40589567181).
+    /// </summary>
     public void Reload()
     {
+        var reload = Interlocked.Increment(ref _reloadsStarted);
         var diagnostics = new List<string>();
         var user = ReadLayer(UserFile, diagnostics);
         var workspace = WorkspaceFile is null ? new Dictionary<string, JsonElement>(StringComparer.Ordinal) : ReadLayer(WorkspaceFile, diagnostics);
         Recompute(() =>
         {
+            if (reload < _reloadApplied)
+            {
+                // Its files' diagnostics are as old as the files it read.
+                diagnostics.Clear();
+                diagnostics.AddRange(_diagnostics.Where(d => d.StartsWith("[file]", StringComparison.Ordinal)));
+                return;
+            }
+
+            _reloadApplied = reload;
             _user = user;
             _workspace = workspace;
         }, diagnostics);
