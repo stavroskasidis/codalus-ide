@@ -647,6 +647,16 @@ jobs:
         with:
           pattern: packages-*
           path: downloaded
+      # "Re-run failed jobs" skips plan, and untag removed its tag when the first attempt failed: the release would find
+      # no tag (develop run 40495180740). Tag again here. The token may tag only a commit whose workflow files match the
+      # default branch's, so once the branch has moved on with workflow changes this fails: "Re-run all jobs" then.
+      - name: Tag the commit again (a re-run of failed jobs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ needs.plan.outputs.version }}"
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1 \
+            || gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" > /dev/null
       - name: Publish the release
         shell: bash
         env:
