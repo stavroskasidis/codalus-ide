@@ -66,11 +66,16 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
   sampler=$!
 fi
 
-# Every test command's output also goes to console.txt, so the report can name the failed tests: as annotations on the
-# run's page and in the job's summary, where a failure is read first (a job that stops the run shows as cancelled, and its
-# log is thousands of lines). eng/ci-failures.sh reads them from there to tell a new failure from a known flake.
+# Every test command's output goes to console.txt, so the report can name the failed tests: as annotations on the run's
+# page and in the job's summary, where a failure is read first (a job that stops the run shows as cancelled, and its log
+# is thousands of lines). eng/ci-failures.sh reads them from there to tell a new failure from a known flake. A tail shows
+# the file in the log as it grows. Not a pipe through tee: a process the tests leave running (a build server, an MSBuild
+# node) inherits the pipe and holds it open, and tee waited for it after the tests had ended until the step timed out
+# (Windows shell-1, run 40571698799: the tests took 14 minutes, the step 40). A file doesn't wait for anyone.
 console="$results/console.txt"
 : > "$console"
+tail -n +1 -f "$console" &
+tailer=$!
 
 # What the report reads may be missing or fail: that never changes the shard's outcome.
 report() {
@@ -79,6 +84,8 @@ report() {
     pkill -P "$sampler" 2>/dev/null
     kill "$sampler" 2>/dev/null
   fi
+  sleep 2 # the tail reads the file about once a second: its last lines reach the log first
+  kill "$tailer" 2>/dev/null
   local failed
   failed="$(awk '{ gsub(/\033\[[0-9;]*m/, ""); print }' "$console" 2>/dev/null | grep -E '^(failed [A-Za-z_]|\[[0-9:]+\] [A-Za-z_][A-Za-z0-9_.]+)' | sort -u | head -30)"
   if [[ -n "$failed" ]]; then
@@ -141,7 +148,7 @@ case "$shard" in
     filters=()
     for class in "${second[@]}"; do filters+=("$flag" "Codalus.Shell.Tests.$class"); done
     # Every test is listed as it ends, so a shard that stalls shows how far it got next to the memory lines above.
-    dotnet test --project tests/Codalus.Shell.Tests --output detailed "${common[@]}" "${filters[@]}" 2>&1 | tee -a "$console"
+    dotnet test --project tests/Codalus.Shell.Tests --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1
     ;;
   others)
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The
@@ -161,8 +168,8 @@ case "$shard" in
     # Both run whatever the first's outcome, and the shard fails if either did.
     status=0
     dotnet test --solution Codalus.slnx -c "$configuration" --no-build ${extra[@]+"${extra[@]}"} -- \
-      "${hang[@]}" --filter-not-namespace Codalus.Shell.Tests "${without[@]}" --ignore-exit-code 8 2>&1 | tee -a "$console" || status=$?
-    dotnet test --project tests/Codalus.Debugging.Tests "${common[@]}" "${alone[@]}" 2>&1 | tee -a "$console" || status=$?
+      "${hang[@]}" --filter-not-namespace Codalus.Shell.Tests "${without[@]}" --ignore-exit-code 8 >> "$console" 2>&1 || status=$?
+    dotnet test --project tests/Codalus.Debugging.Tests "${common[@]}" "${alone[@]}" >> "$console" 2>&1 || status=$?
     exit "$status"
     ;;
   *)
