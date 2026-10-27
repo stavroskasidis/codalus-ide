@@ -14,6 +14,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Fixed:** Test Explorer could find no tests in a project, until it was built again, after VSTest started slowly on a busy machine; a test application slow to connect was reported as a cancelled run instead of its error.
 - **Fixed:** staging or committing could fail with git's "index.lock: File exists" while a diff was open: showing a diff took git's index lock.
 - **Fixed:** in the Properties window, **OK** in the invalid-value message could put the old value back in the cell instead of the text you typed, to correct it.
+- **Fixed:** **F5** or **Ctrl+F5** on an Aspire AppHost could fail on a busy machine with a `TimeoutRejectedException` right after "Starting DCP": the IDE now gives DCP's services 2 minutes to start instead of Aspire's 10 seconds, unless you set `ASPIRE_SERVICE_STARTUP_WATCH_TIMEOUT` yourself.
 
 ## 0.8.0
 
