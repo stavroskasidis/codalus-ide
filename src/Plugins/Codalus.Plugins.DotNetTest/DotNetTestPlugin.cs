@@ -396,8 +396,9 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
         {
             try
             {
-                var tests = await _vstest.DiscoverAsync(sdk, vstest, options, cancellationToken).ConfigureAwait(false);
-                results.AddRange(vstest.Select(t => (t, (IReadOnlyList<RunnerTest>?)tests.Where(x => x.Project == t.Project && x.TargetFramework == t.TargetFramework).ToList(), (string?)null)));
+                var (tests, complete) = await _vstest.DiscoverAsync(sdk, vstest, options, cancellationToken).ConfigureAwait(false);
+                var error = complete ? null : "Discovery was aborted; the tests found before it stopped are shown, and the next run asks again.";
+                results.AddRange(vstest.Select(t => (t, (IReadOnlyList<RunnerTest>?)tests.Where(x => x.Project == t.Project && x.TargetFramework == t.TargetFramework).ToList(), error)));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -437,9 +438,16 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
                 if (tests is not null)
                 {
                     project.RunnerTests[target.TargetFramework ?? string.Empty] = tests;
-                    _discoveredBuilds[target.AssemblyPath] = File.GetLastWriteTimeUtc(target.AssemblyPath);
+
+                    // Only a complete discovery is the build's: an aborted one, kept as the assembly's tests, left the
+                    // project with none to run until the assembly changed (run 39979261891).
+                    if (error is null)
+                    {
+                        _discoveredBuilds[target.AssemblyPath] = File.GetLastWriteTimeUtc(target.AssemblyPath);
+                    }
                 }
-                else
+
+                if (error is not null)
                 {
                     Log($"{project.Name}: {error}");
                 }

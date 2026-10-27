@@ -465,6 +465,29 @@ public sealed class AcpAgentTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_cancelled_turns_permission_is_cancelled_even_when_its_dialog_closes_with_no_choice_first()
+    {
+        // As the shell's dialog: the cancel closes it with no choice, and that answer can come before the session's own
+        // wait sees the cancel (macOS CI, job 122343638513). Registering after that wait makes the close run first.
+        await ConfigureAsync();
+        var asked = new TaskCompletionSource();
+        _host.PermissionAsync = async (_, ct) =>
+        {
+            await Task.Yield();
+            var closed = new TaskCompletionSource<string?>();
+            await using var registration = ct.Register(() => closed.TrySetResult(null));
+            asked.TrySetResult();
+            return await closed.Task;
+        };
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var asking = AskAsync("slow", stop.Token);
+        await asked.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        await stop.CancelAsync();
+        var turn = await asking.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        Assert.Equal(("stopped", "Permission: cancelled"), (turn.FinishReason, turn.Answer));
+    }
+
+    [Fact]
     public async Task A_crash_mid_turn_ends_the_turn_with_the_agents_last_words_and_the_next_question_starts_it_again()
     {
         await ConfigureAsync();

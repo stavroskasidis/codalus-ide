@@ -1919,7 +1919,26 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(form.Error is null && File.Exists(Path.Combine(target, "Blogging", "Inventory", "Product.cs")), "the inventory database is reverse engineered: " + form.Error + "\n" + Log());
         shell.Layout.CloseDocument(model);
         shell.Layout.CloseDocument(scaffold);
+
+        // While it shows, the window lists the contexts of each solution opened, and their migrations, building the
+        // startup project for them: left open, it built Shop as soon as web.scaffolding opened it, and that step's own
+        // build then found a build running and didn't run (the Windows smoke run 40442812385).
+        await WaitAsync(() => !ef.IsBusy && !shell.Builds.IsBuilding, () => $"the Entity Framework window is done ({ef.Busy ?? "a build is running"})", 300).ConfigureAwait(true);
+        shell.Layout.CloseToolWindow(ViewModels.EntityFrameworkViewModel.ToolWindowId);
     }
+
+    /// <summary>
+    /// Why <see cref="ShellHost.BuildAsync"/> returned false when the Build output doesn't say: a build of something
+    /// else it found running (it doesn't build then), the status bar, the build that finished last, and the output.
+    /// </summary>
+    private string BuildProblem(long? lastBuildBefore) =>
+        (shell.Builds.Current is { } running ? $"a build was running: {running.Target} of {(running.Project is { } p ? Path.GetFileName(p) : "the solution")}; " : string.Empty)
+        + $"status: {shell.StatusBar.DisplayMessage}; "
+        + (shell.Builds.LastBuild is { } last && last.Number != lastBuildBefore
+            ? $"the last build: {last.Request.Target} of {(last.Request.Project is { } q ? Path.GetFileName(q) : "the solution")}, {(last.Result.Canceled ? "canceled" : last.Result.Succeeded ? "succeeded" : "failed")} with {last.Result.Errors} error(s)"
+            : "no build finished")
+        + (shell.Workbench.Notifications.Items.Count > 0 ? "; notifications: " + string.Join(" | ", shell.Workbench.Notifications.Items.Select(n => n.Message)) : string.Empty)
+        + ":\n" + Tail(shell.Builds.Channel.GetText(), 3000);
 
     /// <summary>
     /// Scaffolding and service references (M15c, ADR 0041) on samples/Scaffolding: an API controller through the
@@ -1957,7 +1976,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // The project restored and built first, as a developer's would be: the generator then only builds incrementally.
         var shop = Path.Combine(target, "Shop", "Shop.csproj");
-        Check(await Bounded(shell.BuildAsync(Projects.Protocol.BuildTargets.Build, shop), "the Shop project's restore and build", 420).ConfigureAwait(true), "Shop builds:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+        var lastBuild = shell.Builds.LastBuild?.Number;
+        Check(await Bounded(shell.BuildAsync(Projects.Protocol.BuildTargets.Build, shop), "the Shop project's restore and build", 420).ConfigureAwait(true), "Shop builds (" + BuildProblem(lastBuild) + ")");
 
         var form = shell.OpenAddScaffoldedItem(shop, Path.Combine(target, "Shop", "Controllers"));
         Check(form is not null, "Add New Scaffolded Item opens");
@@ -2932,7 +2952,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Screenshot("winforms-properties-invalid.png");
         shell.Dialogs.Accept();
         await WaitAsync(() => !shell.Dialogs.IsOpen, "OK closes the dialog", 10).ConfigureAwait(true);
-        Check(grid.Find("Location.X") is { Text: "abc" } typed && typed.Value == oldX && grid.SelectedRow?.Path == "Location.X", "OK goes back to the cell with the typed text");
+        // The dialog closes at once; going back to the cell is the answer's continuation, a moment later (the Windows
+        // packages' run 40375629247 checked before it, and its message didn't say which part was off).
+        await WaitAsync(() => grid.Find("Location.X") is { Text: "abc" } typed && typed.Value == oldX && grid.SelectedRow?.Path == "Location.X",
+            () => $"OK goes back to the cell with the typed text (Location.X: text '{grid.Find("Location.X")?.Text}', value '{grid.Find("Location.X")?.Value}', was '{oldX}'; selected: {grid.SelectedRow?.Path ?? "none"}; {properties.Title})", 10).ConfigureAwait(true);
         grid.Find("Location.X")!.Text = "-x";
         await WaitAsync(() => shell.Dialogs.IsOpen, "the invalid value opens the dialog again", 30).ConfigureAwait(true);
         shell.Dialogs.Cancel();
@@ -4156,6 +4179,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 // What the debugger saw says why a program didn't stop (debug.compound's second program, linux-arm64).
                 Console.Out.WriteLine($"  --- Debug (the end; the session is {shell.Debugger.State}) ---");
                 Console.Out.WriteLine(Tail(shell.DebugLog.GetText(), 4000));
+                // And what it waits for: linux-arm64's debug.depth (run 40241261003) waited 300 s for Run to Cursor's
+                // stop with the session Running and nothing in its output to say whether netcoredbg, the program's
+                // runtime or a lost event held it.
+                Console.Out.WriteLine("  the session: " + shell.Debugger.Describe());
                 Console.Out.Flush();
                 try
                 {

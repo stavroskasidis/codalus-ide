@@ -137,24 +137,16 @@ public sealed class VariableWindowsTests
             $"debugger {s.F.Shell.Debugger.State}, row attached {watch.IsAttachedToVisualTree()}");
         Assert.Equal("7", (await s.F.Shell.Debugger.EvaluateAsync("app.Count", "watch", TestContext.Current.CancellationToken)).Result);
 
-        // Delete removes a watch. The edit evaluates the watches again, which rebuilds the rows: a row focused before that
-        // lost the focus, and Delete went nowhere (macOS CI, PR #175). Wait for the evaluation, and focus the row again if
-        // a late rebuild took it.
-        await ShellFixture.PumpUntil(() => list.Rows.Any(r => r.Node.Name == "missing" && r.Node.IsError));
-        for (var attempt = 0; attempt < 3 && Names(list) is not ["app.Count"]; attempt++)
-        {
-            list.FocusRow(list.Rows.First(r => r.Node.Name == "missing"));
-            s.F.Press(Key.Delete);
-            try
-            {
-                await ShellFixture.PumpUntil(() => Names(list) is ["app.Count"], seconds: 5);
-            }
-            catch (Exception) when (attempt < 2)
-            {
-            }
-        }
-
-        Assert.True(Names(list) is ["app.Count"], $"the watches: {string.Join(", ", Names(list))}, focus on {TopLevel.GetTopLevel(list)?.FocusManager?.GetFocusedElement()}");
+        // Delete removes a watch, also when the rows were built again under the focused row: every evaluation of the
+        // watches does that (the edit's, finishing with "missing" after the wait above; every stop's), and the row lost the
+        // keyboard with its container, so Delete went nowhere (Windows and macOS CI, runs 39959543059, 39959550864 and
+        // 40346124678).
+        list.FocusRow(list.Rows.First(r => r.Node.Name == "missing"));
+        await s.F.Shell.Watch.RefreshAsync();
+        ShellFixture.Pump();
+        s.F.Press(Key.Delete);
+        await ShellFixture.PumpUntil(() => Names(list) is ["app.Count"], describe: () =>
+            $"the watches: {string.Join(", ", Names(list))}, focus on {TopLevel.GetTopLevel(list)?.FocusManager?.GetFocusedElement()}");
     }
 
     [AvaloniaFact]

@@ -76,6 +76,15 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
 
     private int Line(string marker) => DebuggeeFixture.Line(debuggee.Program, marker);
 
+    /// <summary>
+    /// Until a Debuggee started with <c>--wait-for</c> says "waiting" from Main: its runtime is up. Attached to while its
+    /// runtime was still starting, netcoredbg's attach (ICorDebug's, which waits 10 seconds for the runtime's debugger
+    /// session to open) gave up on a loaded runner: CORDBG_E_TIMEOUT (0x80131c08) to configurationDone (macOS CI, run
+    /// 40401940980; the whole test took 10.2 s).
+    /// </summary>
+    private static async Task RunningAsync(Process process) =>
+        Assert.Equal("waiting", await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
+
     [Fact]
     public async Task Launching_split_arguments_reports_the_debuggee_process_id()
     {
@@ -193,6 +202,7 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
         })!;
         try
         {
+            await RunningAsync(process); // a running process, not one whose runtime is still starting
             _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, Line("done")));
             await _debug.AttachAsync(process.Id, TestContext.Current.CancellationToken);
             Assert.True(_debug.IsAttached);
@@ -230,7 +240,7 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
         try
         {
             // In Main: a pause before it shows no stack, as no thread has managed frames yet.
-            Assert.Equal("waiting", await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
+            await RunningAsync(process);
             await _debug.AttachAsync(process.Id, TestContext.Current.CancellationToken);
             Assert.Equal(DebugState.Running, _debug.State);
 
@@ -309,6 +319,7 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
         using var process = Process.Start(new ProcessStartInfo(apphost, ["--wait-for", signal]) { UseShellExecute = false, RedirectStandardOutput = true })!;
         try
         {
+            await RunningAsync(process);
             _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, Line("loop")));
             await _debug.AttachAsync(process.Id, TestContext.Current.CancellationToken);
             await File.WriteAllTextAsync(signal, "go", TestContext.Current.CancellationToken);

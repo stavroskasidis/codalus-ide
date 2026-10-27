@@ -56,6 +56,10 @@
     // ADR 0002, amendment 2026-10-17: latency and memory fail only against this many runs on the same runner CPU, and
     // latency normalized by VS Code's startup in the same run only warns. Accepted values are in accepted.json.
     "minComparableRuns": 3,
+    // ADR 0002, amendment 2026-10-27: latency fails from 5 runs on the same CPU, and only over both its threshold and 3
+    // standard deviations of those runs (a hosted runner's latency varies 11 to 27% between runs of the same code).
+    "minComparableLatencyRuns": 5,
+    "latencyNoiseSigmas": 3,
     "failNormalized": false,
     "referenceTarget": "vscode",
     "referenceScenario": "cold-start",

@@ -373,6 +373,31 @@ public sealed class GitChangesMenuTests
     }
 
     /// <summary>
+    /// A load that a newer one replaces (the repositories' refresh 750 ms after git changed .git, Update's reload) returns
+    /// only once the newer one has landed, so whoever awaited it reads the branches as they are, not the list before: the
+    /// branch drop-down test read main as current after a detach, and a worktree without its chip, when the repositories'
+    /// refresh came in the middle of its own load (macOS, runs 40480055094, 40538692111, 40547948961).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_load_that_a_newer_one_replaces_returns_with_the_newer_ones_branches()
+    {
+        await using var f = ShellFixture.Create();
+        var (folder, _) = BranchRepository(f.UserData);
+        await OpenAsync(f, folder);
+        var picker = f.Shell.GitBranches;
+        picker.IsOpen = true;
+        await ShellFixture.PumpUntil(() => picker.Rows.Any(r => r.IsCurrent) && !picker.IsLoading);
+
+        Git(folder, "switch", "-q", "--detach", "main");
+        var first = picker.LoadAsync();
+        var newer = picker.LoadAsync();
+        await first;
+        Assert.True(newer.IsCompleted);
+        Assert.DoesNotContain(picker.Rows, r => r.IsCurrent);
+        picker.IsOpen = false;
+    }
+
+    /// <summary>
     /// P4-P11 and C1-C3: New Local Branch From… makes a branch at another without switching when unchecked; Rename… shows
     /// git's rules and the names other branches have under the box; Delete offers the upstream in its one confirmation,
     /// then names what it compared with and lists the commits that would be lost, Delete plain and Cancel the default;

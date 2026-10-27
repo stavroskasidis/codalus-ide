@@ -354,6 +354,27 @@ public sealed partial class DebugAdapter : IDebugAdapter
     internal TimeSpan StuckRuntimeWait { get; set; } = TimeSpan.FromSeconds(15);
 
     /// <summary>
+    /// The adapter's process, the program's (on Linux its state, T or t when stopped, and whether its runtime's debugger
+    /// transport is there) and the connection's (<see cref="DapConnection.Describe"/>): whether a start that never stops
+    /// waits on netcoredbg, on the program's runtime, or on an event that didn't come.
+    /// </summary>
+    public string Describe()
+    {
+        var adapter = _process.Id is { } id
+            ? $"netcoredbg {id.ToString(System.Globalization.CultureInfo.InvariantCulture)}{(_process.Exited.IsCompleted ? $" (exited, code {ExitCode()})" : string.Empty)}"
+            : "netcoredbg on another machine";
+        string program;
+        using (var running = RunningProgram())
+        {
+            program = running is null ? "no program running"
+                : $"program {running.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                  + (ProcStat(running.Id) is { } stat ? $" in state {stat.State}, {(HasRuntimeTransport(running, _programTemp) ? "its runtime's debugger transport there" : "no runtime debugger transport")}" : string.Empty);
+        }
+
+        return $"{adapter}; {program}; {_connection.Describe()}";
+    }
+
+    /// <summary>
     /// The program netcoredbg attached to, or started (its child: dbgshim creates the process), while it runs; null for
     /// an adapter on another machine.
     /// </summary>

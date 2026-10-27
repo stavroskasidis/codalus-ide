@@ -7,6 +7,14 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Fixed:** Solution Explorer, Test Explorer and the other tree tool windows packed their rows tighter than the classic IDE: tree rows are 24 pixels now (`Shell.Size.TreeRow`).
 - **Fixed:** auto-hidden tool windows' tabs on the right side read bottom to top, as if they were on the left, and on the left side their bar was on the inner edge. They read top to bottom on both sides, as in the classic IDE, with the bar on the window's edge.
 - **Fixed:** links in the Output window, the Debug Console and C# Interactive were plain blue, hard to read in dark themes. They're the theme's link color now.
+- **Fixed:** **Stop** while an external agent waited for your approval could tell the agent you had rejected it, instead of that the turn was cancelled.
+- **Fixed:** the branch drop-down could show the branches as they were before an **Update** or a change made outside the IDE (a branch still current after a switch, a worktree without its chip) until it was opened again.
+- **Fixed:** in Locals, Autos, Watch and QuickWatch, keys (Delete, F2, the arrows) did nothing after the values were evaluated again (a step, an edit) until you clicked a row: the focused row lost the keyboard focus.
+- **Fixed:** completion and Quick Info could stop working for the rest of the session when they were asked while a project the file's project references was still waiting for its restore.
+- **Fixed:** Test Explorer could find no tests in a project, until it was built again, after VSTest started slowly on a busy machine; a test application slow to connect was reported as a cancelled run instead of its error.
+- **Fixed:** staging or committing could fail with git's "index.lock: File exists" while a diff was open: showing a diff took git's index lock.
+- **Fixed:** in the Properties window, **OK** in the invalid-value message could put the old value back in the cell instead of the text you typed, to correct it.
+- **Fixed:** **F5** or **Ctrl+F5** on an Aspire AppHost could fail on a busy machine with a `TimeoutRejectedException` right after "Starting DCP": the IDE now gives DCP's services 2 minutes to start instead of Aspire's 10 seconds, unless you set `ASPIRE_SERVICE_STARTUP_WATCH_TIMEOUT` yourself.
 
 ## 0.8.0
 
