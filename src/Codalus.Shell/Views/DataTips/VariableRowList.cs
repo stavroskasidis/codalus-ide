@@ -230,6 +230,10 @@ public sealed class VariableRowList : DockPanel
             _followed.Remove(gone);
         }
 
+        // The focused row's container goes with the rows, and the keyboard with it: a row that had it gets it back, or
+        // keys (Delete, F2, the arrows) go nowhere after every evaluation of the watches and every stop (CI runs
+        // 39959543059, 39959550864 and 40346124678: a watch's Delete after an edit's evaluation removed nothing).
+        var focused = List.IsKeyboardFocusWithin;
         _rows.Clear();
         foreach (var row in rows)
         {
@@ -239,6 +243,11 @@ public sealed class VariableRowList : DockPanel
         if (selected is not null && rows.FirstOrDefault(r => ReferenceEquals(r.Node, selected)) is { } again)
         {
             List.SelectedItem = again;
+        }
+
+        if (focused && !List.IsKeyboardFocusWithin)
+        {
+            FocusRow();
         }
     }
 
