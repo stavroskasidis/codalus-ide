@@ -35,7 +35,14 @@
         </dl>
     </section>
 
-    <section class="spotlight rise rise-5" aria-labelledby="app-models">
+    <section class="viewer rise rise-5" aria-label="Screenshot">
+        <figure class="shot">
+            <img src="assets/screenshots/editor-dark.png" width="1280" height="800" alt="The editor with inlay hints, Find Results for references to Greet, and the Solution Explorer" />
+            <figcaption><strong>Editor</strong><span>Roslyn-powered C# with inlay hints, Find All References and the Solution Explorer.</span></figcaption>
+        </figure>
+    </section>
+
+    <section class="spotlight reveal" aria-labelledby="app-models">
         <div class="section-head">
             <p class="eyebrow">Built for what you build</p>
             <h2 class="heading" id="app-models">One IDE for every .NET app model.</h2>
@@ -51,7 +58,7 @@
                 @foreach (var (model, i) in s_models.Select((m, i) => (m, i)))
                 {
                     <div class="shot model" role="tabpanel" id="model-@model.Key" aria-labelledby="tab-@model.Key" hidden="@(i != 0)">
-                        <figure><img src="assets/screenshots/@model.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@model.Alt" /></figure>
+                        <figure><img src="assets/screenshots/@model.File" width="1280" height="800" loading="lazy" alt="@model.Alt" /></figure>
                         <div class="model-text">
                             <div class="model-what">
                                 <h3>@model.Label</h3>
@@ -188,13 +195,13 @@
     ];
 
     /// <summary>
-    /// The app models the spotlight shows, each with its picture from the smoke test (website/screenshots.txt). The
-    /// first is what visitors see first: the editor.
+    /// The app models the spotlight under the main screenshot shows, each with its picture from the smoke test
+    /// (website/screenshots.txt).
     /// </summary>
     private static readonly Model[] s_models =
     [
-        new("console", "Console apps and libraries", ".csproj", "editor-dark.png",
-            "The editor with inlay hints, Find Results for references to Greet, and the Solution Explorer",
+        new("console", "Console apps and libraries", ".csproj", "intellisense.png",
+            "Typing a call in the editor: the completion list below the line with an icon per kind, the selected method's description beside it and the kind filters under it, and parameter info above the line",
             ["C# on Roslyn: semantic highlighting, completion, live diagnostics and refactorings with previews",
              "Multi-targeting, .NET Standard libraries, NuGet, and every .NET from .NET Core 2.0 to .NET 11",
              "Build, run, debug and test from one window, with the Test Explorer and coverage"],
