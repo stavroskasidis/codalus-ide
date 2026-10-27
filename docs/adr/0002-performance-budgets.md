@@ -1,6 +1,6 @@
 # 0002. Performance budgets
 
-- **Status:** accepted (2026-10-08), amended 2026-10-10 ([see below](#amendment-2026-10-10-rider-dropped-proposed-budgets-approved)) 2026-10-17 (the regression gate: [accepted values and runner-aware comparisons](#amendment-2026-10-17-accepted-values-and-runner-aware-comparisons)) and 2026-10-20 ([`cold-start` without the first-run setup](#amendment-2026-10-20-cold-start-without-the-first-run-setup)). All budgets are final. Rider is no longer a reference, so budget 4 (solution) is final as it stands, and the budgets proposed at M8–M16 are gates. *Update 2026-10-14:* `benchmarks.yml` is gone; the benchmarks are `pipeline.yml`'s `benchmarks` job, run for stable releases or on a dispatch with `benchmarks` checked, with the regression gate against the last 10 runs on `master`. Hosted macOS and Linux results aren't committed yet (`benchmarks/results/` holds Windows only).
+- **Status:** accepted (2026-10-08), amended 2026-10-10 ([see below](#amendment-2026-10-10-rider-dropped-proposed-budgets-approved)) 2026-10-17 (the regression gate: [accepted values and runner-aware comparisons](#amendment-2026-10-17-accepted-values-and-runner-aware-comparisons)) 2026-10-20 ([`cold-start` without the first-run setup](#amendment-2026-10-20-cold-start-without-the-first-run-setup)) and 2026-10-27 ([latency against its own noise](#amendment-2026-10-27-latency-against-its-own-noise)). All budgets are final. Rider is no longer a reference, so budget 4 (solution) is final as it stands, and the budgets proposed at M8–M16 are gates. *Update 2026-10-14:* `benchmarks.yml` is gone; the benchmarks are `pipeline.yml`'s `benchmarks` job, run for stable releases or on a dispatch with `benchmarks` checked, with the regression gate against the last 10 runs on `master`. Hosted macOS and Linux results aren't committed yet (`benchmarks/results/` holds Windows only).
 - **Date:** 2026-10-08
 - **Deciders:** maintainer
 
@@ -142,3 +142,27 @@ The 0.4.0 release (run 39367310356) failed the regression gate on the Mac's `col
   - Until they do, the reference for `memory_idle_*` is a few MB higher than what is measured now, about 3% of it, under the +10% threshold.
   - A regression smaller than that difference would pass in that time.
 
+
+## Amendment (2026-10-27): latency against its own noise
+
+Four stable release runs between 2026-10-23 and 2026-10-27 failed the regression gate on a single metric, just past its limit, confirmation included:
+
+- 39953872764 (Linux, `binary-size` `markuphost_mb`, 4.5 MB against 4.4): a size, which doesn't vary, so a real increase. This amendment doesn't change it.
+- 39979261891 (macOS, `cold-start` `memory_idle_ws_mb`, 267.4 MB against 266.5): memory, which varies 2 to 5%, so +10% is still a signal. This amendment doesn't change it either.
+- 40423773696 (macOS, `cold-start` `startup_interactive_ms`, 1020 ms against 447).
+- 40461519855 (Windows, `self-driven` `selfdriven_typing_ms`, 53.8 ms against 48.7). In the same run, VS Code's own memory moved +10%.
+
+The two latency failures each took a re-run or an accept pull request to release.
+
+- **The cause is the runner, not the releases.** Across the stored results of the master runs (2026-10-16 to 2026-10-27), each metric's p50 varies between runs of the same code on the same runner CPU model by this much (coefficient of variation):
+  - latency: 11 to 27% (macOS cold start 27%, macOS highlighting 20 to 23%, Linux startup 18%, Windows typing 11%);
+  - memory: 2 to 5%; sizes don't vary.
+
+  Replayed over 178 same-CPU comparisons, the fixed +10% put 25 runs over the limit with nothing changed. `cold-start`'s warm p50 was also the lower of only two launches (`--runs 3`, the first launch apart).
+- **The decision (the maintainer, 2026-10-27):**
+  - **A noise band for latency.** p50 and p99 fail only over their threshold (+10%, +20%) *and* over the median of the runs on the same CPU plus 3 σ of those runs (σ = 1.4826 × their median absolute deviation, which one outlier night doesn't move; `latencyNoiseSigmas` in `budgets.json`). A quiet metric keeps its +10%; a noisy one gets the band its own runs show. The gate's table names the band when it is the wider limit.
+  - **Latency fails from 5 runs on the same CPU** (`minComparableLatencyRuns`), enough to measure its spread. With 3 or 4, an increase warns. Memory still fails from 3 (`minComparableRuns`), and binary size is unchanged.
+  - **`cold-start` takes 6 launches on CI** (the p50 of 5 warm ones); `editor-100k`, `self-driven` and `binary-size` keep 3.
+  - The table shows the confirmation run's value next to the first run's.
+- **Replayed** over all 304 stored latency comparisons, the new rule fails none (7 warnings with fewer than 5 runs on the CPU), before any confirmation run.
+- **What it costs.** A regression smaller than a metric's own noise passes on hosted runners. On the macOS M1 runners, cold start's band from the 10 runs before 0.8.0 is about +94% (median 740 ms, σ 232 ms): only a near doubling fails there until steadier runs replace those in the window. The 6-launch p50s should spread much less, and the band is recomputed from the latest 10 runs. Latency smaller than the noise is the reference machine's to catch (*Enforcement in CI*, item 1).
