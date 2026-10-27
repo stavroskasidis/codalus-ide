@@ -201,7 +201,10 @@ public sealed class EntityFrameworkIntegrationTests : IAsyncLifetime
         var json = EntityFrameworkJsonContext.Default;
         var running = _solutions.RequestAsync(EfMethods.ContextInfo, new EfTarget(Blogging, Blogging, "Blogging.Data.BloggingContext"), json.EfTarget, json.EfContextInfoResult, CancellationToken.None);
         int[] ef = [];
-        await WaitUntilAsync(() => (ef = [.. Codalus.Platform.ProcessTree.Children(host).Where(c => !before.Contains(c))]).Length > 0 || running.IsCompleted);
+        // The host queues the command's line for the shell and starts it at once, so its process can show before the
+        // line reaches the channel (Windows CI, run 40579144922): both are waited for.
+        await WaitUntilAsync(() => ((ef = [.. Codalus.Platform.ProcessTree.Children(host).Where(c => !before.Contains(c))]).Length > 0
+            && _ef.Channel.GetText().Contains("dbcontext info", StringComparison.Ordinal)) || running.IsCompleted);
         Assert.False(running.IsCompleted, "dotnet ef finished before the solution closed.");
         Assert.Contains("dbcontext info", _ef.Channel.GetText(), StringComparison.Ordinal);
 
