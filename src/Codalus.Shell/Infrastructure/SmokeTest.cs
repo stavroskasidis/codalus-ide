@@ -1919,7 +1919,26 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(form.Error is null && File.Exists(Path.Combine(target, "Blogging", "Inventory", "Product.cs")), "the inventory database is reverse engineered: " + form.Error + "\n" + Log());
         shell.Layout.CloseDocument(model);
         shell.Layout.CloseDocument(scaffold);
+
+        // While it shows, the window lists the contexts of each solution opened, and their migrations, building the
+        // startup project for them: left open, it built Shop as soon as web.scaffolding opened it, and that step's own
+        // build then found a build running and didn't run (the Windows smoke run 40442812385).
+        await WaitAsync(() => !ef.IsBusy && !shell.Builds.IsBuilding, () => $"the Entity Framework window is done ({ef.Busy ?? "a build is running"})", 300).ConfigureAwait(true);
+        shell.Layout.CloseToolWindow(ViewModels.EntityFrameworkViewModel.ToolWindowId);
     }
+
+    /// <summary>
+    /// Why <see cref="ShellHost.BuildAsync"/> returned false when the Build output doesn't say: a build of something
+    /// else it found running (it doesn't build then), the status bar, the build that finished last, and the output.
+    /// </summary>
+    private string BuildProblem(long? lastBuildBefore) =>
+        (shell.Builds.Current is { } running ? $"a build was running: {running.Target} of {(running.Project is { } p ? Path.GetFileName(p) : "the solution")}; " : string.Empty)
+        + $"status: {shell.StatusBar.DisplayMessage}; "
+        + (shell.Builds.LastBuild is { } last && last.Number != lastBuildBefore
+            ? $"the last build: {last.Request.Target} of {(last.Request.Project is { } q ? Path.GetFileName(q) : "the solution")}, {(last.Result.Canceled ? "canceled" : last.Result.Succeeded ? "succeeded" : "failed")} with {last.Result.Errors} error(s)"
+            : "no build finished")
+        + (shell.Workbench.Notifications.Items.Count > 0 ? "; notifications: " + string.Join(" | ", shell.Workbench.Notifications.Items.Select(n => n.Message)) : string.Empty)
+        + ":\n" + Tail(shell.Builds.Channel.GetText(), 3000);
 
     /// <summary>
     /// Scaffolding and service references (M15c, ADR 0041) on samples/Scaffolding: an API controller through the
@@ -1957,7 +1976,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // The project restored and built first, as a developer's would be: the generator then only builds incrementally.
         var shop = Path.Combine(target, "Shop", "Shop.csproj");
-        Check(await Bounded(shell.BuildAsync(Projects.Protocol.BuildTargets.Build, shop), "the Shop project's restore and build", 420).ConfigureAwait(true), "Shop builds:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+        var lastBuild = shell.Builds.LastBuild?.Number;
+        Check(await Bounded(shell.BuildAsync(Projects.Protocol.BuildTargets.Build, shop), "the Shop project's restore and build", 420).ConfigureAwait(true), "Shop builds (" + BuildProblem(lastBuild) + ")");
 
         var form = shell.OpenAddScaffoldedItem(shop, Path.Combine(target, "Shop", "Controllers"));
         Check(form is not null, "Add New Scaffolded Item opens");
