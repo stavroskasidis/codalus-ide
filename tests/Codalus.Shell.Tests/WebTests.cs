@@ -79,7 +79,7 @@ public sealed class WebTests
         // Generate Request appends to the project's .http file.
         var todo = f.Shell.Endpoints.Endpoints.Single(e => e.Route == "/api/todos/{id:int}");
         await f.Shell.GenerateRequestAsync(todo);
-        await ShellFixture.PumpUntil(() => File.ReadAllText(http).Contains("GET {{WebApi_HostAddress}}/api/todos/{{id}}", StringComparison.Ordinal));
+        await ShellFixture.PumpUntil(() => ShellFixture.ReadText(http).Contains("GET {{WebApi_HostAddress}}/api/todos/{{id}}", StringComparison.Ordinal));
         Assert.Contains("@WebApi_HostAddress", File.ReadAllText(http), StringComparison.Ordinal);
         var post = f.Shell.Endpoints.Endpoints.Single(e => e is { HttpMethod: "POST", Route: "/api/todos" });
         Assert.Equal("POST {{h}}/api/todos\nAccept: application/json\nContent-Type: application/json\n\n{\n}\n", ShellHost.GeneratedRequest(post.HttpMethod, "{{h}}", post.Route));

@@ -136,8 +136,14 @@ switch (command)
                 var second = Gates.Compare(policy, [confirmation, .. latest.Where(r => r.Target != targetName || r.Scenario != scenario)], baseline, accepted)
                     .Where(s => s.Target == targetName && s.Scenario == scenario)
                     .ToList();
+                // The table shows both values: the first run's in its column, the confirmation's in the rule.
                 findings = [.. findings.Select(f => f.Target == targetName && f.Scenario == scenario && f.Failed
-                    ? f with { Failed = second.Any(s => s.Os == f.Os && s.Metric == f.Metric && s.Stat == f.Stat && s.Failed), Rule = f.Rule + " (confirmation run)" }
+                    && second.FirstOrDefault(s => s.Os == f.Os && s.Metric == f.Metric && s.Stat == f.Stat) is var again
+                    ? f with
+                    {
+                        Failed = again is { Failed: true },
+                        Rule = f.Rule + (again is null ? " (confirmation run: not measured)" : string.Create(System.Globalization.CultureInfo.InvariantCulture, $" (confirmation run: {again.Value:F1})")),
+                    }
                     : f)];
             }
         }

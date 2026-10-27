@@ -50,6 +50,20 @@ public sealed record RegressionPolicy
     public int MinComparableRuns { get; init; } = 3;
 
     /// <summary>
+    /// Latency fails only against at least this many runs on the same runner CPU, enough to measure its spread (ADR 0002,
+    /// amendment 2026-10-27); with fewer, it warns. Memory keeps <see cref="MinComparableRuns"/>.
+    /// </summary>
+    public int MinComparableLatencyRuns { get; init; } = 5;
+
+    /// <summary>
+    /// Latency fails only over the median of the runs on the same CPU by more than this many of their standard deviations
+    /// (1.4826 × the median absolute deviation, which a single outlier doesn't move), as well as over its threshold
+    /// (ADR 0002, amendment 2026-10-27): a hosted runner's latency varies 11 to 27% between runs of the same code on
+    /// the same CPU, so a fixed +10% failed on noise. 0 turns the band off.
+    /// </summary>
+    public double LatencyNoiseSigmas { get; init; } = 3;
+
+    /// <summary>
     /// Whether latency normalized by the reference application's time (fewer than <see cref="MinComparableRuns"/> runs on
     /// the same CPU) fails from <see cref="MinComparableRuns"/> such runs. Off: on CI the ratio of Codalus's startup to
     /// VS Code's ranges from 0.13 to 0.19 between runs, wider than the thresholds, so a normalized comparison warns.
@@ -156,6 +170,9 @@ internal static class Gates
     /// only with <see cref="RegressionPolicy.FailNormalized"/>), and memory, which has nothing to normalize by (the GC
     /// sizes its generation-0 budget from the L3 cache, which VS Code's memory doesn't follow), compares with the runs
     /// there are.</item>
+    /// <item>Latency fails only from <see cref="RegressionPolicy.MinComparableLatencyRuns"/> runs on the same CPU, and
+    /// only over its threshold and <see cref="RegressionPolicy.LatencyNoiseSigmas"/> standard deviations of those runs
+    /// (amendment 2026-10-27): a hosted runner's latency varies more between runs than the threshold.</item>
     /// <item>The reference application's own numbers measure the runner and its latest release: reported, never failed.</item>
     /// </list>
     /// </summary>
@@ -199,6 +216,7 @@ internal static class Gates
                     double reference;
                     bool gating;
                     string rule;
+                    var band = 0.0; // latency's noise band over the reference, when wider than its threshold
                     if (kind == MetricKind.Size)
                     {
                         var previous = history.Take(policy.BaselineRuns).Select(h => h.Value).ToList();
@@ -228,10 +246,20 @@ internal static class Gates
                                 .Take(policy.BaselineRuns)
                                 .Select(h => h.Value / h.Reference!.Value)
                                 .ToList();
+                        var needed = kind == MetricKind.Latency ? Math.Max(policy.MinComparableRuns, policy.MinComparableLatencyRuns) : policy.MinComparableRuns;
                         if (sameCpu.Count >= policy.MinComparableRuns)
                         {
-                            (reference, gating) = (Median(sameCpu), !isReference);
+                            (reference, gating) = (Median(sameCpu), !isReference && sameCpu.Count >= needed);
                             rule = Describe(threshold, $"the median of {sameCpu.Count} run(s) on this CPU ({reference:F1})");
+                            if (kind == MetricKind.Latency && policy.LatencyNoiseSigmas > 0)
+                            {
+                                var sigma = 1.4826 * Median([.. sameCpu.Select(v => Math.Abs(v - reference))]);
+                                band = policy.LatencyNoiseSigmas * sigma;
+                                if (band > reference * threshold)
+                                {
+                                    rule += string.Create(CultureInfo.InvariantCulture, $" and {policy.LatencyNoiseSigmas:0.#} σ of their spread (σ {sigma:F1}, +{band / reference:P0})");
+                                }
+                            }
                         }
                         else if (acceptedReference is not null)
                         {
@@ -262,11 +290,11 @@ internal static class Gates
                         }
                         else if (!gating)
                         {
-                            rule += string.Create(CultureInfo.InvariantCulture, $"; fewer than {policy.MinComparableRuns} runs on this CPU: a warning only");
+                            rule += string.Create(CultureInfo.InvariantCulture, $"; fewer than {needed} runs on this CPU: a warning only");
                         }
                     }
 
-                    var limit = reference * (1 + threshold);
+                    var limit = Math.Max(reference * (1 + threshold), reference + band);
                     var over = value > limit && value - reference > floor;
                     findings.Add(new GateFinding(result.Machine.Os, result.Target, result.Scenario, metric, stat, value, limit, over && gating, rule)
                     {

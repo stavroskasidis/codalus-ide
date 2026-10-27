@@ -21,18 +21,21 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
     private readonly SemaphoreSlim _gate = new(1, 1);
     private VsTestConsoleWrapper? _wrapper;
     private string? _wrapperPath;
+    private bool _connected;
 
     /// <summary>
     /// Discovers the tests of <paramref name="targets"/> (one source per target). Sources of different frameworks go in
-    /// separate requests: vstest.console aborts a design-mode request that mixes them.
+    /// separate requests: vstest.console aborts a design-mode request that mixes them. <c>Complete</c> is false when a
+    /// request was aborted: the tests are then only those found before it stopped, often none.
     /// </summary>
-    public async Task<IReadOnlyList<RunnerTest>> DiscoverAsync(string sdkPath, IReadOnlyList<TestTarget> targets, RunOptions options, CancellationToken cancellationToken)
+    public async Task<(IReadOnlyList<RunnerTest> Tests, bool Complete)> DiscoverAsync(string sdkPath, IReadOnlyList<TestTarget> targets, RunOptions options, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var wrapper = Wrapper(sdkPath);
             var results = new List<RunnerTest>();
+            var complete = true;
             foreach (var group in targets.GroupBy(t => t.Framework ?? string.Empty))
             {
                 var handler = new DiscoveryHandler(log);
@@ -45,11 +48,12 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
 
                 // The call returns once the request is sent; the results come through the handler.
                 await handler.Completed.WaitAsync(cancellationToken).ConfigureAwait(false);
+                complete &= !handler.Aborted;
                 var bySource = group.ToDictionary(t => t.AssemblyPath, StringComparer.OrdinalIgnoreCase);
                 results.AddRange(handler.Tests.Select(c => bySource.TryGetValue(c.Source, out var target) ? ToRunnerTest(c, target) : null).OfType<RunnerTest>());
             }
 
-            return results;
+            return (results, complete);
         }
         finally
         {
@@ -143,25 +147,32 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
     private VsTestConsoleWrapper Wrapper(string sdkPath)
     {
         var path = Path.Combine(sdkPath, "vstest.console.dll");
-        if (_wrapper is not null && string.Equals(_wrapperPath, path, StringComparison.OrdinalIgnoreCase))
+        if (_wrapper is null || !string.Equals(_wrapperPath, path, StringComparison.OrdinalIgnoreCase))
         {
-            return _wrapper;
-        }
+            if (!File.Exists(path))
+            {
+                throw new InvalidOperationException($"vstest.console was not found in the SDK ({path}).");
+            }
 
-        if (!File.Exists(path))
-        {
-            throw new InvalidOperationException($"vstest.console was not found in the SDK ({path}).");
+            _wrapper?.EndSession();
+            _wrapper = new VsTestConsoleWrapper(path, new ConsoleParameters { InheritEnvironmentVariables = true });
+            _wrapperPath = path;
+            _connected = false;
+            _wrapper.StartSession();
         }
-
-        _wrapper?.EndSession();
-        _wrapper = new VsTestConsoleWrapper(path, new ConsoleParameters { InheritEnvironmentVariables = true });
-        _wrapperPath = path;
-        _wrapper.StartSession();
 
         // StartSession only starts vstest.console; the async requests don't wait for it to connect and abort ("socket
-        // is null") when sent too early. The synchronous calls do wait.
-        _wrapper.InitializeExtensions([]);
-        log($"VSTest: {path}");
+        // is null") when sent too early. The synchronous calls do wait, but only VSTEST_CONNECTION_TIMEOUT: when that
+        // ran out on a loaded machine the wrapper was kept anyway, and every request sent to it before vstest.console
+        // connected aborted (run 39979261891). So until one wait has succeeded, each use waits again, for the same
+        // vstest.console (or a new one if it exited).
+        if (!_connected)
+        {
+            _wrapper.InitializeExtensions([]);
+            _connected = true;
+            log($"VSTest: {path}");
+        }
+
         return _wrapper;
     }
 
@@ -320,6 +331,8 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
 
         public Task Completed => _completed.Task;
 
+        public bool Aborted { get; private set; }
+
         public IReadOnlyList<TestCase> Tests
         {
             get
@@ -344,6 +357,7 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
             HandleDiscoveredTests(lastChunk);
             if (discoveryCompleteEventArgs.IsAborted)
             {
+                Aborted = true;
                 log("VSTest discovery was aborted.");
             }
 

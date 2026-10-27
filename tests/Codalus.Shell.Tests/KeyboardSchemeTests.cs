@@ -68,7 +68,7 @@ public sealed class KeyboardSchemeTests
         f.Press(Key.X, Ctrl);
         Assert.Contains("Waiting for the next key", f.Shell.StatusBar.Message, StringComparison.Ordinal);
         f.Press(Key.S, Ctrl);
-        await ShellFixture.PumpUntil(() => File.ReadAllText(path) == "alpha beta\nast\n");
+        await ShellFixture.PumpUntil(() => ShellFixture.ReadText(path) == "alpha beta\nast\n");
         Assert.Equal("editor.action.find", CommandFor(f, "ctrl+s"));
         Assert.Equal("workbench.showCommandPalette", CommandFor(f, "alt+x"));
         Assert.Equal("ctrl+x ctrl+s", f.Shell.Workbench.Keybindings.GetBinding("file.save")?.ToString()); // what the menus show

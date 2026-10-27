@@ -145,6 +145,7 @@ public sealed class GitBranchPickerViewModel : ObservableObject
     private string _bannerActionIcon = "window-new";
     private Func<Task>? _bannerRun;
     private int _loadVersion;
+    private Task? _latestLoad;
     private string? _loadedFor;
     private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
     private IReadOnlyList<RepositoryBranches>? _repositories;
@@ -376,8 +377,25 @@ public sealed class GitBranchPickerViewModel : ObservableObject
         }
     }
 
-    /// <summary>Reads the branches again (on each open, after Update and Try Again); the cached list stays shown meanwhile.</summary>
+    /// <summary>
+    /// Reads the branches again (on each open, after Update and Try Again); the cached list stays shown meanwhile. When a
+    /// newer load replaces this one's result (Update's reload, the repositories' refresh after git changed .git), it
+    /// returns once that one has landed: the list it leaves was read after the call, never the one before it (a load
+    /// returned with the rows still showing main as current after a switch, macOS runs 40538692111, 40547948961).
+    /// </summary>
     public async Task LoadAsync()
+    {
+        var load = LoadOnceAsync();
+        _latestLoad = load;
+        await load.ConfigureAwait(true);
+        while (_latestLoad is { } newer && newer != load)
+        {
+            load = newer;
+            await load.ConfigureAwait(true);
+        }
+    }
+
+    private async Task LoadOnceAsync()
     {
         var version = ++_loadVersion;
         if (_loadedFor != _git.Root)

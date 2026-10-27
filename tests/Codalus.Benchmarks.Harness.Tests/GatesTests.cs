@@ -40,6 +40,8 @@ public class GatesTests
         Assert.Contains(budgets.Budgets, b => b is { Target: "shell", Metric: "memory_idle_private_mb", Max: 250 });
         Assert.Equal(0.05, budgets.Regression.Size);
         Assert.Equal(3, budgets.Regression.MinComparableRuns);
+        Assert.Equal(5, budgets.Regression.MinComparableLatencyRuns);
+        Assert.Equal(3, budgets.Regression.LatencyNoiseSigmas);
         Assert.False(budgets.Regression.FailNormalized);
         Assert.Equal("startup_selfreported_ms", budgets.Regression.ReferenceMetric);
     }
@@ -63,10 +65,13 @@ public class GatesTests
             Result("cold-start", 1, ("startup_interactive_ms", [400]), ("memory_idle_private_mb", [100])),
             Result("cold-start", 2, ("startup_interactive_ms", [420]), ("memory_idle_private_mb", [102])),
             Result("cold-start", 3, ("startup_interactive_ms", [900]), ("memory_idle_private_mb", [101])), // an outlier night
+            Result("cold-start", 4, ("startup_interactive_ms", [415]), ("memory_idle_private_mb", [101])),
+            Result("cold-start", 5, ("startup_interactive_ms", [425]), ("memory_idle_private_mb", [100])),
         };
 
-        // 470 ms vs. a 420 ms median: +11.9% and 50 ms over the floor. Memory: +4%, within the gate.
-        var regressed = Gates.Compare(new RegressionPolicy(), [Result("cold-start", 4, ("startup_interactive_ms", [470]), ("memory_idle_private_mb", [105]))], baseline);
+        // 470 ms vs. a 420 ms median: +11.9% and 50 ms over the floor; the outlier night doesn't widen the noise band
+        // (3 σ of the runs' median deviation, 5 ms, is 15 ms). Memory: +4%, within the gate.
+        var regressed = Gates.Compare(new RegressionPolicy(), [Result("cold-start", 6, ("startup_interactive_ms", [470]), ("memory_idle_private_mb", [105]))], baseline);
         Assert.True(regressed.Single(f => f.Metric == "startup_interactive_ms").Failed);
         Assert.False(regressed.Single(f => f.Metric == "memory_idle_private_mb").Failed);
 
@@ -167,20 +172,62 @@ public class GatesTests
             Result("shell", "cold-start", 1, fast, "1", ("startup_interactive_ms", [220]), ("memory_idle_private_mb", [200])),
             Result("shell", "cold-start", 2, fast, "2", ("startup_interactive_ms", [225]), ("memory_idle_private_mb", [201])),
             Result("shell", "cold-start", 3, fast, "3", ("startup_interactive_ms", [215]), ("memory_idle_private_mb", [199])),
-            Result("shell", "cold-start", 4, slow, "4", ("startup_interactive_ms", [320]), ("memory_idle_private_mb", [240])),
-            Result("shell", "cold-start", 5, slow, "5", ("startup_interactive_ms", [330]), ("memory_idle_private_mb", [242])),
-            Result("shell", "cold-start", 6, slow, "6", ("startup_interactive_ms", [325]), ("memory_idle_private_mb", [238])),
+            Result("shell", "cold-start", 4, fast, "4", ("startup_interactive_ms", [222]), ("memory_idle_private_mb", [200])),
+            Result("shell", "cold-start", 5, fast, "5", ("startup_interactive_ms", [218]), ("memory_idle_private_mb", [201])),
+            Result("shell", "cold-start", 6, slow, "6", ("startup_interactive_ms", [320]), ("memory_idle_private_mb", [240])),
+            Result("shell", "cold-start", 7, slow, "7", ("startup_interactive_ms", [330]), ("memory_idle_private_mb", [242])),
+            Result("shell", "cold-start", 8, slow, "8", ("startup_interactive_ms", [325]), ("memory_idle_private_mb", [238])),
+            Result("shell", "cold-start", 9, slow, "9", ("startup_interactive_ms", [322]), ("memory_idle_private_mb", [239])),
+            Result("shell", "cold-start", 10, slow, "10", ("startup_interactive_ms", [328]), ("memory_idle_private_mb", [241])),
         };
 
-        // The slow runner's 330 ms is no regression against the slow runs (the median of all six would fail it).
-        var onSlow = Gates.Compare(new RegressionPolicy(), [Result("shell", "cold-start", 7, slow, null, ("startup_interactive_ms", [330]), ("memory_idle_private_mb", [240]))], baseline);
+        // The slow runner's 330 ms is no regression against the slow runs (the median of all ten would fail it).
+        var onSlow = Gates.Compare(new RegressionPolicy(), [Result("shell", "cold-start", 11, slow, null, ("startup_interactive_ms", [330]), ("memory_idle_private_mb", [240]))], baseline);
         Assert.All(onSlow, f => Assert.False(f.Failed || f.Warning));
-        Assert.Contains("median of 3 run(s) on this CPU (325.0)", onSlow.Single(f => f.Metric == "startup_interactive_ms").Rule, StringComparison.Ordinal);
+        Assert.Contains("median of 5 run(s) on this CPU (325.0)", onSlow.Single(f => f.Metric == "startup_interactive_ms").Rule, StringComparison.Ordinal);
 
         // On the fast runner, 270 ms is 23% over its own runs and fails; memory too. Windows pads and capitalizes CPU names.
         var onFast = Gates.Compare(new RegressionPolicy(),
-            [Result("shell", "cold-start", 7, "  AMD EPYC 9V45 96-CORE PROCESSOR   ", null, ("startup_interactive_ms", [270]), ("memory_idle_private_mb", [230]))], baseline);
+            [Result("shell", "cold-start", 11, "  AMD EPYC 9V45 96-CORE PROCESSOR   ", null, ("startup_interactive_ms", [270]), ("memory_idle_private_mb", [230]))], baseline);
         Assert.All(onFast, f => Assert.True(f.Failed));
+    }
+
+    /// <summary>
+    /// ADR 0002, amendment 2026-10-27: latency fails only over its threshold and 3 σ of the same CPU's runs, from 5 of them.
+    /// The runs here are the Mac's cold start on CI (Apple M1 (Virtual), the 10 master runs from 2026-10-18 to 2026-10-26):
+    /// 1020 ms failed 0.8.0's release run (40423773696) at +10%, inside the runner's own spread.
+    /// </summary>
+    [Fact]
+    public void Latency_fails_only_outside_the_spread_of_its_runs_and_from_five_of_them()
+    {
+        double[] mac = [633, 912, 891, 698, 754, 1030, 727, 401, 407, 903];
+        var baseline = mac.Select((v, i) => Result("shell", "cold-start", i + 1, "Apple M1 (Virtual)", $"{i + 1}", ("startup_interactive_ms", [v]))).ToList();
+        GateFinding Gate(double value, int runs = 10, RegressionPolicy? policy = null) =>
+            Assert.Single(Gates.Compare(policy ?? new RegressionPolicy(), [Result("shell", "cold-start", 20, "Apple M1 (Virtual)", null, ("startup_interactive_ms", [value]))], baseline.TakeLast(runs).ToList()));
+
+        // The median is 740.5 ms and σ (1.4826 × the median deviation, 156.5) 232 ms: the limit is 740.5 + 3 σ, not 814.6.
+        var noise = Gate(1020);
+        Assert.False(noise.Failed);
+        Assert.Equal(1437, noise.Limit, 0);
+        Assert.Contains("3 σ of their spread", noise.Rule, StringComparison.Ordinal);
+        Assert.True(Gate(1500).Failed);
+
+        // The fixed threshold alone (the band off) failed it.
+        Assert.True(Gate(1020, policy: new RegressionPolicy { LatencyNoiseSigmas = 0 }).Failed);
+
+        // A quiet metric keeps its +10%: σ is under it.
+        var quiet = Enumerable.Range(1, 6).Select(i => Result("shell", "self-driven", i, "EPYC", $"{i}", ("selfdriven_typing_ms", [44 + (i % 2)]))).ToList();
+        var typing = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("shell", "self-driven", 9, "EPYC", null, ("selfdriven_typing_ms", [54]))], quiet), f => f.Stat == "p50");
+        Assert.True(typing.Failed);
+        Assert.DoesNotContain("σ", typing.Rule, StringComparison.Ordinal);
+
+        // With 3 or 4 runs on the CPU the spread isn't known yet: latency over the limit warns; memory still fails from 3.
+        var early = Gate(3000, runs: 4);
+        Assert.False(early.Failed);
+        Assert.True(early.Warning);
+        Assert.Contains("fewer than 5 runs on this CPU", early.Rule, StringComparison.Ordinal);
+        var memory = Enumerable.Range(1, 3).Select(i => Result("shell", "cold-start", i, "EPYC", $"{i}", ("memory_idle_ws_mb", [240]))).ToList();
+        Assert.True(Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("shell", "cold-start", 9, "EPYC", null, ("memory_idle_ws_mb", [280]))], memory)).Failed);
     }
 
     [Fact]

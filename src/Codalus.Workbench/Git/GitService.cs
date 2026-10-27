@@ -74,10 +74,10 @@ public sealed partial class GitService : IDisposable
     }
 
     /// <summary>
-    /// Whether git failed only because a lock file it creates (<c>index.lock</c>, a ref's) exists: on Windows the
-    /// antivirus or the search indexer can hold the last command's lock open for a moment after git deleted it, so the
-    /// next write finds it there (the Windows command sweep's Stage File, right after other git commands). Such a command
-    /// changed nothing, so a write tries again a few times before it reports the lock.
+    /// Whether git failed only because a lock file it creates (<c>index.lock</c>, a ref's) exists: another git client
+    /// (a terminal, another editor) may be writing for a moment, and on Windows the antivirus or the search indexer can
+    /// hold the last command's lock open after git deleted it. Codalus' own reads take no lock (<see cref="Start"/>).
+    /// Such a command changed nothing, so a write tries again a few times before it reports the lock.
     /// </summary>
     internal static bool IsLockBusy(int exitCode, string error) => exitCode != 0 && error.Contains(".lock': File exists", StringComparison.Ordinal);
 
@@ -199,7 +199,15 @@ public sealed partial class GitService : IDisposable
             StandardOutputEncoding = new UTF8Encoding(false),
             StandardErrorEncoding = new UTF8Encoding(false),
         };
-        foreach (var argument in (string[])["-c", "core.quotepath=false", "-c", "color.ui=false", .. arguments])
+        // A read takes no lock. GIT_OPTIONAL_LOCKS keeps status from writing the index, but not a working-tree diff: git
+        // diff refreshes the index's stat data under index.lock whenever a file's timestamps changed but not its content
+        // (diff.autoRefreshIndex), so a diff document, which reloads on every status change, could hold the lock while
+        // Stage Active File ran git add (the Windows command sweep's "Unable to create '.../index.lock': File exists", run
+        // 39937763661). Without the refresh, the diff reads such a file's content and still shows no change.
+        string[] options = readOnly
+            ? ["-c", "core.quotepath=false", "-c", "color.ui=false", "-c", "diff.autoRefreshIndex=false"]
+            : ["-c", "core.quotepath=false", "-c", "color.ui=false"];
+        foreach (var argument in (string[])[.. options, .. arguments])
         {
             start.ArgumentList.Add(argument);
         }

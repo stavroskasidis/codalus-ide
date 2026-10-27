@@ -99,7 +99,13 @@ public class EditorTests
         // Signature help after "(" and ",".
         MoveCaret(program, "Geometry.Scale(circle, 3)", "Geometry.Scale(circle,".Length);
         program.ShowSignatureHelp();
-        await ShellFixture.PumpUntil(() => program.SignatureWindow is not null);
+
+        // Timed out once on Windows CI (job 121558777866) with nothing to go on: a request answered with nothing, or a
+        // popup that couldn't show or closed at once (the editor hidden or unfocused) all look the same here.
+        await ShellFixture.PumpUntil(() => program.SignatureWindow is not null, describe: () =>
+            $"client {f.Shell.Languages.RunningClient("csharp") is not null}, editor visible {program.Editor.TextArea.TextView.IsEffectivelyVisible}, focused {program.Editor.TextArea.IsKeyboardFocusWithin}, " +
+            $"active {f.Shell.Layout.ActiveDocument?.Title}, text near caret '{program.Model.Text.GetText(Math.Max(0, program.Editor.CaretOffset - 20), 20)}'. Log:\n" +
+            f.Shell.Workbench.Output.GetOrCreate("codalus.languages", "Language Services").GetText());
         Assert.Equal(2, program.SignatureWindow!.Count);
 
         // F12 on Circle opens Shapes.cs at the class; Navigate Backward returns.

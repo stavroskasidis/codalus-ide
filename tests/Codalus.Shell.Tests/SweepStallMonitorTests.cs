@@ -61,10 +61,22 @@ public sealed class SweepStallMonitorTests
             stall.Reset();
 
             // Posted from another thread, as a workbench event's handler is: a job of the dispatcher's queue.
-            await Task.Run(() => Ui.Post(() => Thread.Sleep(700)));
+            var clock = Stopwatch.StartNew();
+            var ui = Environment.CurrentManagedThreadId;
+            string? ran = null;
+            await Task.Run(() => Ui.Post(() =>
+            {
+                var started = clock.ElapsedMilliseconds;
+                Thread.Sleep(700);
+                ran = $"from {started} to {clock.ElapsedMilliseconds} ms on thread {Environment.CurrentManagedThreadId} (the UI thread is {ui}, UI access {Dispatcher.UIThread.CheckAccess()})";
+            }));
+            var posted = clock.ElapsedMilliseconds;
             await PumpForAsync(TimeSpan.FromMilliseconds(1000));
 
-            Assert.True(stall.MaxMilliseconds >= 400, $"The UI thread was blocked for 700 ms, but the monitor saw {stall.MaxMilliseconds:0} ms.");
+            // Seen 0 ms once on macOS CI (job 122325528410), in 2.7 s where the test takes 1.2 s; it didn't happen again
+            // locally under load: the message says where the job ran and whether the monitor answered any probe.
+            Assert.True(stall.MaxMilliseconds >= 400,
+                $"The UI thread was blocked for 700 ms, but the monitor saw {stall.MaxMilliseconds:0} ms in {stall.Probes} probe(s). Posted after {posted} ms; the job ran {ran ?? "never"}.");
             Assert.StartsWith("the job posted at SweepStallMonitorTests.cs:", stall.JobOfMax);
         }
         finally

@@ -7,7 +7,7 @@ namespace Codalus.Projects.Tests;
 /// wrote them project by project (minutes of it with a package source unreachable off a VPN) evaluated and built each
 /// one again as it came, restarting the C# analysis every time.
 /// </summary>
-public sealed class ProjectWatcherTests : IDisposable
+public sealed class ProjectWatcherTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-watcher-" + Guid.NewGuid().ToString("N"));
     private readonly List<ProjectWatcher.Changes> _reported = [];
@@ -28,7 +28,22 @@ public sealed class ProjectWatcherTests : IDisposable
 
             return Task.CompletedTask;
         });
+    }
+
+    public async ValueTask InitializeAsync()
+    {
         _watcher.Watch(_root, null, [_project]);
+
+        // FSEvents can still deliver the fixture's own writes from just before the watch started: they were reported
+        // while the test held the restore outputs (macOS CI, jobs 121931344903 and 122003721208). Events come in
+        // order, so once a folder created now is reported those have been too, and the tests start from there. (A
+        // folder, as its creation is one event; a file's write can come as a second one, after the clear.)
+        Directory.CreateDirectory(Path.Combine(_root, "App", "Fence"));
+        await WaitUntilAsync(() => Reported().Any(c => c.Directories.Contains(Path.Combine(_root, "App"))));
+        lock (_reported)
+        {
+            _reported.Clear();
+        }
     }
 
     private string Obj(string name) => Path.Combine(_root, "App", "obj", name);
@@ -99,7 +114,7 @@ public sealed class ProjectWatcherTests : IDisposable
         Assert.Empty(_watcher.TakeRestoreOutputs().MSBuildFiles);
     }
 
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
         _watcher.Dispose();
         try
@@ -112,5 +127,7 @@ public sealed class ProjectWatcherTests : IDisposable
         catch (UnauthorizedAccessException)
         {
         }
+
+        return ValueTask.CompletedTask;
     }
 }

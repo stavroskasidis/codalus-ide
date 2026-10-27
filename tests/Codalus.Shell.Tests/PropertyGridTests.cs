@@ -272,6 +272,40 @@ public sealed class PropertyGridTests
         Assert.Contains("Int32", rejected.Error, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// OK in the invalid-value dialog goes back to the cell with the typed text even when the grid was refreshed while
+    /// the dialog was open: the refresh put the value back in the text box (the Windows packages' smoke run 40375629247).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task OK_after_a_refresh_goes_back_to_the_cell_with_the_typed_text()
+    {
+        PropertyRowViewModel X() => new("X", "96", PropertyRowKind.Text, string.Empty, text => Task.FromResult<string?>(int.TryParse(text, out _) ? null : $"'{text}' is not a valid value for Int32.")) { Path = "Location.X" };
+        var grid = new PropertyGridViewModel();
+        var dialogs = new DialogViewModel();
+        Task? answered = null;
+        grid.ValueRejected += (_, e) => answered = PropertiesWindowViewModel.ShowRejectedAsync(dialogs, grid, e);
+        grid.Show([new("Layout", [X()])], alphabetical: false);
+        var x = grid.Find("Location.X")!;
+        grid.SelectedRow = x;
+        x.Text = "abc";
+        await ShellFixture.PumpUntil(() => dialogs.IsOpen);
+
+        grid.Show([new("Layout", [X()])], alphabetical: false);
+        Assert.Equal("96", x.Text);
+        dialogs.Accept();
+        await answered!;
+        Assert.Same(x, grid.Find("Location.X"));
+        Assert.Equal(("abc", "96", "Location.X"), (x.Text, x.Value, grid.SelectedRow?.Path));
+
+        // Cancel still puts the value back.
+        x.Text = "-x";
+        await ShellFixture.PumpUntil(() => dialogs.IsOpen);
+        grid.Show([new("Layout", [X()])], alphabetical: false);
+        dialogs.Cancel();
+        await answered!;
+        Assert.Equal("96", x.Text);
+    }
+
     [AvaloniaFact]
     public void The_color_tabs_alignment_text_keys_and_dates_follow_the_classic_editors()
     {
