@@ -4179,6 +4179,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 // What the debugger saw says why a program didn't stop (debug.compound's second program, linux-arm64).
                 Console.Out.WriteLine($"  --- Debug (the end; the session is {shell.Debugger.State}) ---");
                 Console.Out.WriteLine(Tail(shell.DebugLog.GetText(), 4000));
+                // And what it waits for: linux-arm64's debug.depth (run 40241261003) waited 300 s for Run to Cursor's
+                // stop with the session Running and nothing in its output to say whether netcoredbg, the program's
+                // runtime or a lost event held it.
+                Console.Out.WriteLine("  the session: " + shell.Debugger.Describe());
                 Console.Out.Flush();
                 try
                 {

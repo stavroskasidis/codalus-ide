@@ -21,6 +21,9 @@ public interface IDebugAdapter : IAsyncDisposable
     /// <summary>The adapter's own diagnostics (stderr).</summary>
     event EventHandler<string>? Log;
 
+    /// <summary>What the adapter and its program are doing, for a session that stopped making progress (empty when it can't say).</summary>
+    string Describe() => string.Empty;
+
     Task ConfigurationDoneAsync(CancellationToken cancellationToken);
 
     Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken);
