@@ -50,8 +50,9 @@
              AutomationProperties.Name="{l:T solutionExplorer.solutionExplorer}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ExplorerRowViewModel">
-          <Setter Property="Padding" Value="0,1" />
-          <Setter Property="MinHeight" Value="0" />
+          <Setter Property="Padding" Value="0" />
+          <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
+          <Setter Property="VerticalContentAlignment" Value="Center" />
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
         </Style>
         <Style Selector="ListBoxItem.dropTarget">

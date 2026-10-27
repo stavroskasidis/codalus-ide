@@ -5,6 +5,7 @@
         xmlns:core="using:Dock.Model.Core"
         xmlns:docking="using:Codalus.Shell.Docking"
         xmlns:editing="using:AvaloniaEdit.Editing"
+        xmlns:rendering="using:AvaloniaEdit.Rendering"
         xmlns:collections="using:System.Collections"
         xmlns:dmc="using:Dock.Model.Controls"
         xmlns:dockControls="using:Dock.Avalonia.Controls"
@@ -246,6 +247,27 @@
   <Style Selector="ToolPinItemControl /template/ Border">
     <Setter Property="BorderThickness" Value="{DynamicResource Shell.AutoHide.BarThickness}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.AutoHide.Bar}" />
+  </Style>
+  <!--
+    The side tabs read top to bottom on both sides, as Classic's (0.9): Dock turns them 270 degrees, which read bottom to
+    top. Turned clockwise, the tab's bottom edge is the left one, so the bar stays on the window's outer edge: the bottom
+    on the left side, the top (Shell.AutoHide.BarThickness.Right) on the right.
+  -->
+  <Style Selector="ToolPinItemControl[Orientation=Vertical] /template/ LayoutTransformControl#PART_LayoutTransformControl">
+    <Setter Property="LayoutTransform">
+      <RotateTransform Angle="90" />
+    </Setter>
+  </Style>
+  <Style Selector="ToolPinnedControl[(DockPanel.Dock)=Right] ToolPinItemControl /template/ Border">
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.AutoHide.BarThickness.Right}" />
+  </Style>
+
+  <!--
+    Links in the text views (the Output window, the Debug Console, C# Interactive) in the theme's link color: AvaloniaEdit
+    draws them in plain blue, which is hard to read on a dark editor (0.9).
+  -->
+  <Style Selector="rendering|TextView">
+    <Setter Property="LinkTextForegroundBrush" Value="{DynamicResource Shell.Link}" />
   </Style>
 
   <!-- Tool window tabs: a hover that keeps its text readable, and the selected tab's title in the link color. -->

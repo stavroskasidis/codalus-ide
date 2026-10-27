@@ -36,7 +36,7 @@
               <Style Selector="TreeViewItem" x:DataType="vm:MetricsNodeViewModel">
                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
                 <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
-                <Setter Property="MinHeight" Value="20" />
+                <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
               </Style>
               <!-- Stretch the header so the metric columns line up at the right whatever the depth. -->
               <Style Selector="TreeViewItem /template/ ContentPresenter#PART_HeaderPresenter">
