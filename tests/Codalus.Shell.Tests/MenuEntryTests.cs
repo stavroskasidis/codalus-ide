@@ -37,6 +37,8 @@ public sealed partial class MenuEntryTests
                 MenuEntry.Create("Discard Changes", "discard", keys: "Delete"),
                 MenuEntry.Submenu("Reset", "reset", MenuEntry.Create("Keep Changes", null)),
                 new MenuItem { Header = "Word Wrap", ToggleType = MenuItemToggleType.CheckBox, IsChecked = true },
+                new MenuItem { Header = "Opus 5.5", ToggleType = MenuItemToggleType.Radio, IsChecked = true }, // a picker's choice (AI Chat, M51)
+                new MenuItem { Header = "Sonnet 5.5", ToggleType = MenuItemToggleType.Radio },
             },
         };
         var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 20, Margin = new Thickness(10), VerticalAlignment = VerticalAlignment.Top };

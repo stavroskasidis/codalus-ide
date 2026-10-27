@@ -180,10 +180,11 @@ public class NarrowWindowTests
             var listed = new List<string>();
             foreach (var overflow in overflows)
             {
-                var flyout = Assert.IsType<MenuFlyout>(overflow.Flyout);
+                var flyout = Assert.IsAssignableFrom<MenuFlyout>(overflow.Flyout);
                 flyout.ShowAt(overflow);
                 ShellFixture.Pump();
-                var entries = flyout.Items.OfType<MenuItem>().Select(i => (string)i.Header!).ToList();
+                // In the open menu, laid out: items added as a menu opened never reached it (0.8.0's release candidate).
+                var entries = flyout.Items.OfType<MenuItem>().Where(i => i.IsAttachedToVisualTree() && i.Bounds.Width > 0).Select(i => (string)i.Header!).ToList();
                 flyout.Hide();
                 Assert.NotEmpty(entries);
 

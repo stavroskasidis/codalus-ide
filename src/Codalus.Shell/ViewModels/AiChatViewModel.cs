@@ -129,6 +129,8 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private readonly HashSet<AiChatTurn> _known = [];
     private int _agentIndex;
     private bool _picked;
+    private bool _starting;
+    private string? _startedFor;
     private List<string> _agentNames;
     private IReadOnlyList<AiCommandSuggestion> _suggestions = [];
 
@@ -372,6 +374,42 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         AcpSessionChoices.ThoughtLevelCategory => Localizer.Get("msg.acp.choice.effort", "Effort"),
         _ => choice.Name,
     };
+
+    /// <summary>
+    /// Starts the chosen external agent when the chat shows it and it may run here, so its choices (model, mode, effort)
+    /// show before the first question instead of with its answer (0.8.0's release candidate). It doesn't sign in: an agent
+    /// that needs it then shows its choices after the first question, which asks. Nothing when it runs already.
+    /// </summary>
+    public void EnsureAgentStarted()
+    {
+        // Once per agent and folder: one that didn't start (not signed in, not installed) isn't tried again and again.
+        var key = SelectedAgent is { } agent ? agent + "|" + Ai.WorkspaceRoot : null;
+        if (key is null || IsAgentBlocked || Session is not null || _starting || key == _startedFor)
+        {
+            return;
+        }
+
+        _starting = true;
+        _startedFor = key;
+        _ = StartAgentAsync(SelectedAgent!);
+    }
+
+    private async Task StartAgentAsync(string name)
+    {
+        try
+        {
+            await _host.ExternalAgents.GetOrStartAsync(name, _host.AcpHost, CancellationToken.None, signIn: false).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is AcpException or OperationCanceledException or ObjectDisposedException or InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
+        {
+            // Not signed in, or it can't start (or the window closed): the first question says why, as before.
+        }
+        finally
+        {
+            _starting = false;
+            Ui.Post(RefreshAgentState);
+        }
+    }
 
     /// <summary>Picks the value at <paramref name="index"/> of the choice <paramref name="id"/>: sent to the agent, then kept in its entry.</summary>
     public async Task ChooseAsync(string id, int index)
