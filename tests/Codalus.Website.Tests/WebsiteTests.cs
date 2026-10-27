@@ -245,6 +245,11 @@ public sealed class WebsiteTests : IDisposable
 
         // The first panel shows as the page loads, the others hidden until site.js selects one.
         Assert.Single(Regex.Matches(html, "role=\"tabpanel\" id=\"model-[a-z]+\" aria-labelledby=\"tab-[a-z]+\">"));
+
+        // The main screenshot sits above them, the one picture the page loads at once.
+        var main = html.IndexOf("<img src=\"assets/screenshots/editor-dark.png\"", StringComparison.Ordinal);
+        Assert.InRange(main, 0, html.IndexOf("id=\"app-models\"", StringComparison.Ordinal));
+        Assert.DoesNotContain("loading=\"eager\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
