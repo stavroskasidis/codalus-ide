@@ -966,6 +966,16 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             return new AcpRequestPermissionResponse(AcpPermissionOutcome.Cancelled);
         }
 
+        // The cancel closes the dialog with no choice through a job posted to the UI thread, and that answer can land
+        // before WaitAsync sees the token (its callback runs after the post, on a pool thread that can be preempted): a
+        // cancelled turn's permission is "cancelled", as ACP requires, not the Reject that no choice falls back to (macOS
+        // CI, job 122343638513).
+        if (turnToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            _ai.LogAgent(Name, $"{AcpMethods.SessionRequestPermission} → cancelled");
+            return new AcpRequestPermissionResponse(AcpPermissionOutcome.Cancelled);
+        }
+
         var option = offered.FirstOrDefault(o => o.OptionId == chosen) ?? offered.FirstOrDefault(o => o.Kind == "reject_once") ?? offered.FirstOrDefault(o => o.Kind == "reject_always");
         _ai.LogAgent(Name, $"{AcpMethods.SessionRequestPermission} → {option?.Kind ?? "cancelled"}");
         return new AcpRequestPermissionResponse(option is null ? AcpPermissionOutcome.Cancelled : AcpPermissionOutcome.Selected(option.OptionId));

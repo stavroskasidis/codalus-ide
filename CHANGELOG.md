@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.9.0
+
+- **Fixed:** **Stop** while an external agent waited for your approval could tell the agent you had rejected it, instead of that the turn was cancelled.
+
 ## 0.8.0
 
 - **External agents keep their place, and you choose their model** ([user guide](docs/user-guide/ai.md#what-you-see)): after connecting an agent and restarting, AI Chat showed the Connect buttons again, as if nothing were connected. It now opens with the agent you chose last (`ai.chat.agent`). When an agent offers choices for its session over the Agent Client Protocol (its model, its modes, its effort or thinking level, or choices of its own), each has a picker in AI Chat's toolbar; a pick goes to the agent at once and is kept for its next sessions.
