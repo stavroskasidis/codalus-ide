@@ -314,8 +314,9 @@ public sealed class HostingShellTests
         Git(greetings, "add", ".");
         Git(greetings, "commit", "-q", "-m", "greetings");
         await f.Shell.DiscoverRepositoriesAsync();
-        Assert.Equal(2, f.Shell.GitChanges.Repositories.Count);
+        Assert.Equal(["All Repositories (2)", Path.GetFileName(folder), "Greetings"], f.Shell.GitChanges.Repositories.Select(r => r.Name));
         Assert.True(f.Shell.GitChanges.HasSeveralRepositories);
+        Assert.True(f.Shell.GitChanges.IsAllRepositories); // ADR 0085: all of them by default
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("gitRepositories"));
 
         f.Shell.GitChanges.SelectedRepository = f.Shell.GitChanges.Repositories.Single(r => r.Name == "Greetings");

@@ -237,6 +237,69 @@ public sealed class GitRepositoryFeaturesTests : IAsyncLifetime
         Assert.Equal("main", (await _git.PeekStatusAsync(other, Ct))?.Branch);
     }
 
+    [Fact]
+    public async Task All_repositories_open_as_siblings_answer_for_their_paths_and_run_each_past_failures()
+    {
+        // ADR 0085: the solution's other repository, with a branch both have and one only this repository has.
+        var other = Path.Combine(_root, "other");
+        await InitAsync(other);
+        var library = Path.Combine(other, "Lib.cs");
+        await File.WriteAllTextAsync(library, "class Lib { }\n", Ct);
+        await Git(other, "add", "-A");
+        await Git(other, "commit", "-q", "-m", "lib");
+        await Git(other, "branch", "develop");
+        await Git(Repo, "branch", "develop");
+        await Git(Repo, "branch", "solo");
+
+        var roots = await _git.FindRepositoriesAsync([Repo, other], Ct);
+        _git.Repositories = roots;
+        var changed = 0;
+        _git.SiblingStatusChanged += (_, _) => Interlocked.Increment(ref changed);
+        await _git.SetSiblingsAsync(roots, Ct);
+        var sibling = Assert.Single(_git.Siblings);
+        Assert.Equal(Path.GetFullPath(other), sibling.Root);
+        Assert.Equal("other", sibling.Name);
+        Assert.Equal([_git, sibling], _git.AllServices);
+        Assert.True(changed > 0);
+        Assert.Same(sibling, _git.ServiceFor(library));
+        Assert.Same(_git, _git.ServiceFor(Path.Combine(Repo, "a.txt")));
+        Assert.Same(_git, _git.ServiceFor(Path.Combine(_root, "elsewhere.txt")));
+        Assert.Same(sibling, _git.ServiceAt(other));
+
+        // A change in each, staged in its own repository.
+        await File.WriteAllTextAsync(Path.Combine(Repo, "a.txt"), "two\n", Ct);
+        await File.WriteAllTextAsync(library, "class Lib { int x; }\n", Ct);
+        await _git.RefreshAsync(Ct);
+        await sibling.RefreshAsync(Ct);
+        var groups = _git.GroupByRepository([library, Path.Combine(Repo, "a.txt")]);
+        Assert.Equal([_git, sibling], groups.Select(g => g.Service));
+        foreach (var (service, paths) in groups)
+        {
+            await service.StageAsync(paths, Ct);
+        }
+
+        Assert.Single(_git.Status!.Staged);
+        Assert.Equal("Lib.cs", Assert.Single(sibling.Status!.Staged).RelativePath);
+
+        // Branches every repository has.
+        var branches = await Task.WhenAll(_git.AllServices.Select(s => s.BranchDetailsAsync(Ct)));
+        Assert.Equal(["develop", "main"], GitService.CommonBranches(branches));
+
+        // Commit in each: the second time, git refuses in both, and each failure names its repository.
+        Assert.Empty(await GitService.ForEachAsync(_git.AllServices, s => s.CommitAsync("Both", amend: false, all: false, Ct), Ct));
+        Assert.Equal("Both", (await _git.LogAsync(new GitLogQuery(), 0, 1, Ct))[0].Subject);
+        var failures = await GitService.ForEachAsync(_git.AllServices, s => s.CommitAsync("Again", amend: false, all: false, Ct), Ct);
+        Assert.Equal(["repo", "other"], failures.Select(f => f.Name));
+        Assert.StartsWith("other: ", failures[1].ToString(), StringComparison.Ordinal);
+
+        // Leaving All Repositories closes the siblings; so does closing the repository.
+        await _git.SetSiblingsAsync([], Ct);
+        Assert.Empty(_git.Siblings);
+        await _git.SetSiblingsAsync(roots, Ct);
+        _git.Close();
+        Assert.Empty(_git.Siblings);
+    }
+
     // ------------------------------------------------------------------ pull requests and publishing
 
     [Fact]

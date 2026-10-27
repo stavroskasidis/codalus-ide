@@ -33,6 +33,7 @@ public sealed partial class ShellHost
     private void ApplySolutionViewState(EditorSession? session)
     {
         Explorer.LoadExpansion(session?.ExpandedNodes, session?.CollapsedNodes);
+        LoadRepositories(session?.GitRepositories);
         if (session?.ErrorList is { } errorList)
         {
             ErrorList.ShowErrors = errorList.ShowErrors;
@@ -61,6 +62,7 @@ public sealed partial class ShellHost
     {
         SaveEditorSession();
         _stateKey = null;
+        LoadRepositories(null);
         Bookmarks.CloseSolution();
     }
 
@@ -123,6 +125,7 @@ public sealed partial class ShellHost
             CollapsedNodes = collapsed.Count == 0 ? null : collapsed,
             ErrorList = errorList == new SessionErrorList() ? null : errorList,
             TestGrouping = TestExplorer.Grouping == TestGrouping.Hierarchy ? null : TestExplorer.Grouping.ToString(),
+            GitRepositories = CaptureRepositories(),
         }, ShellJsonContext.Default.EditorSession);
     }
 

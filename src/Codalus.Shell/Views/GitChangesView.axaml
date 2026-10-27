@@ -135,7 +135,7 @@
           </ContextMenu>
         </DockPanel.ContextMenu>
         <controls:Icon Kind="stash" Margin="0,0,6,0" />
-        <TextBlock DockPanel.Dock="Right" Text="{Binding Name}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Margin="6,0,0,0" />
+        <TextBlock DockPanel.Dock="Right" Text="{Binding Label}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Margin="6,0,0,0" />
         <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis" />
       </DockPanel>
     </DataTemplate>
@@ -148,18 +148,43 @@
     </StackPanel>
     <DockPanel IsVisible="{Binding HasRepository}">
       <StackPanel DockPanel.Dock="Top" Margin="6,6,6,4" Spacing="6">
-        <ComboBox ItemsSource="{Binding Repositories}" SelectedItem="{Binding SelectedRepository}" IsVisible="{Binding HasSeveralRepositories}"
-                  HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T gitChanges.repository}" ToolTip.Tip="{l:T gitChanges.theSolutionSpansSeveralRepositoriesThe}">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:GitRepositoryChoice">
-              <StackPanel Orientation="Horizontal" Spacing="6">
-                <controls:Icon Kind="folder" />
-                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding Path}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        <!-- The repository picker (M13b; All Repositories, ADR 0085): All Repositories (N) shows every repository's changes
+             at once, a repository only its own. A filter box, a check on the one shown, Remove on a repository's menu, and
+             Add Repository… for one that has no project in the solution. -->
+        <Button x:Name="RepositoryButton" IsVisible="{Binding HasSeveralRepositories}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="8,3"
+                AutomationProperties.Name="{l:T gitChanges.repository}" ToolTip.Tip="{l:T gitChanges.theSolutionSpansSeveralRepositoriesThe}">
+          <DockPanel>
+            <controls:Icon DockPanel.Dock="Left" Kind="repository" Margin="0,0,6,0" VerticalAlignment="Center" />
+            <controls:Icon DockPanel.Dock="Right" Kind="chevron-down" Margin="6,0,0,0" />
+            <TextBlock Text="{Binding RepositoryButtonText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          </DockPanel>
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedLeft" Opened="OnRepositoryFlyoutOpened">
+              <StackPanel Width="340" Spacing="4">
+                <TextBox x:Name="RepositoryFilter" Text="{Binding RepositoryFilter}" PlaceholderText="{l:T gitChanges.filterRepositories}" AutomationProperties.Name="{l:T gitChanges.filterRepositories}"
+                         KeyDown="OnRepositoryFilterKey" />
+                <ListBox x:Name="RepositoryList" ItemsSource="{Binding ShownRepositories}" MaxHeight="320" Background="Transparent" AutomationProperties.Name="{l:T gitChanges.repositories}"
+                         Tapped="OnRepositoryChosen" KeyDown="OnRepositoryListKey">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GitRepositoryChoice">
+                      <DockPanel Background="Transparent" ToolTip.Tip="{Binding Detail}" AutomationProperties.Name="{Binding Name}">
+                        <Button DockPanel.Dock="Right" Classes="toolbar icon" Width="20" Height="20" MinWidth="20" Padding="0" Margin="4,0,0,0" controls:ButtonIcon.Kind="close"
+                                IsVisible="{Binding CanRemove}" Click="OnRemoveRepository" ToolTip.Tip="{l:T gitChanges.removeFromTheList}" AutomationProperties.Name="{l:T gitChanges.removeFromTheList}" />
+                        <controls:Icon DockPanel.Dock="Left" Kind="check" Opacity="{Binding CheckOpacity}" Margin="0,0,4,0" />
+                        <controls:Icon DockPanel.Dock="Left" Kind="{Binding Icon}" Margin="0,0,6,0" />
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" />
+                      </DockPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Shell.Border}" Padding="0,4,0,0">
+                  <Button Classes="iconText" controls:ButtonIcon.Kind="add" Content="{l:T gitChanges.addRepository}" Click="OnAddRepository" HorizontalAlignment="Left" AutomationProperties.Name="{l:T gitChanges.addRepository}" />
+                </Border>
               </StackPanel>
-            </DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
 
         <!-- The branch, and fetch, pull, push, sync and more: Git's commands in the Git family's color, as in the menus (M34h). -->
         <DockPanel>
@@ -199,7 +224,7 @@
                B20), and a flyout of 340 px right-aligned to the button's edge that lists the branches, each with its menu. -->
           <Panel>
             <Button x:Name="BranchButton" Click="OnBranchButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="8,3"
-                    ToolTip.Tip="{Binding BranchName}" AutomationProperties.Name="{Binding BranchAccessibleName}">
+                    ToolTip.Tip="{Binding BranchTooltip}" AutomationProperties.Name="{Binding BranchAccessibleName}">
               <DockPanel>
                 <controls:Icon DockPanel.Dock="Left" Kind="branch" Classes="accent-git" Margin="0,0,6,0" VerticalAlignment="Center" />
                 <controls:Icon DockPanel.Dock="Right" Kind="chevron-down" Margin="6,0,0,0" />
@@ -286,7 +311,7 @@
               </MenuFlyout>
             </SplitButton.Flyout>
           </SplitButton>
-          <CheckBox Content="{l:T gitChanges.amend}" IsChecked="{Binding Amend}" />
+          <CheckBox Content="{l:T gitChanges.amend}" IsChecked="{Binding Amend}" IsVisible="{Binding CanAmend}" />
         </WrapPanel>
         <Border IsVisible="{Binding HasOperation}" Background="{DynamicResource Shell.Hover}" CornerRadius="3" Padding="6,4">
           <StackPanel Spacing="4">

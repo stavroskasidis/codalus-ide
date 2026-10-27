@@ -7,7 +7,8 @@ namespace Codalus.Workbench.Git;
 
 /// <summary>
 /// Source control through the git CLI (ADR 0008): one process per operation, porcelain output only. Tracks one
-/// repository (the open solution's). Events may be raised on any thread.
+/// repository (the open solution's), and the solution's other repositories as siblings while all are shown (ADR 0085).
+/// Events may be raised on any thread.
 /// </summary>
 public sealed partial class GitService : IDisposable
 {
@@ -260,6 +261,7 @@ public sealed partial class GitService : IDisposable
 
     public void Close()
     {
+        CloseSiblings();
         _lifetime.Cancel();
         _watcher?.Dispose();
         _watcher = null;
@@ -623,6 +625,7 @@ public sealed partial class GitService : IDisposable
         Close();
         _lifetime.Dispose();
         _refreshGate.Dispose();
+        _siblingsGate.Dispose();
         FetchGate.Dispose();
     }
 }

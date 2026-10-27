@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -530,4 +531,78 @@ public sealed partial class GitChangesView : UserControl, IPaneView
     }
 
     public void FocusPrimary() => Message.Focus();
+
+    // ------------------------------------------------------------------ the repository picker (ADR 0085)
+
+    private void OnRepositoryFlyoutOpened(object? sender, EventArgs e)
+    {
+        if (DataContext is GitChangesViewModel vm)
+        {
+            vm.RepositoryFilter = string.Empty;
+            RepositoryList.SelectedItem = vm.SelectedRepository;
+        }
+
+        RepositoryFilter.Focus();
+    }
+
+    private void OnRepositoryChosen(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is Visual { DataContext: GitRepositoryChoice choice } source && source.FindAncestorOfType<Button>(includeSelf: true) is null)
+        {
+            ChooseRepository(choice);
+        }
+    }
+
+    /// <summary>Down from the filter box goes to the list; Enter picks its first repository.</summary>
+    private void OnRepositoryFilterKey(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Down && RepositoryList.ItemCount > 0)
+        {
+            RepositoryList.SelectedIndex = Math.Max(0, RepositoryList.SelectedIndex);
+            (RepositoryList.ContainerFromIndex(RepositoryList.SelectedIndex) as Control)?.Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && DataContext is GitChangesViewModel { ShownRepositories: [var first, ..] })
+        {
+            ChooseRepository(RepositoryList.SelectedItem as GitRepositoryChoice ?? first);
+            e.Handled = true;
+        }
+    }
+
+    private void OnRepositoryListKey(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && RepositoryList.SelectedItem is GitRepositoryChoice choice)
+        {
+            ChooseRepository(choice);
+            e.Handled = true;
+        }
+    }
+
+    private void ChooseRepository(GitRepositoryChoice choice)
+    {
+        RepositoryButton.Flyout?.Hide();
+        if (DataContext is GitChangesViewModel vm && !choice.IsSelected)
+        {
+            vm.SelectedRepository = choice;
+        }
+    }
+
+    private void OnAddRepository(object? sender, RoutedEventArgs e)
+    {
+        RepositoryButton.Flyout?.Hide();
+        if (DataContext is GitChangesViewModel { AddRepository: { } add })
+        {
+            _ = Report(add());
+        }
+    }
+
+    private void OnRemoveRepository(object? sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (DataContext is GitChangesViewModel { RemoveRepository: { } remove } && sender is Button { DataContext: GitRepositoryChoice { CanRemove: true } choice })
+        {
+            RepositoryButton.Flyout?.Hide();
+            _ = Report(remove(choice.Path));
+        }
+    }
 }

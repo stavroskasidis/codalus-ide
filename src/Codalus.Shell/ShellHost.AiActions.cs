@@ -48,15 +48,25 @@ public sealed partial class ShellHost
     /// <summary>Writes the commit message for the staged changes into Git Changes' box.</summary>
     public async Task GenerateCommitMessageAsync()
     {
-        if (!await EnsureAiAsync().ConfigureAwait(true) || Git.Root is not { } root)
+        if (!await EnsureAiAsync().ConfigureAwait(true) || Git.Root is null)
         {
             return;
         }
 
         try
         {
-            var (_, diff, _) = await Git.RunAsync(root, ["diff", "--cached", "--no-ext-diff", "-M"], CancellationToken.None, readOnly: true).ConfigureAwait(true);
-            if (diff.Trim().Length == 0)
+            // With all repositories shown (ADR 0085), every one's staged changes, each filtered against its own repository.
+            var diffs = new List<(string Diff, string Root)>();
+            foreach (var git in GitChanges.Services.Where(s => s.Root is not null))
+            {
+                var (_, diff, _) = await git.RunAsync(git.Root!, ["diff", "--cached", "--no-ext-diff", "-M"], CancellationToken.None, readOnly: true).ConfigureAwait(true);
+                if (diff.Trim().Length > 0)
+                {
+                    diffs.Add((diff, git.Root!));
+                }
+            }
+
+            if (diffs.Count == 0)
             {
                 ShowMessage(Localizer.Get("msg.ai.stageChangesFirst", "Stage the changes to commit first: the message describes the staged changes."));
                 return;
@@ -64,7 +74,7 @@ public sealed partial class ShellHost
 
             var subjects = (await Git.LogAsync(new GitLogQuery(), 0, 10).ConfigureAwait(true)).Select(c => c.Subject).ToList();
             ShowMessage(Localizer.Get("msg.ai.writingCommitMessage", "Writing the commit message…"));
-            GitChanges.Message = await AiActions.CommitMessageAsync(Ai, diff, root, subjects, CancellationToken.None).ConfigureAwait(true);
+            GitChanges.Message = await AiActions.CommitMessageAsync(Ai, diffs, subjects, CancellationToken.None).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is AiUnavailableException or GitException)
         {

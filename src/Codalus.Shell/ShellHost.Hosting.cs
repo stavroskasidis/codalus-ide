@@ -132,7 +132,6 @@ public sealed partial class ShellHost : IHostingActions
         PullRequests = new PullRequestsViewModel(this);
         WorkItems = new WorkItemsViewModel(this);
         Worktrees = new WorktreesViewModel(Git, WorktreeActionAsync);
-        GitChanges.SwitchRepository = SwitchRepositoryAsync;
         GitChanges.CompletionSource = CommitCompletionsAsync;
         ReviewThreads.Changed += (_, _) => ReviewThreadsChanged?.Invoke(this, EventArgs.Empty);
         Git.StatusChanged += (_, _) => Ui.Post(() =>
@@ -863,78 +862,6 @@ public sealed partial class ShellHost : IHostingActions
                 ? answer.Button == "Yes" ? "yes" : null
                 : answer.Button == "OK" ? answer.Input ?? string.Empty : null;
         });
-
-    // ------------------------------------------------------------------ several repositories
-
-    private void ScheduleRepositoryDiscovery()
-    {
-        _repositoryTimer ??= CreateRepositoryTimer();
-        _repositoryTimer.Stop();
-        _repositoryTimer.Start();
-    }
-
-    private DispatcherTimer CreateRepositoryTimer()
-    {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(750) };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            _ = DiscoverRepositoriesAsync();
-        };
-        return timer;
-    }
-
-    /// <summary>Finds the repositories of the solution's folder and its projects' folders (a solution can span several).</summary>
-    public async Task DiscoverRepositoriesAsync()
-    {
-        if (Solutions.Solution is not { } solution)
-        {
-            Git.Repositories = [];
-            GitChanges.SetRepositories([], null);
-            Workbench.Context.Set("gitRepositories", false);
-            return;
-        }
-
-        try
-        {
-            var folders = solution.Projects.Select(p => Path.GetDirectoryName(p.Path)).OfType<string>().Prepend(solution.Directory).ToList();
-            var roots = await Git.FindRepositoriesAsync(folders).ConfigureAwait(true);
-            Git.Repositories = roots;
-            GitChanges.SetRepositories(roots, Git.Root);
-            Workbench.Context.Set("gitRepositories", roots.Count > 1);
-        }
-        catch (Exception ex) when (ex is GitException or IOException)
-        {
-            GitLog.AppendLine("[repositories] " + ex.Message);
-        }
-    }
-
-    /// <summary>Shows another of the solution's repositories in Git Changes, the history and the status bar.</summary>
-    public async Task SwitchRepositoryAsync(string root)
-    {
-        if (Git.Root is { } current && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(current, root))
-        {
-            return;
-        }
-
-        await OpenRepositoryAsync(root).ConfigureAwait(true);
-        GitChanges.SetRepositories(Git.Repositories, Git.Root);
-        StatusBar.ShowMessage("Repository: " + Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar)), TimeSpan.FromSeconds(4));
-    }
-
-    public async Task PickRepositoryAsync()
-    {
-        if (Git.Repositories.Count < 2)
-        {
-            StatusBar.ShowMessage(Localizer.Get("msg.hosting.theSolutionIsInASingle", "The solution is in a single repository."), TimeSpan.FromSeconds(4));
-            return;
-        }
-
-        if (await Palette.ShowAsync([.. Git.Repositories.Select(r => new QuickPickItem(Path.GetFileName(r.TrimEnd(Path.DirectorySeparatorChar))) { Detail = r, Tag = r })], "Switch to a repository of the solution").ConfigureAwait(true) is { Tag: string root })
-        {
-            await SwitchRepositoryAsync(root).ConfigureAwait(true);
-        }
-    }
 
     // ------------------------------------------------------------------ worktrees
 
