@@ -113,5 +113,6 @@ static async Task<int> RunAsync(Stream input, Stream output, string msbuildPath,
     connection.HandlerFailed += (_, ex) => Console.Error.WriteLine("[host] [error] " + ex);
     connection.Start();
     await Task.WhenAny(connection.Completion, server.ExitRequested).ConfigureAwait(false);
+    Codalus.Projects.Host.Packages.DotnetProcess.KillAll(); // no dotnet child outlives the host
     return 0;
 }

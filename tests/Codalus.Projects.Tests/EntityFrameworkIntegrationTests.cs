@@ -187,6 +187,54 @@ public sealed class EntityFrameworkIntegrationTests : IAsyncLifetime
         Assert.True(File.Exists(bundle));
     }
 
+    /// <summary>
+    /// The IDE closing while dotnet ef runs (the Entity Framework window asks for the context's database without a
+    /// cancellation): the command ends with the host. The host used to exit on the shell's shutdown and leave it running;
+    /// on macOS launchd adopted it and it stayed for hours after the Shell tests.
+    /// </summary>
+    [Fact]
+    public async Task Closing_the_solution_ends_a_running_dotnet_ef()
+    {
+        // Straight to the host, without the window's build first: the host's one new child is dotnet ef (which builds).
+        var host = _solutions.HostProcessId ?? throw new InvalidOperationException("No build host.");
+        var before = Codalus.Platform.ProcessTree.Children(host).ToHashSet();
+        var json = EntityFrameworkJsonContext.Default;
+        var running = _solutions.RequestAsync(EfMethods.ContextInfo, new EfTarget(Blogging, Blogging, "Blogging.Data.BloggingContext"), json.EfTarget, json.EfContextInfoResult, CancellationToken.None);
+        int[] ef = [];
+        await WaitUntilAsync(() => (ef = [.. Codalus.Platform.ProcessTree.Children(host).Where(c => !before.Contains(c))]).Length > 0 || running.IsCompleted);
+        Assert.False(running.IsCompleted, "dotnet ef finished before the solution closed.");
+        Assert.Contains("dbcontext info", _ef.Channel.GetText(), StringComparison.Ordinal);
+
+        // Ended before the host exits. Left running, it went on for about a second on Windows (until it wrote to the
+        // closed pipe) and for hours on macOS.
+        await _solutions.CloseAsync();
+        var closed = DateTime.UtcNow;
+        while (ef.Any(IsRunning))
+        {
+            Assert.True(DateTime.UtcNow - closed < TimeSpan.FromMilliseconds(300), "dotnet ef outlived the build host.");
+            await Task.Delay(25, TestContext.Current.CancellationToken);
+        }
+
+        await Record.ExceptionAsync(() => running);
+    }
+
+    private static bool IsRunning(int id)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(id);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     private static void Copy(string source, string target)
     {
         Directory.CreateDirectory(target);
