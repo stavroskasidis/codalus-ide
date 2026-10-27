@@ -53,6 +53,22 @@ The `shell` target is the published product shell in `artifacts/shell` (`CODALUS
 - **`file_highlight_ms`:** from the launch to the first rendered frame with semantic tokens of the file (`BenchDriver`). An answer with no tokens (a language service that hasn't loaded the file yet) doesn't count; the editor asks again and the next answer's colors do. Until 2026-10-20 it counted, which gave the Mac's CI runners a second, faster mode of the metric.
 - **Statistics:** p50/p95/p99 use nearest rank. Every sample is kept in the JSON.
 
+## Comparing versions: the same CI runner, never a local machine
+
+Numbers that decide something are measured on CI, on one runner: a regression gate's verdict, an entry of
+`accepted.json` and its evidence, a value of `budgets.json`.
+
+- **A gate that fails, or a number in doubt:** a same-runner A/B. One CI job publishes both versions (the baseline's
+  release tag and the commit in question) and runs the scenario for each in alternating rounds (ABBA, at least 4 rounds of
+  5 launches) on the same runner. Run it as a one-off workflow on a scratch branch, never merged, and cite its run in the
+  entry. Hosted runners spread widely from one machine to the next (the macOS M1 runner from 286 to 1497 ms for the same
+  cold start), so two separate runs, or a run against older runs' medians, aren't a comparison.
+- **Never numbers from a developer's machine:** not the maintainer's PC, not a remote session's Mac. Runners and
+  developer machines differ too much (CI's virtual M1 against an M4) for local numbers to stand in for CI's, in a gate,
+  in `accepted.json`'s reasons or in `budgets.json`. Local runs are for diagnosing (profiling, which process uses the
+  CPU), not for the repository's numbers.
+- **A scenario CI doesn't run** (`open-solution-50` among them) has no budget until CI measures it.
+
 ## Safety rules
 
 - Scenarios that inject keystrokes need `--allow-input`, and **nobody may use the computer during the run**. Target windows are brought to the foreground with `AttachThreadInput`, without synthesizing keys. Each keystroke is sent only after verifying that the target window owns the foreground. If focus moves anywhere else, the run stops and is discarded, so input never lands in another application.
