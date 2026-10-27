@@ -32,8 +32,11 @@ public sealed class DotNetTestRunControlTests(DotNetTestFixture fixture)
             var before = hangs.Leaves().Single().Result;
             var run = fixture.Tests.RunAsync(TestRunKind.Run, [hangs.Key], Timeout());
 
-            // Running (or at least queued) before cancelling, so the cancellation reaches the test process.
-            await fixture.WaitUntilAsync(() => fixture.Node(project, project, "CalculatorTests", "Hangs").AggregateOutcome() is TestOutcome.Running or TestOutcome.Queued, Timeout());
+            // Running (or at least queued) before cancelling, so the cancellation reaches the test process. A run that
+            // ends first never started it (a failed build or discovery): waiting on for the test hid that for 4 minutes
+            // (runs 39979261891, 40375629247).
+            await fixture.WaitUntilAsync(() => run.IsCompleted || fixture.Node(project, project, "CalculatorTests", "Hangs").AggregateOutcome() is TestOutcome.Running or TestOutcome.Queued, Timeout());
+            Assert.False(run.IsCompleted, $"The run ended without starting the test. Run output: {fixture.Tests.Runs[^1].Output} Log: {fixture.Log}");
             await Task.Delay(1000, Timeout());
             var started = DateTime.UtcNow;
             fixture.Tests.Cancel();

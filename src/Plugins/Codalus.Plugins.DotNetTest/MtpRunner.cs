@@ -329,7 +329,17 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
                 throw new InvalidOperationException("The test application exited before it connected (is it a Microsoft.Testing.Platform application?).");
             }
 
-            _client = await accept.ConfigureAwait(false);
+            try
+            {
+                _client = await accept.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Our timeout, not the caller's cancellation: as an OperationCanceledException it ended the whole run as
+                // "The run was cancelled." and skipped the project's "Discovery failed" (run 39979261891).
+                throw new TimeoutException($"The test application did not connect within {timeout.TotalSeconds:0} seconds.");
+            }
+
             listener.Stop();
             var stream = _client.GetStream();
             var connection = new JsonRpcConnection(stream, stream);
