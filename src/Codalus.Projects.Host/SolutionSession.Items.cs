@@ -344,7 +344,7 @@ internal sealed partial class SolutionSession
     }
 
     /// <summary>
-    /// What a folder workspace builds: its one loaded project, or a generated <c>.codalus/folder.slnx</c> of the loaded
+    /// What a folder workspace builds: its one loaded project, or a generated <c>folder.slnx</c> (in its state folder) of the loaded
     /// projects.
     /// </summary>
     private string FolderBuildEntryPoint()
@@ -360,7 +360,7 @@ internal sealed partial class SolutionSession
             return projects[0];
         }
 
-        return WriteFolderSolution(System.IO.Path.Combine(Path, ".codalus", "folder.slnx"), projects);
+        return WriteFolderSolution(SolutionStateLayout.GeneratedFile(Path, IsFolder, "folder.slnx"), projects);
     }
 
     /// <summary>A generated <c>.slnx</c> of <paramref name="projects"/> (a folder workspace's): returns its path.</summary>
