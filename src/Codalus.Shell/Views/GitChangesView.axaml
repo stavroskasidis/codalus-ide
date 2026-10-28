@@ -186,19 +186,22 @@
           </Button.Flyout>
         </Button>
 
-        <!-- The branch, and fetch, pull, push, sync and more: Git's commands in the Git family's color, as in the menus (M34h). -->
+        <!-- The branch, and fetch, pull, push, sync and more: Git's commands in the Git family's color, as in the menus (M34h).
+             While one of them runs, Cancel takes their place, as in the classic IDE. -->
         <DockPanel>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="4,0,0,0">
-            <Button Classes="toolbar" Tag="git.fetch" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.fetch}" AutomationProperties.Name="{l:T gitChanges.fetch}">
+            <Button x:Name="CancelProgressButton" Content="{l:T gitChanges.cancel}" IsVisible="{Binding IsBusy}" Click="OnCancelProgress" Padding="8,3" Margin="0,0,2,0"
+                    VerticalAlignment="Stretch" ToolTip.Tip="{l:T gitChanges.stopTheRunningGitOperation}" AutomationProperties.Name="{l:T gitChanges.cancel}" />
+            <Button Classes="toolbar" IsVisible="{Binding IsIdle}" Tag="git.fetch" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.fetch}" AutomationProperties.Name="{l:T gitChanges.fetch}">
               <controls:Icon Kind="arrow-down" Classes="accent-git" />
             </Button>
-            <Button Classes="toolbar" Tag="git.pull" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.pull}" AutomationProperties.Name="{l:T gitChanges.pull}">
+            <Button Classes="toolbar" IsVisible="{Binding IsIdle}" Tag="git.pull" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.pull}" AutomationProperties.Name="{l:T gitChanges.pull}">
               <controls:Icon Kind="download" Classes="accent-git" />
             </Button>
-            <Button Classes="toolbar" Tag="git.push" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.push}" AutomationProperties.Name="{l:T gitChanges.push}">
+            <Button Classes="toolbar" IsVisible="{Binding IsIdle}" Tag="git.push" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.push}" AutomationProperties.Name="{l:T gitChanges.push}">
               <controls:Icon Kind="upload" Classes="accent-git" />
             </Button>
-            <Button Classes="toolbar" Tag="git.sync" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.syncPullThenPush}" AutomationProperties.Name="{l:T gitChanges.sync}">
+            <Button Classes="toolbar" IsVisible="{Binding IsIdle}" Tag="git.sync" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.syncPullThenPush}" AutomationProperties.Name="{l:T gitChanges.sync}">
               <controls:Icon Kind="sync" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.moreActions}" AutomationProperties.Name="{l:T gitChanges.moreActions}">
@@ -237,6 +240,12 @@
             </Popup>
           </Panel>
         </DockPanel>
+
+        <!-- While a fetch, pull, push or sync runs: what it's doing, under the branch as in the classic IDE, over a running bar. -->
+        <StackPanel x:Name="Progress" Spacing="4" IsVisible="{Binding IsBusy}">
+          <TextBlock Text="{Binding ProgressText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ProgressText}" AutomationProperties.LiveSetting="Polite" />
+          <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" />
+        </StackPanel>
 
         <!-- Outgoing / incoming commits, the history, and pull requests. -->
         <DockPanel>

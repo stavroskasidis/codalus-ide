@@ -520,22 +520,64 @@ public sealed partial class ShellHost
         : Localizer.Format("msg.git.commitCount", "{0} commits", count);
 
     /// <summary>Fetch: in the open repository, or with all repositories shown in each (ADR 0085).</summary>
-    public Task FetchAsync() => GitChanges.IsAllRepositories ? FetchAllAsync() : GitActionAsync(() => Git.FetchAsync(), "Fetching…");
+    public Task FetchAsync() => GitChanges.IsAllRepositories
+        ? FetchAllAsync()
+        : RemoteActionAsync(token => Git.FetchAsync(token), Localizer.Get("msg.git.fetching", "Fetching…"));
 
-    public Task PullAsync() => GitChanges.IsAllRepositories ? PullAllAsync() : GitActionAsync(() => Git.PullAsync(), "Pulling…");
+    public Task PullAsync() => GitChanges.IsAllRepositories
+        ? PullAllAsync()
+        : RemoteActionAsync(token => Git.PullAsync(token), Localizer.Get("msg.git.pulling", "Pulling…"));
 
-    public Task PushAsync() => GitChanges.IsAllRepositories ? PushAllAsync() : GitActionAsync(() => Git.PushAsync(), "Pushing…");
+    public Task PushAsync() => GitChanges.IsAllRepositories
+        ? PushAllAsync()
+        : RemoteActionAsync(token => Git.PushAsync(token), Localizer.Get("msg.git.pushing", "Pushing…"));
 
     /// <summary>Pulls, then pushes the branch's own commits.</summary>
-    public Task SyncAsync() => GitChanges.IsAllRepositories ? SyncAllAsync() : GitActionAsync(async () =>
+    public Task SyncAsync() => GitChanges.IsAllRepositories ? SyncAllAsync() : RemoteActionAsync(async token =>
     {
         if (Git.Status?.Upstream is not null)
         {
-            await Git.PullAsync().ConfigureAwait(true);
+            await Git.PullAsync(token).ConfigureAwait(true);
         }
 
-        await Git.PushAsync().ConfigureAwait(true);
-    }, "Syncing…");
+        await Git.PushAsync(token).ConfigureAwait(true);
+    }, Localizer.Get("msg.git.syncing", "Syncing…"));
+
+    /// <summary>
+    /// A fetch, pull, push or sync: <see cref="GitActionAsync"/>, with Git Changes showing <paramref name="progress"/> under the
+    /// branch over a running bar and a Cancel that kills git, as the classic IDE does, and a cancellable task in the status bar.
+    /// </summary>
+    private async Task RemoteActionAsync(Func<CancellationToken, Task> action, string progress)
+    {
+        using var shown = GitChanges.BeginProgress(progress);
+        var task = Workbench.Progress.Begin(progress.TrimEnd('…'), "Git", shown.Cancel);
+        var cancelled = false;
+        try
+        {
+            await GitActionAsync(async () =>
+            {
+                try
+                {
+                    await action(shown.Token).ConfigureAwait(true);
+                }
+                catch (OperationCanceledException) when (shown.IsCancellationRequested)
+                {
+                    cancelled = true;
+                }
+            }).ConfigureAwait(true);
+        }
+        finally
+        {
+            task.End();
+        }
+
+        if (cancelled)
+        {
+            var message = Localizer.Get("msg.git.cancelled", "Cancelled.");
+            GitLog.AppendLine(progress + " " + message);
+            StatusBar.ShowMessage(message, TimeSpan.FromSeconds(4));
+        }
+    }
 
     public Task AbortMergeAsync() => GitActionAsync(() => Git.AbortMergeAsync());
 
