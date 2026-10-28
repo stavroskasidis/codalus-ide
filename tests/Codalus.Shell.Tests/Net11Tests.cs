@@ -73,7 +73,10 @@ public sealed class Net11Tests
         f.Shell.Debugger.Breakpoints.Clear();
         await f.RunAsync("debug.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
-        Assert.Contains("runtime=11 library=net11.0", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
+        // The whole Debug log when the line is missing (Linux CI, run 40598985805: the session ended without it, and the
+        // assertion's message showed only the log's first characters).
+        var debugLog = f.Shell.DebugLog.GetText();
+        Assert.True(debugLog.Contains("runtime=11 library=net11.0", StringComparison.Ordinal), $"The program's line isn't in the Debug log:{Environment.NewLine}{debugLog}");
     }
 
     [AvaloniaFact]
