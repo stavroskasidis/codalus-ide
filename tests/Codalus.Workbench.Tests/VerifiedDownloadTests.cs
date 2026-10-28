@@ -66,10 +66,40 @@ public sealed class VerifiedDownloadTests : IDisposable
 
     private static HttpResponseMessage Whole(long? from) => new(HttpStatusCode.OK) { Content = new ByteArrayContent(s_content) };
 
-    private Task FetchAsync(Server server, IProgress<string>? progress = null)
+    private Task FetchAsync(Server server, IProgress<string>? progress = null, string? target = null, string? downloadCache = null)
     {
         var http = new HttpClient(server);
-        return VerifiedDownload.FetchAsync(http, new Uri("https://nodejs.org/dist/node.tar.gz"), Target, Sha256, "Node.js", progress, TestContext.Current.CancellationToken, s_stall);
+        return VerifiedDownload.FetchAsync(http, new Uri("https://nodejs.org/dist/node.tar.gz"), target ?? Target, Sha256, "Node.js", progress, TestContext.Current.CancellationToken, s_stall, downloadCache);
+    }
+
+    [Fact]
+    public async Task A_download_is_kept_in_the_download_cache_and_the_next_one_comes_from_there()
+    {
+        // CI keeps the folder between runs (CODALUS_DOWNLOAD_CACHE), so its tests don't wait on nodejs.org.
+        var cache = Path.Combine(_folder, "downloads");
+        await FetchAsync(new Server(Whole), downloadCache: cache);
+        Assert.Equal(s_content, await File.ReadAllBytesAsync(Path.Combine(cache, "node.tar.gz"), TestContext.Current.CancellationToken));
+
+        var offline = new Server(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var again = Path.Combine(_folder, "again", "node.partial");
+        await FetchAsync(offline, target: again, downloadCache: cache);
+
+        Assert.Empty(offline.Ranges);
+        Assert.Equal(s_content, await File.ReadAllBytesAsync(again, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_cached_file_with_another_checksum_is_downloaded_again_and_replaced()
+    {
+        var cache = Directory.CreateDirectory(Path.Combine(_folder, "downloads")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(cache, "node.tar.gz"), "an older version", TestContext.Current.CancellationToken);
+        var server = new Server(Whole);
+
+        await FetchAsync(server, downloadCache: cache);
+
+        Assert.Single(server.Ranges);
+        Assert.Equal(s_content, await File.ReadAllBytesAsync(Path.Combine(cache, "node.tar.gz"), TestContext.Current.CancellationToken));
+        Assert.Equal(["node.tar.gz"], Directory.EnumerateFiles(cache).Select(Path.GetFileName));
     }
 
     [Fact]

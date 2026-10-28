@@ -17,9 +17,29 @@ internal static class VerifiedDownload
     /// <summary>How many times a download that stalled or dropped is asked for again, from where it stopped.</summary>
     internal const int Attempts = 4;
 
-    public static async Task FetchAsync(HttpClient? http, Uri url, string path, string sha256, string what, IProgress<string>? progress, CancellationToken cancellationToken, TimeSpan? stallTimeout = null)
+    /// <summary>
+    /// A folder of verified downloads, by file name, that a download is taken from when it is there with the right
+    /// checksum, and kept in when it isn't: CI keeps it between runs, so its tests and smoke tests don't wait on
+    /// nodejs.org and github.com (which stalled the macOS smoke test, run 40632085595).
+    /// </summary>
+    internal const string CacheVariable = "CODALUS_DOWNLOAD_CACHE";
+
+    /// <param name="downloadCache">
+    /// The folder of verified downloads; by default <see cref="CacheVariable"/>'s, unless <paramref name="http"/> is given
+    /// (a test's own server).
+    /// </param>
+    public static async Task FetchAsync(HttpClient? http, Uri url, string path, string sha256, string what, IProgress<string>? progress, CancellationToken cancellationToken, TimeSpan? stallTimeout = null, string? downloadCache = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        downloadCache ??= http is null ? Environment.GetEnvironmentVariable(CacheVariable) is { Length: > 0 } folder ? folder : null : null;
+        var cached = downloadCache is null ? null : Path.Combine(downloadCache, Path.GetFileName(url.AbsolutePath));
+        if (cached is not null && File.Exists(cached) && string.Equals(await Sha256Async(cached, cancellationToken).ConfigureAwait(false), sha256, StringComparison.Ordinal))
+        {
+            progress?.Report($"{what} from {downloadCache}.");
+            File.Copy(cached, path, overwrite: true);
+            return;
+        }
+
         progress?.Report($"Downloading {what} from {url.Host}…");
         var client = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
         try
@@ -36,17 +56,34 @@ internal static class VerifiedDownload
         }
 
         progress?.Report("Verifying the download…");
-        string actual;
-        await using (var stream = File.OpenRead(path))
-        {
-            actual = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
-        }
-
+        var actual = await Sha256Async(path, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(actual, sha256, StringComparison.Ordinal))
         {
             File.Delete(path);
             throw new InvalidDataException($"The {what} download doesn't match its published checksum (got {actual}).");
         }
+
+        if (cached is not null)
+        {
+            try
+            {
+                // Through a file of its own, so a reader never sees half of it.
+                Directory.CreateDirectory(downloadCache!);
+                var copy = cached + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
+                File.Copy(path, copy);
+                File.Move(copy, cached, overwrite: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                progress?.Report($"{what} wasn't kept in {downloadCache}: {ex.Message}");
+            }
+        }
+    }
+
+    private static async Task<string> Sha256Async(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = File.OpenRead(path);
+        return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
     }
 
     /// <summary>

@@ -207,6 +207,7 @@ jobs:
           netcoredbg: true
           devtools: true
           display: true
+          downloads: true
       - run: dotnet restore Codalus.slnx
       - run: dotnet build Codalus.slnx -c Release --no-restore
       - name: Save the NuGet cache (develop, one job per OS)
@@ -225,6 +226,19 @@ jobs:
         # the steps below.
         timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 40 }}
         run: bash eng/ci-test.sh ${{ matrix.shard }}
+      - name: Anything downloaded (Node.js, vscode-js-debug)
+        id: downloaded
+        if: always() && steps.setup.outputs.downloads-hit != 'true'
+        shell: bash
+        run: if [ -n "$(ls -A "$CODALUS_DOWNLOAD_CACHE" 2> /dev/null)" ]; then echo "any=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save the downloads
+        # After the steps that download them, passed or not: the next runs take them from the cache (the setup's
+        # downloads input). Several jobs may save the same key: the first one does, the others say it exists.
+        if: always() && steps.downloaded.outputs.any == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/codalus-downloads
+          key: ${{ steps.setup.outputs.downloads-key }}
       - name: Processes the tests left running
         # What the tests left behind is listed: a leak to fix.
         if: always() && runner.os != 'Windows'
@@ -284,13 +298,15 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
+      - id: setup
+        uses: ./.github/actions/setup
         with:
           extra-sdks: true
           nuget-cache: true
           netcoredbg: true
           devtools: true
           display: true
+          downloads: true
       - name: Native AOT publish must stay warning-free in our code
         shell: bash
         run: |
@@ -307,6 +323,19 @@ jobs:
         env:
           CODALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
         run: bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test
+      - name: Anything downloaded (Node.js, vscode-js-debug)
+        id: downloaded
+        if: always() && steps.setup.outputs.downloads-hit != 'true'
+        shell: bash
+        run: if [ -n "$(ls -A "$CODALUS_DOWNLOAD_CACHE" 2> /dev/null)" ]; then echo "any=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save the downloads
+        # After the steps that download them, passed or not: the next runs take them from the cache (the setup's
+        # downloads input). Several jobs may save the same key: the first one does, the others say it exists.
+        if: always() && steps.downloaded.outputs.any == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/codalus-downloads
+          key: ${{ steps.setup.outputs.downloads-key }}
       # Always: the screenshots are the website's (CLAUDE.md, Website), and a failure's report.
       - uses: actions/upload-artifact@v4
         if: always()
@@ -371,10 +400,12 @@ jobs:
           fetch-depth: 0 # the release notes read the history and the tags
       # The smoke test has a .NET 11 step (M30); dumps and attaching need the developer tools (debug.companion,
       # debug.roslyn, debug.remote).
-      - uses: ./.github/actions/setup
+      - id: setup
+        uses: ./.github/actions/setup
         with:
           extra-sdks: true
           devtools: true
+          downloads: true
       - name: Linux prerequisites (Native AOT, AppImage, rpm, delta packages, Xvfb)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev squashfs-tools rpm zstd xvfb
@@ -429,6 +460,19 @@ jobs:
         shell: bash
         timeout-minutes: 40
         run: bash eng/smoke-test.sh --packages artifacts/packages artifacts/smoke-test
+      - name: Anything downloaded (Node.js, vscode-js-debug)
+        id: downloaded
+        if: always() && steps.setup.outputs.downloads-hit != 'true'
+        shell: bash
+        run: if [ -n "$(ls -A "$CODALUS_DOWNLOAD_CACHE" 2> /dev/null)" ]; then echo "any=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save the downloads
+        # After the steps that download them, passed or not: the next runs take them from the cache (the setup's
+        # downloads input). Several jobs may save the same key: the first one does, the others say it exists.
+        if: always() && steps.downloaded.outputs.any == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/codalus-downloads
+          key: ${{ steps.setup.outputs.downloads-key }}
       - uses: actions/upload-artifact@v4
         if: failure() || cancelled()
         with:

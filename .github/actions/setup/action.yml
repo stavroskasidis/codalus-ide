@@ -23,6 +23,12 @@ inputs:
   display:
     description: An X server on Linux (Xvfb on :99, DISPLAY set for the job's later steps), a 1920x1080 screen on Windows
     default: "false"
+  downloads:
+    description: >-
+      Node.js and vscode-js-debug from the cache (CODALUS_DOWNLOAD_CACHE, set for the job's later steps), so the tests
+      and the smoke test don't wait on nodejs.org and github.com: a stalled download of Node.js failed the macOS smoke
+      test (run 40632085595). On a miss eng/get-downloads.sh fetches them; the job saves the folder with the outputs below
+    default: "false"
 outputs:
   nuget-cache-key:
     description: The NuGet cache's key, for the job that saves it
@@ -30,6 +36,12 @@ outputs:
   nuget-cache-hit:
     description: '"true" when the cache had that key exactly (nothing to save)'
     value: ${{ steps.restore-nuget.outputs.cache-hit }}
+  downloads-key:
+    description: The downloads cache's key, for the step that saves it
+    value: ${{ steps.restore-downloads.outputs.cache-primary-key }}
+  downloads-hit:
+    description: '"true" when the downloads cache had that key exactly (nothing to save)'
+    value: ${{ steps.restore-downloads.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -69,6 +81,26 @@ runs:
       if: inputs.netcoredbg == 'true'
       shell: bash
       run: eng/get-netcoredbg.sh
+    - if: inputs.downloads == 'true'
+      id: downloads-key
+      # The pinned versions and checksums are in these two files (the key from their own hash, as netcoredbg's above).
+      shell: bash
+      run: |
+        echo "hash=$(cat src/Codalus.Workbench/Node/NodeRuntime.cs src/Codalus.Workbench/Node/JsDebug.cs | sha256sum | cut -c1-64)" >> "$GITHUB_OUTPUT"
+        echo "CODALUS_DOWNLOAD_CACHE=$RUNNER_TEMP/codalus-downloads" >> "$GITHUB_ENV"
+    - if: inputs.downloads == 'true'
+      id: restore-downloads
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/codalus-downloads
+        key: downloads-${{ runner.os }}-${{ runner.arch }}-${{ steps.downloads-key.outputs.hash }}
+    - name: Downloads (Node.js, vscode-js-debug)
+      # Not in the cache yet (new versions): fetched here, resumed when they stall, with time of their own, instead of
+      # inside a test's minutes. Should it fail, the tests download them themselves.
+      if: inputs.downloads == 'true' && steps.restore-downloads.outputs.cache-hit != 'true'
+      continue-on-error: true
+      shell: bash
+      run: eng/get-downloads.sh "$RUNNER_TEMP/codalus-downloads"
     - name: Developer tools access (macOS)
       # Otherwise the system asks for a password that nobody answers on a runner, and dumps and attaching time out (as
       # a person would approve once). The windowed app runs in the runner's GUI session, where the task port right
