@@ -147,7 +147,7 @@ if (late)
 }
 else
 {
-await WaitForDiagnosticSocket(pid);
+await DiagnosticIpc.WaitForPort(pid);
 registration = shim.RegisterForRuntimeStartup(pid, (pCordb, _, hr) =>
 {
     try
@@ -162,7 +162,7 @@ registration = shim.RegisterForRuntimeStartup(pid, (pCordb, _, hr) =>
         attached.TrySetException(ex);
     }
 }, IntPtr.Zero);
-ResumeRuntime(pid);
+DiagnosticIpc.ResumeRuntime(pid);
 process = await attached.Task.WaitAsync(TimeSpan.FromSeconds(30));
 }
 Log($"attached after {clock.ElapsedMilliseconds} ms");
@@ -281,31 +281,6 @@ static string Describe(CorDebugValue value) => value switch
     CorDebugStringValue s => $"\"{s.GetString(s.Length)}\"",
     _ => $"<{value.Type}>",
 };
-
-static async Task WaitForDiagnosticSocket(int pid)
-{
-    for (var n = 0; n < 300 && DiagnosticSocket(pid) is null; n++)
-    {
-        await Task.Delay(10);
-    }
-}
-
-static string? DiagnosticSocket(int pid) =>
-    Directory.GetFiles(Path.GetTempPath(), $"dotnet-diagnostic-{pid}-*-socket").FirstOrDefault();
-
-static void ResumeRuntime(int pid)
-{
-    using var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Unspecified);
-    var path = DiagnosticSocket(pid) ?? throw new InvalidOperationException($"process {pid} never opened its diagnostic socket (did its runtime start?)");
-    socket.Connect(new System.Net.Sockets.UnixDomainSocketEndPoint(path));
-    var header = new byte[20];
-    "DOTNET_IPC_V1\0"u8.CopyTo(header);
-    BitConverter.TryWriteBytes(header.AsSpan(14), (ushort)20);
-    header[16] = 0x04; // Process
-    header[17] = 0x01; // ResumeRuntime
-    socket.Send(header);
-    socket.Receive(new byte[24]);
-}
 
 static void Log(string message) => Console.WriteLine($"[hotreload] {message}");
 

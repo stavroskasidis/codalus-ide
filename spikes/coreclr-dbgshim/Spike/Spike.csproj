@@ -11,8 +11,15 @@
   <ItemGroup>
     <PackageReference Include="ClrDebug" Version="0.4.2" />
     <PackageReference Include="Microsoft.Diagnostics.DbgShim.linux-x64" Version="10.0.750501" />
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.linux-arm64" Version="10.0.750501" />
     <PackageReference Include="Microsoft.Diagnostics.DbgShim.osx-arm64" Version="10.0.750501" />
     <PackageReference Include="Microsoft.Diagnostics.DbgShim.osx-x64" Version="10.0.750501" />
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.win-x64" Version="10.0.750501" />
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.win-arm64" Version="10.0.750501" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../Shared/*.cs" />
   </ItemGroup>
 
 </Project>

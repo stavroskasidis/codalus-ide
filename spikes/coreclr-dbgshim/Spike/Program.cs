@@ -3,20 +3,26 @@
 // func-eval a property getter, step over a line, run to the end and read the exit code.
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO.Pipes;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using ClrDebug;
 
+if (args.Length > 0 && args[0] == "--launcher-process")
+{
+    return Launcher.Run(args[1..]);
+}
 if (args.Length < 3)
 {
-    Console.Error.WriteLine("usage: Spike <dbgshim path> <program (apphost)> <line> [program args]");
+    Console.Error.WriteLine("usage: Spike <dbgshim path> <program (apphost)> <line> [--attach|--hold|--hook|--launcher]");
     return 2;
 }
 
-var shimPath = args[0];
+var shimPath = Path.GetFullPath(args[0]);
 var program = Path.GetFullPath(args[1]);
+if (OperatingSystem.IsWindows() && !Path.HasExtension(program)) program += ".exe";
 var line = int.Parse(args[2]);
 var dll = Path.ChangeExtension(program, ".dll");
 var symbols = new Symbols(dll);
@@ -25,9 +31,17 @@ Log($"breakpoint target: method 0x{target.Token:x8} IL_{target.Offset:x4} (line 
 
 var clock = Stopwatch.StartNew();
 var shim = new DbgShim(NativeLibrary.Load(shimPath));
-var holdMode = args.Length > 3 && args[3] == "--hold";
-var attachMode = holdMode || (args.Length > 3 && args[3] == "--attach");
+var mode = args.Length > 3 ? args[3] : "launch";
+// --hold and --hook: started by us, held at runtime startup by the diagnostic port; --hook adds candidate (b)'s startup hook.
+var holdMode = mode is "--hold" or "--hook";
+var attachMode = holdMode || mode == "--attach";
+// --launcher: candidate (a), a launcher process of ours starts the program through dbgshim and reports its exit code.
+var launcherMode = mode == "--launcher";
 Process? running = null;
+Task forward = Task.CompletedTask;
+StreamReader? control = null;
+StreamWriter? controlWriter = null;
+ChildExit? launchedExit = null;
 int pid;
 CreateProcessForLaunchResult launch = default!;
 if (attachMode)
@@ -39,21 +53,40 @@ if (attachMode)
         // The runtime holds before running any managed code until a diagnostics client resumes it.
         info.Environment["DOTNET_DefaultDiagnosticPortSuspend"] = "1";
     }
+    if (mode == "--hook")
+    {
+        info.Environment["DOTNET_STARTUP_HOOKS"] = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../Hook/bin/Debug/netstandard2.0/Hook.dll"));
+    }
     running = Process.Start(info)!;
     if (holdMode)
     {
-        await WaitForDiagnosticSocket(running.Id);
+        Log($"diagnostic port: {await DiagnosticIpc.WaitForPort(running.Id) ?? "none"} after {clock.ElapsedMilliseconds} ms");
     }
     else if (running.StandardOutput.ReadLine() != "ready") throw new Exception("debuggee didn't start");
-    _ = Task.Run(() => { while (running.StandardOutput.ReadLine() is { } l) Console.WriteLine(l); });
+    forward = Forward(running.StandardOutput);
     pid = running.Id;
-    clock.Restart();
     Log($"running: pid {pid}");
+}
+else if (launcherMode)
+{
+    var pipeName = $"spike-launcher-{Environment.ProcessId}";
+    var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+    var spike = typeof(Symbols).Assembly.Location;
+    var info = new ProcessStartInfo(Environment.ProcessPath!, [spike, "--launcher-process", shimPath, pipeName, program]) { RedirectStandardInput = true, RedirectStandardOutput = true };
+    running = Process.Start(info)!;
+    forward = Forward(running.StandardOutput);
+    await server.WaitForConnectionAsync().WaitAsync(TimeSpan.FromSeconds(30));
+    control = new StreamReader(server);
+    controlWriter = new StreamWriter(server) { AutoFlush = true };
+    var report = await control.ReadLineAsync() ?? throw new Exception("the launcher ended before reporting a pid");
+    pid = int.Parse(report.Split(' ')[1]);
+    Log($"launcher {running.Id} started the program suspended: pid {pid} after {clock.ElapsedMilliseconds} ms");
 }
 else
 {
     launch = shim.CreateProcessForLaunch($"\"{program}\"", bSuspendProcess: true, lpEnvironment: IntPtr.Zero, lpCurrentDirectory: Path.GetDirectoryName(program));
     pid = launch.ProcessId;
+    launchedExit = new ChildExit(pid);
     Log($"launched suspended: pid {pid}");
 }
 
@@ -116,7 +149,9 @@ if (holdMode)
 {
     // Held by the diagnostic port: register for the runtime's startup, then let it start.
     registration = shim.RegisterForRuntimeStartup(pid, startup, IntPtr.Zero);
-    Log($"resume: {ResumeRuntime(pid)} after {clock.ElapsedMilliseconds} ms");
+    // SPIKE_RESUME_DELAY_MS: an adapter slow to resume (the runtime prints its notice after 5 s held).
+    if (int.TryParse(Environment.GetEnvironmentVariable("SPIKE_RESUME_DELAY_MS"), out var delay)) await Task.Delay(delay);
+    Log($"resume: {DiagnosticIpc.ResumeRuntime(pid)} after {clock.ElapsedMilliseconds} ms");
     process = await attached.Task.WaitAsync(TimeSpan.FromSeconds(30));
     Log($"attached after {clock.ElapsedMilliseconds} ms");
 }
@@ -133,6 +168,14 @@ else if (attachMode)
     process = corDebug.DebugActiveProcess(pid, win32Attach: false);
     Log($"attached to the running process after {clock.ElapsedMilliseconds} ms ({runtimeModule})");
     running!.StandardInput.WriteLine(); // let it go on to the breakpoint
+}
+else if (launcherMode)
+{
+    // Registered for the program's runtime startup before the launcher lets it run.
+    registration = shim.RegisterForRuntimeStartup(pid, startup, IntPtr.Zero);
+    await controlWriter!.WriteLineAsync("resume");
+    process = await attached.Task.WaitAsync(TimeSpan.FromSeconds(30));
+    Log($"attached at runtime startup after {clock.ElapsedMilliseconds} ms");
 }
 else
 {
@@ -197,17 +240,26 @@ bound!.Activate(false);
 process.Continue(false);
 var exit = Next();
 Log($"process exited ({exit.GetType().Name}) after {clock.ElapsedMilliseconds} ms");
-if (attachMode)
+if (registration != IntPtr.Zero) shim.UnregisterForRuntimeStartup(registration);
+int exitCode;
+if (launcherMode)
 {
-    if (registration != IntPtr.Zero) shim.UnregisterForRuntimeStartup(registration);
+    var report = await control!.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(30));
+    exitCode = report is { } r && r.StartsWith("exit ") ? int.Parse(r[5..]) : -1;
     running!.WaitForExit();
-    Log($"exit code: {running.ExitCode}");
+    Log($"launcher exited with {running.ExitCode}");
+}
+else if (attachMode)
+{
+    running!.WaitForExit();
+    exitCode = running.ExitCode;
 }
 else
 {
-    shim.UnregisterForRuntimeStartup(registration);
-    Log($"exit code: {WaitPid(pid)}");
+    exitCode = launchedExit!.Wait(Log);
 }
+await forward.WaitAsync(TimeSpan.FromSeconds(10));
+Log($"exit code: {exitCode}");
 return 0;
 
 CorDebugManagedCallbackEventArgs Next()
@@ -224,6 +276,12 @@ int CurrentLine(CorDebugThread t)
     var f = (CorDebugILFrame)t.ActiveFrame;
     return symbols.Line((int)f.FunctionToken.Value, f.IP.pnOffset);
 }
+
+// The program's output, passed on as it comes (all of it before the exit code is printed).
+static Task Forward(StreamReader output) => Task.Run(() =>
+{
+    while (output.ReadLine() is { } l) Console.WriteLine(l);
+});
 
 static string Describe(CorDebugValue value)
 {
@@ -253,48 +311,39 @@ static string Describe(CorDebugValue value)
     }
 }
 
-static int WaitPid(int pid)
-{
-    var result = waitpid(pid, out var status, 0);
-    if (result != pid) Log($"waitpid failed: errno {Marshal.GetLastPInvokeError()}, parent of {pid} is {ParentOf(pid)}");
-    return result == pid ? (status >> 8) & 0xff : -1;
-
-    static string ParentOf(int p) => File.Exists($"/proc/{p}/stat") ? File.ReadAllText($"/proc/{p}/stat").Split(' ')[3] + $" (we are {Environment.ProcessId})" : "gone";
-
-    [DllImport("libc", SetLastError = true)]
-    static extern int waitpid(int pid, out int status, int options);
-}
-
-static async Task WaitForDiagnosticSocket(int pid)
-{
-    for (var n = 0; n < 200 && DiagnosticSocket(pid) is null; n++)
-    {
-        await Task.Delay(10);
-    }
-    Log($"diagnostic socket: {DiagnosticSocket(pid) ?? "none"}");
-}
-
-static string? DiagnosticSocket(int pid) =>
-    Directory.GetFiles(Path.GetTempPath(), $"dotnet-diagnostic-{pid}-*-socket").FirstOrDefault();
-
-// The diagnostics IPC protocol's Process/ResumeRuntime command (dotnet/diagnostics, documentation/design-docs/ipc-protocol.md).
-static string ResumeRuntime(int pid)
-{
-    using var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Unspecified);
-    var path = DiagnosticSocket(pid) ?? throw new InvalidOperationException($"process {pid} never opened its diagnostic socket (did its runtime start?)");
-    socket.Connect(new System.Net.Sockets.UnixDomainSocketEndPoint(path));
-    var header = new byte[20];
-    "DOTNET_IPC_V1\0"u8.CopyTo(header);
-    BitConverter.TryWriteBytes(header.AsSpan(14), (ushort)20);
-    header[16] = 0x04; // Process
-    header[17] = 0x01; // ResumeRuntime
-    socket.Send(header);
-    var response = new byte[24];
-    var read = socket.Receive(response);
-    return read >= 18 && response[16] == 0xFF && response[17] == 0x00 ? "OK" : $"unexpected response ({read} bytes, {response[16]:x2} {response[17]:x2})";
-}
-
 static void Log(string message) => Console.WriteLine($"[spike] {message}");
+
+/// <summary>
+/// Candidate (a) of ADR 0086's launch: this process starts the program through dbgshim, suspended, so the program is
+/// its child and not the debugger's (mscordbi in the debugger reaps its own children off Windows). Over the pipe the
+/// debugger names: "pid N", then it waits for "resume" (the debugger has registered for the runtime's startup), then
+/// "exit C" once the program has ended. The program inherits this process's standard handles and environment.
+/// </summary>
+static class Launcher
+{
+    public static int Run(string[] args)
+    {
+        var (shimPath, pipeName, program) = (args[0], args[1], args[2]);
+        using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
+        pipe.Connect(10_000);
+        var reader = new StreamReader(pipe);
+        var writer = new StreamWriter(pipe) { AutoFlush = true };
+        var shim = new DbgShim(NativeLibrary.Load(shimPath));
+        var launch = shim.CreateProcessForLaunch($"\"{program}\"", bSuspendProcess: true, lpEnvironment: IntPtr.Zero, lpCurrentDirectory: Path.GetDirectoryName(program));
+        var exit = new ChildExit(launch.ProcessId);
+        writer.WriteLine($"pid {launch.ProcessId}");
+        if (reader.ReadLine() != "resume")
+        {
+            Process.GetProcessById(launch.ProcessId).Kill(); // the debugger went away
+            return 1;
+        }
+        shim.ResumeProcess(launch.ResumeHandle);
+        shim.CloseResumeHandle(launch.ResumeHandle);
+        var code = exit.Wait(m => Console.Error.WriteLine($"[launcher] {m}"));
+        writer.WriteLine($"exit {code}");
+        return code;
+    }
+}
 
 /// <summary>Portable PDB and metadata reading through System.Reflection.Metadata, as ClrModuleInfo does.</summary>
 sealed class Symbols
