@@ -38,11 +38,10 @@ public sealed class SweepStallMonitorTests
             await PumpForAsync(TimeSpan.FromMilliseconds(100));
             Assert.True(stall.MaxMilliseconds < 500, $"A busy thread pool read as a UI stall of {stall.MaxMilliseconds:0} ms.");
 
-            // The UI thread itself blocked: that is a stall. A probe is sent every 20 ms, later on a loaded machine, so the
-            // wait it sees can start a little after the block did.
+            // The UI thread itself blocked: that is a stall.
             stall.Reset();
-            Thread.Sleep(700);
-            await PumpForAsync(TimeSpan.FromMilliseconds(200));
+            Assert.Null(BlockUntilMeasured(stall, 700));
+            await PumpUntilRecordedAsync(stall);
             Assert.True(stall.MaxMilliseconds >= 400, $"The UI thread was blocked for 700 ms, but the monitor saw {stall.MaxMilliseconds:0} ms.");
         }
         finally
@@ -64,17 +63,19 @@ public sealed class SweepStallMonitorTests
             var clock = Stopwatch.StartNew();
             var ui = Environment.CurrentManagedThreadId;
             string? ran = null;
+            string? unmeasured = null;
             await Task.Run(() => Ui.Post(() =>
             {
                 var started = clock.ElapsedMilliseconds;
-                Thread.Sleep(700);
+                unmeasured = BlockUntilMeasured(stall, 700);
                 ran = $"from {started} to {clock.ElapsedMilliseconds} ms on thread {Environment.CurrentManagedThreadId} (the UI thread is {ui}, UI access {Dispatcher.UIThread.CheckAccess()})";
             }));
             var posted = clock.ElapsedMilliseconds;
-            await PumpForAsync(TimeSpan.FromMilliseconds(1000));
+            await PumpForAsync(TimeSpan.FromMilliseconds(100));
+            Assert.True(ran is not null, $"The job didn't run (posted after {posted} ms).");
+            Assert.Null(unmeasured);
+            await PumpUntilRecordedAsync(stall);
 
-            // Seen 0 ms once on macOS CI (job 122325528410), in 2.7 s where the test takes 1.2 s; it didn't happen again
-            // locally under load: the message says where the job ran and whether the monitor answered any probe.
             Assert.True(stall.MaxMilliseconds >= 400,
                 $"The UI thread was blocked for 700 ms, but the monitor saw {stall.MaxMilliseconds:0} ms in {stall.Probes} probe(s). Posted after {posted} ms; the job ran {ran ?? "never"}.");
             Assert.StartsWith("the job posted at SweepStallMonitorTests.cs:", stall.JobOfMax);
@@ -82,6 +83,46 @@ public sealed class SweepStallMonitorTests
         finally
         {
             stall.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Blocks the UI thread (the caller) until a probe of the monitor waits for it and the monitor has sampled what it runs
+    /// three times, then for <paramref name="milliseconds"/> more. A block of a fixed length isn't enough: the monitor
+    /// probes every 20 ms and samples every 100 ms, but its thread can wake hundreds of milliseconds late on a loaded
+    /// runner (macOS CI, job 122325528410: 2.7 s where the test takes 1.2 s), which could miss a block of 700 ms.
+    /// </summary>
+    /// <returns>Why the monitor didn't measure the block, or null (a posted job can't fail the test itself).</returns>
+    private static string? BlockUntilMeasured(SmokeTest.SweepStallMonitor stall, int milliseconds)
+    {
+        if (!SpinWait.SpinUntil(() => stall.ProbePending, TimeSpan.FromSeconds(30)))
+        {
+            return $"No probe of the monitor waited for the blocked UI thread in 30 s ({stall.Probes} answered since the reset).";
+        }
+
+        var samples = stall.SamplesTaken;
+        if (!SpinWait.SpinUntil(() => stall.SamplesTaken >= samples + 3, TimeSpan.FromSeconds(30)))
+        {
+            return $"The monitor took {stall.SamplesTaken - samples} sample(s) of the blocked UI thread in 30 s.";
+        }
+
+        Thread.Sleep(milliseconds);
+        return null;
+    }
+
+    /// <summary>
+    /// Runs the dispatcher's jobs until the monitor has recorded every probe sent so far, the one that waited for the
+    /// block among them (or 30 s). The probe is answered when the block ends, but the monitor's thread records its wait
+    /// only when it next wakes, which can be hundreds of milliseconds later on a loaded runner: 300 ms of pumping after a
+    /// 700 ms block read 0 ms on macOS CI (job 122325528410), and the monitor had recorded only the probe before it.
+    /// </summary>
+    private static async Task PumpUntilRecordedAsync(SmokeTest.SweepStallMonitor stall)
+    {
+        var sent = stall.ProbesSent;
+        var clock = Stopwatch.StartNew();
+        while (stall.ProbesRecorded < sent && clock.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            await PumpForAsync(TimeSpan.FromMilliseconds(20));
         }
     }
 
