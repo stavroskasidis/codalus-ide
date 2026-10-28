@@ -71,6 +71,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M50 | 0.7: fixes and polish from the 0.6 release | built, 2026-10-25 ([m50](checkpoints/m50.md)), with .NET 11 RC3; the 0.6 release's platform-only items moved to M51 (the maintainer's decision); 0.7.1, 2026-10-26, fixed what 0.7.0's validation found from Linux, the rest in M51. Planned 2026-10-24: the maintainer's list after the 0.6.0 release, decided that day (the release's open items, no name of the classic IDE in the current files, dock drop width, CPU, header icons, SEO, Back and Forward, Blazor parameters, sync with the active document, Output text, the Help menu) |
 | M51 | 0.8: AI, feedback and OS integration | built, 2026-10-26 ([m51](checkpoints/m51.md)), validated on Windows, Linux (WSL) and macOS. Planned 2026-10-24: external agents across a restart and their model, more AI (inline completions, debugging help, code actions, commit text), Report a Problem through a prefilled GitHub issue, opt-in OS integration on all three OSes |
 | M52 | 0.9: All Repositories, large solutions and UI fixes | built, 2026-10-27 ([m52](checkpoints/m52.md)), validated on Windows, Linux (WSL) and macOS. All Repositories in Git Changes (ADR 0085), the freeze with an unreachable feed, a large solution's first analysis about twice as fast (server GC for 20 projects or more), packages another SDK restored repaired by a restore, tree row spacing, auto-hidden tabs and Output's links |
+| M53 | 0.10: M52's deferred work | built, 2026-10-28 ([m53](checkpoints/m53.md)). Restores in the solution's folder, without the projects that fail them (the other repository's 41 projects of the maintainer's solution load), a missing assets file restored on open, `dialog_shown` bench events; the build host's server GC and more parallel first passes measured and declined |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
 
@@ -2370,6 +2371,24 @@ Every user-visible item updates the user guide and the website in the same chang
 
 **Status.** Built 2026-10-27 for 0.9.0 ([m52](checkpoints/m52.md)).
 
+### M53 — 0.10: M52's deferred work
+
+**Why.** The maintainer asked on 2026-10-28 for what M52 deferred ([m52](checkpoints/m52.md#deferred)), with the private feeds of the 94-project solution reachable over the VPN.
+
+**Depends on.** M52.
+
+**Scope.**
+
+1. Run the repair restore against the maintainer's solution.
+2. The windowed `codalus --exit-on language` launch that never reported the solution's structure.
+3. `NpmShellTests` failing on the maintainer's Windows machine.
+4. The build host on the server garbage collector, measured.
+5. The cold first analysis of a large solution: bound by the projects' dependency chain and the Razor generator.
+
+**Exit criteria.** Each item fixed or decided with its measurements, validated on Windows, Linux (WSL) and macOS, merged into `develop`.
+
+**Status.** Built 2026-10-28 for 0.10.0 ([m53](checkpoints/m53.md)).
+
 ---
 
 ## Phase 12: Visual Basic and F#
@@ -3275,3 +3294,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-26: All Repositories for 0.9 ([ADR 0085](adr/0085-all-repositories.md)), from the maintainer's request and decisions of that day. A solution in several repositories shows all of them in Git Changes by default: a tree per repository, Commit All Repos, fetch, pull, push, sync and stash in each with the failures listed, Common branches and each repository's in the branch drop-down, and repositories added or left out with the solution. Deferred, each a TODO(issue) in the ADR: ahead/behind chips on the per-repository branch rows, and LFS badges, hosting and the commit template for the other repositories.
 - 2026-10-27: M52 built ([m52](checkpoints/m52.md)) for 0.9.0: tree rows of 24 px (`Shell.Size.TreeRow`), auto-hidden tabs that read top to bottom on both sides, Output's links in `Shell.Link`; a large solution's C# host on the server garbage collector (20 projects or more) and its references loaded in parallel; a restore when design-time builds can't read the packages (projects of another repository restored with another SDK); the pipeline tags again when only failed jobs are re-run.
 - 2026-10-28: D48 proposed: **a managed CoreCLR debugger adapter of our own** ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)). Two spikes on ClrDebug and dbgshim: launch, attach and a launch held at runtime startup debug .NET 9, 10 and 11 (breakpoints, locals, func-eval, stepping) on Linux x64 and macOS arm64 and x64; Roslyn deltas apply through `ICorDebugModule2::ApplyChanges`, also to a program attached to later when it started with `DOTNET_MODIFIABLE_ASSEMBLIES=debug`, as `dotnet watch` starts apps. Nothing is built; Windows and Linux arm64 are still to run.
+- 2026-10-28: M53 built ([m53](checkpoints/m53.md)): M52's repair restore didn't repair, as the IDE restored a project of another repository in its own folder (with that repository's SDK) whenever one project failed the solution's restore; restores run in the solution's folder now, and leave out the projects that fail them. A missing assets file restores on open; dialogs write `dialog_shown` to the bench events; the build host stays on the workstation collector and the first pass at `ProcessorCount / 2`, measured.
