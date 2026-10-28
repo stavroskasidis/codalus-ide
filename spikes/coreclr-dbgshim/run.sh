@@ -2,7 +2,8 @@
 # Runs both spikes and prints a summary. Usage: bash run.sh [rid] [runs] [design runs] [sections]
 #   rid defaults to this machine's (osx-arm64, osx-x64, linux-x64, linux-arm64, win-x64; on Windows, run it in Git Bash);
 #   DEBUGGEE_TFMS="net9.0;net10.0" builds the debuggee for those only (what the installed SDK can build).
-#   runs (5) per mode of the debugging spike; design runs (25) per launch candidate; sections "spike design hotreload".
+#   runs (5) per mode of the debugging spike; design runs (25) per launch candidate and attach variant;
+#   sections (default "spike design attach hotreload").
 set -u
 cd "$(dirname "$0")"
 # macOS has no timeout(1): fall back to perl's alarm.
@@ -10,7 +11,7 @@ command -v timeout >/dev/null || timeout() { local secs=$1; shift; perl -e 'alar
 rid=${1:-$(dotnet --info | awk '/RID:/ {print $2; exit}')}
 runs=${2:-5}
 design_runs=${3:-25}
-sections=${4:-spike design hotreload}
+sections=${4:-spike design attach hotreload}
 for p in Spike HotReload Hook; do dotnet build $p -nologo -v q >/dev/null || { echo "build of $p failed"; dotnet build $p -nologo -v q | grep -E "error" | head; exit 1; }; done
 DebuggeeTfms=${DEBUGGEE_TFMS:-} dotnet build Debuggee -nologo -v q 2>&1 | grep -E " error " | sort -u | head -3
 tfms=$(for t in Debuggee/bin/Debug/*/; do t=${t%/}; t=${t##*/}; ls Debuggee/bin/Debug/$t/Debuggee.dll >/dev/null 2>&1 && echo $t; done)
@@ -68,6 +69,22 @@ for tfm in $tfms; do
   # The runtime prints its "configured to pause" notice only once it has been held 5 s.
   for d in 4000 6000; do out=$(SPIKE_RESUME_DELAY_MS=$d SPIKE_HIT_ONLY=1 spike Debuggee/bin/Debug/$tfm/Debuggee 1 --hook); echo "baseline $tfm --hook resumed after $d ms: notice lines $(grep -c 'configured to pause' <<<"$out"), first line hit $(grep -c 'at line 1' <<<"$out"), exit $(code "$out")"; done
   out=$(SPIKE_CHILD=1 SPIKE_HOOK_MANAGED_ONLY=1 spike Debuggee/bin/Debug/$tfm/Debuggee 6 --hook); echo "baseline $tfm --hook, Environment.SetEnvironmentVariable only: $(grep -o 'managed child: .*' <<<"$out" | cut -c1-60); $(grep -o 'native child: .*' <<<"$out")"
+done
+fi
+
+# 2b. Attach, repeated: the program goes on to the breakpoint's line once the breakpoint is bound, and (the first
+#     spike's way) at once after DebugActiveProcess returns, before the attach's LoadModule events.
+if [[ " $sections " == *" attach "* ]]; then
+for tfm in $tfms; do
+  for wait in bound none; do
+    ok=0; codes=""
+    for n in $(seq $design_runs); do
+      if [ $wait = none ]; then out=$(SPIKE_ATTACH_NO_WAIT=1 spike Debuggee/bin/Debug/$tfm/Debuggee 6 --attach); else out=$(spike Debuggee/bin/Debug/$tfm/Debuggee 6 --attach); fi
+      if full "$out"; then ok=$((ok+1)); else echo "--- FAILED $tfm --attach (released: $wait) run $n"; echo "$out" | grep -E "Exception|exit code|bound|hit" | head -5; fi
+      codes="$codes $(code "$out")"
+    done
+    echo "attach $tfm, program released when $([ $wait = bound ] && echo "the breakpoint is bound" || echo "DebugActiveProcess returns"): $ok/$design_runs full sessions; exit codes:$codes"
+  done
 done
 fi
 

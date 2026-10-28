@@ -96,6 +96,7 @@ CorDebugProcess? process = null;
 CorDebugModule? module = null;
 CorDebugFunctionBreakpoint? bound = null;
 var attached = new TaskCompletionSource<CorDebugProcess>(TaskCreationOptions.RunContinuationsAsynchronously);
+var breakpointBound = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
 callback.OnAnyEvent += (_, e) =>
 {
@@ -109,6 +110,7 @@ callback.OnAnyEvent += (_, e) =>
                 bound = module.GetFunctionFromToken((mdMethodDef)target.Token).ILCode.CreateBreakpoint(target.Offset);
                 bound.Activate(true);
                 Log($"module loaded, breakpoint bound: {load.Module.Name}");
+                breakpointBound.TrySetResult();
             }
             break;
         case BreakpointCorDebugManagedCallbackEventArgs:
@@ -167,6 +169,9 @@ else if (attachMode)
     corDebug.SetManagedHandler(callback);
     process = corDebug.DebugActiveProcess(pid, win32Attach: false);
     Log($"attached to the running process after {clock.ElapsedMilliseconds} ms ({runtimeModule})");
+    // DebugActiveProcess returns before the attach's LoadModule events have arrived: the program goes on to the
+    // breakpoint's line only once the breakpoint is bound (SPIKE_ATTACH_NO_WAIT=1: at once, as the first spike did).
+    if (Environment.GetEnvironmentVariable("SPIKE_ATTACH_NO_WAIT") is null) await breakpointBound.Task.WaitAsync(TimeSpan.FromSeconds(30));
     running!.StandardInput.WriteLine(); // let it go on to the breakpoint
 }
 else if (launcherMode)
