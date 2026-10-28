@@ -150,6 +150,54 @@ public class NavigationDepthTests
     }
 
     [AvaloniaFact]
+    public async Task A_lens_clicked_before_it_resolves_runs_once_it_does()
+    {
+        // A refresh (an option changed, the language service restarted, the document reloaded) replaces the lenses with
+        // ones that keep their titles and get their commands one request at a time. A click on such a row did nothing:
+        // Linux CI's run 40706281162 clicked IShape.Area's after an option change and a scroll away and back, before the
+        // refresh had resolved it. Here the click comes as the refresh replaces the lenses (its Updated), before any
+        // of them is resolved again.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(areaDeclaration) == true, seconds: 60);
+        var view = shapes.Editor.TextArea.TextView;
+        var references = 0;
+        f.Shell.Workbench.Commands.Executed += (_, e) => references += e.CommandId is "editor.action.showReferences" or "editor.action.referenceSearch" ? 1 : 0;
+
+        var clicked = false;
+        var rowLines = 0;
+        shapes.Insights.Updated += (_, _) =>
+        {
+            if (clicked || shapes.Insights.LensResolvedAbove(areaDeclaration) != false)
+            {
+                return;
+            }
+
+            clicked = true;
+            view.EnsureVisualLines(); // the row now holds the new lens
+            var before = view.GetVisualLine(areaDeclaration - 1)!;
+            rowLines = before.TextLines.Count;
+            var codeX = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(areaDeclaration, shapes.Model.Text.GetLineByNumber(areaDeclaration).Length - "double Area();".Length + 1), AvaloniaEdit.Rendering.VisualYPosition.LineTop).X;
+            var rowTop = before.VisualTop + before.TextLines[0].Height - view.VerticalOffset;
+            var click = Avalonia.VisualExtensions.TranslatePoint(view, new Avalonia.Point(codeX + 8, rowTop + before.TextLines[^1].Height / 2), f.Window)!.Value;
+            // Raised on the text view itself: the headless window's MouseDown runs the dispatcher's jobs first, and the
+            // refresh's next answer could resolve the lens in between.
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            view.RaiseEvent(new PointerPressedEventArgs(view, pointer, f.Window, click, 0, new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed), KeyModifiers.None));
+            view.RaiseEvent(new PointerReleasedEventArgs(view, pointer, f.Window, click, 0, new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased), KeyModifiers.None, MouseButton.Left));
+        };
+        shapes.Insights.Refresh();
+        await ShellFixture.PumpUntil(() => clicked, seconds: 30, describe: () => $"the refresh didn't replace the lens; resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}");
+        Assert.Equal(2, rowLines); // the row kept its title
+        await ShellFixture.PumpUntil(() => references > 0, seconds: 30, describe: () => $"commands run: {references}; resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}");
+        Assert.Equal(1, references);
+    }
+
+    [AvaloniaFact]
     public async Task Ctrl_hover_shows_a_symbol_as_a_link_to_its_definition()
     {
         await using var f = ShellFixture.Create();
