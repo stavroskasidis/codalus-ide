@@ -1128,17 +1128,19 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 // would wait for it in turn (minutes each off a VPN) and fail the same way.
                 var leftOut = WithDependents([.. failing]);
                 var others = ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !CannotBuild(p) && !leftOut.Contains(p)).ToList();
-                if (failing.Count > 0 && others.Count > 1)
+                if (failing.Count > 0 && others.Count > 1 && (await RunRestoreAsync(RestoreEntryPoint(others), force).ConfigureAwait(false)).Code == 0)
                 {
-                    await RunRestoreAsync(RestoreEntryPoint(others), force).ConfigureAwait(false);
+                    restoredWithout = others.Count; // (an up-to-date project's assets file isn't written again)
                 }
-
-                foreach (var project in others.Where(p => !AssetsWritten(p)).ToList())
+                else
                 {
-                    await RunRestoreAsync(project, force).ConfigureAwait(false);
-                }
+                    foreach (var project in others.Where(p => !AssetsWritten(p)).ToList())
+                    {
+                        await RunRestoreAsync(project, force).ConfigureAwait(false);
+                    }
 
-                restoredWithout = others.Count(AssetsWritten);
+                    restoredWithout = others.Count(AssetsWritten);
+                }
             }
 
             // Non-SDK-style projects (M43a): their packages.config packages and reference assemblies, which dotnet restore skips.

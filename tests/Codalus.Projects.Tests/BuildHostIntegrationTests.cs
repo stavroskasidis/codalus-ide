@@ -414,6 +414,26 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         using var filter = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(Fixture, ".codalus", "restore.slnf")));
         Assert.Equal([@"other\Lib\Lib.csproj", @"src\App\App.csproj"],
             filter.RootElement.GetProperty("solution").GetProperty("projects").EnumerateArray().Select(p => p.GetString()).Order(StringComparer.Ordinal));
+
+        // Again, with nothing to change: two restores, the solution's and the filter's, though the filter's writes no
+        // assets file (each project was restored on its own again: 77 restores on the maintainer's solution).
+        var restores = 0;
+        _service.RestoreOutput += (_, line) =>
+        {
+            if (line.Contains("Determining projects to restore", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref restores);
+            }
+        };
+        lock (states)
+        {
+            states.Clear();
+        }
+
+        await _service.RestoreAsync(null, Timeout());
+        await WaitUntilAsync(() => { lock (states) { return states.Any(s => s.StartsWith("failed", StringComparison.Ordinal)); } }, TimeSpan.FromMinutes(4));
+        Assert.Contains(states, s => s.Contains("2 project(s) restored without the ones that failed", StringComparison.Ordinal));
+        Assert.Equal(2, Volatile.Read(ref restores));
     }
 
     [Fact]
