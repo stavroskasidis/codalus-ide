@@ -72,6 +72,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M51 | 0.8: AI, feedback and OS integration | built, 2026-10-26 ([m51](checkpoints/m51.md)), validated on Windows, Linux (WSL) and macOS. Planned 2026-10-24: external agents across a restart and their model, more AI (inline completions, debugging help, code actions, commit text), Report a Problem through a prefilled GitHub issue, opt-in OS integration on all three OSes |
 | M52 | 0.9: All Repositories, large solutions and UI fixes | built, 2026-10-27 ([m52](checkpoints/m52.md)), validated on Windows, Linux (WSL) and macOS. All Repositories in Git Changes (ADR 0085), the freeze with an unreachable feed, a large solution's first analysis about twice as fast (server GC for 20 projects or more), packages another SDK restored repaired by a restore, tree row spacing, auto-hidden tabs and Output's links |
 | M53 | 0.10: M52's deferred work | built, 2026-10-28 ([m53](checkpoints/m53.md)). Restores in the solution's folder, without the projects that fail them (the other repository's 41 projects of the maintainer's solution load), a missing assets file restored on open, `dialog_shown` bench events; the build host's server GC and more parallel first passes measured and declined |
+| M54 | A managed CoreCLR debugger, phase 1 | planned 2026-10-28 (D48, [ADR 0086](adr/0086-a-managed-coreclr-debugger.md)): `codalus-debughost --clr-dap` on dbgshim, opt-in behind `debug.adapter` with netcoredbg the default; launches through `codalus-debughost --launch`, the integrated terminal's too; every debugger suite passes under it on Windows, Linux x64, macOS and Linux arm64. M54a, the adapter; M54b, parity |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
 
@@ -142,7 +143,7 @@ All seven are settled:
 |---|---|---|
 | 1. Daily driver | M8, M9, M10 | What a C# developer misses most on day one after the MVP: tests, packages, a terminal. |
 | 2. Language platform | M11 | Pluggable languages (LSP bridge, grammars) and editing for the non-C# files every .NET repository has. |
-| 3. Depth | M12, M29, M13, M14, M26 | Bringing the editor, Git, the debugger and the build and project tooling from "MVP" to the classic IDE's class, and the look and feel from VS Code's to the classic IDE's (M29). |
+| 3. Depth | M12, M29, M13, M14, M26, M54 | Bringing the editor, Git, the debugger and the build and project tooling from "MVP" to the classic IDE's class, and the look and feel from VS Code's to the classic IDE's (M29). |
 | 4. Platform and release | M30, M31, M32, M33 | The newest .NET (11, then each new release), automated nightly and stable releases with setup installers, self-update, and proof that .NET Core 2.0 to .NET 10 projects work. |
 | 5. Web, data and cloud-native | M15, M16, M27, M17 | ASP.NET Core, Blazor, Hot Reload, EF Core and databases, containers, Aspire, publishing. |
 | 6. Diagnostics | M18 | Profiling, counters, memory analysis, dumps, benchmarks. |
@@ -210,6 +211,7 @@ graph LR
   M29 & M34 --> M45
   M45 & M37 & M38 --> M46
   M12 & M29 --> M47
+  M14 & M43 --> M54
 ```
 
 A dashed edge means "better with", not "blocked by".
@@ -841,6 +843,63 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 **Budgets to propose.**
 - No-op build of Solution50 with the up-to-date check: compare with Rider and with `dotnet build`.
 - Opening a 100 MB binlog: tree shown ≤ 3 s, with search staying responsive.
+
+---
+
+### M54 — A managed CoreCLR debugger, phase 1
+
+**Why.** D48 ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md), accepted 2026-10-28) replaces netcoredbg with a debug adapter of our own, in three phases. This milestone is phase 1: the adapter, opt-in behind a setting, with netcoredbg still the default. Phase 2 (Apply Code Changes while debugging) and phase 3 (the new adapter the default, then netcoredbg's removal) are later milestones.
+
+**Depends on.** M43b (ADR 0076's adapter: `NetFxDebugSession`, the evaluator, `ClrModuleInfo`, `CorDebugTarget`), M14 (the debugger suites it has to pass), M10 and ADR 0039 (the integrated terminal's held start), M33 and ADR 0030 (x64 programs on Apple silicon), M21 (remote targets, which keep netcoredbg).
+
+**Decisions** (the maintainer, 2026-10-28, before planning):
+1. **The integrated terminal and Windows' console window go through the launcher** under the new adapter: the terminal runs `codalus-debughost --launch` in its pty. The program stops on `Main`'s first line, needs no startup hook, and on macOS gets the terminal (it falls back to the Debug Console there under netcoredbg). netcoredbg keeps ADR 0039's attach after the startup hook.
+2. **Parity runs in a shard of its own.** `CODALUS_DEBUG_ADAPTER` (`netcoredbg` or `codalus`) overrides `debug.adapter` for DebugService and picks the adapter in the test fixtures. A fourth test shard, `debug-codalus`, runs only the debugger classes with it set to `codalus`, on every pull request and on every CI OS. The other shards keep running them under netcoredbg.
+3. **Linux arm64 gets the `debug-codalus` shard** on GitHub's `ubuntu-24.04-arm` runner, on every pull request; no other shard runs there. netcoredbg's arm64 coverage stays the smoke test's.
+4. **The smoke test runs every debug step again under the new adapter**, all but `debug.remote` (remote targets keep netcoredbg), on every package platform.
+5. **A visible preview.** `debug.adapter` is in Options › Debugging; its description calls `codalus` a preview. Each session's first Debug Console line names its adapter, and why it fell back to netcoredbg when it did. The user guide has a section for it, the Features page a line.
+6. **Every debugger test passes under the new adapter before phase 1 closes**: no skips for the new adapter. A missing feature is built in this milestone. Tests of netcoredbg itself (`NetcoredbgTests`, the x64 netcoredbg, remote targets) aren't part of the parity set.
+7. **Two parts, about five pull requests**: M54a (the adapter) and M54b (parity), each with its checkpoint.
+
+**Scope.**
+
+*M54a, the adapter.*
+
+1. **PR 1: dbgshim, the target and the launcher.**
+   - **Packages:** `Microsoft.Diagnostics.DbgShim.<rid>` 10.0.750501 (MIT; the spikes' version) for each package platform (`win-x64`, `linux-x64`, `linux-arm64`, `osx-arm64`), through central package management; the debug companion takes the one for its runtime identifier, and a build without one (tests, `dotnet run`) takes the build machine's. ClrDebug's `Publish="false"` off Windows goes. Both get their rows in `THIRD-PARTY-NOTICES.md`. `eng/package.sh` signs `libdbgshim.dylib` with the rest of the macOS package.
+   - **Size gate:** the Linux and macOS packages grow by ClrDebug (about 8 MB) and dbgshim (0.3 to 0.4 MB). The new sizes are accepted from CI runs only, with the evidence (`benchmarks/accepted.json`, `docs/benchmarks/net11-release-gate.md`).
+   - **The target:** a second `IClrDebugger` beside the desktop CLR's `CorDebugger`, on dbgshim. Launch: the launcher's pid, `RegisterForRuntimeStartup`, the startup callback's `ICorDebug`, `DebugActiveProcess`, then "resume" to the launcher. Attach: `EnumerateCLRs`, `CreateVersionStringFromModule`, `CreateDebuggingInterfaceFromVersion`; breakpoints bind on the `LoadModule` events that arrive after `DebugActiveProcess` returns. `CorDebugTarget` and its threads, frames and values serve both runtimes. What only the desktop CLR needs (the bitness check, `supportedRuntime`, `clr.dll` on attach) stays on its path.
+   - **`codalus-debughost --clr-dap`:** ADR 0076's session, evaluator and `ClrModuleInfo` over that target, on every OS.
+   - **`codalus-debughost --launch <pipe> <program> [args]`:** it inherits the launch's environment, working directory and standard handles. It starts the program through `CreateProcessForLaunch`, suspended, and sends its pid over the pipe. It resumes the program on "resume", and sends the exit code when the program ends (`waitpid` off Windows, the process handle on Windows; the spike's `ChildExit.cs`), then exits with that code itself. If the pipe closes first, it ends the program: `SIGKILL` for a program that was never resumed (it ignores `SIGTERM`), `ProcessTree.Kill` after the resume. A "detach" message leaves the program running, and the launcher still waits for it and reports its exit code. The launcher ignores Ctrl+C (the program gets it).
+   - **Tests** (`Codalus.Debugging.Tests`, on every OS): launch, attach and the first line on .NET 9, 10 and 11, the exit code on every OS (not 0 on macOS); the launcher's environment, working directory and standard input; a program never resumed killed when the pipe closes; a resumed one ended with its children; detach; children not held.
+
+2. **PR 2: the setting, routing and the shard.**
+   - **`debug.adapter`** (`netcoredbg`, the default, or `codalus`), localized, with `CODALUS_DEBUG_ADAPTER` over it (a row in `docs/environment-variables.md`).
+   - **Routing** stays in DebugService, as ADR 0076 set it up: a .NET Framework program or process goes to `--netfx-dap`; a remote target to netcoredbg; an x64 program on Apple silicon (`RunsAsX64`, the Mach-O check) to netcoredbg 3.1.3; any other launch or attach to the adapter the setting names. Test debugging and plugins' launches follow, as they go through DebugService. The Debug Console's first line names the adapter and any fallback's reason.
+   - **The new adapter's log:** a folder variable like `CODALUS_NETCOREDBG_LOG`, which CI sets per shard and keeps, for ADR 0086's silent attach failure.
+   - **CI:** `debug-codalus` in `pipeline.yml`'s test matrix for `ubuntu-latest`, `windows-latest` and `macos-latest`, and `ubuntu-24.04-arm` for that shard only; `eng/ci-test.sh` runs its class list with `CODALUS_DEBUG_ADAPTER=codalus`; the `ci` check counts the new jobs; `actionlint`. In this PR the list has `Codalus.Debugging.Tests`' debugger classes. The shard's time on each OS goes in the checkpoint, and it has to fit the test step's limit.
+   - **Docs:** the user guide's preview section and settings list, the Features page's line.
+
+*M54b, parity.*
+
+3. **PR 3: the terminal and the console window through the launcher.** Under the new adapter the terminal and Windows' console window run the launcher, which stops on `Main`'s first line, gives macOS the integrated terminal, and keeps Detach All's behavior: the program goes on, and its exit code still reaches the terminal. `TerminalLaunchTests` and `ConsoleWindowLaunchTests` join the shard; the smoke test's `debug.terminal` runs under the new adapter on macOS too.
+4. **PR 4: every suite.** The shell's debugger classes (`DebugTests`, `DebugSessionsTests`, `CompoundDebugTests`, `BlazorWebAppHotReloadDebugTests`), test debugging (`DotNetTestRunControlTests`), the F# and Visual Basic debugging tests, the visualizer and data tip tests join the shard. What they find missing is built here. A Blazor Web App's server is detached from and attached to again around a restart, as under netcoredbg (in-place updates are phase 2). The smoke test's debug steps run a second time under the new adapter.
+5. **PR 5: the rest.** The user guide's gaps for the preview (what it adds: macOS exit codes, the first line in the terminal, casts and operators in expressions; what it lacks), the Features page, ADR 0086's phase 1 status, ADR 0007's and 0076's "amended by" lines, and the checkpoint.
+
+**Tests.** Each PR's tests are above. `debug-codalus` runs every class of the parity set on four OSes; the other shards keep running them under netcoredbg, which stays the default. Platform-sensitive: each PR is validated on Windows, on Linux through WSL (`eng/wsl-test.sh`) and on the Mac through the `codalus-mac` Remote Control session, each reported on its own. Linux arm64 runs only on CI.
+
+**Exit criteria.**
+- Every test of the parity set passes under the new adapter on Windows, Linux x64, macOS and Linux arm64 on CI, and under netcoredbg as before.
+- The smoke test's debug steps pass under the new adapter in the packages of every platform.
+- A program debugged under the new adapter returns its own exit code on macOS, and stops on `Main`'s first line in the integrated terminal.
+- The size gate accepts the packages with ClrDebug and dbgshim, from CI.
+- With `debug.adapter` left alone, nothing changes for the user.
+
+**Out of scope.** Apply Code Changes while debugging (phase 2); the new adapter as the default, remote targets under it, and netcoredbg's removal (phase 3); x64 programs on Apple silicon under the new adapter (the companion would run as x64 there) `TODO(issue)`; the .NET Framework adapter in the terminal (ADR 0076's gap).
+
+**Risks.** ICorDebug off Windows is known only from the spikes; ADR 0086's one silent attach failure on Linux (`TODO(issue)`) is watched for in the shard with the adapter's log. netcoredbg's features the suites test and the spikes didn't try (exceptions, threads, async methods, Just My Code on CoreCLR) are built in M54b, which makes M54b the larger part.
+
+**Status.** Planned 2026-10-28.
 
 ---
 
@@ -3064,7 +3123,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D45 | The Git diff document (#86), drawn in [`DiffDocument.dc.html`](design/controls/DiffDocument.dc.html) with 16 questions in [controls.md](design/controls.md#the-git-diff-document-06) | 0.6 | as drawn | decided 2026-10-22: approved as drawn, every question as recommended |
 | D46 | Rounded corners for the Classic family (#84), drawn in [`RoundedCorners.dc.html`](design/controls/RoundedCorners.dc.html) with 18 questions in [controls.md](design/controls.md#rounded-corners-06) | 0.6 | as drawn | decided 2026-10-22: approved as drawn, every question as recommended; supersedes D33's 2 px Classic radius |
 | D47 | Classic's editor colors (#83): after the document view's 0.85 opacity (Dock's reveal fade) is fixed, should Classic match the classic IDE's measured palette? | 0.6 | match the classic IDE | decided 2026-10-22: match it (control keywords, comments, strings, gray line numbers with the current line's number, bracket colors off by default in Classic, the current line and CodeLens; Light and Blue from the classic IDE's Light scheme) |
-| D48 | Replace netcoredbg with a managed CoreCLR adapter of our own (ADR 0076's, through dbgshim), for Hot Reload while debugging and netcoredbg's gaps? | before the work is scheduled | Yes, in phases: the adapter behind `debug.adapter` with netcoredbg the default, then Apply Code Changes while debugging, then the default and netcoredbg's removal once parity suites pass on every OS ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)) | decided 2026-10-28: accepted as recommended, after three spikes (Linux x64 and arm64, macOS arm64 and x64, Windows x64; the launch through a launcher process). Not scheduled yet |
+| D48 | Replace netcoredbg with a managed CoreCLR adapter of our own (ADR 0076's, through dbgshim), for Hot Reload while debugging and netcoredbg's gaps? | before the work is scheduled | Yes, in phases: the adapter behind `debug.adapter` with netcoredbg the default, then Apply Code Changes while debugging, then the default and netcoredbg's removal once parity suites pass on every OS ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)) | decided 2026-10-28: accepted as recommended, after three spikes (Linux x64 and arm64, macOS arm64 and x64, Windows x64; the launch through a launcher process). Phase 1 planned as [M54](#m54--a-managed-coreclr-debugger-phase-1) on 2026-10-28 |
 
 ## Change log
 
@@ -3298,3 +3357,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-28: D48's prerequisites ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)): both spikes pass on Windows x64 (.NET 9, 10 and 11), where the launch keeps the exit code too; Linux arm64 skipped. A launch spike picks **a launcher process** (it starts the program through dbgshim, suspended, and reports its exit code) over the held launch with a startup hook clearing the variable: both kept exit codes, stopped on `Main`'s first line and left the program's .NET children alone in 25 runs per runtime on Linux, Windows and macOS, but the hook has to clear libc's environment as well as .NET's, and the runtime's "configured to pause" notice comes after 5 s held.
 - 2026-10-28: D48 decided: [ADR 0086](adr/0086-a-managed-coreclr-debugger.md) accepted as proposed, a managed CoreCLR adapter of our own in three phases (the adapter behind `debug.adapter` with netcoredbg the default, launching through a launcher process; Apply Code Changes while debugging; then the default and netcoredbg's removal). Nothing is scheduled yet; the spikes run on Linux arm64 before phase 1 starts.
 - 2026-10-28: D48's last prerequisite ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)): the spikes on Linux arm64, on GitHub's hosted `ubuntu-24.04-arm` runner (no arm64 machine for a Remote Control session), pass every check on .NET 9, 10 and 11 RC3, as on Linux x64: debugging in each mode, both launch candidates 75/75, attach 150/150 and Hot Reload through the debugger. Phase 1 can be scheduled.
+- 2026-10-28: M54 planned, D48's phase 1 ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)): the managed CoreCLR adapter behind `debug.adapter`, netcoredbg the default. The maintainer's decisions: the integrated terminal and Windows' console window go through the launcher under the new adapter (a stop on `Main`'s first line, the terminal on macOS); a `debug-codalus` test shard on every pull request runs the debugger classes under it on Windows, Linux x64, macOS and, alone of the shards, Linux arm64; the smoke test runs every debug step but `debug.remote` again under it; the setting is a visible preview; every debugger test passes under it before phase 1 closes, with no skips; M54a (the adapter, two pull requests) and M54b (parity, three).
