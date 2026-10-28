@@ -5,12 +5,17 @@
     <RollForward>Major</RollForward>
     <AssemblyName>codalus-debughost</AssemblyName>
     <RootNamespace>Codalus.Debugging.Host</RootNamespace>
-    <Description>The debug companion host (M14b, ADR 0032): the debuggee's debugger attributes, dumps (ClrMD) and Create Dump, over JSON-RPC on stdio; with --mono-dap, the Mono debugger adapter over DAP (M20b, ADR 0065); with --netfx-dap, the desktop-CLR (.NET Framework) debugger adapter over DAP on Windows (M43b, ADR 0076); with --activate-app, a packaged Windows app started through Windows (M44, ADR 0074).</Description>
+    <Description>The debug companion host (M14b, ADR 0032): the debuggee's debugger attributes, dumps (ClrMD) and Create Dump, over JSON-RPC on stdio; with --mono-dap, the Mono debugger adapter over DAP (M20b, ADR 0065); with --netfx-dap, the desktop-CLR (.NET Framework) debugger adapter over DAP on Windows (M43b, ADR 0076); with --clr-dap, CoreCLR's debugger adapter over DAP, and with --launch, the program it launches started through dbgshim (M54, ADR 0086); with --activate-app, a packaged Windows app started through Windows (M44, ADR 0074).</Description>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- Source-generated COM interop: IApplicationActivationManager, to start packaged apps (M44). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!--
+      The launcher (the launch mode, ADR 0086) runs with the debugged program's environment, so a DOTNET_STARTUP_HOOKS meant
+      for the program would run in it too; nothing here uses startup hooks.
+    -->
+    <StartupHookSupport>false</StartupHookSupport>
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,18 +38,20 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Diagnostics.Runtime" />
     <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" />
-    <!-- The desktop-CLR debugger adapter's ICorDebug wrappers (M43b, ADR 0076; MIT): COM interop only, the runtime's own mscordbi does the work. -->
+    <!--
+      The ICorDebug wrappers (MIT) of the desktop-CLR debugger adapter (M43b, ADR 0076) and, on every OS, CoreCLR's
+      (M54, ADR 0086): COM interop only, the runtime's own mscordbi does the work.
+    -->
     <PackageReference Include="ClrDebug" />
-  </ItemGroup>
-
-  <!--
-    The desktop CLR runs only on Windows (D31), so a publish for another platform (the Linux and macOS packages) leaves
-    ClrDebug out of the files and the deps.json: 15 MB of ReadyToRun code nothing there can run. Off Windows the adapter
-    answers with UnavailableDebugger and never loads a ClrDebug type (NetFxAdapter.CreateDebugger). A build without a
-    runtime identifier (the tests) keeps it.
-  -->
-  <ItemGroup Condition="'$(RuntimeIdentifier)' != '' And !$(RuntimeIdentifier.StartsWith('win'))">
-    <PackageReference Update="ClrDebug" Publish="false" />
+    <!--
+      dbgshim (MIT), which starts CoreCLR programs for the debugger and finds their runtime's mscordbi (ADR 0086): a
+      publish for a runtime identifier takes its platform's library, a build without one (the tests) every platform's
+      under runtimes/, which the deps.json resolves.
+    -->
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.win-x64" />
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.linux-x64" />
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.linux-arm64" />
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.osx-arm64" />
   </ItemGroup>
 
   <ItemGroup>

@@ -520,53 +520,22 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         Assert.Contains(OperatingSystem.IsWindows() ? "doesn't exist" : "only on Windows", error.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Off_Windows_the_adapter_runs_without_ClrDebug_as_the_packages_ship_it()
+    [Theory]
+    [InlineData("win-x64", "dbgshim.dll")]
+    [InlineData("linux-x64", "libdbgshim.so")]
+    [InlineData("linux-arm64", "libdbgshim.so")]
+    [InlineData("osx-arm64", "libdbgshim.dylib")]
+    public void The_host_carries_ClrDebug_and_dbgshim_for_each_package_platform(string rid, string library)
     {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows packages ship ClrDebug (the desktop-CLR debugger uses it).");
-
-        // A publish for Linux or macOS leaves ClrDebug.dll out, and out of the deps.json (Codalus.Debugging.Host.csproj):
-        // the host's files without it, as the package has them.
-        var folder = Path.Combine(Path.GetTempPath(), "codalus-debughost-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(folder);
-        try
-        {
-            var deps = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.deps.json")))!;
-            foreach (var (_, target) in deps["targets"]!.AsObject())
-            {
-                foreach (var (name, library) in target!.AsObject().ToList())
-                {
-                    if (name.StartsWith("ClrDebug/", StringComparison.Ordinal))
-                    {
-                        target.AsObject().Remove(name);
-                        continue;
-                    }
-
-                    library!["dependencies"]?.AsObject().Remove("ClrDebug");
-                    foreach (var (file, _) in library["runtime"]?.AsObject() ?? [])
-                    {
-                        File.Copy(Path.Combine(AppContext.BaseDirectory, Path.GetFileName(file)), Path.Combine(folder, Path.GetFileName(file)), overwrite: true);
-                    }
-                }
-            }
-
-            foreach (var name in deps["libraries"]!.AsObject().Select(l => l.Key).Where(n => n.StartsWith("ClrDebug/", StringComparison.Ordinal)).ToList())
-            {
-                deps["libraries"]!.AsObject().Remove(name);
-            }
-
-            File.WriteAllText(Path.Combine(folder, "codalus-debughost.deps.json"), deps.ToJsonString());
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.runtimeconfig.json"), Path.Combine(folder, "codalus-debughost.runtimeconfig.json"));
-            Assert.False(File.Exists(Path.Combine(folder, "ClrDebug.dll")));
-
-            await using var adapter = await DebugAdapter.StartAsync(new DebugAdapterStartInfo("dotnet", [Path.Combine(folder, "codalus-debughost.dll"), DesktopClr.AdapterArgument], folder), Ct);
-            var launch = await Assert.ThrowsAsync<DapException>(() => adapter.LaunchAsync(new NetFxDebugArguments(Path.Combine(folder, "app.exe")), s_json.NetFxDebugArguments, Ct));
-            Assert.Contains("only on Windows", launch.Message, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Directory.Delete(folder, recursive: true);
-        }
+        // CoreCLR's debugger adapter (M54, ADR 0086) runs on every OS: ClrDebug ships everywhere again (it was left out
+        // of the Linux and macOS packages in 0.3.0), and dbgshim comes for the package's platform.
+        var deps = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.deps.json")))!;
+        var libraries = deps["targets"]!.AsObject().Single().Value!.AsObject();
+        Assert.Contains(libraries, l => l.Key.StartsWith("ClrDebug/", StringComparison.Ordinal) && l.Value!["runtime"] is not null);
+        var shim = libraries.Single(l => l.Key.StartsWith($"Microsoft.Diagnostics.DbgShim.{rid}/", StringComparison.Ordinal)).Value!;
+        var asset = Assert.Single(shim["runtimeTargets"]!.AsObject());
+        Assert.Equal($"runtimes/{rid}/native/{library}", asset.Key);
+        Assert.True(File.Exists(Path.Combine(AppContext.BaseDirectory, "runtimes", rid, "native", library)));
     }
 
     [Fact]

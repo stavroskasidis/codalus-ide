@@ -18,14 +18,17 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
 
     public ClrModuleInfo? Info(IClrModule? module) => module is null ? null : Modules.FirstOrDefault(m => ReferenceEquals(m.Module, module)).Info;
 
-    /// <summary>mscorlib (where System.Object, System.String and the primitives are).</summary>
+    /// <summary>
+    /// The core library, where System.Object, System.String and the primitives are: mscorlib on the desktop CLR,
+    /// System.Private.CoreLib on CoreCLR (ADR 0086).
+    /// </summary>
     public (IClrModule Module, ClrModuleInfo Info)? CoreLibrary
     {
         get
         {
             foreach (var entry in Modules)
             {
-                if (string.Equals(entry.Info.AssemblyName, "mscorlib", StringComparison.OrdinalIgnoreCase))
+                if (IsCoreLibrary(entry.Info))
                 {
                     return entry;
                 }
@@ -34,6 +37,9 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
             return null;
         }
     }
+
+    private static bool IsCoreLibrary(ClrModuleInfo info) =>
+        string.Equals(info.AssemblyName, "mscorlib", StringComparison.OrdinalIgnoreCase) || string.Equals(info.AssemblyName, "System.Private.CoreLib", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A type a module names, as a module and a type definition token; null when its assembly isn't loaded.</summary>
     public (IClrModule Module, int Token)? Resolve(IClrModule from, ClrTypeName name)
@@ -59,11 +65,11 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         return FindType(name.FullName);
     }
 
-    /// <summary>A type by its full name in any loaded module, mscorlib first.</summary>
+    /// <summary>A type by its full name in any loaded module, the core library first.</summary>
     public (IClrModule Module, int Token)? FindType(string fullName)
     {
         var all = Modules;
-        foreach (var (module, info) in all.OrderBy(m => string.Equals(m.Info.AssemblyName, "mscorlib", StringComparison.OrdinalIgnoreCase) ? 0 : 1))
+        foreach (var (module, info) in all.OrderBy(m => IsCoreLibrary(m.Info) ? 0 : 1))
         {
             if (info.FindType(fullName) is var token and not 0)
             {
@@ -110,7 +116,7 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
     /// <summary>A type definition as a runtime type (no type arguments).</summary>
     public static ClrType TypeOf(IClrModule module, int token) => new(module, token);
 
-    /// <summary>The module and token of a runtime type: its own, or mscorlib's for primitives, string and object.</summary>
+    /// <summary>The module and token of a runtime type: its own, or the core library's for primitives, string and object.</summary>
     public (IClrModule Module, int Token)? Definition(ClrType type)
     {
         if (type.Module is { } module && type.Token != 0)
@@ -218,7 +224,7 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         }
     }
 
-    /// <summary>mscorlib's primitive structs: a boxed primitive may come as one, with its value in <c>m_value</c>.</summary>
+    /// <summary>The core library's primitive structs: a boxed primitive may come as one, with its value in <c>m_value</c>.</summary>
     private static readonly HashSet<string> s_primitiveStructs = new(StringComparer.Ordinal)
     {
         "System.Boolean", "System.Char", "System.SByte", "System.Byte", "System.Int16", "System.UInt16", "System.Int32", "System.UInt32",

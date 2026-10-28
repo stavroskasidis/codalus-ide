@@ -64,6 +64,11 @@
   <ItemGroup Label="Debug companion host (M14b, ADR 0032)">
     <PackageVersion Include="Microsoft.Diagnostics.Runtime" Version="4.2.751201" />
     <PackageVersion Include="ClrDebug" Version="0.4.2" />
+    <!-- CoreCLR's debugger shim, one package per platform (M54, ADR 0086): CoreCLR's debugger adapter starts and attaches through it. -->
+    <PackageVersion Include="Microsoft.Diagnostics.DbgShim.win-x64" Version="10.0.750501" />
+    <PackageVersion Include="Microsoft.Diagnostics.DbgShim.linux-x64" Version="10.0.750501" />
+    <PackageVersion Include="Microsoft.Diagnostics.DbgShim.linux-arm64" Version="10.0.750501" />
+    <PackageVersion Include="Microsoft.Diagnostics.DbgShim.osx-arm64" Version="10.0.750501" />
     <PackageVersion Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.750501" />
   </ItemGroup>
   <ItemGroup Label="Diagnostics host (M18, ADR 0044)">

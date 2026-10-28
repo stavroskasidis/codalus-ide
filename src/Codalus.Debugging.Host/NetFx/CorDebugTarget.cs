@@ -172,8 +172,10 @@ internal sealed class CorDebugger : IClrDebugger
     }
 }
 
-/// <summary>One debugged desktop-CLR process through ICorDebug (M43b): its callbacks become <see cref="ClrEvent"/>s.</summary>
-[SupportedOSPlatform("windows")]
+/// <summary>
+/// One debugged process through ICorDebug: the desktop CLR's (M43b), or CoreCLR's through dbgshim (M54, ADR 0086).
+/// Its callbacks become <see cref="ClrEvent"/>s.
+/// </summary>
 internal sealed class CorDebugTarget : IClrProcess
 {
     private readonly CorDebug _corDebug;
@@ -211,10 +213,17 @@ internal sealed class CorDebugTarget : IClrProcess
 
     public ChannelReader<ClrEvent> Events => _events.Reader;
 
+    /// <summary>
+    /// A CoreCLR program the launcher started (ADR 0086): its exit code comes from the launcher, which is its parent, and
+    /// a detach tells the launcher to leave it running.
+    /// </summary>
+    public CoreClr.LaunchedProgram? Launched { get; set; }
+
     private CorDebugProcess Process => _process ?? throw new ClrException("The process isn't running.");
 
     // ------------------------------------------------------------------ starting
 
+    [SupportedOSPlatform("windows")]
     public void Launch(string program, NetFxDebugArguments arguments, Action<string, string> output)
     {
         var commandLine = DesktopClr.CommandLine(program, arguments.Args ?? []);
@@ -505,7 +514,11 @@ internal sealed class CorDebugTarget : IClrProcess
         int? code = null;
         try
         {
-            if (_os is { } os && os.WaitForExit(5000))
+            if (Launched is { } launched)
+            {
+                code = launched.WaitForExit(TimeSpan.FromSeconds(5));
+            }
+            else if (_os is { } os && os.WaitForExit(5000))
             {
                 code = os.ExitCode;
             }
@@ -582,6 +595,14 @@ internal sealed class CorDebugTarget : IClrProcess
 
             _process.Detach();
         });
+        try
+        {
+            Launched?.Detach();
+        }
+        catch (ClrException)
+        {
+        }
+
         _exited = true;
         _events.Writer.TryWrite(new ClrExited(null));
         _events.Writer.TryComplete();
@@ -916,10 +937,10 @@ internal sealed class CorDebugTarget : IClrProcess
         }
 
         _os?.Dispose();
+        Launched?.Dispose();
     }
 }
 
-[SupportedOSPlatform("windows")]
 internal sealed class CorModule(CorDebugModule module) : IClrModule
 {
     public CorDebugModule Raw { get; } = module;
@@ -929,13 +950,11 @@ internal sealed class CorModule(CorDebugModule module) : IClrModule
     public bool IsDynamic { get; } = module.IsDynamic || module.IsInMemory;
 }
 
-[SupportedOSPlatform("windows")]
 internal sealed class CorBreakpoint(CorDebugFunctionBreakpoint breakpoint) : IClrBreakpoint
 {
     public void Activate(bool active) => CorDebugTarget.Translate(() => breakpoint.Activate(active));
 }
 
-[SupportedOSPlatform("windows")]
 internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : IClrThread
 {
     public CorDebugThread Raw { get; } = thread;
@@ -1001,7 +1020,6 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
     public IClrValue? ThreadObject() => CorDebugTarget.Translate(() => Raw.Object is { } value ? CorValue.Wrap(target, value) : null);
 }
 
-[SupportedOSPlatform("windows")]
 internal sealed class CorFrame : IClrFrame
 {
     private readonly CorThread _thread;
@@ -1103,7 +1121,6 @@ internal sealed class CorFrame : IClrFrame
 /// func-eval's result (<see cref="Result"/>) stays valid itself: an object is held by a strong handle and dereferenced
 /// again, a primitive is kept and created again when it's passed to another call.
 /// </summary>
-[SupportedOSPlatform("windows")]
 internal sealed class CorValue : IClrValue
 {
     private readonly CorDebugTarget _target;

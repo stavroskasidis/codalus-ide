@@ -1,13 +1,14 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
-using System.Runtime.Versioning;
 using Codalus.Debugging.Host.Mono;
 namespace Codalus.Debugging.Host.NetFx;
 
-/// <summary><c>codalus-debughost --netfx-dap</c>: the desktop-CLR debugger adapter's process (M43b, ADR 0076), until the session ends.</summary>
+/// <summary>
+/// <c>codalus-debughost --netfx-dap</c>: the desktop-CLR debugger adapter's process (M43b, ADR 0076), until the session
+/// ends; with <c>--clr-dap</c>, the same session over dbgshim for CoreCLR (M54, ADR 0086).
+/// </summary>
 internal static class NetFxAdapter
 {
-    public static async Task<int> RunAsync(Stream input, Stream output, TextWriter log)
+    /// <param name="debugger">CoreCLR's (<see cref="CoreClr.DbgShimDebugger"/>); the desktop CLR's when null.</param>
+    public static async Task<int> RunAsync(Stream input, Stream output, TextWriter log, IClrDebugger? debugger = null)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -15,7 +16,7 @@ internal static class NetFxAdapter
         }
 
         using var server = new DapServer(input, output);
-        var session = new NetFxDebugSession(server, log, CreateDebugger());
+        var session = new NetFxDebugSession(server, log, debugger ?? CreateDebugger());
         server.Handler = session.HandleAsync;
         using var stop = new CancellationTokenSource();
         var reading = server.RunAsync(stop.Token);
@@ -27,16 +28,8 @@ internal static class NetFxAdapter
         return 0;
     }
 
-    /// <summary>
-    /// The debugger for this platform. ClrDebug's types stay behind <see cref="CreateCorDebugger"/>, which is compiled
-    /// only when it's called (on Windows): the Linux and macOS packages don't ship ClrDebug.dll.
-    /// </summary>
-    internal static IClrDebugger CreateDebugger() => OperatingSystem.IsWindows() ? CreateCorDebugger() : new UnavailableDebugger();
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    [SupportedOSPlatform("windows")]
-    [SuppressMessage("Performance", "CA1859", Justification = "The caller's signature must not name a type that needs ClrDebug.")]
-    private static IClrDebugger CreateCorDebugger() => new CorDebugger();
+    /// <summary>The desktop CLR's debugger on Windows; off Windows one that says .NET Framework runs only there.</summary>
+    internal static IClrDebugger CreateDebugger() => OperatingSystem.IsWindows() ? new CorDebugger() : new UnavailableDebugger();
 
     /// <summary>Off Windows: the desktop CLR runs only there (D31).</summary>
     private sealed class UnavailableDebugger : IClrDebugger
